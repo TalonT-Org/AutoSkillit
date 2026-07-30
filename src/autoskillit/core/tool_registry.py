@@ -90,7 +90,10 @@ _MUTATION_TOOLS = frozenset(
         "unlock_agent_pack",
         "wait_for_ci",
         "wait_for_merge_queue",
+        "write_audit_disposition_bundle",
         "write_audit_cycle_artifact",
+        "write_audit_semantic_result",
+        "write_standalone_audit_evidence",
         "write_telemetry_files",
     }
 )
@@ -399,6 +402,61 @@ _TOOL_DEFS = (
         ("kind", "path", "fields", "cwd", "step_name"),
         required=("kind", "path", "fields", "cwd"),
         wire_types={"fields": ToolWireType.OBJECT},
+    ),
+    _tool(
+        "write_audit_semantic_result",
+        (
+            "reservation_handle",
+            "audited_plan_refs",
+            "assessments",
+            "verdict",
+            "remediation_ref",
+            "step_name",
+        ),
+        required=("reservation_handle", "audited_plan_refs", "assessments", "verdict"),
+        wire_types={
+            "audited_plan_refs": ToolWireType.ARRAY,
+            "assessments": ToolWireType.ARRAY,
+            "remediation_ref": ToolWireType.OBJECT,
+        },
+    ),
+    _tool(
+        "write_standalone_audit_evidence",
+        (
+            "audited_plan_refs",
+            "assessments",
+            "verdict",
+            "remediation_ref",
+            "step_name",
+        ),
+        required=("audited_plan_refs", "assessments", "verdict"),
+        wire_types={
+            "audited_plan_refs": ToolWireType.ARRAY,
+            "assessments": ToolWireType.ARRAY,
+            "remediation_ref": ToolWireType.OBJECT,
+        },
+    ),
+    _tool(
+        "write_audit_disposition_bundle",
+        (
+            "authority_path",
+            "new_plan_path",
+            "new_plan_media_type",
+            "new_plan_schema_version",
+            "dispositions",
+            "step_name",
+        ),
+        required=(
+            "authority_path",
+            "new_plan_path",
+            "new_plan_media_type",
+            "new_plan_schema_version",
+            "dispositions",
+        ),
+        wire_types={
+            "new_plan_schema_version": ToolWireType.INTEGER,
+            "dispositions": ToolWireType.ARRAY,
+        },
     ),
     _tool(
         "fetch_github_issue",

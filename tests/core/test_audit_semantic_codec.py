@@ -12,10 +12,15 @@ from autoskillit.core.audit_semantic_codec import (
     AuditSemanticCodecError,
     canonical_full_reference_records_match,
     load_audit_semantic_result,
+    load_standalone_audit_evidence,
 )
 from autoskillit.core.closure_hashing import canonical_json_bytes, compute_bytes_hash
 from autoskillit.core.path_containment import read_stable_contained_bytes
-from autoskillit.core.types._type_audit_admission import AuditSemanticResult
+from autoskillit.core.types._type_audit_admission import (
+    STANDALONE_AUDIT_EVIDENCE_KIND,
+    AuditSemanticResult,
+    StandaloneAuditEvidence,
+)
 from autoskillit.core.types._type_audit_cycle import (
     ArtifactRef,
     AuditAssessment,
@@ -242,3 +247,29 @@ def test_full_reference_comparison_checks_order_and_non_digest_fields(
     assert canonical_full_reference_records_match((first, second), (first, second))
     assert not canonical_full_reference_records_match((first,), (relocated,))
     assert not canonical_full_reference_records_match((first, second), (second, first))
+
+
+def test_standalone_loader_requires_exact_kind_and_canonical_shape(
+    tmp_path: Path,
+) -> None:
+    semantic = _semantic_result(tmp_path)
+    evidence = StandaloneAuditEvidence(
+        schema_version=1,
+        kind=STANDALONE_AUDIT_EVIDENCE_KIND,
+        audited_plan_refs=semantic.audited_plan_refs,
+        assessments=semantic.assessments,
+        verdict=semantic.verdict,
+        remediation_ref=semantic.remediation_ref,
+    )
+    path = tmp_path / "standalone.json"
+    _write_payload(path, evidence.to_dict())
+
+    loaded = load_standalone_audit_evidence(path, tmp_path)
+
+    assert loaded == evidence
+
+    tampered = evidence.to_dict()
+    tampered["kind"] = "audit_cycle_authority"
+    _write_payload(path, tampered)
+    with pytest.raises(AuditSemanticCodecError, match="invalid kind"):
+        load_standalone_audit_evidence(path, tmp_path)

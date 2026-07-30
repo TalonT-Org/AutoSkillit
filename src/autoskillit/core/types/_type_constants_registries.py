@@ -146,7 +146,15 @@ GATED_TOOLS: frozenset[str] = frozenset(
 )
 
 HEADLESS_TOOLS: frozenset[str] = frozenset(
-    {"test_check", "unlock_agent_pack", "commit_files", "write_audit_cycle_artifact"}
+    {
+        "test_check",
+        "unlock_agent_pack",
+        "commit_files",
+        "write_audit_cycle_artifact",
+        "write_audit_semantic_result",
+        "write_standalone_audit_evidence",
+        "write_audit_disposition_bundle",
+    }
 )
 
 FLEET_TOOLS: frozenset[str] = frozenset(
@@ -793,6 +801,9 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "classify_fix": frozenset({"kitchen-core"}),
     "commit_files": frozenset({"kitchen-core"}),
     "write_audit_cycle_artifact": frozenset({"kitchen-core"}),
+    "write_audit_semantic_result": frozenset({"kitchen-core"}),
+    "write_standalone_audit_evidence": frozenset({"kitchen-core"}),
+    "write_audit_disposition_bundle": frozenset({"kitchen-core"}),
     "list_recipes": frozenset({"kitchen-core", "fleet-dispatch"}),
     "load_recipe": frozenset({"kitchen-core", "fleet-dispatch"}),
     "validate_recipe": frozenset({"kitchen-core"}),

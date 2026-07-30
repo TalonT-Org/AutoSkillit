@@ -430,6 +430,9 @@ def test_headless_tools_contains_expected_names():
         "unlock_agent_pack",
         "commit_files",
         "write_audit_cycle_artifact",
+        "write_audit_semantic_result",
+        "write_standalone_audit_evidence",
+        "write_audit_disposition_bundle",
     }
 
 

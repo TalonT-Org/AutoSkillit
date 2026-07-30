@@ -1,6 +1,6 @@
 # MCP Tool Access Control
 
-AutoSkillit provides 62 MCP tools organized into three access levels that control which
+AutoSkillit provides 65 MCP tools organized into three access levels that control which
 session types can see each tool.
 
 ## Three Access Levels
@@ -12,8 +12,8 @@ session types can see each tool.
 │  reload_session                                         │
 │  Always visible — no gating, no headless restriction    │
 ├─────────────────────────────────────────────────────────┤
-│  HEADLESS-TAGGED  (1 tool)                              │
-│  test_check                                             │
+│  HEADLESS-TAGGED  (7 tools)                             │
+│  test/check, commit, and audit artifact worker tools    │
 │  Revealed in headless sessions via mcp.enable(headless) │
 │  Also carries the kitchen tag; hidden in plain sessions │
 ├─────────────────────────────────────────────────────────┤
@@ -61,14 +61,14 @@ Server startup sequence:
 
 ```
 1. mcp.disable(tags={"kitchen"})
-   → hides 42 kitchen-tagged tools (including the 2 headless-tagged tools)
+   → hides 46 kitchen-tagged tools (including the 7 headless-tagged tools)
 
 2. mcp.disable(tags={subset}) for each entry in config.subsets.disabled
    → e.g. hides all github-tagged tools if "github" is disabled
 
 3. If AUTOSKILLIT_HEADLESS=1:
    mcp.enable(tags={"headless"})
-   → reveals test_check only (the sole headless-tagged tool)
+   → reveals the seven HEADLESS_TOOLS entries
 
 4. When open_kitchen is called:
    ctx.enable_components(tags={"kitchen"})   → reveals kitchen-tagged tools (not fleet)
@@ -92,7 +92,7 @@ missing kitchen visibility.
 
 ## Complete MCP Tool Access Control Map
 
-All 62 tools with their access level, tags, source file, and functional category.
+All 65 tools with their access level, tags, source file, and functional category.
 
 **Tag abbreviations**: AS = `autoskillit`, K = `kitchen`, HL = `headless`,
 GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`, FL = `fleet`
@@ -116,7 +116,13 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`, FL = `fleet`
 
 | Tool | Tags | Source File | Notes |
 |------|------|-------------|-------|
-| `test_check` | AS, K, HL | `server/tools_workspace.py` | Only tool revealed in headless sessions |
+| `test_check` | AS, K, HL | `server/tools_workspace.py` | Test runner |
+| `unlock_agent_pack` | AS, K, HL | `server/tools_agents.py` | Agent-pack access |
+| `commit_files` | AS, K, HL | `server/tools_git.py` | Server-side commit |
+| `write_audit_cycle_artifact` | AS, K, HL | `server/tools_audit_cycle.py` | Legacy audit artifact producer |
+| `write_audit_semantic_result` | AS, K, HL | `server/tools_audit_artifacts.py` | Typed audit semantics |
+| `write_standalone_audit_evidence` | AS, K, HL | `server/tools_audit_artifacts.py` | Standalone evidence |
+| `write_audit_disposition_bundle` | AS, K, HL | `server/tools_audit_artifacts.py` | Typed disposition bundle |
 
 ---
 

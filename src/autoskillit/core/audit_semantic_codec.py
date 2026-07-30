@@ -15,7 +15,10 @@ from .io import decode_versioned_json_bytes
 from .path_containment import ContainmentError, read_stable_contained_bytes
 from .types._type_audit_admission import (
     AUDIT_SEMANTIC_SCHEMA_VERSION,
+    STANDALONE_AUDIT_EVIDENCE_KIND,
+    STANDALONE_AUDIT_EVIDENCE_SCHEMA_VERSION,
     AuditSemanticResult,
+    StandaloneAuditEvidence,
 )
 from .types._type_audit_cycle import ArtifactRef
 
@@ -23,6 +26,7 @@ __all__ = [
     "AuditSemanticCodecError",
     "canonical_full_reference_records_match",
     "load_audit_semantic_result",
+    "load_standalone_audit_evidence",
 ]
 
 _DEFAULT_MAX_SIZE_BYTES = 10_000_000
@@ -35,6 +39,7 @@ _TOP_LEVEL_KEYS = frozenset(
         "verdict",
     }
 )
+_STANDALONE_TOP_LEVEL_KEYS = _TOP_LEVEL_KEYS | {"kind"}
 _ARTIFACT_REF_KEYS = frozenset(
     {
         "byte_size",
@@ -239,5 +244,54 @@ def load_audit_semantic_result(
         raise AuditSemanticCodecError(
             "invalid_semantic_schema",
             "audit semantic artifact does not round-trip exactly",
+        )
+    return result
+
+
+def load_standalone_audit_evidence(
+    path: str | Path,
+    allowed_root: str | Path,
+    *,
+    max_size_bytes: int = _DEFAULT_MAX_SIZE_BYTES,
+    reader: _ArtifactByteReader = read_stable_contained_bytes,
+) -> StandaloneAuditEvidence:
+    """Load one strict canonical standalone-audit artifact beneath ``allowed_root``."""
+
+    try:
+        _, data = reader(path, allowed_root, max_size_bytes=max_size_bytes)
+    except (ContainmentError, OSError) as exc:
+        raise AuditSemanticCodecError(
+            "artifact_read_failed",
+            f"standalone audit artifact containment/read failed: {exc}",
+        ) from exc
+
+    raw = decode_versioned_json_bytes(
+        data,
+        expected_version=STANDALONE_AUDIT_EVIDENCE_SCHEMA_VERSION,
+        require_canonical=True,
+    )
+    if raw is None or set(raw) != _STANDALONE_TOP_LEVEL_KEYS:
+        raise AuditSemanticCodecError(
+            "invalid_canonical_json",
+            "standalone audit artifact is not strict canonical versioned JSON",
+        )
+    if raw["kind"] != STANDALONE_AUDIT_EVIDENCE_KIND:
+        raise AuditSemanticCodecError(
+            "invalid_semantic_schema",
+            "standalone audit artifact has an invalid kind",
+        )
+
+    _validate_exact_recursive_schema({key: value for key, value in raw.items() if key != "kind"})
+    try:
+        result = StandaloneAuditEvidence.from_dict(raw)
+    except (TypeError, ValueError) as exc:
+        raise AuditSemanticCodecError(
+            "invalid_semantic_schema",
+            f"standalone audit artifact validation failed: {exc}",
+        ) from exc
+    if result.to_dict() != raw:
+        raise AuditSemanticCodecError(
+            "invalid_semantic_schema",
+            "standalone audit artifact does not round-trip exactly",
         )
     return result

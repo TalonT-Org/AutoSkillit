@@ -40,6 +40,7 @@ else:
     _capture_types = importlib.import_module(f"{_module_identity.__package__}._types")
 CaptureCleanupOutcome = _capture_types.CaptureCleanupOutcome
 _ObservedArtifact = _capture_types.ObservedArtifact
+_CarrierLeaseLive = _capture_types.CarrierLeaseLive
 
 CaptureAuthorityError = _capture_snapshot.CaptureAuthorityError
 CaptureFailureEvidence = _capture_snapshot.CaptureFailureEvidence
@@ -68,8 +69,7 @@ __all__ = [
 ]
 
 FRAME_MAGIC = _capture_ledger.FRAME_MAGIC
-LEDGER_NAME = ".capture-lifecycle.ledger"
-LOCK_NAME = ".capture-lifecycle.lock"
+LEDGER_NAME, LOCK_NAME = ".capture-lifecycle.ledger", ".capture-lifecycle.lock"
 MAX_LEDGER_BYTES = _capture_ledger.MAX_LEDGER_BYTES
 MAX_ACTIVE_RECORDS = 4096
 
@@ -209,7 +209,7 @@ class CaptureLifecycleStore:
         _capture_delivery.normalize_interrupted_deliveries(
             self,
             lifecycle_error=CaptureLifecycleError,
-            lease_live=_capture_types.CarrierLeaseLive,
+            lease_live=_CarrierLeaseLive,
             tampered=_capture_types.Tampered,
         )
 
@@ -901,7 +901,7 @@ class CaptureLifecycleStore:
             fcntl.flock(observed.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as exc:
             if exc.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
-                raise _capture_types.CarrierLeaseLive from exc
+                raise _CarrierLeaseLive from exc
             raise CaptureLifecycleError("artifact lease capability failure") from exc
 
     def _normalize_abandoned(

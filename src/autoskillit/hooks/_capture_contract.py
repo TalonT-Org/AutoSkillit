@@ -565,6 +565,8 @@ def parse_capture_failure_v2(value: bytes) -> CaptureFailureV2:
     if _render_failure(failure) != value:
         raise CaptureContractError("capture failure transport is not canonical")
     return failure
+
+
 class CaptureProtocolError(ValueError):
     """The shell-capture request is malformed, non-canonical, or unsupported."""
 

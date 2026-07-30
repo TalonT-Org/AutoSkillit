@@ -146,6 +146,8 @@ def test_capture_parser_rejects_oversized_and_wrong_status_fields() -> None:
     )
     with pytest.raises(CaptureContractError):
         parse_capture_v2(forged)
+
+
 _ATTEMPT_ID = "a" * 32
 _LAUNCH_ID = "b" * 32
 

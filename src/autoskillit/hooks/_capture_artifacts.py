@@ -829,7 +829,7 @@ def run_capture(
                 return _normalized_returncode(process.wait())
             except BaseException as exc:
                 logger.error("direct_shell_execution_failed", exc_info=True)
-                settlement = (
+                direct_settlement = (
                     _settle_failed_capture(process) if process is not None else None
                 )
                 return _capture_replay.capture_failure_return(
@@ -837,9 +837,9 @@ def run_capture(
                         stage="direct process",
                         detail=f"direct process failed: {type(exc).__name__}: {exc}",
                         shell_returncode=(
-                            None if settlement is None else settlement.returncode
+                            None if direct_settlement is None else direct_settlement.returncode
                         ),
-                        settlement=settlement,
+                        settlement=direct_settlement,
                     )
                 )
 
@@ -881,9 +881,7 @@ def run_capture(
                 return _capture_replay.capture_failure_return(
                     _capture_replay.failure_transport(
                         stage=failure_stage,
-                        detail=(
-                            "capture output drain truncated after process-group settlement"
-                        ),
+                        detail=("capture output drain truncated after process-group settlement"),
                         shell_returncode=command_returncode,
                         settlement=None,
                     )

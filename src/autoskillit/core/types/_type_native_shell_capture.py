@@ -484,6 +484,17 @@ class ManagedHeadlessSessionLineageStore(Protocol):
         expected_record_digest: str,
     ) -> ManagedHeadlessSessionLineage: ...
 
+    def rebind_final_native_session_id(
+        self,
+        *,
+        lineage_anchor: Path,
+        launch_id: str,
+        expected_session_id: str,
+        session_id: str,
+        expected_generation: int,
+        expected_record_digest: str,
+    ) -> ManagedHeadlessSessionLineage: ...
+
     def bind_dispatch_id(
         self,
         *,

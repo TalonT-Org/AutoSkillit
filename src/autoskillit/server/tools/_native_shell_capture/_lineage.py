@@ -97,6 +97,9 @@ def _verify_resume_lineage(
 
 def _invalid_resume_preparation(
     *,
+    store: ManagedHeadlessSessionLineageStore,
+    backend: CodingAgentBackend | None,
+    lineage_anchor: Path,
     requested: NativeShellCaptureMode | None,
     status: ManagedHeadlessSessionLineageStatus,
     resume_session_id: str,
@@ -110,10 +113,17 @@ def _invalid_resume_preparation(
         lineage_status=status.value,
         resume_session_id=resume_session_id,
     )
-    return SkillNativeShellLineagePreparation(
-        _invalid_lineage_decision(status),
-        None,
+    if backend is None or not backend.capabilities.session_dir_persistent:
+        return SkillNativeShellLineagePreparation(None, None)
+    decision = _invalid_lineage_decision(status)
+    lineage = store.create(
+        lineage_anchor=lineage_anchor,
+        launch_id=new_managed_launch_id(),
+        decision=decision,
+        backend=backend.name,
+        session_kind=ManagedHeadlessSessionKind.SKILL,
     )
+    return SkillNativeShellLineagePreparation(decision, lineage.reference)
 
 
 def prepare_skill_native_shell_lineage(
@@ -145,6 +155,9 @@ def prepare_skill_native_shell_lineage(
     requested = _parse_requested_mode(requested_mode)
     if stored_reference is None:
         return _invalid_resume_preparation(
+            store=store,
+            backend=backend,
+            lineage_anchor=lineage_anchor,
             requested=requested,
             status=ManagedHeadlessSessionLineageStatus.MISSING,
             resume_session_id=resume_session_id,
@@ -160,6 +173,9 @@ def prepare_skill_native_shell_lineage(
             exc_info=True,
         )
         return _invalid_resume_preparation(
+            store=store,
+            backend=backend,
+            lineage_anchor=lineage_anchor,
             requested=requested,
             status=lineage_status,
             resume_session_id=resume_session_id,
@@ -176,6 +192,9 @@ def prepare_skill_native_shell_lineage(
         lineage_status = _lineage_status_from_error(exc)
     if lineage_status is not ManagedHeadlessSessionLineageStatus.VALID:
         return _invalid_resume_preparation(
+            store=store,
+            backend=backend,
+            lineage_anchor=lineage_anchor,
             requested=requested,
             status=lineage_status,
             resume_session_id=resume_session_id,
@@ -221,6 +240,20 @@ def rebind_verified_final_session(
         *lineage.candidate_native_session_ids,
     }:
         raise SkillContractError("Resumed Codex execution returned an unverified final session ID")
+    if lineage.final_native_session_id not in {
+        requested_session_id,
+        returned_session_id,
+    }:
+        raise SkillContractError("Resumed Codex lineage final session ID changed unexpectedly")
+    if lineage.final_native_session_id != returned_session_id:
+        store.rebind_final_native_session_id(
+            lineage_anchor=Path(reference.lineage_anchor),
+            launch_id=reference.launch_id,
+            expected_session_id=requested_session_id,
+            session_id=returned_session_id,
+            expected_generation=lineage.generation,
+            expected_record_digest=lineage.record_digest,
+        )
     on_rebind(returned_session_id, reference)
 
 

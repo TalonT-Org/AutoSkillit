@@ -26,6 +26,7 @@ from autoskillit.core import (
     get_logger,
     new_managed_attempt_id,
 )
+from autoskillit.execution.backends import get_backend
 from autoskillit.execution.session import ManagedHeadlessSessionLineageCASMismatch
 
 logger = get_logger(__name__)
@@ -60,6 +61,16 @@ class _ManagedLineageObserver:
             raise ValueError("Managed lineage backend mismatch")
         if lineage.session_kind is not session_kind:
             raise ValueError("Managed lineage session kind mismatch")
+        capabilities = get_backend(backend).capabilities
+        self._verified_resume_final_session_id = (
+            lineage.final_native_session_id
+            if (
+                capabilities.session_resume_capable
+                and not capabilities.channel_b_capable
+                and session_kind is ManagedHeadlessSessionKind.SKILL
+            )
+            else None
+        )
 
     @classmethod
     def create(
@@ -128,7 +139,25 @@ class _ManagedLineageObserver:
             return
         self.bind_candidate(session_id)
         current = self.store.load_reference(self.reference)
+        if current.final_native_session_id == session_id:
+            return
         if current.final_native_session_id is not None:
+            verified_final_session_id = self._verified_resume_final_session_id
+            if (
+                verified_final_session_id is None
+                or current.final_native_session_id != verified_final_session_id
+            ):
+                raise ValueError("Managed lineage final identity change is not authorized")
+            self._mutate(
+                lambda latest: self.store.rebind_final_native_session_id(
+                    lineage_anchor=Path(self.reference.lineage_anchor),
+                    launch_id=self.reference.launch_id,
+                    expected_session_id=verified_final_session_id,
+                    session_id=session_id,
+                    expected_generation=latest.generation,
+                    expected_record_digest=latest.record_digest,
+                )
+            )
             return
         self._mutate(
             lambda latest: self.store.bind_final_native_session_id(

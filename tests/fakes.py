@@ -299,6 +299,45 @@ class FakeManagedHeadlessSessionLineageStore:
         self._final_index[session_id] = launch_id
         return updated
 
+    def rebind_final_native_session_id(
+        self,
+        *,
+        lineage_anchor: Path,
+        launch_id: str,
+        expected_session_id: str,
+        session_id: str,
+        expected_generation: int,
+        expected_record_digest: str,
+    ) -> ManagedHeadlessSessionLineage:
+        current = self._current(lineage_anchor, launch_id)
+        if current.final_native_session_id == session_id:
+            return current
+        current = self._current(
+            lineage_anchor,
+            launch_id,
+            expected_generation,
+            expected_record_digest,
+        )
+        if current.final_native_session_id != expected_session_id:
+            raise RuntimeError("fake lineage final identity no longer matches resume")
+        if self._final_index.get(expected_session_id) != launch_id:
+            raise RuntimeError("fake lineage prior final identity is not owned")
+        indexed_launch_id = self._final_index.get(session_id)
+        if indexed_launch_id is not None and indexed_launch_id != launch_id:
+            raise RuntimeError("fake lineage replacement final identity is already owned")
+        candidates = current.candidate_native_session_ids
+        if session_id not in candidates:
+            candidates = (*candidates, session_id)
+        updated = self._next(
+            current,
+            candidate_native_session_ids=candidates,
+            final_native_session_id=session_id,
+        )
+        self._records[launch_id] = updated
+        self._final_index[session_id] = launch_id
+        del self._final_index[expected_session_id]
+        return updated
+
     def bind_dispatch_id(
         self,
         *,

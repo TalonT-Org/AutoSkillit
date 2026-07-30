@@ -21,9 +21,11 @@ from autoskillit.core import (
 from autoskillit.execution import (
     DefaultManagedHeadlessSessionLineageStore,
     DefaultSkillSessionContractStore,
+    get_backend,
 )
 from autoskillit.server.tools._native_shell_capture import (
     prepare_skill_native_shell_lineage,
+    rebind_verified_final_session,
 )
 from autoskillit.server.tools.tools_execution import run_skill
 
@@ -64,6 +66,50 @@ def _attach_lineage_reference(
     manifest = store._read_manifest(entry)  # noqa: SLF001
     manifest["managed_lineage_ref"] = lineage.reference.to_dict()
     store._write_manifest(entry, manifest)  # noqa: SLF001
+
+
+def test_verified_changed_resume_rebinds_lineage_index_and_contract_callback(
+    tmp_path: Path,
+) -> None:
+    store = DefaultManagedHeadlessSessionLineageStore()
+    lineage = _seed_skill_lineage(
+        store,
+        anchor=tmp_path,
+        backend_name="codex",
+        session_id="old-final",
+    )
+    lineage = store.bind_candidate_native_session_id(
+        lineage_anchor=tmp_path,
+        launch_id=lineage.launch_id,
+        session_id="new-final",
+        expected_generation=lineage.generation,
+        expected_record_digest=lineage.record_digest,
+    )
+    backend = MagicMock()
+    backend.capabilities.session_dir_persistent = True
+    rebound_contracts: list[tuple[str, object]] = []
+
+    rebind_verified_final_session(
+        store=store,
+        backend=backend,
+        reference=lineage.reference,
+        is_resume=True,
+        requested_session_id="old-final",
+        returned_session_id="new-final",
+        on_rebind=lambda session_id, reference: rebound_contracts.append((session_id, reference)),
+    )
+
+    rebound = store.find_by_final_native_session_id(
+        lineage_anchor=tmp_path,
+        session_id="new-final",
+    )
+    assert rebound.final_native_session_id == "new-final"
+    with pytest.raises(FileNotFoundError):
+        store.find_by_final_native_session_id(
+            lineage_anchor=tmp_path,
+            session_id="old-final",
+        )
+    assert rebound_contracts == [("new-final", lineage.reference)]
 
 
 def test_contract_lifecycle_cleans_provisional_and_failed_bound_state() -> None:
@@ -189,6 +235,7 @@ async def test_resume_missing_lineage_falls_back_to_capture(
     from tests.fakes import InMemoryHeadlessExecutor
 
     session_id = "missing-lineage"
+    tool_ctx_kitchen_open.backend = get_backend("codex")
     bind_test_skill_resume_contract(
         tool_ctx_kitchen_open,
         session_id=session_id,
@@ -214,7 +261,13 @@ async def test_resume_missing_lineage_falls_back_to_capture(
     assert decision.mode is NativeShellCaptureMode.CAPTURE
     assert decision.reason is NativeShellCaptureReason.INVALID_LINEAGE
     assert decision.lineage_status is ManagedHeadlessSessionLineageStatus.MISSING
-    assert executor.calls[0].managed_lineage_ref is None
+    fallback_reference = executor.calls[0].managed_lineage_ref
+    assert fallback_reference is not None
+    fallback_lineage = tool_ctx_kitchen_open.managed_headless_session_lineage_store.load_reference(
+        fallback_reference
+    )
+    assert fallback_lineage.decision == decision
+    assert fallback_lineage.final_native_session_id is None
     diagnostic = next(
         entry
         for entry in logs
@@ -252,7 +305,7 @@ def test_resume_lineage_load_failure_falls_back_to_capture(
     import structlog.testing
 
     lineage_store = DefaultManagedHeadlessSessionLineageStore()
-    reference_store = MagicMock()
+    reference_store = MagicMock(wraps=lineage_store)
     valid = _seed_skill_lineage(
         lineage_store,
         anchor=tmp_path,
@@ -262,6 +315,7 @@ def test_resume_lineage_load_failure_falls_back_to_capture(
     reference_store.load_reference.side_effect = error
     backend = MagicMock()
     backend.name = "codex"
+    backend.capabilities.session_dir_persistent = True
 
     with structlog.testing.capture_logs() as logs:
         preparation = prepare_skill_native_shell_lineage(
@@ -274,11 +328,14 @@ def test_resume_lineage_load_failure_falls_back_to_capture(
             is_resume=True,
         )
 
-    assert preparation.reference is None
     assert preparation.decision is not None
     assert preparation.decision.mode is NativeShellCaptureMode.CAPTURE
     assert preparation.decision.reason is NativeShellCaptureReason.INVALID_LINEAGE
     assert preparation.decision.lineage_status is expected_status
+    assert preparation.reference is not None
+    fallback = lineage_store.load_reference(preparation.reference)
+    assert fallback.decision == preparation.decision
+    assert fallback.final_native_session_id is None
     diagnostic = next(
         entry
         for entry in logs
@@ -318,6 +375,7 @@ def test_resume_lineage_identity_mismatch_falls_back_to_capture(
     reference = lineage.reference
     backend = MagicMock()
     backend.name = "codex"
+    backend.capabilities.session_dir_persistent = True
     if mismatch == "session-kind":
         lineage = replace(lineage, session_kind=ManagedHeadlessSessionKind.FOOD_TRUCK)
     elif mismatch == "anchor":
@@ -334,7 +392,7 @@ def test_resume_lineage_identity_mismatch_falls_back_to_capture(
         lineage = replace(lineage, final_native_session_id="different-session")
     elif mismatch == "candidate-only":
         lineage = replace(lineage, final_native_session_id=None)
-    store = MagicMock()
+    store = MagicMock(wraps=actual_store)
     store.load_reference.return_value = lineage
 
     with structlog.testing.capture_logs() as logs:
@@ -348,10 +406,17 @@ def test_resume_lineage_identity_mismatch_falls_back_to_capture(
             is_resume=True,
         )
 
-    assert preparation.reference is None
-    assert preparation.decision is not None
-    assert preparation.decision.mode is NativeShellCaptureMode.CAPTURE
-    assert preparation.decision.lineage_status is expected_status
+    if backend is None:
+        assert preparation.decision is None
+        assert preparation.reference is None
+    else:
+        assert preparation.decision is not None
+        assert preparation.decision.mode is NativeShellCaptureMode.CAPTURE
+        assert preparation.decision.lineage_status is expected_status
+        assert preparation.reference is not None
+        fallback = actual_store.load_reference(preparation.reference)
+        assert fallback.decision == preparation.decision
+        assert fallback.final_native_session_id is None
     diagnostic = next(
         entry
         for entry in logs

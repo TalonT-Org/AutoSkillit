@@ -155,6 +155,7 @@ class TestExecutionSubpackages:
             "_retry_fsm",
             "_exit_classification",
             "_managed_headless_session_lineage",
+            "_managed_headless_session_lineage_codec",
         }
         actual = {
             p.stem for p in (SRC / "execution" / "session").glob("*.py") if p.stem != "__init__"

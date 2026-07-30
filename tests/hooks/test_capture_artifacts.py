@@ -538,13 +538,20 @@ def test_symlinked_policy_root_is_not_trusted(tmp_path: Path) -> None:
         anchor.close()
 
 
-def test_symlinked_policy_leaf_is_not_trusted(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "policy_filename",
+    [".hook_config.json", ".hook_config_overlay.json"],
+)
+def test_symlinked_policy_leaf_is_not_trusted(
+    policy_filename: str,
+    tmp_path: Path,
+) -> None:
     project = tmp_path / "project"
     temp_dir = project.joinpath(*CAPTURE_PATH_COMPONENTS[:2])
     temp_dir.mkdir(parents=True)
     external_config = tmp_path / "external-config.json"
     external_config.write_text(json.dumps({"output_budget_policy": {"disabled": True}}))
-    (temp_dir / ".hook_config.json").symlink_to(external_config)
+    (temp_dir / policy_filename).symlink_to(external_config)
 
     anchor = open_project_anchor(str(project))
     try:
@@ -593,6 +600,93 @@ def test_verified_policy_merges_overlay_and_bounds_inline_bytes(
         assert read_capture_policy(anchor) == CapturePolicy(disabled=True, inline_bytes=expected)
     finally:
         anchor.close()
+
+
+@pytest.mark.parametrize("policy_source", ["base", "overlay"])
+@pytest.mark.parametrize("policy_disabled", [False, True])
+@pytest.mark.parametrize("requested_mode", ["capture", "direct"])
+def test_runner_policy_precedence_cross_product(
+    requested_mode: str,
+    policy_disabled: bool,
+    policy_source: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    temp_dir = project.joinpath(*CAPTURE_PATH_COMPONENTS[:2])
+    temp_dir.mkdir(parents=True)
+    base_disabled = not policy_disabled if policy_source == "overlay" else policy_disabled
+    (temp_dir / ".hook_config.json").write_text(
+        json.dumps({"output_budget_policy": {"disabled": base_disabled}})
+    )
+    if policy_source == "overlay":
+        (temp_dir / ".hook_config_overlay.json").write_text(
+            json.dumps({"output_budget_policy": {"disabled": policy_disabled}})
+        )
+
+    project_stat = project.stat()
+    reference = CaptureLineageRef(
+        schema_version=1,
+        launch_id="a" * 32,
+        lineage_digest="b" * 64,
+        lineage_anchor=str(project),
+        anchor_device=project_stat.st_dev,
+        anchor_inode=project_stat.st_ino,
+    )
+    observations: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        capture_artifacts,
+        "validate_lineage_reference",
+        lambda supplied_ref, supplied_attempt: (
+            supplied_ref == reference and supplied_attempt == "c" * 32
+        ),
+    )
+
+    def record_observation(
+        supplied_ref: CaptureLineageRef,
+        supplied_attempt: str,
+        **values: object,
+    ) -> bool:
+        assert supplied_ref == reference
+        assert supplied_attempt == "c" * 32
+        observations.append(values)
+        return True
+
+    monkeypatch.setattr(
+        capture_artifacts,
+        "record_runner_observation",
+        record_observation,
+    )
+
+    assert (
+        run_capture(
+            ":",
+            str(project),
+            _CAPTURE_ID,
+            requested_mode=requested_mode,
+            attempt_id="c" * 32,
+            lineage_ref=reference,
+        )
+        == 0
+    )
+
+    launch_direct = requested_mode == "direct"
+    effective_direct = launch_direct or policy_disabled
+    expected_reason = (
+        "launch_authorized_direct"
+        if launch_direct
+        else "project_policy_disabled"
+        if policy_disabled
+        else "capture_enabled"
+    )
+    assert observations == [
+        {
+            "effective_mode": "direct" if effective_direct else "capture",
+            "reason": expected_reason,
+            "project_policy_disabled": policy_disabled,
+        }
+    ]
+    assert _capture_dir(project).exists() is not effective_direct
 
 
 def test_policy_partial_open_failure_closes_autoskillit_fd(

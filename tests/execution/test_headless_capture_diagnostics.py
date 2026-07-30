@@ -243,7 +243,13 @@ async def test_terminal_epilogue_projects_one_attempt_aware_snapshot_to_all_sink
         assert attempt_id == observer.attempts[-1]
         if terminal_case == "early_build_crash":
             raise RuntimeError("build failed")
-        return CmdSpec(cmd=("echo",), env={})
+        return CmdSpec(
+            cmd=("echo",),
+            env={
+                "AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE": "direct",
+                "OPENAI_API_KEY": "<openai-api-key-placeholder>",
+            },
+        )
 
     flush_calls: list[dict[str, Any]] = []
     real_flush = session_log.flush_session_log
@@ -300,3 +306,19 @@ async def test_terminal_epilogue_projects_one_attempt_aware_snapshot_to_all_sink
     index = json.loads((log_root / "sessions.jsonl").read_text().splitlines()[-1])
     assert summary["native_shell_capture"] == expected_projection
     assert index["native_shell_capture"] == expected_projection
+
+    for sink in (launch, exit_event, summary, index):
+        projection = sink["native_shell_capture"]
+        assert projection["requested_mode"] == "direct"
+        assert projection["effective_mode"] == "direct"
+        assert projection["launch_id"] == "1" * 32
+        assert projection["attempt_id"] == observer.attempts[0]
+        assert projection["attributions"] == [
+            "launch_authorized_direct",
+            "project_policy_disabled",
+        ]
+
+    serialized_sinks = json.dumps((launch, exit_event, summary, index), sort_keys=True)
+    assert "AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE" not in serialized_sinks
+    assert "OPENAI_API_KEY" not in serialized_sinks
+    assert "<openai-api-key-placeholder>" not in serialized_sinks

@@ -61,6 +61,23 @@ SHARED_BASELINE_ENV: Mapping[str, str] = MappingProxyType(
     }
 )
 
+_PROTECTED_NATIVE_SHELL_ENV_VARS: frozenset[str] = frozenset(
+    {
+        NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
+        MANAGED_LAUNCH_ID_ENV_VAR,
+        MANAGED_ATTEMPT_ID_ENV_VAR,
+        MANAGED_LINEAGE_DIGEST_ENV_VAR,
+        MANAGED_LINEAGE_REF_ENV_VAR,
+    }
+)
+
+
+def _filter_protected_native_shell_env(extras: Mapping[str, str]) -> dict[str, str]:
+    """Remove controls that only managed Codex builders may author."""
+    return {
+        key: value for key, value in extras.items() if key not in _PROTECTED_NATIVE_SHELL_ENV_VARS
+    }
+
 
 def _merge_caller_env_extras(
     target: dict[str, str],
@@ -71,7 +88,8 @@ def _merge_caller_env_extras(
     """Merge caller extras without admitting Codex cook-owned controls."""
     if extras is not None:
         blocked = denylist | CODEX_COOK_RESERVED_ENV_VARS | {CODEX_STARTUP_TRACE_ENV_VAR}
-        target.update({key: value for key, value in extras.items() if key not in blocked})
+        filtered_extras = _filter_protected_native_shell_env(extras)
+        target.update({key: value for key, value in filtered_extras.items() if key not in blocked})
 
 
 def _managed_native_shell_env(

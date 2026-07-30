@@ -406,8 +406,6 @@ async def _execute_claude_headless(
             if nudge_success is not None:
                 skill_result = nudge_success
 
-        lineage_callbacks.bind_final(skill_result.session_id)
-
         _clone_reverted = False
         if _clone_snapshot is not None:
             _exclude_prefix = _derived_prefix or GUARD_EXCLUDE_PREFIX
@@ -443,6 +441,7 @@ async def _execute_claude_headless(
             fallback_activated = True
             remaining_attempts -= 1
             continue
+        lineage_callbacks.bind_final(skill_result.session_id)
         break
 
     assert skill_result is not None

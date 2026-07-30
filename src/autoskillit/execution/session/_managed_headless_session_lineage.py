@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import fcntl
 import hashlib
-import json
 import os
 import stat
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
@@ -21,6 +20,27 @@ from autoskillit.core import (
     NativeShellCaptureDecision,
     NativeShellCaptureObservation,
     atomic_write,
+)
+from autoskillit.execution.session._managed_headless_session_lineage_codec import (
+    _strict_str,
+)
+from autoskillit.execution.session._managed_headless_session_lineage_codec import (
+    canonical_json as _canonical_json,
+)
+from autoskillit.execution.session._managed_headless_session_lineage_codec import (
+    digest as _digest,
+)
+from autoskillit.execution.session._managed_headless_session_lineage_codec import (
+    lineage_from_dict as _lineage_from_dict,
+)
+from autoskillit.execution.session._managed_headless_session_lineage_codec import (
+    record_payload as _record_payload,
+)
+from autoskillit.execution.session._managed_headless_session_lineage_codec import (
+    record_to_dict as _record_to_dict,
+)
+from autoskillit.execution.session._managed_headless_session_lineage_codec import (
+    strict_json_load as _strict_json_load,
 )
 
 __all__ = [
@@ -44,26 +64,6 @@ _MAX_OBSERVATIONS = 64
 _MAX_OBSERVATION_BYTES = 16 * 1024
 _MAX_RUNNER_MARKER_BYTES = 8 * 1024
 _MAX_RUNNER_MARKERS = 256
-_RECORD_FIELDS = {
-    "schema_version",
-    "generation",
-    "launch_id",
-    "decision",
-    "backend",
-    "session_kind",
-    "lineage_anchor",
-    "anchor_device",
-    "anchor_inode",
-    "lineage_digest",
-    "record_digest",
-    "attempt_ids",
-    "candidate_native_session_ids",
-    "final_native_session_id",
-    "dispatch_id",
-    "terminal_state",
-    "observations",
-    "dropped_observation_count",
-}
 
 
 class ManagedHeadlessSessionLineageConflictError(RuntimeError):
@@ -269,6 +269,64 @@ class DefaultManagedHeadlessSessionLineageStore:
             ),
         )
 
+    def rebind_final_native_session_id(
+        self,
+        *,
+        lineage_anchor: Path,
+        launch_id: str,
+        expected_session_id: str,
+        session_id: str,
+        expected_generation: int,
+        expected_record_digest: str,
+    ) -> ManagedHeadlessSessionLineage:
+        """Transfer final-session ownership from one verified ID to another."""
+        anchor, device, inode = _resolve_anchor(lineage_anchor)
+        root = _prepare_root(anchor)
+        record_path = _record_path(root, launch_id)
+        with _store_lock(root, exclusive=True):
+            current = _read_record(record_path)
+            _validate_anchor_identity(current, anchor, device, inode)
+            if current.final_native_session_id == session_id:
+                return current
+            if current.final_native_session_id != expected_session_id:
+                raise ManagedHeadlessSessionLineageConflictError(
+                    "Managed lineage final identity no longer matches the verified resume"
+                )
+            _require_cas(current, expected_generation, expected_record_digest)
+            indexed_launch_id = _read_index(
+                root,
+                _FINAL_NATIVE_INDEX,
+                expected_session_id,
+            )
+            if indexed_launch_id != launch_id:
+                raise ManagedHeadlessSessionLineageConflictError(
+                    "Managed lineage prior final identity is owned by another launch"
+                )
+            _assert_index_available(
+                root,
+                _FINAL_NATIVE_INDEX,
+                session_id,
+                launch_id,
+            )
+            candidates = current.candidate_native_session_ids
+            if session_id not in candidates:
+                candidates = (*candidates, session_id)
+            updated = _next_generation(
+                replace(
+                    current,
+                    candidate_native_session_ids=candidates,
+                    final_native_session_id=session_id,
+                )
+            )
+            _write_record(record_path, updated)
+            _write_index(root, _FINAL_NATIVE_INDEX, session_id, launch_id)
+            _remove_index(
+                root,
+                _FINAL_NATIVE_INDEX,
+                expected_session_id,
+            )
+            return updated
+
     def bind_dispatch_id(
         self,
         *,
@@ -384,6 +442,7 @@ class DefaultManagedHeadlessSessionLineageStore:
                 raise ManagedHeadlessSessionLineageCASMismatch(
                     "Managed runner observation CAS retry limit exceeded"
                 )
+            _settle_runner_observation(root, reference, observation)
         return self.load_reference(reference)
 
     def _find_by_index(
@@ -526,90 +585,6 @@ def _creation_projection(lineage: ManagedHeadlessSessionLineage) -> tuple[object
         lineage.anchor_inode,
         lineage.dispatch_id,
     )
-
-
-def _record_payload(lineage: ManagedHeadlessSessionLineage) -> dict[str, object]:
-    return {
-        "schema_version": lineage.schema_version,
-        "generation": lineage.generation,
-        "launch_id": lineage.launch_id,
-        "decision": lineage.decision.to_dict(),
-        "backend": lineage.backend,
-        "session_kind": lineage.session_kind.value,
-        "lineage_anchor": lineage.lineage_anchor,
-        "anchor_device": lineage.anchor_device,
-        "anchor_inode": lineage.anchor_inode,
-        "lineage_digest": lineage.lineage_digest,
-        "attempt_ids": list(lineage.attempt_ids),
-        "candidate_native_session_ids": list(lineage.candidate_native_session_ids),
-        "final_native_session_id": lineage.final_native_session_id,
-        "dispatch_id": lineage.dispatch_id,
-        "terminal_state": lineage.terminal_state.value,
-        "observations": [item.to_dict() for item in lineage.observations],
-        "dropped_observation_count": lineage.dropped_observation_count,
-    }
-
-
-def _record_to_dict(lineage: ManagedHeadlessSessionLineage) -> dict[str, object]:
-    return {**_record_payload(lineage), "record_digest": lineage.record_digest}
-
-
-def _lineage_from_dict(value: object) -> ManagedHeadlessSessionLineage:
-    if not isinstance(value, dict) or set(value) != _RECORD_FIELDS:
-        raise ValueError("Invalid managed lineage record shape")
-    try:
-        lineage = ManagedHeadlessSessionLineage(
-            schema_version=_strict_int(value["schema_version"], "schema_version"),
-            generation=_strict_int(value["generation"], "generation"),
-            launch_id=_strict_str(value["launch_id"], "launch_id"),
-            decision=NativeShellCaptureDecision.from_dict(value["decision"]),
-            backend=_strict_str(value["backend"], "backend"),
-            session_kind=ManagedHeadlessSessionKind(
-                _strict_str(value["session_kind"], "session_kind")
-            ),
-            lineage_anchor=_strict_str(value["lineage_anchor"], "lineage_anchor"),
-            anchor_device=_strict_int(value["anchor_device"], "anchor_device"),
-            anchor_inode=_strict_int(value["anchor_inode"], "anchor_inode"),
-            lineage_digest=_strict_str(value["lineage_digest"], "lineage_digest"),
-            record_digest=_strict_str(value["record_digest"], "record_digest"),
-            attempt_ids=_strict_str_tuple(value["attempt_ids"], "attempt_ids"),
-            candidate_native_session_ids=_strict_str_tuple(
-                value["candidate_native_session_ids"],
-                "candidate_native_session_ids",
-            ),
-            final_native_session_id=_optional_str(
-                value["final_native_session_id"],
-                "final_native_session_id",
-            ),
-            dispatch_id=_optional_str(value["dispatch_id"], "dispatch_id"),
-            terminal_state=ManagedHeadlessSessionTerminalState(
-                _strict_str(value["terminal_state"], "terminal_state")
-            ),
-            observations=_observation_tuple(value["observations"]),
-            dropped_observation_count=_strict_int(
-                value["dropped_observation_count"],
-                "dropped_observation_count",
-            ),
-        )
-    except (TypeError, ValueError) as exc:
-        raise ValueError("Invalid managed lineage record") from exc
-    expected_identity_digest = _digest(
-        {
-            "schema_version": lineage.schema_version,
-            "launch_id": lineage.launch_id,
-            "decision": lineage.decision.to_dict(),
-            "backend": lineage.backend,
-            "session_kind": lineage.session_kind.value,
-            "lineage_anchor": lineage.lineage_anchor,
-            "anchor_device": lineage.anchor_device,
-            "anchor_inode": lineage.anchor_inode,
-        }
-    )
-    if lineage.lineage_digest != expected_identity_digest:
-        raise ValueError("Managed lineage identity digest mismatch")
-    if lineage.record_digest != _digest(_record_payload(lineage)):
-        raise ValueError("Managed lineage record digest mismatch")
-    return lineage
 
 
 def _resolve_anchor(lineage_anchor: Path) -> tuple[Path, int, int]:
@@ -769,6 +744,48 @@ def _read_runner_markers(
         os.close(root_fd)
 
 
+def _settle_runner_observation(
+    root: Path,
+    reference: ManagedHeadlessSessionLineageRef,
+    observation: NativeShellCaptureObservation,
+) -> None:
+    """Durably consume one marker after its lineage mutation has settled."""
+    marker = {
+        "schema_version": MANAGED_HEADLESS_SESSION_LINEAGE_SCHEMA_VERSION,
+        "launch_id": reference.launch_id,
+        "lineage_digest": reference.lineage_digest,
+        "observation": observation.to_dict(),
+    }
+    marker_name = f"{hashlib.sha256(_canonical_json(marker).encode('utf-8')).hexdigest()}.json"
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    root_fd = os.open(root, directory_flags | nofollow)
+    observations_fd = -1
+    launch_fd = -1
+    try:
+        try:
+            observations_fd = os.open(
+                _RUNNER_OBSERVATIONS_DIR,
+                directory_flags | nofollow,
+                dir_fd=root_fd,
+            )
+            launch_fd = os.open(
+                reference.launch_id,
+                directory_flags | nofollow,
+                dir_fd=observations_fd,
+            )
+            os.unlink(marker_name, dir_fd=launch_fd)
+            os.fsync(launch_fd)
+        except FileNotFoundError:
+            return
+    finally:
+        if launch_fd >= 0:
+            os.close(launch_fd)
+        if observations_fd >= 0:
+            os.close(observations_fd)
+        os.close(root_fd)
+
+
 def _index_path(root: Path, index_name: str, key: str) -> Path:
     if not isinstance(key, str) or not key or "\x00" in key:
         raise ValueError(f"Invalid managed lineage {index_name} key")
@@ -791,6 +808,17 @@ def _write_index(root: Path, index_name: str, key: str, launch_id: str) -> None:
         ),
         strict_durability=True,
     )
+
+
+def _remove_index(root: Path, index_name: str, key: str) -> None:
+    """Durably remove one index entry while its namespace lock is held."""
+    path = _index_path(root, index_name, key)
+    path.unlink()
+    directory_fd = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
 
 
 def _read_index(root: Path, index_name: str, key: str) -> str:
@@ -857,65 +885,3 @@ def _read_bounded(path: Path) -> bytes:
     if len(raw) > _MAX_RECORD_BYTES:
         raise ValueError("Managed lineage artifact is oversized")
     return raw
-
-
-def _strict_json_load(raw: bytes) -> object:
-    def reject_duplicates(pairs: list[tuple[str, object]]) -> dict[str, object]:
-        result: dict[str, object] = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError("Duplicate managed lineage JSON key")
-            result[key] = value
-        return result
-
-    try:
-        return json.loads(
-            raw.decode("utf-8", errors="strict"),
-            object_pairs_hook=reject_duplicates,
-        )
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError("Invalid managed lineage JSON") from exc
-
-
-def _canonical_json(value: object) -> str:
-    return json.dumps(
-        value,
-        ensure_ascii=True,
-        allow_nan=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-
-
-def _digest(value: Mapping[str, object]) -> str:
-    return hashlib.sha256(_canonical_json(dict(value)).encode("utf-8")).hexdigest()
-
-
-def _strict_str(value: object, field_name: str) -> str:
-    if not isinstance(value, str):
-        raise TypeError(f"{field_name} must be str")
-    return value
-
-
-def _strict_int(value: object, field_name: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(f"{field_name} must be int")
-    return value
-
-
-def _optional_str(value: object, field_name: str) -> str | None:
-    if value is None:
-        return None
-    return _strict_str(value, field_name)
-
-
-def _strict_str_tuple(value: object, field_name: str) -> tuple[str, ...]:
-    if not isinstance(value, list):
-        raise TypeError(f"{field_name} must be a list")
-    return tuple(_strict_str(item, field_name) for item in value)
-
-
-def _observation_tuple(value: object) -> tuple[NativeShellCaptureObservation, ...]:
-    if not isinstance(value, list):
-        raise TypeError("observations must be a list")
-    return tuple(NativeShellCaptureObservation.from_dict(item) for item in value)

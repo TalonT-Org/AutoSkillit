@@ -132,8 +132,43 @@ def test_codex_managed_resume_env_overrides_hostile_extras() -> None:
 
 def test_codex_unmanaged_builders_do_not_inject_managed_env() -> None:
     backend = CodexBackend()
+    hostile_env = _hostile_env()
 
     specs = (
+        backend.build_headless_cmd("prompt", env_extras=hostile_env),
+        backend.build_skill_session_cmd(
+            "/autoskillit:test",
+            "/tmp/project",
+            SkillSessionConfig(provider_extras=hostile_env),
+        ),
+        backend.build_food_truck_cmd(
+            orchestrator_prompt="dispatch",
+            plugin_binding=None,
+            cwd="/tmp/project",
+            completion_marker="DONE",
+            env_extras=hostile_env,
+        ),
+        backend.build_resume_cmd(
+            resume_session_id="thread-1",
+            prompt="continue",
+            env_extras=hostile_env,
+        ),
+        backend.build_interactive_cmd(env_extras=hostile_env),
+    )
+
+    for spec in specs:
+        _assert_no_managed_env(spec.env)
+
+
+def test_codex_ambient_protected_controls_do_not_reach_any_builder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for key, value in _hostile_env().items():
+        monkeypatch.setenv(key, value)
+    backend = CodexBackend()
+
+    specs = (
+        backend.build_cmd("prompt", "/tmp/project"),
         backend.build_headless_cmd("prompt"),
         backend.build_skill_session_cmd(
             "/autoskillit:test",

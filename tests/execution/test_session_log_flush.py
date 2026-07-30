@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    FailureRecord,
     ManagedHeadlessSessionLineageStatus,
     NativeShellCaptureDiagnostic,
     NativeShellCaptureMode,
@@ -582,7 +583,7 @@ def test_flush_index_includes_schema_version_6(tmp_path):
     assert entry["schema_version"] == 6
 
 
-def test_native_shell_diagnostic_is_identical_in_summary_and_index(tmp_path):
+def test_native_shell_diagnostic_is_limited_to_summary_and_index(tmp_path):
     diagnostic = NativeShellCaptureDiagnostic(
         requested_mode=NativeShellCaptureMode.DIRECT,
         effective_mode=NativeShellCaptureMode.DIRECT,
@@ -597,13 +598,54 @@ def test_native_shell_diagnostic_is_identical_in_summary_and_index(tmp_path):
         attempt_id="2" * 32,
         dropped_observation_count=3,
     )
-    _flush(tmp_path, native_shell_capture=diagnostic)
+    failure = FailureRecord(
+        timestamp="2026-01-01T00:00:00Z",
+        skill_command="/autoskillit:implement-worktree",
+        exit_code=1,
+        subtype="error",
+        needs_retry=False,
+        retry_reason="none",
+        stderr="ordinary failure",
+    )
+    secret_placeholder = "<openai-api-key-placeholder>"
+    failure.__dict__.update(
+        native_shell_capture=diagnostic.to_dict(stage="exit"),
+        child_env={
+            "AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE": "direct",
+            "OPENAI_API_KEY": secret_placeholder,
+        },
+    )
+    _flush(
+        tmp_path,
+        step_name="implement",
+        success=False,
+        audit_record=failure.to_dict(),
+        native_shell_capture=diagnostic,
+    )
 
     summary = json.loads((tmp_path / "sessions" / "test-session-001" / "summary.json").read_text())
     index_entry = json.loads((tmp_path / "sessions.jsonl").read_text())
+    audit_log = json.loads(
+        (tmp_path / "sessions" / "test-session-001" / "audit_log.json").read_text()
+    )
     expected = diagnostic.to_dict(stage="exit")
     assert summary["native_shell_capture"] == expected
     assert index_entry["native_shell_capture"] == expected
+    assert audit_log == [failure.to_dict()]
+
+    serialized_audit = json.dumps(audit_log, sort_keys=True)
+    for forbidden in (
+        "native_shell_capture",
+        "requested_mode",
+        "effective_mode",
+        "attributions",
+        diagnostic.launch_id,
+        diagnostic.attempt_id,
+        "AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE",
+        "OPENAI_API_KEY",
+        secret_placeholder,
+    ):
+        assert forbidden not in serialized_audit
 
 
 def test_flush_index_token_fields_zero_when_no_step(tmp_path):

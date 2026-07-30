@@ -194,6 +194,89 @@ def test_candidate_final_dispatch_terminal_and_observation_bindings(
     assert lineage.terminal_state is ManagedHeadlessSessionTerminalState.SUCCEEDED
 
 
+def test_verified_final_rebind_transfers_durable_index_ownership(tmp_path: Path) -> None:
+    anchor = tmp_path / "project"
+    anchor.mkdir()
+    store = DefaultManagedHeadlessSessionLineageStore()
+    lineage = _create(store, anchor)
+    lineage = store.bind_final_native_session_id(
+        lineage_anchor=anchor,
+        launch_id=lineage.launch_id,
+        session_id="old-final",
+        **_cas(lineage),
+    )
+    competing = _create(store, anchor, launch_id="2" * 32)
+    competing = store.bind_final_native_session_id(
+        lineage_anchor=anchor,
+        launch_id=competing.launch_id,
+        session_id="owned-final",
+        **_cas(competing),
+    )
+
+    with pytest.raises(
+        ManagedHeadlessSessionLineageConflictError,
+        match="already owned",
+    ):
+        store.rebind_final_native_session_id(
+            lineage_anchor=anchor,
+            launch_id=lineage.launch_id,
+            expected_session_id="old-final",
+            session_id="owned-final",
+            **_cas(lineage),
+        )
+    assert (
+        store.find_by_final_native_session_id(
+            lineage_anchor=anchor,
+            session_id="old-final",
+        )
+        == lineage
+    )
+
+    rebound = store.rebind_final_native_session_id(
+        lineage_anchor=anchor,
+        launch_id=lineage.launch_id,
+        expected_session_id="old-final",
+        session_id="new-final",
+        **_cas(lineage),
+    )
+
+    assert rebound.final_native_session_id == "new-final"
+    assert rebound.candidate_native_session_ids == ("old-final", "new-final")
+    assert (
+        store.find_by_final_native_session_id(
+            lineage_anchor=anchor,
+            session_id="new-final",
+        )
+        == rebound
+    )
+    with pytest.raises(FileNotFoundError):
+        store.find_by_final_native_session_id(
+            lineage_anchor=anchor,
+            session_id="old-final",
+        )
+    assert (
+        store.rebind_final_native_session_id(
+            lineage_anchor=anchor,
+            launch_id=lineage.launch_id,
+            expected_session_id="old-final",
+            session_id="new-final",
+            **_cas(lineage),
+        )
+        == rebound
+    )
+    with pytest.raises(
+        ManagedHeadlessSessionLineageConflictError,
+        match="no longer matches",
+    ):
+        store.rebind_final_native_session_id(
+            lineage_anchor=anchor,
+            launch_id=lineage.launch_id,
+            expected_session_id="wrong-final",
+            session_id="third-final",
+            **_cas(rebound),
+        )
+
+
 def test_observation_count_overflow_is_bounded_and_counted(tmp_path: Path) -> None:
     anchor = tmp_path / "project"
     anchor.mkdir()

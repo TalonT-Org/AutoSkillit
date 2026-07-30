@@ -62,6 +62,10 @@ _POST_EXIT_TERM_SECONDS = 0.25
 _POST_EXIT_KILL_SECONDS = 0.5
 _DRAIN_POLL_SECONDS = 0.05
 _TRUSTED_BASH_CANDIDATES = ("/bin/bash", "/usr/bin/bash")
+_PROC_ROOT = "/proc"
+_PROC_STAT_READ_BYTES = 4096
+_PROC_READ_FLAGS = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+_SETTLED_PROCESS_STATES = frozenset({b"X", b"Z"})
 _EXECUTABLE_MODE_BITS = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
 _FORWARDED_SIGNALS = (
     signal.SIGINT,
@@ -233,11 +237,32 @@ class OwnedProcessGroup:
         return returncode
 
     def _settle_remaining_group(self) -> None:
-        if _wait_for_group_exit(self.pgid, 0.0):
+        remaining = _process_group_has_live_members(self.pgid)
+        if remaining is False:
             return
         self.signal_group(signal.SIGTERM)
-        if not _wait_for_group_exit(self.pgid, 0.0):
-            self.signal_group(signal.SIGKILL)
+        settled = _wait_for_remaining_group_settlement(
+            self.pgid,
+            _TERM_TIMEOUT_SECONDS,
+        )
+        if settled is True:
+            return
+        if settled is None:
+            time.sleep(_POST_EXIT_TERM_SECONDS)
+            if not _process_group_exists(self.pgid):
+                return
+
+        self.signal_group(signal.SIGKILL)
+        settled = _wait_for_remaining_group_settlement(
+            self.pgid,
+            _KILL_TIMEOUT_SECONDS,
+        )
+        if settled is True:
+            return
+        if settled is None:
+            time.sleep(_POST_EXIT_KILL_SECONDS)
+            return
+        raise OwnedProcessError(f"owned process group {self.pgid} survived SIGKILL")
 
     def _restore_parent_state(self) -> None:
         if self._restored:
@@ -656,6 +681,77 @@ def _wait_for_leader_exit_without_reaping(
     return True
 
 
+def _wait_for_remaining_group_settlement(
+    pgid: int,
+    timeout_seconds: float,
+) -> bool | None:
+    """Wait until no live member remains besides settled zombies."""
+
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        remaining = _process_group_has_live_members(pgid)
+        if remaining is not True:
+            return None if remaining is None else True
+        remaining_seconds = deadline - time.monotonic()
+        if remaining_seconds <= 0:
+            return False
+        time.sleep(min(_GROUP_POLL_SECONDS, remaining_seconds))
+
+
+def _process_group_has_live_members(pgid: int) -> bool | None:
+    """Return live-member state, or None when the proc view is unavailable."""
+
+    group_exists, liveness_visible = _probe_process_group(pgid)
+    if not group_exists:
+        return False
+    try:
+        entries = os.scandir(_PROC_ROOT)
+    except OSError:
+        return None
+
+    indeterminate = False
+    with entries:
+        for entry in entries:
+            if not entry.name.isdecimal():
+                continue
+            try:
+                descriptor = os.open(entry.path + "/stat", _PROC_READ_FLAGS)
+            except FileNotFoundError:
+                continue
+            except OSError:
+                indeterminate = True
+                continue
+            try:
+                raw_stat = os.read(descriptor, _PROC_STAT_READ_BYTES)
+            except OSError:
+                indeterminate = True
+                continue
+            finally:
+                os.close(descriptor)
+
+            parsed = _parse_proc_stat_group_and_state(raw_stat)
+            if parsed is None:
+                indeterminate = True
+                continue
+            member_pgid, member_state = parsed
+            if member_pgid == pgid and member_state not in _SETTLED_PROCESS_STATES:
+                return True
+    return None if indeterminate or not liveness_visible else False
+
+
+def _parse_proc_stat_group_and_state(raw_stat: bytes) -> tuple[int, bytes] | None:
+    command_end = raw_stat.rfind(b")")
+    if command_end < 0:
+        return None
+    fields = raw_stat[command_end + 2 :].split()
+    if len(fields) < 3:
+        return None
+    try:
+        return int(fields[2]), fields[0]
+    except ValueError:
+        return None
+
+
 def _wait_for_group_exit(pgid: int, timeout_seconds: float) -> bool:
     deadline = time.monotonic() + timeout_seconds
     while True:
@@ -668,15 +764,21 @@ def _wait_for_group_exit(pgid: int, timeout_seconds: float) -> bool:
 
 
 def _process_group_exists(pgid: int) -> bool:
+    return _probe_process_group(pgid)[0]
+
+
+def _probe_process_group(pgid: int) -> tuple[bool, bool]:
+    """Return existence and whether signal-zero liveness was observable."""
+
     if pgid <= 1:
         raise OwnedProcessError("unsafe owned process group identity")
     try:
         os.killpg(pgid, 0)
     except ProcessLookupError:
-        return False
+        return False, True
     except PermissionError:
-        return True
-    return True
+        return True, False
+    return True, True
 
 
 def _signal_process_group(pgid: int, signum: signal.Signals) -> None:

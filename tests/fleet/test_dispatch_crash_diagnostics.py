@@ -45,7 +45,17 @@ class TestCrashPathDiagnosticPersistence:
 
         # Inject a crash: any dispatch result will be replaced with a raising call
         async def crashing_run(*args, **kwargs):
-            raise RuntimeError("kaboom: database connection lost")
+            raise RuntimeError(
+                "kaboom: database connection lost\n"
+                "native_shell_capture requested_mode=direct effective_mode=direct\n"
+                "native_shell_capture attributions="
+                "launch_authorized_direct,project_policy_disabled\n"
+                "managed-headless-session-lineage "
+                f"launch_id={'a' * 32} attempt_id={'b' * 32}\n"
+                "native shell capture child environment: "
+                "AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE=direct "
+                "OPENAI_API_KEY=<openai-api-key-placeholder>"
+            )
 
         executor.dispatch_food_truck = crashing_run  # type: ignore[method-assign]
         tool_ctx.executor = executor
@@ -153,6 +163,24 @@ class TestCrashPathDiagnosticPersistence:
         envelope = json.loads(result.outcome.to_envelope())
         assert envelope["error"] == "fleet_unknown_ingredient"
         assert result.per_dispatch_state_path is None
+
+        terminal_failure_texts = (
+            envelope["user_visible_message"],
+            refused[0].diagnostic_message,
+        )
+        for terminal_failure_text in terminal_failure_texts:
+            for forbidden in (
+                "native_shell_capture",
+                "requested_mode",
+                "effective_mode",
+                "attributions",
+                "a" * 32,
+                "b" * 32,
+                "AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE",
+                "OPENAI_API_KEY",
+                "<openai-api-key-placeholder>",
+            ):
+                assert forbidden not in terminal_failure_text
 
     @pytest.mark.anyio
     async def test_crash_logs_structured_fields(self, tool_ctx, monkeypatch) -> None:

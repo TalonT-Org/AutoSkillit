@@ -235,7 +235,9 @@ class TestProviderFallbackLoop:
         }
         attempt_ids = tuple(attempt_id for _, _, attempt_id in lineage_coordinates)
         assert len(set(attempt_ids)) == 2
-        assert lineage_store.load_reference(lineage_observer.reference).attempt_ids == attempt_ids
+        persisted_lineage = lineage_store.load_reference(lineage_observer.reference)
+        assert persisted_lineage.attempt_ids == attempt_ids
+        assert persisted_lineage.final_native_session_id == "s2"
 
     @pytest.mark.anyio
     async def test_budget_exhausted_triggers_fallback(self, minimal_ctx, tmp_path, monkeypatch):

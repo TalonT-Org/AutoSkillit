@@ -2161,6 +2161,39 @@ def test_standard_review_findings_degrade_atomically(
     assert result["validation_errors"]
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("dimension", []), ("severity", {})],
+)
+def test_standard_review_findings_reject_unhashable_enum_values(
+    field: str,
+    value: object,
+) -> None:
+    finding = {
+        "file": "src/app.py",
+        "line": 40,
+        "dimension": "bugs",
+        "severity": "critical",
+        "message": "Malformed enum value",
+        "requires_decision": False,
+    }
+    finding[field] = value
+
+    result = aggregate_experimental_review_candidates(
+        candidates=[],
+        dispositions=[],
+        prior_resolved_findings=[],
+        standard_findings=[finding],
+        valid_diff_lines={"src/app.py": [40]},
+        snapshot={"head_sha": "head", "base_sha": "base"},
+        review_root=str(Path.cwd()),
+    )
+
+    assert result["state"] == "degraded"
+    assert result["survivors"] == []
+    assert result["validation_errors"] == [f"standard[0]: {field} must be a non-empty string"]
+
+
 def test_standard_review_findings_require_snapshot_authority() -> None:
     result = aggregate_experimental_review_candidates(
         candidates=[],

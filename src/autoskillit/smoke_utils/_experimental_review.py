@@ -282,8 +282,12 @@ def _standard_finding_validation_error(
     expected_dimensions = (
         {"deletion_regression"} if deletion_only else set(_STANDARD_REVIEW_DIMENSIONS)
     )
+    if not _is_non_empty_string(finding["dimension"]):
+        return "dimension must be a non-empty string"
     if finding["dimension"] not in expected_dimensions:
         return "dimension does not match the standard finding source"
+    if not _is_non_empty_string(finding["severity"]):
+        return "severity must be a non-empty string"
     if finding["severity"] not in _REVIEW_SEVERITIES:
         return "severity is outside the closed enum"
     if type(finding["requires_decision"]) is not bool:

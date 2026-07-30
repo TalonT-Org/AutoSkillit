@@ -1,9 +1,4 @@
-"""Immutable value contracts for server-owned audit admission.
-
-These contracts are intentionally dormant.  They describe the authority
-materialization boundary without changing the protocol-v1 authority or report
-wire shapes in :mod:`_type_audit_cycle`.
-"""
+"""Immutable value contracts for server-owned audit admission and publication."""
 
 from __future__ import annotations
 
@@ -245,22 +240,21 @@ def _ownership_registry() -> Mapping[tuple[str, str], AuditArtifactFieldOwnershi
     ] = {
         "semantic_result": {
             AuditArtifactFieldOwnership.CHILD_SEMANTIC: (
-                "schema_version",
                 "audited_plan_refs",
                 "assessments",
                 "verdict",
                 "remediation_ref",
             ),
+            AuditArtifactFieldOwnership.SERVER_DERIVED: ("schema_version",),
         },
         "standalone_evidence": {
             AuditArtifactFieldOwnership.CHILD_SEMANTIC: (
-                "schema_version",
                 "audited_plan_refs",
                 "assessments",
                 "verdict",
                 "remediation_ref",
             ),
-            AuditArtifactFieldOwnership.SERVER_DERIVED: ("kind",),
+            AuditArtifactFieldOwnership.SERVER_DERIVED: ("schema_version", "kind"),
         },
         "authority": {
             AuditArtifactFieldOwnership.CHILD_SEMANTIC: (
@@ -287,6 +281,35 @@ def _ownership_registry() -> Mapping[tuple[str, str], AuditArtifactFieldOwnershi
                 "parent_authority_digest",
                 "audited_plan_refs",
             ),
+        },
+        "disposition_report": {
+            AuditArtifactFieldOwnership.CHILD_SEMANTIC: ("dispositions",),
+            AuditArtifactFieldOwnership.SERVER_INJECTED: ("generated_at",),
+            AuditArtifactFieldOwnership.SERVER_DERIVED: (
+                "schema_version",
+                "current_plan_ref",
+                "report_digest",
+            ),
+            AuditArtifactFieldOwnership.VERIFIED_COPY: (
+                "execution_generation",
+                "cycle_id",
+                "plan_set_id",
+                "scope_id",
+                "part_id",
+                "audit_round",
+                "parent_authority_digest",
+                "inventory_digest",
+                "findings_digest",
+            ),
+        },
+        "plan_association": {
+            AuditArtifactFieldOwnership.SERVER_DERIVED: (
+                "schema_version",
+                "plan_ref",
+                "disposition_ref",
+                "association_digest",
+            ),
+            AuditArtifactFieldOwnership.VERIFIED_COPY: ("parent_authority_digest",),
         },
     }
     for artifact_kind, ownership_groups in groups.items():

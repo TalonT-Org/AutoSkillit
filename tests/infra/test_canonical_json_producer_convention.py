@@ -87,6 +87,34 @@ def _find_call_at_line(tree: ast.Module, lineno: int, func_name: str) -> ast.Cal
     return None
 
 
+def _scan_child_tool_authority_producer_sites() -> set[tuple[str, int, str]]:
+    """Find authority construction or canonicalization in child-facing MCP tools."""
+    repo_root = Path(__file__).resolve().parents[2]
+    tools_root = repo_root / "src" / "autoskillit" / "server" / "tools"
+    sites: set[tuple[str, int, str]] = set()
+    for source_path in tools_root.glob("tools_*.py"):
+        tree = ast.parse(source_path.read_text(), filename=str(source_path))
+        relative_path = str(source_path.relative_to(repo_root))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                func = node.func
+                if (isinstance(func, ast.Name) and func.id == "AuditCycleAuthority") or (
+                    isinstance(func, ast.Attribute)
+                    and isinstance(func.value, ast.Name)
+                    and func.value.id == "AuditCycleAuthority"
+                    and func.attr in {"create", "from_dict"}
+                ):
+                    sites.add((relative_path, node.lineno, "construction"))
+            if (
+                isinstance(node, ast.Attribute)
+                and node.attr == "canonical_bytes"
+                and isinstance(node.value, ast.Name)
+                and "authority" in node.value.id.lower()
+            ):
+                sites.add((relative_path, node.lineno, "canonicalization"))
+    return sites
+
+
 _MATERIALIZER_PRODUCER_SITE = (
     "src/autoskillit/server/_audit_authority_materializer.py",
     181,
@@ -148,6 +176,13 @@ _NON_CANONICAL_JSON_EXCEPTIONS: dict[str, tuple[tuple[str, int], str]] = {
 
 
 class TestCanonicalJsonProducerConvention:
+    def test_authority_has_one_materializer_owned_producer(self):
+        authority = _CANONICAL_JSON_ARTIFACT_REGISTRY["authority"]
+
+        assert authority.producer_symbol == "_write_or_verify"
+        assert authority.producer_site == _MATERIALIZER_PRODUCER_SITE
+        assert _scan_child_tool_authority_producer_sites() == set()
+
     def test_require_canonical_consumers_have_registered_producers(self):
         """Every require_canonical=True consumer site must have a registry entry."""
         current = _scan_require_canonical_consumer_sites()

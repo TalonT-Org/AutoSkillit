@@ -1,4 +1,4 @@
-"""Dormant audit-admission ownership and value-contract tests."""
+"""Audit-admission ownership and value-contract tests."""
 
 from __future__ import annotations
 
@@ -39,7 +39,9 @@ from autoskillit.core.types._type_audit_cycle import (
     ArtifactRef,
     AuditAssessment,
     AuditAssessmentRow,
+    AuditCycleAuthority,
     AuditVerdict,
+    PlanDispositionReport,
 )
 from autoskillit.core.types._type_audit_protocols import (
     AuditAuthorityMaterializer,
@@ -276,6 +278,66 @@ def test_authority_field_ownership_registry_is_exact_and_immutable() -> None:
         AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY[("authority", "new")] = (  # type: ignore[index,assignment]
             AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY[("authority", "schema_version")]
         )
+
+
+def _assert_ownership_registry_covers_wire_schemas(registry) -> None:
+    artifact_fields = {
+        "semantic_result": {field.name for field in dataclasses.fields(AuditSemanticResult)},
+        "standalone_evidence": {
+            field.name for field in dataclasses.fields(StandaloneAuditEvidence)
+        },
+        "authority": {field.name for field in dataclasses.fields(AuditCycleAuthority)},
+        "disposition_report": {field.name for field in dataclasses.fields(PlanDispositionReport)},
+        "plan_association": {
+            "schema_version",
+            "plan_ref",
+            "disposition_ref",
+            "parent_authority_digest",
+            "association_digest",
+        },
+    }
+    expected_keys = {
+        (artifact_kind, field_name)
+        for artifact_kind, fields in artifact_fields.items()
+        for field_name in fields
+    }
+    assert set(registry) == expected_keys
+    for key, definition in registry.items():
+        assert key == (definition.artifact_kind, definition.field_name)
+
+
+def test_field_ownership_registry_covers_every_wire_field_exactly() -> None:
+    _assert_ownership_registry_covers_wire_schemas(AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY)
+    assert (
+        AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY[("semantic_result", "schema_version")].ownership
+        is AuditArtifactFieldOwnership.SERVER_DERIVED
+    )
+    assert (
+        AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY[("disposition_report", "generated_at")].ownership
+        is AuditArtifactFieldOwnership.SERVER_INJECTED
+    )
+    assert (
+        AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY[
+            ("disposition_report", "execution_generation")
+        ].ownership
+        is AuditArtifactFieldOwnership.VERIFIED_COPY
+    )
+    assert (
+        AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY[
+            ("plan_association", "association_digest")
+        ].ownership
+        is AuditArtifactFieldOwnership.SERVER_DERIVED
+    )
+
+
+def test_field_ownership_registry_meta_guard_rejects_synthetic_forbidden_field() -> None:
+    mutated = dict(AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY)
+    mutated[("semantic_result", "execution_generation")] = AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY[
+        ("authority", "execution_generation")
+    ]
+
+    with pytest.raises(AssertionError):
+        _assert_ownership_registry_covers_wire_schemas(mutated)
 
 
 def test_ordered_full_reference_identity_covers_all_metadata() -> None:

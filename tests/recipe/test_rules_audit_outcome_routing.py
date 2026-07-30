@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.core import AuditOutcomeStatus
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.rules import rules_audit_outcome_routing
 from autoskillit.recipe.validator import run_semantic_rules
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -26,6 +28,30 @@ def _recipe(name: str = "implementation"):
 
 def _findings(recipe) -> list:
     return [finding for finding in run_semantic_rules(recipe) if finding.rule == _RULE_NAME]
+
+
+def _assert_status_partition_is_exhaustive() -> None:
+    routed_statuses = {
+        "SEMANTIC_REJECTED",
+        *rules_audit_outcome_routing._INFRASTRUCTURE_STATUSES,
+        *rules_audit_outcome_routing._PUBLISHED_STATUSES,
+    }
+    assert routed_statuses == {status.value for status in AuditOutcomeStatus}
+
+
+def test_audit_outcome_status_partition_is_exhaustive() -> None:
+    _assert_status_partition_is_exhaustive()
+
+
+def test_synthetic_future_status_requires_an_explicit_route(monkeypatch) -> None:
+    monkeypatch.setattr(
+        rules_audit_outcome_routing,
+        "_INFRASTRUCTURE_STATUSES",
+        (*rules_audit_outcome_routing._INFRASTRUCTURE_STATUSES, "FUTURE_STATUS"),
+    )
+
+    with pytest.raises(AssertionError, match="FUTURE_STATUS"):
+        _assert_status_partition_is_exhaustive()
 
 
 @pytest.mark.parametrize("recipe_name", _RECIPE_NAMES)

@@ -10,7 +10,9 @@ from typing import Any
 import pytest
 
 from autoskillit.core import (
+    AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY,
     ArtifactRef,
+    AuditArtifactFieldOwnership,
     AuditAssessment,
     AuditVerdict,
     compute_bytes_hash,
@@ -22,6 +24,7 @@ from autoskillit.server.tools.tools_audit_artifacts import (
     _write_semantic_result,
     write_audit_disposition_bundle,
     write_audit_semantic_result,
+    write_standalone_audit_evidence,
     write_standalone_audit_evidence_sync,
 )
 
@@ -109,14 +112,29 @@ def test_standalone_writer_never_raises_for_malformed_semantics(
 
 def test_typed_handler_signatures_exclude_identity_path_and_cwd() -> None:
     semantic_params = set(inspect.signature(write_audit_semantic_result).parameters)
+    standalone_params = set(inspect.signature(write_standalone_audit_evidence).parameters)
     disposition_params = set(inspect.signature(write_audit_disposition_bundle).parameters)
+    child_semantic_fields = {
+        definition.field_name
+        for (kind, _), definition in AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY.items()
+        if kind == "semantic_result"
+        and definition.ownership is AuditArtifactFieldOwnership.CHILD_SEMANTIC
+    }
+    framework_params = {"ctx", "step_name"}
 
     assert {"execution_generation", "cycle_id", "generated_at", "cwd", "path"}.isdisjoint(
         semantic_params
     )
     assert {"execution_generation", "generated_at", "cwd", "path"}.isdisjoint(disposition_params)
-    assert "reservation_handle" in semantic_params
-    assert "authority_path" in disposition_params
+    assert semantic_params - framework_params - {"reservation_handle"} == child_semantic_fields
+    assert standalone_params - framework_params == child_semantic_fields
+    assert disposition_params - framework_params == {
+        "authority_path",
+        "new_plan_path",
+        "new_plan_media_type",
+        "new_plan_schema_version",
+        "dispositions",
+    }
 
 
 @pytest.mark.anyio

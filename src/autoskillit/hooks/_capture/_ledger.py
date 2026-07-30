@@ -51,6 +51,8 @@ __all__ = [
     "record_from_dict",
     "record_to_dict",
     "same_record",
+    "is_delivery_successor",
+    "is_reference_successor",
     "validate_successor",
     "validate_record",
     "write_all",
@@ -628,6 +630,38 @@ _RETENTION_SUCCESSORS = {
 }
 
 
+def is_reference_successor(
+    previous: CaptureReferenceStatus,
+    candidate: CaptureReferenceStatus,
+    *,
+    allow_same: bool = True,
+) -> bool:
+    """Return whether the shared reference-axis policy permits this successor."""
+
+    return (
+        type(previous) is CaptureReferenceStatus
+        and type(candidate) is CaptureReferenceStatus
+        and (allow_same or candidate is not previous)
+        and candidate in _REFERENCE_SUCCESSORS[previous]
+    )
+
+
+def is_delivery_successor(
+    previous: CaptureDeliveryStatus,
+    candidate: CaptureDeliveryStatus,
+    *,
+    allow_same: bool = True,
+) -> bool:
+    """Return whether the shared delivery-axis policy permits this successor."""
+
+    return (
+        type(previous) is CaptureDeliveryStatus
+        and type(candidate) is CaptureDeliveryStatus
+        and (allow_same or candidate is not previous)
+        and candidate in _DELIVERY_SUCCESSORS[previous]
+    )
+
+
 def validate_successor(
     previous: CaptureLifecycleRecord,
     candidate: CaptureLifecycleRecord,
@@ -650,9 +684,10 @@ def validate_successor(
         and not candidate.quarantine_name
     ):
         return
-    reference_successor = candidate.reference_status in _REFERENCE_SUCCESSORS[
-        previous.reference_status
-    ] or (
+    reference_successor = is_reference_successor(
+        previous.reference_status,
+        candidate.reference_status,
+    ) or (
         previous.state is CaptureState.PUBLISHED_WRITING
         and candidate.state is CaptureState.FINALIZED
         and previous.reference_status is CaptureReferenceStatus.NOT_REQUESTED
@@ -675,7 +710,10 @@ def validate_successor(
         or candidate.revision != previous.revision + 1
         or candidate.state not in _STATE_SUCCESSORS[previous.state]
         or not reference_successor
-        or candidate.delivery_status not in _DELIVERY_SUCCESSORS[previous.delivery_status]
+        or not is_delivery_successor(
+            previous.delivery_status,
+            candidate.delivery_status,
+        )
         or candidate.retention_phase not in _RETENTION_SUCCESSORS[previous.retention_phase]
         or candidate.project_identity != previous.project_identity
         or candidate.root_identity != previous.root_identity

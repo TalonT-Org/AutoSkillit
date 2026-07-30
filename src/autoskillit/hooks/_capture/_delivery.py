@@ -23,42 +23,6 @@ DeliveryValue: TypeAlias = (
 )
 RuntimeErrors: TypeAlias = tuple[type[Exception], ...]
 
-_REFERENCE_TRANSITIONS = {
-    _ledger.CaptureReferenceStatus.ISSUED: {
-        _ledger.CaptureReferenceStatus.PUBLISHED,
-        _ledger.CaptureReferenceStatus.UNAVAILABLE,
-        _ledger.CaptureReferenceStatus.UNKNOWN,
-        _ledger.CaptureReferenceStatus.EXPIRED,
-        _ledger.CaptureReferenceStatus.REVOKED,
-    },
-    _ledger.CaptureReferenceStatus.PUBLISHED: {
-        _ledger.CaptureReferenceStatus.UNAVAILABLE,
-        _ledger.CaptureReferenceStatus.UNKNOWN,
-        _ledger.CaptureReferenceStatus.EXPIRED,
-        _ledger.CaptureReferenceStatus.REVOKED,
-    },
-    _ledger.CaptureReferenceStatus.UNAVAILABLE: {
-        _ledger.CaptureReferenceStatus.EXPIRED,
-        _ledger.CaptureReferenceStatus.REVOKED,
-    },
-    _ledger.CaptureReferenceStatus.UNKNOWN: {
-        _ledger.CaptureReferenceStatus.EXPIRED,
-        _ledger.CaptureReferenceStatus.REVOKED,
-    },
-}
-
-_DELIVERY_TRANSITIONS = {
-    _ledger.CaptureDeliveryStatus.NOT_ATTEMPTED: {
-        _ledger.CaptureDeliveryStatus.ATTEMPTING,
-        _ledger.CaptureDeliveryStatus.UNKNOWN,
-    },
-    _ledger.CaptureDeliveryStatus.ATTEMPTING: {
-        _ledger.CaptureDeliveryStatus.DELIVERED,
-        _ledger.CaptureDeliveryStatus.FAILED,
-        _ledger.CaptureDeliveryStatus.UNKNOWN,
-    },
-}
-
 
 class _LifecycleStore(Protocol):
     def get_record(self, capture_id: str) -> _ledger.CaptureLifecycleRecord | None: ...
@@ -105,7 +69,7 @@ def _reference_transition(
 ) -> _ledger.CaptureLifecycleRecord:
     if record.reference_status != expected:
         raise lifecycle_error("capture reference transition predecessor changed")
-    if target not in _REFERENCE_TRANSITIONS.get(expected, set()):
+    if not _ledger.is_reference_successor(expected, target, allow_same=False):
         raise lifecycle_error("capture reference transition is not allowed")
     return replace(
         record,
@@ -379,7 +343,7 @@ def _delivery_transition(
 ) -> _ledger.CaptureLifecycleRecord:
     if record.delivery_status != expected:
         raise lifecycle_error("capture delivery transition predecessor changed")
-    if target not in _DELIVERY_TRANSITIONS.get(expected, set()):
+    if not _ledger.is_delivery_successor(expected, target, allow_same=False):
         raise lifecycle_error("capture delivery transition is not allowed")
     return replace(
         record,

@@ -37,14 +37,16 @@ def kill_process_tree(pid: int, timeout: float = 2.0) -> ProcessCleanupResult:
     # Include the parent in the kill list
     all_procs = children + [parent]
     identities: list[tuple[int, float]] = []
+    access_denied: set[int] = set()
     for proc in all_procs:
         try:
             identities.append((proc.pid, proc.create_time()))
         except psutil.NoSuchProcess:
             continue
+        except psutil.AccessDenied:
+            access_denied.add(proc.pid)
 
     # Send SIGTERM to all
-    access_denied: set[int] = set()
     for proc in all_procs:
         try:
             proc.send_signal(signal.SIGTERM)

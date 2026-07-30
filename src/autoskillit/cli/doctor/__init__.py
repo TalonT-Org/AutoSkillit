@@ -52,7 +52,6 @@ from ._doctor_install import (
     _check_update_dismissal_state,
 )
 from ._doctor_mcp import (
-    _check_cache_version_mismatch,
     _check_codex_mcp_timeouts,
     _check_dual_mcp_registration,
     _check_install_state_consistency,
@@ -122,9 +121,6 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.append(_check_project_config())
     # Check 4b: Config secrets placement
     results.append(_check_config_layers_for_secrets())
-    # Check 5: Version consistency — cached plugin.json must match installed package
-    results.append(_check_cache_version_mismatch())
-
     # Check 6: Hook executability — validates deployed scripts for all event types (all scopes)
     results.extend(_check_hook_health_all_scopes(Path.cwd()))
     # Check 7: Hook registration in settings.json

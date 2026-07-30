@@ -1,4 +1,4 @@
-"""Tests for doctor quota cache schema, install classification, version consistency, and drift."""
+"""Tests for doctor quota cache schema, install classification, and drift."""
 
 from __future__ import annotations
 
@@ -6,8 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-
-from autoskillit import cli
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -315,68 +313,6 @@ def test_doctor_no_dual_when_only_direct(tmp_path: Path, monkeypatch: pytest.Mon
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     result = _check_dual_mcp_registration()
     assert result.severity == Severity.OK
-
-
-# ---------------------------------------------------------------------------
-# T3 — version_consistency reads cache dir, not source tree
-# ---------------------------------------------------------------------------
-
-
-def test_doctor_version_consistency_detects_stale_cache(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture,
-    request: pytest.FixtureRequest,
-) -> None:
-    """Check 5 warns when the CACHED plugin.json version is behind the package."""
-    import importlib.metadata
-
-    from autoskillit.version import version_info as _vi
-
-    cache_dir = tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
-    plugin_json = cache_dir / ".claude-plugin" / "plugin.json"
-    plugin_json.parent.mkdir(parents=True)
-    plugin_json.write_text('{"version": "0.8.0"}')
-
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(importlib.metadata, "version", lambda _: "0.9.0")
-    _vi.cache_clear()
-    request.addfinalizer(_vi.cache_clear)
-    cli.doctor_cmd(output_json=True)
-    data = json.loads(capsys.readouterr().out)
-    vc = next((r for r in data["results"] if r["check"] == "version_consistency"), None)
-    assert vc is not None, "version_consistency check not found in doctor results"
-    assert vc["severity"] == "warning"
-    assert "autoskillit install" in vc["message"]
-
-
-def test_doctor_version_consistency_ok_when_cache_matches(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture,
-    request: pytest.FixtureRequest,
-) -> None:
-    """Check 5 reports OK when cached plugin.json version matches the package."""
-    import importlib.metadata
-
-    from autoskillit.version import version_info as _vi
-
-    cache_dir = tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
-    plugin_json = cache_dir / ".claude-plugin" / "plugin.json"
-    plugin_json.parent.mkdir(parents=True)
-    plugin_json.write_text('{"version": "0.9.0"}')
-
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(importlib.metadata, "version", lambda _: "0.9.0")
-    _vi.cache_clear()
-    request.addfinalizer(_vi.cache_clear)
-    cli.doctor_cmd(output_json=True)
-    data = json.loads(capsys.readouterr().out)
-    vc = next((r for r in data["results"] if r["check"] == "version_consistency"), None)
-    assert vc is not None, "version_consistency check not found in doctor results"
-    assert vc["severity"] == "ok"
 
 
 # ---------------------------------------------------------------------------

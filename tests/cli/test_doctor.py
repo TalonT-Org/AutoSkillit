@@ -148,16 +148,11 @@ class TestCLIDoctor:
         (tmp_path / ".pre-commit-config.yaml").write_text(
             "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
         )
-        # Create plugin cache directory for Check 2c + version_consistency plugin.json
-        import importlib.metadata
-
+        # Create the plugin cache directory for Check 2c.
         _cache_dir = (
             tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
         )
         _cache_dir.mkdir(parents=True, exist_ok=True)
-        _plugin_json = _cache_dir / ".claude-plugin" / "plugin.json"
-        _plugin_json.parent.mkdir(parents=True, exist_ok=True)
-        _plugin_json.write_text(json.dumps({"version": importlib.metadata.version("autoskillit")}))
         # Create installed_plugins.json for Check 2d
         (tmp_path / ".claude" / "plugins" / "installed_plugins.json").write_text(
             json.dumps({"version": 2, "plugins": {"autoskillit@autoskillit-local": {}}})
@@ -264,35 +259,21 @@ class TestCLIDoctor:
         assert Severity.ERROR not in _NON_PROBLEM, "ERROR must not be in _NON_PROBLEM"
         assert Severity.WARNING not in _NON_PROBLEM, "WARNING must not be in _NON_PROBLEM"
 
-    def test_doctor_passes_when_versions_match(
+    def test_doctor_does_not_run_duplicate_cache_version_check(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture,
-        request: pytest.FixtureRequest,
     ) -> None:
-        """doctor reports ok when cached plugin.json version matches package."""
-        import importlib.metadata
-
-        pkg_version = importlib.metadata.version("autoskillit")
-        cache_dir = (
-            tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
-        )
-        plugin_json = cache_dir / ".claude-plugin" / "plugin.json"
-        plugin_json.parent.mkdir(parents=True)
-        plugin_json.write_text(json.dumps({"version": pkg_version}))
+        """Version drift is reported only through the shared install-state authority."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
-        from autoskillit.version import version_info as _vi
-
-        _vi.cache_clear()
-        request.addfinalizer(_vi.cache_clear)
         cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
-        version_checks = [r for r in data["results"] if r["check"] == "version_consistency"]
-        assert len(version_checks) == 1
-        assert version_checks[0]["severity"] == "ok"
+        check_names = {result["check"] for result in data["results"]}
+        assert "version_consistency" not in check_names
+        assert "install_state_consistency" in check_names
 
     def test_doctor_json_output_includes_all_checks(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
@@ -312,7 +293,6 @@ class TestCLIDoctor:
             "mcp_server_registered",
             "autoskillit_on_path",
             "project_config",
-            "version_consistency",
             "hook_health",
             "hook_registration",
             "hook_registry_drift",
@@ -1467,85 +1447,6 @@ def test_doctor_plugin_cache_integrity_ok_when_valid(tmp_path: Path) -> None:
     (version_dir / "hooks.json").write_text(_json.dumps(valid_hooks))
 
     result = _check_plugin_cache_integrity(cache_dir=fake_cache)
-
-    assert result.severity == Severity.OK
-
-
-# T-CACHE-VERSION-1: _check_cache_version_mismatch returns ERROR when kitchen open + mismatch
-def test_doctor_cache_version_mismatch_with_kitchen_open(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """_check_cache_version_mismatch must return ERROR when kitchen is open and versions differ."""
-    import autoskillit.version as _ver
-    from autoskillit.cli.doctor._doctor_mcp import _check_cache_version_mismatch
-    from autoskillit.core import Severity
-
-    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: True)
-    monkeypatch.setattr(
-        _ver,
-        "version_info",
-        lambda **kw: {
-            "match": False,
-            "plugin_json_version": "0.9.347",
-            "package_version": "0.9.351",
-        },
-    )
-
-    result = _check_cache_version_mismatch()
-
-    assert result.severity == Severity.ERROR, (
-        "_check_cache_version_mismatch must return ERROR when kitchen open and version mismatch"
-    )
-    assert "0.9.347" in result.message
-    assert "0.9.351" in result.message
-
-
-# T-CACHE-VERSION-2: _check_cache_version_mismatch returns WARNING when kitchen closed + mismatch
-def test_doctor_cache_version_mismatch_without_kitchen(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """_check_cache_version_mismatch must return WARNING (not ERROR) when kitchen is closed."""
-    import autoskillit.version as _ver
-    from autoskillit.cli.doctor._doctor_mcp import _check_cache_version_mismatch
-    from autoskillit.core import Severity
-
-    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: False)
-    monkeypatch.setattr(
-        _ver,
-        "version_info",
-        lambda **kw: {
-            "match": False,
-            "plugin_json_version": "0.9.347",
-            "package_version": "0.9.351",
-        },
-    )
-
-    result = _check_cache_version_mismatch()
-
-    assert result.severity == Severity.WARNING
-
-
-# T-CACHE-VERSION-3: _check_cache_version_mismatch returns OK when versions match
-def test_doctor_cache_version_mismatch_ok_when_matching(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """_check_cache_version_mismatch must return OK when versions match."""
-    import autoskillit.version as _ver
-    from autoskillit.cli.doctor._doctor_mcp import _check_cache_version_mismatch
-    from autoskillit.core import Severity
-
-    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: False)
-    monkeypatch.setattr(
-        _ver,
-        "version_info",
-        lambda **kw: {
-            "match": True,
-            "plugin_json_version": "0.9.351",
-            "package_version": "0.9.351",
-        },
-    )
-
-    result = _check_cache_version_mismatch()
 
     assert result.severity == Severity.OK
 

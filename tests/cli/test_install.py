@@ -100,7 +100,7 @@ class TestCLIInstall:
         from autoskillit.cli._install_contract import InstallFailureKind, InstallOutcome
         from autoskillit.cli._marketplace import install
 
-        result = install()
+        result = install(request=_direct_request())
         assert result.outcome is InstallOutcome.FAILED
         assert result.failure_kind is InstallFailureKind.PREFLIGHT
         captured = capsys.readouterr()
@@ -321,8 +321,8 @@ class TestCLIInstall:
         mock_run.side_effect = _successful_claude_run(tmp_path)
         from autoskillit.cli._marketplace import install
 
-        install()
-        install()  # second run should not fail
+        install(request=_direct_request())
+        install(request=_direct_request())  # second run should not fail
 
         published = tmp_path / ".autoskillit" / "marketplace" / "plugins" / "autoskillit"
         assert published.is_dir()

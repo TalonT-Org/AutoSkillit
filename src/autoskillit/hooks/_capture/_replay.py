@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from autoskillit.hooks import _capture_failure_policy
     from autoskillit.hooks._capture._snapshot import (
         FinalizedCapture,
         PublishedCaptureReference,
@@ -28,12 +29,14 @@ else:
     )
 
     if __package__ == "_capture":
+        import _capture_failure_policy
         from _capture_contract import (
             CaptureFailureV2,
             render_capture_failure_v2,
             render_capture_v2,
         )
     else:
+        from .. import _capture_failure_policy
         from .._capture_contract import (
             CaptureFailureV2,
             render_capture_failure_v2,
@@ -114,16 +117,11 @@ def _write_and_flush_hook_stderr(payload: bytes) -> None:
 
 
 def _failure_stage(value: str) -> str:
-    normalized = "".join(
-        character if character.isascii() and character.isalnum() else "_"
-        for character in value.lower()
-    ).strip("_")[:64]
-    return normalized if normalized and normalized[0].isalpha() else "capture_failure"
+    return _capture_failure_policy.normalize_failure_stage(value)
 
 
 def _bounded_detail(value: str) -> str:
-    normalized = " ".join(value.split()) or "capture failure"
-    return normalized.encode("utf-8")[:240].decode("utf-8", errors="ignore")
+    return _capture_failure_policy.normalize_failure_detail(value)
 
 
 def failure_transport(

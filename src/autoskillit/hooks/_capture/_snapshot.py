@@ -18,14 +18,17 @@ from typing import TYPE_CHECKING, Any, NoReturn, SupportsIndex
 from . import _descriptor, _syntax
 
 if TYPE_CHECKING:
+    from autoskillit.hooks import _capture_failure_policy
     from autoskillit.hooks._capture_contract import (
         CaptureV2Fields,
         CaptureV2Renderable,
         capture_v2_fields,
     )
 elif __package__ == "_capture":
+    import _capture_failure_policy
     from _capture_contract import CaptureV2Fields, CaptureV2Renderable, capture_v2_fields
 else:
+    from .. import _capture_failure_policy
     from .._capture_contract import CaptureV2Fields, CaptureV2Renderable, capture_v2_fields
 
 _THIS_MODULE = sys.modules[__name__]
@@ -253,12 +256,8 @@ class CaptureFailureEvidence:
 
     def __post_init__(self) -> None:
         if (
-            not isinstance(self.stage, str)
-            or not self.stage
-            or len(self.stage.encode("utf-8")) > 64
-            or not isinstance(self.detail, str)
-            or not self.detail
-            or len(self.detail.encode("utf-8")) > 240
+            not _capture_failure_policy.valid_failure_stage(self.stage)
+            or not _capture_failure_policy.valid_failure_detail(self.detail)
             or (
                 self.settlement_returncode is not None
                 and (

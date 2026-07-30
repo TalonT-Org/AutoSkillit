@@ -9,14 +9,17 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
+    from autoskillit.hooks import _capture_failure_policy
     from autoskillit.hooks._capture._syntax import (
         CAPTURE_ID_RE,
         REFERENCE_RE,
         SHA256_RE,
     )
 elif __package__:
+    from . import _capture_failure_policy
     from ._capture._syntax import CAPTURE_ID_RE, REFERENCE_RE, SHA256_RE
 else:
+    import _capture_failure_policy
     from _capture._syntax import CAPTURE_ID_RE, REFERENCE_RE, SHA256_RE
 
 _THIS_MODULE = sys.modules[__name__]
@@ -57,7 +60,6 @@ _CAPTURE_ID_RE = CAPTURE_ID_RE
 _REFERENCE_RE = REFERENCE_RE
 _SHA256_RE = SHA256_RE
 _REASON_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
-_STAGE_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _CAPTURE_KEYS = frozenset(
     {
         "capture_id",
@@ -425,11 +427,8 @@ def parse_capture_v2(value: bytes) -> CaptureV2Fields:
 def _validate_failure(value: CaptureFailureV2) -> None:
     if (
         type(value) is not CaptureFailureV2
-        or not isinstance(value.stage, str)
-        or _STAGE_RE.fullmatch(value.stage) is None
-        or not isinstance(value.detail, str)
-        or not value.detail
-        or len(value.detail.encode("utf-8")) > 240
+        or not _capture_failure_policy.valid_failure_stage(value.stage)
+        or not _capture_failure_policy.valid_failure_detail(value.detail)
         or (
             value.shell_returncode is not None
             and not _plain_int(value.shell_returncode, maximum=255)

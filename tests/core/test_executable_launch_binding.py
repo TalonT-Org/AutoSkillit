@@ -44,7 +44,6 @@ def test_binding_prefers_explicit_canonical_executable(tmp_path: Path) -> None:
     assert binding.launch_environment == environment
     assert binding.cwd == tmp_path.resolve()
     assert binding.file_sha256
-    assert binding.environment_fingerprint
 
 
 def test_binding_uses_effective_path_when_no_explicit_path(tmp_path: Path) -> None:
@@ -71,26 +70,6 @@ def test_binding_detects_same_path_replacement(tmp_path: Path) -> None:
     os.utime(executable, None)
 
     assert not binding.matches_current_file()
-
-
-def test_binding_fingerprint_changes_with_readiness_configuration(tmp_path: Path) -> None:
-    _executable(tmp_path / "claude")
-    base = {
-        "PATH": str(tmp_path),
-        "MCP_CONNECTION_NONBLOCKING": CLAUDE_MCP_CONNECTION_NONBLOCKING,
-        CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR: str(CLAUDE_MCP_CONNECT_TIMEOUT_MS),
-    }
-    first = ExecutableLaunchBinding.resolve(binary_name="claude", environment=base, cwd=tmp_path)
-    changed = ExecutableLaunchBinding.resolve(
-        binary_name="claude",
-        environment={
-            **base,
-            CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR: str(CLAUDE_MCP_CONNECT_TIMEOUT_MS + 1_000),
-        },
-        cwd=tmp_path,
-    )
-
-    assert first.environment_fingerprint != changed.environment_fingerprint
 
 
 def test_binding_rejects_non_executable_explicit_path(tmp_path: Path) -> None:

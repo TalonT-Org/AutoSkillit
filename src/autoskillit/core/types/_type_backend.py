@@ -45,21 +45,6 @@ __all__ = [
 ]
 
 
-_LAUNCH_FINGERPRINT_ENV_KEYS: frozenset[str] = frozenset(
-    {
-        "AUTOSKILLIT_AGENT_BACKEND",
-        "CLAUDE_CODE_EXECPATH",
-        "CLAUDE_CONFIG_DIR",
-        "CODEX_HOME",
-        "HOME",
-        "MCP_CONNECTION_NONBLOCKING",
-        "MCP_CONNECT_TIMEOUT_MS",
-        "PATH",
-        "XDG_CONFIG_HOME",
-    }
-)
-
-
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -78,7 +63,6 @@ class ExecutableLaunchBinding:
     size: int
     mtime_ns: int
     file_sha256: str
-    environment_fingerprint: str
     cwd: Path
     launch_environment: Mapping[str, str] = field(repr=False, compare=False)
 
@@ -117,15 +101,6 @@ class ExecutableLaunchBinding:
             raise ValueError(f"Executable path is not executable: {canonical}")
         canonical_cwd = cwd.expanduser().resolve(strict=True)
         stat_result = canonical.stat()
-        fingerprint_payload = "\n".join(
-            [
-                f"cwd={canonical_cwd}",
-                *(
-                    f"{key}={environment[key]}"
-                    for key in sorted(_LAUNCH_FINGERPRINT_ENV_KEYS & environment.keys())
-                ),
-            ]
-        ).encode("utf-8")
         return cls(
             path=canonical,
             device=stat_result.st_dev,
@@ -133,7 +108,6 @@ class ExecutableLaunchBinding:
             size=stat_result.st_size,
             mtime_ns=stat_result.st_mtime_ns,
             file_sha256=_sha256_file(canonical),
-            environment_fingerprint=hashlib.sha256(fingerprint_payload).hexdigest(),
             cwd=canonical_cwd,
             launch_environment=MappingProxyType(dict(environment)),
         )

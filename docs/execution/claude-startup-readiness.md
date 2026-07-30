@@ -26,11 +26,10 @@ not `MCP_TIMEOUT`, the distinct per-server connection timeout. Claude may let a
 pending server continue in the background after the snapshot deadline, so the
 configuration does not claim that an over-budget server is addressable.
 
-The executable path, file identity and digest, working directory, nonsecret
-environment fingerprint, and the two readiness values form one
-`ExecutableLaunchBinding`. Availability lookup, `--version` probing, command
-construction, and spawn use that same binding. A file replacement between the
-probe and spawn fails closed.
+The executable path, file identity and digest, working directory, sealed launch
+environment, and the two readiness values form one `ExecutableLaunchBinding`.
+Availability lookup, `--version` probing, command construction, and spawn use
+that same binding. A file replacement between the probe and spawn fails closed.
 
 ## Fresh and resumed sessions
 

@@ -16,6 +16,7 @@ import pytest
 
 import autoskillit.hooks._capture._descriptor as capture_descriptor
 import autoskillit.hooks._capture._reader as capture_reader
+import autoskillit.hooks._capture._resolver as capture_resolver
 import autoskillit.hooks._capture_artifacts as capture_artifacts
 import autoskillit.hooks._capture_lifecycle as capture_lifecycle
 from autoskillit.hooks._capture._reader import (
@@ -746,6 +747,46 @@ def test_transfer_adoption_failure_closes_all_transferred_descriptors(
             os.fstat(carrier_fd)
         with pytest.raises(OSError):
             os.fstat(lease_fd)
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+def test_transfer_preserves_authority_error_when_carrier_cleanup_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    anchor, root, store, artifact, finalized = _finalize(
+        tmp_path / "project",
+        _Clock(),
+        b"ownership",
+    )
+    carrier_fd = artifact.fd
+    os.pwrite(carrier_fd, b"MUTATION!", 0)
+    os.fsync(carrier_fd)
+    real_close = os.close
+    injected = False
+
+    def close_then_report_failure(fd: int) -> None:
+        nonlocal injected
+        real_close(fd)
+        if fd == carrier_fd and not injected:
+            injected = True
+            raise OSError("injected carrier cleanup failure")
+
+    monkeypatch.setattr(capture_resolver.os, "close", close_then_report_failure)
+    try:
+        with pytest.raises(CaptureAuthorityError, match="content changed") as captured:
+            artifact.transfer_to_reader(store, finalized)
+
+        assert injected
+        assert any(
+            "capture carrier cleanup also failed" in note for note in captured.value.__notes__
+        )
+        with pytest.raises(OSError):
+            os.fstat(carrier_fd)
     finally:
         artifact.close_artifact_fd()
         artifact.release_lease()

@@ -267,6 +267,12 @@ def adopt_verified_capture(
             ):
                 raise lifecycle_error("producer capture changed during verification")
         return _reader._make_verified_reader(fd, current_manifest, revision)
-    except BaseException:
-        os.close(fd)
+    except BaseException as primary_error:
+        try:
+            os.close(fd)
+        except OSError as cleanup_error:
+            primary_error.add_note(
+                "capture carrier cleanup also failed: "
+                f"{type(cleanup_error).__name__}: {cleanup_error}"
+            )
         raise

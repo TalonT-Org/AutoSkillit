@@ -100,7 +100,7 @@ def _setup_run_checks(
     )
     monkeypatch.setattr(
         "autoskillit.cli.update._update_checks._claude_settings_path",
-        lambda scope: tmp_path / "settings.json",
+        lambda scope, **_kwargs: tmp_path / "settings.json",
     )
 
     printed: list[str] = []

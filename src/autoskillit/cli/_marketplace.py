@@ -240,14 +240,6 @@ def _marketplace_manifest_path() -> Path:
     return Path.home() / ".autoskillit" / "marketplace" / ".claude-plugin" / "marketplace.json"
 
 
-def _settings_path(scope: str, cwd: Path) -> Path:
-    if scope == "user":
-        return Path.home() / ".claude" / "settings.json"
-    if scope == "local":
-        return cwd / ".claude" / "settings.local.json"
-    return cwd / ".claude" / "settings.json"
-
-
 def _claude_on_path(env: Mapping[str, str]) -> bool:
     """Resolve Claude exactly once against the sealed PATH."""
     return shutil.which("claude", path=env.get("PATH")) is not None
@@ -508,7 +500,10 @@ def install(
         verify_installed_plugin_artifact,
     )
 
-    settings_path = _settings_path(effective_scope, operation_cwd)
+    settings_path = _hooks_mod._claude_settings_path(
+        effective_scope,
+        cwd=operation_cwd,
+    )
     lease_path = installed_artifact_lock_path(target_root)
     try:
         with _InstallLock():

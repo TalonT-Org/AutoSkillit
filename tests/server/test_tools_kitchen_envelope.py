@@ -105,7 +105,7 @@ async def test_open_kitchen_warns_on_orphaned_hooks(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "autoskillit.server._misc._claude_settings_path",
-        lambda scope: settings_dir / "settings.json",
+        lambda scope, **_kwargs: settings_dir / "settings.json",
     )
     monkeypatch.setattr(
         "autoskillit.server._misc._count_hook_registry_drift",
@@ -148,7 +148,7 @@ async def test_open_kitchen_warns_on_missing_hook_scripts(tmp_path, monkeypatch)
 
     monkeypatch.setattr(
         "autoskillit.server._misc._claude_settings_path",
-        lambda scope: settings_dir / "settings.json",
+        lambda scope, **_kwargs: settings_dir / "settings.json",
     )
     monkeypatch.setattr(
         "autoskillit.server._misc.find_broken_hook_scripts",
@@ -193,7 +193,7 @@ async def test_build_hook_diagnostic_warning_skips_missing_when_plugin_active(
 
     monkeypatch.setattr(
         "autoskillit.server._misc._claude_settings_path",
-        lambda scope: settings_dir / "settings.json",
+        lambda scope, **_kwargs: settings_dir / "settings.json",
     )
     monkeypatch.setattr("autoskillit.server._misc.validate_plugin_cache_hooks", lambda **_: [])
     from autoskillit.server._misc import _build_hook_diagnostic_warning
@@ -217,7 +217,7 @@ async def test_build_hook_diagnostic_warning_orphaned_still_fires_when_plugin_ac
 
     monkeypatch.setattr(
         "autoskillit.server._misc._claude_settings_path",
-        lambda scope: settings_dir / "settings.json",
+        lambda scope, **_kwargs: settings_dir / "settings.json",
     )
     monkeypatch.setattr(
         "autoskillit.server._misc._count_hook_registry_drift",

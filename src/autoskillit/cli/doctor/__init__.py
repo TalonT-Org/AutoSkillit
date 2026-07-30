@@ -124,12 +124,12 @@ def run_doctor(*, output_json: bool = False) -> None:
     # Check 6: Hook executability — validates deployed scripts for all event types (all scopes)
     results.extend(_check_hook_health_all_scopes(Path.cwd()))
     # Check 7: Hook registration in settings.json
-    results.append(_check_hook_registration(_claude_settings_path("user")))
+    results.append(_check_hook_registration(_claude_settings_path("user", cwd=Path.cwd())))
     # Check 7b: Hook registry drift (multi-scope)
     results.extend(_check_hook_registry_drift_all_scopes(Path.cwd()))
 
     # Check 7c: Dual registration (plugin active + hooks in settings.json)
-    results.append(_check_dual_registration(_claude_settings_path("user")))
+    results.append(_check_dual_registration(_claude_settings_path("user", cwd=Path.cwd())))
 
     # Check 8: Script version health
     results.append(_check_script_version_health())

@@ -59,7 +59,7 @@ class TestRegisterAllBackendKwarg:
         monkeypatch.setattr(_hooks_mod, "sync_hooks_to_settings", lambda p: None)
         monkeypatch.setattr(_hooks_mod, "_evict_stale_autoskillit_hooks", lambda p: None)
         monkeypatch.setattr(
-            _hooks_mod, "_claude_settings_path", lambda s: tmp_path / "settings.json"
+            _hooks_mod, "_claude_settings_path", lambda s, **_kwargs: tmp_path / "settings.json"
         )
         monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
         # _is_plugin_installed and is_git_worktree are already auto-patched by conftest.py
@@ -148,7 +148,7 @@ class TestRegisterAllBackendDispatch:
         monkeypatch.setattr(_hooks_mod, "sync_hooks_to_settings", lambda p: None)
         monkeypatch.setattr(_hooks_mod, "_evict_stale_autoskillit_hooks", lambda p: None)
         monkeypatch.setattr(
-            _hooks_mod, "_claude_settings_path", lambda s: tmp_path / "settings.json"
+            _hooks_mod, "_claude_settings_path", lambda s, **_kwargs: tmp_path / "settings.json"
         )
         monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
         monkeypatch.setattr(
@@ -299,7 +299,7 @@ class TestRegisterAllCodexConfigTransaction:
         monkeypatch.setattr(_hooks_mod, "sync_hooks_to_settings", lambda p: None)
         monkeypatch.setattr(_hooks_mod, "_evict_stale_autoskillit_hooks", lambda p: None)
         monkeypatch.setattr(
-            _hooks_mod, "_claude_settings_path", lambda s: tmp_path / "settings.json"
+            _hooks_mod, "_claude_settings_path", lambda s, **_kwargs: tmp_path / "settings.json"
         )
         monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
         monkeypatch.setattr("autoskillit.cli._init_helpers._register_mcp_server", lambda p: None)
@@ -466,7 +466,7 @@ class TestRegisterAllBackendBranching:
         monkeypatch.setattr(_hooks_mod, "sweep_all_scopes_for_orphans", lambda p: None)
         monkeypatch.setattr(_hooks_mod, "_evict_stale_autoskillit_hooks", lambda p: None)
         monkeypatch.setattr(
-            _hooks_mod, "_claude_settings_path", lambda s: tmp_path / "settings.json"
+            _hooks_mod, "_claude_settings_path", lambda s, **_kwargs: tmp_path / "settings.json"
         )
         monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
         monkeypatch.setattr(
@@ -511,7 +511,7 @@ class TestRegisterAllCodexMcpRegistration:
         monkeypatch.setattr(_hooks_mod, "sync_hooks_to_settings", lambda p: None)
         monkeypatch.setattr(_hooks_mod, "_evict_stale_autoskillit_hooks", lambda p: None)
         monkeypatch.setattr(
-            _hooks_mod, "_claude_settings_path", lambda s: tmp_path / "settings.json"
+            _hooks_mod, "_claude_settings_path", lambda s, **_kwargs: tmp_path / "settings.json"
         )
         monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
         monkeypatch.setattr("autoskillit.cli._init_helpers._register_mcp_server", lambda p: None)
@@ -591,7 +591,7 @@ class TestRegisterAllDualRegistration:
         monkeypatch.setattr(_hooks_mod, "sync_hooks_to_settings", lambda p: None)
         monkeypatch.setattr(_hooks_mod, "_evict_stale_autoskillit_hooks", lambda p: None)
         monkeypatch.setattr(
-            _hooks_mod, "_claude_settings_path", lambda s: tmp_path / "settings.json"
+            _hooks_mod, "_claude_settings_path", lambda s, **_kwargs: tmp_path / "settings.json"
         )
         monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
         (tmp_path / "pkg").mkdir(exist_ok=True)

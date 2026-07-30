@@ -275,7 +275,7 @@ def run_update_checks(home: Path | None = None) -> None:
     # Gather signals (network I/O happens here; status_line deferred until we know output exists)
     raw_signals: list[Signal | None] = [
         _binary_signal(info, _home, current),
-        _hooks_signal(_claude_settings_path("user")),
+        _hooks_signal(_claude_settings_path("user", cwd=Path.cwd())),
         _source_drift_signal(info, _home),
         _dual_mcp_signal(_home),
     ]

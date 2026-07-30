@@ -57,11 +57,14 @@ def test_settings_path_preserves_claude_scope_distinctions(
     scope: str,
     relative_path: Path,
 ) -> None:
-    from autoskillit.cli import _marketplace
+    from autoskillit.cli import _hooks
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-    assert _marketplace._settings_path(scope, tmp_path / "project") == (tmp_path / relative_path)
+    assert _hooks._claude_settings_path(
+        scope,
+        cwd=tmp_path / "project",
+    ) == (tmp_path / relative_path)
 
 
 def _configure_transaction(

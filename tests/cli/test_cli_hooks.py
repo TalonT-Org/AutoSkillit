@@ -37,7 +37,7 @@ def test_claude_settings_path_user_scope():
     """_claude_settings_path('user') returns ~/.claude/settings.json."""
     from autoskillit.cli._hooks import _claude_settings_path
 
-    p = _claude_settings_path("user")
+    p = _claude_settings_path("user", cwd=Path.cwd())
     assert p == Path.home() / ".claude" / "settings.json"
 
 
@@ -47,7 +47,7 @@ def test_claude_settings_path_project_scope(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     from autoskillit.cli._hooks import _claude_settings_path
 
-    p = _claude_settings_path("project")
+    p = _claude_settings_path("project", cwd=tmp_path)
     assert p == tmp_path / ".claude" / "settings.json"
 
 
@@ -394,7 +394,11 @@ def test_install_does_not_write_hooks_when_plugin_active(tmp_path, monkeypatch):
     settings_path.parent.mkdir(parents=True)
 
     app_module = importlib.import_module("autoskillit.cli._hooks")
-    monkeypatch.setattr(app_module, "_claude_settings_path", lambda scope: settings_path)
+    monkeypatch.setattr(
+        app_module,
+        "_claude_settings_path",
+        lambda scope, **_kwargs: settings_path,
+    )
     monkeypatch.setattr(
         "autoskillit.cli._init_helpers._is_plugin_installed",
         lambda **kwargs: True,
@@ -448,7 +452,11 @@ def test_register_all_skips_hook_sync_when_plugin_active(tmp_path, monkeypatch):
     settings_path.parent.mkdir(parents=True)
 
     _hooks_mod = importlib.import_module("autoskillit.cli._hooks")
-    monkeypatch.setattr(_hooks_mod, "_claude_settings_path", lambda scope: settings_path)
+    monkeypatch.setattr(
+        _hooks_mod,
+        "_claude_settings_path",
+        lambda scope, **_kwargs: settings_path,
+    )
     monkeypatch.setattr(
         "autoskillit.cli._init_helpers._is_plugin_installed",
         lambda **kwargs: True,
@@ -482,7 +490,11 @@ def test_register_all_writes_hooks_when_plugin_not_active(tmp_path, monkeypatch)
     settings_path.parent.mkdir(parents=True)
 
     _hooks_mod = importlib.import_module("autoskillit.cli._hooks")
-    monkeypatch.setattr(_hooks_mod, "_claude_settings_path", lambda scope: settings_path)
+    monkeypatch.setattr(
+        _hooks_mod,
+        "_claude_settings_path",
+        lambda scope, **_kwargs: settings_path,
+    )
     monkeypatch.setattr(
         "autoskillit.cli._init_helpers._is_plugin_installed",
         lambda **kwargs: False,

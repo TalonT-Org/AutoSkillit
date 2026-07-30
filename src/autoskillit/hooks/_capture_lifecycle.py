@@ -16,7 +16,9 @@ from typing import TYPE_CHECKING
 if __package__:
     from ._capture import _module_identity
 else:
-    from _capture import _module_identity  # type: ignore[no-redef]
+    from _capture import _module_identity as _standalone_module_identity
+
+    _module_identity = _standalone_module_identity
 _module_identity.register_module_aliases(__name__)
 if TYPE_CHECKING:
     from autoskillit.hooks._capture import _delivery as _capture_delivery
@@ -38,8 +40,6 @@ else:
     _capture_types = importlib.import_module(f"{_module_identity.__package__}._types")
 CaptureCleanupOutcome = _capture_types.CaptureCleanupOutcome
 _ObservedArtifact = _capture_types.ObservedArtifact
-_LockContended = _capture_types.LockContended
-_CarrierLeaseLive = _capture_types.CarrierLeaseLive
 
 CaptureAuthorityError = _capture_snapshot.CaptureAuthorityError
 CaptureFailureEvidence = _capture_snapshot.CaptureFailureEvidence
@@ -209,7 +209,7 @@ class CaptureLifecycleStore:
         _capture_delivery.normalize_interrupted_deliveries(
             self,
             lifecycle_error=CaptureLifecycleError,
-            lease_live=_CarrierLeaseLive,
+            lease_live=_capture_types.CarrierLeaseLive,
             tampered=_capture_types.Tampered,
         )
 
@@ -236,7 +236,7 @@ class CaptureLifecycleStore:
                 fcntl.flock(fd, operation)
             except OSError as exc:
                 if not blocking and exc.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
-                    raise _LockContended from exc
+                    raise _capture_types.LockContended from exc
                 raise CaptureLifecycleError("cannot acquire lifecycle lock") from exc
             self._validate_root()
             yield
@@ -901,7 +901,7 @@ class CaptureLifecycleStore:
             fcntl.flock(observed.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as exc:
             if exc.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
-                raise _CarrierLeaseLive from exc
+                raise _capture_types.CarrierLeaseLive from exc
             raise CaptureLifecycleError("artifact lease capability failure") from exc
 
     def _normalize_abandoned(

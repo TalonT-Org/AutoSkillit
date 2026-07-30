@@ -105,6 +105,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_type_intake_policy",
         "_type_constants_registries",  # measured response-exemption registry digest
         "tool_registry",  # immutable canonical MCP tool definition registry
+        # Frozen static ownership and identity-profile definitions are derived once.
+        "_type_audit_admission",
         "_codex_config",  # Codex output ceiling derived from measured exemptions
         "_fmt_response_spill",  # standalone spill schema and exemption mirror digests
         "_response_budget",  # canonical spill schema digest
@@ -942,8 +944,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server": 19,
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
-        "core": 29,  # +plugin artifact identity authority
-        "core/types": 41,  # +context persistence, audit, binding, execution, intake types
+        "core": 30,  # +plugin identity authority + strict audit semantic codec
+        "core/types": 43,  # +audit admission ownership, replay contracts, and protocols
         "cli": 22,  # +_plugin_artifact exact installed-incarnation authority (#4382)
         "cli/doctor": 11,  # +_doctor_skills capability declaration authenticity checks
         "workspace": 14,  # +_install_state (single install-state consistency authority,
@@ -1436,6 +1438,8 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     core_protocols: set[str] = set()
     for types_filename in (
         "core/types/__init__.py",
+        "core/types/_type_audit_admission.py",
+        "core/types/_type_audit_protocols.py",
         "core/types/_type_protocols_logging.py",
         "core/types/_type_protocols_execution.py",
         "core/types/_type_protocols_github.py",

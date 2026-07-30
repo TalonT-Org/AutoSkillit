@@ -605,6 +605,37 @@ def test_fmt_test_check_emits_filter_off_when_filter_mode_empty_string():
     assert "filter: off" in out
 
 
+# --- Audit outcome rendering ---
+
+
+@pytest.mark.parametrize("pipeline", [False, True])
+def test_fmt_run_skill_renders_server_authored_audit_outcome(pipeline: bool) -> None:
+    from autoskillit.hooks.formatters._fmt_execution import _fmt_run_skill
+
+    data = {
+        "success": True,
+        "result": "Done.",
+        "session_id": "abc",
+        "subtype": "end_turn",
+        "is_error": False,
+        "exit_code": 0,
+        "needs_retry": False,
+        "retry_reason": "none",
+        "stderr": "",
+        "audit_status": "PUBLISHED",
+        "audit_verdict": "GO",
+        "audit_cycle_path": "/tmp/audit-cycle.json",
+        "audit_attempt_id": "attempt-123",
+    }
+
+    text = _fmt_run_skill(data, pipeline=pipeline)
+
+    assert "audit_status: PUBLISHED" in text
+    assert "audit_verdict: GO" in text
+    assert "audit_cycle_path: /tmp/audit-cycle.json" in text
+    assert "audit_attempt_id: attempt-123" in text
+
+
 # --- Provider line rendering ---
 
 

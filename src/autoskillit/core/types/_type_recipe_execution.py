@@ -42,11 +42,13 @@ __all__ = [
     "VerifiedInputPreflightRequest",
     "VerifiedInputPreflightResult",
     "build_recipe_execution_credential",
+    "compute_audit_slot_intent_digest",
     "compute_invocation_template_digest",
     "compute_recipe_execution_snapshot_digest",
     "compute_runtime_binding_digest",
 ]
 
+_AUDIT_SLOT_INTENT_DOMAIN = "autoskillit:audit-slot-intent:v1:sha256"
 _INVOCATION_TEMPLATE_DOMAIN = "autoskillit:recipe-invocation-template:v1:sha256"
 _RECIPE_EXECUTION_SNAPSHOT_DOMAIN = "autoskillit:recipe-execution-snapshot:v1:sha256"
 _RUNTIME_BINDING_DOMAIN = "autoskillit:recipe-runtime-binding:v1:sha256"
@@ -345,7 +347,7 @@ class RecipeExecutionFactory(Protocol):
     ) -> InstalledRecipeExecution: ...
 
 
-def compute_runtime_binding_digest(
+def _build_runtime_binding_payload(
     *,
     execution_id: str,
     step_name: str,
@@ -353,9 +355,9 @@ def compute_runtime_binding_digest(
     bound_inputs: tuple[tuple[str, BoundScalar], ...],
     actual_mcp_kwargs: Mapping[str, BoundScalar],
     preflight: VerifiedInputPreflightResult | None,
-) -> str:
-    """Hash actual ordered values independently from the template/payload."""
-    payload = {
+    retry_after_audit_attempt_id: str | None,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
         "bound_inputs": [{"name": name, "value": value} for name, value in bound_inputs],
         "execution_id": execution_id,
         "mcp_kwargs": [
@@ -375,4 +377,53 @@ def compute_runtime_binding_digest(
         "step_name": step_name,
         "template_digest": template_digest,
     }
+    if retry_after_audit_attempt_id is not None:
+        payload["retry_after_audit_attempt_id"] = retry_after_audit_attempt_id
+    return payload
+
+
+def compute_runtime_binding_digest(
+    *,
+    execution_id: str,
+    step_name: str,
+    template_digest: str,
+    bound_inputs: tuple[tuple[str, BoundScalar], ...],
+    actual_mcp_kwargs: Mapping[str, BoundScalar],
+    preflight: VerifiedInputPreflightResult | None,
+    retry_after_audit_attempt_id: str | None = None,
+) -> str:
+    """Hash actual ordered values independently from the template/payload."""
+    payload = _build_runtime_binding_payload(
+        execution_id=execution_id,
+        step_name=step_name,
+        template_digest=template_digest,
+        bound_inputs=bound_inputs,
+        actual_mcp_kwargs=actual_mcp_kwargs,
+        preflight=preflight,
+        retry_after_audit_attempt_id=retry_after_audit_attempt_id,
+    )
     return compute_canonical_hash(payload, domain=_RUNTIME_BINDING_DOMAIN)
+
+
+def compute_audit_slot_intent_digest(
+    *,
+    execution_id: str,
+    step_name: str,
+    template_digest: str,
+    bound_inputs: tuple[tuple[str, BoundScalar], ...],
+    actual_mcp_kwargs: Mapping[str, BoundScalar],
+    preflight: VerifiedInputPreflightResult | None,
+    retry_after_audit_attempt_id: str | None = None,
+) -> str:
+    """Hash audit-slot intent independently from any retry attempt."""
+    payload = _build_runtime_binding_payload(
+        execution_id=execution_id,
+        step_name=step_name,
+        template_digest=template_digest,
+        bound_inputs=bound_inputs,
+        actual_mcp_kwargs=actual_mcp_kwargs,
+        preflight=preflight,
+        retry_after_audit_attempt_id=retry_after_audit_attempt_id,
+    )
+    payload.pop("retry_after_audit_attempt_id", None)
+    return compute_canonical_hash(payload, domain=_AUDIT_SLOT_INTENT_DOMAIN)

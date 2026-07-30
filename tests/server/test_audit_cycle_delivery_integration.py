@@ -58,6 +58,7 @@ from autoskillit.core import (
     SkillResult,
     VerifiedInputPreflightRequest,
     VerifiedInputPreflightResult,
+    compute_audit_slot_intent_digest,
     compute_runtime_binding_digest,
 )
 from autoskillit.core.closure_hashing import compute_bytes_hash
@@ -830,6 +831,54 @@ def test_runtime_binding_digest_attests_mcp_values_and_preflight_evidence() -> N
     assert digest != changed_mcp_digest
     assert digest != changed_bound_inputs_digest
     assert digest != changed_evidence_digest
+
+
+def test_runtime_and_audit_slot_digests_partition_retry_identity() -> None:
+    binding_args: dict[str, Any] = {
+        "execution_id": "execution-1",
+        "step_name": "audit",
+        "template_digest": "a" * 64,
+        "bound_inputs": (("issue", 4411), ("strict", True)),
+        "actual_mcp_kwargs": {"zeta": None, "alpha": "value"},
+        "preflight": None,
+    }
+
+    legacy_digest = compute_runtime_binding_digest(**binding_args)
+    first_retry_digest = compute_runtime_binding_digest(
+        **binding_args,
+        retry_after_audit_attempt_id="attempt-1",
+    )
+    second_retry_digest = compute_runtime_binding_digest(
+        **binding_args,
+        retry_after_audit_attempt_id="attempt-2",
+    )
+    slot_digest = compute_audit_slot_intent_digest(**binding_args)
+    retry_slot_digest = compute_audit_slot_intent_digest(
+        **binding_args,
+        retry_after_audit_attempt_id="attempt-1",
+    )
+    changed_slot_digest = compute_audit_slot_intent_digest(
+        **{
+            **binding_args,
+            "actual_mcp_kwargs": {"alpha": "changed", "zeta": None},
+        },
+        retry_after_audit_attempt_id="attempt-1",
+    )
+
+    assert legacy_digest == (
+        "sha256:da46cc24d8ba456acc03222168f2a59fd90802a25208bcbbc94102b8b5d02c8c"
+    )
+    assert (
+        compute_runtime_binding_digest(
+            **binding_args,
+            retry_after_audit_attempt_id=None,
+        )
+        == legacy_digest
+    )
+    assert first_retry_digest != legacy_digest
+    assert second_retry_digest not in {legacy_digest, first_retry_digest}
+    assert retry_slot_digest == slot_digest
+    assert changed_slot_digest != slot_digest
 
 
 @pytest.mark.parametrize("field", ["content_hash", "composite_hash"])

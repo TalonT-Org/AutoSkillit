@@ -7,14 +7,12 @@ from _fmt_primitives import (  # type: ignore[import-not-found]
     _CROSS_MARK,
     _filter_pytest_output,
     _fmt_tokens,
+    _maybe_audit_lines,
 )
 
 
 def _format_exit_code_line(data: dict) -> str:
-    """Return the formatted exit_code line, annotated with kill_reason when present.
-    Legacy payloads without kill_reason render as bare exit_code values so that
-    JSON-line replay of old session logs still parses correctly.
-    """
+    """Format exit code with kill reason while preserving legacy bare values."""
     exit_code = data.get("exit_code", "")
     kill_reason = data.get("kill_reason")
     if kill_reason is None:
@@ -73,6 +71,7 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
         worktree = data.get("worktree_path", "")
         if worktree:
             lines.append(f"worktree_path: {worktree}")
+        _maybe_audit_lines(data, lines)
         _maybe_provider_line(data, lines)
         _maybe_tracker_line(data, lines)
         result = data.get("result", "")
@@ -100,6 +99,7 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
     worktree = data.get("worktree_path", "")
     if worktree:
         lines.append(f"worktree_path: {worktree}")
+    _maybe_audit_lines(data, lines)
     _maybe_provider_line(data, lines)
     token_usage = data.get("token_usage")
     if isinstance(token_usage, dict):
@@ -218,6 +218,10 @@ _FMT_RUN_SKILL_RENDERED: frozenset[str] = frozenset(
         "stderr",
         "token_usage",
         "has_progress_evidence",
+        "audit_status",
+        "audit_verdict",
+        "audit_cycle_path",
+        "audit_attempt_id",
         "provider_used",
         "provider_fallback",
         "pipeline_tracker",

@@ -16,11 +16,14 @@ from pathlib import Path
 from typing import Any, Generic, Literal, TypedDict, TypeVar
 
 from ..closure_hashing import HASH_RE as _HASH_RE
+from ._type_audit_admission import AuditAttemptId, AuditOutcomeStatus
+from ._type_audit_cycle import AuditVerdict
 from ._type_enums import KillReason, RetryReason, SessionOutcome
 
 T = TypeVar("T")
 
 __all__ = [
+    "AuditResultOutcome",
     "CapabilityResolutionDetail",
     "ClosureAuthoritySpec",
     "closure_authority_spec_from_args",
@@ -524,6 +527,16 @@ class NdjsonDriftOutcome:
 
 
 @dataclass(frozen=True, slots=True)
+class AuditResultOutcome:
+    """Server-authored audit outcome attached to a skill result."""
+
+    status: AuditOutcomeStatus | None = None
+    verdict: AuditVerdict | None = None
+    cycle_path: str | None = None
+    attempt_id: AuditAttemptId | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class WriteEvidence:
     """Bundled write evidence signals — either explicitly constructed or absent."""
 
@@ -594,6 +607,8 @@ class SkillResult:
     """Pre-contamination context bundle — populated only when clone_guard fires."""
     ndjson_drift: NdjsonDriftOutcome = field(default_factory=NdjsonDriftOutcome)
     """NDJSON parser vocabulary drift counters — populated by Codex sessions."""
+    audit: AuditResultOutcome = field(default_factory=AuditResultOutcome)
+    """Server-authored audit outcome bundle."""
     completion_required: bool = False
     outcome_fields: dict[str, int | str] | None = None
     outcome_invariant_violated: bool = False
@@ -634,6 +649,14 @@ class SkillResult:
             "pre_contamination_subtype": self.contamination.subtype,
             "ndjson_unknown_event_count": self.ndjson_drift.unknown_event_count,
             "ndjson_unknown_item_count": self.ndjson_drift.unknown_item_count,
+            "audit_status": self.audit.status.value if self.audit.status is not None else None,
+            "audit_verdict": (
+                self.audit.verdict.value if self.audit.verdict is not None else None
+            ),
+            "audit_cycle_path": self.audit.cycle_path,
+            "audit_attempt_id": (
+                self.audit.attempt_id.value if self.audit.attempt_id is not None else None
+            ),
         }
         if self.worktree_path is not None:
             data["worktree_path"] = self.worktree_path

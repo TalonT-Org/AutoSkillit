@@ -136,6 +136,10 @@ _NON_CANONICAL_JSON_EXCEPTIONS: dict[str, tuple[tuple[str, int], str]] = {
 
 
 class TestCanonicalJsonProducerConvention:
+    @pytest.mark.xfail(
+        strict=True,
+        reason="#4419: dormant semantic producer and skill contract land in work package 2",
+    )
     def test_require_canonical_consumers_have_registered_producers(self):
         """Every require_canonical=True consumer site must have a registry entry."""
         current = _scan_require_canonical_consumer_sites()

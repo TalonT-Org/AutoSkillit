@@ -44,7 +44,12 @@ def test_kitchen_id_only_assigned_via_transition_bootstrap():
                         f"ctx.kitchen_id assignment uses "
                         f"{rhs}, not resolve_kitchen_id()"
                     )
-                if isinstance(node.value, ast.Attribute) and node.value.attr == "kitchen_id":
+                if (
+                    isinstance(node.value, ast.Attribute)
+                    and node.value.attr == "kitchen_id"
+                    and isinstance(node.value.value, ast.Name)
+                    and node.value.value.id == "state"
+                ):
                     stored_assign_linenos.add(f"{file_path}:{node.lineno}")
                     continue
                 if isinstance(node.value, ast.Constant) and node.value.value == "":

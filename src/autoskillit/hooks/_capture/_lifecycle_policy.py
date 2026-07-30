@@ -2,17 +2,11 @@
 
 from __future__ import annotations
 
-import sys
 from enum import StrEnum
 
-_THIS_MODULE = sys.modules[__name__]
-for _alias in (
-    "_capture._lifecycle_policy",
-    "autoskillit.hooks._capture._lifecycle_policy",
-):
-    _existing = sys.modules.setdefault(_alias, _THIS_MODULE)
-    if _existing is not _THIS_MODULE:
-        raise RuntimeError("conflicting shell-capture lifecycle policy module identity")
+from ._module_identity import register_module_aliases
+
+register_module_aliases(__name__)
 
 __all__ = [
     "CaptureDeliveryStatus",

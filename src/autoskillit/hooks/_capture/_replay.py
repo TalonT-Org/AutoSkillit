@@ -9,6 +9,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
+from ._module_identity import register_module_aliases
+
 if TYPE_CHECKING:
     from autoskillit.hooks import _capture_failure_policy
     from autoskillit.hooks._capture._snapshot import (
@@ -43,11 +45,7 @@ else:
             render_capture_v2,
         )
 
-_THIS_MODULE = sys.modules[__name__]
-for _alias in ("_capture._replay", "autoskillit.hooks._capture._replay"):
-    _existing = sys.modules.setdefault(_alias, _THIS_MODULE)
-    if _existing is not _THIS_MODULE:
-        raise RuntimeError("conflicting shell-capture replay module identity")
+register_module_aliases(__name__)
 
 _CAPTURE_FAILURE_RETURN_CODE = 1
 _PROCESS_SETTLE_TIMEOUT_SECONDS = 2

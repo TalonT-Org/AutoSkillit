@@ -10,12 +10,12 @@ import os
 import re
 import secrets
 import stat
-import sys
 from dataclasses import InitVar, dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, NoReturn, SupportsIndex
 
 from . import _descriptor, _syntax
+from ._module_identity import register_module_aliases
 
 if TYPE_CHECKING:
     from autoskillit.hooks import _capture_failure_policy
@@ -31,11 +31,7 @@ else:
     from .. import _capture_failure_policy
     from .._capture_contract import CaptureV2Fields, CaptureV2Renderable, capture_v2_fields
 
-_THIS_MODULE = sys.modules[__name__]
-for _alias in ("_capture._snapshot", "autoskillit.hooks._capture._snapshot"):
-    _existing = sys.modules.setdefault(_alias, _THIS_MODULE)
-    if _existing is not _THIS_MODULE:
-        raise RuntimeError("conflicting shell-capture snapshot module identity")
+register_module_aliases(__name__)
 
 __all__ = [
     "CaptureAuthorityError",

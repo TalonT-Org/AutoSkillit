@@ -9,7 +9,6 @@ import math
 import os
 import re
 import struct
-import sys
 from dataclasses import dataclass, replace
 from typing import Any, cast
 
@@ -25,6 +24,7 @@ from ._lifecycle_policy import (
     is_retention_successor,
     is_state_successor,
 )
+from ._module_identity import register_module_aliases
 from ._snapshot import (
     CaptureFailureEvidence,
     CaptureFinalManifest,
@@ -38,11 +38,7 @@ from ._syntax import (
     INCARNATION_RE as _INCARNATION_RE,
 )
 
-_THIS_MODULE = sys.modules[__name__]
-for _alias in ("_capture._ledger", "autoskillit.hooks._capture._ledger"):
-    _existing = sys.modules.setdefault(_alias, _THIS_MODULE)
-    if _existing is not _THIS_MODULE:
-        raise RuntimeError("conflicting shell-capture ledger module identity")
+register_module_aliases(__name__)
 
 __all__ = [
     "CURRENT_FORMAT_VERSION",

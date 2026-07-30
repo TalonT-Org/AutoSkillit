@@ -3,18 +3,14 @@
 from __future__ import annotations
 
 import os
-import sys
 from collections.abc import Callable
 from dataclasses import replace
 from typing import Any, Protocol, TypeAlias
 
 from . import _cleanup, _ledger, _snapshot
+from ._module_identity import register_module_aliases
 
-_THIS_MODULE = sys.modules[__name__]
-for _alias in ("_capture._delivery", "autoskillit.hooks._capture._delivery"):
-    _existing = sys.modules.setdefault(_alias, _THIS_MODULE)
-    if _existing is not _THIS_MODULE:
-        raise RuntimeError("conflicting shell-capture delivery module identity")
+register_module_aliases(__name__)
 
 DeliveryValue: TypeAlias = (
     _snapshot.FinalizedCapture

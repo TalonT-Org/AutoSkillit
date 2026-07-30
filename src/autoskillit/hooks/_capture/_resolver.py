@@ -5,18 +5,14 @@ from __future__ import annotations
 import errno
 import fcntl
 import os
-import sys
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from typing import Protocol
 
 from . import _cleanup, _descriptor, _ledger, _reader, _snapshot
+from ._module_identity import register_module_aliases
 
-_THIS_MODULE = sys.modules[__name__]
-for _alias in ("_capture._resolver", "autoskillit.hooks._capture._resolver"):
-    _existing = sys.modules.setdefault(_alias, _THIS_MODULE)
-    if _existing is not _THIS_MODULE:
-        raise RuntimeError("conflicting shell-capture resolver module identity")
+register_module_aliases(__name__)
 
 _READ_FLAGS = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
 

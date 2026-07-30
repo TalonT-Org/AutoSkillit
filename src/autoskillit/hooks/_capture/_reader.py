@@ -3,18 +3,14 @@
 from __future__ import annotations
 
 import os
-import sys
 from dataclasses import InitVar, dataclass, field
 from typing import NoReturn, Protocol, SupportsIndex
 
 from ._cleanup import close_preserving_primary
+from ._module_identity import register_module_aliases
 from ._snapshot import CaptureAuthorityError
 
-_THIS_MODULE = sys.modules[__name__]
-for _alias in ("_capture._reader", "autoskillit.hooks._capture._reader"):
-    _existing = sys.modules.setdefault(_alias, _THIS_MODULE)
-    if _existing is not _THIS_MODULE:
-        raise RuntimeError("conflicting shell-capture reader module identity")
+register_module_aliases(__name__)
 
 __all__ = [
     "MAX_VERIFIED_READ_BYTES",

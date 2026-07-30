@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import os
-import sys
 
-_THIS_MODULE = sys.modules[__name__]
-for _alias in ("_capture._cleanup", "autoskillit.hooks._capture._cleanup"):
-    _existing = sys.modules.setdefault(_alias, _THIS_MODULE)
-    if _existing is not _THIS_MODULE:
-        raise RuntimeError("conflicting shell-capture cleanup module identity")
+from ._module_identity import register_module_aliases
+
+register_module_aliases(__name__)
 
 
 def close_preserving_primary(

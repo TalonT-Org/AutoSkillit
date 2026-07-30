@@ -5,7 +5,6 @@ from __future__ import annotations
 import errno
 import os
 import stat
-import sys
 from collections.abc import Callable, Collection, Iterable
 from dataclasses import replace
 from typing import Any, Protocol
@@ -18,6 +17,7 @@ from ._ledger import (
     CaptureState,
     same_record,
 )
+from ._module_identity import register_module_aliases
 from ._types import (
     CaptureCleanupOutcome,
     CarrierLeaseLive,
@@ -26,11 +26,7 @@ from ._types import (
     Tampered,
 )
 
-_THIS_MODULE = sys.modules[__name__]
-for _alias in ("_capture._sweep", "autoskillit.hooks._capture._sweep"):
-    _existing = sys.modules.setdefault(_alias, _THIS_MODULE)
-    if _existing is not _THIS_MODULE:
-        raise RuntimeError("conflicting shell-capture sweep module identity")
+register_module_aliases(__name__)
 
 
 class SweepRecord(Protocol):

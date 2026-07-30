@@ -7,14 +7,11 @@ import hmac
 import json
 import os
 import stat
-import sys
 from typing import Protocol
 
-_THIS_MODULE = sys.modules[__name__]
-for _alias in ("_capture._descriptor", "autoskillit.hooks._capture._descriptor"):
-    _existing = sys.modules.setdefault(_alias, _THIS_MODULE)
-    if _existing is not _THIS_MODULE:
-        raise RuntimeError("conflicting shell-capture descriptor module identity")
+from ._module_identity import register_module_aliases
+
+register_module_aliases(__name__)
 
 _READ_CHUNK_BYTES = 64 * 1024
 _UNTRUSTED_MODE_BITS = stat.S_IRWXG | stat.S_IRWXO

@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 
-_THIS_MODULE = sys.modules[__name__]
-for _alias in ("_capture._types", "autoskillit.hooks._capture._types"):
-    _existing = sys.modules.setdefault(_alias, _THIS_MODULE)
-    if _existing is not _THIS_MODULE:
-        raise RuntimeError("conflicting shell-capture types module identity")
+from ._module_identity import register_module_aliases
+
+register_module_aliases(__name__)
 
 __all__ = ["CaptureCleanupOutcome"]
 

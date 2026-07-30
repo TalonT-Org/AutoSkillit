@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import re
-import sys
 
-_THIS_MODULE = sys.modules[__name__]
-for _alias in ("_capture_failure_policy", "autoskillit.hooks._capture_failure_policy"):
-    _existing = sys.modules.setdefault(_alias, _THIS_MODULE)
-    if _existing is not _THIS_MODULE:
-        raise RuntimeError("conflicting shell-capture failure-policy module identity")
+if __package__:
+    from ._capture._module_identity import (
+        register_module_aliases as _register_packaged_module,
+    )
+
+    _register_packaged_module(__name__)
+else:
+    from _capture._module_identity import (
+        register_module_aliases as _register_standalone_module,
+    )
+
+    _register_standalone_module(__name__)
 
 FAILURE_STAGE_MAX_BYTES = 64
 FAILURE_DETAIL_MAX_BYTES = 240

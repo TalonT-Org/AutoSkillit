@@ -7,18 +7,24 @@ import os
 import re
 import secrets
 import stat
-import sys
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-_THIS_MODULE = sys.modules[__name__]
-for _alias in ("_capture_lifecycle", "autoskillit.hooks._capture_lifecycle"):
-    _existing = sys.modules.setdefault(_alias, _THIS_MODULE)
-    if _existing is not _THIS_MODULE:
-        raise RuntimeError("conflicting shell-capture lifecycle module identity")
+if __package__:
+    from ._capture._module_identity import (
+        register_module_aliases as _register_packaged_module,
+    )
+
+    _register_packaged_module(__name__)
+else:
+    from _capture._module_identity import (
+        register_module_aliases as _register_standalone_module,
+    )
+
+    _register_standalone_module(__name__)
 
 if TYPE_CHECKING:
     from autoskillit.hooks._capture import _delivery as _capture_delivery

@@ -219,6 +219,8 @@ def test_decision_freezes_the_complete_producer_matrix(decision_text: str) -> No
     expected_rows = tuple(
         (
             row.surface.name,
+            row.evidence[0].configuration_mode,
+            row.evidence[0].claim_id,
             row.control_point_owner,
             row.observation_state.name,
             row.authority_state.name,

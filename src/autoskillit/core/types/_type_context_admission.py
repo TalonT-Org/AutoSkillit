@@ -2130,13 +2130,20 @@ _LOCAL_SOURCE_LOCATORS = {
 }
 
 
-def _coverage_row(surface: ProducerSurface) -> ProducerCoverageDef:
+def _coverage_row(surface: ProducerSurface, mode: str = "default") -> ProducerCoverageDef:
+    native_shell_direct = surface is ProducerSurface.NATIVE_SHELL and mode == "direct"
     if surface in _VERIFIED_SURFACES:
-        observation_state = CoverageState.VERIFIED
+        observation_state = (
+            CoverageState.PARTIAL if native_shell_direct else CoverageState.VERIFIED
+        )
         evidence_kind = CoverageEvidenceKind.AUTOSKILLIT_SOURCE
         backend = "autoskillit"
         verifier = "source_inspection"
-        locator = _LOCAL_SOURCE_LOCATORS[surface]
+        locator = (
+            "src/autoskillit/hooks/_capture_artifacts.py"
+            if native_shell_direct
+            else _LOCAL_SOURCE_LOCATORS[surface]
+        )
         version = "0.10.890"
         revision = "ac8f653a00d24b6be50ef285958cfb0e1b7a351b"
     elif surface in _UNOBSERVABLE_SURFACES:
@@ -2169,11 +2176,13 @@ def _coverage_row(surface: ProducerSurface) -> ProducerCoverageDef:
         else:
             owner = "final_request_assembler"
     claim_id = f"COV-{surface.name.replace('_', '-')}"
+    if mode != "default":
+        claim_id = f"{claim_id}-{mode.replace('_', '-').upper()}"
     evidence = CoverageEvidence(
         claim_id=claim_id,
         kind=evidence_kind,
         backend=backend,
-        configuration_mode="default",
+        configuration_mode=mode,
         verifier=verifier,
         source_locator=locator,
         tested_version=version,
@@ -2191,7 +2200,13 @@ def _coverage_row(surface: ProducerSurface) -> ProducerCoverageDef:
     )
 
 
-CONTEXT_ADMISSION_COVERAGE = tuple(_coverage_row(surface) for surface in ProducerSurface)
+CONTEXT_ADMISSION_COVERAGE = tuple(
+    _coverage_row(surface, mode)
+    for surface in ProducerSurface
+    for mode in (
+        ("default", "direct") if surface is ProducerSurface.NATIVE_SHELL else ("default",)
+    )
+)
 
 
 __all__ = [

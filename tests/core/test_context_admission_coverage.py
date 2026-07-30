@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import NamedTuple
 
 import pytest
@@ -52,6 +53,21 @@ def _autoskillit_evidence(claim_id: str, source_locator: str) -> ExpectedEvidenc
         "default",
         "source_inspection",
         source_locator,
+        "0.10.890",
+        "ac8f653a00d24b6be50ef285958cfb0e1b7a351b",
+        CHECKED_AT,
+        FRESHNESS_POLICY,
+    )
+
+
+def _autoskillit_direct_evidence() -> ExpectedEvidence:
+    return ExpectedEvidence(
+        "COV-NATIVE-SHELL-DIRECT",
+        "AUTOSKILLIT_SOURCE",
+        "autoskillit",
+        "direct",
+        "source_inspection",
+        "src/autoskillit/hooks/_capture_artifacts.py",
         "0.10.890",
         "ac8f653a00d24b6be50ef285958cfb0e1b7a351b",
         CHECKED_AT,
@@ -114,6 +130,12 @@ EXPECTED_COVERAGE = (
             "COV-NATIVE-SHELL",
             "src/autoskillit/hooks/shell_capture_hook.py",
         ),
+    ),
+    _row(
+        "NATIVE_SHELL",
+        "shell_capture_hook",
+        "PARTIAL",
+        _autoskillit_direct_evidence(),
     ),
     _row(
         "UNIFIED_EXEC_AND_WRITE_STDIN",
@@ -275,6 +297,7 @@ EXPECTED_SURFACES = (
     "PARENT_VISIBLE_CHILD_DELIVERY",
     "COMPACTION_MODEL_WINDOW_TRANSITION",
 )
+EXPECTED_REGISTRY_SURFACES = (EXPECTED_SURFACES[0], *EXPECTED_SURFACES)
 
 
 def _coverage_projection() -> tuple[ExpectedCoverageRow, ...]:
@@ -307,7 +330,28 @@ def _coverage_projection() -> tuple[ExpectedCoverageRow, ...]:
 
 def test_producer_surface_and_registry_are_independently_exhaustive() -> None:
     assert tuple(member.name for member in ProducerSurface) == EXPECTED_SURFACES
-    assert tuple(row.surface.name for row in CONTEXT_ADMISSION_COVERAGE) == EXPECTED_SURFACES
+    assert (
+        tuple(row.surface.name for row in CONTEXT_ADMISSION_COVERAGE) == EXPECTED_REGISTRY_SURFACES
+    )
+
+    default_rows = tuple(
+        row
+        for row in CONTEXT_ADMISSION_COVERAGE
+        if row.evidence[0].configuration_mode == "default"
+    )
+    assert tuple(row.surface.name for row in default_rows) == EXPECTED_SURFACES
+
+
+def test_surface_backend_configuration_keys_are_unique() -> None:
+    keys = tuple(
+        (
+            row.surface,
+            row.evidence[0].backend,
+            row.evidence[0].configuration_mode,
+        )
+        for row in CONTEXT_ADMISSION_COVERAGE
+    )
+    assert len(keys) == len(set(keys))
 
 
 def test_coverage_registry_freezes_every_row_and_evidence_field() -> None:
@@ -330,7 +374,15 @@ def test_verified_observations_have_primary_evidence() -> None:
 
 
 def test_claim_ids_are_stable_and_unique() -> None:
-    expected = tuple(f"COV-{surface.replace('_', '-')}" for surface in EXPECTED_SURFACES)
+    expected = tuple(
+        f"COV-{row.surface.replace('_', '-')}"
+        + (
+            ""
+            if row.evidence[0].configuration_mode == "default"
+            else f"-{row.evidence[0].configuration_mode.replace('_', '-').upper()}"
+        )
+        for row in EXPECTED_COVERAGE
+    )
     actual = tuple(row.evidence[0].claim_id for row in CONTEXT_ADMISSION_COVERAGE)
     assert actual == expected
     assert len(actual) == len(set(actual))
@@ -357,12 +409,6 @@ def test_runtime_version_or_configuration_mismatch_degrades_deterministically() 
             ),
             (
                 evidence.backend,
-                f"{evidence.configuration_mode}-mismatch",
-                evidence.tested_version,
-                CHECKED_AT,
-            ),
-            (
-                evidence.backend,
                 evidence.configuration_mode,
                 f"{evidence.tested_version}-mismatch",
                 CHECKED_AT,
@@ -382,6 +428,13 @@ def test_runtime_version_or_configuration_mismatch_degrades_deterministically() 
                 source_version,
                 as_of,
             )
+            expected = replace(
+                row,
+                observation_state=CoverageState.UPSTREAM_GATED,
+                authority_state=CoverageState.UPSTREAM_GATED,
+                reason_code="coverage-runtime-mismatch",
+            )
+            assert mismatch == expected
             assert mismatch.observation_state is CoverageState.UPSTREAM_GATED
             assert mismatch.authority_state is CoverageState.UPSTREAM_GATED
             assert mismatch.reason_code == "coverage-runtime-mismatch"
@@ -392,6 +445,51 @@ def test_runtime_version_or_configuration_mismatch_degrades_deterministically() 
                 source_version,
                 as_of,
             )
+
+
+def test_unknown_configuration_degrades_the_surface_default() -> None:
+    for surface in ProducerSurface:
+        default = next(
+            row
+            for row in CONTEXT_ADMISSION_COVERAGE
+            if row.surface is surface and row.evidence[0].configuration_mode == "default"
+        )
+        evidence = default.evidence[0]
+        resolved = resolve_context_admission_coverage(
+            surface,
+            evidence.backend,
+            "unknown-configuration",
+            evidence.tested_version,
+            CHECKED_AT,
+        )
+        assert resolved == replace(
+            default,
+            observation_state=CoverageState.UPSTREAM_GATED,
+            authority_state=CoverageState.UPSTREAM_GATED,
+            reason_code="coverage-runtime-mismatch",
+        )
+
+
+def test_native_shell_default_and_direct_resolve_independently() -> None:
+    native_rows = tuple(
+        row for row in CONTEXT_ADMISSION_COVERAGE if row.surface is ProducerSurface.NATIVE_SHELL
+    )
+    by_configuration = {row.evidence[0].configuration_mode: row for row in native_rows}
+    assert tuple(by_configuration) == ("default", "direct")
+    assert by_configuration["default"].observation_state is CoverageState.VERIFIED
+    assert by_configuration["direct"].observation_state is CoverageState.PARTIAL
+
+    direct_evidence = by_configuration["direct"].evidence[0]
+    degraded_direct = resolve_context_admission_coverage(
+        ProducerSurface.NATIVE_SHELL,
+        "mismatched-backend",
+        "direct",
+        direct_evidence.tested_version,
+        CHECKED_AT,
+    )
+    assert degraded_direct.evidence[0].claim_id == "COV-NATIVE-SHELL-DIRECT"
+    assert degraded_direct.observation_state is CoverageState.UPSTREAM_GATED
+    assert degraded_direct.reason_code == "coverage-runtime-mismatch"
 
 
 def test_compaction_observation_does_not_imply_authority() -> None:

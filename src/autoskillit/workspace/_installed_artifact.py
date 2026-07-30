@@ -20,6 +20,7 @@ from autoskillit.core import (
     PluginArtifactValidationError,
     Severity,
     installed_plugin_semantic_key,
+    parse_installed_plugin_semantic_key,
     read_installed_plugin_artifact_identity,
     registered_install_paths,
 )
@@ -80,6 +81,35 @@ class InstallStateSpec:
         if type(self.require_shared_lease) is not bool:
             raise ValueError("require_shared_lease must be a boolean")
         object.__setattr__(self, "home", home)
+
+    @classmethod
+    def from_managed_root(
+        cls,
+        managed_root: Path,
+        semantic_key: str,
+        *,
+        require_registered_plugin: bool,
+        require_shared_lease: bool,
+        supplied_lease: ArtifactLease | None = None,
+    ) -> InstallStateSpec:
+        """Reconstruct trusted inputs from a managed root and exact identity."""
+        root = Path(managed_root)
+        plugin_ref, expected_version = parse_installed_plugin_semantic_key(semantic_key)
+        try:
+            home = root.parents[5]
+        except IndexError as exc:
+            raise ValueError(f"installed plugin root is invalid: {root}") from exc
+        spec = cls(
+            home=home,
+            plugin_ref=plugin_ref,
+            expected_version=expected_version,
+            require_registered_plugin=require_registered_plugin,
+            require_shared_lease=require_shared_lease,
+            supplied_lease=supplied_lease,
+        )
+        if spec.managed_root != root:
+            raise ValueError(f"installed plugin root is invalid: {root}")
+        return spec
 
     @property
     def managed_root(self) -> Path:

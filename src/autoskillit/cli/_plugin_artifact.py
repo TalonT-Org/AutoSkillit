@@ -35,7 +35,6 @@ from autoskillit.core import (
     log_plugin_artifact_lifecycle,
     migrate_retiring_cache_v1,
     new_plugin_artifact_incarnation_id,
-    parse_installed_plugin_semantic_key,
     read_installed_plugin_artifact_identity,
     read_retiring_cache,
     write_versioned_json,
@@ -260,26 +259,14 @@ class InstalledPluginArtifactAuthority:
         )
 
         try:
-            plugin_ref, expected_version = parse_installed_plugin_semantic_key(self._semantic_key)
+            spec = InstallStateSpec.from_managed_root(
+                self._root,
+                self._semantic_key,
+                require_registered_plugin=True,
+                require_shared_lease=True,
+            )
         except ValueError as exc:
-            raise PluginArtifactValidationError(
-                f"installed plugin semantic identity is invalid: {self._semantic_key}"
-            ) from exc
-        try:
-            home = self._root.parents[5]
-        except IndexError as exc:
-            raise PluginArtifactValidationError(
-                f"installed plugin root is invalid: {self._root}"
-            ) from exc
-        spec = InstallStateSpec(
-            home=home,
-            plugin_ref=plugin_ref,
-            expected_version=expected_version,
-            require_registered_plugin=True,
-            require_shared_lease=True,
-        )
-        if spec.managed_root != self._root:
-            raise PluginArtifactValidationError(f"installed plugin root is invalid: {self._root}")
+            raise PluginArtifactValidationError(str(exc)) from exc
 
         verification = verify_installed_plugin_artifact(spec)
         lease = verification.lease

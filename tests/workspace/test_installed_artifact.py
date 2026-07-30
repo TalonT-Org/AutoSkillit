@@ -129,6 +129,39 @@ def test_semantic_key_codec_has_one_round_trip_authority() -> None:
         parse_installed_plugin_semantic_key("missing-version-separator")
 
 
+def test_spec_reconstructs_managed_root_through_one_inverse(home: Path) -> None:
+    expected = _spec(home)
+
+    reconstructed = InstallStateSpec.from_managed_root(
+        expected.managed_root,
+        expected.semantic_key,
+        require_registered_plugin=True,
+        require_shared_lease=True,
+    )
+
+    assert reconstructed == expected
+    with pytest.raises(ValueError, match="installed plugin root is invalid"):
+        InstallStateSpec.from_managed_root(
+            home / "too-shallow",
+            expected.semantic_key,
+            require_registered_plugin=True,
+            require_shared_lease=True,
+        )
+    with pytest.raises(ValueError, match="installed plugin root is invalid"):
+        InstallStateSpec.from_managed_root(
+            home
+            / ".claude"
+            / "plugins"
+            / "cache"
+            / "wrong-marketplace"
+            / "autoskillit"
+            / _VERSION,
+            expected.semantic_key,
+            require_registered_plugin=True,
+            require_shared_lease=True,
+        )
+
+
 def test_uninstalled_optional_state_is_clean_and_does_not_create_a_sidecar(
     home: Path,
 ) -> None:

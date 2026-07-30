@@ -43,7 +43,6 @@ from autoskillit.core import (  # IL-005: core only — never cli.InstalledPlugi
     RetiringCacheState,
     Severity,
     get_logger,
-    parse_installed_plugin_semantic_key,
     read_retiring_cache,
     registered_install_paths,
 )
@@ -213,24 +212,17 @@ def _record_matches_current_installed_artifact(
     from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY
 
     try:
-        plugin_ref, version = parse_installed_plugin_semantic_key(record.semantic_key)
-    except ValueError:
-        return False
-    if plugin_ref != _AUTOSKILLIT_PLUGIN_KEY:
-        return False
-    try:
-        home = record.managed_path.parents[5]
-    except IndexError:
-        return False
-    verification = verify_installed_plugin_artifact(
-        InstallStateSpec(
-            home=home,
-            plugin_ref=plugin_ref,
-            expected_version=version,
+        spec = InstallStateSpec.from_managed_root(
+            record.managed_path,
+            record.semantic_key,
             require_registered_plugin=False,
             require_shared_lease=True,
         )
-    )
+    except ValueError:
+        return False
+    if spec.plugin_ref != _AUTOSKILLIT_PLUGIN_KEY:
+        return False
+    verification = verify_installed_plugin_artifact(spec)
     try:
         unreadable = next(
             (

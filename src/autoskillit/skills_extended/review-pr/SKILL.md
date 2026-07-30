@@ -1452,7 +1452,7 @@ These findings target lines not in the diff and could not be posted as inline co
 
 **CRITICAL — Ordering:** Step 8 must execute after Steps 6 and 7. Do not write the summary file before posting inline comments and submitting the review verdict to GitHub. Writing the file first anchors you to treating it as the primary output rather than a local audit artifact.
 
-Re-run the final freshness guard before every handoff publication. Derive
+Re-run the final freshness guard before every `diff_context` handoff publication. Derive
 `review_generation_id` from the snapshot authority and canonical normalized raw
 ledger. Every artifact in a successful invocation carries the same
 `review_generation_id`, `_head_sha`, `_base_sha`, optional `_merge_base_sha`, and
@@ -1501,16 +1501,17 @@ from autoskillit.smoke_utils import (
 )
 
 SNAPSHOT_IS_FRESH = FINAL_SNAPSHOT_STATE == "fresh"
-if FINAL_SNAPSHOT_STATE == "stale":
-    verdict = "stale_snapshot"
-    FINAL_REVIEW_FINDINGS = []
-    HANDOFF_METADATA = {**HANDOFF_METADATA, "verdict": verdict}
-    RAW_LEDGER = {**RAW_LEDGER, "verdict": verdict}
-elif FINAL_SNAPSHOT_STATE == "authority_degraded":
-    verdict = "needs_human"
-    FINAL_REVIEW_FINDINGS = []
-    HANDOFF_METADATA = {**HANDOFF_METADATA, "verdict": verdict}
-    RAW_LEDGER = {**RAW_LEDGER, "verdict": verdict}
+if not SNAPSHOT_IS_FRESH:
+    if FINAL_SNAPSHOT_STATE == "stale":
+        verdict = "stale_snapshot"
+        FINAL_REVIEW_FINDINGS = []
+        HANDOFF_METADATA = {**HANDOFF_METADATA, "verdict": verdict}
+        RAW_LEDGER = {**RAW_LEDGER, "verdict": verdict}
+    elif FINAL_SNAPSHOT_STATE == "authority_degraded":
+        verdict = "needs_human"
+        FINAL_REVIEW_FINDINGS = []
+        HANDOFF_METADATA = {**HANDOFF_METADATA, "verdict": verdict}
+        RAW_LEDGER = {**RAW_LEDGER, "verdict": verdict}
 
 if FINAL_SNAPSHOT_STATE == "authority_degraded":
     # No retained snapshot or annotation generation exists, so fixed-name

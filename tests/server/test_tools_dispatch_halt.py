@@ -394,6 +394,18 @@ class TestDispatchFoodTruckSkipWhen:
         )
         assert result["success"] is False
         assert result["error"] == "fleet_dispatch_skipped"
+        state = json.loads(state_path.read_text())
+        persisted = state["dispatches"][0]["effect_provenance"]
+        persisted_write = next(
+            effect for effect in persisted["effects"] if effect["name"] == "campaign_state_write"
+        )
+        returned_write = next(
+            effect
+            for effect in result["effect_provenance"]["effects"]
+            if effect["name"] == "campaign_state_write"
+        )
+        assert persisted_write["phase"] == "confirmed"
+        assert persisted_write == returned_write
 
     @pytest.mark.anyio
     async def test_skip_when_false_proceeds_normally(

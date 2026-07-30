@@ -575,10 +575,10 @@ async def dispatch_food_truck(
                             effect_provenance=provenance.snapshot().to_dict(),
                         ),
                     )
-                    provenance.confirm(
-                        DispatchEffectName.CAMPAIGN_STATE_WRITE,
-                        receipt="SKIPPED campaign state persisted",
-                        identities={"campaign_state_path": campaign_state_path_str},
+                    _confirm_campaign_state_write(
+                        provenance,
+                        campaign_state_path_str,
+                        effective_name,
                     )
                 return DispatchCompleted(
                     success=False,

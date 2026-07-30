@@ -66,11 +66,6 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "The transaction-owned backup is removed only after the installed replacement commits.",
     ),
-    ("cli/_marketplace.py", "rollback", "os.replace"): (
-        1,
-        "Rollback restores the exact transaction backup while installed-artifact "
-        "ownership is held.",
-    ),
     ("cli/_marketplace.py", "rollback", "shutil.rmtree"): (
         1,
         "Rollback removes its private staging directory after restoring every covered surface.",

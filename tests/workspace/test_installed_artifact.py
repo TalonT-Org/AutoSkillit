@@ -11,6 +11,7 @@ import pytest
 from autoskillit.core import (
     INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     ArtifactLease,
+    ArtifactLeaseContention,
     PluginArtifactIdentity,
     directory_tree_digest,
     installed_plugin_artifact_manifest_payload,
@@ -20,6 +21,12 @@ from autoskillit.core import (
 from autoskillit.workspace import (
     InstallStateSpec,
     verify_installed_plugin_artifact,
+)
+from tests.fixtures.plugin_artifact_state import (
+    INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
+    PLUGIN_ARTIFACT_STATE_KINDS,
+    PluginArtifactStateKind,
+    build_plugin_artifact_state,
 )
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.medium]
@@ -119,6 +126,73 @@ def test_uninstalled_optional_state_is_clean_and_does_not_create_a_sidecar(
     assert result.findings == ()
     assert result.lease is None
     assert not spec.lease_path.exists()
+
+
+@pytest.mark.parametrize("kind", PLUGIN_ARTIFACT_STATE_KINDS, ids=str)
+def test_complete_production_shaped_artifact_matrix(
+    home: Path,
+    kind: PluginArtifactStateKind,
+) -> None:
+    state = build_plugin_artifact_state(home, kind)
+
+    result = verify_installed_plugin_artifact(state.spec)
+    try:
+        if kind is PluginArtifactStateKind.NO_INSTALLATION:
+            assert result.identity is None
+            assert result.findings == ()
+            assert result.lease is None
+            assert not state.lease_path.exists()
+        elif kind is PluginArtifactStateKind.VALID_CURRENT:
+            assert result.identity == state.identity
+            assert result.findings == ()
+            assert result.lease is not None
+        else:
+            assert kind in INVALID_PLUGIN_ARTIFACT_STATE_KINDS
+            assert result.identity is None
+            assert result.findings
+            assert all(finding.severity.value == "error" for finding in result.findings)
+            assert any(str(state.managed_root) in finding.message for finding in result.findings)
+            assert all("autoskillit install" in finding.message for finding in result.findings)
+    finally:
+        if result.lease is not None:
+            result.lease.close()
+
+
+def test_successful_standalone_verification_rereads_registry_under_shared_lease(
+    home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.workspace._installed_artifact as installed_artifact
+
+    state = build_plugin_artifact_state(
+        home,
+        PluginArtifactStateKind.VALID_CURRENT,
+    )
+    original = installed_artifact.registered_install_paths
+    read_count = 0
+
+    def guarded_registry_read(trusted_home: Path) -> tuple[Path, ...]:
+        nonlocal read_count
+        read_count += 1
+        if read_count == 1:
+            return (state.managed_root.parent / "stale-preflight",)
+        if read_count == 2:
+            with pytest.raises(ArtifactLeaseContention):
+                ArtifactLease.acquire_exclusive(state.lease_path, blocking=False)
+        return original(trusted_home)
+
+    monkeypatch.setattr(
+        installed_artifact,
+        "registered_install_paths",
+        guarded_registry_read,
+    )
+
+    result = verify_installed_plugin_artifact(state.spec)
+    assert read_count == 2
+    assert result.identity == state.identity
+    assert result.findings == ()
+    assert result.lease is not None
+    result.lease.close()
 
 
 def test_registry_path_is_obligation_evidence_never_path_authority(home: Path) -> None:

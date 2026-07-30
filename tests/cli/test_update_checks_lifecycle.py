@@ -10,6 +10,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from autoskillit.cli.update._transaction import (
+    UpdateTransactionOutcome,
+    UpdateTransactionResult,
+)
 from autoskillit.cli.update._update_checks_fetch import (
     _fetch_with_cache,
 )
@@ -569,36 +573,85 @@ def test_verify_update_result_prints_git_vcs_develop_command(
 
 
 # ---------------------------------------------------------------------------
-# T2 — _run_update_sequence warns when autoskillit install exits non-zero
+# T2 — automatic adapter suppresses completed-only effects on every non-success
 # ---------------------------------------------------------------------------
 
 
-def test_run_update_sequence_has_no_success_effects_on_install_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        pytest.param(outcome, id=outcome.value)
+        for outcome in UpdateTransactionOutcome
+        if outcome is not UpdateTransactionOutcome.COMPLETED
+    ],
+)
+def test_run_update_sequence_has_no_completed_only_effects_for_every_noncompleted_outcome(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    outcome: UpdateTransactionOutcome,
 ) -> None:
-    from autoskillit.cli.update._transaction import (
-        UpdateTransactionOutcome,
-        UpdateTransactionResult,
-    )
     from autoskillit.cli.update._update_checks import _run_update_sequence
 
     info = _make_stable_info()
     monkeypatch.setattr(
         "autoskillit.cli.update._update_checks.run_update_transaction",
         lambda **kwargs: UpdateTransactionResult(
-            outcome=UpdateTransactionOutcome.FAILED_INSTALL,
+            outcome=outcome,
             expected_version="0.9.1",
         ),
     )
-    restarted: list[bool] = []
+    effects: list[str] = []
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks._write_dismiss_state",
+        lambda *_args: effects.append("write"),
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks.invalidate_fetch_cache",
+        lambda *_args: effects.append("invalidate"),
+    )
     monkeypatch.setattr(
         "autoskillit.cli.update._update_checks.perform_restart",
-        lambda: restarted.append(True),
+        lambda: effects.append("restart"),
     )
-    state = {"update_prompt": {"conditions": ["binary"]}}
+    state = {
+        "update_prompt": {"conditions": ["binary"]},
+        "binary_snoozed": True,
+        "preserved": "value",
+    }
     _run_update_sequence(info, "0.9.0", tmp_path, state)
-    assert state == {"update_prompt": {"conditions": ["binary"]}}
-    assert not restarted
+    assert state == {
+        "update_prompt": {"conditions": ["binary"]},
+        "binary_snoozed": True,
+        "preserved": "value",
+    }
+    assert effects == []
+    assert "updated successfully" not in capsys.readouterr().out
+
+
+def test_run_update_sequence_passes_home_and_fresh_process_runner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli.update import _update_checks
+
+    captured: list[dict[str, object]] = []
+
+    def transaction(**kwargs: object) -> UpdateTransactionResult:
+        captured.append(kwargs)
+        return UpdateTransactionResult(
+            outcome=UpdateTransactionOutcome.FAILED_UPGRADE,
+        )
+
+    monkeypatch.setattr(_update_checks, "run_update_transaction", transaction)
+    _update_checks._run_update_sequence(_make_stable_info(), "0.9.0", tmp_path, {})
+
+    assert captured == [
+        {
+            "home": tmp_path,
+            "process_runner": _update_checks.subprocess.run,
+        }
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -610,10 +663,6 @@ def test_run_update_sequence_restarts_on_success(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """After a successful upgrade, _run_update_sequence must call perform_restart."""
-    from autoskillit.cli.update._transaction import (
-        UpdateTransactionOutcome,
-        UpdateTransactionResult,
-    )
     from autoskillit.cli.update._update_checks import _run_update_sequence
 
     info = _make_stable_info()
@@ -625,16 +674,35 @@ def test_run_update_sequence_restarts_on_success(
         ),
     )
 
-    restart_called: list[bool] = []
+    effects: list[str] = []
+    written_states: list[dict[str, object]] = []
+
+    def write_state(_home: Path, state: dict[str, object]) -> None:
+        written_states.append(dict(state))
+        effects.append("write")
+
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks._write_dismiss_state",
+        write_state,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks.invalidate_fetch_cache",
+        lambda *_args: effects.append("invalidate"),
+    )
     monkeypatch.setattr(
         "autoskillit.cli.update._update_checks.perform_restart",
-        lambda: restart_called.append(True),
+        lambda: effects.append("restart"),
     )
 
-    _run_update_sequence(info, "0.9.0", tmp_path, {})
-    assert restart_called, (
-        "_run_update_sequence must call perform_restart() after successful upgrade"
-    )
+    state = {
+        "update_prompt": {"conditions": ["binary"]},
+        "binary_snoozed": True,
+        "preserved": "value",
+    }
+    _run_update_sequence(info, "0.9.0", tmp_path, state)
+    assert state == {"preserved": "value"}
+    assert written_states == [{"preserved": "value"}]
+    assert effects == ["write", "invalidate", "restart"]
 
 
 def test_verify_update_result_does_not_write_binary_snoozed(

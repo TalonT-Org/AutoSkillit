@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import filecmp
 import importlib.metadata
 import json
 import os
@@ -291,9 +292,6 @@ class _InstallSnapshot:
         self._entries: list[tuple[Path, str, Path | None]] = []
         self._staged = False
         self._committed = False
-        # Compatibility attributes retained for direct helper tests.
-        self._target_backup: Path | None = None
-        self._target_mutation_owned = False
 
     @staticmethod
     def _shape(path: Path) -> str:
@@ -319,6 +317,82 @@ class _InstallSnapshot:
         else:
             path.unlink()
 
+    @classmethod
+    def _restore_entry(
+        cls,
+        path: Path,
+        shape: str,
+        backup: Path | None,
+    ) -> None:
+        if shape != "missing":
+            if backup is None:
+                raise OSError(f"staged backup is missing for {path}")
+            backup_shape = cls._shape(backup)
+            if backup_shape != shape:
+                raise OSError(
+                    f"staged backup for {path} has shape {backup_shape}, expected {shape}"
+                )
+        cls._remove(path)
+        if shape == "missing":
+            return
+        assert backup is not None
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if shape == "directory":
+            shutil.copytree(backup, path, symlinks=True)
+        elif shape == "symlink":
+            path.symlink_to(os.readlink(backup))
+        else:
+            shutil.copy2(backup, path, follow_symlinks=False)
+        restored_shape = cls._shape(path)
+        if restored_shape != shape:
+            raise OSError(f"restored {path} has shape {restored_shape}, expected {shape}")
+        if not cls._matches_staged_state(path, shape, backup):
+            raise OSError(f"restored {path} does not match its staged prestate")
+
+    @classmethod
+    def _matches_staged_state(
+        cls,
+        path: Path,
+        shape: str,
+        backup: Path | None,
+    ) -> bool:
+        if shape == "missing":
+            return cls._shape(path) == "missing"
+        if backup is None or cls._shape(path) != shape or cls._shape(backup) != shape:
+            return False
+        if stat.S_IMODE(path.lstat().st_mode) != stat.S_IMODE(backup.lstat().st_mode):
+            return False
+        if shape == "symlink":
+            return os.readlink(path) == os.readlink(backup)
+        if shape == "file":
+            return filecmp.cmp(path, backup, shallow=False)
+
+        current_entries = {entry.relative_to(path) for entry in path.rglob("*")}
+        backup_entries = {entry.relative_to(backup) for entry in backup.rglob("*")}
+        if current_entries != backup_entries:
+            return False
+        for relative in current_entries:
+            current_entry = path / relative
+            backup_entry = backup / relative
+            entry_shape = cls._shape(current_entry)
+            if entry_shape != cls._shape(backup_entry):
+                return False
+            if stat.S_IMODE(current_entry.lstat().st_mode) != stat.S_IMODE(
+                backup_entry.lstat().st_mode
+            ):
+                return False
+            if entry_shape == "symlink" and os.readlink(current_entry) != os.readlink(
+                backup_entry
+            ):
+                return False
+            if entry_shape == "file" and not filecmp.cmp(
+                current_entry,
+                backup_entry,
+                shallow=False,
+            ):
+                return False
+        return True
+
     def stage(self) -> None:
         """Copy every covered surface before reconciliation or mutation."""
         if self._staged:
@@ -337,10 +411,7 @@ class _InstallSnapshot:
                     else:
                         shutil.copy2(path, backup, follow_symlinks=False)
                 self._entries.append((path, shape, backup))
-                if path == self._target_root:
-                    self._target_backup = backup
             self._staged = True
-            self._target_mutation_owned = True
         except BaseException:
             logger.warning(
                 "install_snapshot_stage_failed",
@@ -350,10 +421,6 @@ class _InstallSnapshot:
             shutil.rmtree(self._stage_dir, ignore_errors=True)
             self._entries.clear()
             raise
-
-    def stage_target_root(self) -> None:
-        """Compatibility alias: the widened snapshot stages every surface."""
-        self.stage()
 
     def track_retirement(self, _record_id: str) -> None:
         """Retirement state is covered by the exact staged cache file."""
@@ -365,12 +432,7 @@ class _InstallSnapshot:
         diagnostics: list[str] = []
         for path, shape, backup in reversed(self._entries):
             try:
-                self._remove(path)
-                if shape != "missing":
-                    if backup is None or self._shape(backup) == "missing":
-                        raise OSError(f"staged backup is missing for {path}")
-                    path.parent.mkdir(parents=True, exist_ok=True)
-                    os.replace(backup, path)
+                self._restore_entry(path, shape, backup)
             except BaseException as exc:
                 logger.warning(
                     "install_snapshot_restore_failed",
@@ -378,6 +440,36 @@ class _InstallSnapshot:
                     exc_info=True,
                 )
                 diagnostics.append(f"rollback failed for {path}: {exc}")
+                try:
+                    residual_shape = self._shape(path)
+                except BaseException as residual_exc:
+                    logger.warning(
+                        "install_snapshot_residual_shape_inspection_failed",
+                        path=str(path),
+                        exc_info=True,
+                    )
+                    residual_shape = f"unreadable ({residual_exc})"
+                try:
+                    residual_matches = self._matches_staged_state(path, shape, backup)
+                except BaseException:
+                    logger.warning(
+                        "install_snapshot_residual_comparison_failed",
+                        path=str(path),
+                        exc_info=True,
+                    )
+                    residual_matches = False
+                comparison = (
+                    "matches staged prestate"
+                    if residual_matches
+                    else "differs from staged prestate"
+                )
+                diagnostics.append(
+                    f"residual state for {path}: expected {shape}, "
+                    f"observed {residual_shape}; {comparison}"
+                )
+        if diagnostics:
+            diagnostics.append(f"recovery evidence preserved at {self._stage_dir}")
+            return tuple(diagnostics)
         try:
             shutil.rmtree(self._stage_dir)
         except FileNotFoundError:
@@ -389,8 +481,11 @@ class _InstallSnapshot:
                 exc_info=True,
             )
             diagnostics.append(f"rollback staging cleanup failed: {exc}")
-        self._target_backup = None
-        self._target_mutation_owned = False
+            if self._shape(self._stage_dir) != "missing":
+                diagnostics.append(f"recovery evidence preserved at {self._stage_dir}")
+            return tuple(diagnostics)
+        self._entries.clear()
+        self._staged = False
         return tuple(diagnostics)
 
     def commit(self) -> None:
@@ -399,8 +494,8 @@ class _InstallSnapshot:
             raise RuntimeError("install snapshot was not staged")
         shutil.rmtree(self._stage_dir)
         self._committed = True
-        self._target_backup = None
-        self._target_mutation_owned = False
+        self._entries.clear()
+        self._staged = False
 
 
 def _marketplace_manifest_path() -> Path:
@@ -590,7 +685,10 @@ def install(
         install_request.mode is InstallMode.MAINTENANCE_UPDATE
         and not install_request.require_registered_plugin
     ):
-        return InstallResult(outcome=InstallOutcome.NOT_REQUIRED)
+        return _typed_result(
+            InstallOutcome.NOT_REQUIRED,
+            findings=("Claude plugin publication is not required for this maintenance update",),
+        )
 
     try:
         if effective_scope not in _VALID_SCOPES:

@@ -212,6 +212,12 @@ class TestCLIOrderCommand:
         installed_root = current_installed_plugin_root()
         installed_root.mkdir(parents=True)
         (installed_root / "plugin.json").write_text("{}\n", encoding="utf-8")
+        metadata = installed_root / ".claude-plugin" / "plugin.json"
+        metadata.parent.mkdir(parents=True)
+        metadata.write_text(
+            json.dumps({"name": "autoskillit", "version": __version__}),
+            encoding="utf-8",
+        )
         publish_installed_plugin_artifact(
             installed_root,
             semantic_key=installed_plugin_semantic_key(

@@ -11,15 +11,15 @@ from autoskillit.cli.update._transaction import (
     UpdateTransactionResult,
 )
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
 class _TerminalGuard:
     def __enter__(self) -> _TerminalGuard:
         return self
 
-    def __exit__(self, *args: object) -> bool:
-        return False
+    def __exit__(self, *args: object) -> None:
+        return None
 
 
 def _patch_result(
@@ -59,6 +59,7 @@ def test_update_subcommand_registered_in_help() -> None:
 def test_explicit_noncompleted_outcomes_exit_nonzero_without_success_effects(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
     outcome: UpdateTransactionOutcome,
 ) -> None:
     from autoskillit.cli.update._update import run_update_command
@@ -73,9 +74,12 @@ def test_explicit_noncompleted_outcomes_exit_nonzero_without_success_effects(
     )
     effects: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update.invalidate_fetch_cache",
+        "autoskillit.cli.update._update_checks._write_dismiss_state",
+        lambda *_args: effects.append("write"),
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks.invalidate_fetch_cache",
         lambda *_args: effects.append("invalidate"),
-        raising=False,
     )
     monkeypatch.setattr(
         "autoskillit.cli.update._update.perform_restart",
@@ -88,6 +92,7 @@ def test_explicit_noncompleted_outcomes_exit_nonzero_without_success_effects(
     assert exc_info.value.code != 0
     assert effects == []
     assert state_file.read_text(encoding="utf-8") == original
+    assert "updated successfully" not in capsys.readouterr().out
 
 
 def test_explicit_completed_clears_state_invalidates_prints_and_restarts(
@@ -118,9 +123,8 @@ def test_explicit_completed_clears_state_invalidates_prints_and_restarts(
     )
     effects: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update.invalidate_fetch_cache",
+        "autoskillit.cli.update._update_checks.invalidate_fetch_cache",
         lambda *_args: effects.append("invalidate"),
-        raising=False,
     )
     monkeypatch.setattr(
         "autoskillit.cli.update._update.perform_restart",
@@ -131,7 +135,7 @@ def test_explicit_completed_clears_state_invalidates_prints_and_restarts(
 
     state = _read_dismiss_state(tmp_path)
     assert state == {"preserved": "value"}
-    assert effects == ["restart"]
+    assert effects == ["invalidate", "restart"]
     assert "updated successfully" in capsys.readouterr().out
 
 
@@ -141,15 +145,17 @@ def test_explicit_passes_home_and_fresh_process_runner(
     from autoskillit.cli.update import _update
 
     captured: list[dict[str, object]] = []
+
+    def transaction(**kwargs: object) -> UpdateTransactionResult:
+        captured.append(kwargs)
+        return UpdateTransactionResult(
+            outcome=UpdateTransactionOutcome.FAILED_UPGRADE,
+        )
+
     monkeypatch.setattr(
         _update,
         "run_update_transaction",
-        lambda **kwargs: (
-            captured.append(kwargs)
-            or UpdateTransactionResult(
-                outcome=UpdateTransactionOutcome.FAILED_UPGRADE,
-            )
-        ),
+        transaction,
     )
     monkeypatch.setattr(_update, "terminal_guard", _TerminalGuard)
 

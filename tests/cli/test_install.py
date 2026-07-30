@@ -933,30 +933,46 @@ def test_app_install_not_required_succeeds_without_next_steps(
 
 
 @pytest.mark.parametrize(
-    ("outcome_name", "failure_name", "expected_status"),
+    (
+        "outcome_name",
+        "failure_name",
+        "expected_status",
+        "diagnostic",
+        "expect_next_steps",
+    ),
     [
-        ("DECLINED", None, 10),
-        ("DEFERRED", None, 11),
-        ("FAILED", "PREFLIGHT", 20),
-        ("FAILED", "CHILD", 21),
-        ("FAILED", "POSTCONDITION", 22),
-        ("RECOVERY_REQUIRED", "ROLLBACK", 23),
-        ("INDETERMINATE", None, 24),
+        ("COMPLETED", None, 0, "completed diagnostic", True),
+        ("NOT_REQUIRED", None, 0, "not-required diagnostic", False),
+        ("DECLINED", None, 10, "declined diagnostic", False),
+        ("DEFERRED", None, 11, "deferred diagnostic", False),
+        ("FAILED", "PREFLIGHT", 20, "preflight diagnostic", False),
+        ("FAILED", "CHILD", 21, "child diagnostic", False),
+        ("FAILED", "POSTCONDITION", 22, "postcondition diagnostic", False),
+        (
+            "RECOVERY_REQUIRED",
+            "ROLLBACK",
+            23,
+            "recovery-required diagnostic",
+            False,
+        ),
+        ("INDETERMINATE", None, 24, "indeterminate diagnostic", False),
     ],
 )
-def test_app_install_preserves_typed_nonzero_process_status(
+def test_registered_install_boundary_reports_every_outcome_and_suppresses_next_steps(
     outcome_name: str,
     failure_name: str | None,
     expected_status: int,
+    diagnostic: str,
+    expect_next_steps: bool,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Every typed non-success result crosses the process boundary unchanged."""
+    """Every typed outcome crosses the registered process boundary truthfully."""
     import autoskillit.cli._init_helpers as _init_helpers_mod
     import autoskillit.cli._marketplace as _mkt_mod
     from autoskillit.cli._install_contract import (
         InstallFailureKind,
         InstallOutcome,
-        InstallResult,
     )
 
     outcome = InstallOutcome[outcome_name]
@@ -965,18 +981,32 @@ def test_app_install_preserves_typed_nonzero_process_status(
     monkeypatch.setattr(
         _init_helpers_mod, "_print_next_steps", lambda **kw: next_steps_called.append(kw)
     )
+
+    def typed_result(**_kwargs):
+        return _mkt_mod._typed_result(
+            outcome,
+            failure_kind=failure_kind,
+            findings=(diagnostic,),
+        )
+
     monkeypatch.setattr(
         _mkt_mod,
         "install",
-        lambda **kw: InstallResult(outcome=outcome, failure_kind=failure_kind),
+        typed_result,
     )
 
-    from autoskillit.cli.app import install as app_install
+    from autoskillit.cli.app import app
 
     with pytest.raises(SystemExit) as exc_info:
-        app_install(scope="user")
+        app(["install"])
+
     assert exc_info.value.code == expected_status
-    assert not next_steps_called
+    output = capsys.readouterr().out
+    assert diagnostic in output
+    assert bool(next_steps_called) is expect_next_steps
+    if not expect_next_steps:
+        assert not next_steps_called
+        assert "Plugin installed:" not in output
 
 
 def test_install_sweeps_all_scopes_for_orphans(

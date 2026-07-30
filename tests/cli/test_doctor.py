@@ -10,8 +10,33 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autoskillit import cli
+from tests.fixtures.plugin_artifact_state import (
+    INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
+    PLUGIN_ARTIFACT_STATE_KINDS,
+    PluginArtifactStateKind,
+    build_plugin_artifact_state,
+)
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+
+
+def _filesystem_snapshot(path: Path) -> tuple[object, ...]:
+    if path.is_symlink():
+        return ("symlink", str(path.readlink()))
+    if not path.exists():
+        return ("missing",)
+    if path.is_file():
+        return ("file", path.read_bytes())
+    entries: list[tuple[str, str, object]] = []
+    for entry in sorted(path.rglob("*"), key=str):
+        relative = str(entry.relative_to(path))
+        if entry.is_symlink():
+            entries.append((relative, "symlink", str(entry.readlink())))
+        elif entry.is_file():
+            entries.append((relative, "file", entry.read_bytes()))
+        else:
+            entries.append((relative, "directory", ""))
+    return ("directory", tuple(entries))
 
 
 @pytest.mark.parametrize(
@@ -475,6 +500,66 @@ def test_doctor_does_not_modify_plugin_state(tmp_path, monkeypatch, capsys):
     assert retiring_json.read_text() == retiring_content, (
         "Doctor must not modify retiring_cache.json"
     )
+
+
+@pytest.mark.parametrize("kind", PLUGIN_ARTIFACT_STATE_KINDS, ids=str)
+def test_actual_doctor_artifact_matrix_is_read_only(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    kind: PluginArtifactStateKind,
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    state = build_plugin_artifact_state(tmp_path, kind)
+    tracked_paths = (
+        state.home / ".claude" / "plugins",
+        state.home / ".autoskillit" / "marketplace",
+        state.managed_root,
+        state.manifest_path,
+        state.lease_path,
+        state.registry_path,
+        state.marketplace_manifest_path,
+        state.marketplace_plugin_root,
+        *(() if state.older_root is None else (state.older_root,)),
+    )
+    before = {path: _filesystem_snapshot(path) for path in tracked_paths}
+
+    cli.doctor_cmd(output_json=True)
+
+    data = json.loads(capsys.readouterr().out)
+    after = {path: _filesystem_snapshot(path) for path in tracked_paths}
+    assert after == before
+    consistency = [
+        result
+        for result in data["results"]
+        if result["check"] == "install_state_consistency"
+        or result["check"].startswith("install_state:installed_plugin")
+    ]
+    assert consistency
+    if kind in {
+        PluginArtifactStateKind.NO_INSTALLATION,
+        PluginArtifactStateKind.VALID_CURRENT,
+    }:
+        assert consistency == [
+            {
+                "severity": "ok",
+                "check": "install_state_consistency",
+                "message": "Install artifacts, registry, and versions agree",
+            }
+        ]
+        return
+
+    assert kind in INVALID_PLUGIN_ARTIFACT_STATE_KINDS
+    exact_errors = [
+        result
+        for result in consistency
+        if result["severity"] == "error"
+        and result["check"].startswith("install_state:installed_plugin")
+    ]
+    assert exact_errors
+    assert any(str(state.managed_root) in result["message"] for result in exact_errors)
+    assert all("autoskillit install" in result["message"] for result in exact_errors)
 
 
 def test_doctor_checks_plugin_cache_exists(tmp_path, monkeypatch, capsys):

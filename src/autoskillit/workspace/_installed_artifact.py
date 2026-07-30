@@ -8,6 +8,7 @@ are all derived from caller-trusted install inputs.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -124,10 +125,13 @@ def _finding(check: str, message: str) -> InstallStateFinding:
 
 def _registry_findings(
     spec: InstallStateSpec,
+    *,
+    registered: tuple[Path, ...] | None = None,
 ) -> tuple[tuple[Path, ...], tuple[InstallStateFinding, ...]]:
     """Report registry disagreement without deriving authority from registry paths."""
     expected = spec.managed_root
-    registered = registered_install_paths(spec.home)
+    if registered is None:
+        registered = registered_install_paths(spec.home)
     findings: list[InstallStateFinding] = []
     for observed in registered:
         if observed == expected:
@@ -152,6 +156,32 @@ def _registry_findings(
     return registered, tuple(findings)
 
 
+def _has_lexical_evidence(path: Path) -> bool:
+    """Return whether the exact path names an entry, including a dangling symlink."""
+    return path.exists() or path.is_symlink()
+
+
+def _validate_plugin_metadata_version(spec: InstallStateSpec) -> None:
+    metadata_path = spec.managed_root / ".claude-plugin" / "plugin.json"
+    try:
+        raw = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise PluginArtifactUnavailableError(
+            f"installed plugin metadata cannot be read: {metadata_path}"
+        ) from exc
+    except json.JSONDecodeError as exc:
+        raise PluginArtifactValidationError(
+            f"installed plugin metadata is malformed: {metadata_path}"
+        ) from exc
+    observed = raw.get("version") if isinstance(raw, dict) else None
+    if observed != spec.expected_version:
+        raise PluginArtifactValidationError(
+            "installed plugin metadata version does not match the trusted "
+            f"current version {spec.expected_version!r}: {metadata_path} "
+            f"contains {observed!r}"
+        )
+
+
 def _validate_supplied_lease(
     spec: InstallStateSpec,
 ) -> tuple[ArtifactLease | None, InstallStateFinding | None]:
@@ -170,7 +200,8 @@ def _validate_supplied_lease(
             return None, _finding(
                 "installed_plugin_lease_unavailable",
                 "the installed plugin's existing shared lease sidecar cannot be "
-                f"acquired at {spec.lease_path}: {exc}. "
+                f"acquired at {spec.lease_path} for the exact artifact "
+                f"{spec.managed_root}: {exc}. "
                 "Run `autoskillit install` to republish the artifact.",
             )
 
@@ -199,31 +230,47 @@ def verify_installed_plugin_artifact(
     code can extend it through the child-process lifetime.  A supplied lease is
     borrowed: this function never closes it, including on validation failure.
     """
-    registered, registry_findings = _registry_findings(spec)
-    findings = list(registry_findings)
-    artifact_evidence_exists = (
-        spec.managed_root.exists() or spec.manifest_path.exists() or spec.lease_path.exists()
-    )
-    if (
-        not registered
-        and not spec.require_registered_plugin
-        and spec.supplied_lease is None
-        and not artifact_evidence_exists
-    ):
-        return InstalledArtifactVerification(None, tuple(findings), None)
+    findings: list[InstallStateFinding] = []
+    preflight_registered: tuple[Path, ...] | None = None
+    if spec.supplied_lease is None:
+        # This first read is obligation evidence for the no-create fast path,
+        # never the registry truth used by a successful verification.
+        preflight_registered = registered_install_paths(spec.home)
+        artifact_evidence_exists = any(
+            _has_lexical_evidence(path)
+            for path in (spec.managed_root, spec.manifest_path, spec.lease_path)
+        )
+        if (
+            not preflight_registered
+            and not spec.require_registered_plugin
+            and not artifact_evidence_exists
+        ):
+            return InstalledArtifactVerification(None, (), None)
+
     lease, lease_finding = _validate_supplied_lease(spec)
     if lease_finding is not None:
+        if preflight_registered is not None:
+            _, registry_findings = _registry_findings(
+                spec,
+                registered=preflight_registered,
+            )
+            findings.extend(registry_findings)
         findings.append(lease_finding)
         return InstalledArtifactVerification(None, tuple(findings), None)
 
     assert lease is not None
     owns_lease = spec.supplied_lease is None
     try:
+        # Registry state is mutable publication evidence. Discard the preflight
+        # snapshot and inspect it afresh only while the exact lease is held.
+        _, registry_findings = _registry_findings(spec)
+        findings.extend(registry_findings)
         identity = read_installed_plugin_artifact_identity(
             spec.managed_root,
             expected_semantic_key=spec.semantic_key,
             manifest_path=spec.manifest_path,
         )
+        _validate_plugin_metadata_version(spec)
         if (
             identity.semantic_key != spec.semantic_key
             or identity.managed_path != spec.managed_root

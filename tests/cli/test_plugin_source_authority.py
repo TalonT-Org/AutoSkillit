@@ -306,6 +306,12 @@ class TestInstalledPluginArtifactAuthority:
         root = _installed_root(tmp_path)
         root.mkdir(parents=True)
         (root / "plugin.json").write_text('{"name":"autoskillit"}')
+        metadata = root / ".claude-plugin" / "plugin.json"
+        metadata.parent.mkdir(parents=True)
+        metadata.write_text(
+            json.dumps({"name": "autoskillit", "version": "1.2.3"}),
+            encoding="utf-8",
+        )
         semantic_key = "autoskillit@autoskillit-local:1.2.3"
 
         published = publish_installed_plugin_artifact(root, semantic_key=semantic_key)

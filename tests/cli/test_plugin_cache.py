@@ -36,6 +36,12 @@ def _installed_identity(tmp_path: Path, version: str = "1.0.0"):
     ).absolute()
     root.mkdir(parents=True)
     (root / "plugin.json").write_text('{"name":"autoskillit"}', encoding="utf-8")
+    metadata = root / ".claude-plugin" / "plugin.json"
+    metadata.parent.mkdir(parents=True)
+    metadata.write_text(
+        json.dumps({"name": "autoskillit", "version": version}),
+        encoding="utf-8",
+    )
     return publish_installed_plugin_artifact(
         root,
         semantic_key=f"autoskillit@autoskillit-local:{version}",

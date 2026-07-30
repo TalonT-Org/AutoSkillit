@@ -97,6 +97,110 @@ def test_process_status_for_every_result(
 
 
 @pytest.mark.parametrize(
+    ("install_request", "result", "expected_status"),
+    [
+        (
+            _request(),
+            InstallResult(
+                InstallOutcome.COMPLETED,
+                verified_identity="incarnation-completed",
+                findings=("completed diagnostic",),
+            ),
+            InstallProcessStatus.SUCCESS,
+        ),
+        (
+            _request(
+                mode=InstallMode.MAINTENANCE_UPDATE,
+                require_registered_plugin=False,
+            ),
+            InstallResult(
+                InstallOutcome.NOT_REQUIRED,
+                findings=("not-required diagnostic",),
+            ),
+            InstallProcessStatus.SUCCESS,
+        ),
+        (
+            _request(),
+            InstallResult(
+                InstallOutcome.DECLINED,
+                findings=("declined diagnostic",),
+            ),
+            InstallProcessStatus.DECLINED,
+        ),
+        (
+            _request(),
+            InstallResult(
+                InstallOutcome.DEFERRED,
+                findings=("deferred diagnostic",),
+            ),
+            InstallProcessStatus.DEFERRED,
+        ),
+        (
+            _request(),
+            InstallResult(
+                InstallOutcome.FAILED,
+                InstallFailureKind.PREFLIGHT,
+                findings=("preflight diagnostic",),
+            ),
+            InstallProcessStatus.FAILED_PREFLIGHT,
+        ),
+        (
+            _request(),
+            InstallResult(
+                InstallOutcome.FAILED,
+                InstallFailureKind.CHILD,
+                findings=("child diagnostic",),
+            ),
+            InstallProcessStatus.FAILED_CHILD,
+        ),
+        (
+            _request(),
+            InstallResult(
+                InstallOutcome.FAILED,
+                InstallFailureKind.POSTCONDITION,
+                findings=("postcondition diagnostic",),
+            ),
+            InstallProcessStatus.FAILED_POSTCONDITION,
+        ),
+        (
+            _request(),
+            InstallResult(
+                InstallOutcome.RECOVERY_REQUIRED,
+                InstallFailureKind.ROLLBACK,
+                findings=("recovery diagnostic",),
+            ),
+            InstallProcessStatus.RECOVERY_REQUIRED,
+        ),
+        (
+            _request(),
+            InstallResult(
+                InstallOutcome.INDETERMINATE,
+                findings=("indeterminate diagnostic",),
+            ),
+            InstallProcessStatus.INDETERMINATE,
+        ),
+    ],
+)
+def test_every_outcome_round_trips_with_diagnostic_evidence(
+    install_request: InstallRequest,
+    result: InstallResult,
+    expected_status: InstallProcessStatus,
+) -> None:
+    status = process_status_for_result(result)
+    assert status is expected_status
+
+    reconstructed = result_from_process_status(
+        int(status),
+        install_request,
+        verified_identity=result.verified_identity,
+        findings=result.findings,
+    )
+
+    assert reconstructed == result
+    assert reconstructed.findings
+
+
+@pytest.mark.parametrize(
     ("status", "outcome", "failure_kind"),
     [
         (10, InstallOutcome.DECLINED, None),

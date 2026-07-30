@@ -22,6 +22,12 @@ from autoskillit.core import (
     PluginArtifactIdentity,
     Severity,
 )
+from tests.fixtures.plugin_artifact_state import (
+    INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
+    PLUGIN_ARTIFACT_STATE_KINDS,
+    PluginArtifactStateKind,
+    build_plugin_artifact_state,
+)
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -68,8 +74,9 @@ def _queue_registered_retirement(home: Path) -> PluginArtifactIdentity:
     live = (
         home / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit" / __version__
     )
-    live.mkdir(parents=True)
-    (live / "plugin.json").write_text('{"name":"autoskillit"}')
+    metadata = live / ".claude-plugin" / "plugin.json"
+    metadata.parent.mkdir(parents=True)
+    metadata.write_text(json.dumps({"name": "autoskillit", "version": __version__}))
     _write_registry(home, live)
     identity = publish_installed_plugin_artifact(
         live,
@@ -87,6 +94,33 @@ class TestVerifyInstallState:
         from autoskillit.workspace import verify_install_state
 
         assert verify_install_state() == ()
+
+    @pytest.mark.parametrize("kind", PLUGIN_ARTIFACT_STATE_KINDS, ids=str)
+    def test_complete_production_shaped_artifact_matrix(
+        self,
+        home: Path,
+        kind: PluginArtifactStateKind,
+    ) -> None:
+        from autoskillit.workspace import verify_install_state
+
+        state = build_plugin_artifact_state(home, kind)
+
+        findings = verify_install_state()
+        if kind in {
+            PluginArtifactStateKind.NO_INSTALLATION,
+            PluginArtifactStateKind.VALID_CURRENT,
+        }:
+            assert findings == ()
+            return
+
+        assert kind in INVALID_PLUGIN_ARTIFACT_STATE_KINDS
+        exact_findings = [
+            finding for finding in findings if finding.check.startswith("installed_plugin")
+        ]
+        assert exact_findings
+        assert all(finding.severity is Severity.ERROR for finding in exact_findings)
+        assert any(str(state.managed_root) in finding.message for finding in exact_findings)
+        assert all("autoskillit install" in finding.message for finding in exact_findings)
 
     def test_dangling_install_path(self, home: Path) -> None:
         _write_registry(home, home / "does" / "not" / "exist")

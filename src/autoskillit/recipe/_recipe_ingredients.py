@@ -190,6 +190,15 @@ class OpenKitchenResult(TypedDict, total=False):
     kitchen: str
     version: str
     hook_warning: str
+    kitchen_id: str
+    operation_id: str
+    intent_fingerprint: str | None
+    received_intent_fingerprint: str
+    phase: str
+    effects: list[dict[str, Any]]
+    degraded_evidence: list[str]
+    ambiguity: list[str]
+    retry_disposition: str
 
 
 class RecipeListItem(TypedDict):

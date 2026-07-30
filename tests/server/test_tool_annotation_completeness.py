@@ -2,9 +2,8 @@
 
 Layer 2 — Pre-middleware: internal registry has non-None annotations on every tool.
 Layer 3 — Post-middleware: wire output preserves annotations (readOnlyHint survives).
-Layer 4 — Universal assertion: every tool has readOnlyHint=True on the wire.
+Layer 4 — Every tool is True except the effectful open_kitchen transition.
 
-No registry cross-check — the invariant is universal: all tools are read-only.
 Layers 1a/1b (AST) live in tests/arch/test_tool_annotation_completeness.py.
 """
 
@@ -72,14 +71,8 @@ class TestPostMiddlewareAnnotations:
         )
 
     @pytest.mark.anyio
-    async def test_all_tools_have_readonly_hint_true(self, kitchen_enabled):
-        """Layer 4 — Universal invariant: every tool must have readOnlyHint=True.
-
-        All pipelines operate on independent branches and worktrees with zero
-        cross-pipeline interference. readOnlyHint=False serializes parallel tool
-        calls and causes catastrophic pipeline slowdowns (40+ minutes instead of
-        5 minutes for concurrent CI watches). Zero exceptions.
-        """
+    async def test_all_tools_match_readonly_hint_contract(self, kitchen_enabled):
+        """Layer 4 — open_kitchen is effectful; all other tools stay read-only."""
         from fastmcp.client import Client
 
         from autoskillit.server import mcp
@@ -91,14 +84,14 @@ class TestPostMiddlewareAnnotations:
         for tool in tools:
             if tool.annotations is None:
                 continue
-            if tool.annotations.readOnlyHint is not True:
+            expected = tool.name != "open_kitchen"
+            if tool.annotations.readOnlyHint is not expected:
                 violations.append(
                     f"  {tool.name!r}: readOnlyHint={tool.annotations.readOnlyHint!r} "
-                    f"(must be True)"
+                    f"(must be {expected!r})"
                 )
 
         assert not violations, (
-            "Every MCP tool must have readOnlyHint=True. All pipelines operate on "
-            "independent branches/worktrees — there is no valid reason for False.\n"
+            "Every MCP tool must match the exact readOnlyHint contract.\n"
             "Fix the @mcp.tool(annotations=...) decorator:\n\n" + "\n".join(violations)
         )

@@ -30,6 +30,7 @@ from autoskillit.core import (
     GitHubFetcher,
     HeadlessExecutor,
     InputContractResolver,
+    KitchenTransitionLock,
     McpResponseLog,
     MergeQueueWatcher,
     MigrationService,
@@ -57,6 +58,10 @@ from autoskillit.core import (
     current_step_name,
 )
 from autoskillit.pipeline.background import DefaultBackgroundSupervisor
+from autoskillit.pipeline.kitchen_transition import (
+    KitchenOpenState,
+    closed_kitchen_open_state,
+)
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog
 from autoskillit.pipeline.recipe_initialization import (
     NoActiveRecipe,
@@ -131,6 +136,8 @@ class ToolContext:
                           context accounting and recovery service.
     kitchen_id:           UUID string assigned when open_kitchen fires; scopes token telemetry
                           to the current kitchen session lifetime.
+    kitchen_open_state:   Immutable process-local open-operation lifecycle and effect journal.
+    kitchen_transition_lock: KitchenTransitionLock serializing state snapshot replacement.
     active_recipe_packs:  frozenset[str] | None — pack names declared by the loaded recipe
                           (frozenset() when kitchen open but no recipe loaded; None when closed)
     active_recipe_features: frozenset[str] | None — feature names declared by the loaded recipe
@@ -197,6 +204,11 @@ class ToolContext:
     recipe_version: str = field(default="")
     gate_infrastructure_ready: bool = field(default=False)
     kitchen_id: str = field(default="")
+    kitchen_open_state: KitchenOpenState = field(default_factory=closed_kitchen_open_state)
+    kitchen_transition_lock: KitchenTransitionLock = field(
+        default_factory=threading.RLock,
+        repr=False,
+    )
     active_recipe_packs: frozenset[str] | None = field(default_factory=lambda: None)
     active_recipe_features: frozenset[str] | None = field(default_factory=lambda: None)
     active_recipe_steps: dict[str, Any] | None = field(default_factory=lambda: None)

@@ -56,7 +56,11 @@ from autoskillit.execution import (
     RecipeReceiptHandle,
     codex_recipe_delivery_calling_contract,
 )
-from autoskillit.pipeline import InitializingRecipe, RecipeInitializationRequirement
+from autoskillit.pipeline import (
+    InitializingRecipe,
+    KitchenTransitionToken,
+    RecipeInitializationRequirement,
+)
 from autoskillit.server._recipe_execution import (
     install_recipe_execution,
     prepare_recipe_execution,
@@ -117,6 +121,7 @@ class FinalizedRecipeResponse:
     initialization_activating: bool = False
     initialization_id: str | None = None
     initialization_requirements: tuple[RecipeInitializationRequirement, ...] = ()
+    kitchen_transition_token: KitchenTransitionToken | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1141,6 +1146,23 @@ def finalize_recipe_delivery(
                 {"success": False, "error": "recipe_initialization_plan_failed"},
                 separators=(",", ":"),
             )
+    kitchen_transition_token = None
+    if (
+        surface.startswith("open_kitchen")
+        and hasattr(tool_ctx, "kitchen_transition_lock")
+        and hasattr(tool_ctx, "kitchen_open_state")
+    ):
+        with tool_ctx.kitchen_transition_lock:
+            state = tool_ctx.kitchen_open_state
+            serving_effect = next(
+                (effect for effect in state.effects if effect.name == "recipe_serving"),
+                None,
+            )
+            if serving_effect is not None:
+                kitchen_transition_token = KitchenTransitionToken(
+                    operation_id=state.operation_id,
+                    effect_id=serving_effect.effect_id,
+                )
     return FinalizedRecipeResponse(
         rendered=rendered,
         decision=decision,
@@ -1156,6 +1178,7 @@ def finalize_recipe_delivery(
         initialization_activating=surface_definition.initialization_activating,
         initialization_id=initialization_id,
         initialization_requirements=initialization_requirements,
+        kitchen_transition_token=kitchen_transition_token,
     )
 
 

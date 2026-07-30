@@ -92,6 +92,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_validate",  # cli/_validate.py: validate_app = App(name="validate", ...)
         "_type_backend",  # core/types/_type_backend.py: CLAUDE_CODE_CAPABILITIES constant
         "_prompts",  # cli/_prompts.py: immutable startup recovery spec and rendering
+        "tools_kitchen",  # request-scoped open-kitchen transition ContextVar
         # Released reducer definitions are immutable registry values keyed by their own
         # protocol version so the selector cannot drift from the registered definition.
         "context_admission",
@@ -948,7 +949,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
         "hooks": 20,  # +_capture_lifecycle state leaf and +capture_lifecycle_hook SessionStart owner  # noqa: E501
-        "pipeline": 14,  # +context admission ledger +recipe initialization reducer
+        "pipeline": 15,  # +context admission ledger +recipe initialization +kitchen transition
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
         "recipe/rules": 55,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery  # noqa: E501
         "server/tools": 33,  # +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
@@ -1067,9 +1068,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "for registered non-protected surfaces.",
     ),
     "tools_kitchen.py": (
-        1830,
+        2260,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
+        "and the request-scoped replay binder journals operation/effect provenance; "
         "for ingredient key validation; splitting would cross import-layer boundaries; "
         "backend capability promotion delegated to _promote_capability_keys in _auto_overrides; "
         "fail-closed validity gate on both deferred-recall and normal paths adds structural "
@@ -1420,6 +1422,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     - plugin_authority: PluginArtifactAuthority (lifetime-owning authority)
     - config: AutomationConfig dataclass (configuration container, not a service interface)
     - recipe_initialization_state: lifecycle value union, not a service interface
+    - kitchen_open_state: immutable lifecycle value, protected by KitchenTransitionLock
     """
     AUTOSKILLIT_ROOT = SRC_ROOT
 
@@ -1463,6 +1466,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "active_recipe_steps",
         "active_recipe_ingredients",
         "recipe_initialization_state",
+        "kitchen_open_state",
         "temp_dir",
         "project_dir",
         "ephemeral_root",

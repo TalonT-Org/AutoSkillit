@@ -585,6 +585,7 @@ from .types import InventoryAdmissionDecision as InventoryAdmissionDecision
 from .types import InvocationTemplate as InvocationTemplate
 from .types import IssueLabelState as IssueLabelState
 from .types import KillReason as KillReason
+from .types import KitchenTransitionLock as KitchenTransitionLock
 from .types import LabelDef as LabelDef
 from .types import LegacyRetiringEvidence as LegacyRetiringEvidence
 from .types import LensEntry as LensEntry

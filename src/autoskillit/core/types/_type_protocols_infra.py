@@ -10,6 +10,7 @@ __all__ = [
     "GateState",
     "BackgroundSupervisor",
     "FleetLock",
+    "KitchenTransitionLock",
     "QuotaPolicy",
     "QuotaRefreshTask",
     "TokenFactory",
@@ -69,6 +70,20 @@ class FleetLock(Protocol):
 
     @property
     def timeout(self) -> float | None: ...
+
+
+@runtime_checkable
+class KitchenTransitionLock(Protocol):
+    """Synchronous lock protecting one ToolContext kitchen transition snapshot."""
+
+    def __enter__(self) -> Any: ...
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: Any | None,
+    ) -> bool | None: ...
 
 
 @runtime_checkable

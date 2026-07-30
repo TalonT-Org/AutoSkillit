@@ -25,7 +25,7 @@ def test_pretty_output_below_budget() -> None:
         "_fmt_execution.py": 350,
         "_fmt_dispatch.py": 200,
         "_fmt_status.py": 250,
-        "_fmt_recipe.py": 300,
+        "_fmt_recipe.py": 350,  # replay/effect provenance remains visible after compaction
     }
     too_big: list[str] = []
     for name, limit in budgets.items():

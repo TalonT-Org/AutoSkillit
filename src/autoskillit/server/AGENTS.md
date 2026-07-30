@@ -6,7 +6,7 @@ Sub-package: tools/ (see tools/AGENTS.md).
 The composition root `make_context()` is the sole legal instantiation point for all
 service contracts.
 
-## readOnlyHint: All MCP tools MUST have `readOnlyHint: True`
+## readOnlyHint: MCP tools default to `readOnlyHint: True`
 
 Every pipeline operates on independent branches and worktrees with zero cross-pipeline
 interference. `readOnlyHint: False` serializes parallel tool calls and causes catastrophic
@@ -17,8 +17,10 @@ This has regressed three times. Defense-in-depth:
 - Tests: `test_all_tools_have_readonly_hint_true` (universal assertion, no registry)
 - Tests: `test_all_annotations_are_readonly_true` (AST-level, no server import)
 
-If you believe a tool genuinely needs `readOnlyHint: False`, you are wrong. All pipelines
-use independent branches. There is no shared mutable state between concurrent tool calls.
+`open_kitchen` is the sole exception: it uses `readOnlyHint: False` because it mutates
+the process-local gate, visibility, hook configuration, trackers, and replay journal.
+Every other tool remains `readOnlyHint: True`; adding another exception requires an
+explicit architectural contract change.
 
 ## Tool Gating Architecture
 

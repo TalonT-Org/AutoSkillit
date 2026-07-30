@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import difflib
+import functools
+import inspect
 import json
 import os
+import threading
+from collections.abc import Awaitable, Callable, Mapping
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 if TYPE_CHECKING:
     from autoskillit.config.settings import OutputBudgetConfig, QuotaGuardConfig
-    from autoskillit.pipeline import ToolContext
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
@@ -53,7 +57,31 @@ from autoskillit.fleet import (
     discover_campaign_state_files,
     reap_stale_dispatches_async,
 )
-from autoskillit.pipeline import create_background_task
+from autoskillit.pipeline import (
+    KitchenEffectPhase,
+    KitchenIntentConflict,
+    KitchenOpenPhase,
+    KitchenOpenState,
+    KitchenRetryDisposition,
+    ToolContext,
+    _transition_abort,
+    _transition_ambiguous,
+    _transition_confirm,
+    _transition_degraded,
+    advance_kitchen_phase,
+    bind_kitchen_intent,
+    canonical_kitchen_intent_fingerprint,
+    claim_kitchen_request,
+    closed_kitchen_open_state,
+    commit_kitchen_response,
+    confirm_kitchen_effect,
+    create_background_task,
+    kitchen_state_payload,
+    mark_kitchen_effect_ambiguous,
+    new_kitchen_open_state,
+    release_kitchen_request,
+    start_kitchen_effect,
+)
 from autoskillit.server import mcp
 from autoskillit.server._guards import _backend_supports_quota, _require_orchestrator_exact
 from autoskillit.server._misc import (
@@ -111,6 +139,283 @@ logger = get_logger(__name__)
 _PR_CREATE_RECIPES: frozenset[str] = frozenset(
     {"merge-prs", "implementation", "implementation-groups", "remediation"}
 )
+_OPEN_KITCHEN_REQUEST_CTX: ContextVar[ToolContext] = ContextVar("open_kitchen_request_context")
+
+
+def _ensure_kitchen_transition(tool_ctx: ToolContext) -> None:
+    """Create infrastructure identity once, before request arguments are bound."""
+    state = getattr(tool_ctx, "kitchen_open_state", None)
+    if not isinstance(state, KitchenOpenState):
+        tool_ctx.kitchen_transition_lock = threading.RLock()
+        context_id = closed_kitchen_open_state().context_id
+        existing_kitchen_id = getattr(tool_ctx, "kitchen_id", "")
+        tool_ctx.kitchen_open_state = (
+            new_kitchen_open_state(
+                kitchen_id=existing_kitchen_id,
+                context_id=context_id,
+            )
+            if (
+                isinstance(existing_kitchen_id, str)
+                and existing_kitchen_id
+                and getattr(tool_ctx, "gate_infrastructure_ready", False) is True
+            )
+            else closed_kitchen_open_state(context_id=context_id)
+        )
+    with tool_ctx.kitchen_transition_lock:
+        state = tool_ctx.kitchen_open_state
+        if state.phase is KitchenOpenPhase.CLOSED:
+            state = new_kitchen_open_state(
+                kitchen_id=resolve_kitchen_id(),
+                context_id=state.context_id,
+            )
+            tool_ctx.kitchen_open_state = state
+        tool_ctx.kitchen_id = state.kitchen_id
+
+
+def _transition_start(tool_ctx: ToolContext, name: str) -> bool:
+    """Journal STARTED and report whether the effect still needs dispatch."""
+    with tool_ctx.kitchen_transition_lock:
+        existing = next(
+            (effect for effect in tool_ctx.kitchen_open_state.effects if effect.name == name),
+            None,
+        )
+        if existing is not None:
+            if existing.phase in {
+                KitchenEffectPhase.STARTED,
+                KitchenEffectPhase.CONFIRMED,
+                KitchenEffectPhase.DEGRADED,
+            }:
+                return False
+            if existing.phase is KitchenEffectPhase.AMBIGUOUS:
+                raise RuntimeError(f"kitchen effect {name!r} requires reconciliation")
+        tool_ctx.kitchen_open_state = start_kitchen_effect(
+            tool_ctx.kitchen_open_state,
+            name,
+        )
+    return True
+
+
+def _transition_fields(tool_ctx: ToolContext, *, committed: bool = False) -> dict[str, Any]:
+    if committed:
+        _transition_start(tool_ctx, "response_enforcement")
+    with tool_ctx.kitchen_transition_lock:
+        payload = kitchen_state_payload(tool_ctx.kitchen_open_state)
+    if committed:
+        payload["phase"] = KitchenOpenPhase.COMMITTED.value
+        payload["retry_disposition"] = KitchenRetryDisposition.COMMITTED_REPLAY.value
+        for effect in payload["effects"]:
+            if effect["phase"] == KitchenEffectPhase.STARTED.value:
+                effect["phase"] = KitchenEffectPhase.CONFIRMED.value
+                effect["receipt"] = f"response:{effect['effect_id']}"
+    return payload
+
+
+def _attach_transition_fields(
+    result: dict[str, Any],
+    tool_ctx: ToolContext,
+    *,
+    committed: bool,
+) -> dict[str, Any]:
+    result.update(_transition_fields(tool_ctx, committed=committed))
+    return result
+
+
+def _open_kitchen_conflict_response(
+    conflict: KitchenIntentConflict,
+) -> str:
+    payload = kitchen_state_payload(conflict.state)
+    payload.update(
+        {
+            "success": False,
+            "kitchen": "failed",
+            "error": "open_kitchen_intent_fingerprint_conflict",
+            "received_intent_fingerprint": conflict.received_fingerprint,
+            "retry_disposition": KitchenRetryDisposition.FINGERPRINT_CONFLICT.value,
+        }
+    )
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def _read_open_kitchen_request_ctx() -> ToolContext:
+    return _OPEN_KITCHEN_REQUEST_CTX.get()
+
+
+def _open_kitchen_cancellation_response(
+    tool_ctx: ToolContext,
+    exc: BaseException,
+) -> str:
+    with tool_ctx.kitchen_transition_lock:
+        state = tool_ctx.kitchen_open_state
+        started = next(
+            (
+                effect
+                for effect in reversed(state.effects)
+                if effect.phase is KitchenEffectPhase.STARTED
+            ),
+            None,
+        )
+        if started is not None:
+            state = mark_kitchen_effect_ambiguous(
+                state,
+                started.name,
+                evidence=f"{type(exc).__name__}: transport teardown",
+            )
+            tool_ctx.kitchen_open_state = state
+        payload = kitchen_state_payload(state)
+    payload.update(
+        {
+            "success": False,
+            "kitchen": "failed",
+            "error": "cancelled",
+            "subtype": "cancelled",
+        }
+    )
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def _bind_open_kitchen_transition(
+    fn: Callable[..., Awaitable[str]],
+) -> Callable[..., Awaitable[str]]:
+    """Bind request intent outside the typed cancellation boundary."""
+    signature = inspect.signature(fn)
+
+    @functools.wraps(fn)
+    async def wrapper(*args: Any, **kwargs: Any) -> str:
+        from autoskillit.server import _get_ctx  # circular-break
+
+        try:
+            tool_ctx = _get_ctx()
+        except RuntimeError:
+            unshielded = cast(
+                Callable[..., Awaitable[str]],
+                getattr(fn, "__wrapped__", fn),
+            )
+            return await unshielded(*args, **kwargs)
+        _ensure_kitchen_transition(tool_ctx)
+        bound = signature.bind_partial(*args, **kwargs)
+        name = bound.arguments.get("name")
+        overrides = bound.arguments.get("overrides")
+        ingredients_only = bool(bound.arguments.get("ingredients_only", False))
+        delivery_request = bound.arguments.get("delivery_request")
+        fingerprint = canonical_kitchen_intent_fingerprint(
+            name=name if isinstance(name, str) else None,
+            overrides=overrides if isinstance(overrides, Mapping) else None,
+            ingredients_only=ingredients_only,
+            delivery_request=(delivery_request if isinstance(delivery_request, Mapping) else None),
+            context_id=tool_ctx.kitchen_open_state.context_id,
+        )
+        mode = "ingredients_only" if ingredients_only else ("recipe" if name else "anonymous")
+        with tool_ctx.kitchen_transition_lock:
+            active = tool_ctx.kitchen_open_state
+            committed_postconditions_hold = not (
+                active.phase is KitchenOpenPhase.COMMITTED
+                and mode == "recipe"
+                and getattr(tool_ctx, "recipe_name", "") != name
+            )
+            if (
+                active.phase is KitchenOpenPhase.COMMITTED
+                and active.intent_fingerprint is not None
+                and (active.intent_fingerprint != fingerprint or not committed_postconditions_hold)
+            ):
+                tool_ctx.kitchen_open_state = new_kitchen_open_state(
+                    kitchen_id=active.kitchen_id,
+                    context_id=active.context_id,
+                )
+        try:
+            with tool_ctx.kitchen_transition_lock:
+                tool_ctx.kitchen_open_state = bind_kitchen_intent(
+                    tool_ctx.kitchen_open_state,
+                    fingerprint=fingerprint,
+                    mode=mode,
+                )
+                state = tool_ctx.kitchen_open_state
+        except KitchenIntentConflict as conflict:
+            return _open_kitchen_conflict_response(conflict)
+        if state.phase is KitchenOpenPhase.COMMITTED and state.cached_response is not None:
+            return state.cached_response
+        if state.retry_disposition is KitchenRetryDisposition.RECONCILE_REQUIRED:
+            payload = kitchen_state_payload(state)
+            payload.update(
+                {
+                    "success": False,
+                    "kitchen": "failed",
+                    "error": "open_kitchen_reconciliation_required",
+                }
+            )
+            return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+        with tool_ctx.kitchen_transition_lock:
+            state, claimed = claim_kitchen_request(tool_ctx.kitchen_open_state)
+            tool_ctx.kitchen_open_state = state
+        if not claimed:
+            payload = kitchen_state_payload(state)
+            payload.update(
+                {
+                    "success": False,
+                    "kitchen": "in_progress",
+                    "error": "open_kitchen_in_progress",
+                }
+            )
+            return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+        try:
+            token = _OPEN_KITCHEN_REQUEST_CTX.set(tool_ctx)
+            try:
+                result = await fn(*args, **kwargs)
+            finally:
+                _OPEN_KITCHEN_REQUEST_CTX.reset(token)
+
+            parsed: dict[str, Any] | None
+            try:
+                candidate = json.loads(result)
+                parsed = candidate if isinstance(candidate, dict) else None
+            except (TypeError, json.JSONDecodeError):
+                parsed = None
+            if parsed is not None and parsed.get("success") is True:
+                initialization_id = parsed.get("initialization_id")
+                with tool_ctx.kitchen_transition_lock:
+                    state = tool_ctx.kitchen_open_state
+                    for effect in state.effects:
+                        if effect.phase is KitchenEffectPhase.STARTED:
+                            state = confirm_kitchen_effect(
+                                state,
+                                effect.name,
+                                receipt=f"response:{effect.effect_id}",
+                            )
+                    tool_ctx.kitchen_open_state = commit_kitchen_response(
+                        state,
+                        response=result,
+                        initialization_id=(
+                            initialization_id if isinstance(initialization_id, str) else None
+                        ),
+                    )
+                return result
+            if parsed is not None:
+                with tool_ctx.kitchen_transition_lock:
+                    state = tool_ctx.kitchen_open_state
+                    started = next(
+                        (
+                            effect
+                            for effect in reversed(state.effects)
+                            if effect.phase is KitchenEffectPhase.STARTED
+                        ),
+                        None,
+                    )
+                    if started is not None:
+                        state = mark_kitchen_effect_ambiguous(
+                            state,
+                            started.name,
+                            evidence=f"application failure after {started.name} dispatch",
+                        )
+                        tool_ctx.kitchen_open_state = state
+                parsed.update(_transition_fields(tool_ctx))
+                return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
+            return result
+        finally:
+            with tool_ctx.kitchen_transition_lock:
+                tool_ctx.kitchen_open_state = release_kitchen_request(tool_ctx.kitchen_open_state)
+
+    return wrapper
 
 
 def _kitchen_failure_envelope(
@@ -130,15 +435,22 @@ def _kitchen_failure_envelope(
         f"Run 'autoskillit doctor' to diagnose, "
         f"or run 'autoskillit install' if the failure persists."
     )
-    return json.dumps(
-        {
-            "success": False,
-            "kitchen": "failed",
-            "user_visible_message": msg,
-            "error": f"{type(exc).__name__}: {exc}",
-            "stage": stage,
-        }
-    )
+    payload: dict[str, Any] = {
+        "success": False,
+        "kitchen": "failed",
+        "user_visible_message": msg,
+        "error": f"{type(exc).__name__}: {exc}",
+        "stage": stage,
+    }
+    try:
+        from autoskillit.server._state import _get_ctx_or_none  # circular-break
+
+        tool_ctx = _get_ctx_or_none()
+        if tool_ctx is not None:
+            payload.update(_transition_fields(tool_ctx))
+    except Exception:
+        logger.warning("open_kitchen_transition_failure_envelope_failed", exc_info=True)
+    return json.dumps(payload)
 
 
 def _recipe_validation_error_response(name: str, result: dict[str, Any]) -> str:
@@ -470,76 +782,123 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
     from autoskillit.server import _get_ctx, logger  # circular-break
 
     ctx = _get_ctx()
-    ctx.gate.enable()
-    ctx.kitchen_id = resolve_kitchen_id()
-    if not preserve_active_recipe:
+    _ensure_kitchen_transition(ctx)
+    if _transition_start(ctx, "gate_enablement"):
+        ctx.gate.enable()
+        _transition_confirm(
+            ctx,
+            "gate_enablement",
+            receipt="gate:enabled",
+            downstream_identity=ctx.kitchen_id,
+        )
+    if not preserve_active_recipe and _transition_start(ctx, "active_recipe_reset"):
         ctx.active_recipe_packs = frozenset()
         ctx.active_recipe_features = frozenset()
         ctx.active_recipe_steps = {}
         ctx.active_recipe_ingredients = frozenset()
         clear_recipe_execution(ctx)
+        _transition_confirm(ctx, "active_recipe_reset", receipt="active_recipe:cleared")
     logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)
     _supports_quota = _backend_supports_quota(ctx)
 
-    try:
-        _write_hook_config()
-    except Exception as exc:
-        ctx.gate.disable()
-        logger.warning("open_kitchen_failure", stage="write_hook_config", exc_info=True)
-        return _kitchen_failure_envelope(exc, stage="write_hook_config")
+    if _transition_start(ctx, "hook_configuration"):
+        try:
+            _write_hook_config()
+        except Exception as exc:
+            ctx.gate.disable()
+            _transition_ambiguous(ctx, "hook_configuration", exc)
+            logger.warning("open_kitchen_failure", stage="write_hook_config", exc_info=True)
+            return _kitchen_failure_envelope(exc, stage="write_hook_config")
+        _transition_confirm(ctx, "hook_configuration", receipt="hook_config:written")
 
-    try:
-        await _prime_quota_cache(supports_quota_check=_supports_quota)
-    except Exception as exc:
-        ctx.gate.disable()
-        logger.warning("open_kitchen_failure", stage="prime_quota_cache", exc_info=True)
-        return _kitchen_failure_envelope(exc, stage="prime_quota_cache")
+    if _transition_start(ctx, "quota_cache_prime"):
+        try:
+            await _prime_quota_cache(supports_quota_check=_supports_quota)
+        except Exception as exc:
+            ctx.gate.disable()
+            _transition_ambiguous(ctx, "quota_cache_prime", exc)
+            logger.warning("open_kitchen_failure", stage="prime_quota_cache", exc_info=True)
+            return _kitchen_failure_envelope(exc, stage="prime_quota_cache")
+        _transition_confirm(ctx, "quota_cache_prime", receipt="quota_cache:primed")
 
-    if ctx.quota_refresh_task is not None:
-        ctx.quota_refresh_task.cancel()
-    try:
-        ctx.quota_refresh_task = create_background_task(
-            _quota_refresh_loop(
-                ctx.config.quota_guard,
-                supports_quota_check=_supports_quota,
-            ),
-            label="quota_refresh_loop",
-        )
-    except Exception as exc:
-        ctx.gate.disable()
-        logger.warning("open_kitchen_failure", stage="start_quota_refresh", exc_info=True)
-        return _kitchen_failure_envelope(exc, stage="start_quota_refresh")
-
-    try:
-        clear_kitchens_for_pid(os.getpid())
-    except Exception:
-        logger.warning("open_kitchen_clear_pid_failed", exc_info=True)
-
-    try:
-        _register_active_recipe_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
-    except Exception:
-        logger.warning("open_kitchen_registry_failed", exc_info=True)
-
-    try:
-        prune_stale_kitchen_state(ctx.project_dir, ctx.kitchen_id)
-    except Exception:
-        logger.warning("open_kitchen_prune_trackers_failed", exc_info=True)
-
-    try:
-        sweep_stale_markers()
-    except Exception:
-        logger.warning("open_kitchen_sweep_markers_failed", exc_info=True)
-
-    try:
-        _campaign_state_paths = discover_campaign_state_files(ctx.project_dir)
-        if _campaign_state_paths:
-            await reap_stale_dispatches_async(
-                _campaign_state_paths,
-                min_reap_age_seconds=60.0,
-                heartbeat_grace_seconds=90.0,
+    if _transition_start(ctx, "quota_task_start"):
+        if ctx.quota_refresh_task is not None:
+            ctx.quota_refresh_task.cancel()
+        try:
+            ctx.quota_refresh_task = create_background_task(
+                _quota_refresh_loop(
+                    ctx.config.quota_guard,
+                    supports_quota_check=_supports_quota,
+                ),
+                label="quota_refresh_loop",
             )
-    except Exception:
-        logger.warning("open_kitchen_reap_failed", exc_info=True)
+        except Exception as exc:
+            ctx.gate.disable()
+            _transition_ambiguous(ctx, "quota_task_start", exc)
+            logger.warning("open_kitchen_failure", stage="start_quota_refresh", exc_info=True)
+            return _kitchen_failure_envelope(exc, stage="start_quota_refresh")
+        _transition_confirm(
+            ctx,
+            "quota_task_start",
+            receipt="quota_task:owned",
+            downstream_identity=str(id(ctx.quota_refresh_task)),
+        )
+
+    if _transition_start(ctx, "registry_prune"):
+        try:
+            clear_kitchens_for_pid(os.getpid())
+        except Exception as exc:
+            _transition_degraded(ctx, "registry_prune", exc)
+            logger.warning("open_kitchen_clear_pid_failed", exc_info=True)
+        else:
+            _transition_confirm(ctx, "registry_prune", receipt="registry:pid_cleared")
+
+    if _transition_start(ctx, "registry_update"):
+        try:
+            _register_active_recipe_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
+        except Exception as exc:
+            _transition_degraded(ctx, "registry_update", exc)
+            logger.warning("open_kitchen_registry_failed", exc_info=True)
+        else:
+            _transition_confirm(
+                ctx,
+                "registry_update",
+                receipt="registry:kitchen_registered",
+                downstream_identity=ctx.kitchen_id,
+            )
+
+    if _transition_start(ctx, "tracker_prune"):
+        try:
+            prune_stale_kitchen_state(ctx.project_dir, ctx.kitchen_id)
+        except Exception as exc:
+            _transition_degraded(ctx, "tracker_prune", exc)
+            logger.warning("open_kitchen_prune_trackers_failed", exc_info=True)
+        else:
+            _transition_confirm(ctx, "tracker_prune", receipt="trackers:pruned")
+
+    if _transition_start(ctx, "marker_sweep"):
+        try:
+            sweep_stale_markers()
+        except Exception as exc:
+            _transition_degraded(ctx, "marker_sweep", exc)
+            logger.warning("open_kitchen_sweep_markers_failed", exc_info=True)
+        else:
+            _transition_confirm(ctx, "marker_sweep", receipt="markers:swept")
+
+    if _transition_start(ctx, "stale_dispatch_reap"):
+        try:
+            _campaign_state_paths = discover_campaign_state_files(ctx.project_dir)
+            if _campaign_state_paths:
+                await reap_stale_dispatches_async(
+                    _campaign_state_paths,
+                    min_reap_age_seconds=60.0,
+                    heartbeat_grace_seconds=90.0,
+                )
+        except Exception as exc:
+            _transition_degraded(ctx, "stale_dispatch_reap", exc)
+            logger.warning("open_kitchen_reap_failed", exc_info=True)
+        else:
+            _transition_confirm(ctx, "stale_dispatch_reap", receipt="dispatches:reaped")
 
     ctx.gate_infrastructure_ready = True
     return None
@@ -676,6 +1035,10 @@ def _close_kitchen_handler() -> None:
             review_gate_path.unlink(missing_ok=True)
     except OSError:
         logger.warning("review_gate_state_remove_failed", path=str(review_gate_path))
+    with ctx.kitchen_transition_lock:
+        context_id = ctx.kitchen_open_state.context_id
+        ctx.kitchen_open_state = closed_kitchen_open_state(context_id=context_id)
+        ctx.kitchen_id = ""
 
 
 @mcp.resource("recipe://{name}")
@@ -835,16 +1198,26 @@ def _render_ingredients_only_response(
         )
         if warnings:
             inspection["warnings"] = warnings
+    from autoskillit.server._state import _get_ctx_or_none  # circular-break
+
+    tool_ctx = _get_ctx_or_none()
+    if tool_ctx is not None:
+        _attach_transition_fields(inspection, tool_ctx, committed=True)
     return render_served_response(inspection)
 
 
 @mcp.tool(
     tags={"autoskillit"},
-    annotations={"readOnlyHint": True},
+    annotations={"readOnlyHint": False},
     meta=response_backstop_tool_meta("open_kitchen", always_load=True),
 )
 @document_recipe_delivery_contract
-@_cancellation_shield()
+@_bind_open_kitchen_transition
+@_cancellation_shield(
+    state_factory=_read_open_kitchen_request_ctx,
+    state_context_var=_OPEN_KITCHEN_REQUEST_CTX,
+    response_factory=_open_kitchen_cancellation_response,
+)
 @track_response_size("open_kitchen")
 async def open_kitchen(
     name: str | None = None,
@@ -953,39 +1326,75 @@ async def open_kitchen(
                 # its stale tool cache. (close_kitchen's notification only
                 # refreshes after disable; without an explicit re-enable
                 # notification, the client keeps serving the post-close list.)
-                mcp.enable(tags={"kitchen"})
-                mcp.enable(tags={"plan-review"})
-                logger.debug("open_kitchen_global_enables", reason="use_global_enable")
-                try:
-                    await ctx.send_notification(ToolListChangedNotification())
-                except Exception:
-                    logger.warning(
-                        "open_kitchen_notify_failed",
-                        stage="send_notification",
-                        exc_info=True,
+                if _transition_start(tool_ctx, "client_visibility"):
+                    mcp.enable(tags={"kitchen"})
+                    mcp.enable(tags={"plan-review"})
+                    _transition_confirm(
+                        tool_ctx,
+                        "client_visibility",
+                        receipt="visibility:global_enabled",
                     )
+                    logger.debug("open_kitchen_global_enables", reason="use_global_enable")
+                if _transition_start(tool_ctx, "visibility_notification"):
+                    try:
+                        await ctx.send_notification(ToolListChangedNotification())
+                    except Exception as exc:
+                        _transition_degraded(tool_ctx, "visibility_notification", exc)
+                        logger.warning(
+                            "open_kitchen_notify_failed",
+                            stage="send_notification",
+                            exc_info=True,
+                        )
+                    else:
+                        _transition_confirm(
+                            tool_ctx,
+                            "visibility_notification",
+                            receipt="visibility:list_changed_sent",
+                        )
             else:
+                if _transition_start(tool_ctx, "client_visibility"):
+                    try:
+                        await ctx.enable_components(tags={"kitchen"})
+                    except Exception as exc:
+                        _transition_ambiguous(tool_ctx, "client_visibility", exc)
+                        logger.warning(
+                            "open_kitchen_failure", stage="enable_components", exc_info=True
+                        )
+                        tool_ctx.gate_infrastructure_ready = False
+                        return _kitchen_failure_envelope(exc, stage="enable_components")
+                    _transition_confirm(
+                        tool_ctx,
+                        "client_visibility",
+                        receipt="visibility:client_enabled",
+                    )
+
+            if _transition_start(tool_ctx, "subset_visibility"):
                 try:
-                    await ctx.enable_components(tags={"kitchen"})
+                    _kctx = _get_ctx()
+                    await _redisable_subsets(
+                        ctx,
+                        disabled_subsets,
+                        _kctx.config.features,
+                        experimental_enabled=_kctx.config.experimental_enabled,
+                    )
                 except Exception as exc:
+                    _transition_ambiguous(tool_ctx, "subset_visibility", exc)
                     logger.warning(
-                        "open_kitchen_failure", stage="enable_components", exc_info=True
+                        "open_kitchen_failure", stage="redisable_subsets", exc_info=True
                     )
                     tool_ctx.gate_infrastructure_ready = False
-                    return _kitchen_failure_envelope(exc, stage="enable_components")
-
-            try:
-                _kctx = _get_ctx()
-                await _redisable_subsets(
-                    ctx,
-                    disabled_subsets,
-                    _kctx.config.features,
-                    experimental_enabled=_kctx.config.experimental_enabled,
+                    return _kitchen_failure_envelope(exc, stage="redisable_subsets")
+                _transition_confirm(
+                    tool_ctx,
+                    "subset_visibility",
+                    receipt="visibility:subsets_reconciled",
                 )
-            except Exception as exc:
-                logger.warning("open_kitchen_failure", stage="redisable_subsets", exc_info=True)
-                tool_ctx.gate_infrastructure_ready = False
-                return _kitchen_failure_envelope(exc, stage="redisable_subsets")
+            with tool_ctx.kitchen_transition_lock:
+                if tool_ctx.kitchen_open_state.phase is KitchenOpenPhase.REQUEST_BOUND:
+                    tool_ctx.kitchen_open_state = advance_kitchen_phase(
+                        tool_ctx.kitchen_open_state,
+                        KitchenOpenPhase.VISIBILITY_READY,
+                    )
 
         _is_deferred_recall = (
             name is not None
@@ -1066,6 +1475,7 @@ async def open_kitchen(
                     )
             if _is_deferred_recall:
                 try:
+                    _transition_start(tool_ctx, "recipe_serving")
                     result = serve_recipe(
                         tool_ctx,
                         name,
@@ -1094,6 +1504,8 @@ async def open_kitchen(
                     )
                     return _kitchen_failure_envelope(exc, stage="load_and_validate")
                 if ingredients_only:
+                    if not result.get("valid", False):
+                        _transition_abort(tool_ctx, "recipe_serving")
                     return _render_ingredients_only_response(
                         result,
                         declared_ingredients=(
@@ -1136,10 +1548,12 @@ async def open_kitchen(
                         tool_ctx.active_recipe_ingredients = None
                 # Default to False for missing 'valid' so a absent key is treated as invalid
                 if not result.get("valid", False) or not result.get("content", ""):
+                    _transition_abort(tool_ctx, "recipe_serving")
                     tool_ctx.gate.disable()
                     tool_ctx.gate_infrastructure_ready = False
                     return _recipe_validation_error_response(name, result)
                 if not result.get("dispatch_feasible", True):
+                    _transition_abort(tool_ctx, "recipe_serving")
                     return await _dispatch_infeasible_response(
                         result,
                         tool_ctx.backend,
@@ -1162,6 +1576,7 @@ async def open_kitchen(
                         project_root=tool_ctx.project_dir,
                     )
                     if _preflight_err is not None:
+                        _transition_abort(tool_ctx, "recipe_serving")
                         tool_ctx.gate.disable()
                         tool_ctx.gate_infrastructure_ready = False
                         await ctx.disable_components(tags={"kitchen"})
@@ -1201,6 +1616,7 @@ async def open_kitchen(
                         tool_ctx=tool_ctx,
                         finalized_projection=_deferred_finalized_projection,
                     )
+                    _attach_transition_fields(result, tool_ctx, committed=True)
                     return cast(
                         str,
                         finalize_recipe_delivery(
@@ -1220,6 +1636,7 @@ async def open_kitchen(
                     )
                 return render_served_response(result)
             try:
+                _transition_start(tool_ctx, "recipe_serving")
                 result = serve_recipe(
                     tool_ctx,
                     name,
@@ -1244,6 +1661,8 @@ async def open_kitchen(
                 logger.warning("open_kitchen_failure", stage="load_and_validate", exc_info=True)
                 return _kitchen_failure_envelope(exc, stage="load_and_validate")
             if ingredients_only:
+                if not result.get("valid", False):
+                    _transition_abort(tool_ctx, "recipe_serving")
                 return _render_ingredients_only_response(
                     result,
                     declared_ingredients=(
@@ -1304,11 +1723,13 @@ async def open_kitchen(
                 return _kitchen_failure_envelope(exc, stage="apply_triage_gate")
 
             if not result.get("valid", False) or not result.get("content", ""):
+                _transition_abort(tool_ctx, "recipe_serving")
                 tool_ctx.gate.disable()
                 tool_ctx.gate_infrastructure_ready = False
                 return _recipe_validation_error_response(name, result)
 
             if not result.get("dispatch_feasible", True):
+                _transition_abort(tool_ctx, "recipe_serving")
                 return await _dispatch_infeasible_response(
                     result,
                     tool_ctx.backend,
@@ -1336,6 +1757,7 @@ async def open_kitchen(
                     project_root=tool_ctx.project_dir,
                 )
                 if _preflight_err is not None:
+                    _transition_abort(tool_ctx, "recipe_serving")
                     tool_ctx.gate.disable()
                     tool_ctx.gate_infrastructure_ready = False
                     await ctx.disable_components(tags={"kitchen"})
@@ -1399,6 +1821,7 @@ async def open_kitchen(
                     tool_ctx=tool_ctx,
                     finalized_projection=_normal_finalized_projection,
                 )
+                _attach_transition_fields(result, tool_ctx, committed=True)
                 return cast(
                     str,
                     finalize_recipe_delivery(
@@ -1419,6 +1842,7 @@ async def open_kitchen(
 
             return render_served_response(result)
 
+        _transition_start(tool_ctx, "anonymous_response")
         text = (
             f"Kitchen is open. AutoSkillit {__version__}. Tools are ready for service.\n\n"
             f"Available Tools by Category:\n{_categories}\n\n"
@@ -1465,15 +1889,15 @@ async def open_kitchen(
         if warning:
             text += warning
 
-        return render_served_response(
-            {
-                "success": True,
-                "kitchen": "open",
-                "content": text,
-                "ingredients_table": None,
-                "version": __version__,
-            }
-        )
+        anonymous_result: dict[str, Any] = {
+            "success": True,
+            "kitchen": "open",
+            "content": text,
+            "ingredients_table": None,
+            "version": __version__,
+        }
+        _attach_transition_fields(anonymous_result, tool_ctx, committed=True)
+        return render_served_response(anonymous_result)
     except Exception as exc:
         logger.error("open_kitchen unhandled exception", exc_info=True)
         return _kitchen_failure_envelope(exc, stage="unhandled")

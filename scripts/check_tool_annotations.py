@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Verify all MCP tool decorators use readOnlyHint: True.
+"""Verify MCP tool decorators use their exact readOnlyHint contract.
 
-AST-scans src/autoskillit/server/tools_*.py for @mcp.tool() decorators
-and rejects any that: (1) lack the annotations= keyword, (2) have an
-annotations dict missing readOnlyHint, or (3) set readOnlyHint to a non-True value.
+AST-scans src/autoskillit/server/tools/tools_*.py for @mcp.tool() decorators.
+The effectful ``open_kitchen`` transition is False; every other tool is True.
 
 Exit 0 if all annotations are correct. Exit 1 with details on violations.
 """
@@ -12,12 +11,16 @@ import ast
 import sys
 from pathlib import Path
 
-SERVER_DIR = Path(__file__).resolve().parent.parent / "src" / "autoskillit" / "server"
+TOOLS_DIR = Path(__file__).resolve().parent.parent / "src" / "autoskillit" / "server" / "tools"
+READ_ONLY_EXCEPTIONS = {"open_kitchen": False}
 
 
 def check() -> list[str]:
     violations = []
-    for path in sorted(SERVER_DIR.glob("tools_*.py")):
+    paths = sorted(TOOLS_DIR.glob("tools_*.py"))
+    if not paths:
+        return [f"{TOOLS_DIR}: no tool modules discovered"]
+    for path in paths:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -38,27 +41,25 @@ def check() -> list[str]:
                         break
                 if ann_kw is None:
                     violations.append(
-                        f"{path.name}:{dec.lineno}: {node.name} "
-                        f"missing annotations= keyword (must have readOnlyHint=True)"
+                        f"{path.name}:{dec.lineno}: {node.name} missing annotations= keyword"
                     )
                     continue
                 key_names = [k.value for k in ann_kw.value.keys if isinstance(k, ast.Constant)]
                 if "readOnlyHint" not in key_names:
                     violations.append(
                         f"{path.name}:{dec.lineno}: {node.name} "
-                        f"annotations dict missing readOnlyHint key (must be True)"
+                        "annotations dict missing readOnlyHint key"
                     )
                     continue
-                for key, val in zip(ann_kw.value.keys, ann_kw.value.values):
-                    if (
-                        isinstance(key, ast.Constant)
-                        and key.value == "readOnlyHint"
-                        and isinstance(val, ast.Constant)
-                        and val.value is not True
-                    ):
+                expected = READ_ONLY_EXCEPTIONS.get(node.name, True)
+                for key, val in zip(ann_kw.value.keys, ann_kw.value.values, strict=True):
+                    if isinstance(key, ast.Constant) and key.value == "readOnlyHint":
+                        actual = val.value if isinstance(val, ast.Constant) else None
+                        if actual is expected:
+                            continue
                         violations.append(
                             f"{path.name}:{dec.lineno}: {node.name} "
-                            f"has readOnlyHint={val.value!r} (must be True)"
+                            f"has readOnlyHint={actual!r} (must be {expected!r})"
                         )
     return violations
 
@@ -69,9 +70,9 @@ def main() -> int:
         print("readOnlyHint violations found:\n")
         for v in violations:
             print(f"  {v}")
-        print("\nAll tools must have readOnlyHint=True. See server/AGENTS.md for rationale.")
+        print("\nSee server/AGENTS.md for the readOnlyHint contract.")
         return 1
-    print("All tool annotations correct: readOnlyHint=True.")
+    print("All tool annotations match the readOnlyHint contract.")
     return 0
 
 

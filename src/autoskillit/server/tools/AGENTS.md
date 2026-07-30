@@ -7,4 +7,4 @@ The package initializer is docstring-only; importing tool modules performs regis
 
 ## Architecture Notes
 
-Side-effect registration (same pattern as `recipe/rules/`). The `server/__init__.py` owns the `mcp` app object; tool modules import it from the server layer. All tools require `readOnlyHint: True` (see `server/AGENTS.md`).
+Side-effect registration (same pattern as `recipe/rules/`). The `server/__init__.py` owns the `mcp` app object; tool modules import it from the server layer. All tools except the replay-journaled, effectful `open_kitchen` transition require `readOnlyHint: True` (see `server/AGENTS.md`).

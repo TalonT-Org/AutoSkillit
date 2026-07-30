@@ -1,7 +1,7 @@
 """AST annotation test shield for MCP tool readOnlyHint semantics.
 
 Layer 1a — AST presence: every @mcp.tool() has annotations= keyword.
-Layer 1b — AST value: every annotations= has readOnlyHint=True (no import).
+Layer 1b — AST value: open_kitchen=False and every other tool=True (no import).
 
 Runtime layers (2-4) live in tests/server/test_tool_annotation_completeness.py.
 """
@@ -78,15 +78,14 @@ class TestToolAnnotationCompleteness:
             + "\n".join(f"  {v}" for v in violations)
         )
 
-    def test_all_annotations_are_readonly_true(self):
-        """AST scan: readOnlyHint must be True in every @mcp.tool() decorator.
+    def test_all_annotations_match_readonly_contract(self):
+        """AST scan: readOnlyHint must match the exact effect contract.
 
         Delegates to scripts/check_tool_annotations.py:check() to avoid
         duplicating the AST scanning logic.
         """
         violations = check_readonly_violations()
         assert not violations, (
-            "readOnlyHint must be True for all tools. "
-            "All pipelines use independent branches/worktrees.\n\n"
+            "readOnlyHint must be False only for open_kitchen and True otherwise.\n\n"
             + "\n".join(f"  {v}" for v in violations)
         )

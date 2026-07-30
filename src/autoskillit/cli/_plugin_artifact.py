@@ -31,9 +31,11 @@ from autoskillit.core import (
     due_retiring_records,
     get_logger,
     installed_plugin_artifact_manifest_payload,
+    installed_plugin_semantic_key,
     log_plugin_artifact_lifecycle,
     migrate_retiring_cache_v1,
     new_plugin_artifact_incarnation_id,
+    parse_installed_plugin_semantic_key,
     read_installed_plugin_artifact_identity,
     read_retiring_cache,
     write_versioned_json,
@@ -56,13 +58,6 @@ def installed_artifact_lock_path(root: Path) -> Path:
     """Return the stable lease sidecar, which is never retired with the root."""
     manifest_path = installed_artifact_manifest_path(root)
     return manifest_path.with_suffix(manifest_path.suffix + ".lock")
-
-
-def installed_plugin_semantic_key(plugin_ref: str, version: str) -> str:
-    """Bind the installed artifact to the exact plugin/version transaction."""
-    if not plugin_ref or not version:
-        raise ValueError("installed plugin reference and version must not be empty")
-    return f"{plugin_ref}:{version}"
 
 
 def current_installed_plugin_root() -> Path:
@@ -264,17 +259,18 @@ class InstalledPluginArtifactAuthority:
             verify_installed_plugin_artifact,
         )
 
-        plugin_ref, separator, expected_version = self._semantic_key.rpartition(":")
+        try:
+            plugin_ref, expected_version = parse_installed_plugin_semantic_key(self._semantic_key)
+        except ValueError as exc:
+            raise PluginArtifactValidationError(
+                f"installed plugin semantic identity is invalid: {self._semantic_key}"
+            ) from exc
         try:
             home = self._root.parents[5]
         except IndexError as exc:
             raise PluginArtifactValidationError(
                 f"installed plugin root is invalid: {self._root}"
             ) from exc
-        if not separator:
-            raise PluginArtifactValidationError(
-                f"installed plugin semantic identity is invalid: {self._semantic_key}"
-            )
         spec = InstallStateSpec(
             home=home,
             plugin_ref=plugin_ref,

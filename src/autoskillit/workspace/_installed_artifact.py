@@ -19,6 +19,7 @@ from autoskillit.core import (
     PluginArtifactUnavailableError,
     PluginArtifactValidationError,
     Severity,
+    installed_plugin_semantic_key,
     read_installed_plugin_artifact_identity,
     registered_install_paths,
 )
@@ -97,7 +98,7 @@ class InstallStateSpec:
     @property
     def semantic_key(self) -> str:
         """Return the exact plugin/version transaction identity."""
-        return f"{self.plugin_ref}:{self.expected_version}"
+        return installed_plugin_semantic_key(self.plugin_ref, self.expected_version)
 
     @property
     def manifest_path(self) -> Path:

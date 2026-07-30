@@ -15,7 +15,9 @@ from autoskillit.core import (
     PluginArtifactIdentity,
     directory_tree_digest,
     installed_plugin_artifact_manifest_payload,
+    installed_plugin_semantic_key,
     new_plugin_artifact_incarnation_id,
+    parse_installed_plugin_semantic_key,
     write_versioned_json,
 )
 from autoskillit.workspace import (
@@ -113,6 +115,18 @@ def test_spec_is_immutable_and_derives_every_authority_path(home: Path) -> None:
     assert "__dict__" not in InstallStateSpec.__slots__
     with pytest.raises(FrozenInstanceError):
         spec.expected_version = "other"  # type: ignore[misc]
+
+
+def test_semantic_key_codec_has_one_round_trip_authority() -> None:
+    semantic_key = installed_plugin_semantic_key(_PLUGIN_REF, _VERSION)
+
+    assert semantic_key == f"{_PLUGIN_REF}:{_VERSION}"
+    assert parse_installed_plugin_semantic_key(semantic_key) == (
+        _PLUGIN_REF,
+        _VERSION,
+    )
+    with pytest.raises(ValueError, match="invalid installed plugin semantic key"):
+        parse_installed_plugin_semantic_key("missing-version-separator")
 
 
 def test_uninstalled_optional_state_is_clean_and_does_not_create_a_sidecar(

@@ -43,6 +43,7 @@ from autoskillit.core import (  # IL-005: core only — never cli.InstalledPlugi
     RetiringCacheState,
     Severity,
     get_logger,
+    parse_installed_plugin_semantic_key,
     read_retiring_cache,
     registered_install_paths,
 )
@@ -211,8 +212,11 @@ def _record_matches_current_installed_artifact(
 ) -> bool:
     from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY
 
-    plugin_ref, separator, version = record.semantic_key.rpartition(":")
-    if not separator or plugin_ref != _AUTOSKILLIT_PLUGIN_KEY:
+    try:
+        plugin_ref, version = parse_installed_plugin_semantic_key(record.semantic_key)
+    except ValueError:
+        return False
+    if plugin_ref != _AUTOSKILLIT_PLUGIN_KEY:
         return False
     try:
         home = record.managed_path.parents[5]

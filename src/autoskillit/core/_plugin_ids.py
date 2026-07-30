@@ -33,6 +33,21 @@ def _installed_plugins_path(home: Path | None = None) -> Path:
     return base / ".claude" / "plugins" / "installed_plugins.json"
 
 
+def installed_plugin_semantic_key(plugin_ref: str, version: str) -> str:
+    """Bind an installed artifact to one exact plugin/version transaction."""
+    if not plugin_ref or not version:
+        raise ValueError("installed plugin reference and version must not be empty")
+    return f"{plugin_ref}:{version}"
+
+
+def parse_installed_plugin_semantic_key(semantic_key: str) -> tuple[str, str]:
+    """Return the plugin reference and version encoded in a semantic key."""
+    plugin_ref, separator, version = semantic_key.rpartition(":")
+    if not separator or not plugin_ref or not version:
+        raise ValueError(f"invalid installed plugin semantic key: {semantic_key!r}")
+    return plugin_ref, version
+
+
 def registered_install_paths(home: Path | None = None) -> tuple[Path, ...]:
     """Return every ``installPath`` recorded for autoskillit, for diagnostics only.
 

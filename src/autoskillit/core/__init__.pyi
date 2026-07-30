@@ -52,6 +52,8 @@ from ._plugin_ids import DIRECT_PREFIX as DIRECT_PREFIX
 from ._plugin_ids import MARKETPLACE_PREFIX as MARKETPLACE_PREFIX
 from ._plugin_ids import _installed_plugins_path as _installed_plugins_path
 from ._plugin_ids import detect_autoskillit_mcp_prefix as detect_autoskillit_mcp_prefix
+from ._plugin_ids import installed_plugin_semantic_key as installed_plugin_semantic_key
+from ._plugin_ids import parse_installed_plugin_semantic_key as parse_installed_plugin_semantic_key
 from ._plugin_ids import registered_install_paths as registered_install_paths
 from ._step_context import current_order_id as current_order_id
 from ._step_context import current_step_name as current_step_name

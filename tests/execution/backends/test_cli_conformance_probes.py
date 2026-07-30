@@ -1488,6 +1488,7 @@ def _write_delayed_startup_plugin(
                 "requests = {}",
                 "def record(payload):",
                 "    payload['monotonic_ns'] = time.monotonic_ns()",
+                "    payload['server_pid'] = os.getpid()",
                 "    with write_lock:",
                 "        with trace.open('a', encoding='utf-8') as handle:",
                 "            handle.write(json.dumps(payload, sort_keys=True) + '\\n')",
@@ -1783,3 +1784,29 @@ def test_claude_startup_readiness_addressability_trace(
     assert result.open_kitchen_result_observed
     assert not result.question_detected
     assert result.output_bytes <= 256 * 1024
+
+    if delay_ms > connect_timeout_ms:
+        trace_events = _read_startup_trace(result.trace_path)
+        attempts = [
+            event for event in trace_events if event.get("event") == "server_delay_started"
+        ]
+        success = next(
+            event for event in trace_events if event.get("event") == "open_kitchen_result"
+        )
+        first_attempt = attempts[0]
+        assert len(attempts) >= 2
+        successful_attempt = next(
+            event for event in attempts if event.get("server_pid") == success.get("server_pid")
+        )
+
+        assert first_attempt["server_pid"] != successful_attempt["server_pid"]
+        assert not any(
+            event.get("event") == "server_exec_started"
+            and event.get("server_pid") == first_attempt["server_pid"]
+            for event in trace_events
+        )
+        assert (
+            int(first_attempt["monotonic_ns"])
+            < int(successful_attempt["monotonic_ns"])
+            < int(success["monotonic_ns"])
+        )

@@ -112,3 +112,27 @@ def test_pre_launch_fails_closed_for_unusable_capability_probe(
 
     assert errors
     assert expected in errors[0]
+
+
+def test_pre_launch_retains_bounded_nonzero_probe_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    binding = _binding(tmp_path)
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda cmd, **kwargs: subprocess.CompletedProcess(
+            cmd,
+            2,
+            stdout="",
+            stderr="\x1b[31m" + ("x" * 2_000) + " loader policy denied",
+        ),
+    )
+
+    errors = ClaudeCodeBackend().ensure_pre_launch(executable=binding)
+
+    assert len(errors) == 1
+    assert "loader policy denied" in errors[0]
+    assert "\x1b" not in errors[0]
+    assert len(errors[0]) < 1_200

@@ -63,6 +63,7 @@ from autoskillit.core import (
     load_yaml,
     pkg_root,
     read_registry,
+    truncate_text,
 )
 from autoskillit.execution.backends._backend_cmd_builder_base import (
     SHARED_BASELINE_ENV,
@@ -939,10 +940,16 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             return ["Claude Code capability probe timed out"]
         except OSError as exc:
             return [f"Claude Code capability probe failed: {exc}"]
-        if result.returncode != 0:
-            return [f"Claude Code capability probe failed with exit code {result.returncode}"]
         stdout = result.stdout if isinstance(result.stdout, str) else ""
         stderr = result.stderr if isinstance(result.stderr, str) else ""
+        if result.returncode != 0:
+            raw_diagnostic = "\n".join(part for part in (stderr.strip(), stdout.strip()) if part)
+            normalized = "".join(char if char.isprintable() else " " for char in raw_diagnostic)
+            diagnostic = truncate_text(" ".join(normalized.split()), max_len=1_000)
+            detail = f": {diagnostic}" if diagnostic else ""
+            return [
+                f"Claude Code capability probe failed with exit code {result.returncode}{detail}"
+            ]
         output = stdout.strip() or stderr.strip()
         if not output:
             return ["Claude Code capability probe returned empty output"]

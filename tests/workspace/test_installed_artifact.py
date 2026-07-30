@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 
 import pytest
@@ -160,6 +160,46 @@ def test_spec_reconstructs_managed_root_through_one_inverse(home: Path) -> None:
             require_registered_plugin=True,
             require_shared_lease=True,
         )
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"home": Path("relative-home")}, "install-state home must be absolute"),
+        ({"plugin_ref": ""}, "installed plugin reference must not be empty"),
+        (
+            {"plugin_ref": "../autoskillit@autoskillit-local"},
+            "installed plugin name must be one path component",
+        ),
+        (
+            {"plugin_ref": "@autoskillit-local"},
+            "installed plugin name must be one path component",
+        ),
+        (
+            {"expected_version": ""},
+            "installed plugin version must be one path component",
+        ),
+        (
+            {"expected_version": "../1.2.3"},
+            "installed plugin version must be one path component",
+        ),
+        (
+            {"require_registered_plugin": 1},
+            "require_registered_plugin must be a boolean",
+        ),
+        (
+            {"require_shared_lease": 1},
+            "require_shared_lease must be a boolean",
+        ),
+    ],
+)
+def test_spec_rejects_every_untrusted_input_branch(
+    home: Path,
+    overrides: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        replace(_spec(home), **overrides)
 
 
 def test_uninstalled_optional_state_is_clean_and_does_not_create_a_sidecar(

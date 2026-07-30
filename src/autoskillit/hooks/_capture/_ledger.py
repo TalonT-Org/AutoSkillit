@@ -161,6 +161,9 @@ class CaptureLifecycleRecord:
     deletion_nonce: str = ""
     quarantine_name: str = ""
 
+    def __post_init__(self) -> None:
+        validate_record(self)
+
     @property
     def size(self) -> int:
         if self.manifest is not None:

@@ -65,6 +65,25 @@ class _Clock:
         self.value += seconds
 
 
+def test_lifecycle_record_rejects_invalid_identity_at_construction() -> None:
+    with pytest.raises(
+        capture_lifecycle._capture_ledger.LedgerCodecError,
+        match="invalid lifecycle record fields",
+    ):
+        CaptureLifecycleRecord(
+            capture_id="invalid",
+            state=CaptureState.RESERVED,
+            staging_name=".capture-staging-invalid-0000000000000000",
+            public_name="shell_invalid.log",
+            project_identity=(1, 2),
+            root_identity=(3, 4),
+            created_at=1.0,
+            next_attempt_at=2.0,
+            incarnation="1" * 32,
+            revision=1,
+        )
+
+
 @pytest.mark.parametrize("field_name", ("created_at", "next_attempt_at", "retention_at"))
 @pytest.mark.parametrize("value", (float("nan"), float("inf"), float("-inf")))
 def test_ledger_rejects_nonfinite_timestamps(field_name: str, value: float) -> None:

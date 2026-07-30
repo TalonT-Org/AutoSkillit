@@ -25,6 +25,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_campaign_prompt_accuracy.py` | Contract: campaign prompt does not contain inaccurate semaphore language |
 | `test_claim_issue_contracts.py` | Contract tests for claim_issue and release_issue MCP tools |
 | `test_classify_experiment_type_contracts.py` | Contract tests for classify-experiment-type SKILL.md — registry-based classification, secondary modifiers, silent-type detection, output tokens, and skill_contracts.yaml registration |
+| `test_completion_receipt_fitness.py` | Contract: every bundled recipe's completion receipt (including the attestation credential block) fits every backend's effective delivery bound |
 | `test_claude_code_interface_contracts.py` | Contract tests for Claude Code external interface conventions |
 | `test_collapse_issues_contracts.py` | Contract tests for the collapse-issues skill SKILL.md |
 | `test_config_field_coverage.py` | REQ-CONFIG-001: every sub-config dataclass field must be referenced in from_dynaconf |

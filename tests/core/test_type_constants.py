@@ -82,6 +82,26 @@ def test_response_backstop_exemption_registry_public_gateways() -> None:
         assert not hasattr(module, "OPEN_KITCHEN_OUTPUT_BUDGET_BYTES")
 
 
+def test_recipe_execution_install_site_registry_digest_is_canonical() -> None:
+    from autoskillit.core import (
+        RECIPE_EXECUTION_INSTALL_SITE_REGISTRY,
+        RECIPE_EXECUTION_INSTALL_SITE_REGISTRY_DIGEST,
+    )
+
+    canonical = {
+        site: definition._asdict()
+        for site, definition in sorted(RECIPE_EXECUTION_INSTALL_SITE_REGISTRY.items())
+    }
+    payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    assert hashlib.sha256(payload.encode("ascii")).hexdigest() == (
+        RECIPE_EXECUTION_INSTALL_SITE_REGISTRY_DIGEST
+    )
+    assert (
+        RECIPE_EXECUTION_INSTALL_SITE_REGISTRY_DIGEST
+        == "3a83bb6c8596a850103c3793a4118e1fd73627b52c5234086b3cffb981c94374"
+    )
+
+
 # REQ-PACK-001: PACK_REGISTRY defines all packs with default_enabled
 def test_core_packs_constant_defined() -> None:
     """CORE_PACKS must be a frozenset defined in _type_constants and exported via core."""

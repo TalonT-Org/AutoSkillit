@@ -1238,6 +1238,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "algorithm across modules that must remain the single source of "
         "truth for the bound-vs-deprioritized budget allocation order.",
     ),
+    "core/types/_type_constants_registries.py": (
+        1100,
+        "REQ-CNST-010-E16: canonical immutable registries and their measured digests remain "
+        "co-located so the #4411 execution-install-site binding cannot drift from the other "
+        "tool and delivery registries that define its surfaces.",
+    ),
     "core/context_admission.py": (
         3000,
         "REQ-CNST-010-E13: #4333 freezes one exhaustive protocol-v1 reducer and replay "

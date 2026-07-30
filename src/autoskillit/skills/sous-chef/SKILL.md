@@ -996,6 +996,17 @@ caller-supplied generation selectors and require its completion receipt before t
 first execution or mutation tool. Random-access pulls without the matching
 initialization ID never establish readiness.
 
+**Recipe execution attestation — forwarding rule.** The completion receipt carries a
+`recipe_execution` block with `execution_id` and `invocation_template_digests`. Every
+subsequent `run_skill` for a named recipe step MUST forward
+`recipe_execution_id=recipe_execution.execution_id` and
+`invocation_template_digest=recipe_execution.invocation_template_digests[step_name]`. On the
+inline delivery path the same `recipe_execution` block appears in the `open_kitchen`
+response (top level, or under `recipe_delivery.payload_metadata` when the body is attested);
+the same forwarding rule applies. Omitting these parameters or passing values that were not
+delivered in the response will cause `recipe_execution_attestation_missing` or
+`recipe_execution_inactive` denial.
+
 Similarly, NEVER read SKILL.md files directly from the filesystem. Use the Skill tool
 to load skill instructions — it applies runtime transformations (namespace rewriting,
 temp directory substitution, disable-model-invocation injection) that raw files lack.

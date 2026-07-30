@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from autoskillit.core import (
     RECIPE_SECTION_PAGINATION_VERSION,
@@ -18,6 +19,79 @@ from autoskillit.core.types import RetryReason
 from tests.fleet._helpers import _make_recipe_info as _fleet_make_recipe_info
 
 _HOOK_CONFIG_OVERLAY_RELPATH = (".autoskillit", "temp", ".hook_config_overlay.json")
+
+
+def _mock_fmcp_ctx() -> MagicMock:
+    """Return a minimal FastMCP Context mock with async component methods."""
+    ctx = MagicMock()
+    ctx.enable_components = AsyncMock()
+    ctx.disable_components = AsyncMock()
+    return ctx
+
+
+async def _open_kitchen_patched(name, overrides, monkeypatch):
+    """Call open_kitchen with all infrastructure side-effects patched out."""
+    from autoskillit.recipe import _api_cache
+    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+    monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
+    fmcp_ctx = _mock_fmcp_ctx()
+    with patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()):
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server.tools.tools_kitchen.create_background_task"):
+                with patch(
+                    "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                    return_value="test-kitchen",
+                ):
+                    return json.loads(
+                        await open_kitchen(name=name, overrides=overrides, ctx=fmcp_ctx)
+                    )
+
+
+async def _credit_initialization_sections(envelope: dict[str, Any]) -> None:
+    """Page every required section of a bounded envelope through the real pull tool.
+
+    Passes ``initialization_id`` and ``page_plan_sha256`` so each page is credited to the
+    server-owned initialization, which ``complete_recipe_initialization`` requires.
+    """
+    from autoskillit.server.tools.tools_recipe import get_recipe_section
+
+    identity = {key: value for key, value in envelope["recipe_pull"].items() if key != "pull_tool"}
+    initialization_id = envelope["initialization_id"]
+    for requirement in envelope["required_sections"]:
+        continuation: str | None = None
+        for part in range(requirement["total_parts"]):
+            response = json.loads(
+                await get_recipe_section(
+                    section=requirement["section"],
+                    part=part,
+                    initialization_id=initialization_id,
+                    page_plan_sha256=requirement["page_plan_sha256"],
+                    continuation=continuation,
+                    **identity,
+                )
+            )
+            assert response.get("success") is True, f"pull failed: {response}"
+            assert response["page_plan_sha256"] == requirement["page_plan_sha256"]
+            continuation = response.get("continuation")
+
+
+async def _pull_step_section(envelope: dict[str, Any], step_name: str) -> dict[str, Any]:
+    """Return one step's YAML subtree, pulled through the real ``get_recipe_section`` tool."""
+    from autoskillit.core.io import load_yaml
+
+    shim = {"success": True, "recipe_pull": envelope["recipe_pull"]}
+    body = await _resolve_recipe_section(shim, section=step_name)
+    assert isinstance(body, str) and body, f"step section {step_name!r} came back empty"
+    parsed = load_yaml(body)
+    assert isinstance(parsed, dict), f"step section {step_name!r} is not a mapping"
+    assert step_name in parsed, (
+        f"step section {step_name!r} not present in section body; got keys {sorted(parsed)}"
+    )
+    step_obj = parsed[step_name]
+    assert isinstance(step_obj, dict), f"step section {step_name!r} body is not a mapping"
+    return step_obj
 
 
 def _with_finalized_projection(

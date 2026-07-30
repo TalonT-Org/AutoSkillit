@@ -333,6 +333,22 @@ from .types import RECIPE_DELIVERY_SURFACE_REGISTRY as RECIPE_DELIVERY_SURFACE_R
 from .types import (
     RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST as RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST,
 )
+from .types import (
+    RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE as RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE,
+)
+from .types import (
+    RECIPE_EXECUTION_CREDENTIAL_WIRE_FIELDS as RECIPE_EXECUTION_CREDENTIAL_WIRE_FIELDS,
+)
+from .types import (
+    RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY as RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
+)
+from .types import RECIPE_EXECUTION_INACTIVE_MESSAGE as RECIPE_EXECUTION_INACTIVE_MESSAGE
+from .types import (
+    RECIPE_EXECUTION_INSTALL_SITE_REGISTRY as RECIPE_EXECUTION_INSTALL_SITE_REGISTRY,
+)
+from .types import (
+    RECIPE_EXECUTION_INSTALL_SITE_REGISTRY_DIGEST as RECIPE_EXECUTION_INSTALL_SITE_REGISTRY_DIGEST,
+)
 from .types import RECIPE_FLOW_SCHEMA_VERSION as RECIPE_FLOW_SCHEMA_VERSION
 from .types import RECIPE_PACK_REGISTRY as RECIPE_PACK_REGISTRY
 from .types import RECIPE_PACK_TAGS as RECIPE_PACK_TAGS
@@ -366,6 +382,7 @@ from .types import RETIRED_SKILL_NAMES as RETIRED_SKILL_NAMES
 from .types import REVIEW_APPROACH_MARKER as REVIEW_APPROACH_MARKER
 from .types import ROUTING_AUTHORITY_CLAUSE as ROUTING_AUTHORITY_CLAUSE
 from .types import RUN_PYTHON_SENTINEL_KEYS as RUN_PYTHON_SENTINEL_KEYS
+from .types import RUN_SKILL_ATTESTATION_PARAMS as RUN_SKILL_ATTESTATION_PARAMS
 from .types import SCOPE_DIRECTION_SOURCE_TYPES as SCOPE_DIRECTION_SOURCE_TYPES
 from .types import SESSION_ADD_DIR_SUBDIR as SESSION_ADD_DIR_SUBDIR
 from .types import SESSION_TYPE_ENV_VAR as SESSION_TYPE_ENV_VAR
@@ -518,6 +535,7 @@ from .types import EffectiveSkillInvocationAuthority as EffectiveSkillInvocation
 from .types import EnvPolicy as EnvPolicy
 from .types import EpochClosedEffect as EpochClosedEffect
 from .types import EpochFenceProof as EpochFenceProof
+from .types import ExecutionInstallSiteDef as ExecutionInstallSiteDef
 from .types import ExpiredIdempotencyTombstone as ExpiredIdempotencyTombstone
 from .types import ExpireIdempotencyKeyEvent as ExpireIdempotencyKeyEvent
 from .types import FailureRecord as FailureRecord
@@ -634,6 +652,7 @@ from .types import RecipeDeliveryEvidenceDef as RecipeDeliveryEvidenceDef
 from .types import RecipeDeliveryMode as RecipeDeliveryMode
 from .types import RecipeDeliveryRequest as RecipeDeliveryRequest
 from .types import RecipeDeliverySurfaceDef as RecipeDeliverySurfaceDef
+from .types import RecipeExecutionCredential as RecipeExecutionCredential
 from .types import RecipeExecutionFactory as RecipeExecutionFactory
 from .types import RecipeExecutionLock as RecipeExecutionLock
 from .types import RecipeExecutionSnapshot as RecipeExecutionSnapshot
@@ -762,6 +781,9 @@ from .types import WriteBehaviorSpec as WriteBehaviorSpec
 from .types import WriteEvidence as WriteEvidence
 from .types import WriteExpectedResolver as WriteExpectedResolver
 from .types import assert_prompt_sentinel as assert_prompt_sentinel
+from .types import (
+    build_recipe_execution_credential as build_recipe_execution_credential,
+)
 from .types import canonical_recipe_section_json as canonical_recipe_section_json
 from .types import closure_authority_spec_from_args as closure_authority_spec_from_args
 from .types import compute_findings_digest as compute_findings_digest

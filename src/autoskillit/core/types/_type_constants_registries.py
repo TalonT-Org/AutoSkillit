@@ -50,6 +50,9 @@ __all__ = [
     "RecipeDeliverySurfaceDef",
     "RECIPE_DELIVERY_SURFACE_REGISTRY",
     "RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST",
+    "ExecutionInstallSiteDef",
+    "RECIPE_EXECUTION_INSTALL_SITE_REGISTRY",
+    "RECIPE_EXECUTION_INSTALL_SITE_REGISTRY_DIGEST",
     "RecipeSectionDef",
     "RECIPE_SECTION_REGISTRY",
     "DYNAMIC_RECIPE_SECTION_DEF",
@@ -285,6 +288,50 @@ def _recipe_delivery_surface_registry_digest() -> str:
 
 
 RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST: str = _recipe_delivery_surface_registry_digest()
+
+
+class ExecutionInstallSiteDef(NamedTuple):
+    """Static binding of one execution-install site to the response that delivers it."""
+
+    installer_module: str
+    installer_symbol: str
+    delivering_module: str
+    delivering_symbol: str
+    delivery_surface: str
+
+
+RECIPE_EXECUTION_INSTALL_SITE_REGISTRY: Mapping[str, ExecutionInstallSiteDef] = MappingProxyType(
+    {
+        "inline_delivery": ExecutionInstallSiteDef(
+            installer_module="src/autoskillit/server/_recipe_delivery.py",
+            installer_symbol="complete_finalized_recipe_response",
+            delivering_module="src/autoskillit/server/_recipe_delivery.py",
+            delivering_symbol="build_canonical_recipe_artifact_payload",
+            delivery_surface="open_kitchen",
+        ),
+        "initialization_completion": ExecutionInstallSiteDef(
+            installer_module="src/autoskillit/server/_recipe_initialization.py",
+            installer_symbol="complete_initialization_response",
+            delivering_module="src/autoskillit/server/_recipe_initialization.py",
+            delivering_symbol="build_completion_response",
+            delivery_surface="complete_recipe_initialization",
+        ),
+    }
+)
+
+
+def _recipe_execution_install_site_registry_digest() -> str:
+    canonical = {
+        site: definition._asdict()
+        for site, definition in sorted(RECIPE_EXECUTION_INSTALL_SITE_REGISTRY.items())
+    }
+    payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(payload.encode("ascii")).hexdigest()
+
+
+RECIPE_EXECUTION_INSTALL_SITE_REGISTRY_DIGEST: str = (
+    _recipe_execution_install_site_registry_digest()
+)
 
 
 @dataclass(frozen=True, slots=True)

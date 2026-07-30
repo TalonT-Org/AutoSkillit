@@ -776,6 +776,7 @@ async def dispatch_food_truck(
                 dispatch_id=identities.get("dispatch_id", ""),
                 dispatched_session_id=identities.get("dispatched_session_id", ""),
                 reason=FleetErrorCode.FLEET_L3_TIMEOUT,
+                diagnostic_message=timeout_message,
                 effect_provenance=snapshot,
             ).to_envelope()
 

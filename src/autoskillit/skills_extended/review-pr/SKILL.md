@@ -1238,7 +1238,7 @@ if [ "$FINAL_SNAPSHOT_STATE" = fresh ]; then
       awk 'toupper($1) ~ /^HTTP\// {status=$2} END {print status}' "$BATCH_RESPONSE_TMP"
     )"
     POSTED_REVIEW_ID="$(
-      awk 'body || /^[[:space:]]*{/ {body=1; print}' "$BATCH_RESPONSE_TMP" |
+      awk 'body || index($0, "{") == 1 {body=1; print}' "$BATCH_RESPONSE_TMP" |
         jq -r '.id // empty' 2>/dev/null || true
     )"
   fi

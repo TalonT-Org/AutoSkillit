@@ -59,6 +59,7 @@ if TYPE_CHECKING:
         CaptureDeliveryStatus,
         CaptureLifecycleError,
         CaptureLifecycleStore,
+        CaptureTransitionCommittedError,
     )
     from autoskillit.hooks._hook_settings import (
         HOOK_CONFIG_FILENAME,
@@ -104,6 +105,7 @@ else:
         CaptureDeliveryStatus,
         CaptureLifecycleError,
         CaptureLifecycleStore,
+        CaptureTransitionCommittedError,
     )
     from _hook_settings import (
         HOOK_CONFIG_FILENAME,
@@ -605,7 +607,7 @@ def _publish_oversized_capture(
                 finalized,
                 reason_code=reason,
             )
-        except _CAPTURE_RUNTIME_ERRORS:
+        except CaptureTransitionCommittedError:
             reconciled = _reference_result_after_transition(
                 lifecycle,
                 finalized,
@@ -616,7 +618,7 @@ def _publish_oversized_capture(
             raise
     try:
         return lifecycle.publish_reference(finalized)
-    except _CAPTURE_RUNTIME_ERRORS:
+    except CaptureTransitionCommittedError:
         reconciled = _reference_result_after_transition(
             lifecycle,
             finalized,
@@ -624,6 +626,15 @@ def _publish_oversized_capture(
         )
         if type(reconciled) is PublishedCaptureReference:
             return reconciled
+        _capture_delivery.invalidate_lost_reference(
+            lifecycle,
+            finalized,
+            reason_code="PUBLICATION_FAILED",
+            lifecycle_error=CaptureLifecycleError,
+            runtime_errors=_CAPTURE_RUNTIME_ERRORS,
+        )
+        raise
+    except _CAPTURE_RUNTIME_ERRORS:
         _capture_delivery.invalidate_lost_reference(
             lifecycle,
             finalized,

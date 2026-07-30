@@ -45,6 +45,7 @@ from autoskillit.hooks._capture_lifecycle import (
     CaptureLifecycleStore,
     CaptureReferenceStatus,
     CaptureState,
+    CaptureTransitionCommittedError,
 )
 
 capture_authority = importlib.import_module(capture_artifacts.open_project_anchor.__module__)
@@ -1788,7 +1789,7 @@ def test_delivery_transition_accepts_durable_successor_after_exception(
         result = real_transition(self, value, expected=expected, target=target)
         if target is durable_target and not injected:
             injected = True
-            raise OSError("post-append fault")
+            raise CaptureTransitionCommittedError("post-append fault")
         return result
 
     monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
@@ -1804,6 +1805,52 @@ def test_delivery_transition_accepts_durable_successor_after_exception(
     assert captured.out == "inline"
     assert captured.err == ""
     assert _capture_record(project).delivery_status is CaptureDeliveryStatus.DELIVERED
+
+
+@pytest.mark.parametrize(
+    ("uncertain_target", "expected_stdout"),
+    (
+        (CaptureDeliveryStatus.ATTEMPTING, ""),
+        (CaptureDeliveryStatus.DELIVERED, "inline"),
+    ),
+)
+def test_delivery_transition_does_not_accept_unclassified_successor_after_exception(
+    uncertain_target: CaptureDeliveryStatus,
+    expected_stdout: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    process = _FakeCaptureProcess(b"inline")
+    real_transition = CaptureLifecycleStore.transition_delivery
+    injected = False
+
+    def append_then_fail(self, value, *, expected, target):
+        nonlocal injected
+        result = real_transition(self, value, expected=expected, target=target)
+        if target is uncertain_target and not injected:
+            injected = True
+            raise OSError("unclassified post-append fault")
+        return result
+
+    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(
+        CaptureLifecycleStore,
+        "transition_delivery",
+        append_then_fail,
+    )
+
+    assert run_capture("printf inline", str(project), _CAPTURE_ID) == 1
+
+    captured = capfd.readouterr()
+    assert injected
+    assert captured.out == expected_stdout
+    assert _single_failure_marker(captured.err).stage in {
+        "capture_delivery_start",
+        "capture_delivery_finish",
+    }
 
 
 @pytest.mark.parametrize(
@@ -1960,7 +2007,7 @@ def test_publication_accepts_durable_successor_after_exception(
 
     def append_then_fail(self, finalized):
         real_publish(self, finalized)
-        raise OSError("post-publication fault")
+        raise CaptureTransitionCommittedError("post-publication fault")
 
     monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(
@@ -1979,6 +2026,37 @@ def test_publication_accepts_durable_successor_after_exception(
     assert captured.err == ""
     assert record.reference_status is CaptureReferenceStatus.PUBLISHED
     assert record.delivery_status is CaptureDeliveryStatus.DELIVERED
+
+
+def test_publication_does_not_accept_unclassified_successor_after_exception(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    process = _FakeCaptureProcess(b"oversized")
+    real_publish = CaptureLifecycleStore.publish_reference
+
+    def append_then_fail(self, finalized):
+        real_publish(self, finalized)
+        raise OSError("unclassified post-publication fault")
+
+    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(
+        capture_artifacts,
+        "read_capture_policy",
+        lambda _anchor: CapturePolicy(inline_bytes=1),
+    )
+    monkeypatch.setattr(CaptureLifecycleStore, "publish_reference", append_then_fail)
+
+    assert run_capture("printf oversized", str(project), _CAPTURE_ID) == 1
+
+    captured = capfd.readouterr()
+    record = _capture_record(project)
+    assert captured.out == ""
+    assert _single_failure_marker(captured.err).stage == "capture_reference_publication"
+    assert record.reference_status is CaptureReferenceStatus.UNAVAILABLE
 
 
 def test_failure_marker_emission_failure_returns_capture_failure_code(

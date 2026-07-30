@@ -40,6 +40,7 @@ __all__ = [
     "CaptureSnapshotStatus",
     "CaptureStatus",
     "CaptureState",
+    "CaptureTransitionCommittedError",
     "DecodedLedger",
     "LedgerCodecError",
     "LedgerFrame",
@@ -67,6 +68,10 @@ _MAX_JSON_NODES = 4096
 
 class LedgerCodecError(RuntimeError):
     """Raised when framed lifecycle bytes are not strictly recoverable."""
+
+
+class CaptureTransitionCommittedError(RuntimeError):
+    """Raised only after a lifecycle transition frame was durably synced."""
 
 
 class CaptureState(StrEnum):

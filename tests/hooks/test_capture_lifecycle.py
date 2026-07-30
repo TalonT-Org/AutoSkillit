@@ -379,7 +379,7 @@ def test_final_commit_reconciles_durable_append_after_reported_failure(
         real_append(record, records, compaction_epoch, size)
         if record.state is CaptureState.FINALIZED and not injected:
             injected = True
-            raise OSError("post-FINAL append fault")
+            raise capture_lifecycle.CaptureTransitionCommittedError("post-FINAL append fault")
 
     monkeypatch.setattr(store, "_append_locked", append_then_fail)
     try:
@@ -392,6 +392,37 @@ def test_final_commit_reconciles_durable_append_after_reported_failure(
         assert durable.state is CaptureState.FINALIZED
         assert durable.manifest == finalized.snapshot.manifest
         assert durable.revision == finalized.finalized_at_revision
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+def test_final_commit_does_not_reconcile_reported_fsync_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(tmp_path / "project", clock)
+    artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+    os.write(artifact.fd, b"captured")
+    snapshot = _verified_snapshot(store, artifact, b"captured", clock)
+    real_fsync = os.fsync
+
+    def sync_then_report_failure(fd: int) -> None:
+        real_fsync(fd)
+        raise OSError("reported lifecycle fsync failure")
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(capture_lifecycle.os, "fsync", sync_then_report_failure)
+            with pytest.raises(OSError, match="reported lifecycle fsync failure"):
+                store.commit_verified_snapshot(snapshot, issue_reference=True)
+
+        readable = store.get_record(_CAPTURE_ID)
+        assert readable is not None
+        assert readable.state is CaptureState.FINALIZED
     finally:
         artifact.close_artifact_fd()
         artifact.release_lease()

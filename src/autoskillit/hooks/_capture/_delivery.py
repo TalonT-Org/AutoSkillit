@@ -473,7 +473,7 @@ def transition_delivery_checked(
             expected=expected,
             target=target,
         )
-    except runtime_errors:
+    except _ledger.CaptureTransitionCommittedError:
         if delivery_status(store, value) == target:
             return
         raise

@@ -7,6 +7,7 @@ import sys
 from dataclasses import InitVar, dataclass, field
 from typing import NoReturn, Protocol, SupportsIndex
 
+from ._cleanup import close_preserving_primary
 from ._snapshot import CaptureAuthorityError
 
 _THIS_MODULE = sys.modules[__name__]
@@ -71,8 +72,23 @@ class VerifiedCaptureReader:
             raise CaptureAuthorityError("verified capture reader is closed")
         return self
 
-    def __exit__(self, *_exc: object) -> None:
-        self.close()
+    def __exit__(
+        self,
+        _exc_type: object,
+        primary_error: BaseException | None,
+        _traceback: object,
+    ) -> None:
+        if primary_error is None:
+            self.close()
+            return
+        if self._descriptor >= 0:
+            descriptor = self._descriptor
+            object.__setattr__(self, "_descriptor", -1)
+            close_preserving_primary(
+                descriptor,
+                primary_error,
+                context="verified capture reader cleanup",
+            )
 
     def __copy__(self) -> NoReturn:
         raise CaptureAuthorityError("verified capture reader cannot be copied")

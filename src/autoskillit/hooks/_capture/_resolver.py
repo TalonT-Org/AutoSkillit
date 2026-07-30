@@ -10,7 +10,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from typing import Protocol
 
-from . import _descriptor, _ledger, _reader, _snapshot
+from . import _cleanup, _descriptor, _ledger, _reader, _snapshot
 
 _THIS_MODULE = sys.modules[__name__]
 for _alias in ("_capture._resolver", "autoskillit.hooks._capture._resolver"):
@@ -149,7 +149,11 @@ def acquire_writer_lease(
         fcntl.flock(lease_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         return lease_fd
     except OSError as exc:
-        os.close(lease_fd)
+        _cleanup.close_preserving_primary(
+            lease_fd,
+            exc,
+            context="writer lease descriptor cleanup",
+        )
         if exc.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
             raise lifecycle_error("writer lease unexpectedly contended") from exc
         raise lifecycle_error("writer lease capability unavailable") from exc
@@ -213,9 +217,14 @@ def open_verified_capture(
         reader = _reader._make_verified_reader(fd, manifest, revision)
         fd = -1
         return reader
-    finally:
+    except BaseException as primary_error:
         if fd >= 0:
-            os.close(fd)
+            _cleanup.close_preserving_primary(
+                fd,
+                primary_error,
+                context="verified capture descriptor cleanup",
+            )
+        raise
 
 
 def adopt_verified_capture(
@@ -268,11 +277,9 @@ def adopt_verified_capture(
                 raise lifecycle_error("producer capture changed during verification")
         return _reader._make_verified_reader(fd, current_manifest, revision)
     except BaseException as primary_error:
-        try:
-            os.close(fd)
-        except OSError as cleanup_error:
-            primary_error.add_note(
-                "capture carrier cleanup also failed: "
-                f"{type(cleanup_error).__name__}: {cleanup_error}"
-            )
+        _cleanup.close_preserving_primary(
+            fd,
+            primary_error,
+            context="capture carrier cleanup",
+        )
         raise

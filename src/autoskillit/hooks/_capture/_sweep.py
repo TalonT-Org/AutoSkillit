@@ -10,6 +10,7 @@ from collections.abc import Callable, Collection, Iterable
 from dataclasses import replace
 from typing import Any, Protocol
 
+from ._cleanup import close_preserving_primary
 from ._ledger import (
     CaptureLifecycleRecord,
     CaptureReferenceStatus,
@@ -134,8 +135,12 @@ def observe_artifact(
             nlink=value.st_nlink,
             size=value.st_size,
         )
-    except BaseException:
-        os.close(fd)
+    except BaseException as primary_error:
+        close_preserving_primary(
+            fd,
+            primary_error,
+            context="managed capture observation cleanup",
+        )
         raise
 
 

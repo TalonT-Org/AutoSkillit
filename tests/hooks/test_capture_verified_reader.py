@@ -15,9 +15,9 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.hooks._capture._cleanup as capture_cleanup
 import autoskillit.hooks._capture._descriptor as capture_descriptor
 import autoskillit.hooks._capture._reader as capture_reader
-import autoskillit.hooks._capture._resolver as capture_resolver
 import autoskillit.hooks._capture_artifacts as capture_artifacts
 import autoskillit.hooks._capture_lifecycle as capture_lifecycle
 from autoskillit.hooks._capture._reader import (
@@ -190,6 +190,37 @@ def test_verified_reader_is_factory_only_and_nontransferable(tmp_path: Path) -> 
         reader.close()
         root.close()
         anchor.close()
+
+
+def test_reader_context_preserves_body_error_when_close_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    anchor, root, store, artifact, _finalized, published = _publish(
+        tmp_path / "project",
+        _Clock(),
+        b"context",
+    )
+    _close_artifact(artifact)
+    reader = store.open_verified_capture(published.token)
+    root.close()
+    anchor.close()
+    reader_fd = reader._descriptor
+    real_close = os.close
+
+    def close_then_report_failure(fd: int) -> None:
+        real_close(fd)
+        if fd == reader_fd:
+            raise OSError("injected reader cleanup failure")
+
+    monkeypatch.setattr(capture_cleanup.os, "close", close_then_report_failure)
+    with pytest.raises(RuntimeError, match="primary body failure") as captured:
+        with reader:
+            raise RuntimeError("primary body failure")
+
+    assert any(
+        "verified capture reader cleanup also failed" in note for note in captured.value.__notes__
+    )
 
 
 def test_verified_reader_loops_over_short_preads(
@@ -779,7 +810,7 @@ def test_transfer_preserves_authority_error_when_carrier_cleanup_fails(
             injected = True
             raise OSError("injected carrier cleanup failure")
 
-    monkeypatch.setattr(capture_resolver.os, "close", close_then_report_failure)
+    monkeypatch.setattr(capture_cleanup.os, "close", close_then_report_failure)
     try:
         with pytest.raises(CaptureAuthorityError, match="content changed") as captured:
             artifact.transfer_to_reader(store, finalized)

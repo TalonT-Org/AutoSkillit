@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Any, Protocol, TypeAlias
 
-from . import _ledger, _snapshot
+from . import _cleanup, _ledger, _snapshot
 
 _THIS_MODULE = sys.modules[__name__]
 for _alias in ("_capture._delivery", "autoskillit.hooks._capture._delivery"):
@@ -541,7 +541,6 @@ def normalize_interrupted_deliveries(
     *,
     lifecycle_error: type[Exception],
     lease_live: type[Exception],
-    tampered: type[Exception],
 ) -> None:
     with store._locked():
         records, _compaction_epoch, _size = store._load_locked()
@@ -565,7 +564,7 @@ def normalize_interrupted_deliveries(
         lease = None
         try:
             lease = store._acquire_cleanup_lease(expected)
-        except (lease_live, tampered, lifecycle_error, OSError):
+        except lease_live:
             continue
         try:
             with store._locked():
@@ -585,7 +584,15 @@ def normalize_interrupted_deliveries(
                     allowed_states={_ledger.CaptureState.FINALIZED},
                     transform=lambda _record: candidate,
                 )
-        finally:
+        except BaseException as primary_error:
+            if lease is not None:
+                _cleanup.close_preserving_primary(
+                    lease.fd,
+                    primary_error,
+                    context="delivery normalization lease cleanup",
+                )
+            raise
+        else:
             if lease is not None:
                 os.close(lease.fd)
 

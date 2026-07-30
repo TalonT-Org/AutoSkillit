@@ -214,7 +214,6 @@ class CaptureLifecycleStore:
             self,
             lifecycle_error=CaptureLifecycleError,
             lease_live=_CarrierLeaseLive,
-            tampered=_capture_types.Tampered,
         )
 
     def _validate_root(self) -> None:

@@ -645,6 +645,51 @@ def test_invalid_unavailable_reason_does_not_commit_transition(
         anchor.close()
 
 
+def test_restart_normalization_surfaces_unexpected_lease_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(tmp_path / "project", clock)
+    artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+    os.write(artifact.fd, b"captured")
+    finalized = store.commit_verified_snapshot(
+        _verified_snapshot(store, artifact, b"captured", clock),
+        issue_reference=True,
+    )
+    published = store.publish_reference(finalized)
+    store.transition_delivery(
+        published,
+        expected=CaptureDeliveryStatus.NOT_ATTEMPTED,
+        target=CaptureDeliveryStatus.ATTEMPTING,
+    )
+
+    def fail_cleanup_lease(
+        _store: CaptureLifecycleStore,
+        _record: CaptureLifecycleRecord,
+    ) -> None:
+        raise OSError("unexpected cleanup lease failure")
+
+    monkeypatch.setattr(
+        CaptureLifecycleStore,
+        "_acquire_cleanup_lease",
+        fail_cleanup_lease,
+    )
+    try:
+        with pytest.raises(OSError, match="unexpected cleanup lease failure"):
+            CaptureLifecycleStore.from_open_authorities(
+                anchor,
+                root,
+                wall_clock=clock.wall,
+                monotonic=clock.monotonic,
+            )
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
 def test_carrier_fsync_precedes_final_ledger_append(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

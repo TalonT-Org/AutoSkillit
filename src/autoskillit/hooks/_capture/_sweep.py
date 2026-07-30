@@ -7,8 +7,9 @@ import os
 import stat
 from collections.abc import Callable, Collection, Iterable
 from dataclasses import replace
-from typing import Any, Protocol
+from typing import Protocol
 
+from . import _store_port
 from ._cleanup import close_preserving_primary
 from ._ledger import (
     CaptureLifecycleRecord,
@@ -425,7 +426,7 @@ def retry_record(
 
 
 def _transition_if_current(
-    store: Any,
+    store: _store_port.TransitionStorePort,
     expected: CaptureLifecycleRecord,
     transform: Callable[[CaptureLifecycleRecord], CaptureLifecycleRecord],
 ) -> CaptureLifecycleRecord | None:
@@ -445,7 +446,7 @@ def _transition_if_current(
 
 
 def sweep_one(
-    store: Any,
+    store: _store_port.SweepStorePort,
     capture_id: str,
     *,
     lifecycle_error: type[RuntimeError],

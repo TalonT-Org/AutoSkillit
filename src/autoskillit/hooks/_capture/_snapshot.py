@@ -14,7 +14,7 @@ from dataclasses import InitVar, dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, NoReturn, SupportsIndex
 
-from . import _descriptor, _failure_policy, _syntax
+from . import _descriptor, _lifecycle_policy, _syntax
 from ._module_identity import register_module_aliases
 
 if TYPE_CHECKING:
@@ -32,8 +32,6 @@ register_module_aliases(__name__)
 
 __all__ = [
     "CaptureAuthorityError",
-    "CaptureStatus",
-    "CaptureFailureEvidence",
     "CaptureFinalManifest",
     "CaptureManifestWire",
     "CaptureMeasurement",
@@ -43,7 +41,6 @@ __all__ = [
     "CommandOutcomeKind",
     "FinalizedCapture",
     "IssuedCaptureReference",
-    "LegacyCleanupOnly",
     "PublishedCaptureReference",
     "UnavailableCaptureReference",
     "VerifiedCaptureSnapshot",
@@ -152,13 +149,6 @@ class CommandOutcomeKind(StrEnum):
     SIGNALED = "signaled"
 
 
-class CaptureStatus(StrEnum):
-    PENDING = "pending"
-    COMPLETE = "complete"
-    FAILED = "failed"
-    LEGACY_CLEANUP_ONLY = "legacy_cleanup_only"
-
-
 @dataclass(frozen=True, slots=True)
 class CommandOutcome:
     kind: CommandOutcomeKind
@@ -242,27 +232,6 @@ class CaptureMeasurement:
 
 
 @dataclass(frozen=True, slots=True)
-class CaptureFailureEvidence:
-    stage: str
-    detail: str
-    settlement_returncode: int | None = None
-
-    def __post_init__(self) -> None:
-        if (
-            not _failure_policy.valid_failure_stage(self.stage)
-            or not _failure_policy.valid_failure_detail(self.detail)
-            or (
-                self.settlement_returncode is not None
-                and (
-                    not isinstance(self.settlement_returncode, int)
-                    or isinstance(self.settlement_returncode, bool)
-                )
-            )
-        ):
-            raise CaptureAuthorityError("invalid capture failure evidence")
-
-
-@dataclass(frozen=True, slots=True)
 class CaptureManifestWire:
     schema_version: int
     producer: str
@@ -279,7 +248,7 @@ class CaptureManifestWire:
     inline_length: int
     head_length: int
     tail_length: int
-    capture_status: CaptureStatus
+    capture_status: _lifecycle_policy.CaptureStatus
     command_outcome_kind: CommandOutcomeKind
     command_outcome_value: int
     finalized_at: float
@@ -312,7 +281,7 @@ class CaptureFinalManifest(_NoAuthorityCopy):
     inline_length: int
     head_length: int
     tail_length: int
-    capture_status: CaptureStatus
+    capture_status: _lifecycle_policy.CaptureStatus
     command_outcome: CommandOutcome
     finalized_at: float
     reference_hash: str | None
@@ -360,17 +329,6 @@ class VerifiedCaptureSnapshot(_NoAuthorityCopy):
             or self.manifest.tail_length != len(self.measurement.tail)
         ):
             raise CaptureAuthorityError("verified snapshot does not match its measurement")
-
-
-@dataclass(frozen=True, slots=True)
-class LegacyCleanupOnly:
-    """Bounded legacy deletion evidence that carries no snapshot authority."""
-
-    observed_size: int
-
-    def __post_init__(self) -> None:
-        if not _is_plain_int(self.observed_size):
-            raise CaptureAuthorityError("invalid legacy cleanup observation")
 
 
 @dataclass(frozen=True, slots=True)
@@ -488,7 +446,7 @@ def _validate_manifest(value: CaptureFinalManifest | CaptureManifestWire) -> Non
         or value.inline_length > value.total_bytes
         or value.head_length > value.total_bytes
         or value.tail_length > value.total_bytes
-        or value.capture_status is not CaptureStatus.COMPLETE
+        or value.capture_status is not _lifecycle_policy.CaptureStatus.COMPLETE
     ):
         raise CaptureAuthorityError("invalid capture manifest fields")
     _identity(value.project_identity, "project identity")
@@ -545,7 +503,7 @@ def _make_manifest(
         inline_length=len(measurement.inline),
         head_length=len(measurement.head),
         tail_length=len(measurement.tail),
-        capture_status=CaptureStatus.COMPLETE,
+        capture_status=_lifecycle_policy.CaptureStatus.COMPLETE,
         command_outcome=command_outcome,
         finalized_at=finalized_at,
         reference_hash=reference_hash,
@@ -791,7 +749,7 @@ def decode_capture_manifest_wire(data: bytes) -> CaptureManifestWire:
             inline_length=primitive["inline_length"],
             head_length=primitive["head_length"],
             tail_length=primitive["tail_length"],
-            capture_status=CaptureStatus(primitive["capture_status"]),
+            capture_status=_lifecycle_policy.CaptureStatus(primitive["capture_status"]),
             command_outcome_kind=CommandOutcomeKind(primitive["command_outcome_kind"]),
             command_outcome_value=primitive["command_outcome_value"],
             finalized_at=primitive["finalized_at"],

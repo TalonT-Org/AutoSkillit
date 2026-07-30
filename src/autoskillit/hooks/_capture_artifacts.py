@@ -40,7 +40,6 @@ if TYPE_CHECKING:
     )
     from autoskillit.hooks._capture._reader import VerifiedCaptureReader
     from autoskillit.hooks._capture._snapshot import (
-        CaptureFailureEvidence,
         CaptureMeasurement,
         CaptureWriteAuthority,
         CommandOutcome,
@@ -50,6 +49,7 @@ if TYPE_CHECKING:
         UnavailableCaptureReference,
         verify_capture_snapshot,
     )
+    from autoskillit.hooks._capture._types import CaptureFailureEvidence
     from autoskillit.hooks._capture_contract import (
         _CAPTURE_ID_RE,
         _MAX_COMMAND_BYTES,
@@ -86,7 +86,6 @@ else:
     )
     from _capture._reader import VerifiedCaptureReader
     from _capture._snapshot import (
-        CaptureFailureEvidence,
         CaptureMeasurement,
         CaptureWriteAuthority,
         CommandOutcome,
@@ -96,6 +95,7 @@ else:
         UnavailableCaptureReference,
         verify_capture_snapshot,
     )
+    from _capture._types import CaptureFailureEvidence
     from _capture_contract import (
         _CAPTURE_ID_RE,
         _MAX_COMMAND_BYTES,

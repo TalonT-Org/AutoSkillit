@@ -19,6 +19,7 @@ from ._lifecycle_policy import (
     CaptureRetentionPhase,
     CaptureSnapshotStatus,
     CaptureState,
+    CaptureStatus,
     is_delivery_successor,
     is_reference_successor,
     is_retention_successor,
@@ -26,10 +27,7 @@ from ._lifecycle_policy import (
 )
 from ._module_identity import register_module_aliases
 from ._snapshot import (
-    CaptureFailureEvidence,
     CaptureFinalManifest,
-    CaptureStatus,
-    LegacyCleanupOnly,
 )
 from ._syntax import (
     CAPTURE_ID_RE as _CAPTURE_ID_RE,
@@ -37,6 +35,7 @@ from ._syntax import (
 from ._syntax import (
     INCARNATION_RE as _INCARNATION_RE,
 )
+from ._types import CaptureFailureEvidence, LegacyCleanupOnly
 
 register_module_aliases(__name__)
 

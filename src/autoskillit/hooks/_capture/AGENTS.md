@@ -21,5 +21,6 @@ owners. Modules must remain importable when the hooks directory alone is on
 | `_failure_policy.py` | Shared persisted/transported failure-field limits and normalization |
 | `_syntax.py` | Canonical capture ID, incarnation, digest, and reference-token syntax |
 | `_snapshot.py` | Factory-only descriptor verification, immutable FINAL manifest, and opaque reference authority |
+| `_store_port.py` | Canonical interface-segregated lifecycle store capabilities for internal shards |
 | `_sweep.py` | Bounded cleanup sweep and verified recovery-operation orchestration |
 | `_types.py` | Lifecycle outcome, observation, and internal signal types |

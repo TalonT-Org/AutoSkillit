@@ -43,12 +43,12 @@ _ObservedArtifact = _capture_types.ObservedArtifact
 _CarrierLeaseLive = _capture_types.CarrierLeaseLive
 
 CaptureAuthorityError = _capture_snapshot.CaptureAuthorityError
-CaptureFailureEvidence = _capture_snapshot.CaptureFailureEvidence
+CaptureFailureEvidence = _capture_types.CaptureFailureEvidence
 CaptureFinalManifest = _capture_snapshot.CaptureFinalManifest
 CaptureWriteAuthority = _capture_snapshot.CaptureWriteAuthority
 FinalizedCapture = _capture_snapshot.FinalizedCapture
 IssuedCaptureReference = _capture_snapshot.IssuedCaptureReference
-LegacyCleanupOnly = _capture_snapshot.LegacyCleanupOnly
+LegacyCleanupOnly = _capture_types.LegacyCleanupOnly
 PublishedCaptureReference = _capture_snapshot.PublishedCaptureReference
 UnavailableCaptureReference = _capture_snapshot.UnavailableCaptureReference
 VerifiedCaptureSnapshot = _capture_snapshot.VerifiedCaptureSnapshot

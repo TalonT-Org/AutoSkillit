@@ -16,11 +16,11 @@ from typing import Any
 import pytest
 
 import autoskillit.hooks._capture._snapshot as capture_snapshot
+from autoskillit.hooks._capture._lifecycle_policy import CaptureStatus
 from autoskillit.hooks._capture._snapshot import (
     CaptureAuthorityError,
     CaptureFinalManifest,
     CaptureMeasurement,
-    CaptureStatus,
     CommandOutcome,
     VerifiedCaptureSnapshot,
     decode_capture_manifest_wire,
@@ -28,11 +28,28 @@ from autoskillit.hooks._capture._snapshot import (
     parse_capture_reference,
     verify_capture_snapshot,
 )
+from autoskillit.hooks._capture._types import (
+    CaptureFailureEvidence,
+    LegacyCleanupOnly,
+)
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 _CAPTURE_ID = "0123456789abcdef"
 _INCARNATION = "0123456789abcdef0123456789abcdef"
+
+
+def test_lifecycle_only_types_have_canonical_owners() -> None:
+    assert CaptureStatus.__module__ in {
+        "_capture._lifecycle_policy",
+        "autoskillit.hooks._capture._lifecycle_policy",
+    }
+    type_modules = {"_capture._types", "autoskillit.hooks._capture._types"}
+    assert CaptureFailureEvidence.__module__ in type_modules
+    assert LegacyCleanupOnly.__module__ in type_modules
+    assert not hasattr(capture_snapshot, "CaptureStatus")
+    assert not hasattr(capture_snapshot, "CaptureFailureEvidence")
+    assert not hasattr(capture_snapshot, "LegacyCleanupOnly")
 
 
 def _measurement(data: bytes, *, inline_bytes: int = 12) -> CaptureMeasurement:
@@ -470,6 +487,8 @@ def test_package_and_isolated_import_orders_share_authority_modules(
         "_snapshot",
         "_reader",
         "_ledger",
+        "_lifecycle_policy",
+        "_store_port",
         "_types",
         "_sweep",
         "_delivery",

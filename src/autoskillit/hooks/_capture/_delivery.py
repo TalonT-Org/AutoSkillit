@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
 from dataclasses import replace
-from typing import Any, Protocol, TypeAlias
+from typing import TypeAlias
 
-from . import _cleanup, _ledger, _snapshot
+from . import _cleanup, _ledger, _snapshot, _store_port
 from ._module_identity import register_module_aliases
 
 register_module_aliases(__name__)
@@ -18,42 +17,6 @@ DeliveryValue: TypeAlias = (
     | _snapshot.UnavailableCaptureReference
 )
 RuntimeErrors: TypeAlias = tuple[type[Exception], ...]
-
-
-class _LifecycleStore(Protocol):
-    def get_record(self, capture_id: str) -> _ledger.CaptureLifecycleRecord | None: ...
-
-    def mark_reference_unavailable(
-        self,
-        finalized: _snapshot.FinalizedCapture,
-        *,
-        reason_code: str,
-    ) -> _snapshot.UnavailableCaptureReference: ...
-
-    def transition_delivery(
-        self,
-        value: DeliveryValue,
-        *,
-        expected: _ledger.CaptureDeliveryStatus,
-        target: _ledger.CaptureDeliveryStatus,
-    ) -> _ledger.CaptureLifecycleRecord: ...
-
-    def mark_delivery_unknown(
-        self,
-        value: DeliveryValue,
-    ) -> _ledger.CaptureLifecycleRecord: ...
-
-    def _transition_current(
-        self,
-        capture_id: str,
-        incarnation: str,
-        *,
-        allowed_states: set[_ledger.CaptureState],
-        transform: Callable[
-            [_ledger.CaptureLifecycleRecord],
-            _ledger.CaptureLifecycleRecord,
-        ],
-    ) -> _ledger.CaptureLifecycleRecord: ...
 
 
 def _reference_transition(
@@ -75,7 +38,7 @@ def _reference_transition(
 
 
 def publish_reference(
-    store: _LifecycleStore,
+    store: _store_port.DeliveryStorePort,
     finalized: _snapshot.FinalizedCapture,
     *,
     lifecycle_error: type[Exception],
@@ -123,7 +86,7 @@ def _reference_transition_for_manifest(
 
 
 def mark_reference_unavailable(
-    store: _LifecycleStore,
+    store: _store_port.DeliveryStorePort,
     finalized: _snapshot.FinalizedCapture,
     *,
     reason_code: str,
@@ -161,7 +124,7 @@ def mark_reference_unavailable(
 
 
 def mark_reference_unknown(
-    store: _LifecycleStore,
+    store: _store_port.DeliveryStorePort,
     finalized: _snapshot.FinalizedCapture,
     *,
     lifecycle_error: type[Exception],
@@ -195,7 +158,7 @@ def mark_reference_unknown(
 
 
 def revoke_reference(
-    store: _LifecycleStore,
+    store: _store_port.DeliveryStorePort,
     finalized: _snapshot.FinalizedCapture,
     *,
     lifecycle_error: type[Exception],
@@ -254,7 +217,7 @@ def reference_result(
 
 
 def invalidate_lost_reference(
-    store: _LifecycleStore,
+    store: _store_port.DeliveryStorePort,
     finalized: _snapshot.FinalizedCapture,
     *,
     reason_code: str,
@@ -350,7 +313,7 @@ def _delivery_transition(
 
 
 def transition_delivery(
-    store: _LifecycleStore,
+    store: _store_port.DeliveryStorePort,
     value: DeliveryValue,
     *,
     expected: _ledger.CaptureDeliveryStatus,
@@ -380,7 +343,7 @@ def transition_delivery(
 
 
 def mark_delivery_unknown(
-    store: _LifecycleStore,
+    store: _store_port.DeliveryStorePort,
     value: DeliveryValue,
     *,
     lifecycle_error: type[Exception],
@@ -410,7 +373,7 @@ def mark_delivery_unknown(
 
 
 def delivery_status(
-    store: _LifecycleStore,
+    store: _store_port.DeliveryStorePort,
     value: DeliveryValue,
 ) -> _ledger.CaptureDeliveryStatus | None:
     record = store.get_record(value.snapshot.manifest.capture_id)
@@ -420,7 +383,7 @@ def delivery_status(
 
 
 def transition_delivery_checked(
-    store: _LifecycleStore,
+    store: _store_port.DeliveryStorePort,
     value: DeliveryValue,
     *,
     expected: _ledger.CaptureDeliveryStatus,
@@ -441,7 +404,7 @@ def transition_delivery_checked(
 
 
 def record_delivery_failure(
-    store: _LifecycleStore,
+    store: _store_port.DeliveryStorePort,
     value: DeliveryValue,
     *,
     lifecycle_error: type[Exception],
@@ -465,7 +428,7 @@ def record_delivery_failure(
 
 
 def settle_finalized_failure(
-    store: _LifecycleStore,
+    store: _store_port.DeliveryStorePort,
     finalized: _snapshot.FinalizedCapture,
     value: DeliveryValue | None,
     *,
@@ -533,7 +496,7 @@ def _restart_transition(
 
 
 def normalize_interrupted_deliveries(
-    store: Any,
+    store: _store_port.DeliveryNormalizationStorePort,
     *,
     lifecycle_error: type[Exception],
     lease_live: type[Exception],
@@ -567,7 +530,7 @@ def normalize_interrupted_deliveries(
             with store._locked():
                 records, compaction_epoch, size = store._load_locked()
                 current = records.get(expected.capture_id)
-                if not _ledger.same_record(expected, current):
+                if current is None or not _ledger.same_record(expected, current):
                     continue
                 candidate = _restart_transition(
                     current,
@@ -595,7 +558,7 @@ def normalize_interrupted_deliveries(
 
 
 def recover_interrupted_delivery(
-    store: _LifecycleStore,
+    store: _store_port.DeliveryStorePort,
     capture_id: str,
     *,
     lifecycle_error: type[Exception],

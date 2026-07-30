@@ -21,14 +21,14 @@ from typing import cast
 import pytest
 
 import autoskillit.hooks._capture_lifecycle as capture_lifecycle
+from autoskillit.hooks._capture._lifecycle_policy import CaptureStatus
 from autoskillit.hooks._capture._snapshot import (
     CaptureAuthorityError,
-    CaptureFailureEvidence,
     CaptureMeasurement,
-    CaptureStatus,
     CommandOutcome,
     verify_capture_snapshot,
 )
+from autoskillit.hooks._capture._types import CaptureFailureEvidence
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
     CaptureRoot,

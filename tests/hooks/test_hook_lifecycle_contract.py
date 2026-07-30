@@ -37,6 +37,31 @@ def _replace_hook(script: str, **changes: object) -> list[HookDef]:
     ]
 
 
+def test_capture_shards_use_canonical_store_ports() -> None:
+    capture_dir = Path(capture_lifecycle.__file__).with_name("_capture")
+    for filename in ("_delivery.py", "_resolver.py", "_sweep.py"):
+        tree = ast.parse((capture_dir / filename).read_text())
+        local_store_protocols = [
+            node.name
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and "Store" in node.name
+        ]
+        assert not local_store_protocols, (
+            f"{filename} defines local store protocols: {local_store_protocols}"
+        )
+        store_annotations = [
+            ast.unparse(argument.annotation)
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            for argument in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
+            if argument.arg == "store" and argument.annotation is not None
+        ]
+        assert store_annotations
+        assert all(annotation.startswith("_store_port.") for annotation in store_annotations), (
+            f"{filename} has noncanonical store annotations: {store_annotations}"
+        )
+
+
 def test_resource_fields_are_immutable_with_independent_factories() -> None:
     fields = {field.name: field for field in dataclasses.fields(HookDef)}
     for name in (

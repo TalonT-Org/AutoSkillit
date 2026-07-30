@@ -14,6 +14,7 @@ __all__ = [
     "CaptureRetentionPhase",
     "CaptureSnapshotStatus",
     "CaptureState",
+    "CaptureStatus",
     "is_delivery_successor",
     "is_reference_successor",
     "is_retention_successor",
@@ -62,6 +63,13 @@ class CaptureRetentionPhase(StrEnum):
 class CaptureSnapshotStatus(StrEnum):
     ABSENT = "absent"
     VERIFIED = "verified"
+
+
+class CaptureStatus(StrEnum):
+    PENDING = "pending"
+    COMPLETE = "complete"
+    FAILED = "failed"
+    LEGACY_CLEANUP_ONLY = "legacy_cleanup_only"
 
 
 _STATE_SUCCESSORS = {

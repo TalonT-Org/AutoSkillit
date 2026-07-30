@@ -6,10 +6,8 @@ import errno
 import fcntl
 import os
 from collections.abc import Callable
-from contextlib import AbstractContextManager
-from typing import Protocol
 
-from . import _cleanup, _descriptor, _ledger, _reader, _snapshot
+from . import _cleanup, _descriptor, _ledger, _reader, _snapshot, _store_port
 from ._module_identity import register_module_aliases
 
 register_module_aliases(__name__)
@@ -17,21 +15,8 @@ register_module_aliases(__name__)
 _READ_FLAGS = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
 
 
-class _LifecycleStore(Protocol):
-    _root_fd: int
-    _project_identity: tuple[int, int]
-    _root_identity: tuple[int, int]
-    _wall_clock: Callable[[], float]
-
-    def _locked(self, *, blocking: bool = True) -> AbstractContextManager[None]: ...
-
-    def _load_locked(
-        self,
-    ) -> tuple[dict[str, _ledger.CaptureLifecycleRecord], int, int]: ...
-
-
 def _record_manifest(
-    store: _LifecycleStore,
+    store: _store_port.ResolverStorePort,
     record: _ledger.CaptureLifecycleRecord | None,
     *,
     capture_id: str,
@@ -67,7 +52,7 @@ def _record_manifest(
 
 
 def _published_manifest(
-    store: _LifecycleStore,
+    store: _store_port.ResolverStorePort,
     record: _ledger.CaptureLifecycleRecord | None,
     token: str,
     *,
@@ -94,7 +79,7 @@ def _published_manifest(
 
 
 def _producer_manifest(
-    store: _LifecycleStore,
+    store: _store_port.ResolverStorePort,
     record: _ledger.CaptureLifecycleRecord | None,
     finalized: _snapshot.FinalizedCapture,
     *,
@@ -156,7 +141,7 @@ def acquire_writer_lease(
 
 
 def _open_linearized_reader(
-    store: _LifecycleStore,
+    store: _store_port.ResolverStorePort,
     *,
     capture_id: str,
     resolve_manifest: Callable[
@@ -210,7 +195,7 @@ def _open_linearized_reader(
 
 
 def open_verified_capture(
-    store: _LifecycleStore,
+    store: _store_port.ResolverStorePort,
     token: str,
     *,
     lifecycle_error: type[Exception],
@@ -259,7 +244,7 @@ def open_verified_capture(
 
 
 def adopt_verified_capture(
-    store: _LifecycleStore,
+    store: _store_port.ResolverStorePort,
     finalized: _snapshot.FinalizedCapture,
     fd: int,
     *,

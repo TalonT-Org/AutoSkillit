@@ -87,7 +87,7 @@ def test_write_instruction_includes_idempotent_guidance(filename_pattern: str) -
     )
 
 
-def test_effect_artifacts_use_same_directory_temporary_and_atomic_rename() -> None:
+def test_publication_uses_same_directory_temporary_and_atomic_rename() -> None:
     text = _SKILL_PATH.read_text()
     step8 = text[text.index("### Step 8") :]
     assert "same-directory temporary file" in step8

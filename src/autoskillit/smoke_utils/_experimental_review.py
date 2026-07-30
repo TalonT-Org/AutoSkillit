@@ -769,7 +769,6 @@ def prepare_experimental_review_publication(
             "state": "stale_snapshot",
             "artifact_order": ["raw_findings"],
             "artifacts": {"raw_findings": raw_findings},
-            "effect_artifacts": {},
         }
 
     diff_context = {**metadata, **identity, "context_entries": normalized_survivors}
@@ -778,11 +777,9 @@ def prepare_experimental_review_publication(
         "diff_context": diff_context,
     }
     artifact_order = ["raw_findings", "diff_context"]
-    effect_artifacts: dict[str, object] = {"diff_context": diff_context}
     if mode == "local":
         local_findings = {**metadata, **identity, "findings": normalized_survivors}
         artifacts["local_findings"] = local_findings
-        effect_artifacts["local_findings"] = local_findings
         artifact_order.append("local_findings")
     elif receipt is not None:
         normalized_receipt = json.loads(
@@ -790,13 +787,11 @@ def prepare_experimental_review_publication(
         )
         review_receipt = {**normalized_receipt, **identity}
         artifacts["review_receipt"] = review_receipt
-        effect_artifacts["review_receipt"] = review_receipt
         artifact_order.append("review_receipt")
     return {
         "state": "complete",
         "artifact_order": artifact_order,
         "artifacts": artifacts,
-        "effect_artifacts": effect_artifacts,
     }
 
 
@@ -848,8 +843,10 @@ def publish_experimental_review_artifacts(
 
     root.mkdir(parents=True, exist_ok=True)
     final_paths = {
-        name: root / _PUBLICATION_FILENAMES[name].format(pr_number=identifier) for name in order
+        name: root / filename.format(pr_number=identifier)
+        for name, filename in _PUBLICATION_FILENAMES.items()
     }
+    retired_names = [name for name in final_paths if name not in order]
     prior_bytes = {
         name: path.read_bytes() if path.exists() else None for name, path in final_paths.items()
     }
@@ -860,7 +857,7 @@ def publish_experimental_review_artifacts(
         for name in order
     }
     staged: dict[str, Path] = {}
-    published: list[str] = []
+    changed: list[str] = []
     try:
         for name in order:
             staged[name] = _write_temp_bytes(
@@ -868,15 +865,23 @@ def publish_experimental_review_artifacts(
                 final_paths[name].name,
                 documents[name],
             )
-        for name in order:
+        for name in order[:-1]:
             os.replace(staged[name], final_paths[name])
             staged.pop(name)
-            published.append(name)
+            changed.append(name)
+        for name in retired_names:
+            if final_paths[name].exists():
+                final_paths[name].unlink()
+                changed.append(name)
+        marker_name = order[-1]
+        os.replace(staged[marker_name], final_paths[marker_name])
+        staged.pop(marker_name)
+        changed.append(marker_name)
     except Exception as publication_error:
         rollback_error: Exception | None = None
         for temporary_path in staged.values():
             temporary_path.unlink(missing_ok=True)
-        for name in reversed(published):
+        for name in reversed(changed):
             try:
                 previous = prior_bytes[name]
                 if previous is None:

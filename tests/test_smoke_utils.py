@@ -1877,7 +1877,7 @@ def test_experimental_publication_preserves_provenance_and_suppresses_stale_effe
         "diff_context",
         "local_findings",
     ]
-    assert set(publication["effect_artifacts"]) == {"diff_context", "local_findings"}
+    assert "effect_artifacts" not in publication
     artifacts = publication["artifacts"]
     identity_keys = {
         "_head_sha",
@@ -1918,7 +1918,7 @@ def test_experimental_publication_preserves_provenance_and_suppresses_stale_effe
     assert stale["state"] == "stale_snapshot"
     assert stale["artifact_order"] == ["raw_findings"]
     assert set(stale["artifacts"]) == {"raw_findings"}
-    assert stale["effect_artifacts"] == {}
+    assert "effect_artifacts" not in stale
     assert stale["artifacts"]["raw_findings"]["survivors"] == []
     assert (
         stale["artifacts"]["raw_findings"]["review_generation_id"]
@@ -1960,6 +1960,76 @@ def _prepared_local_experimental_publication() -> dict[str, object]:
         mode="local",
         snapshot_is_fresh=True,
     )
+
+
+def test_experimental_publication_retires_obsolete_artifacts(tmp_path: Path) -> None:
+    output_dir = tmp_path / "review-output"
+    base_arguments = {
+        "raw_ledger": {"candidate_records": [{"candidate_id": "candidate-1"}]},
+        "survivors": [{"file": "src/app.py", "line": 42}],
+        "snapshot": {"head_sha": "head", "base_sha": "base"},
+        "annotation_generation_id": "annotation-generation",
+    }
+
+    local = prepare_experimental_review_publication(
+        **base_arguments,
+        mode="local",
+        snapshot_is_fresh=True,
+    )
+    publish_experimental_review_artifacts(
+        publication=local,
+        output_dir=str(output_dir),
+        pr_number="18",
+    )
+    assert {path.name for path in output_dir.iterdir()} == {
+        "raw_findings_18.json",
+        "diff_context_18.json",
+        "local_findings_18.json",
+    }
+
+    github_with_receipt = prepare_experimental_review_publication(
+        **base_arguments,
+        mode="github",
+        snapshot_is_fresh=True,
+        receipt={"posted": True, "http_status": 200},
+    )
+    publish_experimental_review_artifacts(
+        publication=github_with_receipt,
+        output_dir=str(output_dir),
+        pr_number="18",
+    )
+    assert {path.name for path in output_dir.iterdir()} == {
+        "raw_findings_18.json",
+        "diff_context_18.json",
+        "batch_review_response_18.json",
+    }
+
+    github_without_receipt = prepare_experimental_review_publication(
+        **base_arguments,
+        mode="github",
+        snapshot_is_fresh=True,
+    )
+    publish_experimental_review_artifacts(
+        publication=github_without_receipt,
+        output_dir=str(output_dir),
+        pr_number="18",
+    )
+    assert {path.name for path in output_dir.iterdir()} == {
+        "raw_findings_18.json",
+        "diff_context_18.json",
+    }
+
+    stale = prepare_experimental_review_publication(
+        **base_arguments,
+        mode="github",
+        snapshot_is_fresh=False,
+    )
+    publish_experimental_review_artifacts(
+        publication=stale,
+        output_dir=str(output_dir),
+        pr_number="18",
+    )
+    assert {path.name for path in output_dir.iterdir()} == {"raw_findings_18.json"}
 
 
 def _combined_review_survivors(gate_state: str) -> list[dict[str, object]]:

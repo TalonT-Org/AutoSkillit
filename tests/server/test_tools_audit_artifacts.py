@@ -12,7 +12,6 @@ import pytest
 from autoskillit.core import (
     ArtifactRef,
     AuditAssessment,
-    AuditAssessmentRow,
     AuditVerdict,
     compute_bytes_hash,
     load_audit_semantic_result,
@@ -47,12 +46,12 @@ def _semantic_args(tmp_path: Path) -> dict[str, Any]:
             ).to_dict()
         ],
         "assessments": [
-            AuditAssessmentRow.create(
-                requirement_id="REQ-001",
-                requirement_text="Preserve diagnostics",
-                assessment=AuditAssessment.COVERED,
-                evidence_summary="The plan preserves the error boundary.",
-            ).to_dict()
+            {
+                "requirement_id": "REQ-001",
+                "requirement_text": "Preserve diagnostics",
+                "assessment": AuditAssessment.COVERED.value,
+                "evidence_summary": "The plan preserves the error boundary.",
+            }
         ],
         "verdict": AuditVerdict.NO_GO.value,
         "remediation_ref": ArtifactRef(
@@ -121,7 +120,7 @@ def test_typed_handler_signatures_exclude_identity_path_and_cwd() -> None:
 
 
 @pytest.mark.anyio
-async def test_dormant_admission_handlers_fail_closed_without_raising() -> None:
+async def test_admission_handlers_fail_closed_for_invalid_requests_without_raising() -> None:
     semantic = json.loads(
         await write_audit_semantic_result(
             reservation_handle="",

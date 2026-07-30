@@ -61,6 +61,11 @@ from autoskillit.workspace import (
 
 logger = get_logger(__name__)
 
+_VERIFY_PLAN_ARTIFACTS_CALLABLE = "autoskillit.recipe._cmd_rpc.verify_plan_artifacts"
+_SERVER_INJECTED_RUN_PYTHON_PARAMS: dict[str, frozenset[str]] = {
+    _VERIFY_PLAN_ARTIFACTS_CALLABLE: frozenset({"_committed_disposition_resolver"}),
+}
+
 if TYPE_CHECKING:
     from autoskillit.core import SkillResult
     from autoskillit.pipeline import ToolContext
@@ -787,6 +792,8 @@ async def _import_and_call(
     dotted_path: str,
     args: dict[str, object] | None = None,
     timeout: float = 30,
+    *,
+    server_injected_args: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Import a Python callable by dotted path and invoke it.
 
@@ -799,6 +806,23 @@ async def _import_and_call(
     if args is None:
         args = {}
     args = dict(args)
+    reserved_params = _SERVER_INJECTED_RUN_PYTHON_PARAMS.get(dotted_path, frozenset())
+    caller_overrides = reserved_params & args.keys()
+    if caller_overrides:
+        names = ", ".join(sorted(caller_overrides))
+        return {
+            "success": False,
+            "error": f"Caller cannot provide server-injected argument(s): {names}",
+        }
+    injected = dict(server_injected_args or {})
+    unexpected_injections = injected.keys() - reserved_params
+    if unexpected_injections:
+        names = ", ".join(sorted(unexpected_injections))
+        return {
+            "success": False,
+            "error": f"Unexpected server-injected argument(s): {names}",
+        }
+    args.update(injected)
 
     if "." not in dotted_path:
         return {"success": False, "error": f"Invalid dotted path: {dotted_path!r}"}
@@ -909,6 +933,19 @@ async def _import_and_call(
         return {"success": True, "result": result}
     except (TypeError, ValueError):
         return {"success": True, "result": str(result)}
+
+
+def server_injected_run_python_args(
+    dotted_path: str,
+    tool_ctx: ToolContext,
+) -> dict[str, object]:
+    """Return narrow dependencies reserved for a registered callable."""
+
+    if dotted_path == _VERIFY_PLAN_ARTIFACTS_CALLABLE:
+        return {
+            "_committed_disposition_resolver": tool_ctx.committed_disposition_resolver,
+        }
+    return {}
 
 
 def propagate_session_deadline(

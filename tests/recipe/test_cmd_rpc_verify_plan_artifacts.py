@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 import autoskillit.recipe._cmd_rpc_guards as cmd_rpc_guards
+from autoskillit.core import AuditCycleVerifier
 from autoskillit.core.closure_hashing import (
     canonical_json_bytes,
     compute_bytes_hash,
@@ -26,6 +27,18 @@ from autoskillit.core.types import (
 from autoskillit.recipe._cmd_rpc import verify_plan_artifacts
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
+
+class _StaticDispositionResolver:
+    def __init__(self, *, authority_digest: str, plan_digest: str, path) -> None:
+        self._authority_digest = authority_digest
+        self._plan_digest = plan_digest
+        self._path = path
+
+    def resolve(self, *, authority_digest: str, plan_digest: str):
+        if authority_digest != self._authority_digest or plan_digest != self._plan_digest:
+            return None
+        return self._path
 
 
 def _write(tmp_path, name, content="plan content"):
@@ -197,9 +210,15 @@ def test_existing_empty_file_unsalvageable(tmp_path):
 
 def test_active_no_go_salvage_restores_exact_disposition(tmp_path):
     plan, authority, disposition = _write_audit_tuple(tmp_path)
+    loaded_authority = AuditCycleVerifier(authority.parent).load_authority(authority)
     result = verify_plan_artifacts(
         plan_parts=str(plan),
         audit_cycle_path=str(authority),
+        _committed_disposition_resolver=_StaticDispositionResolver(
+            authority_digest=loaded_authority.authority_digest,
+            plan_digest=compute_bytes_hash(plan.read_bytes()),
+            path=disposition,
+        ),
     )
     assert result == {
         "verdict": "salvaged",
@@ -207,6 +226,15 @@ def test_active_no_go_salvage_restores_exact_disposition(tmp_path):
         "plan_path": str(plan),
         "plan_disposition_path": str(disposition),
     }
+
+
+def test_prepared_disposition_without_committed_projection_is_unsalvageable(tmp_path):
+    plan, authority, _ = _write_audit_tuple(tmp_path)
+
+    assert verify_plan_artifacts(
+        plan_parts=str(plan),
+        audit_cycle_path=str(authority),
+    ) == {"verdict": "unsalvageable"}
 
 
 def test_active_no_go_salvage_rejects_missing_association(tmp_path):

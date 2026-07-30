@@ -213,6 +213,7 @@ def test_output_path_tokens_synchronized() -> None:
     expected_path_tokens = frozenset(
         {
             "audit_cycle_path",
+            "audit_semantic_result_path",
             "plan_path",
             "plan_disposition_path",
             "plan_parts",
@@ -314,7 +315,7 @@ PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
     "investigate": ["investigation_path"],
     "make-groups": ["groups_path", "manifest_path", "group_files"],
     "review-approach": ["review_path"],
-    "audit-impl": ["remediation_path"],
+    "audit-impl": ["audit_semantic_result_path"],
     "arch-lens-c4-container": ["diagram_path"],
     "arch-lens-process-flow": ["diagram_path"],
     "arch-lens-data-lineage": ["diagram_path"],

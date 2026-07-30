@@ -1,7 +1,8 @@
 ---
 name: audit-impl
 categories: [audit]
-uses_capabilities: [agent_model, agent_subagent, write_audit_cycle_artifact]
+uses_capabilities:
+  [agent_model, agent_subagent, write_audit_semantic_result, write_standalone_audit_evidence]
 description: Audit a completed implementation against its originating plan(s). Returns GO (merge approved) or NO GO (generates remediation file for retry). Final gate before merge in any implementation pipeline.
 hooks:
   PreToolUse:
@@ -63,7 +64,7 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 
 - Modify source files, plan files, or any other files — read-only audit only
 - Run tests — this skill audits, it does not fix
-- Create files outside the identity-scoped directory selected below
+- Create authority, inventory, lifecycle, execution-identity, or publication artifacts
 - Emit a GO verdict when any `MISSING` or `CONFLICT` finding exists
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
@@ -74,21 +75,20 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 - Spawn all subagents via `Agent(model="sonnet")`
 - Resolve all plan files before starting (abort early if any are missing)
 - Issue all Task calls in a single message to maximize parallelism
-- On every verdict, call `write_audit_cycle_artifact(kind="authority", path=..., fields={...},
-  cwd=...)` with the full field list (execution_generation, cycle_id, plan_set_id, scope_id,
-  part_id, audit_round, parent_authority_digest, audited_plan_refs, inventory_ref,
-  assessments, verdict, remediation_ref, generated_at) — the tool computes every digest and
-  writes byte-exact canonical JSON server-side. Emit the returned `path` as **absolute path**
-  as `audit_cycle_path`. On `NO GO`, also emit the remediation path:
+- On every verdict in an attested invocation, read the opaque `reservation_handle` and exact
+  ordered `audited_plan_refs` from `audit_semantic_submission` in
+  `AUTOSKILLIT_BOUND_INVOCATION_V1`. Call `write_audit_semantic_result(...)` with that handle,
+  those references, the ordered assessment rows, the semantic verdict, and the optional
+  remediation `ArtifactRef`. Never copy or infer execution, lifecycle, round, parent,
+  timestamp, authority, inventory, root, or output-path fields. Emit only the returned
+  semantic path and digest:
   ```
-  verdict = NO GO
-  verified_verdict = NO GO
-  remediation_path = /absolute/cycle/directory/remediation.md
-  audit_cycle_path = /absolute/cycle/directory/authority.json
+  audit_semantic_result_path = /absolute/server/derived/semantic-result.json
+  semantic_digest = sha256:...
   ```
-  On `GO`, omit `remediation_path` but still emit `audit_cycle_path`. The server verifies
-  and publishes the candidate authority to its current-head ledger; the child artifact
-  cannot appoint itself current.
+- On a standalone invocation with no `audit_semantic_submission`, call
+  `write_standalone_audit_evidence(...)` instead. Standalone evidence is never an authority,
+  has no `audit_cycle_path`, and cannot enter trusted preflight or disposition flows.
 
 ## Workflow
 
@@ -188,7 +188,7 @@ verified `ClosureReport` as evidence rather than duplicating it.
 - Step 3.5 (Deviation Evaluation): Unchanged if `deviation_manifest_path` provided.
 - Step 4 (Verdict Determination): Unchanged — determine GO/NO GO from findings.
 - Step 5 (Output — modified): Produce a canonical `ClosureReport` before the authority:
-  - Write it inside the current identity-scoped audit-cycle directory.
+  - Write it beneath `{{AUTOSKILLIT_TEMP}}/audit-impl/closure-evidence/`.
   - Report must contain all fields per the `ClosureReport` schema (`schema_version`,
     `request_hash`, `authority_hash`, `plan_hashes`, `base_sha`, `diff_sha`, `target_sha`,
     `requirement_ids`, `rows`, `verdict`, `report_hash`, `remediation_path`, `generated_at`)
@@ -207,13 +207,10 @@ verified `ClosureReport` as evidence rather than duplicating it.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-**Authority and round selection:** Never scan for a latest file and never activate a round
-from singleton existence. When `prior_audit_cycle_path` is absent, create a new cycle/scope
-at round 1 and extract the full inventory. When it is present, consume only the
-server-verified prior authority, require its trusted verdict to be `NO GO`, require an
-exact parent/scope/part/plan-lineage match, and set the candidate round to prior round + 1.
-Reuse the prior inventory only after verifying its `ArtifactRef`. A sibling/new plan must
-start a new scope instead of extending the prior inventory.
+**Authority ownership:** The child never selects a cycle, scope, part, round, parent,
+timestamp, inventory, output namespace, or execution identity. The server has already
+reserved those values before dispatch. Treat `prior_audit_cycle_path`, when present, only
+as plan/remediation context already admitted by the parent. Never scan for a latest file.
 
 **Union extraction (new scope only):** Launch ≥2 independent Explore subagents per plan file
 (not 1). Each extracts requirements independently. Take the union of all extracted
@@ -226,51 +223,21 @@ Each Explore subagent returns:
 - All tests the plan said it would add or modify
 - Key requirements and constraints listed in the plan
 
-**Inventory schema:**
+Keep the extracted requirements in memory and preserve their deterministic order. At
+submission time, map each requirement to exactly one assessment object containing only:
+
 ```json
 {
-  "schema_version": 1,
-  "generated_at": "ISO-8601",
-  "plan_set_id": "identity derived from the explicit ordered audited plan refs",
-  "requirement_ids": ["REQ-001"],
-  "requirements": [
-    {
-      "id": "REQ-001",
-      "text": "stderr: retry diagnostics and final gh error text go to stderr",
-      "source_file": "plan.md",
-      "source_line": 122,
-      "source_section": "Design Decisions"
-    }
-  ]
+  "requirement_id": "REQ-001",
+  "requirement_text": "The requirement text",
+  "assessment": "COVERED",
+  "evidence_summary": "Evidence grounded in the audited diff"
 }
 ```
 
-`requirement_ids` must be the ordered list of every `requirements[*].id`, in the same order.
-
-Write remediation (when any) and closure report (when any) as plain files, and the
-inventory and authority via `write_audit_cycle_artifact(...)`, under:
-
-```
-{{AUTOSKILLIT_TEMP}}/audit-impl/cycles/{execution_generation}/{plan_set_id}/{scope_id}/{part_id}/round-{N}/
-```
-
-In this order (the authority's `inventory_ref` must reference an already-written inventory
-file so the tool can hash it):
-
-1. Call `write_audit_cycle_artifact(kind="inventory", path=".../round-{N}/inventory.json",
-   fields={...}, cwd=...)` with `fields` containing `schema_version`, `generated_at`,
-   `plan_set_id`, `requirement_ids`, and `requirements` per the schema above.
-2. Call `write_audit_cycle_artifact(kind="authority", path=".../round-{N}/authority.json",
-   fields={...}, cwd=...)` with `fields` containing the explicit execution generation, cycle
-   ID, plan-set/scope/part IDs, round, parent authority digest, audited plan refs,
-   `inventory_ref` (referencing the inventory file just written in step 1), ordered
-   assessment rows, verdict, remediation ref, and generated timestamp. `NO GO` requires a
-   non-null `remediation_ref`; `GO` requires `remediation_ref=null`.
-
-The tool computes `findings_digest` and `authority_digest` internally from the
-`assessments`/`verdict` fields and rejects any semantically inconsistent payload before
-writing — never hand-assemble these digests. Never rewrite an authority after it has
-been written.
+The semantic writer derives row digests. Do not add identity or digest fields to assessment
+objects. The exact ordered `audited_plan_refs` supplied by the reservation must be returned
+unchanged; do not rebuild them from local paths.
 
 ### Step 2 — Load Implementation Diff
 
@@ -477,8 +444,9 @@ MERGE APPROVED
 
 Exit 0. The pipeline may proceed to merge.
 
-After printing the GO result, emit the following structured output token as the very
-last line of your text output:
+After printing the GO result, call `write_audit_semantic_result` with verdict `GO`,
+`remediation_ref=null`, the exact reserved references, and all ordered assessment rows.
+Emit only the server-returned semantic fields as the last lines:
 
 > **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
 > markdown formatting on the token names**. Do not wrap token names in `**bold**`,
@@ -487,9 +455,8 @@ last line of your text output:
 > code fences cause match failure.
 
 ```
-verdict = GO
-verified_verdict = GO
-audit_cycle_path = {absolute_path_to_authority_file}
+audit_semantic_result_path = {server_returned_absolute_path}
+semantic_digest = {server_returned_sha256_digest}
 ```
 
 ---
@@ -572,8 +539,10 @@ MERGE BLOCKED — feed remediation file to /autoskillit:make-plan for re-plannin
 
 Exit 1.
 
-After printing the NO GO result, emit the following structured output tokens as the very
-last lines of your text output:
+After printing the NO GO result, construct the remediation `ArtifactRef` from the exact
+remediation bytes, then call `write_audit_semantic_result` with verdict `NO GO`, that
+reference, the exact reserved references, and all ordered assessment rows. Emit only the
+server-returned semantic fields as the last lines:
 
 > **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
 > markdown formatting on the token names**. Do not wrap token names in `**bold**`,
@@ -582,27 +551,20 @@ last lines of your text output:
 > code fences cause match failure.
 
 ```
-verdict = NO GO
-verified_verdict = NO GO
-remediation_path = {absolute_path_to_remediation_file}
-audit_cycle_path = {absolute_path_to_authority_file}
+audit_semantic_result_path = {server_returned_absolute_path}
+semantic_digest = {server_returned_sha256_digest}
 ```
 
-The `verdict` token must be exactly `GO` or `NO GO` — this is the value the recipe's
-`on_result: field: verdict` routing matches against. `audit_cycle_path` is mandatory on
-both verdicts. `remediation_path` is mandatory only on `NO GO` and must be omitted on
-`GO`. Publication is complete only after the server verifies the immutable candidate
-and atomically advances the matching current-head entry.
+The child-authored prose verdict and any remediation path are not routing authority.
+Publication is complete only when the parent verifies the semantic artifact, materializes
+the authority, atomically advances the ledger head/preflight projection, and rewrites the
+`run_skill` response with server-authored audit fields.
 
 ## Output Location
 
-```
-{{AUTOSKILLIT_TEMP}}/audit-impl/cycles/{generation}/{plan_set}/{scope}/{part}/round-{N}/
-├── authority.json
-├── inventory.json
-├── remediation.md       (NO GO only)
-└── closure_report.json  (closure mode only)
-```
+Remediation and closure evidence, when present, are ordinary evidence files beneath
+`{{AUTOSKILLIT_TEMP}}/audit-impl/`. The server derives the semantic-result, inventory, and
+authority paths; the child must not choose or predict them.
 
 ## Related Skills
 

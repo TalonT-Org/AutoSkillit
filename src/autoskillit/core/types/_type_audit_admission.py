@@ -55,6 +55,7 @@ __all__ = [
     "ReservationDecision",
     "StandaloneAuditEvidence",
     "compute_audit_reference_identity",
+    "compute_audit_slot_id",
 ]
 
 AUDIT_SEMANTIC_SCHEMA_VERSION = 1
@@ -629,6 +630,32 @@ class AuditSlotKey:
             "AuditSlotKey.prior_authority_digest",
             self.prior_authority_digest,
         )
+
+
+_SLOT_ID_DOMAIN = "autoskillit:audit-admission:slot-id:v1:sha256"
+
+
+def compute_audit_slot_id(slot_key: AuditSlotKey) -> AuditSlotId:
+    """Derive the stable slot identifier from a slot key's canonical fields.
+
+    Two reservation requests that resolve to the same ``AuditSlotKey`` fields
+    must resolve to the same slot — this is what makes exact re-reservation of
+    an existing slot effect-free while a changed intent digest always produces
+    a distinct slot.
+    """
+
+    if not isinstance(slot_key, AuditSlotKey):
+        raise ValueError("slot_key must be an AuditSlotKey")
+    payload = {
+        "recipe_execution_id": slot_key.recipe_execution_id.value,
+        "installation_version": slot_key.installation_version.value,
+        "step_name": slot_key.step_name,
+        "invocation_template_digest": slot_key.invocation_template_digest,
+        "slot_intent_digest": slot_key.slot_intent_digest,
+        "ordered_reference_identity": slot_key.ordered_reference_identity,
+        "prior_authority_digest": slot_key.prior_authority_digest,
+    }
+    return AuditSlotId(compute_canonical_hash(payload, domain=_SLOT_ID_DOMAIN))
 
 
 @dataclass(frozen=True, slots=True)

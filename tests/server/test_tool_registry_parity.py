@@ -216,7 +216,6 @@ def test_every_tool_has_an_explicit_initialization_operation() -> None:
             "wait_for_ci",
             "wait_for_merge_queue",
             "write_audit_disposition_bundle",
-            "write_audit_cycle_artifact",
             "write_audit_semantic_result",
             "write_standalone_audit_evidence",
             "write_telemetry_files",

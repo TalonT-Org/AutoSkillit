@@ -1,6 +1,6 @@
 # MCP Tool Access Control
 
-AutoSkillit provides 65 MCP tools organized into three access levels that control which
+AutoSkillit provides 64 MCP tools organized into three access levels that control which
 session types can see each tool.
 
 ## Three Access Levels
@@ -61,7 +61,7 @@ Server startup sequence:
 
 ```
 1. mcp.disable(tags={"kitchen"})
-   → hides 46 kitchen-tagged tools (including the 7 headless-tagged tools)
+   → hides 45 kitchen-tagged tools (including the 6 headless-tagged tools)
 
 2. mcp.disable(tags={subset}) for each entry in config.subsets.disabled
    → e.g. hides all github-tagged tools if "github" is disabled
@@ -92,7 +92,7 @@ missing kitchen visibility.
 
 ## Complete MCP Tool Access Control Map
 
-All 65 tools with their access level, tags, source file, and functional category.
+All 64 tools with their access level, tags, source file, and functional category.
 
 **Tag abbreviations**: AS = `autoskillit`, K = `kitchen`, HL = `headless`,
 GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`, FL = `fleet`
@@ -119,7 +119,6 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`, FL = `fleet`
 | `test_check` | AS, K, HL | `server/tools_workspace.py` | Test runner |
 | `unlock_agent_pack` | AS, K, HL | `server/tools_agents.py` | Agent-pack access |
 | `commit_files` | AS, K, HL | `server/tools_git.py` | Server-side commit |
-| `write_audit_cycle_artifact` | AS, K, HL | `server/tools_audit_cycle.py` | Legacy audit artifact producer |
 | `write_audit_semantic_result` | AS, K, HL | `server/tools_audit_artifacts.py` | Typed audit semantics |
 | `write_standalone_audit_evidence` | AS, K, HL | `server/tools_audit_artifacts.py` | Standalone evidence |
 | `write_audit_disposition_bundle` | AS, K, HL | `server/tools_audit_artifacts.py` | Typed disposition bundle |

@@ -17,12 +17,16 @@ from typing import Any
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
+    AuditAdmissionLedger,
+    AuditAdmissionStoreAuthority,
     ContextAdmissionStoreAuthority,
     DirectInstall,
     FleetLock,
+    InstallationVersion,
     InstalledRecipeExecution,
     PluginArtifactAuthority,
     PluginRetirementCoordinator,
+    RecipeExecutionId,
     RecipeExecutionSnapshot,
     SkillExecutionRole,
     SubprocessRunner,
@@ -54,6 +58,7 @@ from autoskillit.execution import (
 from autoskillit.fleet import FleetSemaphore, build_protected_campaign_ids
 from autoskillit.migration import DefaultMigrationService, default_migration_engine
 from autoskillit.pipeline import (
+    DefaultAuditAdmissionLedger,
     DefaultAuditLog,
     DefaultBackgroundSupervisor,
     DefaultContextAdmissionLedger,
@@ -71,10 +76,11 @@ from autoskillit.recipe import (
     resolve_input_specs,
     resolve_skill_name,
 )
-from autoskillit.server._recipe_execution import (
-    DefaultAuditCycleHeadStore,
-    DefaultInputPreflightResolver,
+from autoskillit.server._audit_authority_materializer import (
+    DefaultAuditAuthorityMaterializer,
+    DefaultCommittedDispositionResolver,
 )
+from autoskillit.server._recipe_execution import DefaultInputPreflightResolver
 from autoskillit.workspace import (
     DefaultCloneManager,
     DefaultSessionSkillManager,
@@ -94,16 +100,20 @@ def make_recipe_execution(
     *,
     snapshot: RecipeExecutionSnapshot,
     allowed_root: Path,
+    installation_version: InstallationVersion,
+    audit_admission_ledger: AuditAdmissionLedger,
 ) -> InstalledRecipeExecution:
     """Build one execution generation from server-owned protocol implementations."""
-    head_store = DefaultAuditCycleHeadStore()
     return InstalledRecipeExecution(
         snapshot=snapshot,
+        installation_version=installation_version,
         runtime_binding_digests={},
-        audit_cycle_heads=head_store,
+        audit_admission_ledger=audit_admission_ledger,
         input_preflight_resolver=DefaultInputPreflightResolver(
             allowed_root=allowed_root,
-            head_store=head_store,
+            ledger=audit_admission_ledger,
+            recipe_execution_id=RecipeExecutionId(snapshot.execution_id),
+            installation_version=installation_version,
         ),
     )
 
@@ -336,6 +346,14 @@ def make_context(
             expected_owner_id=os.getuid(),
         )
     )
+    audit_admission_ledger = DefaultAuditAdmissionLedger(
+        AuditAdmissionStoreAuthority(
+            database_path=(temp_dir / "audit-admission" / "ledger.sqlite3").resolve(),
+            expected_owner_id=os.getuid(),
+        )
+    )
+    audit_authority_materializer = DefaultAuditAuthorityMaterializer(audit_admission_ledger)
+    committed_disposition_resolver = DefaultCommittedDispositionResolver(audit_admission_ledger)
     ctx = ToolContext(
         config=config,
         audit=audit,
@@ -362,6 +380,9 @@ def make_context(
         skill_resolver=provider.resolver,
         skill_session_contract_store=DefaultSkillSessionContractStore(),
         context_admission_ledger=context_admission_ledger,
+        audit_admission_ledger=audit_admission_ledger,
+        audit_authority_materializer=audit_authority_materializer,
+        committed_disposition_resolver=committed_disposition_resolver,
         ephemeral_root=ephemeral_root,
         quota_refresh_task=None,
         session_serve_overrides=None,

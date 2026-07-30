@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from autoskillit.core import RecipeExecutionId
 from autoskillit.recipe._binding import bind_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
 from autoskillit.server._recipe_execution import get_recipe_execution
@@ -107,11 +108,10 @@ async def test_recipe_open_atomically_installs_compiled_execution(
     assert installed.snapshot.templates["verify"].template_digest
     assert installed.runtime_binding_digests == {}
     assert (
-        installed.audit_cycle_heads.get(
-            execution_generation=installed.snapshot.execution_id,
-            plan_set_id="plans-1",
-            scope_id="scope-1",
-            part_id="part-a",
+        tool_ctx.audit_admission_ledger.preflight_projection(
+            recipe_execution_id=RecipeExecutionId(installed.snapshot.execution_id),
+            installation_version=installed.installation_version,
+            step_name="verify",
         )
         is None
     )

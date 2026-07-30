@@ -143,6 +143,7 @@ class TestModuleCascadeCore:
             "git_remote",
             "bash_write_targets",
             "_type_audit_admission",
+            "_type_audit_admission_ledger",
             "_type_audit_cycle",
             "_type_audit_protocols",
             "_type_recipe_binding",
@@ -160,9 +161,12 @@ class TestModuleCascadeCore:
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
 
     def test_audit_cycle_cascade(self) -> None:
-        expected = frozenset({"core", "recipe", "server"})
-        assert MODULE_CASCADE_CORE["_type_audit_cycle"] == expected
-        assert MODULE_CASCADE_CORE["audit_cycle_verifier"] == expected
+        assert MODULE_CASCADE_CORE["_type_audit_cycle"] == frozenset(
+            {"core", "pipeline", "recipe", "server"}
+        )
+        assert MODULE_CASCADE_CORE["audit_cycle_verifier"] == frozenset(
+            {"core", "recipe", "server"}
+        )
 
     def test_recipe_execution_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_recipe_execution"] == frozenset(

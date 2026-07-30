@@ -16,6 +16,7 @@ from autoskillit.pipeline.audit import (
     STDERR_MAX_LEN,
     DefaultAuditLog,
 )
+from autoskillit.pipeline.audit_admission_ledger import DefaultAuditAdmissionLedger
 from autoskillit.pipeline.background import (
     DefaultBackgroundSupervisor,
     create_background_task,
@@ -117,6 +118,7 @@ __all__ = [
     "write_status",
     # context
     "ToolContext",
+    "DefaultAuditAdmissionLedger",
     "DefaultContextAdmissionLedger",
     # kitchen transition
     "KITCHEN_EFFECT_RECIPE_SERVING",

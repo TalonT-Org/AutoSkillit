@@ -29,6 +29,7 @@ def _make_mock_ctx(recipes: MagicMock, temp_dir: Path) -> MagicMock:
     from threading import RLock
 
     from autoskillit.config import OutputBudgetConfig
+    from autoskillit.core import InstallationVersion
     from autoskillit.pipeline import NoActiveRecipe
     from autoskillit.server._factory import make_recipe_execution
 
@@ -43,6 +44,9 @@ def _make_mock_ctx(recipes: MagicMock, temp_dir: Path) -> MagicMock:
     mock_ctx.recipe_initialization_state = NoActiveRecipe()
     mock_ctx.recipe_execution_factory = make_recipe_execution
     _set_mock_kitchen_transition(mock_ctx)
+    mock_ctx.audit_admission_ledger.create_or_get_installation.return_value = InstallationVersion(
+        "test-installation"
+    )
     return mock_ctx
 
 

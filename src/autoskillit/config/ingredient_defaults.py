@@ -42,7 +42,6 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "validate_recipe",
             "get_recipe_section",
             "complete_recipe_initialization",
-            "write_audit_cycle_artifact",
             "write_audit_semantic_result",
             "write_standalone_audit_evidence",
             "write_audit_disposition_bundle",

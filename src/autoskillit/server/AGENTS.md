@@ -63,7 +63,7 @@ Controls whether the tool succeeds when called (independent of visibility):
 | Standard kitchen | `kitchen` | Yes | Yes (`_require_enabled`) | `run_cmd`, `run_skill`, `report_bug` |
 | Fleet tool | `fleet`, `kitchen-core` | Yes (via `ALL_VISIBILITY_TAGS` loop) | Yes (`_require_fleet` or `_require_enabled`) | `dispatch_food_truck`, `record_gate_dispatch` |
 | Fleet-dispatch tool | `fleet-dispatch` (± `kitchen-core`) | Yes (via `ALL_VISIBILITY_TAGS` loop) | Yes (`_require_enabled`) | `fetch_github_issue`, `list_recipes` |
-| Headless-exempt | `kitchen`, `headless` | Yes | No | `test_check`, `commit_files`, `unlock_agent_pack`, `write_audit_cycle_artifact` |
+| Headless-exempt | `kitchen`, `headless` | Yes | No | `test_check`, `commit_files`, `unlock_agent_pack`, typed audit artifact producers |
 | Free-range | _(none of the above)_ | No | No | `open_kitchen`, `close_kitchen` |
 
 ### Registry Constants

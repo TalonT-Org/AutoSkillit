@@ -10,14 +10,16 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Protocol, runtime_checkable
 
 from ..closure_hashing import HASH_RE, compute_canonical_hash
-from ._type_audit_cycle import AuditCycleAuthority, AuditCycleHead, InventoryAdmissionDecision
+from ._type_audit_admission import InstallationVersion
+from ._type_audit_admission_ledger import AuditAdmissionLedger
+from ._type_audit_cycle import InventoryAdmissionDecision
 from ._type_recipe_binding import (
     AbsentBoundValue,
     BoundScalar,
@@ -26,7 +28,6 @@ from ._type_recipe_binding import (
 )
 
 __all__ = [
-    "AuditCycleHeadStore",
     "InputPreflightResolver",
     "InstalledRecipeExecution",
     "InvocationTemplate",
@@ -270,33 +271,6 @@ class VerifiedInputPreflightResult:
 
 
 @runtime_checkable
-class AuditCycleHeadStore(Protocol):
-    """Server-owned compare-and-swap ledger for trusted audit-cycle heads."""
-
-    def get(
-        self,
-        *,
-        execution_generation: str,
-        plan_set_id: str,
-        scope_id: str,
-        part_id: str,
-    ) -> AuditCycleHead | None: ...
-
-    def publish(
-        self,
-        authority: AuditCycleAuthority,
-        *,
-        expected_parent_digest: str | None,
-        expected_round: int,
-        authorized_successor_part_id: str | None = None,
-    ) -> AuditCycleHead: ...
-
-    def clear_generation(self, execution_generation: str) -> None: ...
-
-    def clear_all(self) -> None: ...
-
-
-@runtime_checkable
 class InputPreflightResolver(Protocol):
     def resolve(
         self,
@@ -311,27 +285,18 @@ class InstalledRecipeExecution:
     """One atomically replaceable active execution generation."""
 
     snapshot: RecipeExecutionSnapshot
+    installation_version: InstallationVersion
     runtime_binding_digests: Mapping[str, str]
-    audit_cycle_heads: AuditCycleHeadStore
+    audit_admission_ledger: AuditAdmissionLedger
     input_preflight_resolver: InputPreflightResolver
-    preflight_identities: Mapping[str, tuple[str, str, str]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.installation_version, InstallationVersion):
+            raise ValueError("installation_version must be an InstallationVersion")
         object.__setattr__(
             self,
             "runtime_binding_digests",
             MappingProxyType(dict(self.runtime_binding_digests)),
-        )
-        identities = dict(self.preflight_identities)
-        if any(
-            len(identity) != 3 or not all(isinstance(value, str) and value for value in identity)
-            for identity in identities.values()
-        ):
-            raise ValueError("preflight identities must contain three non-empty strings")
-        object.__setattr__(
-            self,
-            "preflight_identities",
-            MappingProxyType(identities),
         )
 
 
@@ -344,6 +309,8 @@ class RecipeExecutionFactory(Protocol):
         *,
         snapshot: RecipeExecutionSnapshot,
         allowed_root: Path,
+        installation_version: InstallationVersion,
+        audit_admission_ledger: AuditAdmissionLedger,
     ) -> InstalledRecipeExecution: ...
 
 

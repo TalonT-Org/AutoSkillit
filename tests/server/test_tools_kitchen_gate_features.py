@@ -278,8 +278,12 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
 
     # Build context with project_dir = different_dir, recipes = RealRecipeRepository
     from autoskillit.config.settings import AutomationConfig
-    from autoskillit.core import ContextAdmissionStoreAuthority
+    from autoskillit.core import (
+        AuditAdmissionStoreAuthority,
+        ContextAdmissionStoreAuthority,
+    )
     from autoskillit.pipeline.audit import DefaultAuditLog
+    from autoskillit.pipeline.audit_admission_ledger import DefaultAuditAdmissionLedger
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.pipeline.context_admission_ledger import (
         DefaultContextAdmissionLedger,
@@ -288,9 +292,22 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
     from autoskillit.pipeline.timings import DefaultTimingLog
     from autoskillit.pipeline.tokens import DefaultTokenLog
     from autoskillit.recipe.repository import DefaultRecipeRepository
+    from autoskillit.server._audit_authority_materializer import (
+        DefaultAuditAuthorityMaterializer,
+        DefaultCommittedDispositionResolver,
+    )
     from tests.fakes import FakePluginArtifactAuthority, FakeSkillSessionContractStore
 
     real_repo = DefaultRecipeRepository()
+    audit_admission_ledger = DefaultAuditAdmissionLedger(
+        AuditAdmissionStoreAuthority(
+            database_path=(
+                tmp_path / ".autoskillit" / "temp" / "audit-admission" / "ledger.sqlite3"
+            ).resolve(),
+            expected_owner_id=os.getuid(),
+        )
+    )
+    audit_admission_ledger.recover_all()
 
     ctx = ToolContext(
         config=AutomationConfig(features={"fleet": True}),
@@ -312,6 +329,9 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
                 expected_owner_id=os.getuid(),
             )
         ),
+        audit_admission_ledger=audit_admission_ledger,
+        audit_authority_materializer=DefaultAuditAuthorityMaterializer(audit_admission_ledger),
+        committed_disposition_resolver=DefaultCommittedDispositionResolver(audit_admission_ledger),
     )
 
     mock_ctx = _make_mock_ctx()

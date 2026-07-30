@@ -466,6 +466,17 @@ from .types import AgentSessionResult as AgentSessionResult
 from .types import AggregateRevision as AggregateRevision
 from .types import ApiRetryOutcome as ApiRetryOutcome
 from .types import ArtifactRef as ArtifactRef
+from .types import AuditAdmissionLedger as AuditAdmissionLedger
+from .types import AuditAdmissionRecoveryResult as AuditAdmissionRecoveryResult
+from .types import AuditAdmissionStorageError as AuditAdmissionStorageError
+from .types import (
+    AuditAdmissionStorageFailureReason as AuditAdmissionStorageFailureReason,
+)
+from .types import (
+    AuditAdmissionStorageHealthStatus as AuditAdmissionStorageHealthStatus,
+)
+from .types import AuditAdmissionStoreAuthority as AuditAdmissionStoreAuthority
+from .types import AuditAdmissionStoreHealth as AuditAdmissionStoreHealth
 from .types import AuditArtifactFieldOwnership as AuditArtifactFieldOwnership
 from .types import AuditArtifactFieldOwnershipDef as AuditArtifactFieldOwnershipDef
 from .types import AuditAssessment as AuditAssessment
@@ -476,18 +487,30 @@ from .types import AuditAttemptRecord as AuditAttemptRecord
 from .types import AuditAuthorityMaterializer as AuditAuthorityMaterializer
 from .types import AuditCycleAuthority as AuditCycleAuthority
 from .types import AuditCycleHead as AuditCycleHead
-from .types import AuditCycleHeadStore as AuditCycleHeadStore
+from .types import (
+    AuditDispositionCommitOutcome as AuditDispositionCommitOutcome,
+)
+from .types import (
+    AuditDispositionCommitRequest as AuditDispositionCommitRequest,
+)
+from .types import AuditFinalCommitOutcome as AuditFinalCommitOutcome
+from .types import AuditFinalCommitRequest as AuditFinalCommitRequest
 from .types import AuditIdentityReservation as AuditIdentityReservation
 from .types import AuditLog as AuditLog
 from .types import AuditMaterializationResult as AuditMaterializationResult
 from .types import AuditMaterializationStatus as AuditMaterializationStatus
 from .types import AuditOutcome as AuditOutcome
 from .types import AuditOutcomeStatus as AuditOutcomeStatus
+from .types import AuditPreflightProjection as AuditPreflightProjection
 from .types import AuditPreparedEffect as AuditPreparedEffect
 from .types import (
     AuditPreparedEffectDeliveryStatus as AuditPreparedEffectDeliveryStatus,
 )
+from .types import AuditPrepareOutcome as AuditPrepareOutcome
+from .types import AuditPrepareRequest as AuditPrepareRequest
 from .types import AuditReferenceIdentityProfileDef as AuditReferenceIdentityProfileDef
+from .types import AuditReservationOutcome as AuditReservationOutcome
+from .types import AuditReservationRequest as AuditReservationRequest
 from .types import AuditResultOutcome as AuditResultOutcome
 from .types import AuditRound as AuditRound
 from .types import AuditSemanticResult as AuditSemanticResult
@@ -846,6 +869,7 @@ from .types import (
 from .types import canonical_recipe_section_json as canonical_recipe_section_json
 from .types import closure_authority_spec_from_args as closure_authority_spec_from_args
 from .types import compute_audit_reference_identity as compute_audit_reference_identity
+from .types import compute_audit_slot_id as compute_audit_slot_id
 from .types import (
     compute_audit_slot_intent_digest as compute_audit_slot_intent_digest,
 )

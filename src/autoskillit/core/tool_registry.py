@@ -91,7 +91,6 @@ _MUTATION_TOOLS = frozenset(
         "wait_for_ci",
         "wait_for_merge_queue",
         "write_audit_disposition_bundle",
-        "write_audit_cycle_artifact",
         "write_audit_semantic_result",
         "write_standalone_audit_evidence",
         "write_telemetry_files",
@@ -148,6 +147,7 @@ def _run_skill() -> ToolDef:
         "order_id",
         "output_dir",
         "resume_session_id",
+        "retry_after_audit_attempt_id",
         "closure_authority_path",
         "closure_authority_hash",
         "closure_plan_paths",
@@ -396,12 +396,6 @@ _TOOL_DEFS = (
         "commit_files",
         ("paths", "message", "cwd", "step_name"),
         required=("paths", "message", "cwd"),
-    ),
-    _tool(
-        "write_audit_cycle_artifact",
-        ("kind", "path", "fields", "cwd", "step_name"),
-        required=("kind", "path", "fields", "cwd"),
-        wire_types={"fields": ToolWireType.OBJECT},
     ),
     _tool(
         "write_audit_semantic_result",

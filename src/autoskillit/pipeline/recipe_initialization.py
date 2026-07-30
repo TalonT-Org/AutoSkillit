@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, replace
 from typing import TypeAlias
 
 from autoskillit.core import (
+    InstallationVersion,
     InstalledRecipeExecution,
     RecipeArtifactGeneration,
     RecipeExecutionSnapshot,
@@ -80,6 +81,7 @@ class InitializingRecipe:
     flow_generation: RecipeFlowGeneration
     initialization_id: str
     staged_snapshot: RecipeExecutionSnapshot
+    installation_version: InstallationVersion
     requirements: tuple[RecipeInitializationRequirement, ...]
     progress: tuple[RecipeInitializationProgress, ...]
     generation_store_key: str
@@ -96,6 +98,8 @@ class InitializingRecipe:
             )
         ):
             raise ValueError("recipe initialization identity is incomplete")
+        if not isinstance(self.installation_version, InstallationVersion):
+            raise ValueError("recipe initialization installation version is invalid")
         requirements = tuple(self.requirements)
         progress = tuple(self.progress)
         if len(requirements) != len(progress):
@@ -168,6 +172,7 @@ def start_recipe_initialization(
     flow_generation: RecipeFlowGeneration,
     initialization_id: str,
     staged_snapshot: RecipeExecutionSnapshot,
+    installation_version: InstallationVersion,
     requirements: tuple[RecipeInitializationRequirement, ...],
     generation_store_key: str,
 ) -> InitializingRecipe:
@@ -188,6 +193,7 @@ def start_recipe_initialization(
         flow_generation=flow_generation,
         initialization_id=initialization_id,
         staged_snapshot=staged_snapshot,
+        installation_version=installation_version,
         requirements=requirements,
         progress=progress,
         generation_store_key=generation_store_key,
@@ -244,6 +250,8 @@ def transition_recipe_ready(
         raise ValueError("recipe initialization reconstruction is incomplete")
     if installed_execution.snapshot != state.staged_snapshot:
         raise ValueError("installed recipe snapshot differs from staged generation")
+    if installed_execution.installation_version != state.installation_version:
+        raise ValueError("installed recipe occurrence differs from staged generation")
     if not completion_receipt:
         raise ValueError("recipe initialization completion receipt is required")
     return ReadyRecipe(
@@ -268,4 +276,6 @@ def replace_ready_execution(
         raise ValueError("recipe execution is not READY")
     if installed_execution.snapshot != state.installed_execution.snapshot:
         raise ValueError("replacement recipe execution crosses generations")
+    if installed_execution.installation_version != state.installed_execution.installation_version:
+        raise ValueError("replacement recipe execution crosses installation occurrences")
     return replace(state, installed_execution=installed_execution)

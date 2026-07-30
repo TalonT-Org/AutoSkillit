@@ -24,7 +24,7 @@ class TestRunSkillDeniesLockedStep:
     @pytest.mark.anyio
     async def test_run_skill_denies_locked_step(self, tool_ctx_kitchen_open, tmp_path):
         temp_dir = tmp_path / ".autoskillit" / "temp"
-        temp_dir.mkdir(parents=True)
+        temp_dir.mkdir(parents=True, exist_ok=True)
         (temp_dir / ".hook_config.json").write_text("{}")
 
         overlay = temp_dir / ".hook_config_overlay.json"
@@ -61,7 +61,7 @@ class TestRunSkillAllowsUnlockedStep:
     @pytest.mark.anyio
     async def test_run_skill_allows_unlocked_step(self, tool_ctx_kitchen_open, tmp_path):
         temp_dir = tmp_path / ".autoskillit" / "temp"
-        temp_dir.mkdir(parents=True)
+        temp_dir.mkdir(parents=True, exist_ok=True)
         (temp_dir / ".hook_config.json").write_text("{}")
 
         overlay = temp_dir / ".hook_config_overlay.json"
@@ -91,7 +91,7 @@ class TestRunSkillLockCheckUsesOrderId:
         self, tool_ctx_kitchen_open, tmp_path
     ):
         temp_dir = tmp_path / ".autoskillit" / "temp"
-        temp_dir.mkdir(parents=True)
+        temp_dir.mkdir(parents=True, exist_ok=True)
         (temp_dir / ".hook_config.json").write_text("{}")
 
         overlay = temp_dir / ".hook_config_overlay.json"
@@ -125,7 +125,7 @@ class TestRunSkillLockCheckUsesOrderId:
         self, tool_ctx_kitchen_open, tmp_path
     ):
         temp_dir = tmp_path / ".autoskillit" / "temp"
-        temp_dir.mkdir(parents=True)
+        temp_dir.mkdir(parents=True, exist_ok=True)
         (temp_dir / ".hook_config.json").write_text("{}")
 
         overlay = temp_dir / ".hook_config_overlay.json"
@@ -155,7 +155,7 @@ class TestRunSkillLockCheckUsesOrderId:
     @pytest.mark.anyio
     async def test_run_skill_lock_check_unscoped_denied(self, tool_ctx_kitchen_open, tmp_path):
         temp_dir = tmp_path / ".autoskillit" / "temp"
-        temp_dir.mkdir(parents=True)
+        temp_dir.mkdir(parents=True, exist_ok=True)
         (temp_dir / ".hook_config.json").write_text("{}")
 
         overlay = temp_dir / ".hook_config_overlay.json"
@@ -188,7 +188,7 @@ class TestPerPipelineLockIsolation:
     @pytest.mark.anyio
     async def test_per_pipeline_lock_isolation_allowed(self, tool_ctx_kitchen_open, tmp_path):
         temp_dir = tmp_path / ".autoskillit" / "temp"
-        temp_dir.mkdir(parents=True)
+        temp_dir.mkdir(parents=True, exist_ok=True)
         (temp_dir / ".hook_config.json").write_text("{}")
 
         overlay = temp_dir / ".hook_config_overlay.json"
@@ -216,7 +216,7 @@ class TestPerPipelineLockIsolation:
     @pytest.mark.anyio
     async def test_per_pipeline_lock_isolation_denied(self, tool_ctx_kitchen_open, tmp_path):
         temp_dir = tmp_path / ".autoskillit" / "temp"
-        temp_dir.mkdir(parents=True)
+        temp_dir.mkdir(parents=True, exist_ok=True)
         (temp_dir / ".hook_config.json").write_text("{}")
 
         overlay = temp_dir / ".hook_config_overlay.json"
@@ -249,7 +249,7 @@ class TestRunSkillAllowsResumeOfLockedStep:
     @pytest.mark.anyio
     async def test_run_skill_allows_resume_of_locked_step(self, tool_ctx_kitchen_open, tmp_path):
         temp_dir = tmp_path / ".autoskillit" / "temp"
-        temp_dir.mkdir(parents=True)
+        temp_dir.mkdir(parents=True, exist_ok=True)
         (temp_dir / ".hook_config.json").write_text("{}")
 
         overlay = temp_dir / ".hook_config_overlay.json"
@@ -287,7 +287,7 @@ class TestRunSkillResolvesStepNameFromRecipe:
         self, tool_ctx_kitchen_open, tmp_path
     ):
         temp_dir = tmp_path / ".autoskillit" / "temp"
-        temp_dir.mkdir(parents=True)
+        temp_dir.mkdir(parents=True, exist_ok=True)
         (temp_dir / ".hook_config.json").write_text("{}")
 
         overlay = temp_dir / ".hook_config_overlay.json"
@@ -323,7 +323,7 @@ class TestRunSkillResolvesStepNameFromRecipe:
         self, tool_ctx_kitchen_open, tmp_path
     ):
         temp_dir = tmp_path / ".autoskillit" / "temp"
-        temp_dir.mkdir(parents=True)
+        temp_dir.mkdir(parents=True, exist_ok=True)
         (temp_dir / ".hook_config.json").write_text("{}")
 
         overlay = temp_dir / ".hook_config_overlay.json"
@@ -362,7 +362,7 @@ class TestRunSkillResolvesStepNameFromRecipe:
         self, tool_ctx_kitchen_open, tmp_path
     ):
         temp_dir = tmp_path / ".autoskillit" / "temp"
-        temp_dir.mkdir(parents=True)
+        temp_dir.mkdir(parents=True, exist_ok=True)
         (temp_dir / ".hook_config.json").write_text("{}")
 
         overlay = temp_dir / ".hook_config_overlay.json"
@@ -398,7 +398,7 @@ class TestRunSkillResolvesStepNameFromRecipe:
         self, tool_ctx_kitchen_open, tmp_path
     ):
         temp_dir = tmp_path / ".autoskillit" / "temp"
-        temp_dir.mkdir(parents=True)
+        temp_dir.mkdir(parents=True, exist_ok=True)
         (temp_dir / ".hook_config.json").write_text("{}")
 
         tool_ctx_kitchen_open.project_dir = tmp_path
@@ -419,7 +419,7 @@ class TestRunSkillResolvesStepNameFromRecipe:
         self, tool_ctx_kitchen_open, tmp_path
     ):
         temp_dir = tmp_path / ".autoskillit" / "temp"
-        temp_dir.mkdir(parents=True)
+        temp_dir.mkdir(parents=True, exist_ok=True)
         (temp_dir / ".hook_config.json").write_text("{}")
 
         overlay = temp_dir / ".hook_config_overlay.json"

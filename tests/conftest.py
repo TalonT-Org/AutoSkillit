@@ -3,7 +3,7 @@
 import functools
 import os
 from pathlib import Path as _Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -366,8 +366,14 @@ def minimal_ctx(tmp_path):
     use tool_ctx instead.
     """
     from autoskillit.config import AutomationConfig
-    from autoskillit.core import ContextAdmissionStoreAuthority
+    from autoskillit.core import (
+        AuditAdmissionStoreAuthority,
+        AuditAuthorityMaterializer,
+        CommittedDispositionResolver,
+        ContextAdmissionStoreAuthority,
+    )
     from autoskillit.pipeline.audit import DefaultAuditLog
+    from autoskillit.pipeline.audit_admission_ledger import DefaultAuditAdmissionLedger
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.pipeline.context_admission_ledger import (
         DefaultContextAdmissionLedger,
@@ -378,6 +384,15 @@ def minimal_ctx(tmp_path):
     from tests.fakes import FakePluginArtifactAuthority, FakeSkillSessionContractStore
 
     plugin_authority = FakePluginArtifactAuthority(tmp_path)
+    audit_admission_ledger = DefaultAuditAdmissionLedger(
+        AuditAdmissionStoreAuthority(
+            database_path=(
+                tmp_path / ".autoskillit" / "temp" / "audit-admission" / "ledger.sqlite3"
+            ).resolve(),
+            expected_owner_id=os.getuid(),
+        )
+    )
+    audit_admission_ledger.recover_all()
     ctx = ToolContext(
         config=AutomationConfig(features={"fleet": True}),
         audit=DefaultAuditLog(),
@@ -397,6 +412,9 @@ def minimal_ctx(tmp_path):
                 expected_owner_id=os.getuid(),
             )
         ),
+        audit_admission_ledger=audit_admission_ledger,
+        audit_authority_materializer=cast(AuditAuthorityMaterializer, object()),
+        committed_disposition_resolver=cast(CommittedDispositionResolver, object()),
     )
     try:
         yield ctx
@@ -432,6 +450,7 @@ def tool_ctx(monkeypatch, tmp_path):
         plugin_authority=plugin_authority,
         project_dir=tmp_path,
     )
+    ctx.audit_admission_ledger.recover_all()
     ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
     ctx.config.linux_tracing.tmpfs_path = str(tmp_path / "shm")
     ctx.temp_dir = tmp_path / ".autoskillit" / "temp"

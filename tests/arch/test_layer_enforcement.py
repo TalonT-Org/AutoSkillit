@@ -1630,10 +1630,6 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     # core tests — protocol conformance checks require concrete implementations
     "tests/core/test_core_terminal_table.py": frozenset({"autoskillit.cli"}),
     "tests/core/test_types.py": frozenset({"autoskillit.execution"}),
-    # audit-cycle attack test's legitimate-bytes fixture is produced by the sanctioned
-    # server-side producer (write_audit_cycle_artifact_sync) rather than hand-assembled
-    # via the dataclass property — this is the exact gap #4406 Part A closes
-    "tests/core/test_audit_cycle_attacks.py": frozenset({"autoskillit.server"}),
     # execution tests — clone_guard/headless/commands use sibling layers
     "tests/execution/test_clone_guard.py": frozenset({"autoskillit.pipeline"}),
     "tests/execution/test_commands.py": frozenset({"autoskillit.cli"}),
@@ -1848,7 +1844,6 @@ def test_tools_with_path_params_validate_existence():
                     "ci_watcher",
                     "_close_issues_sequentially",
                     "tool_ctx.executor",
-                    "write_audit_cycle_artifact_sync",
                 )
             )
             if not has_guard:

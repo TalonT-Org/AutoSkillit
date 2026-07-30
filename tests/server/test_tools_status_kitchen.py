@@ -152,7 +152,7 @@ class TestKitchenStatus:
     async def test_kitchen_status_has_no_split_brain_warning(self, tool_ctx, tmp_path):
         """A file at the old gate path must not trigger any warning in kitchen_status."""
         gate_dir = tmp_path / ".autoskillit" / "temp"
-        gate_dir.mkdir(parents=True)
+        gate_dir.mkdir(parents=True, exist_ok=True)
         (gate_dir / ".kitchen_gate").write_text("{}")
         result_str = json.dumps(json.loads(await kitchen_status()))
         assert "stale" not in result_str.lower()

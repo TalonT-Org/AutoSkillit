@@ -16,6 +16,7 @@ class TestCoreSubpackages:
     def test_core_types_has_all_type_modules(self):
         expected = {
             "_type_audit_admission",
+            "_type_audit_admission_ledger",
             "_type_audit_cycle",
             "_type_audit_protocols",
             "_type_backend",

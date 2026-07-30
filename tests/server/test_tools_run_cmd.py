@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 from unittest.mock import MagicMock, patch
 
@@ -119,6 +120,68 @@ class TestRunPython:
         )
         assert result["success"] is True
         assert result["result"] == '{"key": "value"}'
+
+    @pytest.mark.anyio
+    async def test_registered_callable_receives_server_disposition_resolver(
+        self,
+        tool_ctx_kitchen_open,
+        monkeypatch,
+    ):
+        _cmd_rpc = importlib.import_module("autoskillit.recipe._cmd_rpc")
+
+        captured = {}
+
+        def fake_verify_plan_artifacts(
+            plan_parts,
+            audit_cycle_path="",
+            _committed_disposition_resolver=None,
+        ):
+            captured["resolver"] = _committed_disposition_resolver
+            return {"verdict": "unsalvageable"}
+
+        monkeypatch.setattr(_cmd_rpc, "verify_plan_artifacts", fake_verify_plan_artifacts)
+        result = json.loads(
+            await run_python(
+                callable="autoskillit.recipe._cmd_rpc.verify_plan_artifacts",
+                args={"plan_parts": "/tmp/plan.md"},
+            )
+        )
+
+        assert result["success"] is True
+        assert captured["resolver"] is tool_ctx_kitchen_open.committed_disposition_resolver
+
+    @pytest.mark.anyio
+    async def test_registered_callable_rejects_caller_resolver_override(
+        self,
+        monkeypatch,
+    ):
+        _cmd_rpc = importlib.import_module("autoskillit.recipe._cmd_rpc")
+
+        called = False
+
+        def fake_verify_plan_artifacts(
+            plan_parts,
+            audit_cycle_path="",
+            _committed_disposition_resolver=None,
+        ):
+            nonlocal called
+            called = True
+            return {"verdict": "unsalvageable"}
+
+        monkeypatch.setattr(_cmd_rpc, "verify_plan_artifacts", fake_verify_plan_artifacts)
+        result = json.loads(
+            await run_python(
+                callable="autoskillit.recipe._cmd_rpc.verify_plan_artifacts",
+                args={
+                    "plan_parts": "/tmp/plan.md",
+                    "_committed_disposition_resolver": "caller-controlled",
+                },
+            )
+        )
+
+        assert result["success"] is False
+        assert "cannot provide server-injected argument" in result["error"]
+        assert called is False
 
     @pytest.mark.anyio
     async def test_import_error(self):

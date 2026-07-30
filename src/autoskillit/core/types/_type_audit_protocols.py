@@ -20,6 +20,7 @@ class AuditAuthorityMaterializer(Protocol):
         *,
         reservation: AuditIdentityReservation,
         semantic_result_path: Path,
+        preflight_step_names: tuple[str, ...],
     ) -> AuditMaterializationResult: ...
 
 

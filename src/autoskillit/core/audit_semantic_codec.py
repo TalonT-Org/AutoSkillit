@@ -64,6 +64,7 @@ AuditSemanticCodecReason = Literal[
     "invalid_canonical_json",
     "invalid_semantic_schema",
     "forbidden_identity_field",
+    "prepared_effect_mismatch",
 ]
 
 

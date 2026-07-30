@@ -1,10 +1,4 @@
-"""Typed, server-owned audit artifact producers.
-
-The semantic and disposition handlers are registered before the atomic
-admission-ledger cutover, but fail closed until that parent-owned dependency is
-installed. Standalone evidence is independent of admission state and is fully
-writable through this module.
-"""
+"""Typed, server-owned audit semantic, standalone, and disposition producers."""
 
 from __future__ import annotations
 
@@ -22,15 +16,22 @@ from autoskillit.core import (
     STANDALONE_AUDIT_EVIDENCE_KIND,
     STANDALONE_AUDIT_EVIDENCE_SCHEMA_VERSION,
     ArtifactRef,
+    AuditAssessment,
     AuditAssessmentRow,
+    AuditCycleVerifier,
+    AuditDispositionCommitRequest,
     AuditOutcomeStatus,
     AuditSemanticResult,
     AuditVerdict,
     PlanDispositionReport,
+    PlanDispositionRow,
+    RecipeExecutionId,
     StandaloneAuditEvidence,
     canonical_json_bytes,
     compute_bytes_hash,
+    compute_canonical_hash,
     get_logger,
+    read_stable_contained_bytes,
     write_canonical_versioned_json,
 )
 from autoskillit.server import mcp
@@ -56,9 +57,24 @@ def _artifact_ref(value: object, *, field_name: str) -> ArtifactRef:
 def _assessment(value: object, *, index: int) -> AuditAssessmentRow:
     if not isinstance(value, dict):
         raise _SemanticInputError(f"assessments[{index}] must be an object")
+    if set(value) != {
+        "requirement_id",
+        "requirement_text",
+        "assessment",
+        "evidence_summary",
+    }:
+        raise _SemanticInputError(
+            f"assessments[{index}] must contain only requirement_id, requirement_text, "
+            "assessment, and evidence_summary"
+        )
     try:
-        return AuditAssessmentRow.from_dict(value)
-    except (TypeError, ValueError) as exc:
+        return AuditAssessmentRow.create(
+            requirement_id=value["requirement_id"],
+            requirement_text=value["requirement_text"],
+            assessment=AuditAssessment(value["assessment"]),
+            evidence_summary=value["evidence_summary"],
+        )
+    except (KeyError, TypeError, ValueError) as exc:
         raise _SemanticInputError(f"assessments[{index}] is invalid: {exc}") from exc
 
 
@@ -101,6 +117,28 @@ def _write_semantic_result(path: Path, result: AuditSemanticResult) -> None:
         AUDIT_SEMANTIC_SCHEMA_VERSION,
         exclusive=True,
     )
+
+
+def _write_or_verify_semantic_result(
+    path: Path,
+    allowed_root: Path,
+    result: AuditSemanticResult,
+) -> tuple[Path, str]:
+    canonical = canonical_json_bytes(result.to_dict())
+    digest = compute_bytes_hash(canonical)
+    try:
+        _write_semantic_result(path, result)
+    except FileExistsError:
+        resolved, existing = read_stable_contained_bytes(
+            path,
+            allowed_root,
+            max_size_bytes=max(1, len(canonical)),
+        )
+        if resolved != path or existing != canonical:
+            raise _SemanticInputError(
+                "reserved semantic result path contains different bytes"
+            ) from None
+    return path, digest
 
 
 def _write_standalone_evidence(path: Path, evidence: StandaloneAuditEvidence) -> None:
@@ -192,16 +230,6 @@ def write_standalone_audit_evidence_sync(
         return {"success": False, "error": f"{type(exc).__name__}: {exc}"}
 
 
-def _dormant_admission_failure(operation: str) -> dict[str, Any]:
-    return {
-        "success": False,
-        "error": (
-            f"{operation} is unavailable until the parent-owned audit admission "
-            "ledger is installed"
-        ),
-    }
-
-
 def _validate_disposition_inputs(
     *,
     authority_path: str,
@@ -221,6 +249,200 @@ def _validate_disposition_inputs(
     for row in dispositions:
         if not isinstance(row, dict):
             raise _SemanticInputError("dispositions must be a non-empty object array")
+
+
+def _disposition_rows(values: list[dict[str, Any]]) -> tuple[PlanDispositionRow, ...]:
+    rows: list[PlanDispositionRow] = []
+    for index, value in enumerate(values):
+        if set(value) != {"requirement_id", "disposition", "implementation_step"}:
+            raise _SemanticInputError(
+                f"dispositions[{index}] must contain only requirement_id, "
+                "disposition, and implementation_step"
+            )
+        try:
+            rows.append(
+                PlanDispositionRow.create(
+                    requirement_id=value["requirement_id"],
+                    disposition=value["disposition"],
+                    implementation_step=value["implementation_step"],
+                )
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise _SemanticInputError(f"dispositions[{index}] is invalid: {exc}") from exc
+    return tuple(rows)
+
+
+def _write_or_verify_disposition_report(
+    path: Path,
+    allowed_root: Path,
+    report: PlanDispositionReport,
+) -> bytes:
+    canonical = canonical_json_bytes(report.to_dict())
+    try:
+        _write_disposition_report(path, report)
+    except FileExistsError:
+        resolved, existing = read_stable_contained_bytes(
+            path,
+            allowed_root,
+            max_size_bytes=max(1, len(canonical)),
+        )
+        if resolved != path or existing != canonical:
+            raise _SemanticInputError(
+                "prepared disposition report contains different bytes"
+            ) from None
+    return canonical
+
+
+def _write_or_verify_plan_association(
+    path: Path,
+    allowed_root: Path,
+    association: dict[str, Any],
+) -> bytes:
+    canonical = canonical_json_bytes(association)
+    try:
+        _write_plan_association(path, association)
+    except FileExistsError:
+        resolved, existing = read_stable_contained_bytes(
+            path,
+            allowed_root,
+            max_size_bytes=max(1, len(canonical)),
+        )
+        if resolved != path or existing != canonical:
+            raise _SemanticInputError(
+                "prepared plan association contains different bytes"
+            ) from None
+    return canonical
+
+
+def _write_audit_disposition_bundle_sync(
+    *,
+    tool_ctx: Any,
+    authority_path: str,
+    new_plan_path: str,
+    new_plan_media_type: str,
+    new_plan_schema_version: int,
+    dispositions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Prepare, verify, and CAS-publish one disposition/association bundle."""
+    from autoskillit.server._recipe_execution import get_recipe_execution  # circular-break
+
+    installed = get_recipe_execution(tool_ctx)
+    if installed is None:
+        raise _SemanticInputError("a trusted recipe execution is not active")
+    allowed_root = tool_ctx.project_dir.resolve()
+    verifier = AuditCycleVerifier(allowed_root)
+    authority = verifier.load_authority(authority_path)
+    if authority.execution_generation != installed.snapshot.execution_id:
+        raise _SemanticInputError("authority belongs to another recipe execution")
+    recipe_execution_id = RecipeExecutionId(authority.execution_generation)
+    head = tool_ctx.audit_admission_ledger.current_head(
+        recipe_execution_id=recipe_execution_id,
+        cycle_id=authority.cycle_id,
+        scope_id=authority.scope_id,
+        part_id=authority.part_id,
+    )
+    if head is None or head.current_authority_digest != authority.authority_digest:
+        raise _SemanticInputError("authority is not the trusted current head")
+
+    resolved_plan, plan_bytes = read_stable_contained_bytes(
+        new_plan_path,
+        allowed_root,
+    )
+    plan_ref = ArtifactRef(
+        locator=str(resolved_plan),
+        media_type=new_plan_media_type,
+        schema_version=new_plan_schema_version,
+        byte_size=len(plan_bytes),
+        content_digest=compute_bytes_hash(plan_bytes),
+    )
+    rows = _disposition_rows(dispositions)
+    output_root = (
+        tool_ctx.temp_dir.resolve()
+        / "audit-disposition"
+        / authority.authority_digest.removeprefix("sha256:")
+        / plan_ref.content_digest.removeprefix("sha256:")
+    )
+    output_root.mkdir(parents=True, exist_ok=True)
+    report_path = output_root / "disposition-report.json"
+    association_path = output_root / "plan-association.json"
+    if report_path.exists():
+        generated_at = verifier.load_report(report_path).generated_at
+    else:
+        generated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    report = PlanDispositionReport.create(
+        execution_generation=authority.execution_generation,
+        cycle_id=authority.cycle_id,
+        plan_set_id=authority.plan_set_id,
+        scope_id=authority.scope_id,
+        part_id=authority.part_id,
+        audit_round=authority.audit_round,
+        parent_authority_digest=authority.authority_digest,
+        inventory_digest=authority.inventory_ref.content_digest,
+        findings_digest=authority.findings_digest,
+        current_plan_ref=plan_ref,
+        dispositions=rows,
+        generated_at=generated_at,
+    )
+    report_bytes = _write_or_verify_disposition_report(
+        report_path,
+        allowed_root,
+        report,
+    )
+    report_ref = ArtifactRef(
+        locator=str(report_path),
+        media_type="application/json",
+        schema_version=AUDIT_CYCLE_SCHEMA_VERSION,
+        byte_size=len(report_bytes),
+        content_digest=compute_bytes_hash(report_bytes),
+    )
+    association: dict[str, Any] = {
+        "schema_version": AUDIT_CYCLE_SCHEMA_VERSION,
+        "plan_ref": plan_ref.to_dict(),
+        "disposition_ref": report_ref.to_dict(),
+        "parent_authority_digest": authority.authority_digest,
+    }
+    association["association_digest"] = compute_canonical_hash(
+        association,
+        domain="autoskillit:audit-cycle:plan-association:v1:sha256",
+    )
+    _write_or_verify_plan_association(
+        association_path,
+        allowed_root,
+        association,
+    )
+    with tool_ctx.recipe_execution_lock:
+        if get_recipe_execution(tool_ctx) is not installed:
+            raise _SemanticInputError(
+                "active recipe execution changed before disposition publication"
+            )
+        committed = tool_ctx.audit_admission_ledger.commit_disposition(
+            AuditDispositionCommitRequest(
+                recipe_execution_id=recipe_execution_id,
+                installation_version=installed.installation_version,
+                cycle_id=authority.cycle_id,
+                scope_id=authority.scope_id,
+                part_id=authority.part_id,
+                authority_digest=authority.authority_digest,
+                plan_digest=plan_ref.content_digest,
+                report_digest=report.report_digest,
+                report_path=report_path,
+                association_digest=association["association_digest"],
+                association_path=association_path,
+                generated_at=generated_at,
+            )
+        )
+    if not committed.committed:
+        raise _SemanticInputError(
+            committed.conflict_detail or "disposition publication was rejected"
+        )
+    return {
+        "success": True,
+        "plan_disposition_path": str(report_path),
+        "plan_association_path": str(association_path),
+        "report_digest": report.report_digest,
+        "association_digest": association["association_digest"],
+        "generated_at": committed.generated_at,
+    }
 
 
 @mcp.tool(
@@ -247,7 +469,7 @@ async def write_audit_semantic_result(
         del ctx
         if not reservation_handle:
             raise _SemanticInputError("reservation_handle must be non-empty")
-        _build_semantic_result(
+        semantic = _build_semantic_result(
             audited_plan_refs=audited_plan_refs,
             assessments=assessments,
             verdict=verdict,
@@ -258,7 +480,21 @@ async def write_audit_semantic_result(
         tool_ctx = _get_ctx()
         started = time.monotonic()
         try:
-            result = _dormant_admission_failure("write_audit_semantic_result")
+            reservation = tool_ctx.audit_admission_ledger.resolve_reservation_handle(
+                reservation_handle
+            )
+            if reservation is None:
+                raise _SemanticInputError("reservation handle is stale or invalid")
+            path, digest = _write_or_verify_semantic_result(
+                reservation.semantic_result_path,
+                reservation.allowed_root,
+                semantic,
+            )
+            result = {
+                "success": True,
+                "audit_semantic_result_path": str(path),
+                "semantic_digest": digest,
+            }
         finally:
             if step_name:
                 tool_ctx.timing_log.record(step_name, time.monotonic() - started)
@@ -336,7 +572,14 @@ async def write_audit_disposition_bundle(
         tool_ctx = _get_ctx()
         started = time.monotonic()
         try:
-            result = _dormant_admission_failure("write_audit_disposition_bundle")
+            result = _write_audit_disposition_bundle_sync(
+                tool_ctx=tool_ctx,
+                authority_path=authority_path,
+                new_plan_path=new_plan_path,
+                new_plan_media_type=new_plan_media_type,
+                new_plan_schema_version=new_plan_schema_version,
+                dispositions=dispositions,
+            )
         finally:
             if step_name:
                 tool_ctx.timing_log.record(step_name, time.monotonic() - started)

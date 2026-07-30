@@ -535,6 +535,7 @@ class TestOutputPathTokensDerivedFromContracts:
         {
             "analysis_file",
             "audit_cycle_path",
+            "audit_semantic_result_path",
             "campaign_path",
             "conflict_report_path",
             "diagnosis_path",

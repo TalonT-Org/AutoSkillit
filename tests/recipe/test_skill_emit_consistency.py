@@ -138,7 +138,7 @@ def test_every_declared_output_has_emit_instruction_in_skill_md() -> None:
             output_name = output["name"]
             # Server-computed outputs are populated by SkillResult attributes and
             # never parsed from model text — skip the emit-line requirement.
-            if output_name in SERVER_COMPUTED_OUTPUTS:
+            if output_name in SERVER_COMPUTED_OUTPUTS or output.get("server_computed", False):
                 continue
             # Accept both spaced and unspaced: key = value OR key=value
             pattern = re.compile(rf"{re.escape(output_name)}\s*=\s*")

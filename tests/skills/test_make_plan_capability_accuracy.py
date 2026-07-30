@@ -14,4 +14,4 @@ def test_make_plan_declares_exact_worker_capabilities() -> None:
     parsed = read_skill_frontmatter(pkg_root() / "skills_extended" / "make-plan" / "SKILL.md")
     assert parsed.data is not None
     caps = set(parsed.data.get("uses_capabilities", []))
-    assert caps == {"agent_model", "agent_subagent", "write_audit_cycle_artifact"}
+    assert caps == {"agent_model", "agent_subagent", "write_audit_disposition_bundle"}

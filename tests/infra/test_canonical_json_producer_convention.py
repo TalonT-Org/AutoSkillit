@@ -3,8 +3,9 @@ registered, verified server-side producer.
 
 Scans src/autoskillit/ for decode_versioned_json_bytes(..., require_canonical=True)
 call sites. Each such site must be registered in _CANONICAL_JSON_ARTIFACT_REGISTRY,
-pointing at a producer function that itself calls write_canonical_versioned_json, and
-at a SKILL.md section that names the producer's MCP tool by symbol. This closes the
+pointing at a producer function that either calls write_canonical_versioned_json or
+exclusively writes already-canonical bytes, and at any child-facing SKILL.md section
+that names the producer's MCP tool by symbol. This closes the
 gap #4406 exhibited: a Python consumer demanding canonical bytes with no mechanical
 guarantee that its LLM-agent producer emits them.
 """
@@ -86,37 +87,48 @@ def _find_call_at_line(tree: ast.Module, lineno: int, func_name: str) -> ast.Cal
     return None
 
 
-# All four canonical audit-cycle artifact kinds converge on this one function before
-# their bytes are written — see server/tools/tools_audit_cycle.py:332-384.
-_AUDIT_CYCLE_ARTIFACT_PRODUCER_SITE: tuple[str, int] = (
-    "src/autoskillit/server/tools/tools_audit_cycle.py",
-    332,
+_MATERIALIZER_PRODUCER_SITE = (
+    "src/autoskillit/server/_audit_authority_materializer.py",
+    181,
 )
+_TYPED_PRODUCER_MODULE = "src/autoskillit/server/tools/tools_audit_artifacts.py"
 
 _CANONICAL_JSON_ARTIFACT_REGISTRY: dict[str, CanonicalArtifactDef] = {
     "authority": CanonicalArtifactDef(
         consumer_site=("src/autoskillit/core/audit_cycle_verifier.py", 424),
-        producer_symbol="write_audit_cycle_artifact",
-        producer_site=_AUDIT_CYCLE_ARTIFACT_PRODUCER_SITE,
-        skill_md_refs=(("src/autoskillit/skills_extended/audit-impl/SKILL.md", 77, 81),),
+        producer_symbol="_write_or_verify",
+        producer_site=_MATERIALIZER_PRODUCER_SITE,
+        skill_md_refs=(),
     ),
     "disposition_report": CanonicalArtifactDef(
         consumer_site=("src/autoskillit/core/audit_cycle_verifier.py", 444),
-        producer_symbol="write_audit_cycle_artifact",
-        producer_site=_AUDIT_CYCLE_ARTIFACT_PRODUCER_SITE,
-        skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 339, 341),),
+        producer_symbol="write_audit_disposition_bundle",
+        producer_site=(_TYPED_PRODUCER_MODULE, 155),
+        skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 339, 347),),
     ),
     "inventory": CanonicalArtifactDef(
         consumer_site=("src/autoskillit/core/audit_cycle_verifier.py", 572),
-        producer_symbol="write_audit_cycle_artifact",
-        producer_site=_AUDIT_CYCLE_ARTIFACT_PRODUCER_SITE,
-        skill_md_refs=(("src/autoskillit/skills_extended/audit-impl/SKILL.md", 260, 262),),
+        producer_symbol="_write_or_verify",
+        producer_site=_MATERIALIZER_PRODUCER_SITE,
+        skill_md_refs=(),
     ),
     "plan_association": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/recipe/_cmd_rpc_guards.py", 274),
-        producer_symbol="write_audit_cycle_artifact",
-        producer_site=_AUDIT_CYCLE_ARTIFACT_PRODUCER_SITE,
-        skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 352, 354),),
+        consumer_site=("src/autoskillit/recipe/_cmd_rpc_guards.py", 280),
+        producer_symbol="write_audit_disposition_bundle",
+        producer_site=(_TYPED_PRODUCER_MODULE, 166),
+        skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 339, 347),),
+    ),
+    "audit_semantic_result": CanonicalArtifactDef(
+        consumer_site=("src/autoskillit/core/audit_semantic_codec.py", 225),
+        producer_symbol="write_audit_semantic_result",
+        producer_site=(_TYPED_PRODUCER_MODULE, 111),
+        skill_md_refs=(("src/autoskillit/skills_extended/audit-impl/SKILL.md", 78, 88),),
+    ),
+    "standalone_audit_evidence": CanonicalArtifactDef(
+        consumer_site=("src/autoskillit/core/audit_semantic_codec.py", 269),
+        producer_symbol="write_standalone_audit_evidence",
+        producer_site=(_TYPED_PRODUCER_MODULE, 144),
+        skill_md_refs=(("src/autoskillit/skills_extended/audit-impl/SKILL.md", 88, 93),),
     ),
 }
 
@@ -136,10 +148,6 @@ _NON_CANONICAL_JSON_EXCEPTIONS: dict[str, tuple[tuple[str, int], str]] = {
 
 
 class TestCanonicalJsonProducerConvention:
-    @pytest.mark.xfail(
-        strict=True,
-        reason="#4419: dormant semantic producer and skill contract land in work package 2",
-    )
     def test_require_canonical_consumers_have_registered_producers(self):
         """Every require_canonical=True consumer site must have a registry entry."""
         current = _scan_require_canonical_consumer_sites()
@@ -162,8 +170,8 @@ class TestCanonicalJsonProducerConvention:
             )
         assert current == registered, "\n\n".join(msg_parts)
 
-    def test_registered_producers_are_the_sanctioned_writer(self):
-        """Every registered producer must itself call write_canonical_versioned_json."""
+    def test_registered_producers_are_sanctioned_canonical_writers(self):
+        """Every registered producer writes canonical objects or prepared canonical bytes."""
         repo_root = Path(__file__).resolve().parents[2]
         checked: set[tuple[str, int]] = set()
         for kind, entry in _CANONICAL_JSON_ARTIFACT_REGISTRY.items():
@@ -181,9 +189,12 @@ class TestCanonicalJsonProducerConvention:
                 for node in ast.walk(function)
                 if isinstance(node, ast.Call) and isinstance(node.func, (ast.Name, ast.Attribute))
             }
-            assert "write_canonical_versioned_json" in call_names, (
+            assert {
+                "write_canonical_versioned_json",
+                "atomic_write",
+            } & call_names, (
                 f"{kind}: producer at {relative_path}:{lineno} no longer calls "
-                "write_canonical_versioned_json"
+                "a sanctioned canonical writer"
             )
 
     def test_registered_skill_md_refs_name_the_producer(self):

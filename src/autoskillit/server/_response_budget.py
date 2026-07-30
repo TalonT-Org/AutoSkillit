@@ -310,6 +310,7 @@ def _project_json_object(
                 "kitchen",
                 "version",
                 "errors",
+                "kill_reason",
                 "audit_status",
                 "audit_verdict",
                 "audit_cycle_path",

@@ -21,6 +21,7 @@ from ._type_audit_cycle import (
     AuditCycleHead,
     AuditVerdict,
 )
+from ._type_enums import KillReason
 
 __all__ = [
     "AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY",
@@ -881,12 +882,21 @@ class AuditOutcome:
     verdict: AuditVerdict | None
     path: Path | None
     error: str | None
+    kill_reason: KillReason = KillReason.NATURAL_EXIT
+    replay_response_json: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.status, AuditOutcomeStatus):
             raise ValueError("AuditOutcome.status has the wrong type")
         if not isinstance(self.attempt_id, AuditAttemptId):
             raise ValueError("AuditOutcome.attempt_id has the wrong type")
+        if not isinstance(self.kill_reason, KillReason):
+            raise ValueError("AuditOutcome.kill_reason has the wrong type")
+        if self.replay_response_json is not None:
+            _require_nonempty(
+                "AuditOutcome.replay_response_json",
+                self.replay_response_json,
+            )
         if self.status is AuditOutcomeStatus.NON_PUBLISHED_STANDALONE:
             _validate_standalone_payload(
                 owner="AuditOutcome",

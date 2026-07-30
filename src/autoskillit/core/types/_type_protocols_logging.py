@@ -33,7 +33,12 @@ class AuditLog(Protocol):
 
     def consecutive_failures(self, skill_command: str) -> int: ...
 
-    def record_success(self, skill_command: str) -> None: ...
+    def record_success(
+        self,
+        skill_command: str,
+        *,
+        dedupe_key: str | None = None,
+    ) -> None: ...
 
     def load_from_log_dir(
         self,

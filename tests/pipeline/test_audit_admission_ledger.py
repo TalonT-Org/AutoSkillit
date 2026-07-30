@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import sqlite3
 import threading
 from pathlib import Path
 
@@ -11,6 +12,8 @@ import pytest
 
 from autoskillit.core import (
     ArtifactRef,
+    AuditAdmissionStorageError,
+    AuditAdmissionStorageFailureReason,
     AuditAdmissionStorageHealthStatus,
     AuditAdmissionStoreAuthority,
     AuditAttemptId,
@@ -23,12 +26,20 @@ from autoskillit.core import (
     AuditReservationOutcome,
     AuditReservationRequest,
     AuditVerdict,
+    InstallationVersion,
+    KillReason,
     RecipeExecutionId,
     ReservationDecision,
 )
+from autoskillit.pipeline import audit_admission_ledger as audit_ledger_module
 from autoskillit.pipeline.audit_admission_ledger import DefaultAuditAdmissionLedger
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.medium]
+
+_REQUIRED_FINALIZATION_EFFECTS = (
+    "audit_success_recorded",
+    "run_skill_state_cleared",
+)
 
 
 def _digest(tag: str) -> str:
@@ -108,6 +119,51 @@ def _head(
     return AuditCycleHead(**base)  # type: ignore[arg-type]
 
 
+def _published_attempt(
+    ledger: DefaultAuditAdmissionLedger,
+    root: Path,
+) -> tuple[AuditAttemptId, InstallationVersion]:
+    execution_id = RecipeExecutionId("exec-1")
+    version = ledger.create_or_get_installation(
+        recipe_execution_id=execution_id,
+        snapshot_digest=_digest("s"),
+    )
+    reserved = ledger.reserve(_reservation_request(root, execution_id, version))
+    ledger.prepare(
+        AuditPrepareRequest(
+            attempt_id=reserved.attempt_id,
+            installation_version=version,
+            semantic_digest=_digest("semantic"),
+            accepted=True,
+        )
+    )
+    committed = ledger.commit_authority(
+        AuditFinalCommitRequest(
+            attempt_id=reserved.attempt_id,
+            installation_version=version,
+            expected_head_digest=None,
+            new_head=_head(root, execution_id, _plan_set_id(reserved)),
+            preflight_step_names=("make-plan",),
+        )
+    )
+    assert committed.committed
+    return reserved.attempt_id, version
+
+
+def _acknowledge_required_finalization_effects(
+    ledger: DefaultAuditAdmissionLedger,
+    attempt_id: AuditAttemptId,
+    *,
+    effect_names: tuple[str, ...] = _REQUIRED_FINALIZATION_EFFECTS,
+) -> None:
+    for effect_name in effect_names:
+        ledger.acknowledge_finalization_effect(
+            attempt_id,
+            effect_name,
+            {"completed": True},
+        )
+
+
 class TestInstallations:
     def test_create_or_get_is_idempotent(self, tmp_path: Path) -> None:
         ledger = DefaultAuditAdmissionLedger(_authority(tmp_path))
@@ -131,6 +187,69 @@ class TestInstallations:
             recipe_execution_id=execution_id, snapshot_digest=_digest("s")
         )
         assert version1 != version2
+
+    def test_active_installation_rejects_snapshot_mismatch(self, tmp_path: Path) -> None:
+        ledger = DefaultAuditAdmissionLedger(_authority(tmp_path))
+        execution_id = RecipeExecutionId("exec-1")
+        version = ledger.create_or_get_installation(
+            recipe_execution_id=execution_id,
+            snapshot_digest=_digest("snapshot-a"),
+        )
+
+        with pytest.raises(AuditAdmissionStorageError) as captured:
+            ledger.create_or_get_installation(
+                recipe_execution_id=execution_id,
+                snapshot_digest=_digest("snapshot-b"),
+            )
+
+        assert captured.value.reason is AuditAdmissionStorageFailureReason.REPLAY_MISMATCH
+        assert (
+            ledger.create_or_get_installation(
+                recipe_execution_id=execution_id,
+                snapshot_digest=_digest("snapshot-a"),
+            )
+            == version
+        )
+
+    def test_retire_recreate_retains_both_installation_occurrences(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        authority = _authority(tmp_path)
+        ledger = DefaultAuditAdmissionLedger(authority)
+        execution_id = RecipeExecutionId("exec-1")
+        version1 = ledger.create_or_get_installation(
+            recipe_execution_id=execution_id,
+            snapshot_digest=_digest("snapshot-a"),
+        )
+        ledger.retire_installation(
+            recipe_execution_id=execution_id,
+            installation_version=version1,
+        )
+        version2 = ledger.create_or_get_installation(
+            recipe_execution_id=execution_id,
+            snapshot_digest=_digest("snapshot-b"),
+        )
+
+        restarted = DefaultAuditAdmissionLedger(authority)
+        assert (
+            restarted.recover_all().store_health.status
+            is AuditAdmissionStorageHealthStatus.HEALTHY
+        )
+        with sqlite3.connect(authority.database_path) as connection:
+            rows = connection.execute(
+                "SELECT installation_version, snapshot_digest, retired_at "
+                "FROM installation_occurrences WHERE recipe_execution_id = ?",
+                (execution_id.value,),
+            ).fetchall()
+
+        assert {(row[0], row[1]) for row in rows} == {
+            (version1.value, _digest("snapshot-a")),
+            (version2.value, _digest("snapshot-b")),
+        }
+        retired_by_version = {row[0]: row[2] for row in rows}
+        assert retired_by_version[version1.value] is not None
+        assert retired_by_version[version2.value] is None
 
 
 class TestReservation:
@@ -173,7 +292,6 @@ class TestReservation:
     def test_reserve_without_installation_raises(self, tmp_path: Path) -> None:
         ledger = DefaultAuditAdmissionLedger(_authority(tmp_path))
         execution_id = RecipeExecutionId("exec-1")
-        from autoskillit.core import InstallationVersion
 
         request = _reservation_request(tmp_path, execution_id, InstallationVersion("unknown"))
         with pytest.raises(ValueError, match="create_or_get_installation"):
@@ -343,14 +461,43 @@ class TestMaterializationLifecycle:
             verdict=AuditVerdict.GO,
             path=tmp_path / "authority.json",
             error=None,
+            kill_reason=KillReason.INFRA_KILL,
+            replay_response_json=(
+                '{"success":true,"kill_reason":"infra_kill","audit_status":"EXACT_REPLAY"}'
+            ),
         )
-        ledger.finalize_response(reserved.attempt_id, outcome)
+        _acknowledge_required_finalization_effects(ledger, reserved.attempt_id)
+        ledger.finalize_response(
+            reserved.attempt_id,
+            outcome,
+            required_effect_names=_REQUIRED_FINALIZATION_EFFECTS,
+        )
         # Idempotent re-finalize with the identical outcome is a no-op, not an error.
-        ledger.finalize_response(reserved.attempt_id, outcome)
+        ledger.finalize_response(
+            reserved.attempt_id,
+            outcome,
+            required_effect_names=_REQUIRED_FINALIZATION_EFFECTS,
+        )
+        with pytest.raises(
+            AuditAdmissionStorageError,
+            match="finalize-response-commit-mismatch",
+        ):
+            ledger.finalize_response(
+                reserved.attempt_id,
+                outcome,
+                required_effect_names=(
+                    *_REQUIRED_FINALIZATION_EFFECTS,
+                    "pipeline_step_completed",
+                ),
+            )
 
         replay = ledger.reserve(request)
         assert replay.decision is ReservationDecision.EXACT_REPLAY
         assert replay.replay_outcome == outcome
+        assert replay.replay_outcome.kill_reason is KillReason.INFRA_KILL
+        assert '"audit_status":"EXACT_REPLAY"' in (
+            replay.replay_outcome.replay_response_json or ""
+        )
 
         projection = ledger.preflight_projection(
             recipe_execution_id=execution_id,
@@ -403,17 +550,215 @@ class TestMaterializationLifecycle:
             verdict=AuditVerdict.GO,
             path=tmp_path / "authority.json",
             error=None,
+            replay_response_json='{"audit_status":"EXACT_REPLAY","path":"authority.json"}',
         )
-        ledger.finalize_response(reserved.attempt_id, first_outcome)
+        _acknowledge_required_finalization_effects(ledger, reserved.attempt_id)
+        ledger.finalize_response(
+            reserved.attempt_id,
+            first_outcome,
+            required_effect_names=_REQUIRED_FINALIZATION_EFFECTS,
+        )
         conflicting_outcome = AuditOutcome(
             status=AuditOutcomeStatus.PUBLISHED,
             attempt_id=reserved.attempt_id,
             verdict=AuditVerdict.GO,
             path=tmp_path / "different-authority.json",
             error=None,
+            replay_response_json=(
+                '{"audit_status":"EXACT_REPLAY","path":"different-authority.json"}'
+            ),
         )
-        with pytest.raises(Exception, match="finalize-response-outcome-mismatch"):
-            ledger.finalize_response(reserved.attempt_id, conflicting_outcome)
+        with pytest.raises(Exception, match="finalize-response-commit-mismatch"):
+            ledger.finalize_response(
+                reserved.attempt_id,
+                conflicting_outcome,
+                required_effect_names=_REQUIRED_FINALIZATION_EFFECTS,
+            )
+
+
+class TestFinalizationEffects:
+    def test_open_attempt_cannot_read_or_acknowledge_finalization_effects(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        ledger = DefaultAuditAdmissionLedger(_authority(tmp_path))
+        execution_id = RecipeExecutionId("exec-1")
+        version = ledger.create_or_get_installation(
+            recipe_execution_id=execution_id,
+            snapshot_digest=_digest("s"),
+        )
+        reserved = ledger.reserve(_reservation_request(tmp_path, execution_id, version))
+
+        with pytest.raises(ValueError, match="not eligible for finalization"):
+            ledger.finalization_effect_result(reserved.attempt_id, "audit_success")
+        with pytest.raises(ValueError, match="not eligible for finalization"):
+            ledger.acknowledge_finalization_effect(
+                reserved.attempt_id,
+                "audit_success",
+                {"recorded": True},
+            )
+
+    def test_acknowledgements_are_durable_idempotent_and_immutable(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        authority = _authority(tmp_path)
+        ledger = DefaultAuditAdmissionLedger(authority)
+        attempt_id, _ = _published_attempt(ledger, tmp_path)
+        result = {"recorded": True, "sequence": 1}
+
+        assert ledger.finalization_effect_result(attempt_id, "audit_success") is None
+        ledger.acknowledge_finalization_effect(attempt_id, "audit_success", result)
+        ledger.acknowledge_finalization_effect(attempt_id, "audit_success", result)
+        loaded = ledger.finalization_effect_result(attempt_id, "audit_success")
+        assert loaded == result
+        assert loaded is not result
+
+        restarted = DefaultAuditAdmissionLedger(authority)
+        assert restarted.finalization_effect_result(attempt_id, "audit_success") == result
+        with pytest.raises(AuditAdmissionStorageError) as captured:
+            restarted.acknowledge_finalization_effect(
+                attempt_id,
+                "audit_success",
+                {"recorded": False, "sequence": 1},
+            )
+        assert captured.value.reason is AuditAdmissionStorageFailureReason.INTEGRITY
+
+    def test_finalize_requires_replay_projection_and_every_declared_effect(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        ledger = DefaultAuditAdmissionLedger(_authority(tmp_path))
+        attempt_id, _ = _published_attempt(ledger, tmp_path)
+        outcome_without_replay = AuditOutcome(
+            status=AuditOutcomeStatus.PUBLISHED,
+            attempt_id=attempt_id,
+            verdict=AuditVerdict.GO,
+            path=tmp_path / "authority.json",
+            error=None,
+        )
+        with pytest.raises(ValueError, match="requires replay_response_json"):
+            ledger.finalize_response(
+                attempt_id,
+                outcome_without_replay,
+                required_effect_names=_REQUIRED_FINALIZATION_EFFECTS,
+            )
+
+        ledger.acknowledge_finalization_effect(
+            attempt_id,
+            _REQUIRED_FINALIZATION_EFFECTS[0],
+            {"completed": True},
+        )
+        outcome = AuditOutcome(
+            status=AuditOutcomeStatus.PUBLISHED,
+            attempt_id=attempt_id,
+            verdict=AuditVerdict.GO,
+            path=tmp_path / "authority.json",
+            error=None,
+            replay_response_json='{"audit_status":"EXACT_REPLAY"}',
+        )
+        with pytest.raises(
+            AuditAdmissionStorageError,
+            match="finalize-response-required-effects-missing",
+        ):
+            ledger.finalize_response(
+                attempt_id,
+                outcome,
+                required_effect_names=_REQUIRED_FINALIZATION_EFFECTS,
+            )
+
+        assert (
+            ledger.reserve(
+                _reservation_request(
+                    tmp_path,
+                    RecipeExecutionId("exec-1"),
+                    ledger.create_or_get_installation(
+                        recipe_execution_id=RecipeExecutionId("exec-1"),
+                        snapshot_digest=_digest("s"),
+                    ),
+                )
+            ).decision
+            is ReservationDecision.PUBLISHED_PENDING_FINALIZATION
+        )
+
+    def test_response_commit_fault_rolls_back_projection_and_lifecycle(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        authority = _authority(tmp_path)
+        ledger = DefaultAuditAdmissionLedger(authority)
+        attempt_id, version = _published_attempt(ledger, tmp_path)
+        _acknowledge_required_finalization_effects(ledger, attempt_id)
+        outcome = AuditOutcome(
+            status=AuditOutcomeStatus.PUBLISHED,
+            attempt_id=attempt_id,
+            verdict=AuditVerdict.GO,
+            path=tmp_path / "authority.json",
+            error=None,
+            replay_response_json='{"audit_status":"EXACT_REPLAY"}',
+        )
+        with sqlite3.connect(authority.database_path) as connection:
+            connection.execute(
+                "CREATE TRIGGER inject_response_commit_fault "
+                "BEFORE UPDATE OF lifecycle ON attempts "
+                "WHEN NEW.lifecycle = 'RESPONSE_COMMITTED' "
+                "BEGIN SELECT RAISE(ABORT, 'injected-response-commit-fault'); END"
+            )
+
+        with pytest.raises(sqlite3.IntegrityError, match="injected-response-commit-fault"):
+            ledger.finalize_response(
+                attempt_id,
+                outcome,
+                required_effect_names=_REQUIRED_FINALIZATION_EFFECTS,
+            )
+
+        with sqlite3.connect(authority.database_path) as connection:
+            response_commit_count = connection.execute(
+                "SELECT COUNT(*) FROM response_commits WHERE attempt_id = ?",
+                (attempt_id.value,),
+            ).fetchone()
+            connection.execute("DROP TRIGGER inject_response_commit_fault")
+        assert response_commit_count == (0,)
+
+        restarted = DefaultAuditAdmissionLedger(authority)
+        replay = restarted.reserve(
+            _reservation_request(
+                tmp_path,
+                RecipeExecutionId("exec-1"),
+                version,
+            )
+        )
+        assert replay.decision is ReservationDecision.PUBLISHED_PENDING_FINALIZATION
+
+    def test_response_committed_attempt_rejects_late_effects_but_allows_reads(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        ledger = DefaultAuditAdmissionLedger(_authority(tmp_path))
+        attempt_id, _ = _published_attempt(ledger, tmp_path)
+        _acknowledge_required_finalization_effects(ledger, attempt_id)
+        ledger.finalize_response(
+            attempt_id,
+            AuditOutcome(
+                status=AuditOutcomeStatus.PUBLISHED,
+                attempt_id=attempt_id,
+                verdict=AuditVerdict.GO,
+                path=tmp_path / "authority.json",
+                error=None,
+                replay_response_json='{"audit_status":"EXACT_REPLAY"}',
+            ),
+            required_effect_names=_REQUIRED_FINALIZATION_EFFECTS,
+        )
+
+        assert ledger.finalization_effect_result(
+            attempt_id, _REQUIRED_FINALIZATION_EFFECTS[0]
+        ) == {"completed": True}
+        with pytest.raises(ValueError, match="not eligible for finalization"):
+            ledger.acknowledge_finalization_effect(
+                attempt_id,
+                "pipeline_step_completed",
+                {"completed": True},
+            )
 
 
 class TestForkPrevention:
@@ -670,6 +1015,217 @@ class TestDisposition:
         outcome = ledger.commit_disposition(request)
         assert not outcome.committed
         assert outcome.conflict_detail == "stale_authority"
+
+
+class TestStoreSecurity:
+    def test_new_database_is_private_owned_regular_and_single_linked(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        authority = _authority(tmp_path)
+        ledger = DefaultAuditAdmissionLedger(authority)
+        ledger.create_or_get_installation(
+            recipe_execution_id=RecipeExecutionId("exec-1"),
+            snapshot_digest=_digest("s"),
+        )
+
+        database_stat = authority.database_path.stat()
+        assert authority.database_path.is_file()
+        assert database_stat.st_uid == authority.expected_owner_id
+        assert database_stat.st_nlink == 1
+        assert database_stat.st_mode & 0o022 == 0
+
+    @pytest.mark.parametrize(
+        "scenario",
+        ["symlink", "non_regular", "hardlink", "world_writable", "foreign_owner"],
+    )
+    def test_insecure_database_target_fails_closed(
+        self,
+        tmp_path: Path,
+        scenario: str,
+    ) -> None:
+        authority = _authority(tmp_path)
+        path = authority.database_path
+        path.parent.mkdir(mode=0o700)
+        if scenario == "symlink":
+            target = tmp_path / "symlink-target.sqlite3"
+            target.write_bytes(b"")
+            target.chmod(0o600)
+            path.symlink_to(target)
+        elif scenario == "non_regular":
+            path.mkdir()
+        elif scenario == "hardlink":
+            target = tmp_path / "hardlink-target.sqlite3"
+            target.write_bytes(b"")
+            target.chmod(0o600)
+            os.link(target, path)
+        else:
+            path.write_bytes(b"")
+            path.chmod(0o602 if scenario == "world_writable" else 0o600)
+            if scenario == "foreign_owner":
+                authority = AuditAdmissionStoreAuthority(
+                    database_path=path,
+                    expected_owner_id=os.getuid() + 1,
+                )
+
+        ledger = DefaultAuditAdmissionLedger(authority)
+        recovery = ledger.recover_all()
+
+        assert recovery.store_health.status is AuditAdmissionStorageHealthStatus.FAIL_CLOSED
+        assert (
+            recovery.store_health.failure_reason
+            is AuditAdmissionStorageFailureReason.SECURITY_IDENTITY
+        )
+        with pytest.raises(AuditAdmissionStorageError):
+            ledger.create_or_get_installation(
+                recipe_execution_id=RecipeExecutionId("exec-1"),
+                snapshot_digest=_digest("s"),
+            )
+
+    def test_database_path_with_symlinked_ancestor_fails_closed(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        real_root = tmp_path / "real"
+        nested = real_root / "nested"
+        nested.mkdir(parents=True, mode=0o700)
+        linked_root = tmp_path / "linked"
+        linked_root.symlink_to(real_root, target_is_directory=True)
+        authority = AuditAdmissionStoreAuthority(
+            database_path=linked_root / "nested" / "ledger.sqlite3",
+            expected_owner_id=os.getuid(),
+        )
+
+        recovery = DefaultAuditAdmissionLedger(authority).recover_all()
+
+        assert recovery.store_health.status is AuditAdmissionStorageHealthStatus.FAIL_CLOSED
+        assert (
+            recovery.store_health.failure_reason
+            is AuditAdmissionStorageFailureReason.SECURITY_IDENTITY
+        )
+
+    def test_sqlite_error_during_recovery_fails_closed(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        ledger = DefaultAuditAdmissionLedger(_authority(tmp_path))
+
+        def fail_connect() -> sqlite3.Connection:
+            raise sqlite3.OperationalError("injected recovery fault")
+
+        monkeypatch.setattr(ledger, "_connect", fail_connect)
+        recovery = ledger.recover_all()
+
+        assert recovery.store_health.status is AuditAdmissionStorageHealthStatus.FAIL_CLOSED
+        assert recovery.store_health.failure_reason is AuditAdmissionStorageFailureReason.IO
+        assert recovery.store_health.reason_code == (
+            "audit-admission-recovery-failed:OperationalError"
+        )
+
+
+class TestRetention:
+    def test_indefinite_policy_supports_far_late_replay_and_rejects_key_reuse(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        authority = _authority(tmp_path)
+        monkeypatch.setattr(
+            audit_ledger_module,
+            "_now_iso",
+            lambda: "1900-01-01T00:00:00+00:00",
+        )
+        ledger = DefaultAuditAdmissionLedger(authority)
+        attempt_id, version = _published_attempt(ledger, tmp_path)
+        request = _reservation_request(
+            tmp_path,
+            RecipeExecutionId("exec-1"),
+            version,
+        )
+        _acknowledge_required_finalization_effects(ledger, attempt_id)
+        outcome = AuditOutcome(
+            status=AuditOutcomeStatus.PUBLISHED,
+            attempt_id=attempt_id,
+            verdict=AuditVerdict.GO,
+            path=tmp_path / "authority.json",
+            error=None,
+            replay_response_json='{"audit_status":"EXACT_REPLAY"}',
+        )
+        ledger.finalize_response(
+            attempt_id,
+            outcome,
+            required_effect_names=_REQUIRED_FINALIZATION_EFFECTS,
+        )
+
+        monkeypatch.setattr(
+            audit_ledger_module,
+            "_now_iso",
+            lambda: "9999-12-31T23:59:59+00:00",
+        )
+        restarted = DefaultAuditAdmissionLedger(authority)
+        assert restarted.retention_policy_id == "audit-admission-retention:indefinite:v1"
+        assert (
+            restarted.recover_all().store_health.status
+            is AuditAdmissionStorageHealthStatus.HEALTHY
+        )
+        restarted.create_or_get_installation(
+            recipe_execution_id=RecipeExecutionId("far-future-execution"),
+            snapshot_digest=_digest("far-future-snapshot"),
+        )
+
+        replay = restarted.reserve(request)
+        assert replay.decision is ReservationDecision.EXACT_REPLAY
+        assert replay.replay_outcome == outcome
+        assert restarted.finalization_effect_result(
+            attempt_id,
+            _REQUIRED_FINALIZATION_EFFECTS[0],
+        ) == {"completed": True}
+        with pytest.raises(
+            AuditAdmissionStorageError,
+            match="finalize-response-commit-mismatch",
+        ):
+            restarted.finalize_response(
+                attempt_id,
+                outcome,
+                required_effect_names=(
+                    *_REQUIRED_FINALIZATION_EFFECTS,
+                    "pipeline_step_completed",
+                ),
+            )
+
+    def test_restart_fails_closed_if_retained_commit_loses_an_acknowledgement(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        authority = _authority(tmp_path)
+        ledger = DefaultAuditAdmissionLedger(authority)
+        attempt_id, _ = _published_attempt(ledger, tmp_path)
+        _acknowledge_required_finalization_effects(ledger, attempt_id)
+        ledger.finalize_response(
+            attempt_id,
+            AuditOutcome(
+                status=AuditOutcomeStatus.PUBLISHED,
+                attempt_id=attempt_id,
+                verdict=AuditVerdict.GO,
+                path=tmp_path / "authority.json",
+                error=None,
+                replay_response_json='{"audit_status":"EXACT_REPLAY"}',
+            ),
+            required_effect_names=_REQUIRED_FINALIZATION_EFFECTS,
+        )
+        with sqlite3.connect(authority.database_path) as connection:
+            connection.execute(
+                "DELETE FROM finalization_effects WHERE attempt_id = ? AND effect_name = ?",
+                (attempt_id.value, _REQUIRED_FINALIZATION_EFFECTS[0]),
+            )
+
+        recovery = DefaultAuditAdmissionLedger(authority).recover_all()
+        assert recovery.store_health.status is AuditAdmissionStorageHealthStatus.FAIL_CLOSED
+        assert recovery.store_health.failure_reason is AuditAdmissionStorageFailureReason.INTEGRITY
+        assert (
+            recovery.store_health.reason_code == "response-commit-finalization-effects-incomplete"
+        )
 
 
 class TestRecovery:

@@ -47,6 +47,11 @@ from autoskillit.core.types._type_audit_protocols import (
     AuditAuthorityMaterializer,
     CommittedDispositionResolver,
 )
+from autoskillit.core.types._type_enums import KillReason
+from autoskillit.core.types._type_recipe_execution import (
+    compute_audit_slot_intent_digest,
+    compute_runtime_binding_digest,
+)
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
@@ -83,6 +88,48 @@ def _covered_row(requirement_id: str = "REQ-001") -> AuditAssessmentRow:
         assessment=AuditAssessment.COVERED,
         evidence_summary="Covered by focused contract tests.",
     )
+
+
+def test_retry_control_changes_runtime_binding_but_not_audit_slot_intent() -> None:
+    common = {
+        "execution_id": "execution",
+        "step_name": "audit_impl",
+        "template_digest": _digest("1"),
+        "bound_inputs": (("plan", "/tmp/plan.md"),),
+        "preflight": None,
+    }
+    first_kwargs = {
+        "skill_command": "/autoskillit:audit-impl",
+        "retry_after_audit_attempt_id": "attempt-one",
+    }
+    second_kwargs = {
+        **first_kwargs,
+        "retry_after_audit_attempt_id": "attempt-two",
+    }
+
+    first_runtime = compute_runtime_binding_digest(
+        **common,
+        actual_mcp_kwargs=first_kwargs,
+        retry_after_audit_attempt_id="attempt-one",
+    )
+    second_runtime = compute_runtime_binding_digest(
+        **common,
+        actual_mcp_kwargs=second_kwargs,
+        retry_after_audit_attempt_id="attempt-two",
+    )
+    first_slot = compute_audit_slot_intent_digest(
+        **common,
+        actual_mcp_kwargs=first_kwargs,
+        retry_after_audit_attempt_id="attempt-one",
+    )
+    second_slot = compute_audit_slot_intent_digest(
+        **common,
+        actual_mcp_kwargs=second_kwargs,
+        retry_after_audit_attempt_id="attempt-two",
+    )
+
+    assert first_runtime != second_runtime
+    assert first_slot == second_slot
 
 
 def _semantic_result(
@@ -552,6 +599,8 @@ def test_internal_pending_status_cannot_escape_as_public_status() -> None:
         verdict=AuditVerdict.GO,
         path=materialization.path,
         error=None,
+        kill_reason=KillReason.INFRA_KILL,
+        replay_response_json='{"audit_status":"EXACT_REPLAY"}',
     )
     committed = AuditAttemptRecord(
         slot_id=AuditSlotId("slot-1"),
@@ -564,6 +613,8 @@ def test_internal_pending_status_cannot_escape_as_public_status() -> None:
     )
 
     assert committed.committed_outcome is outcome
+    assert outcome.kill_reason is KillReason.INFRA_KILL
+    assert outcome.replay_response_json == '{"audit_status":"EXACT_REPLAY"}'
     assert "PUBLISHED_PENDING_FINALIZATION" not in {status.value for status in AuditOutcomeStatus}
     with pytest.raises(ValueError, match="error"):
         AuditOutcome(

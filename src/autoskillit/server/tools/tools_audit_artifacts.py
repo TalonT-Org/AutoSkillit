@@ -314,6 +314,97 @@ def _write_or_verify_plan_association(
     return canonical
 
 
+def _revalidate_disposition_preparation(
+    *,
+    verifier: AuditCycleVerifier,
+    allowed_root: Path,
+    authority_path: Path,
+    authority_bytes: bytes,
+    authority_digest: str,
+    plan_ref: ArtifactRef,
+    report_path: Path,
+    report_bytes: bytes,
+    report: PlanDispositionReport,
+    report_ref: ArtifactRef,
+    association_path: Path,
+    association_bytes: bytes,
+    association: dict[str, Any],
+) -> None:
+    """Reread every prepared input and output immediately before publication."""
+    resolved_authority, current_authority_bytes = read_stable_contained_bytes(
+        authority_path,
+        allowed_root,
+        max_size_bytes=max(1, len(authority_bytes)),
+    )
+    reloaded_authority = verifier.decode_authority(current_authority_bytes)
+    if (
+        resolved_authority != authority_path
+        or current_authority_bytes != authority_bytes
+        or reloaded_authority.authority_digest != authority_digest
+    ):
+        raise _SemanticInputError(
+            "authority changed while the disposition bundle was being prepared"
+        )
+
+    resolved_plan, current_plan_bytes = read_stable_contained_bytes(
+        plan_ref.locator,
+        allowed_root,
+        max_size_bytes=max(1, plan_ref.byte_size),
+    )
+    if (
+        resolved_plan != Path(plan_ref.locator)
+        or len(current_plan_bytes) != plan_ref.byte_size
+        or compute_bytes_hash(current_plan_bytes) != plan_ref.content_digest
+    ):
+        raise _SemanticInputError(
+            "new plan changed while the disposition bundle was being prepared"
+        )
+
+    reloaded_report = verifier.load_report(report_path)
+    resolved_report, current_report_bytes = read_stable_contained_bytes(
+        report_path,
+        allowed_root,
+        max_size_bytes=max(1, len(report_bytes)),
+    )
+    if (
+        resolved_report != report_path
+        or current_report_bytes != report_bytes
+        or reloaded_report.to_dict() != report.to_dict()
+        or reloaded_report.current_plan_ref.to_dict() != plan_ref.to_dict()
+        or len(current_report_bytes) != report_ref.byte_size
+        or compute_bytes_hash(current_report_bytes) != report_ref.content_digest
+    ):
+        raise _SemanticInputError("disposition report changed while the bundle was being prepared")
+
+    resolved_association, current_association_bytes = read_stable_contained_bytes(
+        association_path,
+        allowed_root,
+        max_size_bytes=max(1, len(association_bytes)),
+    )
+    try:
+        reloaded_association = json.loads(current_association_bytes)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise _SemanticInputError(
+            "plan association changed while the bundle was being prepared"
+        ) from exc
+    digest_payload = dict(reloaded_association) if isinstance(reloaded_association, dict) else {}
+    reloaded_digest = digest_payload.pop("association_digest", None)
+    if (
+        resolved_association != association_path
+        or current_association_bytes != association_bytes
+        or reloaded_association != association
+        or reloaded_association.get("plan_ref") != plan_ref.to_dict()
+        or reloaded_association.get("disposition_ref") != report_ref.to_dict()
+        or reloaded_digest != association["association_digest"]
+        or compute_canonical_hash(
+            digest_payload,
+            domain="autoskillit:audit-cycle:plan-association:v1:sha256",
+        )
+        != reloaded_digest
+    ):
+        raise _SemanticInputError("plan association changed while the bundle was being prepared")
+
+
 def _write_audit_disposition_bundle_sync(
     *,
     tool_ctx: Any,
@@ -331,7 +422,11 @@ def _write_audit_disposition_bundle_sync(
         raise _SemanticInputError("a trusted recipe execution is not active")
     allowed_root = tool_ctx.project_dir.resolve()
     verifier = AuditCycleVerifier(allowed_root)
-    authority = verifier.load_authority(authority_path)
+    resolved_authority_path, authority_bytes = read_stable_contained_bytes(
+        authority_path,
+        allowed_root,
+    )
+    authority = verifier.decode_authority(authority_bytes)
     if authority.execution_generation != installed.snapshot.execution_id:
         raise _SemanticInputError("authority belongs to another recipe execution")
     recipe_execution_id = RecipeExecutionId(authority.execution_generation)
@@ -405,7 +500,7 @@ def _write_audit_disposition_bundle_sync(
         association,
         domain="autoskillit:audit-cycle:plan-association:v1:sha256",
     )
-    _write_or_verify_plan_association(
+    association_bytes = _write_or_verify_plan_association(
         association_path,
         allowed_root,
         association,
@@ -415,6 +510,21 @@ def _write_audit_disposition_bundle_sync(
             raise _SemanticInputError(
                 "active recipe execution changed before disposition publication"
             )
+        _revalidate_disposition_preparation(
+            verifier=verifier,
+            allowed_root=allowed_root,
+            authority_path=resolved_authority_path,
+            authority_bytes=authority_bytes,
+            authority_digest=authority.authority_digest,
+            plan_ref=plan_ref,
+            report_path=report_path,
+            report_bytes=report_bytes,
+            report=report,
+            report_ref=report_ref,
+            association_path=association_path,
+            association_bytes=association_bytes,
+            association=association,
+        )
         committed = tool_ctx.audit_admission_ledger.commit_disposition(
             AuditDispositionCommitRequest(
                 recipe_execution_id=recipe_execution_id,

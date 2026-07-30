@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
@@ -49,9 +49,10 @@ from autoskillit.recipe import (
     bind_step_invocation,
     compute_skill_contract_identity,
 )
+from autoskillit.server._misc import clear_run_skill_state
 
 if TYPE_CHECKING:
-    from autoskillit.core import AuditAdmissionLedger, InstallationVersion
+    from autoskillit.core import AuditAdmissionLedger, AuditAttemptId, InstallationVersion
     from autoskillit.pipeline import ToolContext
 
 __all__ = [
@@ -62,10 +63,12 @@ __all__ = [
     "build_recipe_execution_snapshot",
     "build_standalone_child_prompt",
     "clear_recipe_execution",
+    "complete_audit_finalization_effects",
     "get_recipe_execution",
     "install_recipe_execution",
     "prepare_recipe_execution",
     "record_runtime_binding_digest",
+    "required_audit_finalization_effect_names",
     "resolve_attested_input_preflight",
 ]
 
@@ -196,6 +199,34 @@ class DefaultInputPreflightResolver:
                     "a terminal GO cannot carry a plan disposition report",
                 )
             )
+        if report_path is not None:
+            try:
+                report = verifier.load_report(report_path)
+            except Exception as exc:
+                get_logger(__name__).error(
+                    "audit-cycle disposition verification failed",
+                    exc_info=True,
+                )
+                return self._result(
+                    InventoryAdmissionDecision.reject(
+                        AdmissionReason.DISPOSITION_MISMATCH,
+                        f"disposition report verification failed: {exc}",
+                    )
+                )
+            committed_report_path = self._ledger.resolve_disposition(
+                authority_digest=authority.authority_digest,
+                plan_digest=report.current_plan_ref.content_digest,
+            )
+            if committed_report_path is None or committed_report_path != Path(report_path):
+                return self._result(
+                    InventoryAdmissionDecision.reject(
+                        AdmissionReason.DISPOSITION_MISMATCH,
+                        (
+                            "disposition report does not match the admission ledger's "
+                            "committed authority, plan digest, and report path"
+                        ),
+                    )
+                )
         decision = verifier.evaluate_paths(
             authority_path=authority_path,
             report_path=report_path,
@@ -597,3 +628,62 @@ def build_standalone_child_prompt(
         None,
         audit_output_mode=audit_output_mode,
     )
+
+
+_BASE_AUDIT_FINALIZATION_EFFECT_NAMES = (
+    "audit_success_recorded",
+    "run_skill_state_cleared",
+)
+
+
+def required_audit_finalization_effect_names(step_name: str) -> tuple[str, ...]:
+    """Return the closed required-effect set for one attested audit response."""
+    if step_name:
+        return (*_BASE_AUDIT_FINALIZATION_EFFECT_NAMES, "pipeline_step_completed")
+    return _BASE_AUDIT_FINALIZATION_EFFECT_NAMES
+
+
+def complete_audit_finalization_effects(
+    tool_ctx: ToolContext,
+    *,
+    attempt_id: AuditAttemptId,
+    skill_command: str,
+    step_name: str,
+    order_id: str,
+    mark_step_complete: Callable[[ToolContext, str, str], dict | None],
+) -> dict[str, object] | None:
+    """Complete each attempt-keyed success effect at most once."""
+
+    def complete(
+        effect_name: str,
+        action: Callable[[], dict[str, object] | None],
+    ) -> dict[str, object]:
+        existing = tool_ctx.audit_admission_ledger.finalization_effect_result(
+            attempt_id,
+            effect_name,
+        )
+        if existing is not None:
+            return existing
+        result = action() or {}
+        tool_ctx.audit_admission_ledger.acknowledge_finalization_effect(
+            attempt_id,
+            effect_name,
+            result,
+        )
+        return result
+
+    complete(
+        "audit_success_recorded",
+        lambda: tool_ctx.audit.record_success(
+            skill_command,
+            dedupe_key=attempt_id.value,
+        ),
+    )
+    complete("run_skill_state_cleared", lambda: clear_run_skill_state(tool_ctx.project_dir))
+    if not step_name:
+        return None
+    marker = complete(
+        "pipeline_step_completed",
+        lambda: mark_step_complete(tool_ctx, step_name, order_id),
+    )
+    return marker or None

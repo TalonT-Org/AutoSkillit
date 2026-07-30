@@ -420,7 +420,10 @@ class AuditCycleVerifier:
         return data
 
     def load_authority(self, path: str | Path) -> AuditCycleAuthority:
-        data = self._read_path(path)
+        return self.decode_authority(self._read_path(path))
+
+    def decode_authority(self, data: bytes) -> AuditCycleAuthority:
+        """Decode authority bytes through the strict canonical verifier boundary."""
         raw = decode_versioned_json_bytes(
             data,
             expected_version=AUDIT_CYCLE_SCHEMA_VERSION,

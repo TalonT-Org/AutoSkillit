@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,7 @@ from autoskillit.core.types._type_audit_admission import (
     compute_audit_slot_id,
 )
 from autoskillit.core.types._type_audit_admission_ledger import (
+    AuditAdmissionLedger,
     AuditAdmissionRecoveryResult,
     AuditAdmissionStorageError,
     AuditAdmissionStorageFailureReason,
@@ -46,6 +48,19 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 def _digest(tag: str) -> str:
     return "sha256:" + hashlib.sha256(tag.encode()).hexdigest()
+
+
+def test_finalization_effect_protocol_api_is_attempt_keyed() -> None:
+    read_signature = inspect.signature(AuditAdmissionLedger.finalization_effect_result)
+    acknowledge_signature = inspect.signature(AuditAdmissionLedger.acknowledge_finalization_effect)
+
+    assert tuple(read_signature.parameters) == ("self", "attempt_id", "effect_name")
+    assert tuple(acknowledge_signature.parameters) == (
+        "self",
+        "attempt_id",
+        "effect_name",
+        "result",
+    )
 
 
 def _ref(tag: str = "ref") -> ArtifactRef:

@@ -44,6 +44,7 @@ from autoskillit.core import (
     CodingAgentBackend,
     EffectiveSkillInvocationAuthority,
     InvocationTemplate,
+    KillReason,
     RecipeExecutionId,
     ReservationDecision,
     SkillContractError,
@@ -107,6 +108,12 @@ from autoskillit.server._recipe_execution import (
     get_recipe_execution,
     record_runtime_binding_digest,
     resolve_attested_input_preflight,
+)
+from autoskillit.server._recipe_execution import (
+    complete_audit_finalization_effects as _complete_audit_finalization_effects,
+)
+from autoskillit.server._recipe_execution import (
+    required_audit_finalization_effect_names as _required_audit_finalization_effect_names,
 )
 from autoskillit.server._subprocess import _run_subprocess_captured
 from autoskillit.server.tools._backend_compat import (
@@ -216,7 +223,9 @@ def _audit_preflight_step_names(
         step_name
         for step_name, template in installed.snapshot.templates.items()
         if (
-            (contract := resolver(template.invocation.skill_name or "")) is not None
+            template.invocation.skill_name is not None
+            and (contract := resolver(f"/autoskillit:{template.invocation.skill_name}"))
+            is not None
             and getattr(contract, "input_preflight", None) == "audit_cycle_inventory"
         )
     )
@@ -235,6 +244,7 @@ def _audit_response(
     verdict: AuditVerdict | None,
     path: Path | None,
     error: str | None,
+    kill_reason: KillReason = KillReason.NATURAL_EXIT,
 ) -> str:
     success = status in {
         AuditOutcomeStatus.PUBLISHED,
@@ -244,6 +254,7 @@ def _audit_response(
         {
             "success": success,
             "exit_code": 0 if success else 1,
+            "kill_reason": kill_reason.value,
             "result": (
                 f"Server-authored audit outcome: {status.value}"
                 if success
@@ -321,21 +332,42 @@ def _complete_resumed_audit(
     if status is AuditOutcomeStatus.PUBLISHED:
         assert result.verdict is not None
         assert result.path is not None
-        tool_ctx.audit.record_success(skill_command)
-        clear_run_skill_state(tool_ctx.project_dir)
-        if step_name:
-            _mark_step_complete_server_side(tool_ctx, step_name, order_id)
+        response = _audit_response(
+            status=status,
+            attempt_id=result.attempt_id,
+            verdict=result.verdict,
+            path=result.path,
+            error=None,
+        )
+        replay_payload = json.loads(response)
+        replay_payload["audit_status"] = AuditOutcomeStatus.EXACT_REPLAY.value
+        replay_response = json.dumps(
+            replay_payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        _complete_audit_finalization_effects(
+            tool_ctx,
+            attempt_id=result.attempt_id,
+            skill_command=skill_command,
+            step_name=step_name,
+            order_id=order_id,
+            mark_step_complete=_mark_step_complete_server_side,
+        )
         outcome = AuditOutcome(
             status=AuditOutcomeStatus.PUBLISHED,
             attempt_id=result.attempt_id,
             verdict=result.verdict,
             path=result.path,
             error=None,
+            replay_response_json=replay_response,
         )
         tool_ctx.audit_admission_ledger.finalize_response(
             result.attempt_id,
             outcome,
+            required_effect_names=_required_audit_finalization_effect_names(step_name),
         )
+        return response
     return _audit_response(
         status=status,
         attempt_id=result.attempt_id,
@@ -1106,9 +1138,8 @@ async def run_skill(
                 "closure_base_sha": closure_base_sha,
                 "closure_diff_sha": closure_diff_sha,
                 "closure_target_sha": closure_target_sha,
+                "retry_after_audit_attempt_id": retry_after_audit_attempt_id,
             }
-            if retry_after_audit_attempt_id:
-                _actual_mcp_kwargs["retry_after_audit_attempt_id"] = retry_after_audit_attempt_id
             if stale_threshold is not None:
                 _actual_mcp_kwargs["stale_threshold"] = stale_threshold
             if idle_output_timeout is not None:
@@ -1250,12 +1281,15 @@ async def run_skill(
                         case ReservationDecision.EXACT_REPLAY:
                             assert _reservation_outcome.replay_outcome is not None
                             _replay = _reservation_outcome.replay_outcome
+                            if _replay.replay_response_json is not None:
+                                return _replay.replay_response_json
                             return _audit_response(
                                 status=AuditOutcomeStatus.EXACT_REPLAY,
                                 attempt_id=_replay.attempt_id,
                                 verdict=_replay.verdict,
                                 path=_replay.path,
                                 error=_replay.error,
+                                kill_reason=_replay.kill_reason,
                             )
                         case ReservationDecision.RESUME_PREPARED:
                             assert _reservation_outcome.reservation is not None
@@ -1988,8 +2022,8 @@ async def run_skill(
                     )
                 contract_lifecycle.apply_retention(skill_result.needs_retry)
 
+                _audit_outcome_to_finalize: AuditOutcome | None = None
                 if skill_result.success:
-                    _audit_outcome_to_finalize: AuditOutcome | None = None
                     if _audit_reservation is not None:
                         _semantic_path = (skill_result.outcome_fields or {}).get(
                             "audit_semantic_result_path"
@@ -2042,6 +2076,7 @@ async def run_skill(
                                     verdict=_materialized.verdict,
                                     path=_materialized.path,
                                     error=None,
+                                    kill_reason=skill_result.kill_reason,
                                 )
                             case AuditOutcomeStatus.EXACT_REPLAY:
                                 return _audit_response(
@@ -2050,6 +2085,7 @@ async def run_skill(
                                     verdict=_materialized.verdict,
                                     path=_materialized.path,
                                     error=_materialized.error,
+                                    kill_reason=skill_result.kill_reason,
                                 )
                             case (
                                 AuditOutcomeStatus.SEMANTIC_REJECTED
@@ -2066,20 +2102,26 @@ async def run_skill(
                                     verdict=None,
                                     path=None,
                                     error=_materialized.error,
+                                    kill_reason=skill_result.kill_reason,
                                 )
-                    tool_ctx.audit.record_success(skill_command)
-                    clear_run_skill_state(tool_ctx.project_dir)
-                    if step_name:
-                        _pipeline_marker = _mark_step_complete_server_side(
-                            tool_ctx, step_name, order_id
+                    if _audit_outcome_to_finalize is not None:
+                        _pipeline_marker = _complete_audit_finalization_effects(
+                            tool_ctx,
+                            attempt_id=_audit_outcome_to_finalize.attempt_id,
+                            skill_command=skill_command,
+                            step_name=step_name,
+                            order_id=order_id,
+                            mark_step_complete=_mark_step_complete_server_side,
                         )
                     else:
-                        _pipeline_marker = None
-                    if _audit_outcome_to_finalize is not None:
-                        tool_ctx.audit_admission_ledger.finalize_response(
-                            _audit_outcome_to_finalize.attempt_id,
-                            _audit_outcome_to_finalize,
-                        )
+                        tool_ctx.audit.record_success(skill_command)
+                        clear_run_skill_state(tool_ctx.project_dir)
+                        if step_name:
+                            _pipeline_marker = _mark_step_complete_server_side(
+                                tool_ctx, step_name, order_id
+                            )
+                        else:
+                            _pipeline_marker = None
                 else:
                     _pipeline_marker = None
                     await _notify(
@@ -2133,12 +2175,34 @@ async def run_skill(
                     )
                 if _pipeline_marker is not None:
                     _parsed["pipeline_tracker"] = _pipeline_marker
-                return shape_execution_response(
+                _shaped_response = shape_execution_response(
                     tool_ctx,
                     _parsed,
                     tool_name="run_skill",
                     work_dir=cwd,
                 )
+                if _audit_outcome_to_finalize is not None:
+                    _replay_payload = json.loads(_shaped_response)
+                    _replay_payload["audit_status"] = AuditOutcomeStatus.EXACT_REPLAY.value
+                    _replay_response = json.dumps(
+                        _replay_payload,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                    tool_ctx.audit_admission_ledger.finalize_response(
+                        _audit_outcome_to_finalize.attempt_id,
+                        AuditOutcome(
+                            status=_audit_outcome_to_finalize.status,
+                            attempt_id=_audit_outcome_to_finalize.attempt_id,
+                            verdict=_audit_outcome_to_finalize.verdict,
+                            path=_audit_outcome_to_finalize.path,
+                            error=_audit_outcome_to_finalize.error,
+                            kill_reason=_audit_outcome_to_finalize.kill_reason,
+                            replay_response_json=_replay_response,
+                        ),
+                        required_effect_names=_required_audit_finalization_effect_names(step_name),
+                    )
+                return _shaped_response
             except Exception as exc:
                 contract_lifecycle.retain_bound = False
                 logger.error("run_skill executor raised unexpectedly", exc_info=True)

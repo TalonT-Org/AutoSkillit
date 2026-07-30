@@ -383,14 +383,18 @@ def compute_audit_slot_intent_digest(
     retry_after_audit_attempt_id: str | None = None,
 ) -> str:
     """Hash audit-slot intent independently from any retry attempt."""
+    stable_mcp_kwargs = {
+        name: value
+        for name, value in actual_mcp_kwargs.items()
+        if name != "retry_after_audit_attempt_id"
+    }
     payload = _build_runtime_binding_payload(
         execution_id=execution_id,
         step_name=step_name,
         template_digest=template_digest,
         bound_inputs=bound_inputs,
-        actual_mcp_kwargs=actual_mcp_kwargs,
+        actual_mcp_kwargs=stable_mcp_kwargs,
         preflight=preflight,
-        retry_after_audit_attempt_id=retry_after_audit_attempt_id,
+        retry_after_audit_attempt_id=None,
     )
-    payload.pop("retry_after_audit_attempt_id", None)
     return compute_canonical_hash(payload, domain=_AUDIT_SLOT_INTENT_DOMAIN)

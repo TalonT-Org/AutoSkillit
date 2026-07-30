@@ -184,6 +184,7 @@ class DefaultAuditLog:
 
     def __init__(self) -> None:
         self._records: list[FailureRecord] = []
+        self._success_dedupe_keys: set[str] = set()
 
     def record_failure(self, record: FailureRecord) -> None:
         """Append a failure record, applying field truncations."""
@@ -218,6 +219,7 @@ class DefaultAuditLog:
         # Reassign rather than mutate in place: creates a new list object,
         # making the "store is now empty" intent unambiguous.
         self._records = []
+        self._success_dedupe_keys = set()
 
     def consecutive_failures(self, skill_command: str) -> int:
         """Count consecutive needs_retry=True records for skill_command from the end.
@@ -236,13 +238,15 @@ class DefaultAuditLog:
                 break
         return count
 
-    def record_success(self, skill_command: str) -> None:
+    def record_success(self, skill_command: str, *, dedupe_key: str | None = None) -> None:
         """Append a success sentinel to reset the consecutive-failure streak.
 
         The sentinel is a FailureRecord with needs_retry=False and subtype='success'.
         This is visible in get_report() but does not represent a real failure.
         """
         if not skill_command:
+            return
+        if dedupe_key is not None and dedupe_key in self._success_dedupe_keys:
             return
         self._records.append(
             FailureRecord(
@@ -255,6 +259,8 @@ class DefaultAuditLog:
                 stderr="",
             )
         )
+        if dedupe_key is not None:
+            self._success_dedupe_keys.add(dedupe_key)
 
     def load_from_log_dir(
         self,

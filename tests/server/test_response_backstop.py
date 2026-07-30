@@ -661,6 +661,7 @@ def test_non_exempted_projection_capped_at_delivery_bound(tmp_path):
 def test_run_skill_delivery_bound_preserves_audit_outcome_projection(tmp_path):
     payload = {
         "success": True,
+        "kill_reason": "infra_kill",
         "result": "x" * 150_000,
         "audit_status": "PUBLISHED",
         "audit_verdict": "NO GO",
@@ -683,6 +684,7 @@ def test_run_skill_delivery_bound_preserves_audit_outcome_projection(tmp_path):
     assert projected["audit_verdict"] == "NO GO"
     assert projected["audit_cycle_path"] == "/tmp/audit/cycle.json"
     assert projected["audit_attempt_id"] == "attempt-123"
+    assert projected["kill_reason"] == "infra_kill"
     assert RESPONSE_SPILL_METADATA_KEY in projected
 
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Any, ClassVar, Literal, Protocol, runtime_checkable
 
 from ..closure_hashing import HASH_RE
 from ._type_audit_admission import (
@@ -416,7 +416,14 @@ class AuditDispositionCommitOutcome:
 
 @runtime_checkable
 class AuditAdmissionLedger(Protocol):
-    """Durable, single-mutable-authority store for audit admission state."""
+    """Durable, single-mutable-authority store for audit admission state.
+
+    The v1 indefinite policy retains installation occurrences, slots, attempts,
+    finalization acknowledgements, and committed replay projections without a
+    lossy compaction transition.
+    """
+
+    retention_policy_id: ClassVar[Literal["audit-admission-retention:indefinite:v1"]]
 
     def store_health(self) -> AuditAdmissionStoreHealth: ...
 
@@ -451,6 +458,21 @@ class AuditAdmissionLedger(Protocol):
         self,
         attempt_id: AuditAttemptId,
         outcome: AuditOutcome,
+        *,
+        required_effect_names: tuple[str, ...],
+    ) -> None: ...
+
+    def finalization_effect_result(
+        self,
+        attempt_id: AuditAttemptId,
+        effect_name: str,
+    ) -> dict[str, Any] | None: ...
+
+    def acknowledge_finalization_effect(
+        self,
+        attempt_id: AuditAttemptId,
+        effect_name: str,
+        result: dict[str, Any],
     ) -> None: ...
 
     def current_head(

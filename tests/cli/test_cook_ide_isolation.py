@@ -19,7 +19,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+pytestmark = [
+    pytest.mark.layer("cli"),
+    pytest.mark.small,
+    pytest.mark.usefixtures("_stub_interactive_prelaunch"),
+]
 
 
 def test_cook_session_ignores_ide_lock_file(

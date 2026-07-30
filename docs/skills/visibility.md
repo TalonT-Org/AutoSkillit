@@ -129,6 +129,12 @@ ORCHESTRATOR-role entries such as `process-issues` remain excluded from the L1 c
 and project-local bytes are exposed only when that source won effective resolution.
 The `AUTOSKILLIT_HEADLESS` environment variable activates session-boundary enforcement.
 
+Interactive tool visibility is not proof that Claude has completed its startup
+tool-list snapshot. `open_kitchen` keeps its per-tool
+`anthropic/alwaysLoad` metadata, while server-level `alwaysLoad` remains
+disabled until the measured initial-schema cost is accepted. See
+[Claude startup readiness](../execution/claude-startup-readiness.md).
+
 ## Troubleshooting Live Inline Projections
 
 `autoskillit@inline` is a session-only projection, not a marketplace installation.

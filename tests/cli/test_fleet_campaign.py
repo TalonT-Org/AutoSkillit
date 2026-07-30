@@ -16,7 +16,12 @@ from tests.cli._fleet_helpers import (
     _stub_guards,
 )
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium, pytest.mark.feature("fleet")]
+pytestmark = [
+    pytest.mark.layer("cli"),
+    pytest.mark.medium,
+    pytest.mark.feature("fleet"),
+    pytest.mark.usefixtures("_stub_interactive_prelaunch"),
+]
 
 
 def test_fleet_run_exits_when_campaign_not_found(

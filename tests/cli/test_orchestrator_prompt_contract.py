@@ -16,40 +16,55 @@ def _get_prompt() -> str:
     return _build_orchestrator_prompt("demo", "mcp__autoskillit__")
 
 
-class TestOrderedRecipeStartupContract:
-    """Startup distinguishes dispatch, transport, recovery, and application errors."""
+class TestPhaseScopedRecipeStartupContract:
+    """Startup recovery precedes received-result handling unconditionally."""
 
     @pytest.mark.parametrize(
-        ("case_number", "required_phrases"),
+        ("phase", "required_phrases"),
         [
-            (1, ("pre-dispatch", "runtime tool discovery", "bad symbol")),
-            (2, ("transport", "isError:true", "silent retry")),
-            (3, ("isError:false", "structured application result", "success:false")),
-            (4, ("recovery manifest", "flow_records", "entrypoint", "continuation")),
-            (5, ("nonrecoverable application error", "user_visible_message")),
+            (
+                "PRE-DISPATCH",
+                (
+                    "every failure",
+                    "before classifying",
+                    "bounded retry",
+                    "do not explain",
+                    "do not troubleshoot",
+                    "do not output a free-text question",
+                    "do not call AskUserQuestion",
+                ),
+            ),
+            (
+                "POST-RECEIPT",
+                (
+                    "CallToolResult",
+                    "isError:true",
+                    "isError:false",
+                    "structured application result",
+                ),
+            ),
         ],
     )
-    def test_cases_are_present_and_ordered(
-        self, case_number: int, required_phrases: tuple[str, ...]
+    def test_phases_are_present_and_semantically_complete(
+        self, phase: str, required_phrases: tuple[str, ...]
     ) -> None:
         prompt = _get_prompt()
-        start = prompt.index("RECIPE STARTUP RESULT ORDER")
+        start = prompt.index("MCP STARTUP RECOVERY")
         end = prompt.index("During pipeline execution", start)
         section = prompt[start:end]
-        case_positions = [section.index(f"{number}.") for number in range(1, 6)]
-        assert case_positions == sorted(case_positions)
-        case_start = section.index(f"{case_number}.")
-        case_end = (
-            section.index(f"{case_number + 1}.", case_start) if case_number < 5 else len(section)
+        phase_start = section.index(phase)
+        phase_end = (
+            section.index("POST-RECEIPT", phase_start) if phase == "PRE-DISPATCH" else len(section)
         )
-        case_text = section[case_start:case_end]
-        assert all(phrase in case_text for phrase in required_phrases)
+        phase_text = section[phase_start:phase_end]
+        assert all(phrase.lower() in phase_text.lower() for phrase in required_phrases)
 
     def test_recovery_precedes_generic_success_false_rules(self) -> None:
         prompt = _get_prompt()
-        start = prompt.index("RECIPE STARTUP RESULT ORDER")
+        start = prompt.index("MCP STARTUP RECOVERY")
         end = prompt.index("During pipeline execution", start)
         section = prompt[start:end]
+        assert section.index("PRE-DISPATCH") < section.index("POST-RECEIPT")
         assert section.index("recovery manifest") < section.index(
             "nonrecoverable application error"
         )
@@ -87,7 +102,7 @@ class TestStep0ToolPredicateCoverage:
             assert (
                 f"FAILURE PREDICATE — {tool}" in prompt
                 or f"- {tool}:" in prompt
-                or (tool == "open_kitchen" and "RECIPE STARTUP RESULT ORDER" in prompt)
+                or (tool == "open_kitchen" and "MCP STARTUP RECOVERY" in prompt)
             ), f"Tool '{tool}' in STEP 0 has no failure predicate or shared rule"
 
 
@@ -105,8 +120,11 @@ class TestFirstActionAskUserQuestionProhibition:
         assert "DO NOT call AskUserQuestion" in first_action_section
 
     def test_first_action_instructs_retry_on_mcp_unavailable(self):
-        """FIRST ACTION must contain a retry instruction for 'No such tool available'."""
-        from autoskillit.cli._prompts import _build_orchestrator_prompt
+        """FIRST ACTION embeds the exact canonical startup-recovery contract."""
+        from autoskillit.cli._prompts import (
+            _MCP_RETRY_INSTRUCTION,
+            _build_orchestrator_prompt,
+        )
 
         prompt = _build_orchestrator_prompt("demo", "mcp__autoskillit__")
         fa_start = prompt.find("FIRST ACTION")
@@ -115,23 +133,21 @@ class TestFirstActionAskUserQuestionProhibition:
         assert fa_end != -1, "'During pipeline execution' section not found after FIRST ACTION"
         first_action = prompt[fa_start:fa_end]
 
-        assert "retry" in first_action.lower(), (
-            "FIRST ACTION must contain a retry instruction for MCP tool unavailability"
-        )
-        assert "No such tool" in first_action or "unavailable" in first_action.lower(), (
-            "FIRST ACTION retry must reference 'No such tool' or 'unavailable'"
-        )
+        normalized = "\n".join(line.removeprefix("   ") for line in first_action.splitlines())
+        assert _MCP_RETRY_INSTRUCTION in normalized
         assert "Bash" not in first_action, "Retry instruction must not reference Bash"
         assert "ToolSearch" not in first_action, "Retry instruction must not reference ToolSearch"
         assert "sleep" not in first_action.lower(), "Retry instruction must not use sleep"
 
 
-class TestOpenKitchenRetryOnUnavailable:
-    """open_kitchen prompt must instruct the LLM to retry when MCP is not yet ready."""
+class TestOpenKitchenStartupPolicyEmbedding:
+    """open-kitchen prompts embed the exact canonical policy."""
 
-    def test_open_kitchen_prompt_instructs_retry_on_mcp_unavailable(self):
-        """open_kitchen prompt must contain a retry instruction before IMPORTANT section."""
-        from autoskillit.cli._prompts import _build_open_kitchen_prompt
+    def test_open_kitchen_prompt_embeds_canonical_policy(self):
+        from autoskillit.cli._prompts import (
+            _MCP_RETRY_INSTRUCTION,
+            _build_open_kitchen_prompt,
+        )
 
         ok_prompt = _build_open_kitchen_prompt("mcp__autoskillit__")
         first_section_end = ok_prompt.find("IMPORTANT \u2014 Orchestrator Discipline:")
@@ -140,57 +156,7 @@ class TestOpenKitchenRetryOnUnavailable:
         )
         first_section = ok_prompt[:first_section_end]
 
-        assert "retry" in first_section.lower(), (
-            "_build_open_kitchen_prompt must contain a retry instruction "
-            "for MCP tool unavailability"
-        )
-        assert "No such tool" in first_section or "unavailable" in first_section.lower(), (
-            "_build_open_kitchen_prompt retry must reference 'No such tool' or 'unavailable'"
-        )
-
-    def test_mcp_retry_instruction_covers_is_error_block_shape(self) -> None:
-        """_MCP_RETRY_INSTRUCTION must explicitly cover the is_error:true wire format.
-
-        Claude Code delivers MCP transport failures as is_error: true tool_use_error blocks,
-        not as string returns. The instruction must cover "any error" or explicitly mention
-        error blocks — not just the string-return case.
-        """
-        from autoskillit.cli._prompts import _MCP_RETRY_INSTRUCTION
-
-        instr = _MCP_RETRY_INSTRUCTION.lower()
-        assert any(
-            phrase in instr for phrase in ("any error", "tool error", "tool_use_error", "is_error")
-        ), (
-            "_MCP_RETRY_INSTRUCTION does not cover is_error:true wire format. "
-            "Claude Code sends MCP failures as is_error blocks, not string returns."
-        )
-
-    def test_mcp_retry_instruction_does_not_gate_on_string_return_only(self) -> None:
-        """Instruction must not use 'returns' as the sole trigger for retry.
-
-        'If open_kitchen returns X' is a string-return pattern. The actual error arrives
-        as is_error: true with a tool_use_error content block — not a function return.
-        """
-        from autoskillit.cli._prompts import _MCP_RETRY_INSTRUCTION
-
-        assert (
-            "returns" not in _MCP_RETRY_INSTRUCTION
-            or "any error" in _MCP_RETRY_INSTRUCTION.lower()
-            or "error" in _MCP_RETRY_INSTRUCTION.lower()
-        ), "_MCP_RETRY_INSTRUCTION uses 'returns' as sole trigger — misses is_error:true shape."
-
-    def test_mcp_retry_instruction_covers_silent_retry(self) -> None:
-        """Instruction must direct LLM to retry silently without troubleshooting.
-
-        Session 5f08b230 showed LLM gave troubleshooting advice instead of retrying.
-        Instruction must explicitly prohibit explaining the error to the user.
-        """
-        from autoskillit.cli._prompts import _MCP_RETRY_INSTRUCTION
-
-        instr = _MCP_RETRY_INSTRUCTION.lower()
-        assert "silently" in instr or "do not explain" in instr or "do not" in instr, (
-            "_MCP_RETRY_INSTRUCTION does not prohibit LLM from explaining the error to the user."
-        )
+        assert _MCP_RETRY_INSTRUCTION in first_section
 
 
 class TestFirstActionDirectOpenKitchen:

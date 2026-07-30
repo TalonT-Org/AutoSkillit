@@ -33,8 +33,6 @@ from ._doctor_types import DoctorResult
 
 logger = get_logger(__name__)
 
-CODEX_MIN_VERSION: tuple[int, ...] = (0, 130, 0)
-
 _CODEX_ALIAS_STALENESS_DAYS: int = 90
 
 
@@ -84,16 +82,32 @@ def _check_codex_version(*, backend: CodingAgentBackend | None = None) -> Doctor
     if ver.skip_reason is not None:
         return DoctorResult(Severity.OK, check_name, f"Skipped ({ver.skip_reason})")
     assert ver.parsed is not None
-    if ver.parsed < CODEX_MIN_VERSION:
-        min_str = ".".join(str(v) for v in CODEX_MIN_VERSION)
+    assert backend is not None
+    minimum_match = re.fullmatch(
+        r"(\d+)\.(\d+)\.(\d+)",
+        backend.capabilities.min_version,
+    )
+    if minimum_match is None:
+        return DoctorResult(
+            Severity.OK,
+            check_name,
+            "Skipped (backend declares no parseable minimum version)",
+        )
+    minimum = tuple(int(minimum_match.group(index)) for index in range(1, 4))
+    display_name = {
+        "claude-code": "Claude Code",
+        "codex": "Codex CLI",
+    }.get(backend.name, backend.name)
+    if ver.parsed < minimum:
+        min_str = ".".join(str(v) for v in minimum)
         cur_str = ".".join(str(v) for v in ver.parsed)
         return DoctorResult(
             Severity.WARNING,
             check_name,
-            f"Codex CLI {cur_str} is below minimum {min_str}",
+            f"{display_name} {cur_str} is below minimum {min_str}",
         )
     cur_str = ".".join(str(v) for v in ver.parsed)
-    return DoctorResult(Severity.OK, check_name, f"Codex CLI {cur_str}")
+    return DoctorResult(Severity.OK, check_name, f"{display_name} {cur_str}")
 
 
 def _check_codex_limits_verified(*, backend: CodingAgentBackend | None = None) -> DoctorResult:

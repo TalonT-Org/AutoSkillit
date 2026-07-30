@@ -119,6 +119,18 @@ Failure at any step yields a `MergeFailedStep` value that the orchestrator
 maps to a recovery skill (`resolve-failures`, `resolve-merge-conflicts`,
 `diagnose-ci`, …).
 
+## MCP startup phase boundary
+
+Before an `open_kitchen` `CallToolResult` exists, every dispatch failure follows
+the bounded, silent client-readiness policy. A real tool result ends that
+policy: tool-level errors and structured application failures retain their
+declared operation identity and retry disposition. Final fresh launches receive
+the policy prompt; final named or bare resumes depend on the client barrier
+because Claude suppresses appended system prompts on resume.
+
+The exact timeout, executable binding, and live conformance matrix are recorded
+in [Claude startup readiness](claude-startup-readiness.md).
+
 ## Sous-chef injection
 
 `open_kitchen` (in `server/tools_kitchen.py`) materialises the internal

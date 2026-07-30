@@ -10,10 +10,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autoskillit import cli
-from autoskillit.core import ClaudeFlags
+from autoskillit.core import ClaudeFlags, ExecutableLaunchBinding
 from tests.cli.conftest import _SCRIPT_YAML
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+pytestmark = [
+    pytest.mark.layer("cli"),
+    pytest.mark.medium,
+    pytest.mark.usefixtures("_stub_interactive_prelaunch"),
+]
 
 
 class TestCLIOrderCommand:
@@ -110,13 +114,20 @@ class TestCLIOrderCommand:
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
+        monkeypatch.setattr(
+            ExecutableLaunchBinding,
+            "resolve",
+            lambda **_kwargs: (_ for _ in ()).throw(
+                ValueError("'claude' not found in the effective PATH")
+            ),
+        )
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
 
         with pytest.raises(SystemExit) as exc_info:
             cli.order("test-script")
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
-        assert "claude" in captured.out.lower()
+        assert "claude" in captured.err.lower()
 
     def test_order_invalid_script_exits(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
@@ -470,7 +481,7 @@ class TestCLIOrderCommand:
         monkeypatch.setattr(
             CodexBackend,
             "ensure_pre_launch",
-            lambda _self, *, session_dir=None: [],
+            lambda _self, *, session_dir=None, executable=None: [],
         )
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-canary-key")

@@ -73,7 +73,9 @@ class TestJobEnvironment:
         assert workflow["jobs"]["codex-probe"]["env"]["CODEX_SMOKE_TEST"] == "1"
 
     def test_claude_probe_smoke_env(self, workflow: dict) -> None:
-        assert workflow["jobs"]["claude-probe"]["env"]["CLAUDE_CODE_SMOKE_TEST"] == "1"
+        env = workflow["jobs"]["claude-probe"]["env"]
+        assert env["CLAUDE_CODE_SMOKE_TEST"] == "1"
+        assert env["CLAUDE_STARTUP_READINESS_SMOKE"] == "1"
 
     @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
     def test_live_probe_timeout_covers_default_dispatch(
@@ -127,6 +129,25 @@ class TestVersionResolution:
         assert resolve_steps, f"No version resolution step found in {job_name}"
         for step in resolve_steps:
             assert "unknown" in step.get("run", ""), "Version step must fallback to 'unknown'"
+
+    def test_claude_probe_pins_supported_version_platform_rows(self, workflow: dict) -> None:
+        matrix = workflow["jobs"]["claude-probe"]["strategy"]["matrix"]["include"]
+        rows = {(row["os"], row["claude-version"], row["probe-tmpdir"]) for row in matrix}
+        assert rows == {
+            ("ubuntu-22.04", "2.1.142", "/dev/shm/pytest-probes"),
+            ("ubuntu-22.04", "2.1.197", "/dev/shm/pytest-probes"),
+            ("macos-14", "2.1.142", "/tmp/pytest-probes"),
+            ("macos-14", "2.1.197", "/tmp/pytest-probes"),
+        }
+
+    def test_claude_probe_installs_and_exports_exact_pinned_binary(self, workflow: dict) -> None:
+        steps = workflow["jobs"]["claude-probe"]["steps"]
+        install = next(step for step in steps if step.get("name") == "Install pinned Claude CLI")
+        run = install["run"]
+        assert "@anthropic-ai/claude-code@${{ matrix.claude-version }}" in run
+        assert "CLAUDE_CODE_EXECPATH" in run
+        resolve = next(step for step in steps if step.get("id") == "resolve-version")
+        assert '"$CLAUDE_CODE_EXECPATH" --version' in resolve["run"]
 
 
 class TestCacheGate:
@@ -242,4 +263,15 @@ class TestPostFailure:
         steps = workflow["jobs"][job_name]["steps"]
         for step in steps:
             if step.get("if") == "failure()":
-                assert "post-probe-failure.sh" in step.get("run", "")
+                if step.get("run"):
+                    assert "post-probe-failure.sh" in step["run"]
+
+    def test_claude_failure_uploads_bounded_startup_traces(self, workflow: dict) -> None:
+        steps = workflow["jobs"]["claude-probe"]["steps"]
+        upload = next(
+            step for step in steps if step.get("name") == "Upload bounded startup-readiness traces"
+        )
+        assert upload["if"] == "failure()"
+        assert "upload-artifact@" in upload["uses"]
+        assert upload["with"]["path"].endswith("*")
+        assert upload["with"]["retention-days"] == 14

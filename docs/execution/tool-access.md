@@ -224,6 +224,13 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`, FL = `fleet`
 
 ---
 
+Tool visibility in the server and tool addressability in an interactive Claude
+client are separate boundaries. `open_kitchen` is initially visible and carries
+per-tool `anthropic/alwaysLoad` metadata, while kitchen-tagged tools remain
+dynamically gated until opening completes. The bounded client snapshot and
+fresh/resume behavior are documented in
+[Claude startup readiness](claude-startup-readiness.md).
+
 **Total: 52 tools** — 4 Free Range + 11 Fleet + 37 Kitchen-tagged (of which 1, `test_check`, additionally carries the `headless` tag and is revealed inside headless sessions)
 
 For subset configuration that can hide functional-category tools, see

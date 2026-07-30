@@ -10,12 +10,18 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import json
 import os
+import pty
 import re
+import select
 import shlex
 import shutil
+import signal
 import subprocess
+import sys
+import time
 import tomllib
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -31,6 +37,7 @@ from autoskillit._probe_canary import (
 )
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
+    CLAUDE_CODE_CAPABILITIES,
     OUTPUT_DISCIPLINE_DIGEST,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     pkg_root,
@@ -91,6 +98,18 @@ _CLAUDE_CODE_SKIP_REASON = (
 _skip_unless_claude_code_smoke = pytest.mark.skipif(
     not os.environ.get("CLAUDE_CODE_SMOKE_TEST") or not shutil.which("claude"),
     reason=_CLAUDE_CODE_SKIP_REASON,
+)
+
+_CLAUDE_STARTUP_SKIP_REASON = (
+    "Set CLAUDE_STARTUP_READINESS_SMOKE=1 with ANTHROPIC_API_KEY or "
+    "CLAUDE_CODE_OAUTH_TOKEN to run the isolated interactive startup-readiness trace"
+)
+_skip_unless_claude_startup_smoke = pytest.mark.skipif(
+    not os.environ.get("CLAUDE_STARTUP_READINESS_SMOKE")
+    or not os.environ.get("CLAUDE_CODE_SMOKE_TEST")
+    or not shutil.which("claude")
+    or (not os.environ.get("ANTHROPIC_API_KEY") and not os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")),
+    reason=_CLAUDE_STARTUP_SKIP_REASON,
 )
 
 _PROBE_BACKEND = "codex"
@@ -1418,3 +1437,349 @@ class TestClaudeCodeOutputSchemaProbe:
             tools = await client.list_tools()
 
         assert any(t.name == "echo" for t in tools)
+
+
+class _ClaudeStartupProbeResult(NamedTuple):
+    ready: bool
+    tool_list_observed: bool
+    open_kitchen_result_observed: bool
+    question_detected: bool
+    output_bytes: int
+    output_sha256: str
+    trace_path: Path
+
+
+def _write_delayed_startup_plugin(
+    tmp_path: Path,
+    *,
+    delay_ms: int,
+    trace_path: Path,
+) -> Path:
+    plugin_dir = tmp_path / "plugin"
+    (plugin_dir / ".claude-plugin").mkdir(parents=True)
+    (plugin_dir / ".claude-plugin" / "plugin.json").write_text(
+        json.dumps(
+            {
+                "name": "autoskillit-startup-probe",
+                "version": "1.0.0",
+                "description": "Isolated startup-readiness conformance probe",
+            }
+        ),
+        encoding="utf-8",
+    )
+    autoskillit_executable = Path(sys.executable).with_name("autoskillit")
+    assert autoskillit_executable.is_file()
+    shim = tmp_path / "delayed_autoskillit.py"
+    shim.write_text(
+        "\n".join(
+            (
+                "import json",
+                "import os",
+                "import subprocess",
+                "import sys",
+                "import threading",
+                "import time",
+                "from pathlib import Path",
+                "trace = Path(sys.argv[1])",
+                "delay_ms = int(sys.argv[2])",
+                "executable = sys.argv[3]",
+                "write_lock = threading.Lock()",
+                "request_lock = threading.Lock()",
+                "requests = {}",
+                "def record(payload):",
+                "    payload['monotonic_ns'] = time.monotonic_ns()",
+                "    with write_lock:",
+                "        with trace.open('a', encoding='utf-8') as handle:",
+                "            handle.write(json.dumps(payload, sort_keys=True) + '\\n')",
+                "record({'event': 'server_delay_started'})",
+                "time.sleep(delay_ms / 1000)",
+                "record({'event': 'server_exec_started'})",
+                "child = subprocess.Popen(",
+                "    [executable],",
+                "    stdin=subprocess.PIPE,",
+                "    stdout=subprocess.PIPE,",
+                "    stderr=subprocess.PIPE,",
+                ")",
+                "def pump_client():",
+                "    assert child.stdin is not None",
+                "    for line in sys.stdin.buffer:",
+                "        try:",
+                "            payload = json.loads(line)",
+                "        except (json.JSONDecodeError, UnicodeDecodeError):",
+                "            payload = {}",
+                "        method = payload.get('method')",
+                "        params = payload.get('params')",
+                "        tool_name = params.get('name') if isinstance(params, dict) else None",
+                "        request_id = payload.get('id')",
+                "        if request_id is not None:",
+                "            with request_lock:",
+                "                requests[str(request_id)] = (method, tool_name)",
+                "        record({'event': 'client_message', 'method': method, "
+                "'tool_name': tool_name})",
+                "        child.stdin.write(line)",
+                "        child.stdin.flush()",
+                "    child.stdin.close()",
+                "def pump_stderr():",
+                "    assert child.stderr is not None",
+                "    for chunk in iter(lambda: child.stderr.read(8192), b''):",
+                "        sys.stderr.buffer.write(chunk)",
+                "        sys.stderr.buffer.flush()",
+                "threading.Thread(target=pump_client, daemon=True).start()",
+                "threading.Thread(target=pump_stderr, daemon=True).start()",
+                "assert child.stdout is not None",
+                "for line in child.stdout:",
+                "    try:",
+                "        payload = json.loads(line)",
+                "    except (json.JSONDecodeError, UnicodeDecodeError):",
+                "        payload = {}",
+                "    request_id = payload.get('id')",
+                "    with request_lock:",
+                "        request = requests.get(str(request_id))",
+                "    if request is not None and request[0] == 'tools/list':",
+                "        result = payload.get('result')",
+                "        tools = result.get('tools', []) if isinstance(result, dict) else []",
+                "        names = [tool.get('name') for tool in tools if isinstance(tool, dict)]",
+                "        schema_bytes = len(json.dumps(tools, sort_keys=True).encode('utf-8'))",
+                "        record({'event': 'tool_list_snapshot', 'tool_names': names, "
+                "'schema_bytes': schema_bytes})",
+                "    elif (request is not None and request[0] == 'tools/call' "
+                "and isinstance(request[1], str) "
+                "and request[1].endswith('open_kitchen')):",
+                "        result = payload.get('result')",
+                "        is_error = result.get('isError') if isinstance(result, dict) else True",
+                "        record({'event': 'open_kitchen_result', 'is_error': bool(is_error), "
+                "'has_jsonrpc_error': 'error' in payload})",
+                "    sys.stdout.buffer.write(line)",
+                "    sys.stdout.buffer.flush()",
+                "raise SystemExit(child.wait())",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (plugin_dir / ".mcp.json").write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "autoskillit": {
+                        "command": sys.executable,
+                        "args": [
+                            str(shim),
+                            str(trace_path),
+                            str(delay_ms),
+                            str(autoskillit_executable),
+                        ],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    return plugin_dir
+
+
+def _read_startup_trace(trace_path: Path) -> list[dict[str, object]]:
+    if not trace_path.exists():
+        return []
+    events: list[dict[str, object]] = []
+    for line in trace_path.read_text(encoding="utf-8").splitlines():
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            events.append(payload)
+    return events
+
+
+def _run_claude_startup_probe(
+    tmp_path: Path,
+    *,
+    delay_ms: int,
+    connect_timeout_ms: int,
+) -> _ClaudeStartupProbeResult:
+    from autoskillit.cli._prompts import _MCP_RETRY_INSTRUCTION
+
+    trace_dir = Path.cwd() / ".autoskillit" / "temp" / "claude-startup-readiness"
+    trace_dir.mkdir(parents=True, exist_ok=True)
+    trace_path = trace_dir / f"trace-{time.time_ns()}-{delay_ms}.jsonl"
+    terminal_path = trace_path.with_suffix(".terminal.bin")
+    plugin_dir = _write_delayed_startup_plugin(
+        tmp_path,
+        delay_ms=delay_ms,
+        trace_path=trace_path,
+    )
+    home = tmp_path / "home"
+    config_dir = tmp_path / "claude-config"
+    home.mkdir()
+    config_dir.mkdir()
+    (config_dir / "settings.json").write_text(
+        json.dumps(
+            {
+                "env": {"DISABLE_AUTOUPDATER": "1"},
+                "theme": "dark",
+            }
+        ),
+        encoding="utf-8",
+    )
+    executable = Path(shutil.which("claude") or "").resolve(strict=True)
+    onboarding_state: dict[str, object] = {
+        "autoUpdates": False,
+        "hasCompletedOnboarding": True,
+        "installMethod": "global",
+        "lastOnboardingVersion": CLAUDE_CODE_CAPABILITIES.min_version,
+        "theme": "dark",
+    }
+    for onboarding_path in (
+        home / ".claude.json",
+        config_dir / ".claude.json",
+        config_dir.parent / ".claude.json",
+    ):
+        onboarding_path.write_text(json.dumps(onboarding_state), encoding="utf-8")
+    isolated_binary = home / ".local" / "bin" / "claude"
+    isolated_binary.parent.mkdir(parents=True)
+    isolated_binary.symlink_to(executable)
+    environment = dict(os.environ)
+    environment.pop("CLAUDECODE", None)
+    environment.update(
+        {
+            "CLAUDE_CODE_EXECPATH": str(executable),
+            "CLAUDE_CONFIG_DIR": str(config_dir),
+            "HOME": str(home),
+            "IS_DEMO": "1",
+            "MCP_CONNECTION_NONBLOCKING": "0",
+            "MCP_CONNECT_TIMEOUT_MS": str(connect_timeout_ms),
+        }
+    )
+    command = [
+        str(executable),
+        "--dangerously-skip-permissions",
+        "--plugin-dir",
+        str(plugin_dir),
+        "--append-system-prompt",
+        _MCP_RETRY_INSTRUCTION,
+        (
+            "Call open_kitchen now. During startup follow the bounded silent retry "
+            "contract. After a successful result output AUTOSKILLIT_STARTUP_READY "
+            "and no question."
+        ),
+        "--tools",
+        "AskUserQuestion",
+    ]
+    master_fd, slave_fd = pty.openpty()
+    started_ns = time.monotonic_ns()
+    process = subprocess.Popen(
+        command,
+        stdin=slave_fd,
+        stdout=slave_fd,
+        stderr=slave_fd,
+        cwd=tmp_path,
+        env=environment,
+        close_fds=True,
+        start_new_session=True,
+    )
+    os.close(slave_fd)
+    retained = bytearray()
+    deadline = time.monotonic() + 90
+    try:
+        while time.monotonic() < deadline:
+            readable, _, _ = select.select([master_fd], [], [], 0.1)
+            if readable:
+                try:
+                    chunk = os.read(master_fd, 64 * 1024)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                retained.extend(chunk)
+                del retained[: -256 * 1024]
+            if any(
+                event.get("event") == "open_kitchen_result"
+                for event in _read_startup_trace(trace_path)
+            ):
+                break
+            if process.poll() is not None:
+                break
+    finally:
+        if process.poll() is None:
+            os.killpg(process.pid, signal.SIGTERM)
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait(timeout=5)
+        terminal_path.write_bytes(bytes(retained))
+        os.close(master_fd)
+    output = bytes(retained)
+    lowered = output.lower()
+    trace_events = _read_startup_trace(trace_path)
+    tool_list_observed = any(
+        event.get("event") == "tool_list_snapshot"
+        and "open_kitchen" in event.get("tool_names", [])
+        for event in trace_events
+    )
+    open_kitchen_result_observed = any(
+        event.get("event") == "open_kitchen_result"
+        and event.get("is_error") is False
+        and event.get("has_jsonrpc_error") is False
+        for event in trace_events
+    )
+    result = _ClaudeStartupProbeResult(
+        ready=tool_list_observed and open_kitchen_result_observed,
+        tool_list_observed=tool_list_observed,
+        open_kitchen_result_observed=open_kitchen_result_observed,
+        question_detected=(
+            b"askuserquestion" in lowered
+            or b"what would you like" in lowered
+            or b"would you like me to" in lowered
+        ),
+        output_bytes=len(output),
+        output_sha256=hashlib.sha256(output).hexdigest(),
+        trace_path=trace_path,
+    )
+    with trace_path.open("a", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps(
+                {
+                    "event": "probe_terminal",
+                    "delay_ms": delay_ms,
+                    "connect_timeout_ms": connect_timeout_ms,
+                    "elapsed_ms": (time.monotonic_ns() - started_ns) // 1_000_000,
+                    "ready": result.ready,
+                    "tool_list_observed": result.tool_list_observed,
+                    "open_kitchen_result_observed": (result.open_kitchen_result_observed),
+                    "question_detected": result.question_detected,
+                    "output_bytes": result.output_bytes,
+                    "output_sha256": result.output_sha256,
+                    "executable": str(executable),
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        )
+    return result
+
+
+@_skip_unless_claude_startup_smoke
+@pytest.mark.timeout(120)
+@pytest.mark.parametrize(
+    ("delay_ms", "connect_timeout_ms"),
+    [(0, 5_000), (1_000, 5_000), (2_500, 1_000)],
+    ids=["immediate", "within-budget", "fresh-over-budget-retry"],
+)
+def test_claude_startup_readiness_addressability_trace(
+    tmp_path: Path,
+    delay_ms: int,
+    connect_timeout_ms: int,
+) -> None:
+    result = _run_claude_startup_probe(
+        tmp_path,
+        delay_ms=delay_ms,
+        connect_timeout_ms=connect_timeout_ms,
+    )
+
+    assert result.ready, f"startup did not converge; bounded trace: {result.trace_path}"
+    assert result.tool_list_observed
+    assert result.open_kitchen_result_observed
+    assert not result.question_detected
+    assert result.output_bytes <= 256 * 1024

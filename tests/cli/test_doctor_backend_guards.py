@@ -581,6 +581,28 @@ class TestCheckCodexVersion:
         assert result.severity == Severity.OK
         assert "0.131.0" in result.message
 
+    def test_claude_uses_its_own_floor_and_display_name(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_codex_version
+        from autoskillit.core import Severity
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: self._codex_result("2.1.141 (Claude Code)\n"),
+        )
+
+        result = _check_codex_version(backend=ClaudeCodeBackend())
+
+        assert result.severity == Severity.WARNING
+        assert "Claude Code 2.1.141" in result.message
+        assert "2.1.142" in result.message
+        assert "Codex CLI" not in result.message
+
 
 class TestCheckCodexGraduation:
     """Tests for _check_codex_graduation doctor check (Check 33)."""

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import os
 import re as _re
+import shutil
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,6 +31,7 @@ __all__ = [
     "CmdOrigin",
     "CmdSpec",
     "CookSessionHandle",
+    "ExecutableLaunchBinding",
     "ModelTranslation",
     "SessionSummary",
     "SkillSessionConfig",
@@ -39,6 +43,119 @@ __all__ = [
     "model_class",
     "strip_context_window_suffix",
 ]
+
+
+_LAUNCH_FINGERPRINT_ENV_KEYS: frozenset[str] = frozenset(
+    {
+        "AUTOSKILLIT_AGENT_BACKEND",
+        "CLAUDE_CODE_EXECPATH",
+        "CLAUDE_CONFIG_DIR",
+        "CODEX_HOME",
+        "HOME",
+        "MCP_CONNECTION_NONBLOCKING",
+        "MCP_CONNECT_TIMEOUT_MS",
+        "PATH",
+        "XDG_CONFIG_HOME",
+    }
+)
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutableLaunchBinding:
+    """Canonical executable and sealed environment for one interactive launch."""
+
+    path: Path
+    device: int
+    inode: int
+    size: int
+    mtime_ns: int
+    file_sha256: str
+    environment_fingerprint: str
+    cwd: Path
+    launch_environment: Mapping[str, str] = field(repr=False, compare=False)
+
+    @classmethod
+    def resolve(
+        cls,
+        *,
+        binary_name: str,
+        environment: Mapping[str, str],
+        cwd: Path,
+        explicit_path_env: str | None = None,
+    ) -> ExecutableLaunchBinding:
+        """Resolve and seal the exact executable selected by the effective env."""
+        explicit = environment.get(explicit_path_env, "") if explicit_path_env else ""
+        if explicit:
+            candidate = Path(explicit).expanduser()
+            if not candidate.is_absolute():
+                raise ValueError(f"{explicit_path_env} must be an absolute path")
+        else:
+            try:
+                resolved = shutil.which(binary_name, path=environment.get("PATH"))
+            except TypeError:
+                # Test doubles and older compatibility shims may expose the
+                # historical one-argument shape.
+                resolved = shutil.which(binary_name)
+            if resolved is None:
+                raise ValueError(f"'{binary_name}' not found in the effective PATH")
+            candidate = Path(resolved)
+            if not candidate.exists():
+                path_environment = environment if "PATH" in environment else os.environ
+                for directory in os.get_exec_path(path_environment):
+                    effective_candidate = Path(directory) / binary_name
+                    if effective_candidate.is_file() and os.access(effective_candidate, os.X_OK):
+                        candidate = effective_candidate
+                        break
+        try:
+            canonical = candidate.resolve(strict=True)
+        except OSError as exc:
+            raise ValueError(f"Executable path cannot be resolved: {candidate}") from exc
+        if not canonical.is_file() or not os.access(canonical, os.X_OK):
+            raise ValueError(f"Executable path is not executable: {canonical}")
+        canonical_cwd = cwd.expanduser().resolve(strict=True)
+        stat_result = canonical.stat()
+        fingerprint_payload = "\n".join(
+            [
+                f"cwd={canonical_cwd}",
+                *(
+                    f"{key}={environment[key]}"
+                    for key in sorted(_LAUNCH_FINGERPRINT_ENV_KEYS & environment.keys())
+                ),
+            ]
+        ).encode("utf-8")
+        return cls(
+            path=canonical,
+            device=stat_result.st_dev,
+            inode=stat_result.st_ino,
+            size=stat_result.st_size,
+            mtime_ns=stat_result.st_mtime_ns,
+            file_sha256=_sha256_file(canonical),
+            environment_fingerprint=hashlib.sha256(fingerprint_payload).hexdigest(),
+            cwd=canonical_cwd,
+            launch_environment=MappingProxyType(dict(environment)),
+        )
+
+    def matches_current_file(self) -> bool:
+        """Return whether the probed executable identity still owns this path."""
+        try:
+            stat_result = self.path.stat()
+            return (
+                stat_result.st_dev == self.device
+                and stat_result.st_ino == self.inode
+                and stat_result.st_size == self.size
+                and stat_result.st_mtime_ns == self.mtime_ns
+                and _sha256_file(self.path) == self.file_sha256
+            )
+        except OSError:
+            return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -301,7 +418,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     applicable_guards=frozenset({"skill_load_guard"}),
     write_guard_tool_names=frozenset({"Write", "Edit", "Bash", "apply_patch"}),
     env_denylist_prefixes=(),
-    min_version="",
+    min_version="2.1.142",
     version_check_command="claude --version",
     process_name="claude",
     process_name_aliases=frozenset({"claude"}),

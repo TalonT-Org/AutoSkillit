@@ -84,6 +84,7 @@ def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
         CmdSpec,
         CodingAgentBackend,
         CookSessionHandle,
+        ExecutableLaunchBinding,
         ResumeSpec,
     )
 
@@ -105,11 +106,14 @@ def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
     }
 
     pre_launch = inspect.signature(CodingAgentBackend.ensure_pre_launch)
-    assert tuple(pre_launch.parameters) == ("self", "session_dir")
+    assert tuple(pre_launch.parameters) == ("self", "session_dir", "executable")
     assert pre_launch.parameters["session_dir"].kind is inspect.Parameter.KEYWORD_ONLY
     assert pre_launch.parameters["session_dir"].default is None
+    assert pre_launch.parameters["executable"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert pre_launch.parameters["executable"].default is None
     assert typing.get_type_hints(CodingAgentBackend.ensure_pre_launch) == {
         "session_dir": Path | None,
+        "executable": ExecutableLaunchBinding | None,
         "return": list[str],
     }
 

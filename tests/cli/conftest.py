@@ -8,7 +8,9 @@ is_git_worktree to True themselves.
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -36,6 +38,43 @@ def _stub_detect_mcp_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "autoskillit.core.detect_autoskillit_mcp_prefix",
         lambda _capabilities: DIRECT_PREFIX,
+    )
+
+
+@pytest.fixture
+def _stub_interactive_prelaunch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep legacy CLI unit tests focused below the strict launch-probe boundary."""
+    from autoskillit.core import ExecutableLaunchBinding
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    def resolve_binding(
+        *,
+        binary_name: str,
+        environment: dict[str, str],
+        cwd: Path,
+        explicit_path_env: str | None = None,
+    ) -> SimpleNamespace:
+        del explicit_path_env
+        if shutil.which(binary_name) is None:
+            raise ValueError(f"'{binary_name}' not found in the effective PATH")
+        return SimpleNamespace(
+            path=Path(binary_name),
+            launch_environment=dict(environment),
+            cwd=cwd.resolve(),
+            matches_current_file=lambda: True,
+        )
+
+    monkeypatch.setattr(ExecutableLaunchBinding, "resolve", resolve_binding)
+    monkeypatch.setattr(
+        ClaudeCodeBackend,
+        "ensure_pre_launch",
+        lambda _self, *, session_dir=None, executable=None: [],
+    )
+    monkeypatch.setattr(
+        CodexBackend,
+        "ensure_pre_launch",
+        lambda _self, *, session_dir=None, executable=None: [],
     )
 
 

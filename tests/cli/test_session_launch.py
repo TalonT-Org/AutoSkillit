@@ -60,7 +60,8 @@ class _BackendLifecycleStub:
     def validate_interactive_invocation(self, spec):
         return []
 
-    def ensure_pre_launch(self, *, session_dir: Path | None = None) -> list[str]:
+    def ensure_pre_launch(self, *, session_dir: Path | None = None, executable=None) -> list[str]:
+        del executable
         return []
 
     def recover_cook_history(self) -> None:
@@ -94,11 +95,22 @@ class _BackendLifecycleStub:
 
 
 def _capture_subprocess(monkeypatch: pytest.MonkeyPatch) -> dict:
-    """Replace subprocess.run with a capturing stub. Stubs shutil.which to /usr/bin/claude."""
+    """Replace subprocess.run with a capturing stub and preserve real binary lookup."""
     captured: dict = {}
-    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
+    real_which = shutil.which
+    monkeypatch.setattr(shutil, "which", lambda name, **kwargs: real_which(name, **kwargs))
 
     def mock_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
+        if len(cmd) > 1 and cmd[1] == "--version":
+            return type(
+                "Result",
+                (),
+                {
+                    "returncode": 0,
+                    "stdout": "2.1.197 (Claude Code)",
+                    "stderr": "",
+                },
+            )()
         captured["cmd"] = list(cmd)
         captured["env"] = kwargs.get("env", {}) or {}
         captured["pass_fds"] = kwargs.get("pass_fds")
@@ -126,7 +138,7 @@ def _stub_codex_pre_launch(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         CodexBackend,
         "ensure_pre_launch",
-        lambda _self, *, session_dir=None: [],
+        lambda _self, *, session_dir=None, executable=None: [],
     )
 
 
@@ -202,8 +214,10 @@ def test_run_interactive_session_appends_system_prompt(monkeypatch: pytest.Monke
     backend, captured_kwargs = _make_capturing_backend()
     _capture_subprocess(monkeypatch)
     _run_interactive_session(system_prompt="my-unique-prompt", backend=backend)
-    assert len(captured_kwargs) == 1
-    assert captured_kwargs[0]["system_prompt"] == "my-unique-prompt"
+    assert len(captured_kwargs) == 2
+    assert all(kwargs["system_prompt"] == "my-unique-prompt" for kwargs in captured_kwargs)
+    assert captured_kwargs[0].get("executable") is None
+    assert captured_kwargs[1]["executable"].path.is_absolute()
 
 
 def test_run_interactive_session_holds_binding_through_reap_and_passes_descriptors(
@@ -482,7 +496,9 @@ def test_skill_injection_enabled_passes_tools_to_backend(monkeypatch: pytest.Mon
     assert captured_kwargs[0]["system_prompt"] == "test"
 
 
-def test_binary_name_from_backend_used_in_which(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_binary_name_from_backend_used_in_which(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """shutil.which is called with the backend's binary_name(), not a hardcoded literal."""
     from autoskillit.core import BackendCapabilities, CmdSpec
 
@@ -510,12 +526,21 @@ def test_binary_name_from_backend_used_in_which(monkeypatch: pytest.MonkeyPatch)
             )
 
         def build_interactive_cmd(self, **kwargs):
-            return CmdSpec(cmd=("test-agent-binary", "--dangerously-skip-permissions"), env={})
+            executable = kwargs.get("executable")
+            binary = str(executable.path) if executable is not None else "test-agent-binary"
+            return CmdSpec(
+                cmd=(binary, "--dangerously-skip-permissions"),
+                env={"PATH": str(tmp_path)},
+            )
 
-    def tracking_which(binary: str):
+    binary_path = tmp_path / "test-agent-binary"
+    binary_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    binary_path.chmod(0o755)
+
+    def tracking_which(binary: str, **_kwargs):
         captured_which_arg.append(binary)
         if binary == "test-agent-binary":
-            return "/usr/bin/test-agent-binary"
+            return str(binary_path)
         return None
 
     monkeypatch.setattr(shutil, "which", tracking_which)
@@ -831,7 +856,7 @@ def test_feature_flag_gate_blocks_codex_backend_without_feature(
         subprocess, "run", lambda *a, **kw: type("Result", (), {"returncode": 0})()
     )
     _run_interactive_session(system_prompt="test")
-    assert backends_used == ["claude-code"], (
+    assert backends_used == ["claude-code", "claude-code"], (
         f"Expected fallback to claude-code, got: {backends_used}"
     )
 
@@ -886,7 +911,7 @@ def test_feature_flag_gate_allows_codex_backend_when_feature_enabled(
         subprocess, "run", lambda *a, **kw: type("Result", (), {"returncode": 0})()
     )
     _run_interactive_session(system_prompt="test")
-    assert backends_used == ["codex"], (
+    assert backends_used == ["codex", "codex"], (
         f"Expected codex backend when feature enabled, got: {backends_used}"
     )
 
@@ -969,9 +994,15 @@ def test_multi_backend_no_cross_flag_contamination(monkeypatch: pytest.MonkeyPat
     from autoskillit.execution.backends import BACKEND_REGISTRY
 
     captured: dict = {}
-    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/fake-agent")
+    real_which = shutil.which
 
     def mock_run(cmd, **kwargs):
+        if len(cmd) > 1 and cmd[1] == "--version":
+            return type(
+                "Result",
+                (),
+                {"returncode": 0, "stdout": "2.1.197", "stderr": ""},
+            )()
         captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0})()
 
@@ -984,9 +1015,8 @@ def test_multi_backend_no_cross_flag_contamination(monkeypatch: pytest.MonkeyPat
         captured.clear()
         _run_interactive_session(system_prompt="test", backend=backend)
         cmd = captured.get("cmd", [])
-        assert cmd[0] == backend.binary_name(), (
-            f"{backend_name}: cmd must start with binary_name(), got {cmd[0]!r}"
-        )
+        expected = Path(real_which(backend.binary_name()) or "").resolve()
+        assert Path(cmd[0]) == expected
         if backend.binary_name() != "claude":
             assert ClaudeFlags.PLUGIN_DIR not in cmd, (
                 f"{backend_name}: must not contain {ClaudeFlags.PLUGIN_DIR!r}"
@@ -1007,9 +1037,15 @@ def test_real_backend_no_foreign_flags(monkeypatch: pytest.MonkeyPatch, backend_
     from autoskillit.execution.backends import BACKEND_REGISTRY
 
     captured: dict = {}
-    monkeypatch.setattr(shutil, "which", lambda binary: f"/usr/bin/{binary}")
+    real_which = shutil.which
 
     def mock_run(cmd, **kwargs):
+        if len(cmd) > 1 and cmd[1] == "--version":
+            return type(
+                "Result",
+                (),
+                {"returncode": 0, "stdout": "2.1.197", "stderr": ""},
+            )()
         captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0})()
 
@@ -1021,9 +1057,8 @@ def test_real_backend_no_foreign_flags(monkeypatch: pytest.MonkeyPatch, backend_
     _run_interactive_session(system_prompt="test", backend=backend)
     cmd = captured.get("cmd", [])
 
-    assert cmd[0] == backend.binary_name(), (
-        f"{backend_name}: expected {backend.binary_name()!r} at cmd[0], got {cmd[0]!r}"
-    )
+    expected = Path(real_which(backend.binary_name()) or "").resolve()
+    assert Path(cmd[0]) == expected
 
     other_backend = "claude-code" if backend_name == "codex" else "codex"
     foreign_only = _BACKEND_FLAGS[other_backend] - _BACKEND_FLAGS[backend_name]
@@ -1047,9 +1082,15 @@ def test_cross_validation_contract_all_flags_known(
     from autoskillit.execution.backends import BACKEND_REGISTRY
 
     captured: dict = {}
-    monkeypatch.setattr(shutil, "which", lambda binary: f"/usr/bin/{binary}")
+    real_which = shutil.which
 
     def mock_run(cmd, **kwargs):
+        if len(cmd) > 1 and cmd[1] == "--version":
+            return type(
+                "Result",
+                (),
+                {"returncode": 0, "stdout": "2.1.197", "stderr": ""},
+            )()
         captured["cmd"] = list(cmd)
         return type("Result", (), {"returncode": 0})()
 
@@ -1061,9 +1102,8 @@ def test_cross_validation_contract_all_flags_known(
     _run_interactive_session(system_prompt="test", backend=backend)
     cmd = captured.get("cmd", [])
 
-    assert cmd[0] == backend.binary_name(), (
-        f"{backend_name}: cmd[0] must be {backend.binary_name()!r}, got {cmd[0]!r}"
-    )
+    expected = Path(real_which(backend.binary_name()) or "").resolve()
+    assert Path(cmd[0]) == expected
 
     valid_flags = _BACKEND_FLAGS.get(backend_name)
     if valid_flags is None:
@@ -1126,7 +1166,10 @@ def test_run_interactive_session_calls_ensure_pre_launch_for_codex_backend(
         def capabilities(self):
             return caps
 
-        def ensure_pre_launch(self, *, session_dir: Path | None = None) -> list[str]:
+        def ensure_pre_launch(
+            self, *, session_dir: Path | None = None, executable=None
+        ) -> list[str]:
+            del executable
             call_sequence.append("pre_launch")
             return []
 
@@ -1175,7 +1218,10 @@ def test_run_interactive_session_aborts_when_pre_launch_returns_errors(
         def capabilities(self):
             return caps
 
-        def ensure_pre_launch(self, *, session_dir: Path | None = None) -> list[str]:
+        def ensure_pre_launch(
+            self, *, session_dir: Path | None = None, executable=None
+        ) -> list[str]:
+            del executable
             return ["Failed to ensure MCP registration: some error"]
 
         def build_interactive_cmd(self, **kwargs):

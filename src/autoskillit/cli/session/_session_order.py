@@ -15,6 +15,9 @@ from autoskillit.cli._prompts import _build_orchestrator_prompt, _get_ingredient
 from autoskillit.cli.session._session_launch import _launch_cook_session, _write_order_entry
 from autoskillit.core import (
     ORDER_INTERACTIVE_REQUIRED_ENV,
+    BareResume,
+    NamedResume,
+    NoResume,
     RecipeSource,
     SkillExecutionRole,
     atomic_write,
@@ -140,6 +143,11 @@ def order(
 
     project_dir = Path.cwd()
     config = load_config(project_dir)
+    from autoskillit.execution import get_backend
+
+    backend = get_backend(config.agent_backend.backend)
+    backend_caps = backend.capabilities
+    mcp_prefix = detect_autoskillit_mcp_prefix(backend_caps)
     skill_resolver = DefaultSkillResolver()
     skill_visibility = config.skill_visibility_spec()
     validate_skill_tier_roles(skill_visibility, skill_resolver, project_dir)
@@ -157,28 +165,36 @@ def order(
         resume_spec = resume_spec_from_cli(resume=True, session_id=session_id)
 
     if _resume and recipe is None:
-        from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
+        from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS, _build_open_kitchen_prompt
         from autoskillit.cli.session._session_picker import pick_session as _pick_session
-        from autoskillit.config import load_config as _load_config_resume
-        from autoskillit.core import BareResume, NamedResume, NoResume
-        from autoskillit.execution import get_backend as _get_backend_resume
 
         if isinstance(resume_spec, BareResume):
-            _cfg_resume = _load_config_resume(Path.cwd())
-            _backend_resume = _get_backend_resume(_cfg_resume.agent_backend.backend)
-            _backend_resume.recover_cook_history()
+            backend.recover_cook_history()
             _sel = _pick_session(
                 "order",
-                Path.cwd(),
-                _backend_resume.session_locator(),
+                project_dir,
+                backend.session_locator(),
             )
             resume_spec = NamedResume(session_id=_sel) if _sel else NoResume()
+        system_prompt = (
+            _build_open_kitchen_prompt(
+                mcp_prefix=mcp_prefix,
+                has_unguarded_filesystem_access=backend_caps.has_unguarded_filesystem_access,
+                skill_catalog=skill_catalog,
+                project_dir=project_dir,
+                backend=backend,
+            )
+            if isinstance(resume_spec, NoResume)
+            else ""
+        )
         _launch_cook_session(
-            "",
+            system_prompt,
             initial_message=random.choice(_OPEN_KITCHEN_GREETINGS),
             resume_spec=resume_spec,
-            extra_env=_write_order_entry(Path.cwd(), None),
+            project_dir=project_dir,
+            extra_env=_write_order_entry(project_dir, None),
             required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
+            backend=backend,
             skill_catalog=skill_catalog,
         )
         return
@@ -210,27 +226,26 @@ def order(
         )
         if resolved is SLOT_ZERO_SELECTED:
             from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
-            from autoskillit.config import load_config as _load_config_early
-            from autoskillit.execution import get_backend as _get_backend_early
 
-            _cfg_early = _load_config_early(Path.cwd())
-            _backend_early = _get_backend_early(_cfg_early.agent_backend.backend)
-            _caps_early = _backend_early.capabilities
-            mcp_prefix = detect_autoskillit_mcp_prefix(_caps_early)
-            _launch_cook_session(
+            system_prompt = (
                 _build_open_kitchen_prompt(
                     mcp_prefix=mcp_prefix,
-                    has_unguarded_filesystem_access=_caps_early.has_unguarded_filesystem_access,
+                    has_unguarded_filesystem_access=(backend_caps.has_unguarded_filesystem_access),
                     skill_catalog=skill_catalog,
                     project_dir=project_dir,
-                    backend=_backend_early,
-                ),
+                    backend=backend,
+                )
+                if isinstance(resume_spec, NoResume)
+                else ""
+            )
+            _launch_cook_session(
+                system_prompt,
                 initial_message=random.choice(_OPEN_KITCHEN_GREETINGS),
                 resume_spec=resume_spec,
-                project_dir=Path.cwd(),
-                extra_env=_write_order_entry(Path.cwd(), None),
+                project_dir=project_dir,
+                extra_env=_write_order_entry(project_dir, None),
                 required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
-                backend=_backend_early,
+                backend=backend,
                 skill_catalog=skill_catalog,
             )
             return
@@ -347,26 +362,26 @@ def order(
         return
     greeting = random.choice(_COOK_GREETINGS).format(recipe_name=recipe)
     _extra_env |= _write_order_entry(Path.cwd(), recipe)
-    from autoskillit.execution import get_backend
-
-    _backend = get_backend(_cfg.agent_backend.backend)
-    _backend_caps = _backend.capabilities
-    mcp_prefix = detect_autoskillit_mcp_prefix(_backend_caps)
-    _launch_cook_session(
+    system_prompt = (
         _build_orchestrator_prompt(
             recipe,
             mcp_prefix=mcp_prefix,
             ingredients_table=_itable,
-            has_unguarded_filesystem_access=_backend_caps.has_unguarded_filesystem_access,
+            has_unguarded_filesystem_access=backend_caps.has_unguarded_filesystem_access,
             skill_catalog=skill_catalog,
             project_dir=project_dir,
-            backend=_backend,
-        ),
+            backend=backend,
+        )
+        if isinstance(resume_spec, NoResume)
+        else ""
+    )
+    _launch_cook_session(
+        system_prompt,
         initial_message=greeting,
         extra_env=_extra_env,
         resume_spec=resume_spec,
-        project_dir=Path.cwd(),
+        project_dir=project_dir,
         required_env=ORDER_INTERACTIVE_REQUIRED_ENV,
-        backend=_backend,
+        backend=backend,
         skill_catalog=skill_catalog,
     )

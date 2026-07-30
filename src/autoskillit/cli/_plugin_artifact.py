@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
-    DIRECT_INSTALL_CACHE_SUBDIR,
     INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     ArtifactLease,
     PluginArtifactIdentity,
@@ -31,6 +30,8 @@ from autoskillit.core import (
     due_retiring_records,
     get_logger,
     installed_plugin_artifact_manifest_payload,
+    installed_plugin_artifact_root,
+    installed_plugin_cache_dir,
     installed_plugin_semantic_key,
     log_plugin_artifact_lifecycle,
     migrate_retiring_cache_v1,
@@ -38,6 +39,12 @@ from autoskillit.core import (
     read_installed_plugin_artifact_identity,
     read_retiring_cache,
     write_versioned_json,
+)
+from autoskillit.core import (
+    installed_plugin_artifact_lease_path as installed_artifact_lock_path,
+)
+from autoskillit.core import (
+    installed_plugin_artifact_manifest_path as installed_artifact_manifest_path,
 )
 
 logger = get_logger(__name__)
@@ -47,31 +54,11 @@ if TYPE_CHECKING:
     from autoskillit.workspace import EffectiveSkillCatalog
 
 
-def installed_artifact_manifest_path(root: Path) -> Path:
-    """Return the stable external sibling manifest for an installed root."""
-    root = Path(root)
-    return root.parent / f".{root.name}.autoskillit-artifact.json"
-
-
-def installed_artifact_lock_path(root: Path) -> Path:
-    """Return the stable lease sidecar, which is never retired with the root."""
-    manifest_path = installed_artifact_manifest_path(root)
-    return manifest_path.with_suffix(manifest_path.suffix + ".lock")
-
-
 def current_installed_plugin_root() -> Path:
     """Return the lexical cache root created by the current install transaction."""
     from autoskillit import __version__
 
-    return (
-        Path.home()
-        / ".claude"
-        / "plugins"
-        / "cache"
-        / DIRECT_INSTALL_CACHE_SUBDIR
-        / "autoskillit"
-        / __version__
-    )
+    return installed_plugin_artifact_root(Path.home(), "autoskillit", __version__)
 
 
 def _validate_installed_plugin_destination(root: Path) -> None:
@@ -90,13 +77,9 @@ def _validate_installed_plugin_destination(root: Path) -> None:
         raise PluginArtifactValidationError(
             f"installed plugin target must be a directory: {supplied}"
         )
-    expected_parent = (
-        Path.home().resolve(strict=False)
-        / ".claude"
-        / "plugins"
-        / "cache"
-        / DIRECT_INSTALL_CACHE_SUBDIR
-        / "autoskillit"
+    expected_parent = installed_plugin_cache_dir(
+        Path.home().resolve(strict=False),
+        "autoskillit",
     )
     try:
         location = destination_location(supplied)

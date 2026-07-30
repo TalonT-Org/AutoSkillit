@@ -11,26 +11,27 @@ from pathlib import Path
 
 from autoskillit.cli._init_helpers import _user_claude_json_path
 from autoskillit.core import (
-    DIRECT_INSTALL_CACHE_SUBDIR,
     _installed_plugins_path,
     get_logger,
+    installed_plugin_artifact_lease_path,
+    installed_plugin_artifact_manifest_path,
+    installed_plugin_artifact_root,
+    installed_plugin_cache_dir,
 )
 
 logger = get_logger(__name__)
 
 
 def _plugin_cache_dir() -> Path:
-    return (
-        Path.home() / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / "autoskillit"
-    )
+    return installed_plugin_cache_dir(Path.home(), "autoskillit")
 
 
 def _installed_plugin_root(version: str | None = None) -> Path:
     if version is None:
-        from autoskillit.cli._plugin_artifact import current_installed_plugin_root
+        from autoskillit import __version__
 
-        return current_installed_plugin_root()
-    return _plugin_cache_dir() / version
+        version = __version__
+    return installed_plugin_artifact_root(Path.home(), "autoskillit", version)
 
 
 def _installed_plugins_json_path() -> Path:
@@ -47,16 +48,12 @@ class _InstallSnapshot:
         settings_path: Path | None = None,
         workspace_cwd: Path | None = None,
     ) -> None:
-        from autoskillit.cli._plugin_artifact import (
-            installed_artifact_lock_path,
-            installed_artifact_manifest_path,
-        )
         from autoskillit.cli.update._update_checks_fetch import _fetch_cache_path
 
         home = Path.home()
         self._target_root = target_root or _installed_plugin_root()
-        self._artifact_manifest_path = installed_artifact_manifest_path(self._target_root)
-        self._lease_path = installed_artifact_lock_path(self._target_root)
+        self._artifact_manifest_path = installed_plugin_artifact_manifest_path(self._target_root)
+        self._lease_path = installed_plugin_artifact_lease_path(self._target_root)
         settings = settings_path or home / ".claude" / "settings.json"
         self._workspace_temp_dir: Path | None = None
         self._workspace_temp_shape: str | None = None

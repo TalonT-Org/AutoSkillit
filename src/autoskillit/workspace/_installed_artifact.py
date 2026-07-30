@@ -13,12 +13,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from autoskillit.core import (
-    DIRECT_INSTALL_CACHE_SUBDIR,
     ArtifactLease,
     PluginArtifactIdentity,
     PluginArtifactUnavailableError,
     PluginArtifactValidationError,
     Severity,
+    installed_plugin_artifact_lease_path,
+    installed_plugin_artifact_manifest_path,
+    installed_plugin_artifact_root,
     installed_plugin_semantic_key,
     parse_installed_plugin_semantic_key,
     read_installed_plugin_artifact_identity,
@@ -114,15 +116,10 @@ class InstallStateSpec:
     @property
     def managed_root(self) -> Path:
         """Return the sole managed root authorized by the trusted inputs."""
-        plugin_name = self.plugin_ref.partition("@")[0]
-        return (
-            self.home
-            / ".claude"
-            / "plugins"
-            / "cache"
-            / DIRECT_INSTALL_CACHE_SUBDIR
-            / plugin_name
-            / self.expected_version
+        return installed_plugin_artifact_root(
+            self.home,
+            self.plugin_ref,
+            self.expected_version,
         )
 
     @property
@@ -132,13 +129,11 @@ class InstallStateSpec:
 
     @property
     def manifest_path(self) -> Path:
-        root = self.managed_root
-        return root.parent / f".{root.name}.autoskillit-artifact.json"
+        return installed_plugin_artifact_manifest_path(self.managed_root)
 
     @property
     def lease_path(self) -> Path:
-        manifest_path = self.manifest_path
-        return manifest_path.with_suffix(manifest_path.suffix + ".lock")
+        return installed_plugin_artifact_lease_path(self.managed_root)
 
 
 @dataclass(frozen=True, slots=True)

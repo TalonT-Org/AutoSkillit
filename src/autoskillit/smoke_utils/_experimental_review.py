@@ -77,6 +77,15 @@ _STANDARD_REVIEW_DIMENSIONS = (
     "cohesion",
     "slop",
 )
+_STANDARD_FINDING_KEYS = {
+    "file",
+    "line",
+    "dimension",
+    "severity",
+    "message",
+    "requires_decision",
+}
+_REVIEW_SEVERITIES = {"critical", "warning", "info"}
 _PUBLICATION_FILENAMES = {
     "raw_findings": "raw_findings_{pr_number}.json",
     "diff_context": "diff_context_{pr_number}.json",
@@ -261,6 +270,35 @@ def deletion_regression_is_eligible(deletion_context: object) -> bool:
     )
 
 
+def _standard_finding_validation_error(
+    finding: object,
+    *,
+    deletion_only: bool,
+    valid_diff_lines: Mapping[str, Sequence[int]],
+    review_root: Path,
+) -> str | None:
+    if not isinstance(finding, dict) or set(finding) != _STANDARD_FINDING_KEYS:
+        return "finding must have the exact standard closed key set"
+    expected_dimensions = (
+        {"deletion_regression"} if deletion_only else set(_STANDARD_REVIEW_DIMENSIONS)
+    )
+    if finding["dimension"] not in expected_dimensions:
+        return "dimension does not match the standard finding source"
+    if finding["severity"] not in _REVIEW_SEVERITIES:
+        return "severity is outside the closed enum"
+    if type(finding["requires_decision"]) is not bool:
+        return "requires_decision must be an exact boolean"
+    if not _is_non_empty_string(finding["file"]) or not _is_non_empty_string(finding["message"]):
+        return "file and message must be non-empty strings"
+    if not _is_positive_int(finding["line"]):
+        return "line must be a positive integer"
+    if not _is_contained_relative_path(finding["file"], review_root):
+        return "file escapes the review root"
+    if finding["line"] not in valid_diff_lines.get(str(finding["file"]), ()):
+        return "file and line are not an exact changed-line anchor"
+    return None
+
+
 def validate_experimental_auditor_outputs(
     *,
     outputs: Mapping[str, Mapping[str, object]],
@@ -395,8 +433,58 @@ def aggregate_experimental_review_candidates(
     prior_resolved_findings: Sequence[Mapping[str, object]],
     standard_findings: Sequence[Mapping[str, object]] = (),
     deletion_findings: Sequence[Mapping[str, object]] = (),
+    valid_diff_lines: Mapping[str, Sequence[int]] | None = None,
+    snapshot: Mapping[str, str] | None = None,
+    review_root: str = "",
 ) -> dict[str, object]:
     """Combine every source, then apply suppression-first deterministic deduplication."""
+    raw_findings = (*standard_findings, *deletion_findings)
+    validated_standard: list[Mapping[str, object]] = []
+    validated_deletion: list[Mapping[str, object]] = []
+    validation_errors: list[str] = []
+    if raw_findings:
+        root = Path(review_root)
+        head_sha = (snapshot or {}).get("head_sha", (snapshot or {}).get("_head_sha", ""))
+        base_sha = (snapshot or {}).get("base_sha", (snapshot or {}).get("_base_sha", ""))
+        if not root.is_absolute():
+            validation_errors.append("review_root must be absolute")
+        if not _is_non_empty_string(head_sha) or not _is_non_empty_string(base_sha):
+            validation_errors.append("snapshot head/base authority must be non-empty")
+        if valid_diff_lines is None:
+            validation_errors.append("exact changed-line authority is required")
+        if not validation_errors:
+            root = root.resolve()
+            snapshot_identity = dict(snapshot or {})
+            for source, findings, deletion_only, destination in (
+                ("standard", standard_findings, False, validated_standard),
+                ("deletion", deletion_findings, True, validated_deletion),
+            ):
+                for index, finding in enumerate(findings):
+                    error = _standard_finding_validation_error(
+                        finding,
+                        deletion_only=deletion_only,
+                        valid_diff_lines=valid_diff_lines or {},
+                        review_root=root,
+                    )
+                    if error is not None:
+                        validation_errors.append(f"{source}[{index}]: {error}")
+                        continue
+                    canonical = json.dumps(finding, sort_keys=True, separators=(",", ":"))
+                    destination.append(
+                        {
+                            **finding,
+                            "record_digest": hashlib.sha256(canonical.encode()).hexdigest(),
+                            "snapshot": snapshot_identity,
+                        }
+                    )
+    if validation_errors:
+        return {
+            "state": "degraded",
+            "survivors": [],
+            "aggregation_records": [],
+            "validation_errors": validation_errors,
+        }
+
     accepted_dispositions: dict[str, Mapping[str, object]] = {}
     for item in dispositions:
         if (
@@ -457,7 +545,7 @@ def aggregate_experimental_review_candidates(
         )
 
     eligible: list[dict[str, object]] = []
-    for index, finding in enumerate(standard_findings):
+    for index, finding in enumerate(validated_standard):
         default_source = (
             "deletion_regression" if finding.get("dimension") == "deletion_regression" else "arch"
         )
@@ -468,7 +556,7 @@ def aggregate_experimental_review_candidates(
                 original_index=index,
             )
         )
-    for index, finding in enumerate(deletion_findings):
+    for index, finding in enumerate(validated_deletion):
         eligible.append(
             normalize(
                 finding,
@@ -551,7 +639,12 @@ def aggregate_experimental_review_candidates(
                 }
             )
     survivors.sort(key=rank)
-    return {"survivors": survivors, "aggregation_records": aggregation_records}
+    return {
+        "state": "complete",
+        "survivors": survivors,
+        "aggregation_records": aggregation_records,
+        "validation_errors": [],
+    }
 
 
 def render_review_finding_body(finding: Mapping[str, object]) -> str:

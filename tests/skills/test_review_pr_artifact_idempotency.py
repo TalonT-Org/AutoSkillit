@@ -111,6 +111,12 @@ def test_runtime_threads_validation_aggregation_and_publication_results() -> Non
     assert 'for finding in AGGREGATION_RESULT["survivors"]' in step4
     assert "FINAL_REVIEW_FINDINGS" in step4
     assert "standard_findings=STANDARD_FINDINGS" in step4
+    assert "valid_diff_lines=VALID_DIFF_LINES" in step4
+    assert 'snapshot=GATE_AUTHORITY["snapshot"]' in step4
+    assert "review_root=REVIEW_CHECKOUT_ROOT" in step4
+    assert 'if GATE_STATE == "valid_true":' in step4
+    assert 'elif GATE_STATE == "valid_false":' in step4
+    assert '"state": "not_required"' in step4
     assert "PUBLICATION = prepare_experimental_review_publication(" in step8
     assert "survivors=FINAL_REVIEW_FINDINGS" in step8
     assert "receipt=" in step8

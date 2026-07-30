@@ -1974,8 +1974,6 @@ def _combined_review_survivors(gate_state: str) -> list[dict[str, object]]:
             "severity": "critical",
             "message": "Standard behavior regressed",
             "requires_decision": False,
-            "opaque_standard": {"retained": True},
-            "code_region": "[L40]+broken",
         }
     ]
     deletion = [
@@ -2022,8 +2020,98 @@ def _combined_review_survivors(gate_state: str) -> list[dict[str, object]]:
         prior_resolved_findings=[],
         standard_findings=standard,
         deletion_findings=deletion,
+        valid_diff_lines={"src/app.py": [40], "src/deleted.py": [7]},
+        snapshot={"head_sha": "head", "base_sha": "base"},
+        review_root=str(Path.cwd()),
     )
+    assert result["state"] == "complete"
     return [dict(finding) for finding in result["survivors"]]
+
+
+@pytest.mark.parametrize(
+    "invalid_finding",
+    [
+        {
+            "file": "src/app.py",
+            "line": "40",
+            "dimension": "bugs",
+            "severity": "critical",
+            "message": "Malformed line",
+            "requires_decision": False,
+        },
+        {
+            "file": "../escape.py",
+            "line": 40,
+            "dimension": "bugs",
+            "severity": "critical",
+            "message": "Escaping path",
+            "requires_decision": False,
+        },
+        {
+            "file": "src/app.py",
+            "line": 41,
+            "dimension": "bugs",
+            "severity": "critical",
+            "message": "Unchanged line",
+            "requires_decision": False,
+        },
+        {
+            "file": "src/app.py",
+            "line": 40,
+            "dimension": "bugs",
+            "severity": "critical",
+            "message": "Unexpected field",
+            "requires_decision": False,
+            "opaque": True,
+        },
+    ],
+)
+def test_standard_review_findings_degrade_atomically(
+    invalid_finding: dict[str, object],
+) -> None:
+    valid_finding = {
+        "file": "src/valid.py",
+        "line": 7,
+        "dimension": "tests",
+        "severity": "warning",
+        "message": "Valid sibling",
+        "requires_decision": False,
+    }
+    result = aggregate_experimental_review_candidates(
+        candidates=[],
+        dispositions=[],
+        prior_resolved_findings=[],
+        standard_findings=[valid_finding, invalid_finding],
+        valid_diff_lines={"src/valid.py": [7], "src/app.py": [40]},
+        snapshot={"head_sha": "head", "base_sha": "base"},
+        review_root=str(Path.cwd()),
+    )
+    assert result["state"] == "degraded"
+    assert result["survivors"] == []
+    assert result["validation_errors"]
+
+
+def test_standard_review_findings_require_snapshot_authority() -> None:
+    result = aggregate_experimental_review_candidates(
+        candidates=[],
+        dispositions=[],
+        prior_resolved_findings=[],
+        standard_findings=[
+            {
+                "file": "src/app.py",
+                "line": 40,
+                "dimension": "bugs",
+                "severity": "critical",
+                "message": "Missing snapshot",
+                "requires_decision": False,
+            }
+        ],
+        valid_diff_lines={"src/app.py": [40]},
+        review_root=str(Path.cwd()),
+    )
+    assert result["state"] == "degraded"
+    assert result["survivors"] == []
+    assert result["validation_errors"] == ["snapshot head/base authority must be non-empty"]
 
 
 @pytest.mark.parametrize(

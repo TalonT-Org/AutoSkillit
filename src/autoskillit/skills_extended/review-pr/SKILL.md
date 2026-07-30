@@ -929,12 +929,27 @@ from autoskillit.smoke_utils import (
 )
 
 STANDARD_FINDINGS = json.loads(STANDARD_RAW_FINDINGS)
-VALIDATION_RESULT = validate_experimental_auditor_outputs(
-    outputs=EXPERIMENTAL_OUTCOMES_BY_NAME,
-    valid_diff_lines=VALID_DIFF_LINES,
-    snapshot=GATE_AUTHORITY["snapshot"],
-    review_root=REVIEW_CHECKOUT_ROOT,
-)
+if GATE_STATE == "valid_true":
+    VALIDATION_RESULT = validate_experimental_auditor_outputs(
+        outputs=EXPERIMENTAL_OUTCOMES_BY_NAME,
+        valid_diff_lines=VALID_DIFF_LINES,
+        snapshot=GATE_AUTHORITY["snapshot"],
+        review_root=REVIEW_CHECKOUT_ROOT,
+    )
+elif GATE_STATE == "valid_false":
+    VALIDATION_RESULT = {
+        "state": "not_required",
+        "candidates": [],
+        "status_by_name": {},
+        "malformed_envelopes": [],
+    }
+else:
+    VALIDATION_RESULT = {
+        "state": "degraded",
+        "candidates": [],
+        "status_by_name": {},
+        "malformed_envelopes": [],
+    }
 EXPERIMENTAL_AUDIT_STATE = VALIDATION_RESULT["state"]
 EXPERIMENTAL_CANDIDATES = VALIDATION_RESULT["candidates"]
 EXPERIMENTAL_AUDITOR_STATUS = VALIDATION_RESULT["status_by_name"]
@@ -946,7 +961,12 @@ AGGREGATION_RESULT = aggregate_experimental_review_candidates(
     dispositions=DISPOSITION_RECORDS,
     prior_resolved_findings=prior_resolved_findings,
     standard_findings=STANDARD_FINDINGS,
+    valid_diff_lines=VALID_DIFF_LINES,
+    snapshot=GATE_AUTHORITY["snapshot"],
+    review_root=REVIEW_CHECKOUT_ROOT,
 )
+if AGGREGATION_RESULT["state"] == "degraded":
+    EXPERIMENTAL_AUDIT_STATE = "degraded"
 FINAL_REVIEW_FINDINGS = [
     {**finding, "rendered_body": render_review_finding_body(finding)}
     for finding in AGGREGATION_RESULT["survivors"]

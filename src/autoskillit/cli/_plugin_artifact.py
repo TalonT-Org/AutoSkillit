@@ -259,25 +259,45 @@ class InstalledPluginArtifactAuthority:
             raise PluginArtifactValidationError(
                 "installed plugin authority requires implicit_installed load mode"
             )
+        from autoskillit.workspace import (
+            InstallStateSpec,
+            verify_installed_plugin_artifact,
+        )
+
+        plugin_ref, separator, expected_version = self._semantic_key.rpartition(":")
         try:
-            managed_path = _canonical_installed_root(self._root)
-        except Exception as exc:
+            home = self._root.parents[5]
+        except IndexError as exc:
             raise PluginArtifactValidationError(
                 f"installed plugin root is invalid: {self._root}"
             ) from exc
-        try:
-            lease = ArtifactLease.acquire_shared(installed_artifact_lock_path(managed_path))
-        except Exception as exc:
-            raise PluginArtifactPublicationError(
-                f"installed plugin reader lease acquisition failed: {self._semantic_key}"
-            ) from exc
-        try:
-            identity = _read_and_validate_identity(
-                managed_path,
-                expected_semantic_key=self._semantic_key,
+        if not separator:
+            raise PluginArtifactValidationError(
+                f"installed plugin semantic identity is invalid: {self._semantic_key}"
             )
+        spec = InstallStateSpec(
+            home=home,
+            plugin_ref=plugin_ref,
+            expected_version=expected_version,
+            require_registered_plugin=True,
+            require_shared_lease=True,
+        )
+        if spec.managed_root != self._root:
+            raise PluginArtifactValidationError(f"installed plugin root is invalid: {self._root}")
+
+        verification = verify_installed_plugin_artifact(spec)
+        lease = verification.lease
+        if verification.findings or verification.identity is None or lease is None:
+            if lease is not None:
+                lease.close()
+            detail = "; ".join(finding.message for finding in verification.findings)
+            raise PluginArtifactValidationError(
+                detail or f"installed plugin identity is unavailable: {self._semantic_key}"
+            )
+        try:
+            identity = verification.identity
             InstalledPluginArtifactRetirementOwner(
-                managed_path.parent
+                identity.managed_path.parent
             ).cancel_obsolete_retirements(identity)
             log_plugin_artifact_lifecycle(
                 logger,

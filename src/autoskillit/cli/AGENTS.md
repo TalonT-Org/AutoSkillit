@@ -13,6 +13,8 @@ and retiring queue via `_InstallSnapshot`. Do not add a mutation above the
 preflight block, and do not add a failure path that bypasses the rollback —
 retiring the live plugin cache before its replacement was secured is what
 produced a dangling registry pointer two hours later.
+`_install_contract.py` is the dependency leaf that preserves install semantics
+across the Python, CLI, and update-child process boundaries.
 
 `app.py` is the Click application root; all sub-packages register their subcommand groups
 against the root Click group. `_serve_guard.py` was extracted from `app.py` to isolate

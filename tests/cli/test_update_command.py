@@ -1,74 +1,46 @@
-"""Tests for cli/_update.py — first-class update command."""
+"""Tests for the explicit update presentation adapter."""
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.cli._install_info import InstallInfo, InstallType
+from autoskillit.cli.update._transaction import (
+    UpdateTransactionOutcome,
+    UpdateTransactionResult,
+)
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
-def _make_info(
-    install_type: InstallType,
-    revision: str | None = None,
-    editable_source: Path | None = None,
-) -> InstallInfo:
-    return InstallInfo(
-        install_type=install_type,
-        commit_id="abc123" if install_type == InstallType.GIT_VCS else None,
-        requested_revision=revision,
-        url=None,
-        editable_source=editable_source,
-    )
-
-
-class FakeTG:
-    def __enter__(self):
+class _TerminalGuard:
+    def __enter__(self) -> _TerminalGuard:
         return self
 
-    def __exit__(self, *a):
+    def __exit__(self, *args: object) -> bool:
         return False
 
 
-def _setup_run_update(
+def _patch_result(
     monkeypatch: pytest.MonkeyPatch,
-    info: InstallInfo,
-    tmp_path: Path,
-    current_version: str = "0.7.77",
-    new_version: str = "0.9.0",
-) -> list[list[str]]:
-    """Patch run_update_command dependencies, return captured subprocess.run call args."""
-    monkeypatch.setattr("autoskillit.cli.update._update.detect_install", lambda: info)
-    monkeypatch.setattr("autoskillit.cli.update._update.terminal_guard", FakeTG)
-
-    run_calls: list[list[str]] = []
+    result: UpdateTransactionResult,
+) -> None:
     monkeypatch.setattr(
-        "autoskillit.cli.update._update.subprocess.run",
-        lambda cmd, **kw: run_calls.append(list(cmd)) or subprocess.CompletedProcess(cmd, 0),
+        "autoskillit.cli.update._update.run_update_transaction",
+        lambda **kwargs: result,
     )
-
-    import autoskillit as _pkg
-
-    monkeypatch.setattr(_pkg, "__version__", current_version)
-
-    import importlib.metadata
-
-    monkeypatch.setattr(importlib.metadata, "version", lambda _name: new_version)
-    monkeypatch.setattr("autoskillit.cli.update._update.perform_restart", lambda: None)
-    return run_calls
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update.terminal_guard",
+        _TerminalGuard,
+    )
 
 
 def test_update_subcommand_registered_in_help() -> None:
-    """autoskillit update --help must exit 0."""
-    import subprocess as _sp
+    import subprocess
     import sys
 
-    result = _sp.run(
+    result = subprocess.run(
         [sys.executable, "-m", "autoskillit", "update", "--help"],
         capture_output=True,
         text=True,
@@ -77,245 +49,112 @@ def test_update_subcommand_registered_in_help() -> None:
 
 
 @pytest.mark.parametrize(
-    "revision,expected_cmd_prefix",
+    "outcome",
     [
-        ("stable", ["uv", "tool", "upgrade", "autoskillit"]),
-        ("main", ["uv", "tool", "upgrade", "autoskillit"]),
-        ("v0.7.75", ["uv", "tool", "upgrade", "autoskillit"]),
-        ("develop", ["uv", "tool", "install", "--force"]),
+        outcome
+        for outcome in UpdateTransactionOutcome
+        if outcome is not UpdateTransactionOutcome.COMPLETED
     ],
 )
-def test_update_runs_upgrade_command_for_git_vcs_install(
+def test_explicit_noncompleted_outcomes_exit_nonzero_without_success_effects(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    revision: str,
-    expected_cmd_prefix: list[str],
+    outcome: UpdateTransactionOutcome,
 ) -> None:
     from autoskillit.cli.update._update import run_update_command
 
-    info = _make_info(InstallType.GIT_VCS, revision=revision)
-    run_calls = _setup_run_update(monkeypatch, info, tmp_path)
-    run_update_command(home=tmp_path)
-    assert any(cmd[: len(expected_cmd_prefix)] == expected_cmd_prefix for cmd in run_calls), (
-        f"Expected cmd prefix {expected_cmd_prefix} in calls {run_calls}"
+    state_file = tmp_path / ".autoskillit" / "update_check.json"
+    state_file.parent.mkdir(parents=True)
+    original = '{"update_prompt": {"conditions": ["binary"]}}'
+    state_file.write_text(original, encoding="utf-8")
+    _patch_result(
+        monkeypatch,
+        UpdateTransactionResult(outcome=outcome, findings=("transaction failed",)),
     )
-
-
-def test_update_runs_upgrade_command_for_local_editable(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    from autoskillit.cli.update._update import run_update_command
-
-    editable_source = tmp_path / "repo"
-    editable_source.mkdir()
-    info = _make_info(InstallType.LOCAL_EDITABLE, editable_source=editable_source)
-    run_calls = _setup_run_update(monkeypatch, info, tmp_path)
-    run_update_command(home=tmp_path)
-    assert any(cmd[:4] == ["uv", "pip", "install", "-e"] for cmd in run_calls), (
-        f"Expected uv pip install -e in calls {run_calls}"
-    )
-
-
-def test_update_runs_autoskillit_install_after_upgrade_command(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    from autoskillit.cli.update._update import run_update_command
-
-    info = _make_info(InstallType.GIT_VCS, revision="stable")
-    run_calls = _setup_run_update(monkeypatch, info, tmp_path)
-    run_update_command(home=tmp_path)
-    assert any(cmd[:2] == ["autoskillit", "install"] for cmd in run_calls)
-
-
-def test_update_passes_skip_env_to_subprocess(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    from autoskillit.cli.update._update import run_update_command
-
-    info = _make_info(InstallType.GIT_VCS, revision="stable")
-    monkeypatch.setattr("autoskillit.cli.update._update.detect_install", lambda: info)
-    monkeypatch.setattr("autoskillit.cli.update._update.terminal_guard", FakeTG)
-
-    env_passed: list[dict] = []
+    effects: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update.subprocess.run",
-        lambda cmd, **kw: (
-            env_passed.append(kw.get("env", {})) or subprocess.CompletedProcess(cmd, 0)
-        ),
-    )
-
-    import autoskillit as _pkg
-
-    monkeypatch.setattr(_pkg, "__version__", "0.7.77")
-
-    import importlib.metadata
-
-    monkeypatch.setattr(importlib.metadata, "version", lambda _name: "0.9.0")
-    monkeypatch.setattr("autoskillit.cli.update._update.perform_restart", lambda: None)
-    run_update_command(home=tmp_path)
-
-    for env in env_passed:
-        assert env.get("AUTOSKILLIT_SKIP_STALE_CHECK") == "1"
-        assert env.get("AUTOSKILLIT_SKIP_UPDATE_CHECK") == "1"
-
-
-def test_update_verifies_version_advance_and_warns_on_failure(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    from autoskillit.cli.update._update import run_update_command
-
-    info = _make_info(InstallType.GIT_VCS, revision="stable")
-    monkeypatch.setattr("autoskillit.cli.update._update.detect_install", lambda: info)
-    monkeypatch.setattr("autoskillit.cli.update._update.terminal_guard", FakeTG)
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update.subprocess.run",
-        lambda *a, **kw: subprocess.CompletedProcess([], 0),
+        "autoskillit.cli.update._update.invalidate_fetch_cache",
+        lambda *_args: effects.append("invalidate"),
+        raising=False,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.0"
+        "autoskillit.cli.update._update.perform_restart",
+        lambda: effects.append("restart"),
     )
 
-    import autoskillit as _pkg
+    with pytest.raises(SystemExit) as exc_info:
+        run_update_command(home=tmp_path)
 
-    monkeypatch.setattr(_pkg, "__version__", "0.7.77")
-
-    # version unchanged after upgrade — simulates a silent failure
-    import importlib.metadata
-
-    monkeypatch.setattr(importlib.metadata, "version", lambda _name: "0.7.77")
-
-    printed: list[str] = []
-    monkeypatch.setattr(
-        "builtins.print", lambda *args, **kw: printed.append(" ".join(str(a) for a in args))
-    )
-    run_update_command(home=tmp_path)
-    combined = " ".join(printed)
-    assert "still 0.7.77" in combined
+    assert exc_info.value.code != 0
+    assert effects == []
+    assert state_file.read_text(encoding="utf-8") == original
 
 
-def test_update_clears_dismissal_state_on_success(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_explicit_completed_clears_state_invalidates_prints_and_restarts(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     from autoskillit.cli.update._update import run_update_command
-    from autoskillit.cli.update._update_checks import _read_dismiss_state, _write_dismiss_state
+    from autoskillit.cli.update._update_checks import (
+        _read_dismiss_state,
+        _write_dismiss_state,
+    )
 
-    # Seed dismissal state
-    (tmp_path / ".autoskillit").mkdir(parents=True, exist_ok=True)
     _write_dismiss_state(
         tmp_path,
         {
-            "update_prompt": {
-                "dismissed_at": "2026-01-01T00:00:00+00:00",
-                "dismissed_version": "0.7.77",
-                "conditions": ["binary"],
-            }
+            "update_prompt": {"conditions": ["binary"]},
+            "binary_snoozed": True,
+            "preserved": "value",
         },
     )
-
-    info = _make_info(InstallType.GIT_VCS, revision="stable")
-    monkeypatch.setattr("autoskillit.cli.update._update.detect_install", lambda: info)
-    monkeypatch.setattr("autoskillit.cli.update._update.terminal_guard", FakeTG)
+    _patch_result(
+        monkeypatch,
+        UpdateTransactionResult(
+            outcome=UpdateTransactionOutcome.COMPLETED,
+            expected_version="1.1.0",
+        ),
+    )
+    effects: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update.subprocess.run",
-        lambda *a, **kw: subprocess.CompletedProcess([], 0),
+        "autoskillit.cli.update._update.invalidate_fetch_cache",
+        lambda *_args: effects.append("invalidate"),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update.perform_restart",
+        lambda: effects.append("restart"),
     )
 
-    import autoskillit as _pkg
-
-    monkeypatch.setattr(_pkg, "__version__", "0.7.77")
-
-    import importlib.metadata
-
-    monkeypatch.setattr(importlib.metadata, "version", lambda _name: "0.9.0")
-
-    monkeypatch.setattr("builtins.print", lambda *a, **kw: None)
-    monkeypatch.setattr("autoskillit.cli.update._update.perform_restart", lambda: None)
     run_update_command(home=tmp_path)
+
     state = _read_dismiss_state(tmp_path)
-    assert "update_prompt" not in state
+    assert state == {"preserved": "value"}
+    assert effects == ["restart"]
+    assert "updated successfully" in capsys.readouterr().out
 
 
-def test_update_reports_actionable_error_on_unknown_install_type(
+def test_explicit_passes_home_and_fresh_process_runner(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from autoskillit.cli.update._update import run_update_command
+    from autoskillit.cli.update import _update
 
-    info = _make_info(InstallType.UNKNOWN)
-    monkeypatch.setattr("autoskillit.cli.update._update.detect_install", lambda: info)
-    printed: list[str] = []
+    captured: list[dict[str, object]] = []
     monkeypatch.setattr(
-        "builtins.print", lambda *args, **kw: printed.append(" ".join(str(a) for a in args))
+        _update,
+        "run_update_transaction",
+        lambda **kwargs: (
+            captured.append(kwargs)
+            or UpdateTransactionResult(
+                outcome=UpdateTransactionOutcome.FAILED_UPGRADE,
+            )
+        ),
     )
-    with pytest.raises(SystemExit) as exc_info:
-        run_update_command(home=tmp_path)
-    assert exc_info.value.code == 2
-    combined = " ".join(printed)
-    assert "Unknown install type" in combined or "install.sh" in combined
+    monkeypatch.setattr(_update, "terminal_guard", _TerminalGuard)
 
+    with pytest.raises(SystemExit):
+        _update.run_update_command(home=tmp_path)
 
-def test_run_update_command_warns_on_install_failure(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture, tmp_path: Path
-) -> None:
-    """run_update_command warns user when autoskillit install step exits non-zero."""
-    from autoskillit.cli.update._update import run_update_command
-
-    info = _make_info(InstallType.GIT_VCS, revision="stable")
-    monkeypatch.setattr("autoskillit.cli.update._update.detect_install", lambda: info)
-    monkeypatch.setattr("autoskillit.cli.update._update.terminal_guard", FakeTG)
-
-    upgrade_ok = subprocess.CompletedProcess([], returncode=0)
-    install_fail = subprocess.CompletedProcess([], returncode=1)
-    mock_run = MagicMock(side_effect=[upgrade_ok, install_fail])
-    monkeypatch.setattr("autoskillit.cli.update._update.subprocess.run", mock_run)
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
-    )
-    import autoskillit as _pkg
-
-    # Simulate pre-update state: process-cached __version__ is stale (0.9.0),
-    # but post-install metadata already reflects the new version (0.9.1).
-    monkeypatch.setattr(_pkg, "__version__", "0.9.0")
-    import importlib.metadata
-
-    monkeypatch.setattr(importlib.metadata, "version", lambda _: "0.9.1")
-    monkeypatch.setattr("autoskillit.cli.update._update.perform_restart", lambda: None)
-    run_update_command(home=tmp_path)
-    out = capsys.readouterr().out
-    assert "autoskillit install" in out
-
-
-def test_run_update_command_restarts_on_success(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """After a successful upgrade, run_update_command must call perform_restart."""
-    from autoskillit.cli.update._update import run_update_command
-
-    info = _make_info(InstallType.GIT_VCS, revision="stable")
-    monkeypatch.setattr("autoskillit.cli.update._update.detect_install", lambda: info)
-    monkeypatch.setattr("autoskillit.cli.update._update.terminal_guard", FakeTG)
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update.subprocess.run",
-        lambda *a, **kw: subprocess.CompletedProcess([], 0),
-    )
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
-    )
-
-    import autoskillit as _pkg
-
-    monkeypatch.setattr(_pkg, "__version__", "0.9.0")
-
-    import importlib.metadata
-
-    monkeypatch.setattr(importlib.metadata, "version", lambda _name: "0.9.1")
-    monkeypatch.setattr("builtins.print", lambda *a, **kw: None)
-
-    restart_called: list[bool] = []
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update.perform_restart", lambda: restart_called.append(True)
-    )
-
-    run_update_command(home=tmp_path)
-    assert restart_called, (
-        "run_update_command must call perform_restart() after successful upgrade"
-    )
+    assert captured[0]["home"] == tmp_path
+    assert captured[0]["process_runner"] is _update.subprocess.run

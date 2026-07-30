@@ -37,6 +37,10 @@ REGISTRY_READ_ALLOWLIST: dict[str, str] = {
         "verify_install_state() reports registry/filesystem disagreement. Reporting a "
         "dangling installPath is the point; nothing here resolves a source from it."
     ),
+    "workspace/_installed_artifact.py": (
+        "The shared verifier reads registry paths only as obligation evidence; its exact "
+        "managed root is derived independently from trusted home/plugin/version inputs."
+    ),
     "cli/doctor/_doctor_mcp.py": (
         "The doctor check that dereferences installPath. Returning OK for a merely "
         "present key is the inversion this ratchet exists to prevent recurring."
@@ -50,9 +54,13 @@ DESTINATION_RESOLVE_ALLOWLIST: dict[str, str] = {
 }
 
 PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
-    ("cli/_marketplace.py", "_restore", "path.unlink"): (
+    ("cli/_marketplace.py", "_remove", "path.unlink"): (
         1,
-        "Transaction rollback restores a snapshotted metadata file, not a leased artifact.",
+        "Transaction restoration removes the failed replacement before restoring its staged copy.",
+    ),
+    ("cli/_marketplace.py", "_remove", "shutil.rmtree"): (
+        1,
+        "Transaction restoration removes a failed replacement directory under install ownership.",
     ),
     ("cli/_marketplace.py", "commit", "shutil.rmtree"): (
         1,
@@ -63,21 +71,13 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Rollback restores the exact transaction backup while installed-artifact "
         "ownership is held.",
     ),
-    ("cli/_marketplace.py", "rollback", "self._target_root.unlink"): (
-        1,
-        "Rollback removes only the failed transaction target while artifact ownership is held.",
-    ),
     ("cli/_marketplace.py", "rollback", "shutil.rmtree"): (
         1,
-        "Rollback removes only the failed transaction target while artifact ownership is held.",
+        "Rollback removes its private staging directory after restoring every covered surface.",
     ),
-    ("cli/_marketplace.py", "stage_target_root", "os.replace"): (
+    ("cli/_marketplace.py", "stage", "shutil.rmtree"): (
         1,
-        "The current installed root is moved to a transaction backup under its exclusive lease.",
-    ),
-    ("cli/_marketplace.py", "stage_target_root", "self._artifact_manifest_path.unlink"): (
-        1,
-        "The staged installed manifest is removed under the same exclusive transaction lease.",
+        "A failed snapshot construction removes only its private transaction staging directory.",
     ),
     ("cli/_marketplace.py", "upgrade", "scripts_dir.rename"): (
         1,
@@ -194,9 +194,9 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
 }
 
 PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
-    ("cli/_marketplace.py", "install", "()"): (
-        2,
-        "External Claude install commands intentionally consume no launch binding.",
+    ("cli/_marketplace.py", "_run_claude_admin", "()"): (
+        1,
+        "The centralized Claude administration gateway intentionally consumes no launch binding.",
     ),
     ("cli/session/_session_cook.py", "cook", "pass_fds"): (
         1,

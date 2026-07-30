@@ -59,18 +59,21 @@ def _checks(home: Path) -> set[str]:
 def _queue_registered_retirement(home: Path) -> PluginArtifactIdentity:
     from datetime import UTC, datetime, timedelta
 
+    from autoskillit import __version__
     from autoskillit.cli._plugin_artifact import (
         InstalledPluginArtifactRetirementOwner,
         publish_installed_plugin_artifact,
     )
 
-    live = home / "cache" / "1.0.0"
+    live = (
+        home / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit" / __version__
+    )
     live.mkdir(parents=True)
     (live / "plugin.json").write_text('{"name":"autoskillit"}')
     _write_registry(home, live)
     identity = publish_installed_plugin_artifact(
         live,
-        semantic_key="autoskillit@autoskillit-local:1.0.0",
+        semantic_key=f"autoskillit@autoskillit-local:{__version__}",
     )
     InstalledPluginArtifactRetirementOwner(live.parent).enqueue_retirement(
         identity,
@@ -89,11 +92,11 @@ class TestVerifyInstallState:
         _write_registry(home, home / "does" / "not" / "exist")
         assert "installed_plugins_install_path" in _checks(home)
 
-    def test_resolvable_install_path_is_silent(self, home: Path) -> None:
+    def test_resolvable_stale_install_path_is_not_path_authority(self, home: Path) -> None:
         real = home / "cache" / "1.0.0"
         real.mkdir(parents=True)
         _write_registry(home, real)
-        assert "installed_plugins_install_path" not in _checks(home)
+        assert "installed_plugins_install_path" in _checks(home)
 
     def test_retired_artifact_shape_still_on_disk(self, home: Path) -> None:
         from tests.cli._upgrade_fixtures import seed_legacy_home

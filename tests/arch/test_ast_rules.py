@@ -415,7 +415,6 @@ def test_no_raw_claude_list_construction() -> None:
     command assembly that bypasses established safety flags.
     """
     ALLOWED = {
-        ("_marketplace.py", "install"),
         ("_session_cook.py", "cook"),
         ("claude.py", "build_interactive_cmd"),
         ("claude.py", "build_headless_cmd"),

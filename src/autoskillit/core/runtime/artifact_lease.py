@@ -85,7 +85,12 @@ class ArtifactLease:
     @classmethod
     def acquire_shared(cls, lock_path: Path) -> ArtifactLease:
         """Acquire a blocking reader lease backed by a stable regular file."""
-        return cls._acquire(Path(lock_path), shared=True, blocking=True)
+        return cls._acquire(Path(lock_path), shared=True, blocking=True, create=True)
+
+    @classmethod
+    def acquire_existing_shared(cls, lock_path: Path) -> ArtifactLease:
+        """Acquire a blocking reader lease without creating or modifying its sidecar."""
+        return cls._acquire(Path(lock_path), shared=True, blocking=True, create=False)
 
     @classmethod
     def acquire_exclusive(
@@ -95,7 +100,12 @@ class ArtifactLease:
         blocking: bool = False,
     ) -> ArtifactLease:
         """Acquire a writer lease, nonblocking unless explicitly requested."""
-        return cls._acquire(Path(lock_path), shared=False, blocking=blocking)
+        return cls._acquire(
+            Path(lock_path),
+            shared=False,
+            blocking=blocking,
+            create=True,
+        )
 
     @classmethod
     def _acquire(
@@ -104,13 +114,15 @@ class ArtifactLease:
         *,
         shared: bool,
         blocking: bool,
+        create: bool,
     ) -> ArtifactLease:
         if fcntl is None:
             raise RuntimeError("Artifact leases require a POSIX flock implementation")
         if lock_path.suffix != ".lock":
             raise ValueError(f"Artifact lease path must use the .lock suffix: {lock_path}")
 
-        lock_path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+        if create:
+            lock_path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
         directory_flags = (
             os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
         )
@@ -120,18 +132,23 @@ class ArtifactLease:
             directory_stat = os.fstat(directory_fd)
             if not stat.S_ISDIR(directory_stat.st_mode):
                 raise RuntimeError(f"Artifact lease root is not a directory: {lock_path.parent}")
-            os.fchmod(directory_fd, 0o700)
+            if create:
+                os.fchmod(directory_fd, 0o700)
 
+            open_flags = os.O_RDWR | os.O_CREAT
+            if not create:
+                open_flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
             fd = os.open(
                 lock_path.name,
-                os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0),
+                open_flags | getattr(os, "O_NOFOLLOW", 0),
                 0o600,
                 dir_fd=directory_fd,
             )
             lease_stat = os.fstat(fd)
             if not stat.S_ISREG(lease_stat.st_mode):
                 raise RuntimeError(f"Artifact lease is not a regular file: {lock_path}")
-            os.fchmod(fd, 0o600)
+            if create:
+                os.fchmod(fd, 0o600)
 
             operation = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
             if not blocking:

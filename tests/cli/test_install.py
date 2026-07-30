@@ -41,7 +41,24 @@ def _successful_claude_run(home: Path):
     def run(cmd, *_args, **_kwargs):
         normalized = tuple(str(part) for part in cmd)
         if normalized[:3] == ("claude", "plugin", "install"):
-            _seed_current_installed_plugin(home)
+            root = _seed_current_installed_plugin(home)
+            registry_path = home / ".claude" / "plugins" / "installed_plugins.json"
+            registry_path.parent.mkdir(parents=True, exist_ok=True)
+            registry_path.write_text(
+                json.dumps(
+                    {
+                        "version": 2,
+                        "plugins": {
+                            "autoskillit@autoskillit-local": [
+                                {
+                                    "installPath": str(root),
+                                    "scope": "user",
+                                }
+                            ]
+                        },
+                    }
+                )
+            )
         return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
 
     return run
@@ -50,11 +67,12 @@ def _successful_claude_run(home: Path):
 class TestCLIInstall:
     def test_install_validates_scope(self, capsys: pytest.CaptureFixture) -> None:
         """install rejects invalid scope values."""
+        from autoskillit.cli._install_contract import InstallFailureKind, InstallOutcome
         from autoskillit.cli._marketplace import install
 
-        with pytest.raises(SystemExit) as exc_info:
-            install(scope="invalid")
-        assert exc_info.value.code == 1
+        result = install(scope="invalid")
+        assert result.outcome is InstallOutcome.FAILED
+        assert result.failure_kind is InstallFailureKind.PREFLIGHT
         captured = capsys.readouterr()
         assert "Invalid scope" in captured.out
 
@@ -69,13 +87,14 @@ class TestCLIInstall:
 
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
+        from autoskillit.cli._install_contract import InstallFailureKind, InstallOutcome
         from autoskillit.cli._marketplace import install
 
-        with pytest.raises(SystemExit) as exc_info:
-            install()
-        assert exc_info.value.code == 1
+        result = install()
+        assert result.outcome is InstallOutcome.FAILED
+        assert result.failure_kind is InstallFailureKind.PREFLIGHT
         captured = capsys.readouterr()
-        assert "claude plugin marketplace add" in captured.out
+        assert "claude" in captured.out
 
     def test_install_creates_marketplace_dir(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -321,7 +340,9 @@ class TestCLIInstall:
 
         result = install(scope="user")
 
-        assert result is False
+        from autoskillit.cli._install_contract import InstallOutcome
+
+        assert result.outcome is InstallOutcome.DECLINED
         captured = capsys.readouterr()
         assert "plugin_install_capable" in captured.out
 
@@ -357,7 +378,9 @@ class TestCLIInstall:
 
         result = install(scope="user")
 
-        assert result is True
+        from autoskillit.cli._install_contract import InstallOutcome
+
+        assert result.outcome is InstallOutcome.COMPLETED
         assert len(called) >= 1  # subprocess was invoked (past the guard)
 
     def test_install_backend_guard_no_new_module_level_imports(self) -> None:
@@ -560,7 +583,7 @@ class TestInstallCommand:
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: True)
         from autoskillit.cli._marketplace import _assert_not_worktree
 
-        with pytest.raises(SystemExit, match="worktree"):
+        with pytest.raises(RuntimeError, match="worktree"):
             _assert_not_worktree()
 
     def test_ensure_marketplace_succeeds_in_main_checkout(
@@ -814,17 +837,20 @@ def test_install_claudecode_guard_returns_false(
     monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
     monkeypatch.setenv("CLAUDECODE", "1")
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    from autoskillit.cli._install_contract import InstallOutcome
+
     result = _install(scope="user")
-    assert result is False, f"Expected False, got {result!r}"
+    assert result.outcome is InstallOutcome.DEFERRED
 
 
-def test_install_claudecode_guard_does_not_print_next_steps(
+def test_install_claudecode_guard_exits_declined_without_next_steps(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """app.install() must not print Next Steps when CLAUDECODE guard fires."""
+    """app.install() represents the legacy False guard as a declined process."""
 
     import autoskillit.cli._init_helpers as _init_helpers_mod
     import autoskillit.cli._marketplace as _mkt_mod
+    from autoskillit.cli._install_contract import InstallProcessStatus
 
     next_steps_called: list[dict] = []
     monkeypatch.setattr(
@@ -835,10 +861,122 @@ def test_install_claudecode_guard_does_not_print_next_steps(
 
     from autoskillit.cli.app import install as app_install
 
-    app_install(scope="user")
+    with pytest.raises(SystemExit) as exc_info:
+        app_install(scope="user")
+    assert exc_info.value.code == InstallProcessStatus.DECLINED
     assert not next_steps_called, (
         "_print_next_steps must not be called when install() returns False"
     )
+
+
+def test_app_install_constructs_direct_request_and_prints_only_after_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The direct command records its obligation before normalizing legacy True."""
+    import autoskillit.cli._init_helpers as _init_helpers_mod
+    import autoskillit.cli._install_contract as _contract_mod
+    import autoskillit.cli._marketplace as _mkt_mod
+    from autoskillit import __version__
+
+    real_request = _contract_mod.InstallRequest
+    requests: list[_contract_mod.InstallRequest] = []
+    next_steps_called: list[dict] = []
+
+    def capture_request(**kwargs):
+        request = real_request(**kwargs)
+        requests.append(request)
+        return request
+
+    monkeypatch.setattr(_contract_mod, "InstallRequest", capture_request)
+    monkeypatch.setattr(_mkt_mod, "install", lambda **kw: True)
+    monkeypatch.setattr(
+        _init_helpers_mod, "_print_next_steps", lambda **kw: next_steps_called.append(kw)
+    )
+
+    from autoskillit.cli.app import install as app_install
+
+    app_install(scope="project")
+
+    assert requests == [
+        real_request(
+            scope="project",
+            mode=_contract_mod.InstallMode.DIRECT,
+            require_registered_plugin=True,
+            expected_version=__version__,
+        )
+    ]
+    assert next_steps_called == [{"context": "install"}]
+
+
+def test_app_install_not_required_succeeds_without_next_steps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A typed no-op result remains successful but does not claim completion."""
+    import autoskillit.cli._init_helpers as _init_helpers_mod
+    import autoskillit.cli._marketplace as _mkt_mod
+    from autoskillit.cli._install_contract import InstallOutcome, InstallResult
+
+    next_steps_called: list[dict] = []
+    monkeypatch.setattr(
+        _init_helpers_mod, "_print_next_steps", lambda **kw: next_steps_called.append(kw)
+    )
+    monkeypatch.setattr(
+        _mkt_mod,
+        "install",
+        lambda **kw: InstallResult(outcome=InstallOutcome.NOT_REQUIRED),
+    )
+
+    from autoskillit.cli.app import install as app_install
+
+    app_install(scope="user")
+    assert not next_steps_called
+
+
+@pytest.mark.parametrize(
+    ("outcome_name", "failure_name", "expected_status"),
+    [
+        ("DECLINED", None, 10),
+        ("DEFERRED", None, 11),
+        ("FAILED", "PREFLIGHT", 20),
+        ("FAILED", "CHILD", 21),
+        ("FAILED", "POSTCONDITION", 22),
+        ("RECOVERY_REQUIRED", "ROLLBACK", 23),
+        ("INDETERMINATE", None, 24),
+    ],
+)
+def test_app_install_preserves_typed_nonzero_process_status(
+    outcome_name: str,
+    failure_name: str | None,
+    expected_status: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every typed non-success result crosses the process boundary unchanged."""
+    import autoskillit.cli._init_helpers as _init_helpers_mod
+    import autoskillit.cli._marketplace as _mkt_mod
+    from autoskillit.cli._install_contract import (
+        InstallFailureKind,
+        InstallOutcome,
+        InstallResult,
+    )
+
+    outcome = InstallOutcome[outcome_name]
+    failure_kind = InstallFailureKind[failure_name] if failure_name is not None else None
+    next_steps_called: list[dict] = []
+    monkeypatch.setattr(
+        _init_helpers_mod, "_print_next_steps", lambda **kw: next_steps_called.append(kw)
+    )
+    monkeypatch.setattr(
+        _mkt_mod,
+        "install",
+        lambda **kw: InstallResult(outcome=outcome, failure_kind=failure_kind),
+    )
+
+    from autoskillit.cli.app import install as app_install
+
+    with pytest.raises(SystemExit) as exc_info:
+        app_install(scope="user")
+    assert exc_info.value.code == expected_status
+    assert not next_steps_called
 
 
 def test_install_sweeps_all_scopes_for_orphans(

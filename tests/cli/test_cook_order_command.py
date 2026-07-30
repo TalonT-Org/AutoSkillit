@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -217,6 +218,17 @@ class TestCLIOrderCommand:
                 _AUTOSKILLIT_PLUGIN_KEY,
                 __version__,
             ),
+        )
+        registry = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+        registry.parent.mkdir(parents=True, exist_ok=True)
+        registry.write_text(
+            json.dumps(
+                {
+                    "version": 2,
+                    "plugins": {_AUTOSKILLIT_PLUGIN_KEY: {"installPath": str(installed_root)}},
+                }
+            ),
+            encoding="utf-8",
         )
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""

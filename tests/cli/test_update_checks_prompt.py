@@ -5,7 +5,6 @@ notification for dismissed signals."""
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -196,90 +195,63 @@ def test_prompt_uses_friendly_branch_language(
 # ---------------------------------------------------------------------------
 
 
-def test_yes_runs_upgrade_command_from_install_info_not_hardcoded(
+def test_yes_delegates_to_shared_update_transaction(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from autoskillit.cli._install_info import upgrade_command
+    from autoskillit.cli.update._transaction import (
+        UpdateTransactionOutcome,
+        UpdateTransactionResult,
+    )
 
     info = _make_stable_info()
     printed, input_calls = _setup_run_checks(
         monkeypatch, tmp_path, binary_signal=True, answer="y", info=info
     )
-    run_calls: list[list[str]] = []
+    calls: list[dict[str, object]] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.subprocess.run",
-        lambda cmd, **kw: run_calls.append(list(cmd)) or subprocess.CompletedProcess(cmd, 0),
-    )
-    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", MagicMock())
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._verify_update_result", lambda *a, **kw: True
-    )
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.0"
-    )
-    monkeypatch.setattr("autoskillit.cli.update._update_checks.perform_restart", lambda: None)
-    expected_cmd = upgrade_command(info)
-    run_update_checks(home=tmp_path)
-    assert expected_cmd in run_calls, (
-        f"Expected upgrade command {expected_cmd!r} from upgrade_command(info); got {run_calls!r}"
-    )
-
-
-def test_yes_runs_autoskillit_install_after_upgrade_command(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    printed, input_calls = _setup_run_checks(monkeypatch, tmp_path, binary_signal=True, answer="y")
-    run_calls: list[list[str]] = []
-
-    class FakeTG:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", FakeTG)
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.subprocess.run",
-        lambda cmd, **kw: run_calls.append(list(cmd)) or subprocess.CompletedProcess(cmd, 0),
-    )
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._verify_update_result", lambda *a, **kw: True
-    )
-    monkeypatch.setattr("autoskillit.cli.update._update_checks.perform_restart", lambda: None)
-    run_update_checks(home=tmp_path)
-    # ["autoskillit", "install"] must be among the calls
-    assert any(cmd[:2] == ["autoskillit", "install"] for cmd in run_calls)
-
-
-def test_yes_passes_skip_env_to_subprocess(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    printed, input_calls = _setup_run_checks(monkeypatch, tmp_path, binary_signal=True, answer="y")
-    env_passed: list[dict] = []
-
-    class FakeTG:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", FakeTG)
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.subprocess.run",
-        lambda cmd, **kw: (
-            env_passed.append(kw.get("env", {})) or subprocess.CompletedProcess(cmd, 0)
+        "autoskillit.cli.update._update_checks.run_update_transaction",
+        lambda **kwargs: (
+            calls.append(kwargs)
+            or UpdateTransactionResult(
+                outcome=UpdateTransactionOutcome.COMPLETED,
+                expected_version="0.9.0",
+            )
         ),
     )
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._verify_update_result", lambda *a, **kw: True
-    )
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", MagicMock)
     monkeypatch.setattr("autoskillit.cli.update._update_checks.perform_restart", lambda: None)
     run_update_checks(home=tmp_path)
-    for env in env_passed:
-        assert env.get("AUTOSKILLIT_SKIP_STALE_CHECK") == "1"
-        assert env.get("AUTOSKILLIT_SKIP_UPDATE_CHECK") == "1"
+    assert calls[0]["home"] == tmp_path
+    assert "process_runner" in calls[0]
+
+
+def test_yes_noncompleted_transaction_returns_without_restart_or_state_clear(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from autoskillit.cli.update._transaction import (
+        UpdateTransactionOutcome,
+        UpdateTransactionResult,
+    )
+
+    printed, input_calls = _setup_run_checks(monkeypatch, tmp_path, binary_signal=True, answer="y")
+    state = {"preserved": "value"}
+    _write_dismiss_state(tmp_path, state)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks.run_update_transaction",
+        lambda **kwargs: UpdateTransactionResult(
+            outcome=UpdateTransactionOutcome.FAILED_INSTALL,
+            expected_version="0.9.0",
+        ),
+    )
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", MagicMock)
+    restarted: list[bool] = []
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks.perform_restart",
+        lambda: restarted.append(True),
+    )
+    run_update_checks(home=tmp_path)
+    assert not restarted
+    assert _read_dismiss_state(tmp_path) == state
 
 
 def test_yes_single_invocation_exits_without_any_other_prompt(
@@ -289,20 +261,17 @@ def test_yes_single_invocation_exits_without_any_other_prompt(
         monkeypatch, tmp_path, binary_signal=True, hooks_signal=True, answer="y"
     )
 
-    class FakeTG:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", FakeTG)
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.subprocess.run",
-        lambda *a, **kw: subprocess.CompletedProcess([], 0),
+    from autoskillit.cli.update._transaction import (
+        UpdateTransactionOutcome,
+        UpdateTransactionResult,
     )
+
+    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", MagicMock)
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._verify_update_result", lambda *a, **kw: True
+        "autoskillit.cli.update._update_checks.run_update_transaction",
+        lambda **kwargs: UpdateTransactionResult(
+            outcome=UpdateTransactionOutcome.COMPLETED,
+        ),
     )
     monkeypatch.setattr("autoskillit.cli.update._update_checks.perform_restart", lambda: None)
     run_update_checks(home=tmp_path)

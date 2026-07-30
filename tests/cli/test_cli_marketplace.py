@@ -70,8 +70,11 @@ def test_marketplace_module_still_importable():
 
 class TestInstallPluginInstallCapableGuard:
     def test_rejects_when_plugin_install_not_capable(self, monkeypatch, capsys):
-        """install() returns False with rejection message when capability is False."""
+        """install() returns a typed decline when capability is false."""
         from unittest.mock import MagicMock
+
+        from autoskillit.cli import _marketplace
+        from autoskillit.cli._install_contract import InstallOutcome
 
         mock_cfg = MagicMock()
         mock_cfg.agent_backend.backend = "some-backend"
@@ -80,18 +83,22 @@ class TestInstallPluginInstallCapableGuard:
         mock_backend = MagicMock()
         mock_backend.capabilities.plugin_install_capable = False
         monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: mock_backend)
+        monkeypatch.setattr(_marketplace, "is_git_worktree", lambda _path: False)
 
         from autoskillit.cli._marketplace import install
 
         result = install(scope="user")
 
-        assert result is False
+        assert result.outcome is InstallOutcome.DECLINED
         captured = capsys.readouterr()
         assert "plugin_install_capable" in captured.out
 
     def test_passes_guard_when_plugin_install_capable(self, monkeypatch, capsys):
-        """install() does not reject at capability guard when True."""
+        """install() reaches the typed session deferral when capability is true."""
         from unittest.mock import MagicMock
+
+        from autoskillit.cli import _marketplace
+        from autoskillit.cli._install_contract import InstallOutcome
 
         mock_cfg = MagicMock()
         mock_cfg.agent_backend.backend = "claude-code"
@@ -100,6 +107,7 @@ class TestInstallPluginInstallCapableGuard:
         mock_backend = MagicMock()
         mock_backend.capabilities.plugin_install_capable = True
         monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: mock_backend)
+        monkeypatch.setattr(_marketplace, "is_git_worktree", lambda _path: False)
 
         # Stub CLAUDECODE env to trigger the next guard (deferred exit)
         monkeypatch.setenv("CLAUDECODE", "1")
@@ -108,8 +116,6 @@ class TestInstallPluginInstallCapableGuard:
 
         result = install(scope="user")
 
-        # Should reach the CLAUDECODE guard (returns False for deferred),
-        # NOT the capability guard
-        assert result is False
+        assert result.outcome is InstallOutcome.DEFERRED
         captured = capsys.readouterr()
         assert "plugin_install_capable" not in captured.out

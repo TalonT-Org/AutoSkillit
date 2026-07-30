@@ -15,10 +15,15 @@ from autoskillit.workspace._clone_detect import (
 )
 from autoskillit.workspace._clone_remote import CloneSourceResolution
 from autoskillit.workspace._install_state import (
-    InstallStateFinding,
     marketplace_plugin_root,
     reconcile_install_artifacts,
     verify_install_state,
+)
+from autoskillit.workspace._installed_artifact import (
+    InstalledArtifactVerification,
+    InstallStateFinding,
+    InstallStateSpec,
+    verify_installed_plugin_artifact,
 )
 from autoskillit.workspace._projected_artifact import (
     PROJECTION_CACHE_KEY_EXCLUSIONS,
@@ -147,6 +152,8 @@ __all__ = [
     "SkillFrontmatterParseError",
     "PROJECTION_CACHE_KEY_EXCLUSIONS",
     "InstallStateFinding",
+    "InstalledArtifactVerification",
+    "InstallStateSpec",
     "ProjectionCacheKey",
     "ProjectedPluginArtifactAuthority",
     "ProjectedPluginRetirementOwner",
@@ -158,6 +165,7 @@ __all__ = [
     "public_plugin_asset_digest",
     "reconcile_install_artifacts",
     "verify_install_state",
+    "verify_installed_plugin_artifact",
     "SkillsDirectoryProvider",
     "materialize_agent_skill_tree",
     "materialize_codex_profile_skills",

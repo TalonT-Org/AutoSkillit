@@ -946,9 +946,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "execution": 18,
         "core": 30,  # +plugin identity authority + strict audit semantic codec
         "core/types": 44,  # +audit admission ownership, ledger contracts, and protocols
-        "cli": 22,  # +_plugin_artifact exact installed-incarnation authority (#4382)
+        "cli": 23,  # +_install_contract typed install process boundary (#4409)
         "cli/doctor": 11,  # +_doctor_skills capability declaration authenticity checks
-        "workspace": 14,  # +_install_state (single install-state consistency authority,
+        "workspace": 15,  # +_installed_artifact exact lease-protected authority (#4409);
+        # +_install_state (single install-state consistency authority,
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
         "hooks": 20,  # +_capture_lifecycle state leaf and +capture_lifecycle_hook SessionStart owner  # noqa: E501

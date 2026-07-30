@@ -33,6 +33,10 @@ from autoskillit.cli._install_info import (
 )
 from autoskillit.cli._restart import perform_restart
 from autoskillit.cli.ui._terminal import terminal_guard
+from autoskillit.cli.update._transaction import (
+    UpdateTransactionOutcome,
+    run_update_transaction,
+)
 from autoskillit.cli.update._update_checks_fetch import (
     _fetch_latest_version,
     invalidate_fetch_cache,
@@ -102,8 +106,6 @@ def _verify_update_result(
 
     if new_version != current:
         return True
-
-    from autoskillit.cli._install_info import upgrade_command
 
     cmd = upgrade_command(info)
     cmd_str = " ".join(cmd) if cmd else "autoskillit update"
@@ -258,38 +260,21 @@ def _run_update_sequence(
     current: str,
     home: Path,
     state: dict[str, object],
-    skip_env: dict[str, str],
 ) -> None:
-    """Run the upgrade command, then autoskillit install, then verify."""
-    cmd = upgrade_command(info)
-    if cmd is None:
-        return
-    target_branch = comparison_branch(info)
-    latest: str = (
-        _fetch_latest_version(target_branch, home) or current
-        if target_branch is not None
-        else current
-    )
-    install_result: subprocess.CompletedProcess[bytes] = subprocess.CompletedProcess(
-        args=["autoskillit", "install"], returncode=0
-    )
+    """Present the automatic caller around the shared update transaction."""
+    del info, current
     with terminal_guard():
-        subprocess.run(cmd, check=False, env=skip_env)
-        install_result = subprocess.run(["autoskillit", "install"], check=False, env=skip_env)
-    if install_result.returncode != 0:
-        print(
-            "\nautoskillit install exited with an error. "
-            "Hooks and plugin cache may be stale. "
-            "Run 'autoskillit install' manually to fix.",
-            flush=True,
+        result = run_update_transaction(
+            home=home,
+            process_runner=subprocess.run,
         )
-    succeeded = _verify_update_result(info, current, latest, home, state)
-    if succeeded:
-        state.pop("update_prompt", None)
-        state.pop("binary_snoozed", None)
-        _write_dismiss_state(home, state)
-        invalidate_fetch_cache(home)
-        perform_restart()
+    if result.outcome is not UpdateTransactionOutcome.COMPLETED:
+        return
+    state.pop("update_prompt", None)
+    state.pop("binary_snoozed", None)
+    _write_dismiss_state(home, state)
+    invalidate_fetch_cache(home)
+    perform_restart()
 
 
 def run_update_checks(home: Path | None = None) -> None:
@@ -315,12 +300,6 @@ def run_update_checks(home: Path | None = None) -> None:
         or not sys.stdout.isatty()
     ):
         return
-
-    _skip_env: dict[str, str] = {
-        **os.environ,
-        "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
-        "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
-    }
 
     info = detect_install()
     if info.install_type in (
@@ -382,7 +361,7 @@ def run_update_checks(home: Path | None = None) -> None:
             return
 
         if answer.lower() in ("", "y", "yes"):
-            _run_update_sequence(info, current, _home, state, _skip_env)
+            _run_update_sequence(info, current, _home, state)
             return
 
         # N path — write unified dismissal record

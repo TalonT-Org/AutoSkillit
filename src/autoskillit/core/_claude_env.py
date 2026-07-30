@@ -68,6 +68,101 @@ IDE_ENV_ALWAYS_EXTRAS: Mapping[str, str] = MappingProxyType(
     }
 )
 
+# Maintenance subprocesses start from an empty environment and admit only the
+# host values needed to locate executables, user-scoped package configuration,
+# network/certificate configuration, and basic process facilities.
+_MAINTENANCE_BASE_ENV_KEYS: frozenset[str] = frozenset(
+    {
+        "HOME",
+        "PATH",
+        "XDG_CONFIG_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_DATA_HOME",
+        "XDG_STATE_HOME",
+        "XDG_RUNTIME_DIR",
+        "USER",
+        "LOGNAME",
+        "SHELL",
+        "TERM",
+        "TMPDIR",
+        "TEMP",
+        "TMP",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "no_proxy",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "REQUESTS_CA_BUNDLE",
+        "CURL_CA_BUNDLE",
+        "PIP_CERT",
+        "PIP_INDEX_URL",
+        "PIP_EXTRA_INDEX_URL",
+        "PIP_TRUSTED_HOST",
+        "UV_INDEX_URL",
+        "UV_EXTRA_INDEX_URL",
+        "UV_DEFAULT_INDEX",
+    }
+)
+_MAINTENANCE_WINDOWS_BASE_ENV_KEYS: frozenset[str] = frozenset(
+    {
+        "SYSTEMROOT",
+        "WINDIR",
+        "COMSPEC",
+        "PATHEXT",
+    }
+)
+_MAINTENANCE_EXTRA_KEYS: frozenset[str] = frozenset(
+    {
+        "AUTOSKILLIT_SKIP_STALE_CHECK",
+        "AUTOSKILLIT_SKIP_UPDATE_CHECK",
+    }
+)
+
+
+def _is_protected_maintenance_extra(key: str) -> bool:
+    upper_key = key.upper()
+    return (
+        upper_key.startswith(("CLAUDECODE", "CODEX", "PYTHON", "LD_", "DYLD_"))
+        or upper_key.startswith(("VIRTUAL_ENV", "CONDA"))
+        or upper_key.startswith(("PIP_", "UV_", "POETRY_", "PDM_", "PIPENV_"))
+        or (
+            upper_key.startswith("AUTOSKILLIT_")
+            and any(family in upper_key for family in ("BACKEND", "SESSION", "CAMPAIGN", "ORDER"))
+        )
+    )
+
+
+def build_maintenance_env(
+    base_env: Mapping[str, str],
+    extras: Mapping[str, str] | None = None,
+) -> Mapping[str, str]:
+    """Return a minimal sealed environment for update/install subprocesses.
+
+    Host values are copied from an explicit allowlist; the environment is
+    never cloned wholesale. Callers may add only the two maintenance recursion
+    guards. Rejection messages name offending keys without exposing values.
+    """
+    supplied_extras = {} if extras is None else extras
+    protected = sorted(key for key in supplied_extras if _is_protected_maintenance_extra(key))
+    if protected:
+        raise ValueError(f"Protected maintenance env extras are not allowed: {protected}")
+
+    unsupported = sorted(set(supplied_extras) - _MAINTENANCE_EXTRA_KEYS)
+    if unsupported:
+        raise ValueError(f"Unsupported maintenance env extras: {unsupported}")
+
+    allowed_base_keys = _MAINTENANCE_BASE_ENV_KEYS
+    if os.name == "nt":
+        allowed_base_keys = allowed_base_keys | _MAINTENANCE_WINDOWS_BASE_ENV_KEYS
+    out = {key: base_env[key] for key in sorted(allowed_base_keys) if key in base_env}
+    out.update(supplied_extras)
+    return MappingProxyType(out)
+
 
 def build_agent_env(
     base: Mapping[str, str] | None = None,

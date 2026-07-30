@@ -72,6 +72,71 @@ def test_independent_shared_readers_own_distinct_descriptors(tmp_path: Path) -> 
             assert second.inherited_fds == (second.fileno(),)
 
 
+def test_existing_shared_requires_existing_parent_and_sidecar(tmp_path: Path) -> None:
+    missing_parent_lock = tmp_path / "missing" / "projection.lock"
+    with pytest.raises(FileNotFoundError):
+        ArtifactLease.acquire_existing_shared(missing_parent_lock)
+    assert not missing_parent_lock.parent.exists()
+
+    lock_path = tmp_path / "projection.lock"
+    with pytest.raises(FileNotFoundError):
+        ArtifactLease.acquire_existing_shared(lock_path)
+    assert not lock_path.exists()
+
+
+def test_existing_shared_is_read_only_and_preserves_modes(tmp_path: Path) -> None:
+    import fcntl
+
+    lock_path = tmp_path / "projection.lock"
+    lock_path.touch(mode=0o640)
+    tmp_path.chmod(0o750)
+    lock_path.chmod(0o640)
+
+    with ArtifactLease.acquire_existing_shared(lock_path) as reader:
+        descriptor_flags = fcntl.fcntl(reader.fileno(), fcntl.F_GETFL)
+        assert descriptor_flags & os.O_ACCMODE == os.O_RDONLY
+        assert reader.path == lock_path
+        assert reader.shared is True
+        assert stat.S_IMODE(tmp_path.stat().st_mode) == 0o750
+        assert stat.S_IMODE(lock_path.stat().st_mode) == 0o640
+
+    assert stat.S_IMODE(tmp_path.stat().st_mode) == 0o750
+    assert stat.S_IMODE(lock_path.stat().st_mode) == 0o640
+
+
+def test_existing_shared_blocks_exclusive_until_close(tmp_path: Path) -> None:
+    lock_path = tmp_path / "projection.lock"
+    with ArtifactLease.acquire_exclusive(lock_path, blocking=False):
+        pass
+    reader = ArtifactLease.acquire_existing_shared(lock_path)
+
+    try:
+        with pytest.raises(ArtifactLeaseContention):
+            ArtifactLease.acquire_exclusive(lock_path, blocking=False)
+    finally:
+        reader.close()
+
+    with ArtifactLease.acquire_exclusive(lock_path, blocking=False):
+        pass
+
+
+def test_existing_shared_rejects_symlink_and_non_regular_sidecar(tmp_path: Path) -> None:
+    target = tmp_path / "target.lock"
+    target.touch()
+    symlink = tmp_path / "symlink.lock"
+    symlink.symlink_to(target)
+
+    with pytest.raises(OSError):
+        ArtifactLease.acquire_existing_shared(symlink)
+    assert symlink.is_symlink()
+
+    fifo = tmp_path / "fifo.lock"
+    os.mkfifo(fifo)
+    with pytest.raises(RuntimeError, match="regular file"):
+        ArtifactLease.acquire_existing_shared(fifo)
+    assert stat.S_ISFIFO(fifo.stat().st_mode)
+
+
 def test_artifact_lease_context_preserves_body_error(
     tmp_path: Path,
     monkeypatch,

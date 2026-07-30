@@ -374,6 +374,7 @@ def test_install_does_not_write_hooks_when_plugin_active(tmp_path, monkeypatch):
     Writing them to settings.json creates dual registration and doubles hook execution.
     """
     import importlib
+    from types import SimpleNamespace
 
     from autoskillit.cli._marketplace import install
 
@@ -392,6 +393,13 @@ def test_install_does_not_write_hooks_when_plugin_active(tmp_path, monkeypatch):
         "autoskillit.cli._plugin_artifact.publish_installed_plugin_artifact",
         lambda *args, **kwargs: None,
     )
+    monkeypatch.setattr(
+        "autoskillit.workspace.verify_installed_plugin_artifact",
+        lambda _spec: SimpleNamespace(
+            identity=SimpleNamespace(incarnation_id="test-incarnation"),
+            findings=(),
+        ),
+    )
     monkeypatch.delenv("CLAUDECODE", raising=False)
 
     _app_mod = importlib.import_module("autoskillit.cli._marketplace")
@@ -400,7 +408,7 @@ def test_install_does_not_write_hooks_when_plugin_active(tmp_path, monkeypatch):
 
     install(scope="local")
 
-    data = json.loads(settings_path.read_text())
+    data = json.loads(settings_path.read_text()) if settings_path.exists() else {}
     all_commands = [
         h["command"]
         for event_entries in data.get("hooks", {}).values()

@@ -464,9 +464,9 @@ _CLAUDE_ENV_RULE_ALLOWED: frozenset[tuple[str, str]] = frozenset(
         ("_doctor.py", "_check_mcp_server_registered"),
         # onboarding probe: `claude plugin list` — read-only install check.
         ("_init_helpers.py", "_is_plugin_installed"),
-        # marketplace registration + install: `claude plugin marketplace add` /
-        # `claude plugin install`. Administrative ops invoked once during setup.
-        ("_marketplace.py", "install"),
+        # Typed marketplace gateway: administrative commands receive the
+        # transaction's already-sealed env/cwd explicitly.
+        ("_marketplace.py", "_run_claude_admin"),
         # run_headless_core and dispatch_food_truck pass `spec` (CmdSpec)
         # to _execute_claude_headless, which internally uses `spec.env` at the
         # runner call site. The checker incorrectly treats _execute_claude_headless(spec, ...)
@@ -522,4 +522,54 @@ def test_no_raw_claude_env() -> None:
     assert not violations, (
         "Found claude-launching subprocess calls that bypass build_agent_env():\n"
         + "\n".join(f"  {v}" for v in violations)
+    )
+
+
+def test_marketplace_admin_gateway_requires_explicit_env_cwd_and_shell_false() -> None:
+    """Both mutating Claude admin calls share one sealed-context gateway."""
+    source = (CLI_ROOT / "_marketplace.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    functions = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    gateway = functions["_run_claude_admin"]
+    assert [argument.arg for argument in gateway.args.args] == ["argv"]
+    assert [argument.arg for argument in gateway.args.kwonlyargs] == ["env", "cwd"]
+
+    subprocess_calls = [
+        node
+        for node in ast.walk(gateway)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "subprocess"
+        and node.func.attr == "run"
+    ]
+    assert len(subprocess_calls) == 1
+    keywords = {keyword.arg: keyword.value for keyword in subprocess_calls[0].keywords}
+    assert {"env", "cwd", "shell"} <= keywords.keys()
+    assert isinstance(keywords["env"], ast.Call)
+    assert isinstance(keywords["cwd"], ast.Name) and keywords["cwd"].id == "cwd"
+    assert isinstance(keywords["shell"], ast.Constant) and keywords["shell"].value is False
+
+    install_node = functions["install"]
+    assert not any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "subprocess"
+        for node in ast.walk(install_node)
+    )
+    gateway_calls = [
+        node
+        for node in ast.walk(install_node)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_run_claude_admin"
+    ]
+    assert len(gateway_calls) == 2
+    assert all(
+        {"env", "cwd"} <= {keyword.arg for keyword in call.keywords} for call in gateway_calls
     )

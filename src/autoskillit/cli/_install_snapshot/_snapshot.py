@@ -415,8 +415,15 @@ class _InstallSnapshot:
         """Discard staged state only after every required postcondition passes."""
         if not self._staged:
             raise RuntimeError("install snapshot was not staged")
-        shutil.rmtree(self._stage_dir)
         self._committed = True
         self._entries.clear()
         self._workspace_temp_shape = None
         self._staged = False
+        try:
+            shutil.rmtree(self._stage_dir)
+        except Exception:
+            logger.warning(
+                "install_snapshot_commit_cleanup_failed",
+                stage_dir=str(self._stage_dir),
+                exc_info=True,
+            )

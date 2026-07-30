@@ -979,6 +979,40 @@ def test_snapshot_restores_directory_and_symlink_shapes(
     assert not snapshot._stage_dir.exists()
 
 
+def test_snapshot_commit_is_final_before_staging_cleanup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli import _marketplace
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    target = _marketplace._installed_plugin_root(_VERSION)
+    target.mkdir(parents=True)
+    payload = target / "payload.txt"
+    payload.write_text("before", encoding="utf-8")
+    snapshot = _marketplace._InstallSnapshot(target_root=target)
+    snapshot.stage()
+    payload.write_text("installed", encoding="utf-8")
+    original_rmtree = _marketplace.shutil.rmtree
+
+    def partially_remove_then_fail(path: Path, *args, **kwargs) -> None:
+        if Path(path) == snapshot._stage_dir:
+            staged_entry = next(snapshot._stage_dir.iterdir())
+            _marketplace._InstallSnapshot._remove(staged_entry)
+            raise OSError("injected partial staging cleanup failure")
+        original_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(_marketplace.shutil, "rmtree", partially_remove_then_fail)
+
+    snapshot.commit()
+
+    assert payload.read_text(encoding="utf-8") == "installed"
+    assert snapshot.rollback() == ()
+    assert snapshot._committed is True
+    assert snapshot._staged is False
+    assert snapshot._entries == []
+
+
 def test_incomplete_compensation_returns_recovery_required_with_both_diagnostics(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

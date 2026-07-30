@@ -36,6 +36,7 @@ from autoskillit.core import (
 )
 from autoskillit.fleet import (
     _INFRASTRUCTURE_FAILURE_REASONS,
+    CampaignStateMutator,
     DispatchAggregatePhase,
     DispatchCompleted,
     DispatchEffectName,
@@ -54,7 +55,6 @@ from autoskillit.fleet import (
     read_all_campaign_captures,
     read_state,
     record_gate_outcome,
-    update_dispatch_effect_provenance,
     upsert_dispatch_record_by_name,
 )
 from autoskillit.server import mcp
@@ -259,11 +259,23 @@ def _confirm_campaign_state_write(
         identities={"campaign_state_path": campaign_state_path_str},
     )
     try:
-        receipt_persisted = update_dispatch_effect_provenance(
-            Path(campaign_state_path_str),
-            effective_name,
-            provenance.snapshot().to_dict(),
-        )
+        receipt_persisted = False
+        with CampaignStateMutator(Path(campaign_state_path_str)) as mutator:
+            if mutator.state is not None:
+                record = next(
+                    (
+                        dispatch
+                        for dispatch in mutator.state.dispatches
+                        if dispatch.name == effective_name
+                    ),
+                    None,
+                )
+                if record is not None:
+                    receipt = provenance.snapshot().to_dict()
+                    if record.effect_provenance != receipt:
+                        record.effect_provenance = receipt
+                        mutator.mark_dirty()
+                    receipt_persisted = True
     except Exception:
         logger.warning(
             "_confirm_campaign_state_write: receipt persistence failed",

@@ -778,6 +778,13 @@ class TestCancelledErrorRecordsInterruptedState:
         assert (
             d["dispatched_session_id"] == ""
         )  # No session_id available when CancelledError fires before dispatch completes
+        assert d["effect_provenance"]["retry_disposition"] == "reconcile_required"
+        spawn_effect = next(
+            effect
+            for effect in d["effect_provenance"]["effects"]
+            if effect["name"] == "process_spawn"
+        )
+        assert spawn_effect["phase"] == "started"
         assert tool_ctx.fleet_lock.active_count == 0
 
 
@@ -870,3 +877,13 @@ class TestSessionIdEagerPersistence:
         d = state["dispatches"][0]
         assert d["dispatched_session_id"] == "early-session-xyz"
         assert d["status"] == "interrupted"
+        assert d["effect_provenance"]["retry_disposition"] == "resume_by_identity"
+        spawn_effect = next(
+            effect
+            for effect in d["effect_provenance"]["effects"]
+            if effect["name"] == "process_spawn"
+        )
+        assert spawn_effect["phase"] == "confirmed"
+        assert spawn_effect["known_downstream_identities"]["dispatched_session_id"] == (
+            "early-session-xyz"
+        )

@@ -1000,15 +1000,6 @@ async def _run_dispatch(
         from autoskillit.core import read_boot_id
 
         _dispatched_pid.append(pid)
-        provenance.confirm(
-            DispatchEffectName.PROCESS_SPAWN,
-            receipt="executor reported spawned process",
-            identities={
-                "pid": pid,
-                "starttime_ticks": ticks,
-                "dispatch_id": dispatch_id,
-            },
-        )
         provenance.start(
             DispatchEffectName.CHILD_DISCOVERY,
             identities={"pid": pid, "dispatch_id": dispatch_id},
@@ -1064,6 +1055,16 @@ async def _run_dispatch(
         _dispatched_session_id.append(session_id)
         mark_dispatch_session_identity(
             state_path, effective_name, dispatched_session_id=session_id
+        )
+        provenance.confirm(
+            DispatchEffectName.PROCESS_SPAWN,
+            receipt="executor reported spawned process and authoritative session identity",
+            identities={
+                "pid": _dispatched_pid[0] if _dispatched_pid else 0,
+                "starttime_ticks": _dispatched_ticks[0] if _dispatched_ticks else 0,
+                "dispatch_id": dispatch_id,
+                "dispatched_session_id": session_id,
+            },
         )
 
     marker_dir: Path | None = None
@@ -1137,6 +1138,8 @@ async def _run_dispatch(
                     _dispatched_session_id[0] if _dispatched_session_id else ""
                 ),
             )
+        if skill_result.session_id and not _dispatched_session_id:
+            _on_session_id(skill_result.session_id)
 
         ended_at = max(time.time(), started_at + 1e-6)
         _dispatch_completed_normally = True

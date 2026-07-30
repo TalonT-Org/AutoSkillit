@@ -10,7 +10,11 @@ import uuid
 from pathlib import Path
 
 from autoskillit.cli._init_helpers import _user_claude_json_path
-from autoskillit.core import DIRECT_INSTALL_CACHE_SUBDIR, get_logger
+from autoskillit.core import (
+    DIRECT_INSTALL_CACHE_SUBDIR,
+    _installed_plugins_path,
+    get_logger,
+)
 
 logger = get_logger(__name__)
 
@@ -30,7 +34,7 @@ def _installed_plugin_root(version: str | None = None) -> Path:
 
 
 def _installed_plugins_json_path() -> Path:
-    return Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+    return _installed_plugins_path()
 
 
 class _InstallSnapshot:

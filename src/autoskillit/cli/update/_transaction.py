@@ -29,6 +29,7 @@ from autoskillit.cli._install_info import detect_install, upgrade_command
 from autoskillit.cli._installed_plugins import InstalledPluginsFile
 from autoskillit.core import (
     Severity,
+    _installed_plugins_path,
     build_maintenance_env,
     get_logger,
     is_git_main_checkout,
@@ -269,9 +270,7 @@ def run_update_transaction(
             f"Could not read pre-update autoskillit metadata: {exc}",
         )
 
-    registry = InstalledPluginsFile(
-        resolved_home / ".claude" / "plugins" / "installed_plugins.json"
-    )
+    registry = InstalledPluginsFile(_installed_plugins_path(resolved_home))
     registration_snapshot = registry.contains(_PLUGIN_REF)
 
     progress.enter(UpdateTransactionPhase.PLUGIN_OBLIGATION_DERIVATION)

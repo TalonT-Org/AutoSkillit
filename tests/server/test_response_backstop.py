@@ -658,6 +658,34 @@ def test_non_exempted_projection_capped_at_delivery_bound(tmp_path):
     assert RESPONSE_SPILL_METADATA_KEY in data
 
 
+def test_run_skill_delivery_bound_preserves_audit_outcome_projection(tmp_path):
+    payload = {
+        "success": True,
+        "result": "x" * 150_000,
+        "audit_status": "PUBLISHED",
+        "audit_verdict": "NO GO",
+        "audit_cycle_path": "/tmp/audit/cycle.json",
+        "audit_attempt_id": "attempt-123",
+        "stderr": "y" * 20_000,
+    }
+
+    shaped = enforce_response_budget(
+        json.dumps(payload),
+        tool_name="run_skill",
+        artifact_dir=tmp_path,
+        config=OutputBudgetConfig(),
+        selected_result_token_limit=500,
+    )
+
+    assert isinstance(shaped, str)
+    projected = json.loads(shaped)
+    assert projected["audit_status"] == "PUBLISHED"
+    assert projected["audit_verdict"] == "NO GO"
+    assert projected["audit_cycle_path"] == "/tmp/audit/cycle.json"
+    assert projected["audit_attempt_id"] == "attempt-123"
+    assert RESPONSE_SPILL_METADATA_KEY in projected
+
+
 def test_delivery_bound_summary_projects_oversized_preserved_fields(tmp_path):
     """REQ-026/REQ-027 rung-4 pin: preserved fields must stay present even
     when they alone exceed the bound — the ladder projects values, never drops

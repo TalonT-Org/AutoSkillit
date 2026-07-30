@@ -236,13 +236,17 @@ class TestLoopBudgetSeparation:
     def test_audit_impl_no_go_routes_to_audit_loop(self, recipe_name: str) -> None:
         recipe = self.recipes[recipe_name]
         audit_step = recipe.steps["audit_impl"]
-        fallthrough = [
-            c.route
-            for c in audit_step.on_result.conditions
-            if c.when is None
-            or ("GO" not in c.when and "error" not in c.when and "preflight" not in c.when)
+        correction_routes = [
+            condition.route
+            for condition in audit_step.on_result.conditions
+            if condition.when
+            and (
+                "SEMANTIC_REJECTED" in condition.when
+                or ("audit_verdict" in condition.when and "NO GO" in condition.when)
+            )
         ]
-        assert fallthrough == ["check_audit_remediation_loop"]
+        assert len(correction_routes) == 3
+        assert set(correction_routes) == {"check_audit_remediation_loop"}
 
     @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
     def test_all_merge_failure_arms_guarded(self, recipe_name: str) -> None:

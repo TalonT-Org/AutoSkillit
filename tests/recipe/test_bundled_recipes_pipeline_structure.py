@@ -304,24 +304,19 @@ class TestImplementationPipelineStructure:
         """T_IP2: review_approach step has capture containing key review_path."""
         assert "review_path" in recipe.steps["review_approach"].capture
 
-    def test_ip3_audit_impl_has_verdict_and_remediation_capture_and_on_result(
+    def test_ip3_audit_impl_has_server_audit_captures_and_on_result(
         self,
         recipe,
     ) -> None:
-        """T_IP3: audit_impl captures remediation_path and routes via on_result using verdict.
-
-        Uses predicate format (v0.3.0): verdict is read directly from result.verdict in predicate
-        conditions — it is not captured as context.verdict (which would create a dead output).
-        """
+        """T_IP3: audit_impl captures and routes only server-authored audit outcomes."""
         step = recipe.steps["audit_impl"]
         assert "remediation_path" in step.capture
+        assert {"audit_status", "audit_verdict", "audit_attempt_id"} <= step.capture.keys()
         assert step.on_result is not None
-        # Predicate format: conditions list (not legacy field+routes dict)
         conds = step.on_result.conditions
         assert len(conds) > 0, "audit_impl on_result must have predicate conditions"
-        assert any("result.verdict" in (c.when or "") for c in conds), (
-            "audit_impl on_result must have a condition checking result.verdict"
-        )
+        assert any("result.audit_verdict" in (condition.when or "") for condition in conds)
+        assert all("result.verdict" not in (condition.when or "") for condition in conds)
 
     def test_ip4_verify_step_references_context_review_path(self, recipe) -> None:
         """T_IP4: verify step with_args contains a reference to context.review_path."""
@@ -840,23 +835,19 @@ class TestInvestigateFirstStructure:
     def recipe(self):
         return load_recipe(builtin_recipes_dir() / "remediation.yaml")
 
-    def test_if1_audit_impl_has_verdict_and_remediation_capture_and_on_result(
+    def test_if1_audit_impl_has_server_audit_captures_and_on_result(
         self,
         recipe,
     ) -> None:
-        """T_IF1: audit_impl captures remediation_path and routes via on_result using verdict.
-
-        Uses predicate format (v0.3.0): verdict is read directly from result.verdict in predicate
-        conditions — it is not captured as context.verdict (which would create a dead output).
-        """
+        """T_IF1: audit_impl captures and routes only server-authored audit outcomes."""
         step = recipe.steps["audit_impl"]
         assert "remediation_path" in step.capture
+        assert {"audit_status", "audit_verdict", "audit_attempt_id"} <= step.capture.keys()
         assert step.on_result is not None
         conds = step.on_result.conditions
         assert len(conds) > 0, "audit_impl on_result must have predicate conditions"
-        assert any("result.verdict" in (c.when or "") for c in conds), (
-            "audit_impl on_result must have a condition checking result.verdict"
-        )
+        assert any("result.audit_verdict" in (condition.when or "") for condition in conds)
+        assert all("result.verdict" not in (condition.when or "") for condition in conds)
 
     def test_if2_remediate_step_routes_to_make_plan(self, recipe) -> None:
         """T_IF2: remediate step exists and routes to make_plan (not rectify)."""

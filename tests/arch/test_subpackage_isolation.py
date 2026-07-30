@@ -954,7 +954,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "hooks": 20,  # +_capture_lifecycle state leaf and +capture_lifecycle_hook SessionStart owner  # noqa: E501
         "pipeline": 15,  # +context/audit admission ledgers +recipe initialization +kitchen transition
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
-        "recipe/rules": 55,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery  # noqa: E501
+        "recipe/rules": 56,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing  # noqa: E501
         "server/tools": 33,  # +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
         # auto-init dependency tracker + REVIEW_BEFORE_PLAN ordering telemetry)
         # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate

@@ -486,6 +486,15 @@ skills:
     - name: audit_cycle_path
       type: file_path
       server_computed: true
+    - name: audit_status
+      type: string
+      server_computed: true
+    - name: audit_verdict
+      type: string
+      server_computed: true
+    - name: audit_attempt_id
+      type: string
+      server_computed: true
     - name: verified_verdict
       type: string
       server_computed: true

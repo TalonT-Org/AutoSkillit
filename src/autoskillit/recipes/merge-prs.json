@@ -1418,6 +1418,7 @@
         "cwd": "${{ context.work_dir }}",
         "step_name": "audit_impl",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/audit-impl",
+        "retry_after_audit_attempt_id": "${{ context.audit_attempt_id }}",
         "closure_authority_path": "${{ inputs.closure_authority_path }}",
         "closure_authority_hash": "${{ inputs.closure_authority_hash }}",
         "closure_plan_paths": "${{ context.all_plan_paths }}",
@@ -1426,21 +1427,55 @@
         "closure_target_sha": ""
       },
       "capture": {
-        "verdict": "${{ result.verdict }}",
         "remediation_path": "${{ result.remediation_path }}",
-        "audit_cycle_path": "${{ result.audit_cycle_path }}"
+        "audit_cycle_path": "${{ result.audit_cycle_path }}",
+        "audit_status": "${{ result.audit_status }}",
+        "audit_verdict": "${{ result.audit_verdict }}",
+        "audit_attempt_id": "${{ result.audit_attempt_id }}"
       },
       "on_result": [
         {
-          "when": "${{ result.verdict }} == GO",
-          "route": "compute_domain_partitions"
-        },
-        {
-          "when": "${{ result.verdict }} == NO GO",
+          "when": "${{ result.audit_status }} == SEMANTIC_REJECTED",
           "route": "remediate"
         },
         {
+          "when": "${{ result.audit_status }} == CONFLICT",
+          "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.audit_status }} == STORAGE_FAILURE",
+          "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.audit_status }} == QUARANTINED",
+          "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.audit_status }} == NON_PUBLISHED_STANDALONE",
+          "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }} == GO",
           "route": "compute_domain_partitions"
+        },
+        {
+          "when": "${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == GO",
+          "route": "compute_domain_partitions"
+        },
+        {
+          "when": "${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }} == NO GO",
+          "route": "remediate"
+        },
+        {
+          "when": "${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == NO GO",
+          "route": "remediate"
+        },
+        {
+          "when": "result.error",
+          "route": "register_clone_failure"
+        },
+        {
+          "route": "register_clone_failure"
         }
       ],
       "on_failure": "register_clone_failure",
@@ -1449,7 +1484,8 @@
       "optional": true,
       "skip_when_false": "inputs.audit_impl",
       "optional_context_refs": [
-        "audit_cycle_path"
+        "audit_cycle_path",
+        "audit_attempt_id"
       ],
       "note": "DEPENDENCY: context.all_plan_paths is only populated if the plan step executed at least once. The check_impl_plans gate ensures this step is only reached when implementation plan files exist (i.e. make-plan was invoked), so all_plan_paths is guaranteed to be set when audit_impl runs. Gated by check_impl_plans — only reached when implementation plan files exist in plans_dir. Only execute if inputs.audit_impl is 'true'; if false, skip directly to open_integration_pr. Passes context.all_plan_paths (comma-separated list of plan file paths accumulated across the PR loop) as plans_input. audit-impl splits on commas and audits each plan file. implementation_ref is context.batch_branch (no worktree remains). GO → open_integration_pr. NO GO replaces the prior authority before completion. NO GO re-enters plan with the exact current authority and the successor audit consumes it as prior.\n"
     },

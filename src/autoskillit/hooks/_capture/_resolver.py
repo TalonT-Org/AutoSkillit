@@ -159,38 +159,30 @@ def acquire_writer_lease(
         raise lifecycle_error("writer lease capability unavailable") from exc
 
 
-def open_verified_capture(
+def _open_linearized_reader(
     store: _LifecycleStore,
-    token: str,
     *,
+    capture_id: str,
+    resolve_manifest: Callable[
+        [_ledger.CaptureLifecycleRecord | None],
+        _snapshot.CaptureFinalManifest,
+    ],
+    acquire_descriptor: Callable[[_snapshot.CaptureFinalManifest], int],
     lifecycle_error: type[Exception],
+    changed_message: str,
 ) -> _reader.VerifiedCaptureReader:
-    """Resolve a published reference under a retained shared carrier lease."""
-
     fd = -1
     try:
         with store._locked():
-            hint = _snapshot.parse_capture_reference(token)
             records, _epoch, _size = store._load_locked()
-            record = records.get(hint.capture_id)
-            manifest = _published_manifest(
-                store,
-                record,
-                token,
-                capture_id=hint.capture_id,
-                incarnation=hint.incarnation,
-                lifecycle_error=lifecycle_error,
-            )
-            try:
-                fd = os.open(manifest.carrier_name, _READ_FLAGS, dir_fd=store._root_fd)
-            except OSError as exc:
-                raise lifecycle_error("capture carrier is unavailable") from exc
+            record = records.get(capture_id)
+            manifest = resolve_manifest(record)
+            fd = acquire_descriptor(manifest)
             _descriptor.inspect_capture_descriptor(
                 fd,
                 manifest,
                 error_type=_snapshot.CaptureAuthorityError,
             )
-            _acquire_shared_lease(fd, lifecycle_error)
             revision = record.revision if record is not None else -1
             manifest_bytes = record.manifest_bytes if record is not None else b""
 
@@ -198,22 +190,15 @@ def open_verified_capture(
 
         with store._locked():
             records, _epoch, _size = store._load_locked()
-            current = records.get(hint.capture_id)
-            current_manifest = _published_manifest(
-                store,
-                current,
-                token,
-                capture_id=hint.capture_id,
-                incarnation=hint.incarnation,
-                lifecycle_error=lifecycle_error,
-            )
+            current = records.get(capture_id)
+            current_manifest = resolve_manifest(current)
             if (
                 current is None
                 or current.revision != revision
                 or current.manifest_bytes != manifest_bytes
                 or current_manifest != manifest
             ):
-                raise lifecycle_error("verified capture changed during resolution")
+                raise lifecycle_error(changed_message)
         reader = _reader._make_verified_reader(fd, manifest, revision)
         fd = -1
         return reader
@@ -227,6 +212,54 @@ def open_verified_capture(
         raise
 
 
+def open_verified_capture(
+    store: _LifecycleStore,
+    token: str,
+    *,
+    lifecycle_error: type[Exception],
+) -> _reader.VerifiedCaptureReader:
+    """Resolve a published reference under a retained shared carrier lease."""
+
+    hint = _snapshot.parse_capture_reference(token)
+
+    def resolve_manifest(
+        record: _ledger.CaptureLifecycleRecord | None,
+    ) -> _snapshot.CaptureFinalManifest:
+        return _published_manifest(
+            store,
+            record,
+            token,
+            capture_id=hint.capture_id,
+            incarnation=hint.incarnation,
+            lifecycle_error=lifecycle_error,
+        )
+
+    def acquire_descriptor(manifest: _snapshot.CaptureFinalManifest) -> int:
+        try:
+            fd = os.open(manifest.carrier_name, _READ_FLAGS, dir_fd=store._root_fd)
+        except OSError as exc:
+            raise lifecycle_error("capture carrier is unavailable") from exc
+        try:
+            _acquire_shared_lease(fd, lifecycle_error)
+            return fd
+        except BaseException as primary_error:
+            _cleanup.close_preserving_primary(
+                fd,
+                primary_error,
+                context="shared lease descriptor cleanup",
+            )
+            raise
+
+    return _open_linearized_reader(
+        store,
+        capture_id=hint.capture_id,
+        resolve_manifest=resolve_manifest,
+        acquire_descriptor=acquire_descriptor,
+        lifecycle_error=lifecycle_error,
+        changed_message="verified capture changed during resolution",
+    )
+
+
 def adopt_verified_capture(
     store: _LifecycleStore,
     finalized: _snapshot.FinalizedCapture,
@@ -236,50 +269,33 @@ def adopt_verified_capture(
 ) -> _reader.VerifiedCaptureReader:
     """Adopt a producer's already-exclusive carrier open file description."""
 
-    try:
-        if type(finalized) is not _snapshot.FinalizedCapture:
+    if type(finalized) is not _snapshot.FinalizedCapture:
+        try:
             raise lifecycle_error("producer entrance requires finalized capture")
-        manifest = finalized.snapshot.manifest
-        with store._locked():
-            records, _epoch, _size = store._load_locked()
-            record = records.get(manifest.capture_id)
-            current_manifest = _producer_manifest(
-                store,
-                record,
-                finalized,
-                lifecycle_error=lifecycle_error,
-            )
-            _descriptor.inspect_capture_descriptor(
+        except BaseException as primary_error:
+            _cleanup.close_preserving_primary(
                 fd,
-                current_manifest,
-                error_type=_snapshot.CaptureAuthorityError,
+                primary_error,
+                context="capture carrier cleanup",
             )
-            revision = record.revision if record is not None else -1
-            manifest_bytes = record.manifest_bytes if record is not None else b""
+            raise
+    manifest = finalized.snapshot.manifest
 
-        _snapshot.verify_capture_descriptor(fd, current_manifest)
-
-        with store._locked():
-            records, _epoch, _size = store._load_locked()
-            current = records.get(manifest.capture_id)
-            rechecked_manifest = _producer_manifest(
-                store,
-                current,
-                finalized,
-                lifecycle_error=lifecycle_error,
-            )
-            if (
-                current is None
-                or current.revision != revision
-                or current.manifest_bytes != manifest_bytes
-                or rechecked_manifest != current_manifest
-            ):
-                raise lifecycle_error("producer capture changed during verification")
-        return _reader._make_verified_reader(fd, current_manifest, revision)
-    except BaseException as primary_error:
-        _cleanup.close_preserving_primary(
-            fd,
-            primary_error,
-            context="capture carrier cleanup",
+    def resolve_manifest(
+        record: _ledger.CaptureLifecycleRecord | None,
+    ) -> _snapshot.CaptureFinalManifest:
+        return _producer_manifest(
+            store,
+            record,
+            finalized,
+            lifecycle_error=lifecycle_error,
         )
-        raise
+
+    return _open_linearized_reader(
+        store,
+        capture_id=manifest.capture_id,
+        resolve_manifest=resolve_manifest,
+        acquire_descriptor=lambda _manifest: fd,
+        lifecycle_error=lifecycle_error,
+        changed_message="producer capture changed during verification",
+    )

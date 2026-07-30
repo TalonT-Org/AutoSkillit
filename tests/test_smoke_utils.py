@@ -1630,15 +1630,18 @@ def test_experimental_aggregation_rejects_accepted_disposition_without_identity(
         prior_resolved_findings=[],
     )
 
-    assert result == {"survivors": [], "aggregation_records": []}
+    assert result == {
+        "state": "complete",
+        "survivors": [],
+        "aggregation_records": [],
+        "validation_errors": [],
+    }
 
 
 def test_combined_review_aggregation_is_cross_source_and_completion_order_independent() -> None:
     reachability, abstraction = EXPERIMENTAL_REVIEW_AUDITORS
     standard = [
         {
-            "candidate_id": "standard-arch",
-            "original_index": 0,
             "file": "src/app.py",
             "line": 42,
             "dimension": "arch",
@@ -1649,8 +1652,6 @@ def test_combined_review_aggregation_is_cross_source_and_completion_order_indepe
     ]
     deletion = [
         {
-            "candidate_id": "deletion",
-            "original_index": 0,
             "file": "src/deleted.py",
             "line": 8,
             "dimension": "deletion_regression",
@@ -1715,18 +1716,19 @@ def test_combined_review_aggregation_is_cross_source_and_completion_order_indepe
     )
 
     assert forward == reverse
-    assert [item["candidate_id"] for item in forward["survivors"]] == [
-        "standard-arch",
-        "deletion",
-        "experimental-abstraction",
+    assert [item["dimension"] for item in forward["survivors"]] == [
+        "arch",
+        "deletion_regression",
+        "overengineering_abstraction_surface",
     ]
+    standard_winner_id = str(forward["survivors"][0]["candidate_id"])
     loser = next(
         record
         for record in forward["aggregation_records"]
         if record["candidate_id"] == "experimental-collision"
     )
-    assert loser["winner_candidate_id"] == "standard-arch"
-    assert loser["member_ids"] == ["standard-arch", "experimental-collision"]
+    assert loser["winner_candidate_id"] == standard_winner_id
+    assert loser["member_ids"] == [standard_winner_id, "experimental-collision"]
     assert loser["dedup_group_id"]
     assert "fixed source rank" in loser["rationale"]
 
@@ -2073,8 +2075,6 @@ def _combined_review_survivors(gate_state: str) -> list[dict[str, object]]:
     reachability, abstraction = EXPERIMENTAL_REVIEW_AUDITORS
     standard = [
         {
-            "candidate_id": "standard-bug",
-            "original_index": 0,
             "file": "src/app.py",
             "line": 40,
             "dimension": "bugs",
@@ -2085,8 +2085,6 @@ def _combined_review_survivors(gate_state: str) -> list[dict[str, object]]:
     ]
     deletion = [
         {
-            "candidate_id": "deletion-regression",
-            "original_index": 0,
             "file": "src/deleted.py",
             "line": 7,
             "dimension": "deletion_regression",

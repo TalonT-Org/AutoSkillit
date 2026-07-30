@@ -60,6 +60,17 @@ def test_started_unconfirmed_effect_requires_reconciliation() -> None:
     assert snapshot.retry_disposition is DispatchRetryDisposition.RECONCILE_REQUIRED
 
 
+def test_repeated_start_preserves_original_journal_entry() -> None:
+    tracker = DispatchProvenanceTracker(operation_id="operation-repeated-start")
+    tracker.start(DispatchEffectName.PROCESS_SPAWN, identities={"dispatch_id": "dispatch-1"})
+
+    tracker.start(DispatchEffectName.PROCESS_SPAWN, identities={"dispatch_id": "dispatch-2"})
+
+    effect = tracker.snapshot().effects[0]
+    assert effect.phase is DispatchEffectPhase.STARTED
+    assert dict(effect.known_downstream_identities) == {"dispatch_id": "dispatch-1"}
+
+
 def test_local_cleanup_does_not_erase_confirmed_spawn() -> None:
     tracker = DispatchProvenanceTracker(operation_id="operation-4")
     tracker.confirm(

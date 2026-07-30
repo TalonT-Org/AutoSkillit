@@ -204,7 +204,7 @@ class DispatchProvenanceTracker:
     ) -> None:
         with self._lock:
             existing = self._effects.get(name)
-            if existing is not None and existing.phase != DispatchEffectPhase.NOT_STARTED:
+            if existing is not None:
                 return
             self._effects[name] = DispatchEffectRecord(
                 name=name,

@@ -410,6 +410,7 @@ def test_install_boundary_rejects_worktree_without_persistent_mutation(
 def test_success_path_holds_both_transaction_guards_through_commit(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
     import autoskillit.workspace as workspace
@@ -484,6 +485,9 @@ def test_success_path_holds_both_transaction_guards_through_commit(
 
     assert result.outcome is InstallOutcome.COMPLETED
     assert result.verified_identity == f"{_PLUGIN_REF}:{_VERSION}"
+    success_message = f"Plugin installed: {_PLUGIN_REF} (scope: user)"
+    assert result.findings == (success_message,)
+    assert capsys.readouterr().out == f"{success_message}\n"
     assert events == [
         "install_lock_acquired",
         "artifact_lease_acquired",

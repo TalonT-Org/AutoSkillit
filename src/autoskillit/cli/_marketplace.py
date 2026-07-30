@@ -706,10 +706,11 @@ def install(
             findings=(f"install lock failure: {exc}",),
         )
 
-    print(f"Plugin installed: {plugin_ref} (scope: {effective_scope})")
-    return InstallResult(
-        outcome=InstallOutcome.COMPLETED,
+    success_message = f"Plugin installed: {plugin_ref} (scope: {effective_scope})"
+    return _typed_result(
+        InstallOutcome.COMPLETED,
         verified_identity=verified_identity,
+        findings=(success_message,),
     )
 
 

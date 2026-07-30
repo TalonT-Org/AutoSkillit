@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Any, Protocol, TypeAlias
 
-from . import _ledger, _snapshot, _sweep
+from . import _ledger, _snapshot
 
 _THIS_MODULE = sys.modules[__name__]
 for _alias in ("_capture._delivery", "autoskillit.hooks._capture._delivery"):
@@ -606,7 +606,7 @@ def normalize_interrupted_deliveries(
             with store._locked():
                 records, compaction_epoch, size = store._load_locked()
                 current = records.get(expected.capture_id)
-                if not _sweep._same_record(expected, current):
+                if not _ledger.same_record(expected, current):
                     continue
                 candidate = _restart_transition(
                     current,

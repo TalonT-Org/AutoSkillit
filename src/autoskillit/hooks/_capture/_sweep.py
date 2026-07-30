@@ -15,6 +15,7 @@ from ._ledger import (
     CaptureReferenceStatus,
     CaptureRetentionPhase,
     CaptureState,
+    same_record,
 )
 from ._types import (
     CaptureCleanupOutcome,
@@ -422,20 +423,6 @@ def retry_record(
     )
 
 
-def _same_record(
-    expected: CaptureLifecycleRecord,
-    current: CaptureLifecycleRecord | None,
-) -> bool:
-    return (
-        current is not None
-        and replace(
-            current,
-            compaction_epoch=expected.compaction_epoch,
-        )
-        == expected
-    )
-
-
 def _transition_if_current(
     store: Any,
     expected: CaptureLifecycleRecord,
@@ -444,7 +431,7 @@ def _transition_if_current(
     with store._locked(blocking=False):
         records, compaction_epoch, size = store._load_locked()
         current = records.get(expected.capture_id)
-        if not _same_record(expected, current):
+        if not same_record(expected, current):
             return None
         return store._transition_locked(
             records=records,
@@ -510,11 +497,7 @@ def sweep_one(
             records, compaction_epoch, size = store._load_locked()
             record = records.get(capture_id)
             now = store._wall_clock()
-            if (
-                record is None
-                or not _same_record(expected, record)
-                or record.next_attempt_at > now
-            ):
+            if record is None or not same_record(expected, record) or record.next_attempt_at > now:
                 return ("not_due", 0, 0)
             if record.state in {
                 CaptureState.RESERVED,
@@ -561,7 +544,7 @@ def sweep_one(
         with store._locked(blocking=False):
             records, compaction_epoch, size = store._load_locked()
             current = records.get(capture_id)
-            if not _same_record(deleting, current):
+            if not same_record(deleting, current):
                 raise lifecycle_error("cleanup authority changed during deletion")
             deleted = replace(
                 deleting,

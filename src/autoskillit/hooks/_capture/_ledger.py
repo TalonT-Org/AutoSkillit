@@ -10,7 +10,7 @@ import os
 import re
 import struct
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any, cast
 
@@ -50,6 +50,7 @@ __all__ = [
     "legacy_record_from_dict",
     "record_from_dict",
     "record_to_dict",
+    "same_record",
     "validate_successor",
     "validate_record",
     "write_all",
@@ -163,6 +164,22 @@ class CaptureLifecycleRecord:
     @property
     def sha256(self) -> str:
         return self.manifest.sha256 if self.manifest is not None else ""
+
+
+def same_record(
+    expected: CaptureLifecycleRecord,
+    current: CaptureLifecycleRecord | None,
+) -> bool:
+    """Compare one logical record while ignoring its load-time compaction epoch."""
+
+    return (
+        current is not None
+        and replace(
+            current,
+            compaction_epoch=expected.compaction_epoch,
+        )
+        == expected
+    )
 
 
 def _plain_int(value: object, *, minimum: int = 0) -> bool:

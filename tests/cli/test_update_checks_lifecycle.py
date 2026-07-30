@@ -1,5 +1,5 @@
 """Tests for cli/_update_checks.py — UC-11 fetch cache lifecycle, UC-12 state
-transitions, and T1/T2/T6 update sequence and verification."""
+transitions, and T2/T6 automatic update sequencing."""
 
 from __future__ import annotations
 
@@ -546,43 +546,6 @@ def test_fetch_with_cache_epoch_check_contract(
 
 
 # ---------------------------------------------------------------------------
-# T1 — _verify_update_result uses install-type-aware upgrade command
-# ---------------------------------------------------------------------------
-
-
-def test_verify_update_result_prints_git_vcs_stable_command(
-    tmp_path: Path, capsys: pytest.CaptureFixture
-) -> None:
-    import importlib.metadata
-
-    from autoskillit.cli.update._update_checks import _verify_update_result
-
-    info = _make_stable_info()
-    with patch.object(importlib.metadata, "version", return_value="0.9.0"):
-        result = _verify_update_result(info, "0.9.0", "0.9.1", tmp_path, {})
-    assert result is False
-    out = capsys.readouterr().out
-    assert "uv tool upgrade autoskillit" in out
-    assert "autoskillit update" in out
-
-
-def test_verify_update_result_prints_git_vcs_develop_command(
-    tmp_path: Path, capsys: pytest.CaptureFixture
-) -> None:
-    import importlib.metadata
-
-    from autoskillit.cli.update._update_checks import _verify_update_result
-
-    info = _make_develop_info()
-    with patch.object(importlib.metadata, "version", return_value="0.9.0"):
-        result = _verify_update_result(info, "0.9.0", "0.9.1", tmp_path, {})
-    assert result is False
-    out = capsys.readouterr().out
-    assert "git+" in out
-    assert "uv tool upgrade autoskillit" not in out
-
-
-# ---------------------------------------------------------------------------
 # T2 — automatic adapter suppresses completed-only effects on every non-success
 # ---------------------------------------------------------------------------
 
@@ -665,7 +628,7 @@ def test_run_update_sequence_passes_home_and_fresh_process_runner(
 
 
 # ---------------------------------------------------------------------------
-# T6 — binary_snoozed is never written by _verify_update_result
+# T6 — successful coordinator cleanup and restart
 # ---------------------------------------------------------------------------
 
 
@@ -713,17 +676,3 @@ def test_run_update_sequence_restarts_on_success(
     assert state == {"preserved": "value"}
     assert written_states == [{"preserved": "value"}]
     assert effects == ["write", "invalidate", "restart"]
-
-
-def test_verify_update_result_does_not_write_binary_snoozed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import importlib.metadata
-
-    from autoskillit.cli.update._update_checks import _verify_update_result
-
-    info = _make_stable_info(commit_id="abc")
-    state: dict = {}
-    with patch.object(importlib.metadata, "version", return_value="0.9.0"):
-        _verify_update_result(info, "0.9.0", "0.9.1", tmp_path, state)
-    assert "binary_snoozed" not in state

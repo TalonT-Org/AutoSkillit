@@ -84,9 +84,9 @@ Run health checks on your setup.
 
 Runs 41 checks (up to 47 with fleet enabled) enumerated by `run_doctor` in
 `cli/doctor/__init__.py` — numbered plus lettered sub-checks `2b`, `2c`, `2d`,
-`2e`, `4b`, `7b`, `7c`, and `31b`. The checks cover stale MCP servers, plugin registration, PATH,
-project config, secrets placement, version consistency, hook health, hook
-registration, hook registry drift, recipe version health, gitignore
+`2e`, `2f`, `4b`, `7b`, `7c`, and `31b`. The checks cover stale MCP servers, plugin registration, PATH,
+project config, secrets placement, shared exact-artifact/install-state consistency,
+hook health, hook registration, hook registry drift, recipe version health, gitignore
 completeness, secret-scanning hook, editable install source, stale entry
 points, source drift, quota cache schema, process state, install classification,
 update dismissal state, ambient env leaks, feature gate consistency, codex version,

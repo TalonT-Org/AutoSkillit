@@ -67,7 +67,7 @@ projects need.
 
     autoskillit doctor
 
-Doctor runs 41 checks (23 numbered + 7 lettered sub-checks: `2b`, `2c`, `2d`, `2e`, `4b`, `7b`, `7c` + 11 backend runtime probes, checks 30–39 including `31b`); up to 47 with the fleet feature enabled.
+Doctor runs 41 checks (22 numbered + 8 lettered sub-checks: `2b`, `2c`, `2d`, `2e`, `2f`, `4b`, `7b`, `7c` + 11 backend runtime probes, checks 30–39 including `31b`); up to 47 with the fleet feature enabled.
 Enumerated by `run_doctor` in `src/autoskillit/cli/doctor/__init__.py`:
 
 | # | Check | What it verifies |
@@ -77,10 +77,10 @@ Enumerated by `run_doctor` in `src/autoskillit/cli/doctor/__init__.py`:
 | 2b | Dual MCP registration | No duplicate direct + marketplace registration |
 | 2c | Plugin cache exists | `~/.claude/plugins/cache/autoskillit-local/` directory exists |
 | 2d | installed_plugins.json | AutoSkillit entry present in installed_plugins.json |
+| 2f | Install state consistency | Exact install artifacts, registry entries, retired shapes, and derived versions agree |
 | 3 | `autoskillit` on PATH | The CLI command is reachable |
 | 4 | Config exists | `.autoskillit/config.yaml` is present |
 | 4b | Config secrets placement | Secrets live in `.autoskillit/.secrets.yaml`, never in `config.yaml` |
-| 5 | Version consistency | Cached plugin.json version matches installed package version |
 | 6 | Hook executability | Deployed hook scripts exist and are executable for every event type |
 | 7 | Hook registration | Hooks are registered in `settings.json` |
 | 7b | Hook registry drift | Structural diff against `generate_hooks_json()` from `hook_registry.py` |
@@ -134,11 +134,14 @@ If you installed via `uv tool install`, ensure `~/.local/bin` is on your PATH:
 Install Claude Code following [Anthropic's guide](https://docs.anthropic.com/en/docs/claude-code/overview).
 Then re-run `autoskillit install`.
 
-### Doctor reports "version_consistency: WARNING"
+### Doctor reports an `install_state:*` finding
 
-Your installed package version doesn't match the plugin manifest. Re-run:
+The shared `install_state_consistency` diagnostic names the exact artifact or
+invariant whose installed state disagrees with the registry, a retired shape, or
+the running package version. Rebuild and reconcile the install, then verify it:
 
     autoskillit install
+    autoskillit doctor
 
 ### Doctor reports "hook_health: ERROR"
 

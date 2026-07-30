@@ -29,7 +29,6 @@ from autoskillit.cli._install_info import (
     comparison_branch,
     detect_install,
     dismissal_window,
-    upgrade_command,
 )
 from autoskillit.cli._restart import perform_restart
 from autoskillit.cli.ui._terminal import terminal_guard
@@ -79,46 +78,6 @@ def _write_dismiss_state(home: Path, state: dict[str, object]) -> None:
     state_file = home / ".autoskillit" / _DISMISS_FILE
     state_file.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(state_file, json.dumps(state))
-
-
-def _verify_update_result(
-    info: InstallInfo,
-    current: str,
-    latest: str,
-    home: Path,
-    state: dict[str, object],
-) -> bool:
-    """Verify that the update subprocess advanced the installed version.
-
-    Calls importlib.metadata.version() directly to bypass the lru_cache in
-    version_info() and the process-lifetime cache in autoskillit.__version__.
-
-    Returns True if the version advanced (update succeeded).
-    Returns False if the version is unchanged (update silently failed).
-    """
-    import importlib.metadata
-
-    try:
-        new_version = importlib.metadata.version("autoskillit")
-    except Exception:
-        logger.debug("Failed to read version after update attempt", exc_info=True)
-        new_version = current
-
-    if new_version != current:
-        return True
-
-    cmd = upgrade_command(info)
-    cmd_str = " ".join(cmd) if cmd else "autoskillit update"
-    print(
-        f"\nUpdate attempted but version is still {current}. "
-        f"To upgrade, run:\n"
-        f"  autoskillit update\n"
-        f"Or manually:\n"
-        f"  {cmd_str}\n"
-        f"  autoskillit install",
-        flush=True,
-    )
-    return False
 
 
 def _binary_signal(info: InstallInfo, home: Path, current: str) -> Signal | None:

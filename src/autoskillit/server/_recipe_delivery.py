@@ -1173,7 +1173,11 @@ def finalize_recipe_delivery(
         flow_generation=flow_generation,
         execution_snapshot=execution_snapshot,
         normalized_compile_key=normalized_compile_key,
-        tool_ctx=tool_ctx if execution_snapshot is not None else None,
+        tool_ctx=(
+            tool_ctx
+            if execution_snapshot is not None or kitchen_transition_token is not None
+            else None
+        ),
         recipe_name=recipe_name,
         initialization_activating=surface_definition.initialization_activating,
         initialization_id=initialization_id,
@@ -1194,6 +1198,29 @@ def complete_finalized_recipe_response(
     parsed: dict[str, Any] | None = None
     prepared_execution: Any = None
     previous_initialization_state: Any = None
+    transition_token = finalized.kitchen_transition_token
+    if enforced == finalized.rendered and transition_token is not None:
+        transition_owned = False
+        if (
+            finalized.tool_ctx is not None
+            and hasattr(finalized.tool_ctx, "kitchen_transition_lock")
+            and hasattr(finalized.tool_ctx, "kitchen_open_state")
+        ):
+            with finalized.tool_ctx.kitchen_transition_lock:
+                state = finalized.tool_ctx.kitchen_open_state
+                transition_owned = state.operation_id == transition_token.operation_id and any(
+                    effect.name == "recipe_serving"
+                    and effect.effect_id == transition_token.effect_id
+                    for effect in state.effects
+                )
+        if not transition_owned:
+            enforced = json.dumps(
+                {
+                    "success": False,
+                    "error": "kitchen_transition_ownership_mismatch",
+                },
+                separators=(",", ":"),
+            )
     if enforced == finalized.rendered and finalized.initialization_activating:
         required_values = (
             finalized.tool_ctx,

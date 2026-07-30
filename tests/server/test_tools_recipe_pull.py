@@ -41,7 +41,12 @@ from autoskillit.execution import (
     RecipeDeliveryReceiptLedger,
 )
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
-from autoskillit.pipeline import InitializingRecipe, RecipeInitializationRequirement
+from autoskillit.pipeline import (
+    InitializingRecipe,
+    RecipeInitializationRequirement,
+    new_kitchen_open_state,
+    start_kitchen_effect,
+)
 from autoskillit.recipe import load_and_validate
 from autoskillit.server import _recipe_delivery as recipe_delivery
 from autoskillit.server import _recipe_section_pagination as pagination
@@ -227,6 +232,42 @@ def _persist_finalized_generation(
     assert finalized.artifact_generation is not None
     assert finalized.execution_snapshot is not None
     return finalized.artifact_generation, finalized
+
+
+def test_finalized_response_rejects_stale_kitchen_transition_owner(tool_ctx) -> None:
+    tool_ctx.kitchen_id = "transition-owner"
+    tool_ctx.kitchen_open_state = start_kitchen_effect(
+        new_kitchen_open_state(
+            kitchen_id=tool_ctx.kitchen_id,
+            context_id="context-1",
+            operation_id="operation-1",
+        ),
+        "recipe_serving",
+    )
+    finalized = _finalize_recipe_delivery(
+        _payload(),
+        surface="open_kitchen",
+        recipe_name="remediation",
+        tool_ctx=tool_ctx,
+        finalized_projection=_test_projection(),
+    )
+    assert finalized.kitchen_transition_token is not None
+
+    tool_ctx.kitchen_open_state = start_kitchen_effect(
+        new_kitchen_open_state(
+            kitchen_id=tool_ctx.kitchen_id,
+            context_id="context-1",
+            operation_id="operation-2",
+        ),
+        "recipe_serving",
+    )
+
+    completed = complete_finalized_recipe_response(finalized, finalized.rendered)
+
+    assert json.loads(completed) == {
+        "success": False,
+        "error": "kitchen_transition_ownership_mismatch",
+    }
 
 
 def _persist(

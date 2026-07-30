@@ -11,6 +11,12 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import (
+    ManagedHeadlessSessionLineageStatus,
+    NativeShellCaptureDiagnostic,
+    NativeShellCaptureMode,
+    NativeShellCaptureReason,
+)
 from autoskillit.core.types._type_results import ProviderOutcome
 from autoskillit.core.types._type_results_execution import (
     RecipeIdentity,
@@ -574,6 +580,30 @@ def test_flush_index_includes_schema_version_6(tmp_path):
     index_path = tmp_path / "sessions.jsonl"
     entry = json.loads(index_path.read_text().strip().split("\n")[-1])
     assert entry["schema_version"] == 6
+
+
+def test_native_shell_diagnostic_is_identical_in_summary_and_index(tmp_path):
+    diagnostic = NativeShellCaptureDiagnostic(
+        requested_mode=NativeShellCaptureMode.DIRECT,
+        effective_mode=NativeShellCaptureMode.DIRECT,
+        primary_reason=NativeShellCaptureReason.LAUNCH_AUTHORIZED_DIRECT,
+        attributions=(
+            NativeShellCaptureReason.LAUNCH_AUTHORIZED_DIRECT,
+            NativeShellCaptureReason.PROJECT_POLICY_DISABLED,
+        ),
+        resolution_reason=NativeShellCaptureReason.EXPLICIT_ARGUMENT,
+        lineage_status=ManagedHeadlessSessionLineageStatus.FRESH,
+        launch_id="1" * 32,
+        attempt_id="2" * 32,
+        dropped_observation_count=3,
+    )
+    _flush(tmp_path, native_shell_capture=diagnostic)
+
+    summary = json.loads((tmp_path / "sessions" / "test-session-001" / "summary.json").read_text())
+    index_entry = json.loads((tmp_path / "sessions.jsonl").read_text())
+    expected = diagnostic.to_dict(stage="exit")
+    assert summary["native_shell_capture"] == expected
+    assert index_entry["native_shell_capture"] == expected
 
 
 def test_flush_index_token_fields_zero_when_no_step(tmp_path):

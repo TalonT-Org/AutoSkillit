@@ -194,6 +194,35 @@ def test_candidate_final_dispatch_terminal_and_observation_bindings(
     assert lineage.terminal_state is ManagedHeadlessSessionTerminalState.SUCCEEDED
 
 
+def test_observation_count_overflow_is_bounded_and_counted(tmp_path: Path) -> None:
+    anchor = tmp_path / "project"
+    anchor.mkdir()
+    store = DefaultManagedHeadlessSessionLineageStore()
+    lineage = _create(store, anchor)
+
+    for ordinal in range(65):
+        attempt_id = f"{ordinal + 1:032x}"
+        lineage = store.append_attempt(
+            lineage_anchor=anchor,
+            launch_id=lineage.launch_id,
+            attempt_id=attempt_id,
+            **_cas(lineage),
+        )
+        lineage = store.record_observation(
+            lineage_anchor=anchor,
+            launch_id=lineage.launch_id,
+            observation=NativeShellCaptureObservation(
+                attempt_id=attempt_id,
+                effective_mode=NativeShellCaptureMode.DIRECT,
+                reason=NativeShellCaptureReason.LAUNCH_AUTHORIZED_DIRECT,
+            ),
+            **_cas(lineage),
+        )
+
+    assert len(lineage.observations) == 64
+    assert lineage.dropped_observation_count == 1
+
+
 def test_resolved_anchor_identity_is_persisted_and_reference_mismatch_rejected(
     tmp_path: Path,
 ) -> None:

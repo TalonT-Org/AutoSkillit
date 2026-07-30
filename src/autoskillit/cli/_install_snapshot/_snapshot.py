@@ -278,9 +278,6 @@ class _InstallSnapshot:
             self._workspace_temp_shape = None
             raise
 
-    def track_retirement(self, _record_id: str) -> None:
-        """Retirement state is covered by the exact staged cache file."""
-
     def rollback(self, *, owned_lease_fd: int | None = None) -> tuple[str, ...]:
         """Best-effort exact restoration; return every rollback diagnostic."""
         if not self._staged or self._committed:

@@ -559,7 +559,6 @@ def install(
                     if install_request.mode is InstallMode.DIRECT:
                         _ensure_workspace_ready(cwd=operation_cwd)
                     _clear_plugin_cache(
-                        on_retirement_created=snapshot.track_retirement,
                         current_version=expected_version,
                         _lock_owned=True,
                     )

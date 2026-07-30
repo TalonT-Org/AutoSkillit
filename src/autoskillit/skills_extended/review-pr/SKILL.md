@@ -276,7 +276,9 @@ FINAL_SNAPSHOT_STATE=authority_degraded
 COMMIT_ID=""
 HTTP_STATUS=""
 BATCH_RESPONSE_TMP=""
+POSTED_REVIEW_ID=""
 RECEIPT_DOCUMENT=""
+STALE_REVIEW_COMPENSATION_FAILED=false
 
 # Closed degraded reason codes:
 # metrics_missing, metrics_invalid_json, manifest_missing, manifest_invalid,
@@ -1196,11 +1198,17 @@ COMMENTS_JSON=$(jq -n --argjson findings "$FILTERED_FINDINGS" '
 # Build and post the full review payload via stdin. --include makes the HTTP
 # status authoritative without relying on response-body shape.
 refresh_final_snapshot_state
+if [ "$FINAL_SNAPSHOT_STATE" != fresh ]; then
+  verdict=stale_snapshot
+  SNAPSHOT_IS_FRESH=false
+  RECEIPT_DOCUMENT=""
+fi
 if [ "$FINAL_SNAPSHOT_STATE" = fresh ]; then
+  REVIEW_EVENT="{APPROVE|COMMENT|REQUEST_CHANGES}"
   if BATCH_RESPONSE_TMP="$(mktemp "${REVIEW_OUTPUT_DIR%/}/batch_review_response.XXXXXX")"; then
     jq -n \
       --arg body "AutoSkillit PR Review — Verdict: {verdict}" \
-      --arg event "{APPROVE|COMMENT|REQUEST_CHANGES}" \
+      --arg event "$REVIEW_EVENT" \
       --arg commit_id "$COMMIT_ID" \
       --argjson comments "$COMMENTS_JSON" \
       '{body: $body, event: $event, commit_id: $commit_id, comments: $comments}' | \
@@ -1208,6 +1216,10 @@ if [ "$FINAL_SNAPSHOT_STATE" = fresh ]; then
       --method POST --include --input - > "$BATCH_RESPONSE_TMP"
     HTTP_STATUS="$(
       awk 'toupper($1) ~ /^HTTP\// {status=$2} END {print status}' "$BATCH_RESPONSE_TMP"
+    )"
+    POSTED_REVIEW_ID="$(
+      awk 'body || /^[[:space:]]*{/ {body=1; print}' "$BATCH_RESPONSE_TMP" |
+        jq -r '.id // empty' 2>/dev/null || true
     )"
   fi
 fi
@@ -1219,6 +1231,21 @@ if [ "$HTTP_STATUS" = "200" ]; then
       --arg review_generation_id "$REVIEW_GENERATION_ID" \
       '{posted:true,http_status:200,commit_id:$commit_id,
         review_generation_id:$review_generation_id}')"
+  else
+    verdict=stale_snapshot
+    SNAPSHOT_IS_FRESH=false
+    RECEIPT_DOCUMENT=""
+    if [ -n "$POSTED_REVIEW_ID" ] && [ "$REVIEW_EVENT" != COMMENT ]; then
+      sleep 1
+      if ! gh api \
+        /repos/{owner}/{repo}/pulls/{pr_number}/reviews/"$POSTED_REVIEW_ID"/dismissals \
+        --method PUT \
+        --field message="Dismissed because the PR snapshot changed during review submission" \
+        >/dev/null
+      then
+        STALE_REVIEW_COMPENSATION_FAILED=true
+      fi
+    fi
   fi
 fi
 rm -f -- "$BATCH_RESPONSE_TMP"
@@ -1227,6 +1254,11 @@ rm -f -- "$BATCH_RESPONSE_TMP"
 Step 6 constructs the receipt in memory only. It must not write the fixed receipt
 path. Step 8 passes the parsed `RECEIPT_DOCUMENT` to the sole atomic publisher, so
 raw findings and diff context are renamed before the receipt becomes visible.
+The post-submit refresh is part of the effect boundary. A moved snapshot immediately
+replaces the prior verdict with `stale_snapshot`, suppresses the receipt, and dismisses
+an authoritative approval or changes-requested review. Report
+`STALE_REVIEW_COMPENSATION_FAILED=true` as a needs-human operational failure while
+retaining the `stale_snapshot` verdict and diagnostic-only artifacts.
 
 Event mapping:
 - `approved` → `APPROVE`
@@ -1447,6 +1479,13 @@ from autoskillit.smoke_utils import (
     publish_experimental_review_artifacts,
 )
 
+SNAPSHOT_IS_FRESH = FINAL_SNAPSHOT_STATE == "fresh"
+if not SNAPSHOT_IS_FRESH:
+    verdict = "stale_snapshot"
+    FINAL_REVIEW_FINDINGS = []
+    HANDOFF_METADATA = {**HANDOFF_METADATA, "verdict": verdict}
+    RAW_LEDGER = {**RAW_LEDGER, "verdict": verdict}
+
 PUBLICATION = prepare_experimental_review_publication(
     raw_ledger=RAW_LEDGER,
     survivors=FINAL_REVIEW_FINDINGS,
@@ -1462,10 +1501,11 @@ PUBLICATION = prepare_experimental_review_publication(
     ),
 )
 if SNAPSHOT_IS_FRESH:
-    assert (
-        PUBLICATION["artifacts"]["raw_findings"]["review_generation_id"]
-        == REVIEW_GENERATION_ID
-    )
+    publication_generation_id = PUBLICATION["artifacts"]["raw_findings"][
+        "review_generation_id"
+    ]
+    if publication_generation_id != REVIEW_GENERATION_ID:
+        raise RuntimeError("publication generation changed after external effects")
 PUBLICATION_RESULT = publish_experimental_review_artifacts(
     publication=PUBLICATION,
     output_dir=REVIEW_OUTPUT_DIR,

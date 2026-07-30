@@ -121,6 +121,10 @@ def test_runtime_threads_validation_aggregation_and_publication_results() -> Non
     assert "survivors=FINAL_REVIEW_FINDINGS" in step8
     assert "receipt=" in step8
     assert "PUBLICATION_RESULT = publish_experimental_review_artifacts(" in step8
+    assert "if not SNAPSHOT_IS_FRESH:" in step8
+    assert 'verdict = "stale_snapshot"' in step8
+    assert "FINAL_REVIEW_FINDINGS = []" in step8
+    assert 'raise RuntimeError("publication generation changed after external effects")' in step8
 
 
 def test_fixed_destinations_reject_direct_redirects() -> None:

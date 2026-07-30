@@ -170,6 +170,12 @@ def test_step6_captures_http_status_and_publishes_receipt_only_on_200() -> None:
     assert '--arg review_generation_id "$REVIEW_GENERATION_ID"' in section
     assert "must not write the fixed receipt" in section
     assert "comments` array" in section
+    assert "POSTED_REVIEW_ID=" in section
+    assert '/reviews/"$POSTED_REVIEW_ID"/dismissals' in section
+    assert "--method PUT" in section
+    assert "sleep 1" in section
+    assert "STALE_REVIEW_COMPENSATION_FAILED=true" in section
+    assert section.count("verdict=stale_snapshot") >= 2
 
 
 @pytest.mark.parametrize(

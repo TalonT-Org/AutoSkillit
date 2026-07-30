@@ -551,8 +551,9 @@ def normalize_interrupted_deliveries(
                     primary_error,
                     context="delivery normalization lease cleanup",
                 )
+                lease = None
             raise
-        else:
+        finally:
             if lease is not None:
                 os.close(lease.fd)
 

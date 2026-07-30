@@ -754,6 +754,71 @@ def test_restart_normalization_surfaces_unexpected_lease_failure(
         anchor.close()
 
 
+def test_restart_normalization_closes_lease_when_record_turns_stale(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(tmp_path / "project", clock)
+    artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+    os.write(artifact.fd, b"captured")
+    finalized = store.commit_verified_snapshot(
+        _verified_snapshot(store, artifact, b"captured", clock),
+        issue_reference=True,
+    )
+    published = store.publish_reference(finalized)
+    store.transition_delivery(
+        published,
+        expected=CaptureDeliveryStatus.NOT_ATTEMPTED,
+        target=CaptureDeliveryStatus.ATTEMPTING,
+    )
+    lease_fd = os.open(os.devnull, os.O_RDONLY)
+    lease = capture_lifecycle._ObservedArtifact(
+        fd=lease_fd,
+        identity=(0, 0),
+        nlink=1,
+        size=0,
+    )
+    original_load_locked = CaptureLifecycleStore._load_locked
+    load_count = 0
+
+    def load_with_stale_record(
+        current_store: CaptureLifecycleStore,
+    ) -> tuple[dict[str, CaptureLifecycleRecord], int, int]:
+        nonlocal load_count
+        records, compaction_epoch, size = original_load_locked(current_store)
+        load_count += 1
+        if load_count == 2:
+            records = dict(records)
+            records[_CAPTURE_ID] = replace(
+                records[_CAPTURE_ID],
+                revision=records[_CAPTURE_ID].revision + 1,
+            )
+        return records, compaction_epoch, size
+
+    monkeypatch.setattr(CaptureLifecycleStore, "_load_locked", load_with_stale_record)
+    monkeypatch.setattr(
+        CaptureLifecycleStore,
+        "_acquire_cleanup_lease",
+        lambda _store, _record: lease,
+    )
+    try:
+        store._normalize_interrupted_deliveries()
+
+        with pytest.raises(OSError) as closed:
+            os.fstat(lease_fd)
+        assert closed.value.errno == errno.EBADF
+    finally:
+        try:
+            os.close(lease_fd)
+        except OSError as exc:
+            assert exc.errno == errno.EBADF
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
 def test_carrier_fsync_precedes_final_ledger_append(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

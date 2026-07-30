@@ -244,7 +244,6 @@ def test_run_interactive_session_holds_binding_through_reap_and_passes_descripto
     authority.acquire_launch_binding = lambda **_kwargs: binding  # type: ignore[method-assign]
     events: list[str] = []
 
-    monkeypatch.setattr(shutil, "which", lambda _, **_kwargs: "/usr/bin/claude")
     monkeypatch.setattr(
         "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
         lambda **_kwargs: (authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR),
@@ -277,7 +276,6 @@ def test_run_interactive_session_closes_binding_on_launch_failure(
     authority.acquire_launch_binding = lambda **_kwargs: binding  # type: ignore[method-assign]
     expected = RuntimeError(f"injected {failure_site} failure")
 
-    monkeypatch.setattr(shutil, "which", lambda _, **_kwargs: "/usr/bin/claude")
     monkeypatch.setattr(
         "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
         lambda **_kwargs: (authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR),
@@ -319,7 +317,6 @@ def test_run_interactive_session_preserves_failure_when_binding_close_fails(
     binding = FailingCloseBinding(Path("/dev/null"))
     authority = _TestAuthority(None)
     authority.acquire_launch_binding = lambda **_kwargs: binding  # type: ignore[method-assign]
-    monkeypatch.setattr(shutil, "which", lambda _, **_kwargs: "/usr/bin/claude")
     monkeypatch.setattr(
         "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
         lambda **_kwargs: (authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR),
@@ -484,7 +481,6 @@ def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -
     from autoskillit.cli.session._session_launch import _run_interactive_session
 
     captured: dict = {}
-    monkeypatch.setattr(shutil, "which", lambda _, **_kwargs: "/usr/bin/claude")
 
     def mock_run(cmd, **kwargs):
         captured["cmd"] = list(cmd)
@@ -727,7 +723,6 @@ def test_skill_injection_false_via_get_backend_forwards_system_prompt_kwarg(
 
     monkeypatch.setattr("autoskillit.config.load_config", lambda: mock_config)
     monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: _NoInjectDIBackend())
-    monkeypatch.setattr(shutil, "which", lambda _, **_kwargs: "/usr/bin/claude")
 
     def mock_run(cmd, **kwargs):
         return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
@@ -777,7 +772,6 @@ def test_codex_like_backend_no_claude_flags(monkeypatch: pytest.MonkeyPatch) -> 
             return CmdSpec(cmd=("codex", "--dangerously-bypass-approvals-and-sandbox"), env={})
 
     captured: dict = {}
-    monkeypatch.setattr(shutil, "which", lambda _, **_kwargs: "/usr/bin/codex")
 
     def mock_run(cmd, **kwargs):
         captured["cmd"] = list(cmd)
@@ -863,7 +857,6 @@ def test_feature_flag_gate_blocks_codex_backend_without_feature(
 
     monkeypatch.setattr("autoskillit.config.load_config", lambda: mock_config)
     monkeypatch.setattr("autoskillit.execution.get_backend", fake_get_backend)
-    monkeypatch.setattr(shutil, "which", lambda _, **_kwargs: "/usr/bin/claude")
     monkeypatch.setattr(
         subprocess, "run", lambda *a, **kw: type("Result", (), {"returncode": 0})()
     )
@@ -918,7 +911,6 @@ def test_feature_flag_gate_allows_codex_backend_when_feature_enabled(
 
     monkeypatch.setattr("autoskillit.config.load_config", lambda: mock_config)
     monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: _CodexStub())
-    monkeypatch.setattr(shutil, "which", lambda _, **_kwargs: "/usr/bin/codex")
     monkeypatch.setattr(
         subprocess, "run", lambda *a, **kw: type("Result", (), {"returncode": 0})()
     )
@@ -953,7 +945,6 @@ def test_launch_cook_session_accepts_backend_param(monkeypatch: pytest.MonkeyPat
             build_calls.append(kwargs)
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
 
-    monkeypatch.setattr(shutil, "which", lambda _, **_kwargs: "/usr/bin/claude")
     monkeypatch.setattr(
         subprocess, "run", lambda *a, **kw: type("Result", (), {"returncode": 0})()
     )
@@ -1188,8 +1179,6 @@ def test_run_interactive_session_calls_ensure_pre_launch_for_codex_backend(
         def build_interactive_cmd(self, **kwargs):
             return CmdSpec(cmd=("codex",), env={})
 
-    monkeypatch.setattr(shutil, "which", lambda _, **_kwargs: "/usr/bin/codex")
-
     def mock_run(cmd, **kwargs):
         call_sequence.append("subprocess")
         return type("Result", (), {"returncode": 0})()
@@ -1238,8 +1227,6 @@ def test_run_interactive_session_aborts_when_pre_launch_returns_errors(
 
         def build_interactive_cmd(self, **kwargs):
             return CmdSpec(cmd=("codex",), env={})
-
-    monkeypatch.setattr(shutil, "which", lambda _, **_kwargs: "/usr/bin/codex")
 
     def _must_not_call(*a, **kw):
         raise AssertionError("subprocess.run must not be called")

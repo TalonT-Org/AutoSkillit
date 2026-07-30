@@ -21,17 +21,17 @@ else:
     _register_standalone_module(__name__)
 
 if TYPE_CHECKING:
-    from autoskillit.hooks import _capture_failure_policy
+    from autoskillit.hooks._capture import _failure_policy
     from autoskillit.hooks._capture._syntax import (
         CAPTURE_ID_RE,
         REFERENCE_RE,
         SHA256_RE,
     )
 elif __package__:
-    from . import _capture_failure_policy
+    from ._capture import _failure_policy
     from ._capture._syntax import CAPTURE_ID_RE, REFERENCE_RE, SHA256_RE
 else:
-    import _capture_failure_policy
+    from _capture import _failure_policy
     from _capture._syntax import CAPTURE_ID_RE, REFERENCE_RE, SHA256_RE
 
 __all__ = [
@@ -433,8 +433,8 @@ def parse_capture_v2(value: bytes) -> CaptureV2Fields:
 def _validate_failure(value: CaptureFailureV2) -> None:
     if (
         type(value) is not CaptureFailureV2
-        or not _capture_failure_policy.valid_failure_stage(value.stage)
-        or not _capture_failure_policy.valid_failure_detail(value.detail)
+        or not _failure_policy.valid_failure_stage(value.stage)
+        or not _failure_policy.valid_failure_detail(value.detail)
         or (
             value.shell_returncode is not None
             and not _plain_int(value.shell_returncode, maximum=255)

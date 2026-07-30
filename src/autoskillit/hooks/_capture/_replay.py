@@ -9,10 +9,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
+from . import _failure_policy
 from ._module_identity import register_module_aliases
 
 if TYPE_CHECKING:
-    from autoskillit.hooks import _capture_failure_policy
     from autoskillit.hooks._capture._snapshot import (
         FinalizedCapture,
         PublishedCaptureReference,
@@ -31,14 +31,12 @@ else:
     )
 
     if __package__ == "_capture":
-        import _capture_failure_policy
         from _capture_contract import (
             CaptureFailureV2,
             render_capture_failure_v2,
             render_capture_v2,
         )
     else:
-        from .. import _capture_failure_policy
         from .._capture_contract import (
             CaptureFailureV2,
             render_capture_failure_v2,
@@ -84,14 +82,19 @@ def write_all_stream(
     while view:
         written = stream.write(view)
         if (
+            on_progress is not None
+            and isinstance(written, int)
+            and not isinstance(written, bool)
+            and written > 0
+        ):
+            on_progress(min(written, len(view)))
+        if (
             not isinstance(written, int)
             or isinstance(written, bool)
             or written <= 0
             or written > len(view)
         ):
             raise OSError(errno.EIO, f"{boundary} write made no progress")
-        if on_progress is not None:
-            on_progress(written)
         view = view[written:]
 
 
@@ -115,11 +118,11 @@ def _write_and_flush_hook_stderr(payload: bytes) -> None:
 
 
 def _failure_stage(value: str) -> str:
-    return _capture_failure_policy.normalize_failure_stage(value)
+    return _failure_policy.normalize_failure_stage(value)
 
 
 def _bounded_detail(value: str) -> str:
-    return _capture_failure_policy.normalize_failure_detail(value)
+    return _failure_policy.normalize_failure_detail(value)
 
 
 def failure_transport(

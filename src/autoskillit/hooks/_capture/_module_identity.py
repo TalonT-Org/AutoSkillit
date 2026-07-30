@@ -24,4 +24,8 @@ def register_module_aliases(module_name: str) -> ModuleType:
     return module
 
 
-_THIS_MODULE = register_module_aliases(__name__)
+_THIS_MODULE = sys.modules[__name__]
+for _alias in ("_capture._module_identity", "autoskillit.hooks._capture._module_identity"):
+    _existing = sys.modules.setdefault(_alias, _THIS_MODULE)
+    if _existing is not _THIS_MODULE:
+        raise RuntimeError("conflicting shell-capture module-identity bootstrap")

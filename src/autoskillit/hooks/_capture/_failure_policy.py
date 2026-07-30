@@ -4,18 +4,9 @@ from __future__ import annotations
 
 import re
 
-if __package__:
-    from ._capture._module_identity import (
-        register_module_aliases as _register_packaged_module,
-    )
+from ._module_identity import register_module_aliases
 
-    _register_packaged_module(__name__)
-else:
-    from _capture._module_identity import (
-        register_module_aliases as _register_standalone_module,
-    )
-
-    _register_standalone_module(__name__)
+register_module_aliases(__name__)
 
 FAILURE_STAGE_MAX_BYTES = 64
 FAILURE_DETAIL_MAX_BYTES = 240

@@ -18,6 +18,7 @@ owners. Modules must remain importable when the hooks directory alone is on
 | `_resolver.py` | Lifecycle-linearized published-reference resolution and producer-exclusive reader adoption |
 | `_delivery.py` | Transactional reference publication and hook-stdout delivery-state transitions |
 | `_descriptor.py` | Stdlib-only retained-descriptor metadata and digest verification |
+| `_failure_policy.py` | Shared persisted/transported failure-field limits and normalization |
 | `_syntax.py` | Canonical capture ID, incarnation, digest, and reference-token syntax |
 | `_snapshot.py` | Factory-only descriptor verification, immutable FINAL manifest, and opaque reference authority |
 | `_sweep.py` | Bounded cleanup sweep and verified recovery-operation orchestration |

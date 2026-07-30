@@ -166,6 +166,7 @@ def _open_linearized_reader(
     acquire_descriptor: Callable[[_snapshot.CaptureFinalManifest], int],
     lifecycle_error: type[Exception],
     changed_message: str,
+    cleanup_context: str,
 ) -> _reader.VerifiedCaptureReader:
     fd = -1
     try:
@@ -203,7 +204,7 @@ def _open_linearized_reader(
             _cleanup.close_preserving_primary(
                 fd,
                 primary_error,
-                context="verified capture descriptor cleanup",
+                context=cleanup_context,
             )
         raise
 
@@ -253,6 +254,7 @@ def open_verified_capture(
         acquire_descriptor=acquire_descriptor,
         lifecycle_error=lifecycle_error,
         changed_message="verified capture changed during resolution",
+        cleanup_context="verified capture descriptor cleanup",
     )
 
 
@@ -294,4 +296,5 @@ def adopt_verified_capture(
         acquire_descriptor=lambda _manifest: fd,
         lifecycle_error=lifecycle_error,
         changed_message="producer capture changed during verification",
+        cleanup_context="capture carrier cleanup",
     )

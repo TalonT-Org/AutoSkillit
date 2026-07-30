@@ -14,21 +14,18 @@ from dataclasses import InitVar, dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, NoReturn, SupportsIndex
 
-from . import _descriptor, _syntax
+from . import _descriptor, _failure_policy, _syntax
 from ._module_identity import register_module_aliases
 
 if TYPE_CHECKING:
-    from autoskillit.hooks import _capture_failure_policy
     from autoskillit.hooks._capture_contract import (
         CaptureV2Fields,
         CaptureV2Renderable,
         capture_v2_fields,
     )
 elif __package__ == "_capture":
-    import _capture_failure_policy
     from _capture_contract import CaptureV2Fields, CaptureV2Renderable, capture_v2_fields
 else:
-    from .. import _capture_failure_policy
     from .._capture_contract import CaptureV2Fields, CaptureV2Renderable, capture_v2_fields
 
 register_module_aliases(__name__)
@@ -252,8 +249,8 @@ class CaptureFailureEvidence:
 
     def __post_init__(self) -> None:
         if (
-            not _capture_failure_policy.valid_failure_stage(self.stage)
-            or not _capture_failure_policy.valid_failure_detail(self.detail)
+            not _failure_policy.valid_failure_stage(self.stage)
+            or not _failure_policy.valid_failure_detail(self.detail)
             or (
                 self.settlement_returncode is not None
                 and (

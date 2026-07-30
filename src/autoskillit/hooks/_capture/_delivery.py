@@ -537,6 +537,7 @@ def normalize_interrupted_deliveries(
     *,
     lifecycle_error: type[Exception],
     lease_live: type[Exception],
+    tampered: type[Exception],
 ) -> None:
     with store._locked():
         records, _compaction_epoch, _size = store._load_locked()
@@ -560,7 +561,7 @@ def normalize_interrupted_deliveries(
         lease = None
         try:
             lease = store._acquire_cleanup_lease(expected)
-        except lease_live:
+        except (lease_live, tampered):
             continue
         try:
             with store._locked():

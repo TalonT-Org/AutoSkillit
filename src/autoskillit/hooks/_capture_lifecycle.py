@@ -13,18 +13,9 @@ from contextlib import contextmanager
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-if __package__:
-    from ._capture._module_identity import (
-        register_module_aliases as _register_packaged_module,
-    )
-
-    _register_packaged_module(__name__)
-else:
-    from _capture._module_identity import (
-        register_module_aliases as _register_standalone_module,
-    )
-
-    _register_standalone_module(__name__)
+_CAPTURE_PACKAGE = f"{__package__}._capture" if __package__ else "_capture"
+_MODULE_IDENTITY = importlib.import_module(f"{_CAPTURE_PACKAGE}._module_identity")
+_MODULE_IDENTITY.register_module_aliases(__name__)
 
 if TYPE_CHECKING:
     from autoskillit.hooks._capture import _delivery as _capture_delivery
@@ -36,7 +27,6 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture import _syntax as _capture_syntax
     from autoskillit.hooks._capture import _types as _capture_types
 else:
-    _CAPTURE_PACKAGE = f"{__package__}._capture" if __package__ else "_capture"
     _capture_delivery = importlib.import_module(f"{_CAPTURE_PACKAGE}._delivery")
     _capture_ledger = importlib.import_module(f"{_CAPTURE_PACKAGE}._ledger")
     _capture_reader = importlib.import_module(f"{_CAPTURE_PACKAGE}._reader")
@@ -220,6 +210,7 @@ class CaptureLifecycleStore:
             self,
             lifecycle_error=CaptureLifecycleError,
             lease_live=_CarrierLeaseLive,
+            tampered=_capture_types.Tampered,
         )
 
     def _validate_root(self) -> None:
@@ -227,8 +218,7 @@ class CaptureLifecycleStore:
             raise CaptureLifecycleError("capture root identity changed")
 
     def capture_finalization_window(self) -> tuple[float, float]:
-        finalized_at = self._wall_clock()
-        return finalized_at, finalized_at + _RETENTION_SECONDS
+        return (now := self._wall_clock()), now + _RETENTION_SECONDS
 
     @contextmanager
     def _locked(self, *, blocking: bool = True) -> Iterator[None]:
@@ -592,6 +582,9 @@ class CaptureLifecycleStore:
         authority = self._authority_for(record)
         fd = -1
         lease_fd = -1
+        committed_error = CaptureTransitionCommittedError
+        creation_errors = (CaptureLifecycleError, committed_error, OSError)
+        recovery_errors = (CaptureAuthorityError, *creation_errors)
         try:
             fd = os.open(record.staging_name, _ARTIFACT_FLAGS, 0o600, dir_fd=self._root_fd)
             value = os.fstat(fd)
@@ -643,11 +636,7 @@ class CaptureLifecycleStore:
             published = self.mark_published(authority)
             authority = self._authority_for(published)
             return fd, lease_fd, record.public_name, identity, authority
-        except (
-            CaptureLifecycleError,
-            CaptureTransitionCommittedError,
-            OSError,
-        ) as primary_error:
+        except creation_errors as primary_error:
             try:
                 current = self.get_record(capture_id)
                 if current is not None and current.state in {
@@ -663,12 +652,7 @@ class CaptureLifecycleStore:
                         ),
                         observed_size=os.fstat(fd).st_size if fd >= 0 else 0,
                     )
-            except (
-                CaptureAuthorityError,
-                CaptureLifecycleError,
-                CaptureTransitionCommittedError,
-                OSError,
-            ) as recovery_error:
+            except recovery_errors as recovery_error:
                 primary_error.add_note(
                     "failed-state recovery also failed: "
                     f"{type(recovery_error).__name__}: {recovery_error}"

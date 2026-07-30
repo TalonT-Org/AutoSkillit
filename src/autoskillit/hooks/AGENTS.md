@@ -24,7 +24,6 @@ Sub-packages: guards/ (see guards/AGENTS.md), formatters/ (see formatters/AGENTS
 | `_hook_utils.py` | Shared stdlib-only utilities for hook scripts (e.g., `find_project_root`, `STEP_SUFFIX_RE`) |
 | `_command_classification.py` | Shared stdlib-only command classification primitives for guard scripts (interpreter/wrapper detection, git command classification) |
 | `_capture_contract.py` | Canonical bounded V2 capture/failure codec, strict parser, and rendered-size APIs |
-| `_capture_failure_policy.py` | Shared persisted/transported failure-field limits and normalization |
 | `_policy_event.py` | Typed policy-event formatter for hook provenance messages (stdlib-only) |
 | `_capture/` | Small stdlib-only authority and lifecycle primitive package shared by producer and cleanup owners |
 | `_capture_artifacts.py` | Stdlib-only pipe drain, descriptor verification, transactional publication/delivery orchestration, and command runner |

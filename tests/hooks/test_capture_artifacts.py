@@ -1593,7 +1593,7 @@ def test_successful_finalization_uses_lifecycle_time_policy(
     monkeypatch.setattr(
         CaptureLifecycleStore,
         "capture_finalization_window",
-        lambda _self: (123.0, 456.0),
+        lambda _self: (9_000_000_000.0, 9_000_000_333.0),
     )
 
     assert run_capture("printf inline", str(project), _CAPTURE_ID) == 0
@@ -1601,8 +1601,8 @@ def test_successful_finalization_uses_lifecycle_time_policy(
     capfd.readouterr()
     record = _capture_record(project)
     assert record.manifest is not None
-    assert record.manifest.finalized_at == 123.0
-    assert record.manifest.retention_deadline == 456.0
+    assert record.manifest.finalized_at == 9_000_000_000.0
+    assert record.manifest.retention_deadline == 9_000_000_333.0
 
 
 def test_begin_delivery_failure_emits_no_capture_bytes(

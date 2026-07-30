@@ -10,6 +10,7 @@ import pickle
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -384,7 +385,7 @@ def test_fifo_substitution_is_rejected_without_blocking(tmp_path: Path) -> None:
     project = tmp_path / "project"
     anchor, root, _store, artifact, _finalized, published = _publish(
         project,
-        _Clock(),
+        _Clock(time.time()),
         b"fifo",
     )
     _close_artifact(artifact)
@@ -394,11 +395,12 @@ def test_fifo_substitution_is_rejected_without_blocking(tmp_path: Path) -> None:
     code = (
         "import sys;"
         "from autoskillit.hooks._capture_artifacts import open_capture_lifecycle;"
-        "from autoskillit.hooks._capture_lifecycle import CaptureLifecycleError;"
+        "from autoskillit.hooks._capture._snapshot import CaptureAuthorityError;"
         "\ntry:\n"
         "  with open_capture_lifecycle(sys.argv[1],create=False) as lifecycle:\n"
         "    lifecycle.open_verified_capture(sys.argv[2])\n"
-        "except (CaptureLifecycleError,OSError):\n"
+        "except CaptureAuthorityError as exc:\n"
+        "  print(f'{type(exc).__name__}:{exc}',file=sys.stderr)\n"
         "  raise SystemExit(0)\n"
         "raise SystemExit(2)\n"
     )
@@ -411,6 +413,7 @@ def test_fifo_substitution_is_rejected_without_blocking(tmp_path: Path) -> None:
             timeout=5,
         )
         assert completed.returncode == 0, completed.stderr
+        assert completed.stderr == ("CaptureAuthorityError:capture carrier metadata changed\n")
     finally:
         root.close()
         anchor.close()

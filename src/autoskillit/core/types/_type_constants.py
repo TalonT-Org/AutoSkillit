@@ -56,6 +56,8 @@ __all__ = [
     "CODEX_ARCHIVED_SESSIONS_SUBDIR",
     "CODEX_SESSIONS_SUBDIR",
     "SESSION_ADD_DIR_SUBDIR",
+    "RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE",
+    "RECIPE_EXECUTION_INACTIVE_MESSAGE",
 ]
 
 OUTPUT_DISCIPLINE_POLICY_VERSION = 1
@@ -500,3 +502,17 @@ CODEX_SESSIONS_SUBDIR: str = "codex-sessions"
 CODEX_ARCHIVED_SESSIONS_SUBDIR: str = "codex-archived-sessions"
 CODEX_ACTIVE_VIEWS_SUBDIR: str = "codex-active-sessions"
 SESSION_ADD_DIR_SUBDIR: str = "add-dir"
+
+RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE: str = (
+    "an active recipe requires recipe_execution_id and invocation_template_digest; "
+    "take both from the recipe_execution block of the complete_recipe_initialization "
+    "receipt (bounded delivery) or of the open_kitchen response (inline delivery), "
+    "using invocation_template_digests[step_name] for this step"
+)
+
+RECIPE_EXECUTION_INACTIVE_MESSAGE: str = (
+    "no recipe execution is installed in this server process, so this call cannot claim "
+    "recipe attestation; a reloaded session has no execution — open the kitchen and "
+    "complete_recipe_initialization to establish one, or drop the attestation arguments "
+    "to run this skill without a recipe"
+)

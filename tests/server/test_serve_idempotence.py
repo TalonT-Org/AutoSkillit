@@ -7,7 +7,6 @@ open_kitchen and subsequent load_recipe / deferred-recall open_kitchen calls.
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from hypothesis import HealthCheck, assume, given, settings
@@ -18,7 +17,7 @@ from autoskillit.core import (
     RecipeArtifactGeneration,
 )
 from autoskillit.pipeline.context import ToolContext
-from tests.server._helpers import _resolve_recipe_section
+from tests.server._helpers import _open_kitchen_patched, _resolve_recipe_section
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
@@ -38,34 +37,6 @@ def test_re_serve_surfaces_in_sync_with_serve_surfaces() -> None:
         f"Missing: {expected - set(_RE_SERVE_SURFACES)}. "
         f"Extra: {set(_RE_SERVE_SURFACES) - expected}."
     )
-
-
-def _mock_fmcp_ctx() -> MagicMock:
-    """Return a minimal FastMCP Context mock with async component methods."""
-    ctx = MagicMock()
-    ctx.enable_components = AsyncMock()
-    ctx.disable_components = AsyncMock()
-    return ctx
-
-
-async def _open_kitchen_patched(name, overrides, monkeypatch):
-    """Call open_kitchen with all infrastructure side-effects patched out."""
-    from autoskillit.recipe import _api_cache
-    from autoskillit.recipe._api_cache import LoadCache
-    from autoskillit.server.tools.tools_kitchen import open_kitchen
-
-    monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
-    fmcp_ctx = _mock_fmcp_ctx()
-    with patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-            with patch("autoskillit.server.tools.tools_kitchen.create_background_task"):
-                with patch(
-                    "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
-                    return_value="test-kitchen",
-                ):
-                    return json.loads(
-                        await open_kitchen(name=name, overrides=overrides, ctx=fmcp_ctx)
-                    )
 
 
 async def test_load_recipe_after_open_kitchen_with_overrides_serves_identical_content(

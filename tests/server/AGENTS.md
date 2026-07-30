@@ -88,6 +88,8 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_execution_provider.py` | Tests for provider_extras/profile_name forwarding through run_skill() |
 | `test_tools_execution_response.py` | Contract tests: MCP tool response fields use correct enum types |
 | `test_tools_execution_results.py` | Tests for run_skill result shapes, failure paths, timing, flush telemetry, and gate checks |
+| `test_attestation_delivery_reachability.py` | Differential delivery-mode reachability test for the recipe execution credential |
+| `test_tools_execution_recipe_execution.py` | Attestation-related error message contracts for run_skill |
 | `test_tools_execution_spill.py` | Lossless spill and anchor contracts for execution and dispatch handlers |
 | `test_tools_execution_routing.py` | Tests for run_skill routing, executor delegation, and session skill management |
 | `test_tools_execution_step_resolution.py` | Tests for server-side recipe step parameter resolution in run_skill (output_dir, stale_threshold, idle_output_timeout, step_provider auto-filled from cached recipe step definitions) |

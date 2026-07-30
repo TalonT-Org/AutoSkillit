@@ -46,6 +46,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_dispatch_timeout_guard.py` | AST guard: _run_dispatch must call resolve_dispatch_timeout with no hardcoded 'or 1800' or falsy timeout patterns |
 | `test_doctor_readonly.py` | AST guard: run_doctor() must not perform filesystem mutations (REQ-DOCTOR-READONLY) |
 | `test_execution_source_split.py` | Arch guards for execution layer source splits (P8-F1, F3, F4 audit fixes) |
+| `test_execution_install_delivery.py` | AST ratchet: every `install_recipe_execution` site is registered; registered delivering symbols call the sanctioned `build_recipe_execution_credential` producer; delivery surfaces are real MCP tools |
 | `test_feature_markers.py` | Marker completeness: fleet test files carry feature('fleet'), infra tests do not |
 | `test_feature_registry.py` | Feature registry structural and behavioral self-tests |
 | `test_file_size_budgets.py` | Per-file source size budgets (REQ-FILE-001) |

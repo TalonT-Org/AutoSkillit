@@ -41,12 +41,15 @@ from autoskillit.core import (
 from autoskillit.execution import CaptureReadError, SkillSessionContract, summarize_capture
 from autoskillit.pipeline import canonical_step_name
 from autoskillit.recipe import (
+    AuditAuthorityPublicationSpec,
+    AuditOutputMode,
     OutcomeInvariantEntry,
     ResultFieldSpec,
     SkillContract,
     SkillInput,
     SkillOutput,
     SuccessQualifierEntry,
+    select_audit_output_contract,
 )
 from autoskillit.server._misc import SkillProjectionContext, _hook_config_overlay_path
 from autoskillit.server._response_budget import shape_json_response
@@ -375,6 +378,11 @@ def deserialize_skill_contract(payload: str) -> SkillContract | None:
         completion_required = data.get("completion_required", False)
         if not isinstance(completion_required, bool):
             raise ValueError("completion_required must be a boolean")
+        publication_data = data.get("audit_authority_publication")
+        publication = None
+        if isinstance(publication_data, dict):
+            publication = AuditAuthorityPublicationSpec(**publication_data)
+        raw_mode = data.get("audit_output_mode")
         return SkillContract(
             inputs=tuple(SkillInput(**item) for item in data["inputs"]),
             outputs=[SkillOutput(**item) for item in data["outputs"]],
@@ -391,6 +399,9 @@ def deserialize_skill_contract(payload: str) -> SkillContract | None:
             success_qualifiers=[
                 SuccessQualifierEntry(**item) for item in data.get("success_qualifiers", [])
             ],
+            input_preflight=data.get("input_preflight"),
+            audit_authority_publication=publication,
+            audit_output_mode=AuditOutputMode(raw_mode) if raw_mode is not None else None,
         )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise SkillContractError("Persisted skill execution contract is invalid") from exc
@@ -400,6 +411,8 @@ def resolve_skill_dispatch_metadata(
     tool_ctx: ToolContext,
     skill_command: str,
     stored_contract: SkillSessionContract | None,
+    *,
+    audit_output_mode: AuditOutputMode | None = None,
 ) -> tuple[list[str], WriteBehaviorSpec | None, SkillContract | None]:
     """Resolve fresh metadata or restore the exact persisted execution metadata."""
     if stored_contract is not None:
@@ -408,17 +421,16 @@ def resolve_skill_dispatch_metadata(
             stored_contract.write_behavior,
             deserialize_skill_contract(stored_contract.skill_contract_json),
         )
-    return (
-        list(tool_ctx.output_pattern_resolver(skill_command))
-        if tool_ctx.output_pattern_resolver
-        else [],
-        tool_ctx.write_expected_resolver(skill_command)
-        if tool_ctx.write_expected_resolver
-        else None,
-        tool_ctx.skill_contract_resolver(skill_command)
-        if tool_ctx.skill_contract_resolver
-        else None,
-    )
+    resolver = tool_ctx.skill_contract_resolver
+    contract = resolver(skill_command) if resolver else None
+    pattern_resolver = tool_ctx.output_pattern_resolver
+    patterns = list(pattern_resolver(skill_command)) if pattern_resolver else []
+    if contract is not None and audit_output_mode is not None:
+        contract = select_audit_output_contract(contract, audit_output_mode)
+        patterns = list(contract.expected_output_patterns)
+    write_resolver = tool_ctx.write_expected_resolver
+    write_spec = write_resolver(skill_command) if write_resolver else None
+    return patterns, write_spec, contract
 
 
 def resolve_step_name_from_recipe(

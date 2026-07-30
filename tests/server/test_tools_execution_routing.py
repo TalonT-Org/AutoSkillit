@@ -27,6 +27,44 @@ async def test_tools_execution_routes_through_executor(tool_ctx_kitchen_open, mo
 
 
 @pytest.mark.anyio
+async def test_standalone_audit_uses_only_standalone_contract(
+    tool_ctx_kitchen_open,
+    monkeypatch,
+    tmp_path,
+) -> None:
+    import json
+    from unittest.mock import MagicMock
+
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    materializer = MagicMock()
+    tool_ctx_kitchen_open.executor = executor
+    tool_ctx_kitchen_open.audit_authority_materializer = materializer
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    response = json.loads(
+        await run_skill(
+            "/autoskillit:audit-impl audit this plan",
+            str(tmp_path),
+        )
+    )
+
+    call = executor.calls[0]
+    assert call.skill_contract.audit_output_mode.value == "standalone"
+    assert {output.name for output in call.skill_contract.outputs} == {
+        "audit_status",
+        "standalone_evidence_path",
+        "content_digest",
+    }
+    assert '"audit_output_mode":"standalone"' in call.skill_command
+    assert "audit_semantic_submission" not in call.skill_command
+    materializer.materialize.assert_not_called()
+    assert response["audit_verdict"] is None
+    assert response["audit_cycle_path"] is None
+
+
+@pytest.mark.anyio
 async def test_run_skill_passes_validated_add_dirs(tool_ctx_kitchen_open, monkeypatch) -> None:
     """run_skill passes ValidatedAddDir instances (not raw strings) as add_dirs."""
     from autoskillit.core import ValidatedAddDir

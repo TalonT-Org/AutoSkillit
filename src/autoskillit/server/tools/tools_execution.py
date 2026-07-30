@@ -115,6 +115,7 @@ from autoskillit.server.tools._backend_compat import (
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (
+    AuditOutputMode,
     _import_and_call,
     _RunSkillContractLifecycle,
     _spill_spec,
@@ -130,6 +131,7 @@ from autoskillit.server.tools._execution_helpers import (
     resolve_relative_path_args,
     resolve_skill_dispatch_metadata,
     run_cmd_artifact_root,
+    select_audit_output_contract,
     server_injected_run_python_args,
     shape_execution_response,
     spill_run_cmd_result,
@@ -1015,7 +1017,7 @@ async def run_skill(
         _audit_reservation: AuditIdentityReservation | None = None
         _audit_preflight_steps: tuple[str, ...] = ()
         _target_contract = (
-            tool_ctx.skill_contract_resolver(target_name)
+            tool_ctx.skill_contract_resolver(skill_command)
             if (_stored_contract_entry is None and tool_ctx.skill_contract_resolver is not None)
             else None
         )
@@ -1031,6 +1033,16 @@ async def run_skill(
             and step_name
             and step_name in _installed_execution.snapshot.dynamic_skill_step_names
         )
+        _audit_output_mode: AuditOutputMode | None = None
+        if _audit_publication is not None and not resume_session_id:
+            _audit_output_mode = (
+                AuditOutputMode.ATTESTED
+                if _installed_execution is not None and not _dynamic_recipe_call
+                else AuditOutputMode.STANDALONE
+            )
+            if _target_contract is None:
+                raise SkillContractError("audit output contract is unavailable")
+            select_audit_output_contract(_target_contract, _audit_output_mode)
         # Resolved from cwd so the audit-cycle containment anchor matches the
         # clone's actual artifact directory (orchestrator's tool_ctx.temp_dir
         # is disjoint from the clone's temp tree in clone-based pipelines).
@@ -1062,6 +1074,7 @@ async def run_skill(
                         skill_command,
                         cwd,
                         skill_inputs,
+                        audit_output_mode=_audit_output_mode,
                     )
                 except RecipeExecutionAdmissionError as exc:
                     return _recipe_execution_deny(exc.code, str(exc))
@@ -1232,6 +1245,7 @@ async def run_skill(
                                 _preflight_result,
                                 audit_reservation_handle=(_reservation_outcome.reservation_handle),
                                 audit_reserved_plan_refs=_audited_plan_refs,
+                                audit_output_mode=_audit_output_mode,
                             )
                         case ReservationDecision.EXACT_REPLAY:
                             assert _reservation_outcome.replay_outcome is not None
@@ -1309,6 +1323,7 @@ async def run_skill(
                     skill_command,
                     _bound_recipe_inputs,
                     _preflight_result,
+                    audit_output_mode=_audit_output_mode,
                 )
         elif _claims_recipe_execution:
             return _recipe_execution_deny(
@@ -1321,6 +1336,7 @@ async def run_skill(
                     skill_command,
                     cwd,
                     skill_inputs,
+                    audit_output_mode=_audit_output_mode,
                 )
             except RecipeExecutionAdmissionError as exc:
                 return _recipe_execution_deny(
@@ -1587,7 +1603,12 @@ async def run_skill(
                 )
 
             expected_output_patterns, write_spec, _skill_contract = (
-                resolve_skill_dispatch_metadata(tool_ctx, skill_command, _stored_contract)
+                resolve_skill_dispatch_metadata(
+                    tool_ctx,
+                    skill_command,
+                    _stored_contract,
+                    audit_output_mode=_audit_output_mode,
+                )
             )
 
             # Resolve closure spec from explicit MCP tool parameters.

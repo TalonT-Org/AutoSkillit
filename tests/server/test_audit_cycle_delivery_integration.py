@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from autoskillit.core import (
     AuditAdmissionStoreAuthority,
     AuditAssessment,
     AuditAssessmentRow,
+    AuditCycleVerificationError,
     AuditCycleVerifier,
     AuditMaterializationStatus,
     AuditReservationRequest,
@@ -24,8 +26,12 @@ from autoskillit.core import (
     compute_bytes_hash,
 )
 from autoskillit.pipeline import DefaultAuditAdmissionLedger
+from autoskillit.server import _recipe_execution
 from autoskillit.server._audit_authority_materializer import (
     DefaultAuditAuthorityMaterializer,
+)
+from autoskillit.server.tools.tools_audit_artifacts import (
+    write_standalone_audit_evidence_sync,
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
@@ -79,6 +85,55 @@ def _semantic_path(
     reservation.semantic_result_path.parent.mkdir(parents=True, exist_ok=True)
     reservation.semantic_result_path.write_bytes(canonical_json_bytes(semantic.to_dict()))
     return reservation.semantic_result_path
+
+
+def test_prompt_contract_mode_is_bound_before_child_dispatch() -> None:
+    standalone = _recipe_execution.build_standalone_child_prompt(
+        "/autoskillit:audit-impl",
+        "/tmp",
+        None,
+        audit_output_mode=_recipe_execution.AuditOutputMode.STANDALONE,
+    )
+    standalone_payload = json.loads(standalone.split("AUTOSKILLIT_BOUND_INVOCATION_V1\n", 1)[1])
+    assert standalone_payload["audit_output_mode"] == "standalone"
+    assert "audit_semantic_submission" not in standalone_payload
+
+    attested = _recipe_execution.build_bound_child_prompt(
+        "/autoskillit:audit-impl",
+        (),
+        None,
+        audit_reservation_handle="opaque-handle",
+        audit_output_mode=_recipe_execution.AuditOutputMode.ATTESTED,
+    )
+    attested_payload = json.loads(attested.split("AUTOSKILLIT_BOUND_INVOCATION_V1\n", 1)[1])
+    assert attested_payload["audit_output_mode"] == "attested"
+    assert attested_payload["audit_semantic_submission"]["reservation_handle"] == ("opaque-handle")
+
+
+def test_standalone_evidence_is_not_loadable_as_authority(tmp_path: Path) -> None:
+    plan_ref = _artifact(
+        tmp_path / "standalone-plan.md",
+        b"standalone plan",
+        media_type="text/markdown",
+    )
+    result = write_standalone_audit_evidence_sync(
+        temp_root=tmp_path,
+        audited_plan_refs=[plan_ref.to_dict()],
+        assessments=[
+            {
+                "requirement_id": "REQ-001",
+                "requirement_text": "Standalone evidence stays non-published.",
+                "assessment": "COVERED",
+                "evidence_summary": "The artifact carries the standalone schema kind.",
+            }
+        ],
+        verdict="GO",
+        remediation_ref=None,
+    )
+
+    assert result["audit_status"] == "NON_PUBLISHED_STANDALONE"
+    with pytest.raises(AuditCycleVerificationError):
+        AuditCycleVerifier(tmp_path).load_authority(result["standalone_evidence_path"])
 
 
 def test_parent_materializer_injects_server_execution_and_publishes_projection(

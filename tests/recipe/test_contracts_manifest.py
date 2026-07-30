@@ -13,7 +13,9 @@ from autoskillit.recipe._contracts_manifest import (
     get_callable_contract,
     get_skill_contract,
     load_bundled_manifest,
+    select_audit_output_contract,
 )
+from autoskillit.recipe._contracts_types import AuditOutputMode
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -105,6 +107,28 @@ def test_get_skill_contract_defaults_allowed_values_to_empty_list() -> None:
                 assert o.allowed_values == []
             return
     pytest.skip("No suitable skill found for default-empty assertion")
+
+
+def test_audit_impl_selects_disjoint_attested_and_standalone_outputs() -> None:
+    contract = get_skill_contract("audit-impl", load_bundled_manifest())
+    assert contract is not None
+
+    attested = select_audit_output_contract(contract, AuditOutputMode.ATTESTED)
+    standalone = select_audit_output_contract(contract, AuditOutputMode.STANDALONE)
+
+    assert {output.name for output in attested.outputs} == {
+        "audit_semantic_result_path",
+        "semantic_digest",
+    }
+    assert attested.audit_authority_publication is not None
+    assert attested.audit_output_mode is AuditOutputMode.ATTESTED
+    assert {output.name for output in standalone.outputs} == {
+        "audit_status",
+        "standalone_evidence_path",
+        "content_digest",
+    }
+    assert standalone.audit_authority_publication is None
+    assert standalone.audit_output_mode is AuditOutputMode.STANDALONE
 
 
 @pytest.mark.parametrize("authority_data", [[], "invalid", 1])

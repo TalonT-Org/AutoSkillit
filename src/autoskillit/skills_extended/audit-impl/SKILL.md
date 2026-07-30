@@ -88,7 +88,13 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
   ```
 - On a standalone invocation with no `audit_semantic_submission`, call
   `write_standalone_audit_evidence(...)` instead. Standalone evidence is never an authority,
-  has no `audit_cycle_path`, and cannot enter trusted preflight or disposition flows.
+  has no `audit_cycle_path`, and cannot enter trusted preflight or disposition flows. Emit
+  only the returned absolute evidence path, digest, and explicit non-publication status:
+  ```
+  audit_status = NON_PUBLISHED_STANDALONE
+  standalone_evidence_path = /absolute/server/derived/standalone-evidence.json
+  content_digest = sha256:...
+  ```
 
 ## Workflow
 
@@ -444,9 +450,11 @@ MERGE APPROVED
 
 Exit 0. The pipeline may proceed to merge.
 
-After printing the GO result, call `write_audit_semantic_result` with verdict `GO`,
+After printing the GO result, select the already-declared invocation mode. With an
+`audit_semantic_submission`, call `write_audit_semantic_result` with verdict `GO`,
 `remediation_ref=null`, the exact reserved references, and all ordered assessment rows.
-Emit only the server-returned semantic fields as the last lines:
+Without that submission, call `write_standalone_audit_evidence` with the audited references
+and rows instead. Emit only the fields returned for the selected mode as the last lines:
 
 > **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
 > markdown formatting on the token names**. Do not wrap token names in `**bold**`,
@@ -457,6 +465,14 @@ Emit only the server-returned semantic fields as the last lines:
 ```
 audit_semantic_result_path = {server_returned_absolute_path}
 semantic_digest = {server_returned_sha256_digest}
+```
+
+or, for standalone:
+
+```
+audit_status = NON_PUBLISHED_STANDALONE
+standalone_evidence_path = {server_returned_absolute_path}
+content_digest = {server_returned_sha256_digest}
 ```
 
 ---
@@ -540,9 +556,11 @@ MERGE BLOCKED — feed remediation file to /autoskillit:make-plan for re-plannin
 Exit 1.
 
 After printing the NO GO result, construct the remediation `ArtifactRef` from the exact
-remediation bytes, then call `write_audit_semantic_result` with verdict `NO GO`, that
-reference, the exact reserved references, and all ordered assessment rows. Emit only the
-server-returned semantic fields as the last lines:
+remediation bytes. With an `audit_semantic_submission`, call
+`write_audit_semantic_result` with verdict `NO GO`, that reference, the exact reserved
+references, and all ordered assessment rows. Without that submission, call
+`write_standalone_audit_evidence` with those child-owned semantics instead. Emit only the
+fields returned for the selected mode as the last lines:
 
 > **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
 > markdown formatting on the token names**. Do not wrap token names in `**bold**`,
@@ -553,6 +571,14 @@ server-returned semantic fields as the last lines:
 ```
 audit_semantic_result_path = {server_returned_absolute_path}
 semantic_digest = {server_returned_sha256_digest}
+```
+
+or, for standalone:
+
+```
+audit_status = NON_PUBLISHED_STANDALONE
+standalone_evidence_path = {server_returned_absolute_path}
+content_digest = {server_returned_sha256_digest}
 ```
 
 The child-authored prose verdict and any remediation path are not routing authority.

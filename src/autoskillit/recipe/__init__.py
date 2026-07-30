@@ -294,6 +294,11 @@ from autoskillit.recipe._binding import (  # noqa: E402
     bind_runtime_skill_invocation,
     compute_skill_contract_identity,
 )
+from autoskillit.recipe.contracts import (  # noqa: E402
+    AuditAuthorityPublicationSpec,
+    AuditOutputMode,
+    select_audit_output_contract,
+)
 
 __all__ = [
     "GROUP_LABELS",
@@ -315,6 +320,8 @@ __all__ = [
     "StepResultCondition",
     "StepResultRoute",
     "DataFlowReport",
+    "AuditAuthorityPublicationSpec",
+    "AuditOutputMode",
     "StaleItem",
     "StalenessEntry",
     "compute_recipe_hash",
@@ -337,6 +344,7 @@ __all__ = [
     "load_recipe_card",
     "resolve_input_specs",
     "resolve_skill_name",
+    "select_audit_output_contract",
     "validate_recipe_cards",
     "OutcomeInvariantEntry",
     "ResultFieldSpec",

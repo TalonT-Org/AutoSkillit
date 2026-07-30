@@ -425,6 +425,31 @@ skills:
     audit_authority_publication:
       output_field: audit_semantic_result_path
       prior_input_field: prior_audit_cycle_path
+    audit_output_contracts:
+      attested:
+        outputs:
+        - name: audit_semantic_result_path
+          type: file_path
+        - name: semantic_digest
+          type: string
+        expected_output_patterns:
+        - "audit_semantic_result_path[ \\t]*=[ \\t]*/.+"
+        pattern_examples:
+        - "audit_semantic_result_path = /tmp/audit/semantic.json\nsemantic_digest = sha256:abc\n%%ORDER_UP%%"
+      standalone:
+        outputs:
+        - name: audit_status
+          type: string
+          allowed_values: [NON_PUBLISHED_STANDALONE]
+        - name: standalone_evidence_path
+          type: file_path
+        - name: content_digest
+          type: string
+        expected_output_patterns:
+        - "audit_status[ \\t]*=[ \\t]*NON_PUBLISHED_STANDALONE"
+        - "standalone_evidence_path[ \\t]*=[ \\t]*/.+"
+        pattern_examples:
+        - "audit_status = NON_PUBLISHED_STANDALONE\nstandalone_evidence_path = /tmp/audit/standalone.json\ncontent_digest = sha256:def\n%%ORDER_UP%%"
     inputs:
     - name: all_plan_paths
       type: file_path_list

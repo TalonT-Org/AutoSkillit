@@ -48,6 +48,30 @@ def test_deserialize_skill_contract_rejects_non_mapping_payload() -> None:
         deserialize_skill_contract("[]")
 
 
+def test_persisted_audit_contract_preserves_selected_output_mode() -> None:
+    from autoskillit.server.tools import _execution_helpers as helpers
+
+    selected = helpers.SkillContract(
+        inputs=(),
+        outputs=[
+            helpers.SkillOutput(name="audit_status", type="str"),
+            helpers.SkillOutput(name="standalone_evidence_path", type="file_path"),
+            helpers.SkillOutput(name="content_digest", type="str"),
+        ],
+        audit_output_mode=helpers.AuditOutputMode.STANDALONE,
+    )
+    restored = helpers.deserialize_skill_contract(helpers.serialize_skill_contract(selected))
+
+    assert restored is not None
+    assert restored.audit_output_mode is helpers.AuditOutputMode.STANDALONE
+    assert restored.audit_authority_publication is None
+    assert {output.name for output in restored.outputs} == {
+        "audit_status",
+        "standalone_evidence_path",
+        "content_digest",
+    }
+
+
 class TestGateErrorSchemaNormalization:
     """Gate errors use the standard 9-field response schema."""
 

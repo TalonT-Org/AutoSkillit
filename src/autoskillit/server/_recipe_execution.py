@@ -42,6 +42,7 @@ from autoskillit.pipeline import (
     transition_recipe_ready,
 )
 from autoskillit.recipe import (
+    AuditOutputMode,
     RecipeStep,
     RuntimeBindingError,
     bind_runtime_skill_invocation,
@@ -522,6 +523,7 @@ def build_bound_child_prompt(
     *,
     audit_reservation_handle: str | None = None,
     audit_reserved_plan_refs: tuple[ArtifactRef, ...] = (),
+    audit_output_mode: AuditOutputMode | None = None,
 ) -> str:
     """Serialize one non-shell child prompt from ordered bound data."""
     payload: dict[str, object] = {
@@ -538,6 +540,8 @@ def build_bound_child_prompt(
             "audited_plan_refs": [reference.to_dict() for reference in audit_reserved_plan_refs],
             "reservation_handle": audit_reservation_handle,
         }
+    if audit_output_mode is not None:
+        payload["audit_output_mode"] = audit_output_mode.value
     return f"{skill_command.strip()}\n\nAUTOSKILLIT_BOUND_INVOCATION_V1\n" + json.dumps(
         payload, ensure_ascii=False, separators=(",", ":")
     )
@@ -547,6 +551,8 @@ def build_standalone_child_prompt(
     skill_command: str,
     cwd: str,
     skill_inputs: Mapping[str, str | int | float | bool] | None,
+    *,
+    audit_output_mode: AuditOutputMode | None = None,
 ) -> str:
     """Validate standalone inputs without requiring attested recipe state.
 
@@ -556,6 +562,13 @@ def build_standalone_child_prompt(
     cannot be validated safely.
     """
     if skill_inputs is None:
+        if audit_output_mode is not None:
+            return build_bound_child_prompt(
+                skill_command,
+                (),
+                None,
+                audit_output_mode=audit_output_mode,
+            )
         return skill_command
     with_args: dict[str, object] = {
         "skill_command": skill_command,
@@ -582,4 +595,5 @@ def build_standalone_child_prompt(
         skill_command,
         binding.canonical_child_invocation,
         None,
+        audit_output_mode=audit_output_mode,
     )

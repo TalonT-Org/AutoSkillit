@@ -561,6 +561,7 @@ class TestOutputPathTokensDerivedFromContracts:
             "scope_report",
             "scope_directions",
             "selected_directions",
+            "standalone_evidence_path",
             "summary_path",
             "triage_manifest",
             "triage_report",
@@ -617,12 +618,19 @@ class TestOutputPathTokensDerivedFromContracts:
         from autoskillit.recipe.contracts import load_bundled_manifest
 
         manifest = load_bundled_manifest()
-        declared_path_tokens = {
-            out["name"]
-            for skill_data in manifest.get("skills", {}).values()
-            for out in skill_data.get("outputs", [])
-            if isinstance(out, dict) and out.get("type", "").startswith("file_path")
-        }
+        declared_path_tokens: set[str] = set()
+        for skill_data in manifest.get("skills", {}).values():
+            output_groups = [skill_data.get("outputs", [])]
+            output_groups.extend(
+                mode_contract.get("outputs", [])
+                for mode_contract in skill_data.get("audit_output_contracts", {}).values()
+            )
+            for output_group in output_groups:
+                declared_path_tokens.update(
+                    out["name"]
+                    for out in output_group
+                    if isinstance(out, dict) and out.get("type", "").startswith("file_path")
+                )
         untracked = (
             declared_path_tokens - _OUTPUT_PATH_TOKENS - _INTENTIONALLY_EXCLUDED_PATH_TOKENS
         )
@@ -1713,13 +1721,20 @@ class TestRecoverablePathTokensCoverage:
         for skill_data in skills_data.values():
             if not isinstance(skill_data, dict):
                 continue
-            for out in skill_data.get("outputs", []):
-                if not isinstance(out, dict):
-                    continue
-                t = out.get("type", "")
-                name = out.get("name", "").strip()
-                if name and (t.startswith("file_path") or t == "directory_path"):
-                    declared.add(name)
+            output_groups = [skill_data.get("outputs", [])]
+            output_groups.extend(
+                mode_contract.get("outputs", [])
+                for mode_contract in skill_data.get("audit_output_contracts", {}).values()
+                if isinstance(mode_contract, dict)
+            )
+            for output_group in output_groups:
+                for out in output_group:
+                    if not isinstance(out, dict):
+                        continue
+                    t = out.get("type", "")
+                    name = out.get("name", "").strip()
+                    if name and (t.startswith("file_path") or t == "directory_path"):
+                        declared.add(name)
 
         from autoskillit.execution.headless._headless_path_tokens import (
             _INTENTIONALLY_EXCLUDED_PATH_TOKENS,
@@ -2362,14 +2377,20 @@ class TestOutputPathTokensScopedBySkillContract:
         manifest = load_bundled_manifest()
         derived: dict[str, frozenset[str]] = {}
         for skill_name, skill_data in manifest.get("skills", {}).items():
-            raw = frozenset(
+            output_groups = [skill_data.get("outputs", [])]
+            output_groups.extend(
+                mode_contract.get("outputs", [])
+                for mode_contract in skill_data.get("audit_output_contracts", {}).values()
+                if isinstance(mode_contract, dict)
+            )
+            derived[skill_name] = frozenset(
                 out.get("name", "")
-                for out in skill_data.get("outputs", [])
+                for output_group in output_groups
+                for out in output_group
                 if isinstance(out, dict)
                 and out.get("name", "")
                 and out.get("type", "").startswith("file_path")
             )
-            derived[skill_name] = raw
         assert dict(_OUTPUT_PATH_TOKENS_BY_SKILL) == derived
 
     def test_intentionally_excluded_tokens_still_in_raw_registry(self):

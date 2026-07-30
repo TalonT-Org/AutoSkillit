@@ -36,7 +36,11 @@ from autoskillit.core import (
     is_git_main_checkout,
     is_git_worktree,
 )
-from autoskillit.workspace import InstallStateSpec, verify_installed_plugin_artifact
+from autoskillit.workspace import (
+    InstallStateLeaseMode,
+    InstallStateSpec,
+    verify_installed_plugin_artifact,
+)
 
 __all__ = [
     "IRREVERSIBLE_PIVOT_PHASE",
@@ -430,7 +434,7 @@ def run_update_transaction(
                     plugin_ref=_AUTOSKILLIT_PLUGIN_KEY,
                     expected_version=expected_version,
                     require_registered_plugin=True,
-                    require_shared_lease=True,
+                    lease_mode=InstallStateLeaseMode.SHARED,
                 )
             )
         except Exception as exc:

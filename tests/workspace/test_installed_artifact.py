@@ -21,6 +21,7 @@ from autoskillit.core import (
     write_versioned_json,
 )
 from autoskillit.workspace import (
+    InstallStateLeaseMode,
     InstallStateSpec,
     verify_installed_plugin_artifact,
 )
@@ -48,7 +49,7 @@ def _spec(
     home: Path,
     *,
     require_registered_plugin: bool = True,
-    require_shared_lease: bool = True,
+    lease_mode: InstallStateLeaseMode = InstallStateLeaseMode.SHARED,
     supplied_lease: ArtifactLease | None = None,
 ) -> InstallStateSpec:
     return InstallStateSpec(
@@ -56,7 +57,7 @@ def _spec(
         plugin_ref=_PLUGIN_REF,
         expected_version=_VERSION,
         require_registered_plugin=require_registered_plugin,
-        require_shared_lease=require_shared_lease,
+        lease_mode=lease_mode,
         supplied_lease=supplied_lease,
     )
 
@@ -137,7 +138,7 @@ def test_spec_reconstructs_managed_root_through_one_inverse(home: Path) -> None:
         expected.managed_root,
         expected.semantic_key,
         require_registered_plugin=True,
-        require_shared_lease=True,
+        lease_mode=InstallStateLeaseMode.SHARED,
     )
 
     assert reconstructed == expected
@@ -146,7 +147,7 @@ def test_spec_reconstructs_managed_root_through_one_inverse(home: Path) -> None:
             home / "too-shallow",
             expected.semantic_key,
             require_registered_plugin=True,
-            require_shared_lease=True,
+            lease_mode=InstallStateLeaseMode.SHARED,
         )
     with pytest.raises(ValueError, match="installed plugin root is invalid"):
         InstallStateSpec.from_managed_root(
@@ -159,7 +160,7 @@ def test_spec_reconstructs_managed_root_through_one_inverse(home: Path) -> None:
             / _VERSION,
             expected.semantic_key,
             require_registered_plugin=True,
-            require_shared_lease=True,
+            lease_mode=InstallStateLeaseMode.SHARED,
         )
 
 
@@ -189,8 +190,8 @@ def test_spec_reconstructs_managed_root_through_one_inverse(home: Path) -> None:
             "require_registered_plugin must be a boolean",
         ),
         (
-            {"require_shared_lease": 1},
-            "require_shared_lease must be a boolean",
+            {"lease_mode": "shared"},
+            "lease_mode must be an InstallStateLeaseMode",
         ),
     ],
 )
@@ -311,6 +312,28 @@ def test_acquires_existing_shared_lease_and_returns_exact_identity(home: Path) -
     result.lease.close()
 
 
+def test_reuses_caller_owned_shared_lease_without_closing_it(home: Path) -> None:
+    spec = _spec(home)
+    expected = _publish_exact(spec)
+    _write_registry(home, spec.managed_root)
+    shared = ArtifactLease.acquire_existing_shared(spec.lease_path)
+    try:
+        result = verify_installed_plugin_artifact(
+            _spec(
+                home,
+                lease_mode=InstallStateLeaseMode.SHARED,
+                supplied_lease=shared,
+            )
+        )
+
+        assert result.identity == expected
+        assert result.findings == ()
+        assert result.lease is shared
+        assert not shared.closed
+    finally:
+        shared.close()
+
+
 def test_explicit_trusted_home_does_not_fall_back_to_ambient_home(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -339,7 +362,7 @@ def test_reuses_caller_owned_exclusive_lease_without_closing_it(home: Path) -> N
         result = verify_installed_plugin_artifact(
             _spec(
                 home,
-                require_shared_lease=False,
+                lease_mode=InstallStateLeaseMode.EXCLUSIVE,
                 supplied_lease=lease,
             )
         )
@@ -360,7 +383,7 @@ def test_install_precommit_can_verify_under_exclusive_lease_before_registration(
             _spec(
                 home,
                 require_registered_plugin=False,
-                require_shared_lease=False,
+                lease_mode=InstallStateLeaseMode.EXCLUSIVE,
                 supplied_lease=lease,
             )
         )
@@ -375,7 +398,9 @@ def test_exclusive_mode_requires_a_supplied_publication_lease(home: Path) -> Non
     _publish_exact(initial)
     _write_registry(home, initial.managed_root)
 
-    result = verify_installed_plugin_artifact(_spec(home, require_shared_lease=False))
+    result = verify_installed_plugin_artifact(
+        _spec(home, lease_mode=InstallStateLeaseMode.EXCLUSIVE)
+    )
 
     assert result.identity is None
     assert {finding.check for finding in result.findings} == {"installed_plugin_lease_required"}
@@ -389,7 +414,11 @@ def test_rejects_wrong_supplied_mode_without_closing_caller_lease(home: Path) ->
 
     with ArtifactLease.acquire_exclusive(spec.lease_path, blocking=True) as lease:
         result = verify_installed_plugin_artifact(
-            _spec(home, require_shared_lease=True, supplied_lease=lease)
+            _spec(
+                home,
+                lease_mode=InstallStateLeaseMode.SHARED,
+                supplied_lease=lease,
+            )
         )
         assert {finding.check for finding in result.findings} == {"installed_plugin_lease_invalid"}
         assert not lease.closed
@@ -433,7 +462,7 @@ def test_closed_or_wrong_path_supplied_lease_is_rejected(home: Path) -> None:
         wrong_result = verify_installed_plugin_artifact(
             _spec(
                 home,
-                require_shared_lease=False,
+                lease_mode=InstallStateLeaseMode.EXCLUSIVE,
                 supplied_lease=wrong,
             )
         )

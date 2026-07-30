@@ -22,6 +22,7 @@ from autoskillit.workspace._install_state import (
 from autoskillit.workspace._installed_artifact import (
     InstalledArtifactVerification,
     InstallStateFinding,
+    InstallStateLeaseMode,
     InstallStateSpec,
     verify_installed_plugin_artifact,
 )
@@ -152,6 +153,7 @@ __all__ = [
     "SkillFrontmatterParseError",
     "PROJECTION_CACHE_KEY_EXCLUSIONS",
     "InstallStateFinding",
+    "InstallStateLeaseMode",
     "InstalledArtifactVerification",
     "InstallStateSpec",
     "ProjectionCacheKey",

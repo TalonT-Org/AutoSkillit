@@ -17,7 +17,7 @@ from autoskillit.core import (
     new_plugin_artifact_incarnation_id,
     write_versioned_json,
 )
-from autoskillit.workspace import InstallStateSpec
+from autoskillit.workspace import InstallStateLeaseMode, InstallStateSpec
 
 DEFAULT_PLUGIN_REF = "autoskillit@autoskillit-local"
 
@@ -151,7 +151,7 @@ def _spec(
         plugin_ref=plugin_ref,
         expected_version=version,
         require_registered_plugin=require_registered_plugin,
-        require_shared_lease=True,
+        lease_mode=InstallStateLeaseMode.SHARED,
     )
 
 

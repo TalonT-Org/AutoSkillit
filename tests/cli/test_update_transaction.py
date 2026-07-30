@@ -512,7 +512,9 @@ def test_codex_caller_with_old_claude_registration_completes_only_after_matching
     assert result.outcome is UpdateTransactionOutcome.COMPLETED
     assert "--require-registered-plugin" in calls[1]
     assert captured_specs[0].require_registered_plugin is True
-    assert captured_specs[0].require_shared_lease is True
+    from autoskillit.workspace import InstallStateLeaseMode
+
+    assert captured_specs[0].lease_mode is InstallStateLeaseMode.SHARED
     assert captured_specs[0].expected_version == "1.1.0"
     assert result.expected_version == "1.1.0"
     assert result.verified_identity == f"{_PLUGIN_REF}:1.1.0"

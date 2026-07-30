@@ -502,6 +502,7 @@ def install(
         _InstallLock,
     )
     from autoskillit.workspace import (
+        InstallStateLeaseMode,
         InstallStateSpec,
         reconcile_install_artifacts,
         verify_installed_plugin_artifact,
@@ -656,7 +657,7 @@ def install(
                             plugin_ref=plugin_ref,
                             expected_version=expected_version,
                             require_registered_plugin=(install_request.require_registered_plugin),
-                            require_shared_lease=False,
+                            lease_mode=InstallStateLeaseMode.EXCLUSIVE,
                             supplied_lease=target_writer,
                         )
                     )

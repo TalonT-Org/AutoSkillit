@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 
 from autoskillit.core import (
@@ -29,10 +30,18 @@ from autoskillit.core import (
 
 __all__ = [
     "InstalledArtifactVerification",
+    "InstallStateLeaseMode",
     "InstallStateFinding",
     "InstallStateSpec",
     "verify_installed_plugin_artifact",
 ]
+
+
+class InstallStateLeaseMode(StrEnum):
+    """Lease ownership required while verifying installed artifact identity."""
+
+    SHARED = "shared"
+    EXCLUSIVE = "exclusive"
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,17 +57,17 @@ class InstallStateFinding:
 class InstallStateSpec:
     """Trusted inputs for exact installed-artifact verification.
 
-    ``require_shared_lease`` is explicit because verification is also used by
-    the install transaction while it owns the exclusive publication lease.
-    A missing supplied lease may only be satisfied for shared-reader mode: the
-    verifier never creates or independently acquires an exclusive sidecar.
+    ``lease_mode`` is explicit because verification is also used by the install
+    transaction while it owns the exclusive publication lease. A missing
+    supplied lease may only be satisfied for shared-reader mode: the verifier
+    never creates or independently acquires an exclusive sidecar.
     """
 
     home: Path
     plugin_ref: str
     expected_version: str
     require_registered_plugin: bool
-    require_shared_lease: bool
+    lease_mode: InstallStateLeaseMode
     supplied_lease: ArtifactLease | None = None
 
     def __post_init__(self) -> None:
@@ -80,8 +89,8 @@ class InstallStateSpec:
             )
         if type(self.require_registered_plugin) is not bool:
             raise ValueError("require_registered_plugin must be a boolean")
-        if type(self.require_shared_lease) is not bool:
-            raise ValueError("require_shared_lease must be a boolean")
+        if not isinstance(self.lease_mode, InstallStateLeaseMode):
+            raise ValueError("lease_mode must be an InstallStateLeaseMode")
         object.__setattr__(self, "home", home)
 
     @classmethod
@@ -91,7 +100,7 @@ class InstallStateSpec:
         semantic_key: str,
         *,
         require_registered_plugin: bool,
-        require_shared_lease: bool,
+        lease_mode: InstallStateLeaseMode,
         supplied_lease: ArtifactLease | None = None,
     ) -> InstallStateSpec:
         """Reconstruct trusted inputs from a managed root and exact identity."""
@@ -106,7 +115,7 @@ class InstallStateSpec:
             plugin_ref=plugin_ref,
             expected_version=expected_version,
             require_registered_plugin=require_registered_plugin,
-            require_shared_lease=require_shared_lease,
+            lease_mode=lease_mode,
             supplied_lease=supplied_lease,
         )
         if spec.managed_root != root:
@@ -213,13 +222,14 @@ def _validate_supplied_lease(
 ) -> tuple[ArtifactLease | None, InstallStateFinding | None]:
     lease = spec.supplied_lease
     if lease is None:
-        if not spec.require_shared_lease:
+        if spec.lease_mode is InstallStateLeaseMode.EXCLUSIVE:
             return None, _finding(
                 "installed_plugin_lease_required",
                 "exact installed-plugin verification requires the caller's open "
                 f"exclusive publication lease for {spec.lease_path}. "
                 "Run `autoskillit install` to retry publication.",
             )
+        assert spec.lease_mode is InstallStateLeaseMode.SHARED
         try:
             return ArtifactLease.acquire_existing_shared(spec.lease_path), None
         except (OSError, RuntimeError, ValueError) as exc:
@@ -235,9 +245,10 @@ def _validate_supplied_lease(
         problem = "is closed"
     elif lease.path != spec.lease_path:
         problem = f"owns {lease.path} instead of {spec.lease_path}"
-    elif lease.shared is not spec.require_shared_lease:
-        expected_mode = "shared" if spec.require_shared_lease else "exclusive"
-        problem = f"does not own the required {expected_mode} mode"
+    elif spec.lease_mode is InstallStateLeaseMode.SHARED and not lease.shared:
+        problem = "does not own the required shared mode"
+    elif spec.lease_mode is InstallStateLeaseMode.EXCLUSIVE and lease.shared:
+        problem = "does not own the required exclusive mode"
     else:
         return lease, None
     return None, _finding(

@@ -237,6 +237,7 @@ class InstalledPluginArtifactAuthority:
                 "installed plugin authority requires implicit_installed load mode"
             )
         from autoskillit.workspace import (
+            InstallStateLeaseMode,
             InstallStateSpec,
             verify_installed_plugin_artifact,
         )
@@ -246,7 +247,7 @@ class InstalledPluginArtifactAuthority:
                 self._root,
                 self._semantic_key,
                 require_registered_plugin=True,
-                require_shared_lease=True,
+                lease_mode=InstallStateLeaseMode.SHARED,
             )
         except ValueError as exc:
             raise PluginArtifactValidationError(str(exc)) from exc

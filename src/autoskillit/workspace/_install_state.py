@@ -48,6 +48,7 @@ from autoskillit.core import (  # IL-005: core only — never cli.InstalledPlugi
 )
 from autoskillit.workspace._installed_artifact import (
     InstallStateFinding,
+    InstallStateLeaseMode,
     InstallStateSpec,
     verify_installed_plugin_artifact,
 )
@@ -105,7 +106,7 @@ def _current_install_state_spec() -> InstallStateSpec:
         plugin_ref=_AUTOSKILLIT_PLUGIN_KEY,
         expected_version=importlib.metadata.version("autoskillit"),
         require_registered_plugin=bool(registered_install_paths(home)),
-        require_shared_lease=True,
+        lease_mode=InstallStateLeaseMode.SHARED,
     )
 
 
@@ -216,7 +217,7 @@ def _record_matches_current_installed_artifact(
             record.managed_path,
             record.semantic_key,
             require_registered_plugin=False,
-            require_shared_lease=True,
+            lease_mode=InstallStateLeaseMode.SHARED,
         )
     except ValueError:
         return False

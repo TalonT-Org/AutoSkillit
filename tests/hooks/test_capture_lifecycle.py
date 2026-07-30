@@ -13,6 +13,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable
+from contextlib import ExitStack, contextmanager
 from dataclasses import FrozenInstanceError, asdict, replace
 from pathlib import Path
 from typing import cast
@@ -210,7 +211,10 @@ def _legacy_record(
     }
 
 
-def _race_calls(*calls: Callable[[], object]) -> list[object]:
+def _race_calls(
+    *calls: Callable[[], object],
+    after_start: Callable[[], None] | None = None,
+) -> list[object]:
     barrier = threading.Barrier(len(calls) + 1)
 
     def invoke(call: Callable[[], object]) -> object:
@@ -223,7 +227,56 @@ def _race_calls(*calls: Callable[[], object]) -> list[object]:
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(calls)) as executor:
         futures = [executor.submit(invoke, call) for call in calls]
         barrier.wait(timeout=5)
+        if after_start is not None:
+            after_start()
         return [future.result(timeout=5) for future in futures]
+
+
+def _coordinate_transition_race(
+    store: CaptureLifecycleStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[], None]:
+    real_locked = store._locked
+    real_load = store._load_locked
+    entrants = threading.Barrier(3)
+    first_loaded = threading.Event()
+    release_first = threading.Event()
+    counter_lock = threading.Lock()
+    lock_entries = 0
+    load_entries = 0
+
+    @contextmanager
+    def coordinated_locked(*, blocking: bool = True):
+        nonlocal lock_entries
+        with counter_lock:
+            lock_entries += 1
+            coordinate = lock_entries <= 2
+        if coordinate:
+            entrants.wait(timeout=5)
+        with real_locked(blocking=blocking):
+            yield
+
+    def coordinated_load():
+        nonlocal load_entries
+        result = real_load()
+        with counter_lock:
+            load_entries += 1
+            first = load_entries == 1
+        if first:
+            first_loaded.set()
+            assert release_first.wait(timeout=5)
+        return result
+
+    def after_start() -> None:
+        entrants.wait(timeout=5)
+        assert first_loaded.wait(timeout=5)
+        with counter_lock:
+            assert load_entries == 1
+        release_first.set()
+
+    monkeypatch.setattr(store, "_locked", coordinated_locked)
+    monkeypatch.setattr(store, "_load_locked", coordinated_load)
+    return after_start
 
 
 def _assert_one_lifecycle_race_loser(
@@ -389,11 +442,17 @@ def _commit_verified(
 
 
 def _finalized_capture(project: Path, clock: _Clock, capture_id: str = _CAPTURE_ID):
-    anchor, root, store = _open_store(project, clock)
-    artifact = create_capture_artifact(root, capture_id, store)
-    os.write(artifact.fd, b"captured")
-    _commit_verified(store, artifact, b"captured", clock)
-    return anchor, root, store, artifact
+    with ExitStack() as cleanup:
+        anchor, root, store = _open_store(project, clock)
+        cleanup.callback(anchor.close)
+        cleanup.callback(root.close)
+        artifact = create_capture_artifact(root, capture_id, store)
+        cleanup.callback(artifact.release_lease)
+        cleanup.callback(artifact.close_artifact_fd)
+        os.write(artifact.fd, b"captured")
+        _commit_verified(store, artifact, b"captured", clock)
+        cleanup.pop_all()
+        return anchor, root, store, artifact
 
 
 def test_final_commit_reconciles_durable_append_after_reported_failure(
@@ -466,6 +525,7 @@ def test_final_commit_does_not_reconcile_reported_fsync_failure(
 
 def test_verified_final_and_failure_commits_have_one_winner(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     clock = _Clock()
     anchor, root, store = _open_store(tmp_path / "project", clock)
@@ -480,6 +540,7 @@ def test_verified_final_and_failure_commits_have_one_winner(
                 CaptureFailureEvidence(stage="race", detail="failure won"),
                 observed_size=8,
             ),
+            after_start=_coordinate_transition_race(store, monkeypatch),
         )
         durable = store.get_record(_CAPTURE_ID)
 
@@ -500,6 +561,7 @@ def test_verified_final_and_failure_commits_have_one_winner(
 
 def test_conflicting_final_commits_do_not_issue_twice(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     clock = _Clock()
     anchor, root, store = _open_store(tmp_path / "project", clock)
@@ -510,6 +572,7 @@ def test_conflicting_final_commits_do_not_issue_twice(
         results = _race_calls(
             lambda: store.commit_verified_snapshot(snapshot, issue_reference=False),
             lambda: store.commit_verified_snapshot(snapshot, issue_reference=True),
+            after_start=_coordinate_transition_race(store, monkeypatch),
         )
         durable = store.get_record(_CAPTURE_ID)
 

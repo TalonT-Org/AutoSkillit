@@ -11,6 +11,7 @@ import subprocess
 import sys
 import threading
 import time
+from contextlib import ExitStack
 from pathlib import Path
 
 import pytest
@@ -88,37 +89,49 @@ def _finalize(
     *,
     issue_reference: bool = True,
 ):
-    anchor, root, store = _open_store(project, clock)
-    artifact = create_capture_artifact(root, _CAPTURE_ID, store)
-    os.write(artifact.fd, data)
-    verified = verify_capture_snapshot(
-        fd=artifact.fd,
-        capture_id=artifact.authority.capture_id,
-        incarnation=artifact.authority.incarnation,
-        project_identity=(anchor.identity.device, anchor.identity.inode),
-        root_identity=(root.identity.device, root.identity.inode),
-        carrier_name=artifact.name,
-        carrier_identity=(artifact.identity.device, artifact.identity.inode),
-        measurement=CaptureMeasurement.from_bytes(
-            data,
-            inline_bytes=max(1, min(len(data), 32)),
-        ),
-        command_outcome=CommandOutcome.exited(0),
-        expected_revision=artifact.authority.expected_revision,
-        finalized_at=clock.wall(),
-        retention_deadline=clock.wall() + 3600.0,
-    )
-    finalized = store.commit_verified_snapshot(
-        verified,
-        issue_reference=issue_reference,
-    )
-    return anchor, root, store, artifact, finalized
+    with ExitStack() as cleanup:
+        anchor, root, store = _open_store(project, clock)
+        cleanup.callback(anchor.close)
+        cleanup.callback(root.close)
+        artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+        cleanup.callback(artifact.release_lease)
+        cleanup.callback(artifact.close_artifact_fd)
+        os.write(artifact.fd, data)
+        verified = verify_capture_snapshot(
+            fd=artifact.fd,
+            capture_id=artifact.authority.capture_id,
+            incarnation=artifact.authority.incarnation,
+            project_identity=(anchor.identity.device, anchor.identity.inode),
+            root_identity=(root.identity.device, root.identity.inode),
+            carrier_name=artifact.name,
+            carrier_identity=(artifact.identity.device, artifact.identity.inode),
+            measurement=CaptureMeasurement.from_bytes(
+                data,
+                inline_bytes=max(1, min(len(data), 32)),
+            ),
+            command_outcome=CommandOutcome.exited(0),
+            expected_revision=artifact.authority.expected_revision,
+            finalized_at=clock.wall(),
+            retention_deadline=clock.wall() + 3600.0,
+        )
+        finalized = store.commit_verified_snapshot(
+            verified,
+            issue_reference=issue_reference,
+        )
+        cleanup.pop_all()
+        return anchor, root, store, artifact, finalized
 
 
 def _publish(project: Path, clock: _Clock, data: bytes):
-    anchor, root, store, artifact, finalized = _finalize(project, clock, data)
-    published = store.publish_reference(finalized)
-    return anchor, root, store, artifact, finalized, published
+    with ExitStack() as cleanup:
+        anchor, root, store, artifact, finalized = _finalize(project, clock, data)
+        cleanup.callback(anchor.close)
+        cleanup.callback(root.close)
+        cleanup.callback(artifact.release_lease)
+        cleanup.callback(artifact.close_artifact_fd)
+        published = store.publish_reference(finalized)
+        cleanup.pop_all()
+        return anchor, root, store, artifact, finalized, published
 
 
 def _close_artifact(artifact) -> None:
@@ -272,7 +285,7 @@ def test_reference_resolver_rejects_non_capabilities(
     )
     _close_artifact(artifact)
     try:
-        with pytest.raises((CaptureAuthorityError, CaptureLifecycleError)):
+        with pytest.raises(CaptureAuthorityError, match="invalid capture reference"):
             store.open_verified_capture(invalid_reference)
     finally:
         root.close()
@@ -348,8 +361,11 @@ def test_reference_is_bound_to_physical_project(tmp_path: Path) -> None:
     )
     _close_artifact(artifact)
     other_anchor, other_root, other_store = _open_store(tmp_path / "project-b", clock)
+    source_ledger = _capture_dir(tmp_path / "project-a") / ".capture-lifecycle.ledger"
+    target_ledger = _capture_dir(tmp_path / "project-b") / ".capture-lifecycle.ledger"
+    target_ledger.write_bytes(source_ledger.read_bytes())
     try:
-        with pytest.raises(CaptureLifecycleError):
+        with pytest.raises(CaptureLifecycleError, match="physical binding does not match"):
             other_store.open_verified_capture(published.token)
     finally:
         other_root.close()

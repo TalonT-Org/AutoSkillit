@@ -12,6 +12,7 @@ import pytest
 from autoskillit import cli
 from tests.fixtures.plugin_artifact_state import (
     INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
+    PLUGIN_ARTIFACT_STATE_EXPECTATIONS,
     PLUGIN_ARTIFACT_STATE_KINDS,
     PluginArtifactStateKind,
     build_plugin_artifact_state,
@@ -492,6 +493,7 @@ def test_actual_doctor_artifact_matrix_is_read_only(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.chdir(tmp_path)
     state = build_plugin_artifact_state(tmp_path, kind)
+    expected = PLUGIN_ARTIFACT_STATE_EXPECTATIONS[kind]
     tracked_paths = (
         state.home / ".claude" / "plugins",
         state.home / ".autoskillit" / "marketplace",
@@ -517,10 +519,7 @@ def test_actual_doctor_artifact_matrix_is_read_only(
         or result["check"].startswith("install_state:installed_plugin")
     ]
     assert consistency
-    if kind in {
-        PluginArtifactStateKind.NO_INSTALLATION,
-        PluginArtifactStateKind.VALID_CURRENT,
-    }:
+    if not expected.checks:
         assert consistency == [
             {
                 "severity": "ok",
@@ -537,7 +536,9 @@ def test_actual_doctor_artifact_matrix_is_read_only(
         if result["severity"] == "error"
         and result["check"].startswith("install_state:installed_plugin")
     ]
-    assert exact_errors
+    assert {result["check"] for result in exact_errors} == {
+        f"install_state:{check}" for check in expected.checks
+    }
     assert any(str(state.managed_root) in result["message"] for result in exact_errors)
     assert all("autoskillit install" in result["message"] for result in exact_errors)
 

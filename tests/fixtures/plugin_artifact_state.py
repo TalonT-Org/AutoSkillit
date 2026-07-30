@@ -55,6 +55,72 @@ INVALID_PLUGIN_ARTIFACT_STATE_KINDS = tuple(
 
 
 @dataclass(frozen=True, slots=True)
+class PluginArtifactStateExpectation:
+    """Exact verification outcome for one production-shaped artifact state."""
+
+    checks: frozenset[str]
+    identity_present: bool
+    lease_present: bool
+
+
+_ARTIFACT_INVALID = frozenset({"installed_plugin_artifact_invalid"})
+_LEASE_UNAVAILABLE = frozenset({"installed_plugin_lease_unavailable"})
+_STALE_REGISTRY = frozenset(
+    {
+        "installed_plugins_install_path",
+        "installed_plugin_registry_missing",
+        "installed_plugin_lease_unavailable",
+    }
+)
+
+PLUGIN_ARTIFACT_STATE_EXPECTATIONS = {
+    PluginArtifactStateKind.NO_INSTALLATION: PluginArtifactStateExpectation(
+        frozenset(), False, False
+    ),
+    PluginArtifactStateKind.OLDER_ONLY: PluginArtifactStateExpectation(
+        _STALE_REGISTRY, False, False
+    ),
+    PluginArtifactStateKind.VALID_CURRENT: PluginArtifactStateExpectation(frozenset(), True, True),
+    PluginArtifactStateKind.DANGLING_REGISTRY: PluginArtifactStateExpectation(
+        _STALE_REGISTRY, False, False
+    ),
+    PluginArtifactStateKind.MISSING_IDENTITY: PluginArtifactStateExpectation(
+        _ARTIFACT_INVALID, False, False
+    ),
+    PluginArtifactStateKind.MALFORMED_IDENTITY: PluginArtifactStateExpectation(
+        _ARTIFACT_INVALID, False, False
+    ),
+    PluginArtifactStateKind.WRONG_SEMANTIC_KEY: PluginArtifactStateExpectation(
+        _ARTIFACT_INVALID, False, False
+    ),
+    PluginArtifactStateKind.WRONG_INCARNATION: PluginArtifactStateExpectation(
+        _ARTIFACT_INVALID, False, False
+    ),
+    PluginArtifactStateKind.WRONG_MANAGED_PATH: PluginArtifactStateExpectation(
+        _ARTIFACT_INVALID, False, False
+    ),
+    PluginArtifactStateKind.VERSION_MISMATCH: PluginArtifactStateExpectation(
+        _ARTIFACT_INVALID, False, False
+    ),
+    PluginArtifactStateKind.DIGEST_MISMATCH: PluginArtifactStateExpectation(
+        _ARTIFACT_INVALID, False, False
+    ),
+    PluginArtifactStateKind.MISSING_LEASE: PluginArtifactStateExpectation(
+        _LEASE_UNAVAILABLE, False, False
+    ),
+    PluginArtifactStateKind.DANGLING_MANAGED_ROOT: PluginArtifactStateExpectation(
+        _ARTIFACT_INVALID, False, False
+    ),
+    PluginArtifactStateKind.DANGLING_MANIFEST: PluginArtifactStateExpectation(
+        _ARTIFACT_INVALID, False, False
+    ),
+    PluginArtifactStateKind.DANGLING_LEASE: PluginArtifactStateExpectation(
+        _LEASE_UNAVAILABLE, False, False
+    ),
+}
+
+
+@dataclass(frozen=True, slots=True)
 class PluginArtifactState:
     """Materialized state plus every trusted path consumed by production."""
 

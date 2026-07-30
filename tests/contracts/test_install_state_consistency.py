@@ -20,6 +20,7 @@ from autoskillit.core import (
 )
 from tests.fixtures.plugin_artifact_state import (
     INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
+    PLUGIN_ARTIFACT_STATE_EXPECTATIONS,
     PLUGIN_ARTIFACT_STATE_KINDS,
     PluginArtifactStateKind,
     build_plugin_artifact_state,
@@ -100,20 +101,18 @@ class TestVerifyInstallState:
         from autoskillit.workspace import verify_install_state
 
         state = build_plugin_artifact_state(home, kind)
+        expected = PLUGIN_ARTIFACT_STATE_EXPECTATIONS[kind]
 
         findings = verify_install_state()
-        if kind in {
-            PluginArtifactStateKind.NO_INSTALLATION,
-            PluginArtifactStateKind.VALID_CURRENT,
-        }:
+        exact_findings = [
+            finding for finding in findings if finding.check.startswith("installed_plugin")
+        ]
+        assert {finding.check for finding in exact_findings} == expected.checks
+        if not expected.checks:
             assert findings == ()
             return
 
         assert kind in INVALID_PLUGIN_ARTIFACT_STATE_KINDS
-        exact_findings = [
-            finding for finding in findings if finding.check.startswith("installed_plugin")
-        ]
-        assert exact_findings
         assert all(finding.severity is Severity.ERROR for finding in exact_findings)
         assert any(str(state.managed_root) in finding.message for finding in exact_findings)
         assert all("autoskillit install" in finding.message for finding in exact_findings)

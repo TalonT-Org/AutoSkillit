@@ -26,6 +26,7 @@ from autoskillit.workspace import (
 )
 from tests.fixtures.plugin_artifact_state import (
     INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
+    PLUGIN_ARTIFACT_STATE_EXPECTATIONS,
     PLUGIN_ARTIFACT_STATE_KINDS,
     PluginArtifactStateKind,
     build_plugin_artifact_state,
@@ -221,22 +222,19 @@ def test_complete_production_shaped_artifact_matrix(
     kind: PluginArtifactStateKind,
 ) -> None:
     state = build_plugin_artifact_state(home, kind)
+    expected = PLUGIN_ARTIFACT_STATE_EXPECTATIONS[kind]
 
     result = verify_installed_plugin_artifact(state.spec)
     try:
+        assert {finding.check for finding in result.findings} == expected.checks
+        assert (result.identity is not None) is expected.identity_present
+        assert (result.lease is not None) is expected.lease_present
         if kind is PluginArtifactStateKind.NO_INSTALLATION:
-            assert result.identity is None
-            assert result.findings == ()
-            assert result.lease is None
             assert not state.lease_path.exists()
         elif kind is PluginArtifactStateKind.VALID_CURRENT:
             assert result.identity == state.identity
-            assert result.findings == ()
-            assert result.lease is not None
         else:
             assert kind in INVALID_PLUGIN_ARTIFACT_STATE_KINDS
-            assert result.identity is None
-            assert result.findings
             assert all(finding.severity.value == "error" for finding in result.findings)
             assert any(str(state.managed_root) in finding.message for finding in result.findings)
             assert all("autoskillit install" in finding.message for finding in result.findings)

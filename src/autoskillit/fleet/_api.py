@@ -1193,6 +1193,7 @@ async def _run_dispatch(
                         captured_session_id = getattr(sr, "session_id", "") or ""
 
                 with anyio.CancelScope(shield=True):
+                    provenance.record_state_cleanup(confirmed=True)
                     mark_dispatch_interrupted(
                         state_path,
                         effective_name,
@@ -1201,8 +1202,8 @@ async def _run_dispatch(
                         dispatched_session_log_dir=str(marker_dir)
                         if marker_dir is not None
                         else "",
+                        effect_provenance=provenance.snapshot().to_dict(),
                     )
-                provenance.record_state_cleanup(confirmed=True)
             except Exception:
                 provenance.record_state_cleanup(confirmed=False)
                 logger.warning(

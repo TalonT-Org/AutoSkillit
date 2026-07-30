@@ -215,13 +215,10 @@ def _is_dismissed(
 
 
 def _run_update_sequence(
-    info: InstallInfo,
-    current: str,
     home: Path,
     state: dict[str, object],
 ) -> None:
     """Present the automatic caller around the shared update transaction."""
-    del info, current
     with terminal_guard():
         result = run_update_transaction(
             home=home,
@@ -320,7 +317,7 @@ def run_update_checks(home: Path | None = None) -> None:
             return
 
         if answer.lower() in ("", "y", "yes"):
-            _run_update_sequence(info, current, _home, state)
+            _run_update_sequence(_home, state)
             return
 
         # N path — write unified dismissal record

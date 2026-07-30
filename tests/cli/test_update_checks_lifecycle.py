@@ -170,7 +170,6 @@ def test_run_update_sequence_invalidates_fetch_cache(
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     cache_file.write_text('{"some": "data"}', encoding="utf-8")
 
-    info = _make_stable_info()
     monkeypatch.setattr(
         "autoskillit.cli.update._update_checks.run_update_transaction",
         lambda **kwargs: UpdateTransactionResult(
@@ -179,7 +178,7 @@ def test_run_update_sequence_invalidates_fetch_cache(
         ),
     )
     monkeypatch.setattr("autoskillit.cli.update._update_checks.perform_restart", lambda: None)
-    _run_update_sequence(info, "0.9.0", tmp_path, {})
+    _run_update_sequence(tmp_path, {})
     assert not cache_file.exists(), "Fetch cache must be deleted after successful update"
 
 
@@ -584,7 +583,6 @@ def test_run_update_sequence_has_no_completed_only_effects_for_every_noncomplete
 ) -> None:
     from autoskillit.cli.update._update_checks import _run_update_sequence
 
-    info = _make_stable_info()
     monkeypatch.setattr(
         "autoskillit.cli.update._update_checks.run_update_transaction",
         lambda **kwargs: UpdateTransactionResult(
@@ -610,7 +608,7 @@ def test_run_update_sequence_has_no_completed_only_effects_for_every_noncomplete
         "binary_snoozed": True,
         "preserved": "value",
     }
-    _run_update_sequence(info, "0.9.0", tmp_path, state)
+    _run_update_sequence(tmp_path, state)
     assert state == {
         "update_prompt": {"conditions": ["binary"]},
         "binary_snoozed": True,
@@ -635,7 +633,7 @@ def test_run_update_sequence_passes_home_and_fresh_process_runner(
         )
 
     monkeypatch.setattr(_update_checks, "run_update_transaction", transaction)
-    _update_checks._run_update_sequence(_make_stable_info(), "0.9.0", tmp_path, {})
+    _update_checks._run_update_sequence(tmp_path, {})
 
     assert captured == [
         {
@@ -656,7 +654,6 @@ def test_run_update_sequence_restarts_on_success(
     """After a successful upgrade, _run_update_sequence must call perform_restart."""
     from autoskillit.cli.update._update_checks import _run_update_sequence
 
-    info = _make_stable_info()
     monkeypatch.setattr(
         "autoskillit.cli.update._update_checks.run_update_transaction",
         lambda **kwargs: UpdateTransactionResult(
@@ -690,7 +687,7 @@ def test_run_update_sequence_restarts_on_success(
         "binary_snoozed": True,
         "preserved": "value",
     }
-    _run_update_sequence(info, "0.9.0", tmp_path, state)
+    _run_update_sequence(tmp_path, state)
     assert state == {"preserved": "value"}
     assert written_states == [{"preserved": "value"}]
     assert effects == ["write", "invalidate", "restart"]

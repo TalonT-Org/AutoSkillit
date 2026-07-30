@@ -318,10 +318,15 @@ If the file exists:
   including `path`, `line`, `severity`, `dimension`, `message`, `code_region`,
   `evidence`, `trace`, `boundary_checks`, `confidence`, `simpler_behavior`,
   `candidate_id`, `disposition_id`, and `snapshot`.
-- Read `local_findings_{pr_number}.json` and `diff_context_{pr_number}.json` from
-  the same `REVIEW_PR_OUTPUT`. Require matching top-level `_head_sha`,
-  `annotation_generation_id`, and `review_generation_id` before trusting either
-  enriched artifact. A mismatch rejects both handoffs and uses the existing
+- In `mode=local`, read `local_findings_{pr_number}.json` and
+  `diff_context_{pr_number}.json` from the same `REVIEW_PR_OUTPUT`. Require
+  matching top-level `_head_sha`, `annotation_generation_id`, and
+  `review_generation_id` before trusting either enriched artifact.
+- In `mode=github`, pair `diff_context_{pr_number}.json` with the published
+  `batch_review_response_{pr_number}.json` receipt from the same
+  `REVIEW_PR_OUTPUT`, and require the same three generation fields to match.
+  Do not require a local-findings artifact in GitHub mode. A missing or
+  mismatched mode-appropriate pair rejects the handoff and uses the existing
   fallback path.
 - Log: `"Loaded pre-built context for N findings from review-pr handoff (schema_version: {v})"`
 

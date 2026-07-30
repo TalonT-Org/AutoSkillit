@@ -62,6 +62,16 @@ def test_step2_loads_diff_context_map():
     assert "diff_context_map" in section
 
 
+def test_step2_uses_mode_appropriate_generation_pair() -> None:
+    section = _step2_section()
+    normalized = " ".join(section.split())
+
+    assert "In `mode=local`, read `local_findings_{pr_number}.json`" in normalized
+    assert "In `mode=github`, pair `diff_context_{pr_number}.json`" in normalized
+    assert "`batch_review_response_{pr_number}.json` receipt" in normalized
+    assert "Do not require a local-findings artifact in GitHub mode" in normalized
+
+
 def test_step2_fallback_when_file_absent():
     """Step 2 must fall back to empty map when diff_context file is absent."""
     section = _step2_section()

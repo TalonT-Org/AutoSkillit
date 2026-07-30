@@ -74,7 +74,8 @@ class TestBackendOverrideSourceInSessionsJsonl:
             "outcome_fields": None,
             "outcome_invariant_violated": False,
             "outcome_qualifier": None,
-            "schema_version": 5,
+            "native_shell_capture": None,
+            "schema_version": 6,
         }
         assert entry["backend_override_source"] is None
 

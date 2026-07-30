@@ -40,6 +40,10 @@ if TYPE_CHECKING:
         open_capture_root,
         open_project_anchor,
     )
+    from autoskillit.hooks._capture._observation import (
+        record_runner_observation,
+        validate_lineage_reference,
+    )
     from autoskillit.hooks._capture._reader import VerifiedCaptureReader
     from autoskillit.hooks._capture._snapshot import (
         CaptureMeasurement,
@@ -94,6 +98,10 @@ else:
         open_capture_lifecycle,
         open_capture_root,
         open_project_anchor,
+    )
+    from _capture._observation import (
+        record_runner_observation,
+        validate_lineage_reference,
     )
     from _capture._reader import VerifiedCaptureReader
     from _capture._snapshot import (
@@ -791,7 +799,29 @@ def run_capture(
     try:
         policy = read_capture_policy(anchor)
         bash_path = _resolve_bash()
-        effective_direct = requested_mode == "direct" or policy.disabled
+        lineage_valid = (
+            lineage_ref is not None
+            and attempt_id is not None
+            and validate_lineage_reference(lineage_ref, attempt_id)
+        )
+        launch_direct = requested_mode == "direct" and lineage_valid
+        effective_direct = launch_direct or policy.disabled
+        if launch_direct:
+            effective_reason = "launch_authorized_direct"
+        elif policy.disabled:
+            effective_reason = "project_policy_disabled"
+        else:
+            effective_reason = "capture_enabled"
+        if lineage_valid:
+            assert lineage_ref is not None
+            assert attempt_id is not None
+            record_runner_observation(
+                lineage_ref,
+                attempt_id,
+                effective_mode="direct" if effective_direct else "capture",
+                reason=effective_reason,
+                project_policy_disabled=policy.disabled,
+            )
         if effective_direct:
             try:
                 spawned = _spawn_bash(anchor, bash_path, command, capture_output=False)

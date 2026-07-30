@@ -15,12 +15,20 @@ from autoskillit.core import (
     ManagedHeadlessSessionLineageStore,
     ManagedHeadlessSessionTerminalState,
     NativeShellCaptureDecision,
+    NativeShellCaptureDiagnostic,
+    NativeShellCaptureMode,
+    NativeShellCaptureReason,
     PluginLaunchBinding,
     PluginLoadMode,
+    SkillResult,
+    SubprocessResult,
     ValidatedAddDir,
+    get_logger,
     new_managed_attempt_id,
 )
 from autoskillit.execution.session import ManagedHeadlessSessionLineageCASMismatch
+
+logger = get_logger(__name__)
 
 _BuildSpec = Callable[
     [PluginLaunchBinding | None, Mapping[str, str] | None, str | None],
@@ -150,6 +158,124 @@ class _ManagedLineageObserver:
             )
         )
 
+    def capture_diagnostic(self) -> NativeShellCaptureDiagnostic:
+        """Collect runner markers and build one immutable bounded projection."""
+
+        lineage = self.store.collect_runner_observations(self.reference)
+        policy_disabled = any(
+            observation.project_policy_disabled for observation in lineage.observations
+        )
+        observed_direct = any(
+            observation.effective_mode is NativeShellCaptureMode.DIRECT
+            for observation in lineage.observations
+        )
+        launch_direct = lineage.decision.mode is NativeShellCaptureMode.DIRECT
+        effective_mode = (
+            NativeShellCaptureMode.DIRECT
+            if launch_direct or observed_direct
+            else NativeShellCaptureMode.CAPTURE
+        )
+        attributions: set[NativeShellCaptureReason] = set()
+        if launch_direct:
+            attributions.add(NativeShellCaptureReason.LAUNCH_AUTHORIZED_DIRECT)
+        if policy_disabled:
+            attributions.add(NativeShellCaptureReason.PROJECT_POLICY_DISABLED)
+        if not attributions:
+            attributions.add(NativeShellCaptureReason.CAPTURE_ENABLED)
+        if launch_direct:
+            primary_reason = NativeShellCaptureReason.LAUNCH_AUTHORIZED_DIRECT
+        elif policy_disabled:
+            primary_reason = NativeShellCaptureReason.PROJECT_POLICY_DISABLED
+        else:
+            primary_reason = NativeShellCaptureReason.CAPTURE_ENABLED
+        attempt_id = (
+            lineage.observations[-1].attempt_id
+            if lineage.observations
+            else (lineage.attempt_ids[-1] if lineage.attempt_ids else None)
+        )
+        return NativeShellCaptureDiagnostic(
+            requested_mode=lineage.decision.mode,
+            effective_mode=effective_mode,
+            primary_reason=primary_reason,
+            attributions=tuple(sorted(attributions, key=lambda value: value.value)),
+            resolution_reason=lineage.decision.reason,
+            lineage_status=lineage.decision.lineage_status,
+            launch_id=lineage.launch_id,
+            attempt_id=attempt_id,
+            dropped_observation_count=lineage.dropped_observation_count,
+        )
+
+
+def capture(
+    observer: _ManagedLineageObserver | None,
+) -> NativeShellCaptureDiagnostic | None:
+    """Return one immutable terminal projection without disrupting execution."""
+
+    if observer is None:
+        return None
+    try:
+        return observer.capture_diagnostic()
+    except Exception:
+        logger.warning("native_shell_capture_diagnostic_failed", exc_info=True)
+        return None
+
+
+def log_launch(observer: _ManagedLineageObserver | None) -> None:
+    """Emit the common launch event with a deterministic diagnostic identity."""
+
+    diagnostic = capture(observer)
+    logger.debug(
+        "headless_session_launch",
+        event_id=(diagnostic.event_id(stage="launch") if diagnostic is not None else None),
+        native_shell_capture=(
+            diagnostic.to_dict(stage="launch") if diagnostic is not None else None
+        ),
+    )
+
+
+def log_exit(
+    diagnostic: NativeShellCaptureDiagnostic | None,
+    result: SkillResult,
+) -> None:
+    """Emit the common terminal event for every result-bearing exit path."""
+
+    logger.debug(
+        "headless_session_exit",
+        success=result.success,
+        needs_retry=result.needs_retry,
+        subtype=result.subtype,
+        session_id=result.session_id,
+        event_id=(diagnostic.event_id(stage="exit") if diagnostic is not None else None),
+        native_shell_capture=(
+            diagnostic.to_dict(stage="exit") if diagnostic is not None else None
+        ),
+    )
+
+
+def log_cancelled(
+    diagnostic: NativeShellCaptureDiagnostic | None,
+) -> None:
+    """Emit the terminal event for a cancellation that will be re-raised."""
+
+    log_exit(diagnostic, SkillResult.cancelled())
+
+
+def should_flush(
+    result: SubprocessResult,
+    skill_result: SkillResult,
+    step_name: str,
+    diagnostic: NativeShellCaptureDiagnostic | None,
+) -> bool:
+    """Return whether the session has any durable diagnostic payload."""
+
+    return (
+        result.proc_snapshots is not None
+        or not skill_result.success
+        or bool(step_name)
+        or skill_result.token_usage is not None
+        or diagnostic is not None
+    )
+
 
 def _headless_plugin_load_mode(
     backend: CodingAgentBackend,
@@ -231,5 +357,10 @@ __all__ = [
     "_LineageCallbacks",
     "_ManagedLineageObserver",
     "_build_attempt_spec",
+    "capture",
     "_headless_plugin_load_mode",
+    "log_cancelled",
+    "log_exit",
+    "log_launch",
+    "should_flush",
 ]

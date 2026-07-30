@@ -6,6 +6,7 @@ import fcntl
 import hashlib
 import json
 import os
+import stat
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import replace
@@ -32,6 +33,7 @@ __all__ = [
 _NAMESPACE = Path(".autoskillit") / "managed-headless-session-lineage"
 _RECORDS_DIR = "records"
 _INDEXES_DIR = "indexes"
+_RUNNER_OBSERVATIONS_DIR = "runner-observations"
 _FINAL_NATIVE_INDEX = "final-native-session"
 _DISPATCH_INDEX = "dispatch"
 _LOCK_FILENAME = ".lock"
@@ -40,6 +42,8 @@ _MAX_ATTEMPTS = 256
 _MAX_CANDIDATE_SESSION_IDS = 64
 _MAX_OBSERVATIONS = 64
 _MAX_OBSERVATION_BYTES = 16 * 1024
+_MAX_RUNNER_MARKER_BYTES = 8 * 1024
+_MAX_RUNNER_MARKERS = 256
 _RECORD_FIELDS = {
     "schema_version",
     "generation",
@@ -351,6 +355,37 @@ class DefaultManagedHeadlessSessionLineageStore:
             mutate=mutate,
         )
 
+    def collect_runner_observations(
+        self,
+        reference: ManagedHeadlessSessionLineageRef,
+    ) -> ManagedHeadlessSessionLineage:
+        """Ingest closed descriptor-written runner markers with CAS-safe replay."""
+
+        current = self.load_reference(reference)
+        root = _prepare_root(Path(reference.lineage_anchor))
+        markers = _read_runner_markers(root, reference, current)
+        for observation in markers:
+            for _ in range(8):
+                current = self.load_reference(reference)
+                if observation in current.observations:
+                    break
+                try:
+                    current = self.record_observation(
+                        lineage_anchor=Path(reference.lineage_anchor),
+                        launch_id=reference.launch_id,
+                        observation=observation,
+                        expected_generation=current.generation,
+                        expected_record_digest=current.record_digest,
+                    )
+                    break
+                except ManagedHeadlessSessionLineageCASMismatch:
+                    continue
+            else:
+                raise ManagedHeadlessSessionLineageCASMismatch(
+                    "Managed runner observation CAS retry limit exceeded"
+                )
+        return self.load_reference(reference)
+
     def _find_by_index(
         self,
         *,
@@ -652,6 +687,86 @@ def _read_record(path: Path) -> ManagedHeadlessSessionLineage:
     if _canonical_json(value).encode("utf-8") != raw:
         raise ValueError("Managed lineage record is not canonical JSON")
     return _lineage_from_dict(value)
+
+
+def _read_runner_markers(
+    root: Path,
+    reference: ManagedHeadlessSessionLineageRef,
+    lineage: ManagedHeadlessSessionLineage,
+) -> tuple[NativeShellCaptureObservation, ...]:
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    root_fd = os.open(root, directory_flags | nofollow)
+    observations_fd = -1
+    launch_fd = -1
+    try:
+        try:
+            observations_fd = os.open(
+                _RUNNER_OBSERVATIONS_DIR,
+                directory_flags | nofollow,
+                dir_fd=root_fd,
+            )
+            launch_fd = os.open(
+                reference.launch_id,
+                directory_flags | nofollow,
+                dir_fd=observations_fd,
+            )
+        except FileNotFoundError:
+            return ()
+        parsed: list[NativeShellCaptureObservation] = []
+        for name in sorted(os.listdir(launch_fd))[:_MAX_RUNNER_MARKERS]:
+            if not name.endswith(".json") or "/" in name or name in {".", ".."}:
+                continue
+            marker_fd = -1
+            try:
+                marker_fd = os.open(
+                    name,
+                    os.O_RDONLY | nofollow,
+                    dir_fd=launch_fd,
+                )
+                metadata = os.fstat(marker_fd)
+                if (
+                    not stat.S_ISREG(metadata.st_mode)
+                    or metadata.st_nlink != 1
+                    or metadata.st_size > _MAX_RUNNER_MARKER_BYTES
+                ):
+                    continue
+                raw = os.read(marker_fd, _MAX_RUNNER_MARKER_BYTES + 1)
+            except OSError:
+                continue
+            finally:
+                if marker_fd >= 0:
+                    os.close(marker_fd)
+            try:
+                marker = _strict_json_load(raw)
+                if _canonical_json(marker).encode("utf-8") != raw:
+                    continue
+                if not isinstance(marker, dict) or set(marker) != {
+                    "schema_version",
+                    "launch_id",
+                    "lineage_digest",
+                    "observation",
+                }:
+                    continue
+                if (
+                    marker["schema_version"] != MANAGED_HEADLESS_SESSION_LINEAGE_SCHEMA_VERSION
+                    or marker["launch_id"] != reference.launch_id
+                    or marker["lineage_digest"] != reference.lineage_digest
+                ):
+                    continue
+                observation = NativeShellCaptureObservation.from_dict(marker["observation"])
+                if observation.attempt_id not in lineage.attempt_ids:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            parsed.append(observation)
+        return tuple(dict.fromkeys(parsed))
+    finally:
+        if launch_fd >= 0:
+            os.close(launch_fd)
+        if observations_fd >= 0:
+            os.close(observations_fd)
+        os.close(root_fd)
 
 
 def _index_path(root: Path, index_name: str, key: str) -> Path:

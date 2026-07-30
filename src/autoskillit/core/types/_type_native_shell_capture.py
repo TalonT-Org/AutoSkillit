@@ -7,6 +7,8 @@ filesystem implementation; the concrete durable store lives in
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import secrets
 from collections.abc import MutableMapping
@@ -24,6 +26,7 @@ __all__ = [
     "ManagedHeadlessSessionLineageStore",
     "ManagedHeadlessSessionTerminalState",
     "NativeShellCaptureDecision",
+    "NativeShellCaptureDiagnostic",
     "NativeShellCaptureMode",
     "NativeShellCaptureObservation",
     "NativeShellCaptureReason",
@@ -254,6 +257,85 @@ class NativeShellCaptureObservation:
 
 
 @dataclass(frozen=True, slots=True)
+class NativeShellCaptureDiagnostic:
+    """Immutable bounded projection shared by every terminal diagnostic sink."""
+
+    requested_mode: NativeShellCaptureMode
+    effective_mode: NativeShellCaptureMode
+    primary_reason: NativeShellCaptureReason
+    attributions: tuple[NativeShellCaptureReason, ...]
+    resolution_reason: NativeShellCaptureReason
+    lineage_status: ManagedHeadlessSessionLineageStatus
+    launch_id: str
+    attempt_id: str | None
+    dropped_observation_count: int = 0
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.requested_mode, NativeShellCaptureMode):
+            raise TypeError("requested_mode must be a NativeShellCaptureMode")
+        if not isinstance(self.effective_mode, NativeShellCaptureMode):
+            raise TypeError("effective_mode must be a NativeShellCaptureMode")
+        if not isinstance(self.primary_reason, NativeShellCaptureReason):
+            raise TypeError("primary_reason must be a NativeShellCaptureReason")
+        if not isinstance(self.resolution_reason, NativeShellCaptureReason):
+            raise TypeError("resolution_reason must be a NativeShellCaptureReason")
+        if not isinstance(self.lineage_status, ManagedHeadlessSessionLineageStatus):
+            raise TypeError("lineage_status must be a ManagedHeadlessSessionLineageStatus")
+        _validate_identity(self.launch_id, "launch_id")
+        if self.attempt_id is not None:
+            _validate_identity(self.attempt_id, "attempt_id")
+        if not all(isinstance(value, NativeShellCaptureReason) for value in self.attributions):
+            raise TypeError("attributions must contain NativeShellCaptureReason values")
+        canonical_attributions = tuple(
+            sorted(set(self.attributions), key=lambda value: value.value)
+        )
+        if self.attributions != canonical_attributions or len(self.attributions) > 4:
+            raise ValueError("attributions must be sorted, unique, and bounded")
+        _validate_nonnegative_int(
+            self.dropped_observation_count,
+            "dropped_observation_count",
+        )
+
+    def to_dict(self, *, stage: str | None = None) -> dict[str, object]:
+        """Return the exact non-secret JSON projection."""
+
+        projection: dict[str, object] = {
+            "requested_mode": self.requested_mode.value,
+            "effective_mode": self.effective_mode.value,
+            "primary_reason": self.primary_reason.value,
+            "attributions": [value.value for value in self.attributions],
+            "resolution_reason": self.resolution_reason.value,
+            "lineage_status": self.lineage_status.value,
+            "launch_id": self.launch_id,
+            "attempt_id": self.attempt_id,
+            "dropped_observation_count": self.dropped_observation_count,
+        }
+        if stage is not None:
+            projection["event_id"] = self.event_id(stage=stage)
+        return projection
+
+    def event_id(self, *, stage: str, ordinal: int = 0) -> str:
+        """Derive a deterministic event identity from lineage coordinates."""
+
+        if stage not in {"launch", "exit"}:
+            raise ValueError("Unsupported native shell diagnostic stage")
+        _validate_nonnegative_int(ordinal, "ordinal")
+        payload = json.dumps(
+            {
+                "attempt_id": self.attempt_id,
+                "launch_id": self.launch_id,
+                "ordinal": ordinal,
+                "stage": stage,
+            },
+            ensure_ascii=True,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("ascii")
+        return hashlib.sha256(payload).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
 class ManagedHeadlessSessionLineage:
     """Validated immutable value returned by the durable lineage store."""
 
@@ -430,6 +512,11 @@ class ManagedHeadlessSessionLineageStore(Protocol):
         observation: NativeShellCaptureObservation,
         expected_generation: int,
         expected_record_digest: str,
+    ) -> ManagedHeadlessSessionLineage: ...
+
+    def collect_runner_observations(
+        self,
+        reference: ManagedHeadlessSessionLineageRef,
     ) -> ManagedHeadlessSessionLineage: ...
 
 

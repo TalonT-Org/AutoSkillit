@@ -65,6 +65,7 @@ from autoskillit.execution.headless._headless_launch import (
     _run_headless_attempt,
 )
 from autoskillit.execution.headless._headless_result import _build_skill_result
+from autoskillit.execution.headless._managed import _attempt as _diag
 from autoskillit.execution.headless._managed import (
     _LineageCallbacks,
     _ManagedLineageObserver,
@@ -249,6 +250,7 @@ async def _execute_claude_headless(
     skill_result: SkillResult
     _stream_parser = _step_backend.stream_parser(completion_marker=completion_marker)
     lineage_callbacks = _LineageCallbacks(managed_lineage_observer, on_session_id_resolved)
+    _diag.log_launch(managed_lineage_observer)
     spec: CmdSpec
     while True:
         try:
@@ -282,6 +284,7 @@ async def _execute_claude_headless(
             logger.error("headless_runner_crashed", exc_info=True)
             _exc_text = traceback.format_exc()
             _log_dir = ctx.config.linux_tracing.log_dir
+            terminal_capture_diagnostic = _diag.capture(managed_lineage_observer)
             try:
                 from autoskillit.execution import flush_session_log
 
@@ -328,6 +331,7 @@ async def _execute_claude_headless(
                         order_id=order_id,
                     ),
                     backend_override_source=backend_override_source,
+                    native_shell_capture=terminal_capture_diagnostic,
                 )
             except Exception:
                 logger.debug("flush_session_log during crash failed", exc_info=True)
@@ -336,6 +340,7 @@ async def _execute_claude_headless(
                 skill_command=skill_command,
                 order_id=order_id,
             )
+            _diag.log_exit(terminal_capture_diagnostic, _crashed)
             return dataclasses.replace(
                 _crashed,
                 provider=ProviderOutcome(
@@ -346,6 +351,7 @@ async def _execute_claude_headless(
             logger.warning("headless_runner_cancelled", exc_info=True)
             _exc_text = traceback.format_exc()
             _log_dir = ctx.config.linux_tracing.log_dir
+            terminal_capture_diagnostic = _diag.capture(managed_lineage_observer)
             try:
                 from autoskillit.execution import flush_session_log
 
@@ -393,9 +399,11 @@ async def _execute_claude_headless(
                             order_id=order_id,
                         ),
                         backend_override_source=backend_override_source,
+                        native_shell_capture=terminal_capture_diagnostic,
                     )
             except Exception:
                 logger.debug("flush_session_log during cancel failed", exc_info=True)
+            _diag.log_cancelled(terminal_capture_diagnostic)
             raise
         _elapsed = time.monotonic() - _start_mono
         _end_ts = (datetime.fromisoformat(_start_ts) + timedelta(seconds=_elapsed)).isoformat()
@@ -510,13 +518,9 @@ async def _execute_claude_headless(
     # Extract the audit record (if any) added by this session
     new_audit_records = ctx.audit.get_report_as_dicts()[audit_count_before:]
     audit_record = new_audit_records[0] if new_audit_records else None
+    terminal_capture_diagnostic = _diag.capture(managed_lineage_observer)
 
-    if (
-        result.proc_snapshots is not None
-        or not skill_result.success
-        or bool(step_name)
-        or skill_result.token_usage is not None
-    ):
+    if _diag.should_flush(result, skill_result, step_name, terminal_capture_diagnostic):
         from autoskillit.execution.session_log import flush_session_log
 
         try:
@@ -596,17 +600,12 @@ async def _execute_claude_headless(
                 outcome_fields=skill_result.outcome_fields,
                 outcome_invariant_violated=skill_result.outcome_invariant_violated,
                 outcome_qualifier=skill_result.outcome_qualifier,
+                native_shell_capture=terminal_capture_diagnostic,
             )
         except Exception:
             logger.debug("session_log_flush_failed", exc_info=True)
 
-    logger.debug(
-        "headless_session_exit",
-        success=skill_result.success,
-        needs_retry=skill_result.needs_retry,
-        subtype=skill_result.subtype,
-        session_id=skill_result.session_id,
-    )
+    _diag.log_exit(terminal_capture_diagnostic, skill_result)
 
     from autoskillit.execution.session_log import _resolve_session_label
 

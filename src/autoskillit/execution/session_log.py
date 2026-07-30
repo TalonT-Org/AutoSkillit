@@ -16,7 +16,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
-    from autoskillit.core import ProviderOutcome, RecipeIdentity, SessionLocator, SessionTelemetry
+    from autoskillit.core import (
+        NativeShellCaptureDiagnostic,
+        ProviderOutcome,
+        RecipeIdentity,
+        SessionLocator,
+        SessionTelemetry,
+    )
 
 
 from autoskillit.core import (
@@ -161,6 +167,7 @@ def flush_session_log(
     outcome_fields: dict[str, int | str] | None = None,
     outcome_invariant_violated: bool = False,
     outcome_qualifier: str | None = None,
+    native_shell_capture: NativeShellCaptureDiagnostic | None = None,
 ) -> None:
     """Flush session diagnostics to disk.
 
@@ -407,6 +414,10 @@ def flush_session_log(
             _fast_dumps(telemetry.github_api_usage, sort_keys=True, indent=True) + "\n",
         )
 
+    native_shell_capture_projection = (
+        native_shell_capture.to_dict(stage="exit") if native_shell_capture is not None else None
+    )
+
     # Write summary.json
     summary = {
         "session_id": session_id,
@@ -460,6 +471,7 @@ def flush_session_log(
         "api_retry_exhausted": api_retry_exhausted,
         "ndjson_unknown_event_count": ndjson_unknown_event_count,
         "ndjson_unknown_item_count": ndjson_unknown_item_count,
+        "native_shell_capture": native_shell_capture_projection,
     }
     if versions is not None:
         summary["versions"] = {
@@ -594,10 +606,11 @@ def flush_session_log(
         "outcome_fields": outcome_fields,
         "outcome_invariant_violated": outcome_invariant_violated,
         "outcome_qualifier": outcome_qualifier,
+        "native_shell_capture": native_shell_capture_projection,
         "model_identifier": effective_model_id,
         "configured_model": model_identity.configured_model,
         "profile_name": model_identity.profile_name,
-        "schema_version": 5,
+        "schema_version": 6,
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:

@@ -365,6 +365,12 @@ class FakeManagedHeadlessSessionLineageStore:
         self._records[launch_id] = updated
         return updated
 
+    def collect_runner_observations(
+        self,
+        reference: ManagedHeadlessSessionLineageRef,
+    ) -> ManagedHeadlessSessionLineage:
+        return self.load_reference(reference)
+
 
 @dataclasses.dataclass
 class _FakePluginLease:

@@ -716,6 +716,7 @@ from .types import ModelTotalEntry as ModelTotalEntry
 from .types import ModelTranslation as ModelTranslation
 from .types import NamedResume as NamedResume
 from .types import NativeShellCaptureDecision as NativeShellCaptureDecision
+from .types import NativeShellCaptureDiagnostic as NativeShellCaptureDiagnostic
 from .types import NativeShellCaptureMode as NativeShellCaptureMode
 from .types import NativeShellCaptureObservation as NativeShellCaptureObservation
 from .types import NativeShellCaptureReason as NativeShellCaptureReason

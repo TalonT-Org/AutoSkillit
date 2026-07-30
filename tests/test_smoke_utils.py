@@ -1696,6 +1696,13 @@ def test_combined_review_aggregation_is_cross_source_and_completion_order_indepe
         "prior_resolved_findings": [],
         "standard_findings": standard,
         "deletion_findings": deletion,
+        "valid_diff_lines": {
+            "src/app.py": [42],
+            "src/deleted.py": [8],
+            "src/other.py": [19],
+        },
+        "snapshot": {"head_sha": "head", "base_sha": "base"},
+        "review_root": str(Path.cwd()),
     }
 
     forward = aggregate_experimental_review_candidates(
@@ -2192,6 +2199,32 @@ def test_standard_review_findings_reject_unhashable_enum_values(
     assert result["state"] == "degraded"
     assert result["survivors"] == []
     assert result["validation_errors"] == [f"standard[0]: {field} must be a non-empty string"]
+
+
+def test_standard_review_findings_accept_hunk_range_fallback() -> None:
+    finding = {
+        "file": "src/app.py",
+        "line": 40,
+        "dimension": "bugs",
+        "severity": "warning",
+        "message": "Valid hunk-range finding",
+        "requires_decision": False,
+    }
+
+    result = aggregate_experimental_review_candidates(
+        candidates=[],
+        dispositions=[],
+        prior_resolved_findings=[],
+        standard_findings=[finding],
+        valid_diff_lines={},
+        valid_line_ranges={"src/app.py": [[38, 42]]},
+        snapshot={"head_sha": "head", "base_sha": "base"},
+        review_root=str(Path.cwd()),
+    )
+
+    assert result["state"] == "complete"
+    assert [item["line"] for item in result["survivors"]] == [40]
+    assert result["validation_errors"] == []
 
 
 def test_standard_review_findings_require_snapshot_authority() -> None:

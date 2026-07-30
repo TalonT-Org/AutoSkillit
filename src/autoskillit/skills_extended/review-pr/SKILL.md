@@ -908,7 +908,7 @@ Use the installed helpers
 for fixed-order all-or-nothing validation, bounded malformed envelopes, and
 accepted-only suppression-before-dedup. The aggregation call is the single combined
 standard/deletion/experimental aggregation boundary: pass the retained snapshot
-identity, exact changed-line authority, all standard/deletion findings, parent
+identity, exact changed-line and hunk-range authority, all standard/deletion findings, parent
 dispositions, and prior resolved findings.
 Use `prepare_experimental_review_publication` as the canonical executable semantics
 for common generation identity, local-findings-last ordering, and stale effect
@@ -964,6 +964,7 @@ AGGREGATION_RESULT = aggregate_experimental_review_candidates(
     prior_resolved_findings=prior_resolved_findings,
     standard_findings=STANDARD_FINDINGS,
     valid_diff_lines=VALID_DIFF_LINES,
+    valid_line_ranges=VALID_LINE_RANGES,
     snapshot=GATE_AUTHORITY["snapshot"],
     review_root=REVIEW_CHECKOUT_ROOT,
 )

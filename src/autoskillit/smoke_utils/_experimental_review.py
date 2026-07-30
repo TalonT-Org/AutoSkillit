@@ -275,6 +275,7 @@ def _standard_finding_validation_error(
     *,
     deletion_only: bool,
     valid_diff_lines: Mapping[str, Sequence[int]],
+    valid_line_ranges: Mapping[str, Sequence[Sequence[int]]],
     review_root: Path,
 ) -> str | None:
     if not isinstance(finding, dict) or set(finding) != _STANDARD_FINDING_KEYS:
@@ -298,8 +299,23 @@ def _standard_finding_validation_error(
         return "line must be a positive integer"
     if not _is_contained_relative_path(finding["file"], review_root):
         return "file escapes the review root"
-    if finding["line"] not in valid_diff_lines.get(str(finding["file"]), ()):
-        return "file and line are not an exact changed-line anchor"
+    file_path = str(finding["file"])
+    line = int(finding["line"])
+    if valid_diff_lines:
+        if line not in valid_diff_lines.get(file_path, ()):
+            return "file and line are not an exact changed-line anchor"
+    elif valid_line_ranges:
+        ranges = valid_line_ranges.get(file_path, ())
+        if not any(
+            isinstance(bounds, Sequence)
+            and not isinstance(bounds, (str, bytes))
+            and len(bounds) == 2
+            and _is_positive_int(bounds[0])
+            and _is_positive_int(bounds[1])
+            and int(bounds[0]) <= line <= int(bounds[1])
+            for bounds in ranges
+        ):
+            return "file and line are not within a changed hunk"
     return None
 
 
@@ -438,6 +454,7 @@ def aggregate_experimental_review_candidates(
     standard_findings: Sequence[Mapping[str, object]] = (),
     deletion_findings: Sequence[Mapping[str, object]] = (),
     valid_diff_lines: Mapping[str, Sequence[int]] | None = None,
+    valid_line_ranges: Mapping[str, Sequence[Sequence[int]]] | None = None,
     snapshot: Mapping[str, str] | None = None,
     review_root: str = "",
 ) -> dict[str, object]:
@@ -454,8 +471,8 @@ def aggregate_experimental_review_candidates(
             validation_errors.append("review_root must be absolute")
         if not _is_non_empty_string(head_sha) or not _is_non_empty_string(base_sha):
             validation_errors.append("snapshot head/base authority must be non-empty")
-        if valid_diff_lines is None:
-            validation_errors.append("exact changed-line authority is required")
+        if valid_diff_lines is None and valid_line_ranges is None:
+            validation_errors.append("changed-line authority is required")
         if not validation_errors:
             root = root.resolve()
             snapshot_identity = dict(snapshot or {})
@@ -468,6 +485,7 @@ def aggregate_experimental_review_candidates(
                         finding,
                         deletion_only=deletion_only,
                         valid_diff_lines=valid_diff_lines or {},
+                        valid_line_ranges=valid_line_ranges or {},
                         review_root=root,
                     )
                     if error is not None:

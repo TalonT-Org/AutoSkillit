@@ -124,7 +124,10 @@ def _configure_transaction(
         successful_claude_admin,
     )
     monkeypatch.setattr(update_checks, "invalidate_fetch_cache", lambda _home: None)
-    identity = SimpleNamespace(incarnation_id="0" * 32)
+    identity = SimpleNamespace(
+        incarnation_id="0" * 32,
+        semantic_key=f"{_PLUGIN_REF}:{_VERSION}",
+    )
     monkeypatch.setattr(
         workspace,
         "verify_installed_plugin_artifact",
@@ -439,7 +442,10 @@ def test_success_path_holds_both_transaction_guards_through_commit(
     def verify_exact(_spec):
         record_owned("exact_verification")
         return SimpleNamespace(
-            identity=SimpleNamespace(incarnation_id="0" * 32),
+            identity=SimpleNamespace(
+                incarnation_id="0" * 32,
+                semantic_key=f"{_PLUGIN_REF}:{_VERSION}",
+            ),
             findings=(),
         )
 
@@ -477,6 +483,7 @@ def test_success_path_holds_both_transaction_guards_through_commit(
     )
 
     assert result.outcome is InstallOutcome.COMPLETED
+    assert result.verified_identity == f"{_PLUGIN_REF}:{_VERSION}"
     assert events == [
         "install_lock_acquired",
         "artifact_lease_acquired",
@@ -729,7 +736,10 @@ def test_failure_after_every_persistent_mutation_stage_restores_prestate(
             lambda _home: mutate_then_raise(),
         )
     else:
-        verified_identity = SimpleNamespace(incarnation_id="0" * 32)
+        verified_identity = SimpleNamespace(
+            incarnation_id="0" * 32,
+            semantic_key=f"{_PLUGIN_REF}:{_VERSION}",
+        )
 
         def record_verification(_spec):
             verification_events.append("verified")

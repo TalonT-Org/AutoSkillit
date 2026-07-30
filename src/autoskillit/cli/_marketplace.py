@@ -674,7 +674,7 @@ def install(
                             "Installed plugin exact verification failed"
                             + (f": {messages}" if messages else ""),
                         )
-                    verified_identity = verification.identity.incarnation_id
+                    verified_identity = verification.identity.semantic_key
                     snapshot.commit()
                 except _InstallFailed as exc:
                     return _compensated_result(

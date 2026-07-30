@@ -254,7 +254,14 @@ def test_install_invalidates_fetch_cache(monkeypatch: pytest.MonkeyPatch, tmp_pa
             "Verification",
             (),
             {
-                "identity": type("Identity", (), {"incarnation_id": "test-identity"})(),
+                "identity": type(
+                    "Identity",
+                    (),
+                    {
+                        "incarnation_id": "test-identity",
+                        "semantic_key": (f"autoskillit@autoskillit-local:{__version__}"),
+                    },
+                )(),
                 "findings": (),
             },
         )(),

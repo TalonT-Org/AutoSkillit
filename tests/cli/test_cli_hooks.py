@@ -408,7 +408,10 @@ def test_install_does_not_write_hooks_when_plugin_active(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "autoskillit.workspace.verify_installed_plugin_artifact",
         lambda _spec: SimpleNamespace(
-            identity=SimpleNamespace(incarnation_id="test-incarnation"),
+            identity=SimpleNamespace(
+                incarnation_id="test-incarnation",
+                semantic_key=f"autoskillit@autoskillit-local:{__version__}",
+            ),
             findings=(),
         ),
     )

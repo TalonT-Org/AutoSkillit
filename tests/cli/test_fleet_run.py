@@ -221,8 +221,6 @@ class TestFleetRunDispatch:
     def test_fleet_run_consumes_native_shell_capture_mode_once(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import os
-
         from autoskillit.core import NativeShellCaptureMode
 
         monkeypatch.setenv("AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE", "direct")
@@ -234,7 +232,7 @@ class TestFleetRunDispatch:
 
         async def fake_execute(**kwargs: object) -> DispatchResult:
             captured_args.update(kwargs)
-            os.environ["AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE"] = "capture"
+            monkeypatch.setenv("AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE", "capture")
             return _mock_success_result()
 
         with patch(

@@ -236,6 +236,7 @@ async def _run_headless_attempt(
     on_session_id_resolved: Callable[[str], None] | None,
     stream_parser: StreamParser,
     managed_lineage_observer: _ManagedLineageObserver | None = None,
+    managed_attempt_id: str | None = None,
 ) -> tuple[SubprocessResult, CmdSpec]:
     """Build and execute one provider attempt under one owned plugin binding."""
     with _plugin_launch_binding(
@@ -248,6 +249,7 @@ async def _run_headless_attempt(
             binding=binding,
             provider_extras=provider_extras,
             observer=managed_lineage_observer,
+            managed_attempt_id=managed_attempt_id,
         )
         if spec.cmd:
             binary = Path(spec.cmd[0]).stem

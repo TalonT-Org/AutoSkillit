@@ -112,6 +112,21 @@ def test_registry_preserves_typed_handler_wire_contracts() -> None:
             assert param.wire_type is wire_type
 
 
+def test_managed_launch_tools_share_native_shell_capture_schema() -> None:
+    run_skill_param = TOOL_REGISTRY["run_skill"].param_def("native_shell_capture_mode")
+    food_truck_param = TOOL_REGISTRY["dispatch_food_truck"].param_def("native_shell_capture_mode")
+
+    assert run_skill_param == food_truck_param
+    assert run_skill_param is not None
+    assert run_skill_param.wire_type is ToolWireType.STRING
+    assert run_skill_param.required is False
+    assert run_skill_param.handler_parameter is True
+
+    signatures = _handler_signatures()
+    for tool_name in ("run_skill", "dispatch_food_truck"):
+        assert ("native_shell_capture_mode", False) in signatures[tool_name]
+
+
 def test_run_skill_has_one_compiler_owned_structured_input_channel() -> None:
     structured = tuple(
         param for param in TOOL_REGISTRY["run_skill"].params if param.structured_skill_inputs

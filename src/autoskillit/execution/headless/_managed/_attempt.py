@@ -261,7 +261,7 @@ def log_cancelled(
 
 
 def should_flush(
-    result: SubprocessResult,
+    result: SubprocessResult | None,
     skill_result: SkillResult,
     step_name: str,
     diagnostic: NativeShellCaptureDiagnostic | None,
@@ -269,7 +269,7 @@ def should_flush(
     """Return whether the session has any durable diagnostic payload."""
 
     return (
-        result.proc_snapshots is not None
+        (result is not None and result.proc_snapshots is not None)
         or not skill_result.success
         or bool(step_name)
         or skill_result.token_usage is not None
@@ -299,8 +299,9 @@ def _build_attempt_spec(
     binding: PluginLaunchBinding | None,
     provider_extras: Mapping[str, str] | None,
     observer: _ManagedLineageObserver | None,
+    managed_attempt_id: str | None = None,
 ) -> CmdSpec:
-    """Build one physical attempt, allocating managed identity immediately first."""
+    """Build one physical attempt from an already-bound managed identity."""
     if observer is None:
         unmanaged_build = cast(
             Callable[
@@ -310,7 +311,8 @@ def _build_attempt_spec(
             build_spec,
         )
         return unmanaged_build(binding, provider_extras)
-    managed_attempt_id = observer.allocate_attempt()
+    if managed_attempt_id is None:
+        managed_attempt_id = observer.allocate_attempt()
     return build_spec(binding, provider_extras, managed_attempt_id)
 
 

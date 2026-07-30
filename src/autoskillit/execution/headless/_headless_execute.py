@@ -9,7 +9,8 @@ import traceback
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, cast
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import anyio
 
@@ -246,14 +247,38 @@ async def _execute_claude_headless(
 
     _pre_session_sha = _capture_git_head_sha(cwd)
     _result: SubprocessResult | None = None
-    result: SubprocessResult
-    skill_result: SkillResult
+    result: SubprocessResult | None = None
+    skill_result: SkillResult | None = None
+    pending_cancel: BaseException | None = None
+    pending_cancel_traceback: TracebackType | None = None
+    terminal_exception_text = ""
+    terminal_reason_override = ""
+    _clone_reverted = False
+
+    def defer_cancellation(exc: BaseException) -> None:
+        nonlocal pending_cancel
+        nonlocal pending_cancel_traceback
+        nonlocal terminal_exception_text
+        nonlocal terminal_reason_override
+        pending_cancel = exc
+        pending_cancel_traceback = exc.__traceback__
+        terminal_exception_text = traceback.format_exc()
+        terminal_reason_override = "CANCELLED"
+
     _stream_parser = _step_backend.stream_parser(completion_marker=completion_marker)
     lineage_callbacks = _LineageCallbacks(managed_lineage_observer, on_session_id_resolved)
-    _diag.log_launch(managed_lineage_observer)
-    spec: CmdSpec
+    launch_logged = False
+    spec: CmdSpec | None = None
     while True:
         try:
+            managed_attempt_id = (
+                managed_lineage_observer.allocate_attempt()
+                if managed_lineage_observer is not None
+                else None
+            )
+            if not launch_logged:
+                _diag.log_launch(managed_lineage_observer)
+                launch_logged = True
             _result, spec = await _run_headless_attempt(
                 build_spec,
                 cwd=cwd,
@@ -278,133 +303,28 @@ async def _execute_claude_headless(
                 session_id=session_id,
                 on_session_id_resolved=lineage_callbacks.on_candidate,
                 stream_parser=_stream_parser,
+                managed_attempt_id=managed_attempt_id,
                 **lineage_callbacks.attempt_kwargs,
             )
         except Exception as exc:
             logger.error("headless_runner_crashed", exc_info=True)
-            _exc_text = traceback.format_exc()
-            _log_dir = ctx.config.linux_tracing.log_dir
-            terminal_capture_diagnostic = _diag.capture(managed_lineage_observer)
-            try:
-                from autoskillit.execution import flush_session_log
-
-                flush_session_log(
-                    log_dir=_log_dir,
-                    cwd=str(cwd),
-                    kitchen_id=kitchen_id,
-                    caller_session_id=caller_session_id,
-                    order_id=order_id,
-                    campaign_id=campaign_id,
-                    dispatch_id=dispatch_id,
-                    project_dir=project_dir,
-                    build_protected_campaign_ids=ctx.build_protected_campaign_ids,
-                    session_id="",
-                    pid=0,
-                    skill_command=skill_command,
-                    success=False,
-                    subtype="crashed",
-                    exit_code=-1,
-                    start_ts=_start_ts,
-                    proc_snapshots=None,
-                    termination_reason="CRASHED",
-                    exception_text=_exc_text,
-                    versions=_versions,
-                    provider_outcome=ProviderOutcome(
-                        provider_used=current_provider_name,
-                        fallback_activated=fallback_activated,
-                    ),
-                    recipe_identity=RecipeIdentity(
-                        name=recipe_name,
-                        content_hash=recipe_content_hash,
-                        composite_hash=recipe_composite_hash,
-                        version=recipe_version,
-                    ),
-                    max_sessions=ctx.config.linux_tracing.max_sessions,
-                    model_identity=model_identity,
-                    backend=cast(Literal["claude-code", "codex"], _step_backend.name),
-                    channel_b_capable=_step_backend.capabilities.channel_b_capable,
-                    comm_aliases=_step_backend.capabilities.process_name_aliases,
-                    telemetry=_build_error_path_telemetry(
-                        ctx.github_api_log,
-                        session_id="",
-                        step_name=step_name,
-                        order_id=order_id,
-                    ),
-                    backend_override_source=backend_override_source,
-                    native_shell_capture=terminal_capture_diagnostic,
-                )
-            except Exception:
-                logger.debug("flush_session_log during crash failed", exc_info=True)
-            _crashed = SkillResult.crashed(
+            result = None
+            terminal_exception_text = traceback.format_exc()
+            terminal_reason_override = "CRASHED"
+            skill_result = SkillResult.crashed(
                 exception=exc,
                 skill_command=skill_command,
                 order_id=order_id,
             )
-            _diag.log_exit(terminal_capture_diagnostic, _crashed)
-            return dataclasses.replace(
-                _crashed,
-                provider=ProviderOutcome(
-                    provider_used=current_provider_name, fallback_activated=fallback_activated
-                ),
-            )
-        except BaseException:
+            break
+        except BaseException as exc:
             logger.warning("headless_runner_cancelled", exc_info=True)
-            _exc_text = traceback.format_exc()
-            _log_dir = ctx.config.linux_tracing.log_dir
-            terminal_capture_diagnostic = _diag.capture(managed_lineage_observer)
-            try:
-                from autoskillit.execution import flush_session_log
-
-                with anyio.CancelScope(shield=True):
-                    flush_session_log(
-                        log_dir=_log_dir,
-                        cwd=str(cwd),
-                        kitchen_id=kitchen_id,
-                        caller_session_id=caller_session_id,
-                        order_id=order_id,
-                        campaign_id=campaign_id,
-                        dispatch_id=dispatch_id,
-                        project_dir=project_dir,
-                        build_protected_campaign_ids=ctx.build_protected_campaign_ids,
-                        session_id="",
-                        pid=0,
-                        skill_command=skill_command,
-                        success=False,
-                        subtype="cancelled",
-                        exit_code=-1,
-                        start_ts=_start_ts,
-                        proc_snapshots=None,
-                        termination_reason="CANCELLED",
-                        exception_text=_exc_text,
-                        versions=_versions,
-                        provider_outcome=ProviderOutcome(
-                            provider_used=current_provider_name,
-                            fallback_activated=fallback_activated,
-                        ),
-                        recipe_identity=RecipeIdentity(
-                            name=recipe_name,
-                            content_hash=recipe_content_hash,
-                            composite_hash=recipe_composite_hash,
-                            version=recipe_version,
-                        ),
-                        max_sessions=ctx.config.linux_tracing.max_sessions,
-                        model_identity=model_identity,
-                        backend=cast(Literal["claude-code", "codex"], _step_backend.name),
-                        channel_b_capable=_step_backend.capabilities.channel_b_capable,
-                        comm_aliases=_step_backend.capabilities.process_name_aliases,
-                        telemetry=_build_error_path_telemetry(
-                            ctx.github_api_log,
-                            session_id="",
-                            step_name=step_name,
-                            order_id=order_id,
-                        ),
-                        backend_override_source=backend_override_source,
-                        native_shell_capture=terminal_capture_diagnostic,
-                    )
-            except Exception:
-                logger.debug("flush_session_log during cancel failed", exc_info=True)
-            _diag.log_cancelled(terminal_capture_diagnostic)
-            raise
+            result = None
+            skill_result = SkillResult.cancelled()
+            defer_cancellation(exc)
+            break
+        assert _result is not None
+        assert spec is not None
         _elapsed = time.monotonic() - _start_mono
         _end_ts = (datetime.fromisoformat(_start_ts) + timedelta(seconds=_elapsed)).isoformat()
         result = dataclasses.replace(  # type: ignore[arg-type]
@@ -458,24 +378,31 @@ async def _execute_claude_headless(
             and skill_result.retry_reason
             in (RetryReason.CONTRACT_RECOVERY, RetryReason.EARLY_STOP)
         ):
-            nudge_success = await _attempt_contract_nudge(
-                skill_result,
-                result,
-                expected_output_patterns,
-                completion_marker,
-                cwd,
-                runner,
-                backend=_step_backend,
-                result_parser=_step_backend.result_parser(),
-                provider_extras=current_provider_extras,
-                retry_reason=skill_result.retry_reason,
-                pty_override=pty_override,
-                skill_contract=skill_contract,
-                plugin_authority=plugin_authority,
-                plugin_load_mode=plugin_load_mode,
-                session_env=spec.env,
-                **lineage_callbacks.attempt_kwargs,
-            )
+            try:
+                nudge_success = await _attempt_contract_nudge(
+                    skill_result,
+                    result,
+                    expected_output_patterns,
+                    completion_marker,
+                    cwd,
+                    runner,
+                    backend=_step_backend,
+                    result_parser=_step_backend.result_parser(),
+                    provider_extras=current_provider_extras,
+                    retry_reason=skill_result.retry_reason,
+                    pty_override=pty_override,
+                    skill_contract=skill_contract,
+                    plugin_authority=plugin_authority,
+                    plugin_load_mode=plugin_load_mode,
+                    session_env=spec.env,
+                    **lineage_callbacks.attempt_kwargs,
+                )
+            except BaseException as exc:
+                logger.warning("headless_nudge_cancelled", exc_info=True)
+                skill_result = SkillResult.cancelled()
+                result = None
+                defer_cancellation(exc)
+                break
             if nudge_success is not None:
                 skill_result = nudge_success
 
@@ -484,16 +411,23 @@ async def _execute_claude_headless(
         _clone_reverted = False
         if _clone_snapshot is not None:
             _exclude_prefix = _derived_prefix or GUARD_EXCLUDE_PREFIX
-            skill_result, _clone_reverted = await check_and_revert_clone_contamination(
-                _clone_snapshot,
-                skill_result,
-                cwd,
-                runner,
-                ctx.audit,
-                skill_command=skill_command,
-                policy=_clone_guard_policy,
-                exclude_prefix=_exclude_prefix,
-            )
+            try:
+                skill_result, _clone_reverted = await check_and_revert_clone_contamination(
+                    _clone_snapshot,
+                    skill_result,
+                    cwd,
+                    runner,
+                    ctx.audit,
+                    skill_command=skill_command,
+                    policy=_clone_guard_policy,
+                    exclude_prefix=_exclude_prefix,
+                )
+            except BaseException as exc:
+                logger.warning("headless_clone_guard_cancelled", exc_info=True)
+                skill_result = SkillResult.cancelled()
+                result = None
+                defer_cancellation(exc)
+                break
 
         if (
             skill_result.retry_reason in {RetryReason.STALE, RetryReason.BUDGET_EXHAUSTED}
@@ -511,123 +445,155 @@ async def _execute_claude_headless(
             continue
         break
 
-    _metrics = _compute_post_session_metrics(cwd, _pre_session_sha, skill_result)
+    assert skill_result is not None
+    provider_outcome = ProviderOutcome(
+        provider_used=current_provider_name,
+        fallback_activated=fallback_activated,
+    )
+    recipe_identity = RecipeIdentity(
+        name=recipe_name,
+        content_hash=recipe_content_hash,
+        composite_hash=recipe_composite_hash,
+        version=recipe_version,
+    )
 
-    timing_seconds: float = result.elapsed_seconds
+    if result is not None:
+        assert spec is not None
+        _metrics = _compute_post_session_metrics(cwd, _pre_session_sha, skill_result)
+        timing_seconds = result.elapsed_seconds
 
-    # Extract the audit record (if any) added by this session
-    new_audit_records = ctx.audit.get_report_as_dicts()[audit_count_before:]
-    audit_record = new_audit_records[0] if new_audit_records else None
-    terminal_capture_diagnostic = _diag.capture(managed_lineage_observer)
+        # Extract the audit record (if any) added by this session.
+        new_audit_records = ctx.audit.get_report_as_dicts()[audit_count_before:]
+        audit_record = new_audit_records[0] if new_audit_records else None
 
-    if _diag.should_flush(result, skill_result, step_name, terminal_capture_diagnostic):
-        from autoskillit.execution.session_log import flush_session_log
+        from autoskillit.execution.session_log import _resolve_session_label
 
+        _token_label = _resolve_session_label(step_name, dispatch_id)
         try:
-            flush_session_log(
-                log_dir=ctx.config.linux_tracing.log_dir,
-                cwd=cwd,
-                kitchen_id=kitchen_id,
-                caller_session_id=caller_session_id,
-                order_id=order_id,
-                campaign_id=campaign_id,
-                dispatch_id=dispatch_id,
-                project_dir=project_dir,
-                build_protected_campaign_ids=ctx.build_protected_campaign_ids,
-                session_id=skill_result.session_id,
-                pid=result.pid,
-                skill_command=skill_command,
-                success=skill_result.success,
-                subtype=skill_result.subtype,
-                cli_subtype=skill_result.cli_subtype,
-                exit_code=skill_result.exit_code,
+            ctx.token_log.record(
+                _token_label,
+                skill_result.token_usage,
                 start_ts=result.start_ts,
                 end_ts=result.end_ts,
                 elapsed_seconds=result.elapsed_seconds,
-                termination_reason=result.termination.value,
-                kill_reason=skill_result.kill_reason.value,
-                snapshot_interval_seconds=ctx.config.linux_tracing.proc_interval,
-                proc_snapshots=result.proc_snapshots,
-                step_name=step_name,
-                telemetry=_build_session_telemetry(
-                    skill_result=skill_result,
-                    timing_seconds=timing_seconds,
-                    audit_record=audit_record,
-                    github_api_log=ctx.github_api_log,
-                    loc_insertions=_metrics.loc_insertions,
-                    loc_deletions=_metrics.loc_deletions,
-                    step_name=step_name,
-                    order_id=order_id,
-                ),
-                api_retry_count=skill_result.api_retry.count,
-                api_retry_last_error=skill_result.api_retry.last_error,
-                api_retry_last_status=skill_result.api_retry.last_status,
-                api_retry_exhausted=skill_result.api_retry.exhausted,
-                ndjson_unknown_event_count=skill_result.ndjson_drift.unknown_event_count,
-                ndjson_unknown_item_count=skill_result.ndjson_drift.unknown_item_count,
-                write_path_warnings=skill_result.write_path_warnings,
-                write_call_count=skill_result.evidence.write_call_count,
-                fs_writes_detected=skill_result.evidence.fs_writes_detected,
-                git_writes_detected=skill_result.evidence.git_writes_detected,
-                file_changes_count=skill_result.evidence.file_changes_count,
-                clone_contamination_reverted=_clone_reverted,
-                tracked_comm=result.tracked_comm,
-                comm_aliases=_step_backend.capabilities.process_name_aliases,
-                orphaned_tool_result=result.orphaned_tool_result,
-                raw_stdout=result.stdout
-                if (
-                    not skill_result.success or skill_result.kill_reason != KillReason.NATURAL_EXIT
-                )
-                else "",
-                last_stop_reason=skill_result.last_stop_reason,
-                versions=_versions,
-                provider_outcome=ProviderOutcome(
-                    provider_used=current_provider_name,
-                    fallback_activated=fallback_activated,
-                ),
-                recipe_identity=RecipeIdentity(
-                    name=recipe_name,
-                    content_hash=recipe_content_hash,
-                    composite_hash=recipe_composite_hash,
-                    version=recipe_version,
-                ),
-                max_sessions=ctx.config.linux_tracing.max_sessions,
-                model_identity=model_identity,
-                is_resume=spec.is_resume,
-                backend=cast(Literal["claude-code", "codex"], _step_backend.name),
-                channel_b_capable=_step_backend.capabilities.channel_b_capable,
-                backend_override_source=backend_override_source,
-                outcome_fields=skill_result.outcome_fields,
-                outcome_invariant_violated=skill_result.outcome_invariant_violated,
-                outcome_qualifier=skill_result.outcome_qualifier,
-                native_shell_capture=terminal_capture_diagnostic,
+                order_id=order_id,
+                loc_insertions=_metrics.loc_insertions,
+                loc_deletions=_metrics.loc_deletions,
+                model=model_identity.effective_model,
             )
+        except Exception:
+            logger.debug("token_log_record_failed", exc_info=True)
+        terminal_telemetry = _build_session_telemetry(
+            skill_result=skill_result,
+            timing_seconds=timing_seconds,
+            audit_record=audit_record,
+            github_api_log=ctx.github_api_log,
+            loc_insertions=_metrics.loc_insertions,
+            loc_deletions=_metrics.loc_deletions,
+            step_name=step_name,
+            order_id=order_id,
+        )
+    else:
+        terminal_telemetry = _build_error_path_telemetry(
+            ctx.github_api_log,
+            session_id="",
+            step_name=step_name,
+            order_id=order_id,
+        )
+
+    skill_result = dataclasses.replace(
+        skill_result,
+        provider=provider_outcome,
+    )
+
+    # One immutable value feeds the event, summary.json, and sessions.jsonl.
+    terminal_capture_diagnostic = _diag.capture(managed_lineage_observer)
+    if _diag.should_flush(result, skill_result, step_name, terminal_capture_diagnostic):
+        if result is None:
+            from autoskillit.execution import flush_session_log
+        else:
+            from autoskillit.execution.session_log import flush_session_log
+
+        flush_kwargs: dict[str, Any] = {
+            "log_dir": ctx.config.linux_tracing.log_dir,
+            "cwd": cwd,
+            "kitchen_id": kitchen_id,
+            "caller_session_id": caller_session_id,
+            "order_id": order_id,
+            "campaign_id": campaign_id,
+            "dispatch_id": dispatch_id,
+            "project_dir": project_dir,
+            "build_protected_campaign_ids": ctx.build_protected_campaign_ids,
+            "session_id": skill_result.session_id if result is not None else "",
+            "pid": result.pid if result is not None else 0,
+            "skill_command": skill_command,
+            "success": skill_result.success,
+            "subtype": skill_result.subtype,
+            "exit_code": skill_result.exit_code,
+            "start_ts": result.start_ts if result is not None else _start_ts,
+            "proc_snapshots": result.proc_snapshots if result is not None else None,
+            "termination_reason": (
+                result.termination.value if result is not None else terminal_reason_override
+            ),
+            "exception_text": terminal_exception_text,
+            "versions": _versions,
+            "provider_outcome": provider_outcome,
+            "recipe_identity": recipe_identity,
+            "max_sessions": ctx.config.linux_tracing.max_sessions,
+            "model_identity": model_identity,
+            "backend": cast(Literal["claude-code", "codex"], _step_backend.name),
+            "channel_b_capable": _step_backend.capabilities.channel_b_capable,
+            "comm_aliases": _step_backend.capabilities.process_name_aliases,
+            "telemetry": terminal_telemetry,
+            "backend_override_source": backend_override_source,
+            "native_shell_capture": terminal_capture_diagnostic,
+        }
+        if result is not None:
+            assert spec is not None
+            flush_kwargs.update(
+                {
+                    "cli_subtype": skill_result.cli_subtype,
+                    "end_ts": result.end_ts,
+                    "elapsed_seconds": result.elapsed_seconds,
+                    "kill_reason": skill_result.kill_reason.value,
+                    "snapshot_interval_seconds": ctx.config.linux_tracing.proc_interval,
+                    "step_name": step_name,
+                    "api_retry_count": skill_result.api_retry.count,
+                    "api_retry_last_error": skill_result.api_retry.last_error,
+                    "api_retry_last_status": skill_result.api_retry.last_status,
+                    "api_retry_exhausted": skill_result.api_retry.exhausted,
+                    "ndjson_unknown_event_count": skill_result.ndjson_drift.unknown_event_count,
+                    "ndjson_unknown_item_count": skill_result.ndjson_drift.unknown_item_count,
+                    "write_path_warnings": skill_result.write_path_warnings,
+                    "write_call_count": skill_result.evidence.write_call_count,
+                    "fs_writes_detected": skill_result.evidence.fs_writes_detected,
+                    "git_writes_detected": skill_result.evidence.git_writes_detected,
+                    "file_changes_count": skill_result.evidence.file_changes_count,
+                    "clone_contamination_reverted": _clone_reverted,
+                    "tracked_comm": result.tracked_comm,
+                    "orphaned_tool_result": result.orphaned_tool_result,
+                    "raw_stdout": (
+                        result.stdout
+                        if (
+                            not skill_result.success
+                            or skill_result.kill_reason != KillReason.NATURAL_EXIT
+                        )
+                        else ""
+                    ),
+                    "last_stop_reason": skill_result.last_stop_reason,
+                    "is_resume": spec.is_resume,
+                    "outcome_fields": skill_result.outcome_fields,
+                    "outcome_invariant_violated": skill_result.outcome_invariant_violated,
+                    "outcome_qualifier": skill_result.outcome_qualifier,
+                }
+            )
+        try:
+            with anyio.CancelScope(shield=pending_cancel is not None):
+                flush_session_log(**flush_kwargs)
         except Exception:
             logger.debug("session_log_flush_failed", exc_info=True)
 
     _diag.log_exit(terminal_capture_diagnostic, skill_result)
-
-    from autoskillit.execution.session_log import _resolve_session_label
-
-    _token_label = _resolve_session_label(step_name, dispatch_id)
-    try:
-        ctx.token_log.record(
-            _token_label,
-            skill_result.token_usage,
-            start_ts=result.start_ts,
-            end_ts=result.end_ts,
-            elapsed_seconds=result.elapsed_seconds,
-            order_id=order_id,
-            loc_insertions=_metrics.loc_insertions,
-            loc_deletions=_metrics.loc_deletions,
-            model=model_identity.effective_model,
-        )
-    except Exception:
-        logger.debug("token_log_record_failed", exc_info=True)
-    skill_result = dataclasses.replace(
-        skill_result,
-        provider=ProviderOutcome(
-            provider_used=current_provider_name, fallback_activated=fallback_activated
-        ),
-    )
+    if pending_cancel is not None:
+        raise pending_cancel.with_traceback(pending_cancel_traceback)
     return skill_result

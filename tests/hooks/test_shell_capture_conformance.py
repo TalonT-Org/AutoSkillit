@@ -26,9 +26,23 @@ from uuid import uuid4
 
 import pytest
 
+import autoskillit.hooks._capture_artifacts as capture_artifacts
 import autoskillit.hooks.shell_capture_hook as shell_capture_hook
+from autoskillit.core import (
+    ManagedHeadlessSessionKind,
+    NativeShellCaptureMode,
+    resolve_native_shell_capture_decision,
+)
+from autoskillit.execution.session import DefaultManagedHeadlessSessionLineageStore
 from autoskillit.hooks._capture_artifacts import open_capture_lifecycle
-from autoskillit.hooks._capture_contract import CaptureV2Fields, parse_capture_v2
+from autoskillit.hooks._capture_contract import (
+    CAPTURE_REQUEST_PROTOCOL_VERSION,
+    CaptureLineageRef,
+    CaptureRequest,
+    CaptureV2Fields,
+    encode_capture_request,
+    parse_capture_v2,
+)
 from autoskillit.hooks._capture_lifecycle import CaptureState
 from autoskillit.hooks.shell_capture_hook import _build_harness
 
@@ -37,6 +51,8 @@ pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 _INLINE_BYTES = 12_000
 _CAPTURE_SUBDIR = ".autoskillit/temp/shell_capture"
 _TIMEOUT = 30
+_DIRECT_LAUNCH_ID = "1" * 32
+_DIRECT_ATTEMPT_ID = "2" * 32
 _HARNESS_FORBIDDEN_VERBS: frozenset[str] = frozenset(
     {
         "rm",
@@ -239,6 +255,96 @@ def _main_generated_wrapper(command: str, cwd: Path, monkeypatch: pytest.MonkeyP
     assert exit_info.value.code == 0
     payload = json.loads(output.getvalue())
     return payload["hookSpecificOutput"]["updatedInput"]["command"]
+
+
+def _direct_lineage_reference(project: Path) -> CaptureLineageRef:
+    store = DefaultManagedHeadlessSessionLineageStore()
+    lineage = store.create(
+        lineage_anchor=project,
+        launch_id=_DIRECT_LAUNCH_ID,
+        decision=resolve_native_shell_capture_decision(NativeShellCaptureMode.DIRECT),
+        backend="codex",
+        session_kind=ManagedHeadlessSessionKind.SKILL,
+    )
+    lineage = store.append_attempt(
+        lineage_anchor=project,
+        launch_id=lineage.launch_id,
+        attempt_id=_DIRECT_ATTEMPT_ID,
+        expected_generation=lineage.generation,
+        expected_record_digest=lineage.record_digest,
+    )
+    return CaptureLineageRef(
+        schema_version=lineage.reference.schema_version,
+        launch_id=lineage.reference.launch_id,
+        lineage_digest=lineage.reference.lineage_digest,
+        lineage_anchor=lineage.reference.lineage_anchor,
+        anchor_device=lineage.reference.anchor_device,
+        anchor_inode=lineage.reference.anchor_inode,
+    )
+
+
+def _run_runner(
+    command: str,
+    project: Path,
+    *,
+    mode: str,
+) -> subprocess.CompletedProcess[bytes]:
+    lineage_ref = _direct_lineage_reference(project) if mode == "direct" else None
+    request = CaptureRequest(
+        protocol_version=CAPTURE_REQUEST_PROTOCOL_VERSION,
+        action="run",
+        mode=mode,
+        attempt_id=_DIRECT_ATTEMPT_ID if lineage_ref is not None else None,
+        lineage_ref=lineage_ref,
+        cwd=str(project),
+        capture_id=uuid4().hex[:16],
+        command=command,
+    )
+    return subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            str(Path(capture_artifacts.__file__).resolve()),
+            encode_capture_request(request),
+        ],
+        capture_output=True,
+        cwd=project,
+        timeout=_TIMEOUT,
+        check=False,
+    )
+
+
+@pytest.mark.parametrize(
+    ("label", "command"),
+    [
+        ("separate_streams_nonzero", "printf stdout; printf stderr >&2; exit 7"),
+        ("descriptor_cwd_zero", "printf 'cwd=%s' \"$PWD\""),
+        ("self_signal", "printf before-signal; kill -TERM $$"),
+    ],
+)
+def test_capture_direct_runner_matrix_preserves_shell_semantics(
+    tmp_path: Path,
+    label: str,
+    command: str,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    raw = _run_raw(command, project)
+    expected_returncode = 128 + (-raw.returncode) if raw.returncode < 0 else raw.returncode
+
+    direct = _run_runner(command, project, mode="direct")
+
+    assert direct.returncode == expected_returncode, label
+    assert direct.stdout == raw.stdout, label
+    assert direct.stderr == raw.stderr, label
+    assert not _artifact_files(project), label
+
+    captured = _run_runner(command, project, mode="capture")
+
+    assert captured.returncode == expected_returncode, label
+    assert captured.stdout == raw.stdout + raw.stderr, label
+    assert captured.stderr == b"", label
+    assert len(_artifact_files(project)) == 1, label
 
 
 @pytest.mark.parametrize("label,command", _CORPUS, ids=[row[0] for row in _CORPUS])

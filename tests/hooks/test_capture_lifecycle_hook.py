@@ -28,6 +28,7 @@ from autoskillit.hooks._capture._snapshot import (
     verify_capture_snapshot,
 )
 from autoskillit.hooks._capture_artifacts import create_capture_artifact
+from autoskillit.hooks._capture_contract import NATIVE_SHELL_CAPTURE_MODE_ENV_VAR
 from autoskillit.hooks._capture_lifecycle import (
     LEDGER_NAME,
     CaptureLifecycleError,
@@ -175,13 +176,17 @@ def _seed_due_capture(project: Path) -> Path:
 
 
 @pytest.mark.parametrize("headless", [False, True])
+@pytest.mark.parametrize("native_mode", ["capture", "direct"])
 def test_cleanup_hook_deletes_due_capture_in_every_session_scope(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     headless: bool,
+    native_mode: str,
 ) -> None:
     project = tmp_path / "project"
     project.mkdir()
     artifact = _seed_due_capture(project)
+    monkeypatch.setenv(NATIVE_SHELL_CAPTURE_MODE_ENV_VAR, native_mode)
 
     completed = _run_hook(project, {"cwd": str(project)}, headless=headless)
 
@@ -189,6 +194,7 @@ def test_cleanup_hook_deletes_due_capture_in_every_session_scope(
     assert completed.stdout == ""
     assert completed.stderr == ""
     assert not artifact.exists()
+    assert not list(project.joinpath(*CAPTURE_PATH_COMPONENTS).glob("shell_*.log"))
 
 
 @pytest.mark.parametrize(

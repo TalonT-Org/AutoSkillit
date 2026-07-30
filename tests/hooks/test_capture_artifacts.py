@@ -7,6 +7,7 @@ import errno
 import importlib
 import json
 import os
+import shlex
 import stat
 import subprocess
 from dataclasses import FrozenInstanceError
@@ -763,6 +764,67 @@ def test_setup_failure_prevents_user_command_and_emits_failure_marker(
     assert '"status":"capture_failed"' in captured.err
     assert "shell capture v2:" not in captured.out + captured.err
     assert not (project / "command_ran").exists()
+
+
+@pytest.mark.parametrize("root_shape", ["blocking_file", "symlink"])
+def test_validated_direct_bypasses_unusable_capture_root_without_artifact_or_lease(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    root_shape: str,
+) -> None:
+    project = tmp_path / "project"
+    capture_parent = project.joinpath(*CAPTURE_PATH_COMPONENTS[:-1])
+    capture_parent.mkdir(parents=True)
+    capture_root = capture_parent / CAPTURE_PATH_COMPONENTS[-1]
+    if root_shape == "blocking_file":
+        capture_root.write_text("must remain a file", encoding="utf-8")
+    else:
+        external = tmp_path / "external-capture-root"
+        external.mkdir()
+        capture_root.symlink_to(external, target_is_directory=True)
+
+    project_stat = project.stat()
+    reference = CaptureLineageRef(
+        schema_version=1,
+        launch_id="a" * 32,
+        lineage_digest="b" * 64,
+        lineage_anchor=str(project),
+        anchor_device=project_stat.st_dev,
+        anchor_inode=project_stat.st_ino,
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "validate_lineage_reference",
+        lambda supplied_ref, supplied_attempt: (
+            supplied_ref == reference and supplied_attempt == "c" * 32
+        ),
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "record_runner_observation",
+        lambda *_args, **_kwargs: True,
+    )
+
+    sentinel = project / "direct-ran"
+    assert (
+        run_capture(
+            f"printf direct > {shlex.quote(str(sentinel))}",
+            str(project),
+            _CAPTURE_ID,
+            requested_mode="direct",
+            attempt_id="c" * 32,
+            lineage_ref=reference,
+        )
+        == 0
+    )
+
+    assert sentinel.read_text(encoding="utf-8") == "direct"
+    assert not list(capture_root.glob("shell_*.log"))
+    if root_shape == "blocking_file":
+        assert capture_root.read_text(encoding="utf-8") == "must remain a file"
+    else:
+        assert capture_root.is_symlink()
+        assert not list(capture_root.iterdir())
 
 
 @pytest.mark.parametrize("capture_id", ["", "0123456789abcde", "0123456789abcdeg"])

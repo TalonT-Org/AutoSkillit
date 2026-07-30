@@ -109,7 +109,7 @@ class OwnedProcessGroup:
         return self.process.returncode
 
     def poll(self) -> int | None:
-        return self.process.poll()
+        return _poll_leader_without_reaping(self.process)
 
     def terminate(self) -> None:
         self.signal_group(signal.SIGTERM)
@@ -123,82 +123,121 @@ class OwnedProcessGroup:
     def wait(self) -> int:
         """Wait for the leader, settle remaining group members, and restore state."""
 
-        failure: BaseException | None = None
-        returncode: int | None = None
+        failures: list[BaseException] = []
         try:
-            returncode = self.process.wait()
-            self._settle_remaining_group()
+            _wait_for_leader_exit_without_reaping(self.process, timeout_seconds=None)
         except BaseException as exc:
             logger.error("owned_process_wait_failed", exc_info=True)
-            failure = exc
-            try:
-                self.settle()
-            except BaseException as cleanup_exc:
-                logger.error("owned_process_wait_cleanup_failed", exc_info=True)
-                raise BaseExceptionGroup(
-                    "owned process wait and cleanup failed",
-                    [exc, cleanup_exc],
-                ) from None
-        finally:
+            failures.append(exc)
+        returncode = self._settle_reap_and_verify(
+            failures,
+            reap_timeout_seconds=None,
+        )
+        try:
             self._restore_parent_state()
-        if failure is not None:
-            raise failure
+        except BaseException as exc:
+            logger.error("owned_process_parent_restore_failed", exc_info=True)
+            failures.append(exc)
+
+        if failures:
+            if len(failures) == 1:
+                raise failures[0]
+            raise BaseExceptionGroup("owned process wait failed", failures)
         if returncode is None:
             raise OwnedProcessError("owned process leader has no return code")
         return returncode
 
     def settle(self) -> int:
-        """Terminate the group when necessary, reap the leader, and prove absence."""
+        """Terminate the group when necessary, settle it, then reap the leader."""
 
         failures: list[BaseException] = []
         try:
-            if self.process.poll() is None:
+            if _poll_leader_without_reaping(self.process) is None:
                 self.signal_group(signal.SIGTERM)
-                try:
-                    self.process.wait(timeout=_TERM_TIMEOUT_SECONDS)
-                except subprocess.TimeoutExpired:
+                if not _wait_for_leader_exit_without_reaping(
+                    self.process,
+                    timeout_seconds=_TERM_TIMEOUT_SECONDS,
+                ):
                     self.signal_group(signal.SIGKILL)
-                    try:
-                        self.process.wait(timeout=_KILL_TIMEOUT_SECONDS)
-                    except subprocess.TimeoutExpired as exc:
+                    if not _wait_for_leader_exit_without_reaping(
+                        self.process,
+                        timeout_seconds=_KILL_TIMEOUT_SECONDS,
+                    ):
                         failures.append(
                             OwnedProcessError(
-                                f"owned process leader {self.process.pid} was not reaped"
+                                f"owned process leader {self.process.pid} did not exit"
                             )
                         )
-                        failures.append(exc)
-            elif self.process.returncode is None:
-                self.process.wait(timeout=_KILL_TIMEOUT_SECONDS)
+        except BaseException as exc:
+            logger.error("owned_process_termination_failed", exc_info=True)
+            failures.append(exc)
 
-            try:
-                self._settle_remaining_group()
-            except BaseException as exc:
-                logger.error("owned_process_group_cleanup_failed", exc_info=True)
-                failures.append(exc)
-        finally:
-            try:
-                self._restore_parent_state()
-            except BaseException as exc:
-                logger.error("owned_process_parent_restore_failed", exc_info=True)
-                failures.append(exc)
+        returncode = self._settle_reap_and_verify(
+            failures,
+            reap_timeout_seconds=_KILL_TIMEOUT_SECONDS,
+        )
+        try:
+            self._restore_parent_state()
+        except BaseException as exc:
+            logger.error("owned_process_parent_restore_failed", exc_info=True)
+            failures.append(exc)
 
         if failures:
             if len(failures) == 1:
                 raise failures[0]
             raise BaseExceptionGroup("owned process cleanup failed", failures)
-        returncode = self.process.returncode
         if returncode is None:
             raise OwnedProcessError("owned process leader has no return code")
         return returncode
 
+    def _settle_reap_and_verify(
+        self,
+        failures: list[BaseException],
+        *,
+        reap_timeout_seconds: float | None,
+    ) -> int | None:
+        """Settle under the anchored PGID, then reap and verify absence."""
+
+        returncode = self.process.returncode
+        if returncode is None:
+            try:
+                self._settle_remaining_group()
+            except BaseException as exc:
+                logger.error("owned_process_group_cleanup_failed", exc_info=True)
+                failures.append(exc)
+
+            try:
+                if reap_timeout_seconds is None:
+                    returncode = self.process.wait()
+                else:
+                    returncode = self.process.wait(timeout=reap_timeout_seconds)
+            except subprocess.TimeoutExpired as exc:
+                logger.error("owned_process_leader_reap_timed_out", exc_info=True)
+                failures.append(
+                    OwnedProcessError(f"owned process leader {self.process.pid} was not reaped")
+                )
+                failures.append(exc)
+            except BaseException as exc:
+                logger.error("owned_process_leader_reap_failed", exc_info=True)
+                failures.append(exc)
+
+        if returncode is not None:
+            try:
+                if not _wait_for_group_exit(self.pgid, _KILL_TIMEOUT_SECONDS):
+                    raise OwnedProcessError(
+                        f"owned process group {self.pgid} remains after leader reap"
+                    )
+            except BaseException as exc:
+                logger.error("owned_process_group_verification_failed", exc_info=True)
+                failures.append(exc)
+        return returncode
+
     def _settle_remaining_group(self) -> None:
-        if not _process_group_exists(self.pgid):
+        if _wait_for_group_exit(self.pgid, 0.0):
             return
         self.signal_group(signal.SIGTERM)
-        if not _wait_for_group_exit(self.pgid, _TERM_TIMEOUT_SECONDS):
+        if not _wait_for_group_exit(self.pgid, 0.0):
             self.signal_group(signal.SIGKILL)
-            if not _wait_for_group_exit(self.pgid, _KILL_TIMEOUT_SECONDS):
-                raise OwnedProcessError(f"owned process group {self.pgid} survived SIGKILL")
 
     def _restore_parent_state(self) -> None:
         if self._restored:
@@ -571,6 +610,50 @@ def _safe_tcsetpgrp(terminal_fd: int, pgid: int) -> None:
 def _require_posix_process_ownership() -> None:
     if os.name != "posix" or not hasattr(os, "killpg"):
         raise OwnedProcessError("shell runner requires POSIX process-group ownership")
+
+
+def _poll_leader_without_reaping(
+    process: subprocess.Popen[bytes],
+) -> int | None:
+    """Observe a real child leader without releasing its PGID anchor."""
+
+    if process.returncode is not None:
+        return process.returncode
+    if not isinstance(process, subprocess.Popen):
+        return process.poll()
+    required = ("P_PID", "WEXITED", "WNOHANG", "WNOWAIT", "waitid")
+    if any(not hasattr(os, name) for name in required):
+        raise OwnedProcessError("non-reaping process observation is unavailable")
+    try:
+        result = os.waitid(
+            os.P_PID,
+            process.pid,
+            os.WEXITED | os.WNOHANG | os.WNOWAIT,
+        )
+    except ChildProcessError as exc:
+        raise OwnedProcessError(f"owned process leader {process.pid} is not waitable") from exc
+    if result is None:
+        return None
+    if result.si_code == os.CLD_EXITED:
+        return int(result.si_status)
+    return -int(result.si_status)
+
+
+def _wait_for_leader_exit_without_reaping(
+    process: subprocess.Popen[bytes],
+    *,
+    timeout_seconds: float | None,
+) -> bool:
+    deadline = None if timeout_seconds is None else time.monotonic() + timeout_seconds
+    while _poll_leader_without_reaping(process) is None:
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            time.sleep(min(_GROUP_POLL_SECONDS, remaining))
+        else:
+            time.sleep(_GROUP_POLL_SECONDS)
+    return True
 
 
 def _wait_for_group_exit(pgid: int, timeout_seconds: float) -> bool:

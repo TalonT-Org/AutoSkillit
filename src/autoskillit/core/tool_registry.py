@@ -357,6 +357,7 @@ _TOOL_DEFS = (
             "ingredients": ToolWireType.OBJECT,
             "capture": ToolWireType.OBJECT,
             "resume_checkpoint": ToolWireType.OBJECT,
+            "native_shell_capture_mode": ToolWireType.STRING,
         },
     ),
     _tool(

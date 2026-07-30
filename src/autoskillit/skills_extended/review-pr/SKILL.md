@@ -965,7 +965,7 @@ else:
     }
 EXPERIMENTAL_AUDIT_STATE = VALIDATION_RESULT["state"]
 EXPERIMENTAL_CANDIDATES = VALIDATION_RESULT["candidates"]
-EXPERIMENTAL_AUDITOR_STATUS = VALIDATION_RESULT["status_by_name"]
+AUDITOR_STATUS_BY_NAME.update(VALIDATION_RESULT["status_by_name"])
 MALFORMED_ENVELOPES = VALIDATION_RESULT["malformed_envelopes"]
 
 # Construct DISPOSITION_RECORDS only after the mandatory parent evidence reads.
@@ -1477,8 +1477,9 @@ The raw ledger contains immutable linked arrays named `candidate_records`,
 `verdict_use_records`, and `publication_records`. Every candidate has
 `candidate_id` and `record_digest`; later records reference that ID rather than
 mutating the candidate. Dedup records include `dedup_group_id`, all member IDs,
-winner ID, and rationale. Include `GATE_AUTHORITY`, fixed-order auditor terminal
-status, review mode, snapshot, generations, accepted/rejected counts, and bounded
+winner ID, and rationale. Include `GATE_AUTHORITY`, the fixed-order
+`AUDITOR_STATUS_BY_NAME` terminal-status authority, review mode, snapshot,
+generations, accepted/rejected counts, and bounded
 malformed envelopes.
 
 Save findings summary to `${REVIEW_OUTPUT_DIR}summary_{pr_number}_{timestamp}.md`. (relative to the current working directory)

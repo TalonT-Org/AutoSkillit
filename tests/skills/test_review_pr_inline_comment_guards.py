@@ -89,6 +89,12 @@ def test_standard_findings_decode_degrades_on_parse_or_type_failure() -> None:
     assert '"validation_errors": STANDARD_VALIDATION_ERRORS' in SKILL_TEXT
 
 
+def test_auditor_status_uses_one_authoritative_mapping() -> None:
+    assert 'AUDITOR_STATUS_BY_NAME.update(VALIDATION_RESULT["status_by_name"])' in SKILL_TEXT
+    assert "EXPERIMENTAL_AUDITOR_STATUS =" not in SKILL_TEXT
+    assert "`AUDITOR_STATUS_BY_NAME` terminal-status authority" in SKILL_TEXT
+
+
 def test_skill_labels_tier2_as_degraded_failure():
     """Tier 2 (body dump) must be explicitly labeled as a degraded failure mode,
     not presented as an acceptable fallback."""

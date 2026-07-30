@@ -24,6 +24,7 @@ from autoskillit.hooks._capture_artifacts import (
     open_capture_root,
     open_project_anchor,
 )
+from autoskillit.hooks._capture_contract import decode_capture_request
 from autoskillit.hooks._capture_lifecycle import CaptureLifecycleStore
 from tests.execution.backends._conformance_assertions import (
     assert_shell_capture_marker_authority,
@@ -228,7 +229,8 @@ def test_snapshotted_runner_tail_reclaims_after_producer_release(
     assert completed.returncode == 0
     assert not due_artifact.exists()
     runner_argv = shlex.split(runner_command.splitlines()[-1])
-    capture_id = runner_argv[-1]
+    capture_id = decode_capture_request(runner_argv[-1]).capture_id
+    assert capture_id is not None
     authority = assert_shell_capture_marker_authority(
         completed.stdout,
         project,

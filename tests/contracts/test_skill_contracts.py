@@ -437,20 +437,21 @@ def test_skill_contracts_allowed_values_covers_recipe_routes() -> None:
 
 # T3-1
 def test_review_gate_loop_required_pattern_in_review_pr_contracts(skills):
-    """review-pr gate pattern must use OR-conditional form compatible with approved_with_comments.
+    """review-pr gate pattern admits both intentional tagless verdicts.
 
     The unconditional %%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%% pattern causes
     CONTRACT_VIOLATION for sessions that legitimately emit no gate tag
-    (approved_with_comments verdict). The corrected form must be an OR that accepts
-    either a gate tag or an approved_with_comments verdict.
+    (approved_with_comments and stale_snapshot). The corrected form accepts either
+    a gate tag or one of those exact verdicts.
     """
     assert "review-pr" in skills
     patterns = skills["review-pr"].get("expected_output_patterns", [])
     conditional_pattern = (
-        "(?:%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%|verdict[ \\t]*=[ \\t]*approved_with_comments)"
+        "(?:%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%|verdict[ \\t]*=[ "
+        "\\t]*(approved_with_comments|stale_snapshot))"
     )
     assert conditional_pattern in patterns, (
-        f"review-pr gate pattern must use OR-conditional form so that approved_with_comments "
+        f"review-pr gate pattern must use OR-conditional form so intentional tagless "
         f"sessions succeed without a %%REVIEW_GATE:: tag. "
         f"Expected pattern: {conditional_pattern!r}. Got: {patterns!r}"
     )
@@ -458,8 +459,7 @@ def test_review_gate_loop_required_pattern_in_review_pr_contracts(skills):
 
 # T3-2
 def test_review_gate_clear_pattern_in_review_pr_contracts(skills):
-    """review-pr REVIEW_GATE pattern must cover CLEAR and LOOP_REQUIRED; approved_with_comments
-    example must exist WITHOUT a gate tag."""
+    """Gate tags remain covered while intentional tagless examples have no tag."""
     assert "review-pr" in skills
     patterns = skills["review-pr"].get("expected_output_patterns", [])
     examples = skills["review-pr"].get("pattern_examples", [])
@@ -471,15 +471,16 @@ def test_review_gate_clear_pattern_in_review_pr_contracts(skills):
         f"REVIEW_GATE pattern must reference both tags; found: {gate_patterns}"
     )
 
-    awc_examples = [ex for ex in examples if "approved_with_comments" in ex]
-    assert awc_examples, (
-        "No approved_with_comments example found in pattern_examples — "
-        "add one to document the no-gate-tag path"
-    )
-    for ex in awc_examples:
-        assert "%%REVIEW_GATE::" not in ex, (
-            f"approved_with_comments example must NOT include %%REVIEW_GATE:: tag; found: {ex!r}"
+    for verdict in ("approved_with_comments", "stale_snapshot"):
+        tagless_examples = [ex for ex in examples if verdict in ex]
+        assert tagless_examples, (
+            f"No {verdict} example found in pattern_examples — "
+            "add one to document the no-gate-tag path"
         )
+        for example in tagless_examples:
+            assert "%%REVIEW_GATE::" not in example, (
+                f"{verdict} example must NOT include %%REVIEW_GATE:: tag; found: {example!r}"
+            )
 
 
 def test_skill_contracts_yaml_includes_setup_environment(skills: dict[str, Any]) -> None:

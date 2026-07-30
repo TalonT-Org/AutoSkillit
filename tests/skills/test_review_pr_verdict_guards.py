@@ -109,10 +109,20 @@ def test_review_pr_own_pr_comment_retry():
 def test_experimental_degradation_blocks_approval() -> None:
     text = _skill_text()
     step5 = text[text.index("### Step 5") : text.index("### Step 6")]
-    assert "GATE_STATE == degraded" in step5
-    assert "EXPERIMENTAL_AUDIT_STATE == degraded" in step5
-    assert 'verdict = "needs_human"' in step5
+    assert "determine_experimental_review_verdict" in step5
+    assert "gate_state=GATE_STATE" in step5
+    assert "experimental_audit_state=EXPERIMENTAL_AUDIT_STATE" in step5
+    assert "retained_snapshot_was_valid=RETAINED_SNAPSHOT_WAS_VALID" in step5
     assert step5.index("stale_snapshot") < step5.index("changes_requested")
+
+
+def test_initial_gate_degradation_is_not_classified_as_snapshot_movement() -> None:
+    text = _skill_text()
+    step2 = text[text.index("### Step 2.7") : text.index("### Step 2.5")]
+    assert "refresh_final_snapshot_state()" in step2
+    assert "FINAL_SNAPSHOT_STATE=authority_degraded" in step2
+    assert "Missing/malformed authority is degradation" in step2
+    assert "needs_human, never stale_snapshot" in step2
 
 
 def test_experimental_result_failures_are_distinct_from_empty_array() -> None:

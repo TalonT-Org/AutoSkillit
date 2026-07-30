@@ -72,7 +72,10 @@ by the recipe pipeline after `open_pr_step` opens the PR.
   verdict, artifact handoff, or GitHub mutation
 - Deduplicate findings by (file, line) pairs before posting
 - Issue all Task calls in a single message to maximize parallelism
-- Use the Write tool or bash redirects (`> path`) for all file writes — never `open(path, 'w')` or `.write_text()` inside a `python3` heredoc or `python3 -c` invocation, as these are blocked by the write guard
+- Publish every fixed-name file through a same-directory `mktemp` path and atomic
+  `mv`; a redirect may target only that temporary path, never the fixed destination.
+  Never `open(path, 'w')` or `.write_text()` inside a `python3` heredoc or
+  `python3 -c` invocation, as these are blocked by the write guard
 
 ## Workflow
 
@@ -210,7 +213,11 @@ else:
 
 Save to: `${REVIEW_OUTPUT_DIR}prior_threads_{pr_number}.json`
 
-Use `jq -n` or the Write tool to create this file. If the file already exists from a prior review loop iteration, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`). Do not use inline Python one-liners or heredoc scripts with `open()` — these are blocked by the sandbox.
+Render with `jq -n` into a same-directory `mktemp` path, then atomically `mv` that
+temporary over the fixed destination. If using the Write tool, write the temporary
+path first and rename it. Never redirect directly to the fixed destination. Do not
+use inline Python one-liners or heredoc scripts with `open()` — these are blocked by
+the sandbox.
 
 If the GraphQL call fails (token scope, network): set both lists to `[]` and log a warning.
 Prior-thread context is best-effort — failure must not abort the review.
@@ -241,20 +248,35 @@ METRICS_BASE_SHA=""
 METRICS_MERGE_BASE_SHA=""
 CHECKOUT_HEAD_SHA=""
 CHECKOUT_BASE_SHA=""
+CHECKOUT_MERGE_BASE_SHA=""
+LIVE_REFS=""
 LIVE_HEAD_SHA=""
 LIVE_BASE_SHA=""
+DIFF_SHA256=""
+PROFILE_ID=""
+ANNOTATION_GENERATION_ID=""
 METRICS_MARKER_BEFORE=""
 METRICS_MARKER_AFTER=""
+ARTIFACT_SNAPSHOT_DIR=""
+ANNOTATED_DIFF_SNAPSHOT_PATH=""
+HUNK_RANGES_SNAPSHOT_PATH=""
+VALID_LINES_SNAPSHOT_PATH=""
 ANNOTATED_DIFF=""
 VALID_LINE_RANGES="{}"
 VALID_DIFF_LINES=""
 GATE_STATE=degraded
 GATE_REASON_CODE=metrics_missing
+GATE_FAILED=false
 GATE_AUTHORITY='{"state":"degraded","reason_code":"metrics_missing","snapshot":{},"annotation_generation_id":""}'
 STANDARD_RAW_FINDINGS='[]'
 EXPERIMENTAL_CANDIDATES='[]'
 EXPERIMENTAL_AUDIT_STATE=not_eligible
 AUDITOR_STATUS_BY_NAME='{"pr-review-auditor-reachability":{"status":"not_started","reason_code":"not_eligible"},"pr-review-auditor-abstraction-surface":{"status":"not_started","reason_code":"not_eligible"}}'
+FINAL_SNAPSHOT_STATE=authority_degraded
+COMMIT_ID=""
+HTTP_STATUS=""
+BATCH_RESPONSE_TMP=""
+RECEIPT_DOCUMENT=""
 
 # Closed degraded reason codes:
 # metrics_missing, metrics_invalid_json, manifest_missing, manifest_invalid,
@@ -262,12 +284,14 @@ AUDITOR_STATUS_BY_NAME='{"pr-review-auditor-reachability":{"status":"not_started
 # artifact_name_mismatch, artifact_length_mismatch, artifact_digest_mismatch,
 # marker_changed, gate_missing, gate_not_boolean.
 degrade_gate() {
-    GATE_STATE=degraded
-    GATE_REASON_CODE="$1"
+    if [ "$GATE_FAILED" = false ]; then
+        GATE_STATE=degraded
+        GATE_REASON_CODE="$1"
+        GATE_FAILED=true
+    fi
     ANNOTATED_DIFF=""
     VALID_LINE_RANGES="{}"
     VALID_DIFF_LINES=""
-    unset annotated_diff_path hunk_ranges_path valid_lines_path
 }
 
 if [ -z "$REVIEW_CHECKOUT_ROOT" ] || [ ! -d "$REVIEW_CHECKOUT_ROOT" ]; then
@@ -275,53 +299,80 @@ if [ -z "$REVIEW_CHECKOUT_ROOT" ] || [ ! -d "$REVIEW_CHECKOUT_ROOT" ]; then
 elif [ -z "${diff_metrics_path:-}" ] || [ ! -f "$diff_metrics_path" ]; then
     degrade_gate metrics_missing
 else
-    METRICS_MARKER_BEFORE="$(cat "$diff_metrics_path")"
-    if ! printf '%s' "$METRICS_MARKER_BEFORE" | jq -e 'type == "object"' >/dev/null; then
+    # Retain one candidate generation in invocation-scoped files. Each cp reads
+    # through one open descriptor, so atomic publisher replacement can select an
+    # old or new complete file but cannot create mixed bytes within a retained file.
+    ARTIFACT_SNAPSHOT_DIR="$(mktemp -d "${REVIEW_OUTPUT_DIR%/}/gate_snapshot.XXXXXX")" ||
+        degrade_gate artifact_missing
+    METRICS_MARKER_BEFORE="${ARTIFACT_SNAPSHOT_DIR}/metrics.before"
+    METRICS_MARKER_AFTER="${ARTIFACT_SNAPSHOT_DIR}/metrics.after"
+    if [ "$GATE_FAILED" = false ] &&
+       ! cp -- "$diff_metrics_path" "$METRICS_MARKER_BEFORE"; then
+        degrade_gate metrics_missing
+    fi
+
+    if [ "$GATE_FAILED" = false ] &&
+       ! jq -e 'type == "object"' < "$METRICS_MARKER_BEFORE" >/dev/null; then
         degrade_gate metrics_invalid_json
-    elif ! printf '%s' "$METRICS_MARKER_BEFORE" | jq -e '
+    elif [ "$GATE_FAILED" = false ] &&
+         ! jq -e '
+        has("_head_sha") and
+        has("_base_sha") and
+        has("generation_id") and
+        has("diff_sha256") and
+        has("diff_byte_length") and
+        has("diff_source") and
+        has("artifacts") and
+        (.artifacts | has("annotated_diff") and has("hunk_ranges") and has("valid_lines"))
+    ' < "$METRICS_MARKER_BEFORE" >/dev/null; then
+        degrade_gate manifest_missing
+    elif [ "$GATE_FAILED" = false ] &&
+         ! jq -e '
         (._head_sha | type == "string" and length > 0) and
         (._base_sha | type == "string" and length > 0) and
         (.generation_id | type == "string" and length > 0) and
         (.diff_sha256 | type == "string" and length == 64) and
-        (.diff_byte_length | type == "number") and
+        (.diff_byte_length | type == "number" and . >= 0 and floor == .) and
         (.diff_source | type == "object") and
         (.artifacts | type == "object") and
         (.artifacts.annotated_diff | type == "object") and
         (.artifacts.hunk_ranges | type == "object") and
         (.artifacts.valid_lines | type == "object")
-    ' >/dev/null; then
-        degrade_gate manifest_missing
-    else
-        METRICS_HEAD_SHA="$(printf '%s' "$METRICS_MARKER_BEFORE" | jq -r '._head_sha')"
-        METRICS_BASE_SHA="$(printf '%s' "$METRICS_MARKER_BEFORE" | jq -r '._base_sha')"
-        METRICS_MERGE_BASE_SHA="$(printf '%s' "$METRICS_MARKER_BEFORE" | jq -r '._merge_base_sha // ""')"
-        ANNOTATION_GENERATION_ID="$(printf '%s' "$METRICS_MARKER_BEFORE" | jq -r '.generation_id')"
-        DIFF_SHA256="$(printf '%s' "$METRICS_MARKER_BEFORE" | jq -r '.diff_sha256')"
-        PROFILE_ID="$(printf '%s' "$METRICS_MARKER_BEFORE" | jq -r '.diff_source.profile_id // ""')"
+    ' < "$METRICS_MARKER_BEFORE" >/dev/null; then
+        degrade_gate manifest_invalid
+    fi
+
+    if [ "$GATE_FAILED" = false ]; then
+        METRICS_HEAD_SHA="$(jq -r '._head_sha' < "$METRICS_MARKER_BEFORE")"
+        METRICS_BASE_SHA="$(jq -r '._base_sha' < "$METRICS_MARKER_BEFORE")"
+        METRICS_MERGE_BASE_SHA="$(jq -r '._merge_base_sha // ""' < "$METRICS_MARKER_BEFORE")"
+        ANNOTATION_GENERATION_ID="$(jq -r '.generation_id' < "$METRICS_MARKER_BEFORE")"
+        DIFF_SHA256="$(jq -r '.diff_sha256' < "$METRICS_MARKER_BEFORE")"
+        PROFILE_ID="$(jq -r '.diff_source.profile_id // ""' < "$METRICS_MARKER_BEFORE")"
 
         # Validate the closed source/profile object before any gate read.
-        if [ "${mode}" = "local" ]; then
-            printf '%s' "$METRICS_MARKER_BEFORE" | jq -e '
+        if [ "$MODE" = "local" ]; then
+            jq -e '
               .review_mode == "local" and .diff_source == {
                 "comparison":"merge_base_to_head","context_lines":3,
                 "external_diff":false,"kind":"local_git",
                 "profile_id":"local_git_pinned_v1","rename_detection":"50%",
                 "text_conversion":false
-              }' >/dev/null || degrade_gate profile_invalid
+              }' < "$METRICS_MARKER_BEFORE" >/dev/null || degrade_gate profile_invalid
         else
-            printf '%s' "$METRICS_MARKER_BEFORE" | jq -e '
+            jq -e '
               .review_mode == "github" and .diff_source == {
                 "comparison":"pull_request","context_lines":3,
                 "external_diff":false,"kind":"github_pr",
                 "profile_id":"github_pr_diff_v1","rename_detection":"provider_default",
                 "text_conversion":false
-              }' >/dev/null || degrade_gate profile_invalid
+              }' < "$METRICS_MARKER_BEFORE" >/dev/null || degrade_gate profile_invalid
         fi
 
         CHECKOUT_HEAD_SHA="$(git -C "$REVIEW_CHECKOUT_ROOT" rev-parse HEAD 2>/dev/null || true)"
         if [ -z "$CHECKOUT_HEAD_SHA" ] || [ "$CHECKOUT_HEAD_SHA" != "$METRICS_HEAD_SHA" ]; then
             degrade_gate snapshot_mismatch
-        elif [ "${mode}" = "local" ]; then
+        elif [ "$MODE" = "local" ]; then
             CHECKOUT_BASE_SHA="$(git -C "$REVIEW_CHECKOUT_ROOT" rev-parse "${base_branch}" 2>/dev/null || true)"
             CHECKOUT_MERGE_BASE_SHA="$(git -C "$REVIEW_CHECKOUT_ROOT" merge-base "$CHECKOUT_BASE_SHA" "$CHECKOUT_HEAD_SHA" 2>/dev/null || true)"
             if [ -z "$CHECKOUT_BASE_SHA" ] || [ -z "$CHECKOUT_MERGE_BASE_SHA" ]; then
@@ -345,34 +396,48 @@ else
         # Verify fixed path names, byte lengths, and SHA-256 digests.
         for artifact_key in annotated_diff hunk_ranges valid_lines; do
             case "$artifact_key" in
-              annotated_diff) artifact_path="${annotated_diff_path:-}" ;;
-              hunk_ranges) artifact_path="${hunk_ranges_path:-}" ;;
-              valid_lines) artifact_path="${valid_lines_path:-}" ;;
+              annotated_diff)
+                artifact_path="${annotated_diff_path:-}"
+                retained_path="${ARTIFACT_SNAPSHOT_DIR}/annotated_diff"
+                ANNOTATED_DIFF_SNAPSHOT_PATH="$retained_path"
+                ;;
+              hunk_ranges)
+                artifact_path="${hunk_ranges_path:-}"
+                retained_path="${ARTIFACT_SNAPSHOT_DIR}/hunk_ranges"
+                HUNK_RANGES_SNAPSHOT_PATH="$retained_path"
+                ;;
+              valid_lines)
+                artifact_path="${valid_lines_path:-}"
+                retained_path="${ARTIFACT_SNAPSHOT_DIR}/valid_lines"
+                VALID_LINES_SNAPSHOT_PATH="$retained_path"
+                ;;
             esac
-            expected_name="$(printf '%s' "$METRICS_MARKER_BEFORE" | jq -r ".artifacts.${artifact_key}.basename // \"\"")"
-            expected_length="$(printf '%s' "$METRICS_MARKER_BEFORE" | jq -r ".artifacts.${artifact_key}.byte_length // \"\"")"
-            expected_digest="$(printf '%s' "$METRICS_MARKER_BEFORE" | jq -r ".artifacts.${artifact_key}.sha256 // \"\"")"
+            expected_name="$(jq -r ".artifacts.${artifact_key}.basename // \"\"" < "$METRICS_MARKER_BEFORE")"
+            expected_length="$(jq -r ".artifacts.${artifact_key}.byte_length // \"\"" < "$METRICS_MARKER_BEFORE")"
+            expected_digest="$(jq -r ".artifacts.${artifact_key}.sha256 // \"\"" < "$METRICS_MARKER_BEFORE")"
             if [ -z "$artifact_path" ] || [ ! -f "$artifact_path" ]; then
                 degrade_gate artifact_missing
             elif [ "$(basename "$artifact_path")" != "$expected_name" ]; then
                 degrade_gate artifact_name_mismatch
-            elif [ "$(wc -c < "$artifact_path" | tr -d ' ')" != "$expected_length" ]; then
+            elif ! cp -- "$artifact_path" "$retained_path"; then
+                degrade_gate artifact_missing
+            elif [ "$(wc -c < "$retained_path" | tr -d ' ')" != "$expected_length" ]; then
                 degrade_gate artifact_length_mismatch
-            elif [ "$(sha256sum "$artifact_path" | cut -d' ' -f1)" != "$expected_digest" ]; then
+            elif [ "$(sha256sum "$retained_path" | cut -d' ' -f1)" != "$expected_digest" ]; then
                 degrade_gate artifact_digest_mismatch
             fi
         done
 
-        METRICS_MARKER_AFTER="$(cat "$diff_metrics_path")"
-        if [ "$METRICS_MARKER_AFTER" != "$METRICS_MARKER_BEFORE" ]; then
+        if ! cp -- "$diff_metrics_path" "$METRICS_MARKER_AFTER" ||
+           ! cmp -s "$METRICS_MARKER_BEFORE" "$METRICS_MARKER_AFTER"; then
             degrade_gate marker_changed
-        elif ! printf '%s' "$METRICS_MARKER_BEFORE" | jq -e 'has("run_overengineering_audits")' >/dev/null; then
+        elif ! jq -e 'has("run_overengineering_audits")' < "$METRICS_MARKER_BEFORE" >/dev/null; then
             degrade_gate gate_missing
-        elif ! printf '%s' "$METRICS_MARKER_BEFORE" | jq -e '.run_overengineering_audits | type == "boolean"' >/dev/null; then
+        elif ! jq -e '.run_overengineering_audits | type == "boolean"' < "$METRICS_MARKER_BEFORE" >/dev/null; then
             degrade_gate gate_not_boolean
-        elif [ "$GATE_STATE" = degraded ] && [ "$GATE_REASON_CODE" != metrics_missing ]; then
+        elif [ "$GATE_FAILED" = true ]; then
             : # Retain the first deterministic validation failure.
-        elif [ "$(printf '%s' "$METRICS_MARKER_BEFORE" | jq -r '.run_overengineering_audits')" = true ]; then
+        elif [ "$(jq -r '.run_overengineering_audits' < "$METRICS_MARKER_BEFORE")" = true ]; then
             GATE_STATE=valid_true
             GATE_REASON_CODE=none
             EXPERIMENTAL_AUDIT_STATE=pending
@@ -383,9 +448,11 @@ else
         fi
 
         if [ "$GATE_STATE" = valid_true ] || [ "$GATE_STATE" = valid_false ]; then
-            ANNOTATED_DIFF="$(tail -n +2 "$annotated_diff_path")"
-            VALID_LINE_RANGES="$(cat "$hunk_ranges_path")"
-            VALID_DIFF_LINES="$(cat "$valid_lines_path")"
+            # Consume only the retained, digest-validated sidecars. Keep these files
+            # for final pre-effect revalidation; never reread the publisher paths.
+            ANNOTATED_DIFF="$(tail -n +2 "$ANNOTATED_DIFF_SNAPSHOT_PATH")"
+            VALID_LINE_RANGES="$(cat "$HUNK_RANGES_SNAPSHOT_PATH")"
+            VALID_DIFF_LINES="$(cat "$VALID_LINES_SNAPSHOT_PATH")"
         fi
     fi
 fi
@@ -403,6 +470,51 @@ GATE_AUTHORITY="$(jq -cn \
     head_sha:$head_sha,base_sha:$base_sha,merge_base_sha:$merge_base_sha,
     diff_sha256:$diff_sha256,profile_id:$profile_id
   },annotation_generation_id:$annotation_generation_id}')"
+
+revalidate_retained_snapshot() {
+    local current_marker="" current_head="" current_base="" current_merge_base=""
+    local current_live_refs="" current_live_head="" current_live_base=""
+    [ "$GATE_STATE" = valid_true ] || [ "$GATE_STATE" = valid_false ] || return 1
+    current_marker="$(mktemp "${REVIEW_OUTPUT_DIR%/}/metrics_recheck.XXXXXX")" || return 1
+    if ! cp -- "$diff_metrics_path" "$current_marker" ||
+       ! cmp -s "$METRICS_MARKER_BEFORE" "$current_marker" ||
+       ! cmp -s "$annotated_diff_path" "$ANNOTATED_DIFF_SNAPSHOT_PATH" ||
+       ! cmp -s "$hunk_ranges_path" "$HUNK_RANGES_SNAPSHOT_PATH" ||
+       ! cmp -s "$valid_lines_path" "$VALID_LINES_SNAPSHOT_PATH"; then
+        rm -f -- "$current_marker"
+        return 1
+    fi
+    rm -f -- "$current_marker"
+
+    current_head="$(git -C "$REVIEW_CHECKOUT_ROOT" rev-parse HEAD 2>/dev/null || true)"
+    [ "$current_head" = "$METRICS_HEAD_SHA" ] || return 1
+    if [ "$MODE" = "local" ]; then
+        current_base="$(git -C "$REVIEW_CHECKOUT_ROOT" rev-parse "$base_branch" 2>/dev/null || true)"
+        current_merge_base="$(git -C "$REVIEW_CHECKOUT_ROOT" merge-base "$current_base" "$current_head" 2>/dev/null || true)"
+        [ "$current_base" = "$METRICS_BASE_SHA" ] &&
+            [ "$current_merge_base" = "$METRICS_MERGE_BASE_SHA" ]
+    else
+        current_live_refs="$(gh pr view "$pr_number" --json headRefOid,baseRefOid 2>/dev/null || true)"
+        current_live_head="$(printf '%s' "$current_live_refs" | jq -r '.headRefOid // ""' 2>/dev/null)"
+        current_live_base="$(printf '%s' "$current_live_refs" | jq -r '.baseRefOid // ""' 2>/dev/null)"
+        [ "$current_live_head" = "$METRICS_HEAD_SHA" ] &&
+            [ "$current_live_base" = "$METRICS_BASE_SHA" ]
+    fi
+}
+
+refresh_final_snapshot_state() {
+    if [ "$GATE_STATE" = valid_true ] || [ "$GATE_STATE" = valid_false ]; then
+        if revalidate_retained_snapshot; then
+            FINAL_SNAPSHOT_STATE=fresh
+        else
+            FINAL_SNAPSHOT_STATE=stale
+        fi
+    else
+        # Missing/malformed authority is degradation, not movement of a retained
+        # valid snapshot. It must resolve to needs_human, never stale_snapshot.
+        FINAL_SNAPSHOT_STATE=authority_degraded
+    fi
+}
 ```
 
 `VALID_DIFF_LINES` is the exact right-side changed-line authority. An eligible
@@ -410,6 +522,12 @@ experimental run may never fall back to `VALID_LINE_RANGES`. Standard findings r
 the existing exact-line-first, hunk-range-fallback behavior. Every Git command, agent
 working directory, containment check, and parent evidence read uses
 `REVIEW_CHECKOUT_ROOT`.
+Call `refresh_final_snapshot_state` immediately before evidence reads, verdict
+computation, every GitHub mutation, and the single handoff publication. Only a
+previously valid retained authority that later fails byte/ref revalidation sets
+`FINAL_SNAPSHOT_STATE=stale`. Missing or malformed initial gate authority remains
+`authority_degraded` and resolves to `needs_human`; it is not a stale snapshot.
+Neither branch triggers a fresh sidecar read or adopts a newer generation.
 
 ### Step 2.5: Deletion Context Pre-Computation
 
@@ -467,6 +585,14 @@ deletion_context = {
 
 If `MERGE_BASE` is empty or any git command fails, set `deletion_context = null`.
 The parallel deletion regression audit is skipped when `deletion_context` is null.
+Resolve the dispatch decision with the installed production helper; it accepts no
+overengineering gate input, so the two authorities cannot become coupled:
+
+```python
+from autoskillit.smoke_utils import deletion_regression_is_eligible
+
+DELETION_DISPATCH_REQUIRED = deletion_regression_is_eligible(deletion_context)
+```
 
 ### Step 2.9: Diff-Size Adaptive Agent Selection
 
@@ -480,9 +606,11 @@ STANDARD_DISPATCH_AGENTS=""
 EXPERIMENTAL_DISPATCH_AGENTS=""
 
 if [ -n "$METRICS_MARKER_BEFORE" ]; then
-    STANDARD_DISPATCH_AGENTS="$(printf '%s' "$METRICS_MARKER_BEFORE" |
+    STANDARD_DISPATCH_AGENTS="$(
       jq -r 'if (.dispatch_agents | type) == "array"
-             then .dispatch_agents | join(",") else "" end' 2>/dev/null || true)"
+             then .dispatch_agents | join(",") else "" end' \
+        < "$METRICS_MARKER_BEFORE" 2>/dev/null || true
+    )"
 fi
 
 if [ "$GATE_STATE" = valid_true ] &&
@@ -526,8 +654,8 @@ auditor to that fallback.
 ### Step 3: Run Parallel Audit Subagents (SINGLE MESSAGE)
 
 Parse `STANDARD_DISPATCH_AGENTS` and `EXPERIMENTAL_DISPATCH_AGENTS` independently.
-Add independently eligible `deletion_context` work only when constructing the existing
-single foreground parallel batch.
+Add deletion work only when `DELETION_DISPATCH_REQUIRED` is true, independently of
+`GATE_STATE`, and only while constructing the existing single foreground parallel batch.
 
 **Issue ALL Task tool calls in a single message — one per dimension — so they execute
 in parallel. Do NOT iterate through dimensions across multiple turns.**
@@ -713,19 +841,22 @@ candidate key set is `file`, `line`, `dimension`, `severity`, `message`,
 - dimension is exactly `overengineering_reachability` or
   `overengineering_abstraction_surface`; severity is `critical`, `warning`, or
   `info`; `requires_decision` is an exact boolean;
+- `file`, `message`, and `simpler_behavior` are non-empty strings after trimming;
 - primary, evidence, and trace lines are positive integers excluding booleans;
 - the primary `(file, line)` occurs in exact `VALID_DIFF_LINES`, never only a hunk
   range;
 - evidence items have exactly `{path,line,role,claim}`, contain at least two
   distinct repository-relative `path:line` locations, and use only `anchor`,
   `caller`, `consumer`, `registration`, `invariant`, or
-  `counterevidence_checked`;
+  `counterevidence_checked`; every `path`, `role`, and `claim` is a non-empty
+  string after trimming;
 - trace items have exactly `{path,line,relation}` and form a non-empty ordered
-  chain;
+  chain; every `path` and `relation` is a non-empty string after trimming;
 - boundary checks contain exactly one `{boundary,status,claim}` row for each
   `reflection_decorators`, `dependency_injection`, `plugin_registry`,
   `cli_entrypoint`, `serialization`, `generated_code`, and `public_api`, with
   status `checked_absent`, `checked_no_reachable_path`, or `not_applicable`;
+  every boundary `claim` is a non-empty string after trimming;
 - paths are relative, contain no `..`, and canonically remain under
   `REVIEW_CHECKOUT_ROOT`;
 - `type(confidence)` is exactly integer or float, never boolean, is finite, and
@@ -744,7 +875,13 @@ mode-appropriate live refs, the byte-identical metrics marker, diff identity/pro
 and all artifact digests. Quote and read each cited location under
 `REVIEW_CHECKOUT_ROOT`. Write a separate immutable disposition record with a
 parent-generated `disposition_id` referencing `candidate_id`. Confidence never
-implies acceptance. The closed disposition/rejection reason codes are:
+implies acceptance. The parent must verify every role-labelled evidence claim,
+every one of the seven boundary claims, every hop in the complete ordered trace
+as a reachable chain, and the proposed simpler behavior's semantic equivalence
+for return values, exceptions, ordering, persistence, concurrency, and
+compatibility. Missing, contradictory, or unverified claims reject the candidate;
+the parent may not accept a sampled subset. The closed disposition/rejection
+reason codes are:
 `accepted`, `schema_invalid`, `path_escape`, `not_changed_line`,
 `stale_snapshot`, `insufficient_evidence`, `boundary_unchecked`,
 `reachable_counterexample`, `simpler_behavior_not_equivalent`,
@@ -756,9 +893,69 @@ received byte length and SHA-256, at most a 4 KiB excerpt or iteration-scoped ra
 reference, parse/schema errors, and rejection reason. Never copy unbounded model
 output into an ordinary summary.
 
-Feed only parent-accepted experimental findings into normal aggregation. Normalize
-sources in fixed order: `STANDARD_DISPATCH_AGENTS`, then `deletion_context`, then
-reachability, then abstraction-surface, preserving original array index.
+Use the installed helpers
+`autoskillit.smoke_utils.validate_experimental_auditor_outputs`,
+`build_malformed_review_envelope`, and
+`aggregate_experimental_review_candidates` as the canonical executable semantics
+for fixed-order all-or-nothing validation, bounded malformed envelopes, and
+accepted-only suppression-before-dedup. The aggregation call is the single combined
+standard/deletion/experimental aggregation boundary: pass the retained snapshot
+identity, exact changed-line authority, all standard/deletion findings, parent
+dispositions, and prior resolved findings.
+Use `prepare_experimental_review_publication` as the canonical executable semantics
+for common generation identity, local-findings-last ordering, and stale effect
+suppression. Use `publish_experimental_review_artifacts` for same-directory temporary
+writes, marker-last atomic renames, cleanup, and rollback. Validation, aggregation,
+and preparation perform no repository reads or writes; publication writes only the
+already-prepared documents. Parent evidence adjudication and every snapshot
+revalidation remain mandatory here.
+
+Invoke validation and aggregation directly and thread their returned records into
+the named review state; do not reimplement their behavior in prose:
+
+```python
+import json
+
+from autoskillit.smoke_utils import (
+    aggregate_experimental_review_candidates,
+    render_review_finding_body,
+    validate_experimental_auditor_outputs,
+)
+
+STANDARD_FINDINGS = json.loads(STANDARD_RAW_FINDINGS)
+VALIDATION_RESULT = validate_experimental_auditor_outputs(
+    outputs=EXPERIMENTAL_OUTCOMES_BY_NAME,
+    valid_diff_lines=VALID_DIFF_LINES,
+    snapshot=GATE_AUTHORITY["snapshot"],
+    review_root=REVIEW_CHECKOUT_ROOT,
+)
+EXPERIMENTAL_AUDIT_STATE = VALIDATION_RESULT["state"]
+EXPERIMENTAL_CANDIDATES = VALIDATION_RESULT["candidates"]
+EXPERIMENTAL_AUDITOR_STATUS = VALIDATION_RESULT["status_by_name"]
+MALFORMED_ENVELOPES = VALIDATION_RESULT["malformed_envelopes"]
+
+# Construct DISPOSITION_RECORDS only after the mandatory parent evidence reads.
+AGGREGATION_RESULT = aggregate_experimental_review_candidates(
+    candidates=EXPERIMENTAL_CANDIDATES,
+    dispositions=DISPOSITION_RECORDS,
+    prior_resolved_findings=prior_resolved_findings,
+    standard_findings=STANDARD_FINDINGS,
+)
+FINAL_REVIEW_FINDINGS = [
+    {**finding, "rendered_body": render_review_finding_body(finding)}
+    for finding in AGGREGATION_RESULT["survivors"]
+]
+all_findings = FINAL_REVIEW_FINDINGS
+AGGREGATION_RECORDS = AGGREGATION_RESULT["aggregation_records"]
+```
+
+Feed only parent-accepted experimental findings into normal aggregation. The helper
+is that single normal-aggregation boundary; standard and deletion findings enter
+without experimental dispositions. It normalizes every source in fixed order: the
+standard dimension allowlist, deletion regression, reachability, then
+abstraction-surface, preserving original array index. Suppress and deduplicate
+exactly once across that combined sequence; do not append a second
+standard/deletion list afterward.
 
 1. Suppression pass — before deduplication, remove a finding matching
    `prior_resolved_findings` by the same file and a line within ±5. Log
@@ -800,11 +997,14 @@ disposition, aggregation, verdict use, and publication as separate immutable lin
 records.
 
 Immediately before verdict computation and again before any artifact handoff or GitHub
-effect, rerun the full ref/marker/manifest validation from Step 2.7. If anything is
-unavailable or differs, set `FINAL_SNAPSHOT_STATE=stale`, discard survivor sets from
-effect-producing consumers, permit only diagnostic raw/summary envelopes with empty
-survivors, and emit `stale_snapshot`. Do not publish diff context, local findings,
-receipts, comments, reviews, or approvals. On freshness, set
+effect, call `refresh_final_snapshot_state`. If an initially valid retained snapshot
+is now unavailable or differs, discard survivor sets from effect-producing consumers,
+permit only diagnostic raw/summary envelopes with empty survivors, and emit
+`stale_snapshot`. In that movement branch the refresh helper sets
+`FINAL_SNAPSHOT_STATE=stale` before any consumer is selected. Initial gate
+degradation remains `authority_degraded` and emits
+`needs_human`. Do not publish diff context, local findings, receipts, comments,
+reviews, or approvals from either state. On freshness, set
 `COMMIT_ID="$METRICS_HEAD_SHA"` once and never query a later head to replace it.
 
 ### Step 4.5: Echo Primary Obligation
@@ -832,28 +1032,45 @@ No degraded gate, eligible audit, or stale snapshot may emit `approved`,
 
 **Verdict logic:**
 ```python
-decision_findings = [f for f in all_findings if f.get("requires_decision")]
-blocking_findings = [
-    f for f in all_findings
-    if not f.get("requires_decision") and f["severity"] == "critical"
-]
-warning_findings = [
-    f for f in all_findings
-    if not f.get("requires_decision") and f["severity"] == "warning"
-]
+from autoskillit.smoke_utils import determine_experimental_review_verdict
 
-if FINAL_SNAPSHOT_STATE == "stale":
-    verdict = "stale_snapshot"
-elif blocking_findings:
-    verdict = "changes_requested"
-elif GATE_STATE == degraded or EXPERIMENTAL_AUDIT_STATE == degraded:
-    verdict = "needs_human"
-elif warning_findings:
-    verdict = "approved_with_comments"
-elif decision_findings:
-    verdict = "needs_human"
+refresh_final_snapshot_state()
+RETAINED_SNAPSHOT_WAS_VALID = GATE_STATE in {"valid_true", "valid_false"}
+SNAPSHOT_IS_FRESH = FINAL_SNAPSHOT_STATE == "fresh"
+verdict = determine_experimental_review_verdict(
+    retained_snapshot_was_valid=RETAINED_SNAPSHOT_WAS_VALID,
+    final_snapshot_is_fresh=SNAPSHOT_IS_FRESH,
+    gate_state=GATE_STATE,
+    experimental_audit_state=EXPERIMENTAL_AUDIT_STATE,
+    findings=all_findings,
+)
+```
+
+Before Step 6, finish `RAW_LEDGER` and `HANDOFF_METADATA` in memory. The metadata
+contains the existing `summary`, `verdict`, `pr_number`, `iteration`,
+`schema_version`, and `written_at` fields. Derive the generation ID before any
+GitHub effect from the same final combined findings and ledger that Step 8 will
+publish:
+
+```python
+from autoskillit.smoke_utils import prepare_experimental_review_publication
+
+if SNAPSHOT_IS_FRESH:
+    PUBLICATION_SEED = prepare_experimental_review_publication(
+        raw_ledger=RAW_LEDGER,
+        survivors=FINAL_REVIEW_FINDINGS,
+        snapshot=GATE_AUTHORITY["snapshot"],
+        annotation_generation_id=ANNOTATION_GENERATION_ID,
+        mode=MODE,
+        snapshot_is_fresh=True,
+        handoff_metadata=HANDOFF_METADATA,
+    )
+    REVIEW_GENERATION_ID = PUBLICATION_SEED["artifacts"]["raw_findings"][
+        "review_generation_id"
+    ]
 else:
-    verdict = "approved"
+    PUBLICATION_SEED = None
+    REVIEW_GENERATION_ID = ""
 ```
 
 ### Step 6: Post Inline Review Comments
@@ -946,28 +1163,44 @@ COMMENTS_JSON=$(jq -n --argjson findings "$FILTERED_FINDINGS" '
     path: .file,
     line: .line,
     side: "RIGHT",
-    body: ("[" + .severity + "] " + .dimension + ": " + .message)
+    body: .rendered_body
   })
 ')
 
-# Build and post the full review payload via stdin
-jq -n \
-  --arg body "AutoSkillit PR Review — Verdict: {verdict}" \
-  --arg event "{APPROVE|COMMENT|REQUEST_CHANGES}" \
-  --arg commit_id "$COMMIT_ID" \
-  --argjson comments "$COMMENTS_JSON" \
-  '{body: $body, event: $event, commit_id: $commit_id, comments: $comments}' | \
-gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \
-  --method POST --input -
-
-# Write receipt file on success — checked by check_review_posted gate in the recipe
-if [ "$HTTP_STATUS" = "200" ]; then
-  # Publish the receipt atomically only after the final freshness recheck.
-  printf '{"posted":true}' > "${REVIEW_OUTPUT_DIR}.batch_review_response_${pr_number}.tmp"
-  mv "${REVIEW_OUTPUT_DIR}.batch_review_response_${pr_number}.tmp" \
-     "${REVIEW_OUTPUT_DIR}batch_review_response_${pr_number}.json"
+# Build and post the full review payload via stdin. --include makes the HTTP
+# status authoritative without relying on response-body shape.
+refresh_final_snapshot_state
+if [ "$FINAL_SNAPSHOT_STATE" = fresh ]; then
+  if BATCH_RESPONSE_TMP="$(mktemp "${REVIEW_OUTPUT_DIR%/}/batch_review_response.XXXXXX")"; then
+    jq -n \
+      --arg body "AutoSkillit PR Review — Verdict: {verdict}" \
+      --arg event "{APPROVE|COMMENT|REQUEST_CHANGES}" \
+      --arg commit_id "$COMMIT_ID" \
+      --argjson comments "$COMMENTS_JSON" \
+      '{body: $body, event: $event, commit_id: $commit_id, comments: $comments}' | \
+    gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \
+      --method POST --include --input - > "$BATCH_RESPONSE_TMP"
+    HTTP_STATUS="$(
+      awk 'toupper($1) ~ /^HTTP\// {status=$2} END {print status}' "$BATCH_RESPONSE_TMP"
+    )"
+  fi
 fi
+if [ "$HTTP_STATUS" = "200" ]; then
+  refresh_final_snapshot_state
+  if [ "$FINAL_SNAPSHOT_STATE" = fresh ]; then
+    RECEIPT_DOCUMENT="$(jq -cn \
+      --arg commit_id "$COMMIT_ID" \
+      --arg review_generation_id "$REVIEW_GENERATION_ID" \
+      '{posted:true,http_status:200,commit_id:$commit_id,
+        review_generation_id:$review_generation_id}')"
+  fi
+fi
+rm -f -- "$BATCH_RESPONSE_TMP"
 ```
+
+Step 6 constructs the receipt in memory only. It must not write the fixed receipt
+path. Step 8 passes the parsed `RECEIPT_DOCUMENT` to the sole atomic publisher, so
+raw findings and diff context are renamed before the receipt becomes visible.
 
 Event mapping:
 - `approved` → `APPROVE`
@@ -1004,7 +1237,7 @@ gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
   --field path="{finding.file}" \
   --field subject_type="file" \
   --field commit_id="$COMMIT_ID" \
-  --field body="[{finding.severity}] {finding.dimension} (L{finding.line} — outside diff hunk): {finding.message}"
+  --field body="{finding.rendered_body}"
 sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
@@ -1030,7 +1263,7 @@ gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
   --field line={finding.line} \
   --field side="RIGHT" \
   --field commit_id="$COMMIT_ID" \
-  --field body="[{finding.severity}] {finding.dimension}: {finding.message}"
+  --field body="{finding.rendered_body}"
 sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
@@ -1061,7 +1294,9 @@ gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \
   --method POST --input -
 ```
 
-Format each file's findings as a bullet list (not a markdown table):
+Format each file's findings as a bullet list (not a markdown table). Reuse
+`finding.rendered_body` verbatim for every bullet; it is the same compact renderer
+used by the primary batch, file-level comments, and Tier 1:
 
 ```
 ## AutoSkillit Review Findings
@@ -1069,10 +1304,10 @@ Format each file's findings as a bullet list (not a markdown table):
 **Verdict:** {verdict}
 
 ### path/to/file.py
-- **L{line}** [{severity}/{dimension}]: {message, truncated to 120 chars}
+- **L{line}** {finding.rendered_body}
 
 ### path/to/other.py
-- **L{line}** [{severity}/{dimension}]: {message, truncated to 120 chars}
+- **L{line}** {finding.rendered_body}
 ```
 
 This bullet-list format avoids horizontal overflow from long message content.
@@ -1113,7 +1348,7 @@ pair of consecutive POST/PATCH/PUT/DELETE calls.
 
 When `UNPOSTABLE_FINDINGS` is non-empty, construct the body by appending the following
 section after the verdict one-liner. Group unpostable findings by file, format as a
-bullet list reusing the Tier 2 format (120-char message truncation).
+bullet list reusing the Tier 2 `finding.rendered_body` format.
 
 **TRUNCATION GUARD:** Cap the Outside Diff Range section at ~40,000 characters.
 The GitHub review body has a hard 65,536-char limit (HTTP 422 on overflow,
@@ -1129,10 +1364,10 @@ Template for the appended section:
 These findings target lines not in the diff and could not be posted as inline comments:
 
 **path/to/file.py**
-- **L42** [critical/arch]: Finding message truncated to 120 chars
+- **L42** {finding.rendered_body}
 
 **path/to/other.py**
-- **L99** [warning/security]: Finding message truncated to 120 chars
+- **L99** {finding.rendered_body}
 ```
 
 ### Step 8: Write Summary and Emit Verdict
@@ -1169,6 +1404,65 @@ status, review mode, snapshot, generations, accepted/rejected counts, and bounde
 malformed envelopes.
 
 Save findings summary to `${REVIEW_OUTPUT_DIR}summary_{pr_number}_{timestamp}.md`. (relative to the current working directory)
+
+Prepare and publish the structured artifacts with the installed executable
+helpers. The final freshness check selects a complete or diagnostic-only
+publication; the publisher stages every document before renaming and rolls back
+any completed rename if a later boundary fails. Execute
+`refresh_final_snapshot_state` immediately before this block and assign
+`FINAL_SNAPSHOT_STATE == "fresh"` to the Python boolean `SNAPSHOT_IS_FRESH`.
+Parse `RECEIPT_DOCUMENT` only when it is non-empty:
+
+```python
+import json
+
+from autoskillit.smoke_utils import (
+    prepare_experimental_review_publication,
+    publish_experimental_review_artifacts,
+)
+
+PUBLICATION = prepare_experimental_review_publication(
+    raw_ledger=RAW_LEDGER,
+    survivors=FINAL_REVIEW_FINDINGS,
+    snapshot=GATE_AUTHORITY["snapshot"],
+    annotation_generation_id=ANNOTATION_GENERATION_ID,
+    mode=MODE,
+    snapshot_is_fresh=SNAPSHOT_IS_FRESH,
+    handoff_metadata=HANDOFF_METADATA,
+    receipt=(
+        json.loads(RECEIPT_DOCUMENT)
+        if MODE == "github" and RECEIPT_DOCUMENT
+        else None
+    ),
+)
+if SNAPSHOT_IS_FRESH:
+    assert (
+        PUBLICATION["artifacts"]["raw_findings"]["review_generation_id"]
+        == REVIEW_GENERATION_ID
+    )
+PUBLICATION_RESULT = publish_experimental_review_artifacts(
+    publication=PUBLICATION,
+    output_dir=REVIEW_OUTPUT_DIR,
+    pr_number=str(pr_number),
+)
+```
+
+This publisher is the only writer of the fixed raw-findings, diff-context,
+GitHub-receipt, and local-findings paths. Its executable order is raw findings,
+diff context, then the GitHub receipt; local mode instead publishes local findings
+last. Every downstream finding is copied from `FINAL_REVIEW_FINDINGS`, retains
+opaque fields, and carries both `file` and the normalized `path` alias plus
+`body`, `side`, and `code_region`.
+
+**Write Raw Findings JSON (first):**
+
+As the first publication, build the complete raw ledger in memory using the schema
+specified below. The sole publisher renders it into a same-directory temporary path
+and atomically renames it to
+`${REVIEW_OUTPUT_DIR}raw_findings_{pr_number}.json`. Do not begin diff-context,
+receipt, or local-findings publication until this rename succeeds. On
+`stale_snapshot`, the raw ledger is a bounded diagnostic envelope with empty
+survivor and publication sets.
 
 **Write Diff-Scoped Context Handoff (before emitting verdict):**
 
@@ -1228,11 +1522,13 @@ Log: `"Wrote diff-scoped context handoff: N entries → {path}"`. If the write f
 (e.g., temp dir unavailable), log a warning and continue — the handoff file is
 best-effort and its absence is handled gracefully by resolve-review.
 
-Use `jq -n` or the Write tool to create this file. If the file already exists from a prior review loop iteration, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`). Do not use inline Python one-liners or heredoc scripts with `open()` — these are blocked by the sandbox.
+Do not independently render or rename this fixed path: the helper invocation above
+normalizes and publishes it in the same transaction as raw findings and the final
+receipt/local marker.
 
-**Write Raw Findings JSON (after diff-context handoff):**
+**Raw Findings JSON schema (published first):**
 
-Write the raw findings source ledger before effect-bearing handoffs. It preserves
+The raw findings source ledger preserves
 standard findings, experimental candidates, validation, disposition, aggregation,
 verdict-use, publication, rejected-candidate, and malformed-envelope records.
 
@@ -1271,7 +1567,10 @@ affected the verdict, and any gate/audit/snapshot degradation. GitHub rendering
 contains compact repository-relative evidence and accepted experimental dimensions
 only.
 
-Use `jq -n` or the Write tool to create this file. If the file already exists from a prior review loop iteration, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`). Do not use inline Python one-liners or heredoc scripts with `open()` — these are blocked by the sandbox.
+Use the first-publication transaction above; this schema section does not authorize
+a second write. Never redirect directly to the fixed destination. Do not use inline
+Python one-liners or heredoc scripts with `open()` — these are blocked by the
+sandbox.
 
 Output the verdict as the final line:
 

@@ -1,8 +1,14 @@
 """Guards: resolve-review loads and uses diff_context handoff file from review-pr."""
 
+import json
 from pathlib import Path
 
 import pytest
+
+from autoskillit.smoke_utils import (
+    prepare_experimental_review_publication,
+    publish_experimental_review_artifacts,
+)
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
@@ -131,3 +137,90 @@ def test_enriched_context_fields_remain_opaque_dict_values() -> None:
         "snapshot",
     ):
         assert field in section
+
+
+@pytest.mark.parametrize("mode", ["local", "github"])
+def test_actual_publisher_output_matches_resolve_review_path_line_boundary(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    findings = [
+        {
+            "file": "src/reach.py",
+            "line": 11,
+            "severity": "warning",
+            "dimension": "overengineering_reachability",
+            "message": "No reachable consumer",
+            "requires_decision": False,
+            "candidate_id": "reach",
+            "disposition_id": "disposition-reach",
+            "evidence": [{"opaque": "preserved"}],
+            "code_region": "[L11]+unused",
+        },
+        {
+            "file": "src/surface.py",
+            "line": 22,
+            "severity": "warning",
+            "dimension": "overengineering_abstraction_surface",
+            "message": "Unused abstraction surface",
+            "requires_decision": False,
+            "candidate_id": "surface",
+            "disposition_id": "disposition-surface",
+            "custom_proof": {"kept": True},
+        },
+        {
+            "file": "src/standard.py",
+            "line": 33,
+            "severity": "critical",
+            "dimension": "bugs",
+            "message": "Standard finding",
+            "requires_decision": False,
+            "candidate_id": "standard",
+        },
+        {
+            "file": "src/deleted.py",
+            "line": 44,
+            "severity": "critical",
+            "dimension": "deletion_regression",
+            "message": "Deletion regression",
+            "requires_decision": False,
+            "candidate_id": "deletion",
+        },
+    ]
+    publication = prepare_experimental_review_publication(
+        raw_ledger={"candidate_records": findings},
+        survivors=findings,
+        snapshot={"head_sha": "head", "base_sha": "base", "merge_base_sha": "merge"},
+        annotation_generation_id="annotation",
+        mode=mode,
+        snapshot_is_fresh=True,
+        handoff_metadata={"pr_number": 51, "iteration": 3},
+        receipt=(
+            {"posted": True, "http_status": 200, "commit_id": "head"} if mode == "github" else None
+        ),
+    )
+    published = publish_experimental_review_artifacts(
+        publication=publication,
+        output_dir=str(tmp_path / mode),
+        pr_number="51",
+    )
+
+    diff_context = json.loads(Path(published["published_paths"]["diff_context"]).read_text())
+    resolve_review_map = {
+        (entry["path"], entry["line"]): dict(entry) for entry in diff_context["context_entries"]
+    }
+    assert set(resolve_review_map) == {
+        ("src/reach.py", 11),
+        ("src/surface.py", 22),
+        ("src/standard.py", 33),
+        ("src/deleted.py", 44),
+    }
+    assert resolve_review_map[("src/reach.py", 11)]["code_region"] == "[L11]+unused"
+    assert resolve_review_map[("src/reach.py", 11)]["evidence"] == [{"opaque": "preserved"}]
+    assert resolve_review_map[("src/surface.py", 22)]["custom_proof"] == {"kept": True}
+    assert {resolve_review_map[key]["dimension"] for key in resolve_review_map} >= {
+        "overengineering_reachability",
+        "overengineering_abstraction_surface",
+        "bugs",
+        "deletion_regression",
+    }

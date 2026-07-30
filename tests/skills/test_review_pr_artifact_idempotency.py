@@ -17,7 +17,9 @@ _SKILL_PATH = (
     / "SKILL.md"
 )
 
-_IDEMPOTENT_KEYWORDS = frozenset(["read it first", "already exists", "Bash redirect", "jq -n"])
+_IDEMPOTENT_KEYWORDS = frozenset(
+    ["read it first", "already exists", "Bash redirect", "jq -n", "atomically rename"]
+)
 
 _VULNERABLE_FILES = [
     "prior_threads_{pr_number}.json",
@@ -93,10 +95,32 @@ def test_effect_artifacts_use_same_directory_temporary_and_atomic_rename() -> No
     assert "local_findings_{pr_number}.json last" in step8
     assert "review_generation_id" in step8
     assert "annotation_generation_id" in step8
+    assert step8.index("**Write Raw Findings JSON (first):**") < step8.index(
+        "**Write Diff-Scoped Context Handoff"
+    )
+
+
+def test_runtime_threads_validation_aggregation_and_publication_results() -> None:
+    text = _SKILL_PATH.read_text()
+    step4 = text[text.index("### Step 4") : text.index("### Step 4.5")]
+    step8 = text[text.index("### Step 8") :]
+
+    assert "VALIDATION_RESULT = validate_experimental_auditor_outputs(" in step4
+    assert 'EXPERIMENTAL_CANDIDATES = VALIDATION_RESULT["candidates"]' in step4
+    assert "AGGREGATION_RESULT = aggregate_experimental_review_candidates(" in step4
+    assert 'for finding in AGGREGATION_RESULT["survivors"]' in step4
+    assert "FINAL_REVIEW_FINDINGS" in step4
+    assert "standard_findings=STANDARD_FINDINGS" in step4
+    assert "PUBLICATION = prepare_experimental_review_publication(" in step8
+    assert "survivors=FINAL_REVIEW_FINDINGS" in step8
+    assert "receipt=" in step8
+    assert "PUBLICATION_RESULT = publish_experimental_review_artifacts(" in step8
 
 
 def test_fixed_destinations_reject_direct_redirects() -> None:
     text = _SKILL_PATH.read_text()
+    assert "jq -n ... > path" not in text
+    assert "bash redirects (`> path`)" not in text
     for filename in (
         "diff_context_${pr_number}.json",
         "raw_findings_${pr_number}.json",

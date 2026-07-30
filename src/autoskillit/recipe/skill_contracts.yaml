@@ -722,13 +722,13 @@ skills:
       description: "Written when mode=local. Path to local_findings_{pr_number}.json output."
     expected_output_patterns:
     - "verdict[ \\t]*=[ \\t]*(approved|approved_with_comments|changes_requested|needs_human|stale_snapshot)"
-    - "(?:%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%|verdict[ \\t]*=[ \\t]*approved_with_comments)"
+    - "(?:%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%|verdict[ \\t]*=[ \\t]*(approved_with_comments|stale_snapshot))"
     pattern_examples:
     - "verdict = approved\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
     - "verdict = approved_with_comments\n%%ORDER_UP%%"
     - "verdict = changes_requested\n%%REVIEW_GATE::LOOP_REQUIRED%%\n%%ORDER_UP%%"
     - "verdict = needs_human\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
-    - "verdict = stale_snapshot\n%%REVIEW_GATE::LOOP_REQUIRED%%\n%%ORDER_UP%%"
+    - "verdict = stale_snapshot\n%%ORDER_UP%%"
     negative_examples:
     - "verdict = approved\n%%ORDER_UP%%"
 

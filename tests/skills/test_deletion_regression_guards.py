@@ -7,6 +7,7 @@ when a PR reintroduces code that was deliberately deleted from the base branch.
 import pytest
 
 from autoskillit.core.paths import pkg_root
+from autoskillit.smoke_utils import deletion_regression_is_eligible
 
 SKILLS_ROOT = pkg_root() / "skills_extended"
 MERGE_PR_SKILL = SKILLS_ROOT / "merge-pr" / "SKILL.md"
@@ -183,7 +184,7 @@ def test_review_pr_deletion_regression_subagent_severity_is_critical(review_pr_t
 
 def test_review_pr_deletion_regression_requires_decision_false(review_pr_text):
     """The deletion_regression subagent must set requires_decision=false."""
-    dr_idx = review_pr_text.find("deletion_regression")
+    dr_idx = review_pr_text.find("Subagent prompt template (dimension 7 — deletion_regression")
     assert dr_idx != -1
     context = review_pr_text[dr_idx : dr_idx + 1500]
     has_false = "requires_decision=false" in context or "requires_decision: false" in context
@@ -213,3 +214,42 @@ def test_review_pr_finding_schema_dimension_union_complete(review_pr_text):
         "the pipe-separated dimension union: "
         "'arch|tests|defense|bugs|cohesion|slop|deletion_regression'"
     )
+
+
+@pytest.mark.parametrize("gate_state", ["valid_true", "valid_false"])
+@pytest.mark.parametrize(
+    ("deletion_context", "expected"),
+    [
+        (
+            {
+                "merge_base": "a" * 40,
+                "deleted_files": ["src/removed.py"],
+                "deleted_symbols": [],
+            },
+            True,
+        ),
+        (None, False),
+    ],
+)
+def test_review_pr_overengineering_gate_is_independent_of_deletion_eligibility(
+    review_pr_text,
+    gate_state,
+    deletion_context,
+    expected,
+):
+    """The executable deletion decision is identical for both gate values."""
+    assert gate_state in {"valid_true", "valid_false"}
+    assert deletion_regression_is_eligible(deletion_context) is expected
+
+    step_25_start = review_pr_text.index("### Step 2.5:")
+    step_3_start = review_pr_text.index("### Step 3:")
+    deletion_section = review_pr_text[step_25_start:step_3_start]
+    assert "deletion_regression_is_eligible(deletion_context)" in deletion_section
+    call_index = deletion_section.index("deletion_regression_is_eligible(deletion_context)")
+    helper_call = deletion_section[call_index - 100 : call_index + 100]
+    assert "GATE_STATE" not in helper_call
+
+    step_4_start = review_pr_text.index("### Step 4:", step_3_start)
+    step_3 = review_pr_text[step_3_start:step_4_start]
+    assert "DELETION_DISPATCH_REQUIRED" in step_3
+    assert "Only spawned when `deletion_context` is non-null." in step_3

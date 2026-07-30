@@ -12,6 +12,17 @@ from autoskillit.smoke_utils._eval import (
     parse_agent_eval_manifests,
     parse_eval_manifests,
 )
+from autoskillit.smoke_utils._experimental_review import (
+    EXPERIMENTAL_REVIEW_AUDITORS,
+    aggregate_experimental_review_candidates,
+    build_malformed_review_envelope,
+    deletion_regression_is_eligible,
+    determine_experimental_review_verdict,
+    prepare_experimental_review_publication,
+    publish_experimental_review_artifacts,
+    render_review_finding_body,
+    validate_experimental_auditor_outputs,
+)
 from autoskillit.smoke_utils._git import (
     check_bug_report_non_empty,
     check_commits_ahead,
@@ -42,13 +53,16 @@ from autoskillit.smoke_utils._review import (
 from autoskillit.smoke_utils._telemetry import consolidate_health_reports, patch_pr_token_summary
 
 __all__ = [
+    "EXPERIMENTAL_REVIEW_AUDITORS",
     "LOCAL_ROUND_EXEMPT_VERDICTS",
     "REQUIRED_CRITERION_KEYS",
     "VALID_CRITERION_TYPES",
+    "aggregate_experimental_review_candidates",
     "aggregate_review_verdict",
     "annotate_pr_diff",
     "build_agent_eval_context",
     "build_eval_context",
+    "build_malformed_review_envelope",
     "check_bug_report_non_empty",
     "check_commits_ahead",
     "check_loop_iteration",
@@ -62,6 +76,8 @@ __all__ = [
     "compile_eval_scorecard",
     "compute_domain_partitions",
     "detect_zero_changes",
+    "deletion_regression_is_eligible",
+    "determine_experimental_review_verdict",
     "diagnose_merge_gate",
     "enrich_diff_context",
     "extract_investigation",
@@ -72,6 +88,10 @@ __all__ = [
     "parse_eval_manifests",
     "patch_pr_token_summary",
     "pre_iteration_cleanup",
+    "prepare_experimental_review_publication",
+    "publish_experimental_review_artifacts",
+    "render_review_finding_body",
     "select_review_dimensions",
     "try_load_json",
+    "validate_experimental_auditor_outputs",
 ]

@@ -264,12 +264,15 @@ def test_review_pr_gate_consumption_follows_manifest_and_marker_freshness() -> N
         "### Step 2.5: Deletion Context Pre-Computation",
     )
 
-    first_marker = step_2_7.index('METRICS_MARKER_BEFORE="$(cat "$diff_metrics_path")"')
+    first_marker = step_2_7.index('cp -- "$diff_metrics_path" "$METRICS_MARKER_BEFORE"')
     manifest_validation = step_2_7.index("artifact_digest_mismatch", first_marker)
-    second_marker = step_2_7.index('METRICS_MARKER_AFTER="$(cat "$diff_metrics_path")"')
+    second_marker = step_2_7.index('cp -- "$diff_metrics_path" "$METRICS_MARKER_AFTER"')
+    marker_comparison = step_2_7.index('cmp -s "$METRICS_MARKER_BEFORE" "$METRICS_MARKER_AFTER"')
     gate_type_check = step_2_7.index('.run_overengineering_audits | type == "boolean"')
 
-    assert first_marker < manifest_validation < second_marker < gate_type_check
+    assert first_marker < manifest_validation < second_marker < marker_comparison < gate_type_check
+    assert 'cat "$HUNK_RANGES_SNAPSHOT_PATH"' in step_2_7
+    assert 'cat "$VALID_LINES_SNAPSHOT_PATH"' in step_2_7
     assert "GATE_STATE=valid_true" in step_2_7
     assert "GATE_STATE=valid_false" in step_2_7
     assert "GATE_STATE=degraded" in step_2_7

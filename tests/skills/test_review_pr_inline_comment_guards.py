@@ -6,10 +6,15 @@ and a non-table tiered fallback. Each test makes it impossible to
 silently regress its guarded element.
 """
 
+import json
+import os
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
+
+from autoskillit.smoke_utils import render_review_finding_body
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
@@ -150,6 +155,94 @@ def test_step6_uses_input_flag_not_field_for_comments():
     )
 
 
+def test_step6_captures_http_status_and_publishes_receipt_only_on_200() -> None:
+    step6_start = SKILL_TEXT.index("### Step 6")
+    step65_start = SKILL_TEXT.index("### Step 6.5")
+    section = SKILL_TEXT[step6_start:step65_start]
+    assert "--include --input -" in section
+    assert 'HTTP_STATUS="$(' in section
+    assert "awk 'toupper($1) ~ /^HTTP\\//" in section
+    assert 'if [ "$HTTP_STATUS" = "200" ]; then' in section
+    assert "refresh_final_snapshot_state" in section
+    assert "RECEIPT_DOCUMENT=" in section
+    assert "http_status:200" in section
+    assert '--arg commit_id "$COMMIT_ID"' in section
+    assert '--arg review_generation_id "$REVIEW_GENERATION_ID"' in section
+    assert "must not write the fixed receipt" in section
+    assert "comments` array" in section
+
+
+@pytest.mark.parametrize(
+    ("http_status", "snapshot_rc", "expect_receipt"),
+    [("200", "0", True), ("201", "0", False), ("200", "1", False)],
+)
+def test_step6_receipt_effect_requires_http_200_and_fresh_authoritative_commit(
+    tmp_path: Path,
+    http_status: str,
+    snapshot_rc: str,
+    expect_receipt: bool,
+) -> None:
+    block_start = SKILL_TEXT.index('if [ "$HTTP_STATUS" = "200" ]; then')
+    block_end = SKILL_TEXT.index('rm -f -- "$BATCH_RESPONSE_TMP"', block_start)
+    receipt_block = SKILL_TEXT[block_start:block_end]
+    capture_path = tmp_path / "receipt-in-memory.json"
+    script = "\n".join(
+        [
+            'revalidate_retained_snapshot() { return "$SNAPSHOT_RC"; }',
+            (
+                "refresh_final_snapshot_state() { "
+                "if revalidate_retained_snapshot; then FINAL_SNAPSHOT_STATE=fresh; "
+                "else FINAL_SNAPSHOT_STATE=stale; fi; }"
+            ),
+            receipt_block,
+            'printf \'%s\' "$RECEIPT_DOCUMENT" > "$CAPTURE_PATH"',
+        ]
+    )
+    env = {
+        **os.environ,
+        "HTTP_STATUS": http_status,
+        "SNAPSHOT_RC": snapshot_rc,
+        "REVIEW_OUTPUT_DIR": f"{tmp_path}/",
+        "pr_number": "42",
+        "COMMIT_ID": "authoritative-head",
+        "REVIEW_GENERATION_ID": "review-generation",
+        "CAPTURE_PATH": str(capture_path),
+    }
+
+    result = subprocess.run(
+        ["bash", "-c", script],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not (tmp_path / "batch_review_response_42.json").exists()
+    serialized_receipt = capture_path.read_text()
+    assert bool(serialized_receipt) is expect_receipt
+    if expect_receipt:
+        receipt = json.loads(serialized_receipt)
+        assert receipt == {
+            "posted": True,
+            "http_status": 200,
+            "commit_id": "authoritative-head",
+            "review_generation_id": "review-generation",
+        }
+
+
+def test_primary_and_every_fallback_reuse_the_canonical_rendered_body() -> None:
+    step6 = SKILL_TEXT[
+        SKILL_TEXT.index("### Step 6: Post Inline Review Comments") : SKILL_TEXT.index(
+            "### Step 6.5"
+        )
+    ]
+    assert "body: .rendered_body" in step6
+    assert step6.count('--field body="{finding.rendered_body}"') >= 2
+    assert "`finding.rendered_body` verbatim for every bullet" in step6
+
+
 def test_step15_resolve_review_uses_input_flag_not_field_for_comments():
     """resolve-review Step 1.5 must prescribe --input - for the batch reviews POST.
 
@@ -254,6 +347,56 @@ def test_step6_uses_filtered_findings_as_comment_source():
         "Step 6 must reference FILTERED_FINDINGS as the source for inline comments. "
         "Using all findings bypasses hunk-range validation from Step 4."
     )
+
+
+def test_step6_rendering_preserves_accepted_evidence_and_disposition_provenance():
+    """The concrete jq payload must carry accepted proof evidence through GitHub."""
+    step6_start = SKILL_TEXT.index("### Step 6")
+    step65_start = SKILL_TEXT.index("### Step 6.5", step6_start)
+    step6_section = SKILL_TEXT[step6_start:step65_start]
+    prefix = 'COMMENTS_JSON=$(jq -n --argjson findings "$FILTERED_FINDINGS" \''
+    program_start = step6_section.index(prefix) + len(prefix)
+    program_end = step6_section.index("\n')", program_start)
+    jq_program = step6_section[program_start:program_end]
+    finding = {
+        "file": "src/app.py",
+        "line": 42,
+        "severity": "warning",
+        "dimension": "overengineering_reachability",
+        "message": "Unreachable state machinery",
+        "candidate_id": "candidate-1",
+        "disposition_id": "disposition-1",
+        "evidence": [
+            {
+                "path": "src/app.py",
+                "line": 42,
+                "role": "anchor",
+                "claim": "State is declared here",
+            },
+            {
+                "path": "src/caller.py",
+                "line": 7,
+                "role": "caller",
+                "claim": "Only caller excludes the state",
+            },
+        ],
+    }
+    findings = [{**finding, "rendered_body": render_review_finding_body(finding)}]
+
+    result = subprocess.run(
+        ["jq", "-n", "--argjson", "findings", json.dumps(findings), jq_program],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    comments = json.loads(result.stdout)
+
+    assert len(comments) == 1
+    body = comments[0]["body"]
+    assert "src/app.py:42 [anchor] State is declared here" in body
+    assert "src/caller.py:7 [caller] Only caller excludes the state" in body
+    assert "candidate_id=candidate-1" in body
+    assert "disposition_id=disposition-1" in body
 
 
 def test_step65_positioned_between_step6_and_step7():

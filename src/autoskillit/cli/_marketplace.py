@@ -32,9 +32,6 @@ from autoskillit.cli._install_snapshot import (
     _InstallSnapshot,
     _plugin_cache_dir,
 )
-from autoskillit.cli._install_snapshot import (
-    _installed_plugins_json_path as _installed_plugins_json_path,
-)
 from autoskillit.core import (
     SkillExecutionRole,
     SkillSource,

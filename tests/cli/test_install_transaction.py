@@ -592,13 +592,14 @@ def test_failure_after_every_persistent_mutation_stage_restores_prestate(
     marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
     import autoskillit.workspace as workspace
     from autoskillit.cli import _plugin_artifact
+    from autoskillit.cli._install_snapshot import _installed_plugins_json_path
     from autoskillit.cli.update import _update_checks
     from autoskillit.cli.update._update_checks_fetch import _fetch_cache_path
 
     projection = tmp_path / ".autoskillit" / "marketplace"
     manifest = projection / ".claude-plugin" / "marketplace.json"
     known = tmp_path / ".claude" / "plugins" / "known_marketplaces.json"
-    installed = marketplace._installed_plugins_json_path()
+    installed = _installed_plugins_json_path()
     target = marketplace._installed_plugin_root(_VERSION)
     identity = _plugin_artifact.installed_artifact_manifest_path(target)
     retiring = tmp_path / ".autoskillit" / "retiring_cache.json"
@@ -906,6 +907,7 @@ def test_child_failure_restores_every_staged_shared_surface(
 ) -> None:
     marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
     from autoskillit.cli import _plugin_artifact
+    from autoskillit.cli._install_snapshot import _installed_plugins_json_path
 
     projection = tmp_path / ".autoskillit" / "marketplace"
     projection.mkdir(parents=True)
@@ -913,7 +915,7 @@ def test_child_failure_restores_every_staged_shared_surface(
     known = tmp_path / ".claude" / "plugins" / "known_marketplaces.json"
     known.parent.mkdir(parents=True)
     known.write_text('{"old": true}')
-    installed = marketplace._installed_plugins_json_path()
+    installed = _installed_plugins_json_path()
     installed.write_text('{"version": 2, "plugins": {"old": {}}}')
     retiring = tmp_path / ".autoskillit" / "retiring_cache.json"
     retiring.write_text('{"schema_version": 2, "records": []}')

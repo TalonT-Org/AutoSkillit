@@ -71,7 +71,6 @@ class DispatchEffectName(StrEnum):
     LOCAL_PROCESS_CLEANUP = "local_process_cleanup"
     STATE_CLEANUP = "state_cleanup"
     LABEL_CLEANUP = "label_cleanup"
-    COMPENSATION = "compensation"
 
 
 class DispatchEffectPhase(StrEnum):
@@ -133,7 +132,6 @@ class DispatchEffectProvenance:
     local_cleanup: ProcessCleanupResult | None = None
     state_cleanup_confirmed: bool = False
     labels_cleanup_confirmed: bool = False
-    fresh_retry_authorized: bool = False
 
     @property
     def aggregate_phase(self) -> DispatchAggregatePhase:
@@ -155,7 +153,7 @@ class DispatchEffectProvenance:
     @property
     def retry_disposition(self) -> DispatchRetryDisposition:
         aggregate = self.aggregate_phase
-        if self.fresh_retry_authorized or aggregate == DispatchAggregatePhase.NOT_STARTED:
+        if aggregate == DispatchAggregatePhase.NOT_STARTED:
             return DispatchRetryDisposition.FRESH_DISPATCH_ALLOWED
         if aggregate == DispatchAggregatePhase.UNKNOWN:
             return DispatchRetryDisposition.RECONCILE_REQUIRED
@@ -173,7 +171,6 @@ class DispatchEffectProvenance:
             ),
             "state_cleanup_confirmed": self.state_cleanup_confirmed,
             "labels_cleanup_confirmed": self.labels_cleanup_confirmed,
-            "fresh_retry_authorized": self.fresh_retry_authorized,
         }
 
 
@@ -187,7 +184,6 @@ class DispatchProvenanceTracker:
         self._local_cleanup: ProcessCleanupResult | None = None
         self._state_cleanup_confirmed = False
         self._labels_cleanup_confirmed = False
-        self._fresh_retry_authorized = False
         self._lock = threading.Lock()
 
     def _effect_id(self, name: DispatchEffectName) -> str:
@@ -287,10 +283,6 @@ class DispatchProvenanceTracker:
         with self._lock:
             self._labels_cleanup_confirmed = confirmed
 
-    def authorize_fresh_retry_after_compensation(self) -> None:
-        with self._lock:
-            self._fresh_retry_authorized = True
-
     def snapshot(self) -> DispatchEffectProvenance:
         with self._lock:
             return DispatchEffectProvenance(
@@ -303,7 +295,6 @@ class DispatchProvenanceTracker:
                 local_cleanup=self._local_cleanup,
                 state_cleanup_confirmed=self._state_cleanup_confirmed,
                 labels_cleanup_confirmed=self._labels_cleanup_confirmed,
-                fresh_retry_authorized=self._fresh_retry_authorized,
             )
 
 

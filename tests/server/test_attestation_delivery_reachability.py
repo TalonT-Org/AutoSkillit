@@ -185,9 +185,11 @@ async def test_no_delivery_mode_omits_the_attestation_credential(
     tool_ctx_kitchen_open.session_serve_overrides = None
     tool_ctx_kitchen_open.session_serve_defer_unresolved = False
     tool_ctx_kitchen_open.recipe_name = ""
+    arm = forbid_artifact_reads
 
     match mode:
         case RecipeDeliveryMode.ORDINARY_INLINE:
+            arm()
             envelope = await _open_kitchen_patched(_RECIPE_ORDINARY, _OVERRIDES, monkeypatch)
             assert envelope.get("success") is True
             assert not envelope.get("delivery_bound_spill")
@@ -206,6 +208,7 @@ async def test_no_delivery_mode_omits_the_attestation_credential(
             payload = _payload("remediation body\n" + ("x" * 30_000))
             payload["recipe_name"] = _RECIPE_ENVELOPE
             tool_ctx_kitchen_open.backend = _protected_codex_backend()
+            arm()
             finalized = _finalize_recipe_delivery(
                 payload,
                 surface="open_kitchen",
@@ -231,6 +234,7 @@ async def test_no_delivery_mode_omits_the_attestation_credential(
             assert envelope["delivery_bound_spill"] is True
             assert RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY not in envelope
             await _credit_initialization_sections(envelope)
+            arm()
             from autoskillit.server.tools.tools_recipe import complete_recipe_initialization
 
             receipt = json.loads(

@@ -69,7 +69,8 @@ __all__ = [
 ]
 
 FRAME_MAGIC = _capture_ledger.FRAME_MAGIC
-LEDGER_NAME, LOCK_NAME = ".capture-lifecycle.ledger", ".capture-lifecycle.lock"
+LEDGER_NAME = ".capture-lifecycle.ledger"
+LOCK_NAME = ".capture-lifecycle.lock"
 MAX_LEDGER_BYTES = _capture_ledger.MAX_LEDGER_BYTES
 MAX_ACTIVE_RECORDS = 4096
 
@@ -456,12 +457,7 @@ class CaptureLifecycleStore:
             or candidate.revision != previous.revision + 1
         ):
             raise CaptureLifecycleError("transition did not produce one valid successor")
-        self._append_locked(
-            candidate,
-            records,
-            compaction_epoch,
-            ledger_size,
-        )
+        self._append_locked(candidate, records, compaction_epoch, ledger_size)
         return candidate
 
     def _transition(

@@ -918,9 +918,10 @@ def publish_experimental_review_artifacts(
             except OSError as error:  # pragma: no cover - exceptional filesystem failure
                 rollback_error = error
         if rollback_error is not None:
-            raise RuntimeError(
-                "publication failed and rollback was incomplete"
-            ) from rollback_error
+            raise ExceptionGroup(
+                "publication failed and rollback was incomplete",
+                [publication_error, rollback_error],
+            )
         raise RuntimeError(
             "experimental review artifact publication failed"
         ) from publication_error

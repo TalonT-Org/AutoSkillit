@@ -2511,6 +2511,49 @@ def test_experimental_publication_rolls_back_each_rename_boundary(
     assert not list(output_dir.glob(".*.tmp"))
 
 
+def test_experimental_publication_preserves_publication_and_rollback_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import autoskillit.smoke_utils._experimental_review as experimental_review
+
+    publication = _prepared_local_experimental_publication()
+    output_dir = tmp_path / "review-output"
+    output_dir.mkdir()
+    final_paths = [
+        output_dir / "raw_findings_20.json",
+        output_dir / "diff_context_20.json",
+        output_dir / "local_findings_20.json",
+    ]
+    for index, path in enumerate(final_paths):
+        path.write_text(f"old-{index}")
+    real_replace = os.replace
+    replace_count = 0
+
+    def failing_replace(source: str | os.PathLike[str], destination: str | os.PathLike[str]):
+        nonlocal replace_count
+        replace_count += 1
+        if replace_count == 2:
+            raise OSError("injected publication failure")
+        if replace_count == 3:
+            raise OSError("injected rollback failure")
+        real_replace(source, destination)
+
+    monkeypatch.setattr(experimental_review.os, "replace", failing_replace)
+    with pytest.raises(ExceptionGroup) as exc_info:
+        publish_experimental_review_artifacts(
+            publication=publication,
+            output_dir=str(output_dir),
+            pr_number="20",
+        )
+
+    errors = exc_info.value.exceptions
+    assert [str(error) for error in errors] == [
+        "injected publication failure",
+        "injected rollback failure",
+    ]
+
+
 # ---------------------------------------------------------------------------
 # T_EDC1–T_EDC4: enrich_diff_context tests
 # ---------------------------------------------------------------------------

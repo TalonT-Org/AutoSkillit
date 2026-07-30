@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture import _resolver as _capture_resolver
     from autoskillit.hooks._capture import _snapshot as _capture_snapshot
     from autoskillit.hooks._capture import _sweep as _capture_sweep
+    from autoskillit.hooks._capture import _syntax as _capture_syntax
     from autoskillit.hooks._capture import _types as _capture_types
 else:
     _CAPTURE_PACKAGE = f"{__package__}._capture" if __package__ else "_capture"
@@ -36,6 +37,7 @@ else:
     _capture_resolver = importlib.import_module(f"{_CAPTURE_PACKAGE}._resolver")
     _capture_snapshot = importlib.import_module(f"{_CAPTURE_PACKAGE}._snapshot")
     _capture_sweep = importlib.import_module(f"{_CAPTURE_PACKAGE}._sweep")
+    _capture_syntax = importlib.import_module(f"{_CAPTURE_PACKAGE}._syntax")
     _capture_types = importlib.import_module(f"{_CAPTURE_PACKAGE}._types")
 
 CaptureCleanupOutcome = _capture_types.CaptureCleanupOutcome
@@ -81,8 +83,8 @@ _MAX_RETRY_SECONDS = 3600.0
 _COMPACTION_THRESHOLD_BYTES = 3 * 1024 * 1024
 _MAX_COMPACTION_BYTES = 4 * 1024 * 1024
 _MAX_TOMBSTONES = 256
-_CAPTURE_ID_RE = re.compile(r"^[0-9a-f]{16}$")
-_INCARNATION_RE = re.compile(r"^[0-9a-f]{32}$")
+_CAPTURE_ID_RE = _capture_syntax.CAPTURE_ID_RE
+_INCARNATION_RE = _capture_syntax.INCARNATION_RE
 _PUBLIC_NAME_RE = re.compile(r"^shell_[0-9a-f]{16}\.log$")
 _STAGING_NAME_RE = re.compile(r"^\.capture-staging-[0-9a-f]{16}-[0-9a-f]{16}$")
 _QUARANTINE_NAME_RE = re.compile(r"^\.capture-quarantine-[0-9a-f]{16}-[0-9a-f]{16}$")

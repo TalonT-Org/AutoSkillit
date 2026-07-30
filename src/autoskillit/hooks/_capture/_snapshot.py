@@ -16,6 +16,18 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any, NoReturn, SupportsIndex
 
 from . import _descriptor
+from ._syntax import (
+    CAPTURE_ID_RE as _CAPTURE_ID_RE,
+)
+from ._syntax import (
+    INCARNATION_RE as _INCARNATION_RE,
+)
+from ._syntax import (
+    REFERENCE_RE as _REFERENCE_RE,
+)
+from ._syntax import (
+    SHA256_RE as _SHA256_RE,
+)
 
 if TYPE_CHECKING:
     from autoskillit.hooks._capture_contract import (
@@ -65,11 +77,7 @@ MAX_MANIFEST_BYTES = 8 * 1024
 MAX_REFERENCE_TOKEN_BYTES = 192
 
 _AUTHORITY_FACTORY_TOKEN = object()
-_CAPTURE_ID_RE = re.compile(r"^[0-9a-f]{16}$")
-_INCARNATION_RE = re.compile(r"^[0-9a-f]{32}$")
-_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _CARRIER_NAME_RE = re.compile(r"^shell_[0-9a-f]{16}\.log$")
-_REFERENCE_RE = re.compile(r"^ascr2:([0-9a-f]{16}):([0-9a-f]{32}):([0-9a-f]{64})$")
 _UNTRUSTED_MODE_BITS = stat.S_IRWXG | stat.S_IRWXO
 _READ_CHUNK_BYTES = 64 * 1024
 _MANIFEST_FIELDS = frozenset(

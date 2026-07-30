@@ -21,6 +21,12 @@ from ._snapshot import (
     CaptureStatus,
     LegacyCleanupOnly,
 )
+from ._syntax import (
+    CAPTURE_ID_RE as _CAPTURE_ID_RE,
+)
+from ._syntax import (
+    INCARNATION_RE as _INCARNATION_RE,
+)
 
 _THIS_MODULE = sys.modules[__name__]
 for _alias in ("_capture._ledger", "autoskillit.hooks._capture._ledger"):
@@ -120,8 +126,6 @@ class CaptureSnapshotStatus(StrEnum):
     VERIFIED = "verified"
 
 
-_CAPTURE_ID_RE = re.compile(r"^[0-9a-f]{16}$")
-_INCARNATION_RE = re.compile(r"^[0-9a-f]{32}$")
 _PUBLIC_NAME_RE = re.compile(r"^shell_[0-9a-f]{16}\.log$")
 _STAGING_NAME_RE = re.compile(r"^\.capture-staging-[0-9a-f]{16}-[0-9a-f]{16}$")
 _QUARANTINE_NAME_RE = re.compile(r"^\.capture-quarantine-[0-9a-f]{16}-[0-9a-f]{16}$")

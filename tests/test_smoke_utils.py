@@ -2445,7 +2445,7 @@ def _annotation_run_side_effect(
     merge_base_sha: str = _MERGE_BASE_SHA,
 ):
     def _run(args, **_kwargs):
-        if args[:3] == ["gh", "pr", "view"]:
+        if args[:2] == ["gh", "api"]:
             payload = json.dumps(
                 {
                     "headRefOid": head_sha,
@@ -2531,8 +2531,8 @@ def test_annotate_pr_diff_github_mode_uses_gh_pr_diff(mock_run, tmp_path: Path) 
     diff_index = next(
         index for index, command in enumerate(commands) if command[:3] == ["gh", "pr", "diff"]
     )
-    assert commands[diff_index - 1][:3] == ["gh", "pr", "view"]
-    assert commands[diff_index + 1][:3] == ["gh", "pr", "view"]
+    assert commands[diff_index - 1][:2] == ["gh", "api"]
+    assert commands[diff_index + 1][:2] == ["gh", "api"]
 
 
 @patch("subprocess.run")
@@ -2721,7 +2721,7 @@ def test_annotate_pr_diff_invalidates_old_marker_when_diff_fails(mock_run, tmp_p
     metrics_path.write_text('{"generation_id":"stale"}')
 
     def fail_diff(args, **_kwargs):
-        if args[:3] == ["gh", "pr", "view"]:
+        if args[:2] == ["gh", "api"]:
             payload = json.dumps({"headRefOid": _SHA, "baseRefOid": _BASE_SHA})
             return subprocess.CompletedProcess(args, 0, payload.encode(), b"")
         if args[:3] == ["gh", "pr", "diff"]:
@@ -2742,7 +2742,7 @@ def test_annotate_pr_diff_failed_ref_lookup_publishes_no_authority(
     metrics_path.write_text('{"generation_id":"stale"}')
 
     def fail_ref_lookup(args, **_kwargs):
-        if args[:3] == ["gh", "pr", "view"]:
+        if args[:2] == ["gh", "api"]:
             return subprocess.CompletedProcess(args, 1, b"", b"ref lookup failed")
         raise AssertionError(f"unexpected annotation command: {args}")
 
@@ -2803,7 +2803,7 @@ def test_annotate_pr_diff_rejects_moving_github_refs(mock_run, tmp_path: Path) -
 
     def moving_refs(args, **_kwargs):
         nonlocal ref_reads
-        if args[:3] == ["gh", "pr", "view"]:
+        if args[:2] == ["gh", "api"]:
             ref_reads += 1
             head = _SHA if ref_reads == 1 else f"{_SHA}moved"
             payload = json.dumps({"headRefOid": head, "baseRefOid": _BASE_SHA})

@@ -248,6 +248,13 @@ def test_gate_validation_precedes_boolean_consumption() -> None:
         assert initialized in section
 
 
+def test_live_pr_refs_use_supported_pull_request_api_fields() -> None:
+    section = _section("### Step 2.7", "### Step 2.5")
+    assert section.count('gh api "repos/{owner}/{repo}/pulls/${pr_number}"') == 2
+    assert "gh pr view" not in section
+    assert "--json headRefOid,baseRefOid" not in section
+
+
 @pytest.mark.parametrize(
     ("gate", "expected_state", "expected_audit_state"),
     [

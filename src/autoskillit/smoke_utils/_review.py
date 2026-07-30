@@ -71,12 +71,7 @@ def annotate_pr_diff(
             timeout=timeout,
         )
         if result.returncode != 0:
-            stderr = result.stderr
-            detail = (
-                stderr.decode("utf-8", errors="replace")
-                if isinstance(stderr, bytes)
-                else str(stderr or "")
-            ).strip()
+            detail = result.stderr.decode("utf-8", errors="replace").strip()
             raise RuntimeError(f"annotation command failed ({' '.join(args)}): {detail}")
         return result
 
@@ -88,7 +83,13 @@ def annotate_pr_diff(
 
     def _read_pr_refs(*, required: bool) -> tuple[str, str] | None:
         result = subprocess.run(
-            ["gh", "pr", "view", str(pr_number), "--json", "headRefOid,baseRefOid"],
+            [
+                "gh",
+                "api",
+                f"repos/{{owner}}/{{repo}}/pulls/{pr_number}",
+                "--jq",
+                "{headRefOid: .head.sha, baseRefOid: .base.sha}",
+            ],
             capture_output=True,
             text=False,
             check=False,

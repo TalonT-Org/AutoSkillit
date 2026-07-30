@@ -382,7 +382,10 @@ else
                 degrade_gate snapshot_mismatch
             fi
         else
-            LIVE_REFS="$(gh pr view "${pr_number}" --json headRefOid,baseRefOid 2>/dev/null || true)"
+            LIVE_REFS="$(
+              gh api "repos/{owner}/{repo}/pulls/${pr_number}" \
+                --jq '{headRefOid:.head.sha,baseRefOid:.base.sha}' 2>/dev/null || true
+            )"
             LIVE_HEAD_SHA="$(printf '%s' "$LIVE_REFS" | jq -r '.headRefOid // ""' 2>/dev/null)"
             LIVE_BASE_SHA="$(printf '%s' "$LIVE_REFS" | jq -r '.baseRefOid // ""' 2>/dev/null)"
             if [ -z "$LIVE_HEAD_SHA" ] || [ -z "$LIVE_BASE_SHA" ]; then
@@ -494,7 +497,10 @@ revalidate_retained_snapshot() {
         [ "$current_base" = "$METRICS_BASE_SHA" ] &&
             [ "$current_merge_base" = "$METRICS_MERGE_BASE_SHA" ]
     else
-        current_live_refs="$(gh pr view "$pr_number" --json headRefOid,baseRefOid 2>/dev/null || true)"
+        current_live_refs="$(
+          gh api "repos/{owner}/{repo}/pulls/${pr_number}" \
+            --jq '{headRefOid:.head.sha,baseRefOid:.base.sha}' 2>/dev/null || true
+        )"
         current_live_head="$(printf '%s' "$current_live_refs" | jq -r '.headRefOid // ""' 2>/dev/null)"
         current_live_base="$(printf '%s' "$current_live_refs" | jq -r '.baseRefOid // ""' 2>/dev/null)"
         [ "$current_live_head" = "$METRICS_HEAD_SHA" ] &&

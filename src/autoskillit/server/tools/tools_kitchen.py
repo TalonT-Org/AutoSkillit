@@ -7,7 +7,6 @@ import functools
 import inspect
 import json
 import os
-import threading
 from collections.abc import Awaitable, Callable, Mapping
 from contextvars import ContextVar
 from datetime import UTC, datetime
@@ -61,7 +60,6 @@ from autoskillit.pipeline import (
     KitchenEffectPhase,
     KitchenIntentConflict,
     KitchenOpenPhase,
-    KitchenOpenState,
     KitchenRetryDisposition,
     ToolContext,
     _transition_abort,
@@ -144,23 +142,6 @@ _OPEN_KITCHEN_REQUEST_CTX: ContextVar[ToolContext] = ContextVar("open_kitchen_re
 
 def _ensure_kitchen_transition(tool_ctx: ToolContext) -> None:
     """Create infrastructure identity once, before request arguments are bound."""
-    state = getattr(tool_ctx, "kitchen_open_state", None)
-    if not isinstance(state, KitchenOpenState):
-        tool_ctx.kitchen_transition_lock = threading.RLock()
-        context_id = closed_kitchen_open_state().context_id
-        existing_kitchen_id = getattr(tool_ctx, "kitchen_id", "")
-        tool_ctx.kitchen_open_state = (
-            new_kitchen_open_state(
-                kitchen_id=existing_kitchen_id,
-                context_id=context_id,
-            )
-            if (
-                isinstance(existing_kitchen_id, str)
-                and existing_kitchen_id
-                and getattr(tool_ctx, "gate_infrastructure_ready", False) is True
-            )
-            else closed_kitchen_open_state(context_id=context_id)
-        )
     with tool_ctx.kitchen_transition_lock:
         state = tool_ctx.kitchen_open_state
         if state.phase is KitchenOpenPhase.CLOSED:

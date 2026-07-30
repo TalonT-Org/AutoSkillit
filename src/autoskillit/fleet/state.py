@@ -609,6 +609,25 @@ def upsert_dispatch_record_by_name(state_path: Path, record: DispatchRecord) -> 
         m.mark_dirty()
 
 
+def update_dispatch_effect_provenance(
+    state_path: Path,
+    dispatch_name: str,
+    effect_provenance: dict[str, Any],
+) -> bool:
+    """Atomically persist a replay-safe provenance receipt for one dispatch."""
+    with CampaignStateMutator(state_path) as m:
+        if m.state is None:
+            return False
+        for dispatch in m.state.dispatches:
+            if dispatch.name != dispatch_name:
+                continue
+            if dispatch.effect_provenance != effect_provenance:
+                dispatch.effect_provenance = dict(effect_provenance)
+                m.mark_dirty()
+            return True
+        return False
+
+
 def build_protected_campaign_ids(project_dir: Path) -> frozenset[str]:
     """Return campaign IDs with at least one non-terminal dispatch.
 

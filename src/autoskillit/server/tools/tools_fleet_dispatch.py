@@ -54,6 +54,7 @@ from autoskillit.fleet import (
     read_all_campaign_captures,
     read_state,
     record_gate_outcome,
+    update_dispatch_effect_provenance,
     upsert_dispatch_record_by_name,
 )
 from autoskillit.server import mcp
@@ -244,6 +245,38 @@ def _write_dispatch_to_campaign_state(
     except Exception:
         logger.warning("_write_dispatch_to_campaign_state: failed", exc_info=True)
         return False
+
+
+def _confirm_campaign_state_write(
+    provenance: DispatchProvenanceTracker,
+    campaign_state_path_str: str,
+    effective_name: str,
+) -> bool:
+    """Confirm the write and persist its post-confirmation provenance receipt."""
+    provenance.confirm(
+        DispatchEffectName.CAMPAIGN_STATE_WRITE,
+        receipt="campaign state writer confirmed persistence",
+        identities={"campaign_state_path": campaign_state_path_str},
+    )
+    try:
+        receipt_persisted = update_dispatch_effect_provenance(
+            Path(campaign_state_path_str),
+            effective_name,
+            provenance.snapshot().to_dict(),
+        )
+    except Exception:
+        logger.warning(
+            "_confirm_campaign_state_write: receipt persistence failed",
+            exc_info=True,
+        )
+        receipt_persisted = False
+    if not receipt_persisted:
+        provenance.mark_ambiguous(
+            DispatchEffectName.CAMPAIGN_STATE_WRITE,
+            evidence="campaign state confirmation receipt persistence failed",
+            identities={"campaign_state_path": campaign_state_path_str},
+        )
+    return receipt_persisted
 
 
 def _get_food_truck_prompt_builder(
@@ -746,10 +779,10 @@ async def dispatch_food_truck(
                 result.per_dispatch_state_path,
             )
             if campaign_write_confirmed:
-                provenance.confirm(
-                    DispatchEffectName.CAMPAIGN_STATE_WRITE,
-                    receipt="campaign state writer confirmed persistence",
-                    identities={"campaign_state_path": campaign_state_path_str},
+                _confirm_campaign_state_write(
+                    provenance,
+                    campaign_state_path_str,
+                    effective_name,
                 )
             else:
                 provenance.mark_ambiguous(

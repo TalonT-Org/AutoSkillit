@@ -14,6 +14,7 @@ from autoskillit.server.tools.tools_fleet_dispatch import (
     _BOUND_DISPATCH_PROVENANCE,
     _bind_dispatch_provenance,
     _bound_dispatch_provenance,
+    _confirm_campaign_state_write,
     _dispatch_cancellation_response,
 )
 
@@ -49,6 +50,47 @@ async def test_argument_binder_attaches_unique_request_provenance() -> None:
     )
     assert _BOUND_DISPATCH_PROVENANCE.get() is None
     assert _ACTIVE_DISPATCH_PROVENANCE.get(None) is None
+
+
+def test_campaign_write_confirmation_receipt_is_persisted(tmp_path) -> None:
+    from autoskillit.fleet import (
+        DispatchProvenanceTracker,
+        DispatchRecord,
+        read_state,
+        write_initial_state,
+    )
+
+    state_path = tmp_path / "campaign.json"
+    tracker = DispatchProvenanceTracker(operation_id="operation-campaign-write")
+    tracker.start(
+        DispatchEffectName.CAMPAIGN_STATE_WRITE,
+        identities={"campaign_state_path": str(state_path)},
+    )
+    write_initial_state(
+        state_path,
+        "campaign-1",
+        "campaign",
+        "/manifest.yaml",
+        [
+            DispatchRecord(
+                name="dispatch-a",
+                effect_provenance=tracker.snapshot().to_dict(),
+            )
+        ],
+    )
+
+    assert _confirm_campaign_state_write(tracker, str(state_path), "dispatch-a")
+
+    state = read_state(state_path)
+    assert state is not None
+    persisted = state.dispatches[0].effect_provenance
+    campaign_write = next(
+        effect
+        for effect in persisted["effects"]
+        if effect["name"] == DispatchEffectName.CAMPAIGN_STATE_WRITE.value
+    )
+    assert campaign_write["phase"] == "confirmed"
+    assert persisted["retry_disposition"] == "resume_by_identity"
 
 
 @pytest.mark.asyncio

@@ -123,7 +123,7 @@ def _make_mock_ctx() -> MagicMock:
     from threading import RLock
 
     from autoskillit.config import OutputBudgetConfig, QuotaGuardConfig
-    from autoskillit.pipeline import NoActiveRecipe
+    from autoskillit.pipeline import NoActiveRecipe, closed_kitchen_open_state
     from autoskillit.server._factory import make_recipe_execution
 
     gate = MagicMock()
@@ -140,6 +140,8 @@ def _make_mock_ctx() -> MagicMock:
     ctx.config.subsets.disabled = []  # REQ-VIS-008: no subsets disabled by default
     ctx.active_recipe_ingredients = None
     ctx.gate_infrastructure_ready = False
+    ctx.kitchen_transition_lock = RLock()
+    ctx.kitchen_open_state = closed_kitchen_open_state()
     ctx.recipe_execution_lock = RLock()
     ctx.recipe_initialization_state = NoActiveRecipe()
     ctx.recipe_execution_factory = make_recipe_execution

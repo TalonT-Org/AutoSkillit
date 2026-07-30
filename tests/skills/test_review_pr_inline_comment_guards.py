@@ -253,6 +253,63 @@ def test_step6_receipt_effect_requires_http_200_and_fresh_authoritative_commit(
         }
 
 
+@pytest.mark.parametrize(
+    ("dismiss_exit_code", "expected_compensation_failed"),
+    [(0, "false"), (1, "true")],
+)
+def test_step6_stale_snapshot_dismisses_posted_authoritative_review(
+    tmp_path: Path,
+    dismiss_exit_code: int,
+    expected_compensation_failed: str,
+) -> None:
+    block_start = SKILL_TEXT.index('if [ "$HTTP_STATUS" = "200" ]; then')
+    block_end = SKILL_TEXT.index('rm -f -- "$BATCH_RESPONSE_TMP"', block_start)
+    receipt_block = SKILL_TEXT[block_start:block_end]
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        '#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" > "$GH_ARGS_PATH"\nexit "$GH_EXIT_CODE"\n'
+    )
+    fake_gh.chmod(0o755)
+    gh_args_path = tmp_path / "gh-args.txt"
+    compensation_path = tmp_path / "compensation.txt"
+    script = "\n".join(
+        [
+            "refresh_final_snapshot_state() { FINAL_SNAPSHOT_STATE=stale; }",
+            "sleep() { :; }",
+            receipt_block,
+            ('printf \'%s\' "${STALE_REVIEW_COMPENSATION_FAILED:-false}" > "$COMPENSATION_PATH"'),
+        ]
+    )
+    env = {
+        **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "HTTP_STATUS": "200",
+        "POSTED_REVIEW_ID": "987",
+        "REVIEW_EVENT": "REQUEST_CHANGES",
+        "GH_ARGS_PATH": str(gh_args_path),
+        "GH_EXIT_CODE": str(dismiss_exit_code),
+        "COMPENSATION_PATH": str(compensation_path),
+    }
+
+    result = subprocess.run(
+        ["bash", "-c", script],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    gh_args = gh_args_path.read_text()
+    assert "/repos/{owner}/{repo}/pulls/{pr_number}/reviews/987/dismissals" in gh_args
+    assert "--method PUT" in gh_args
+    assert "Dismissed because the PR snapshot changed during review submission" in gh_args
+    assert compensation_path.read_text() == expected_compensation_failed
+
+
 def test_primary_and_every_fallback_reuse_the_canonical_rendered_body() -> None:
     step6 = SKILL_TEXT[
         SKILL_TEXT.index("### Step 6: Post Inline Review Comments") : SKILL_TEXT.index(

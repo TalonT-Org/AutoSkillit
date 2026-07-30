@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from autoskillit.core import FleetErrorCode, ProcessCleanupResult
@@ -131,6 +133,21 @@ def test_every_dispatch_envelope_carries_provenance() -> None:
 
     assert '"operation_id": "operation-6"' in rejected.to_envelope()
     assert '"operation_id": "operation-6"' in completed.to_envelope()
+
+
+def test_failed_completion_preserves_domain_reason_in_error_field() -> None:
+    completed = DispatchCompleted(
+        success=False,
+        dispatch_status=DispatchStatus.FAILURE,
+        dispatch_id="dispatch-domain-failure",
+        dispatched_session_id="session-domain-failure",
+        reason="domain_validation_failed",
+    )
+
+    envelope = json.loads(completed.to_envelope())
+
+    assert envelope["error"] == "domain_validation_failed"
+    assert envelope["user_visible_message"] == "domain_validation_failed"
 
 
 def test_legacy_constructor_provenance_fails_closed() -> None:

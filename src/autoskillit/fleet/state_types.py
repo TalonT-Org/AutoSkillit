@@ -712,11 +712,7 @@ class DispatchCompleted:
             "elapsed_seconds": self.elapsed_seconds,
         }
         if not self.success:
-            try:
-                error_code = FleetErrorCode(reason_text).value
-            except ValueError:
-                error_code = FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH.value
-            d["error"] = error_code
+            d["error"] = reason_text or FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH.value
             d["user_visible_message"] = self.diagnostic_message or reason_text
         if self.l3_raw_body is not None:
             d["l3_raw_body"] = self.l3_raw_body

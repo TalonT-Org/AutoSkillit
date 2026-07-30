@@ -385,7 +385,6 @@ def validate_record(record: CaptureLifecycleRecord) -> None:
     if (
         type(record.capture_status) is not CaptureStatus
         or type(record.snapshot_status) is not CaptureSnapshotStatus
-        or record.capture_status is CaptureStatus.PARTIAL
     ):
         raise LedgerCodecError("invalid capture outcome axes")
     if record.manifest is None:

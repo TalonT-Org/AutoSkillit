@@ -21,6 +21,7 @@ import pytest
 
 import autoskillit.hooks._capture_lifecycle as capture_lifecycle
 from autoskillit.hooks._capture._snapshot import (
+    CaptureAuthorityError,
     CaptureFailureEvidence,
     CaptureMeasurement,
     CaptureStatus,
@@ -613,6 +614,30 @@ def test_delivered_reference_cannot_be_reclassified_as_unavailable(
         assert durable is not None
         assert durable.reference_status is CaptureReferenceStatus.PUBLISHED
         assert durable.delivery_status is CaptureDeliveryStatus.DELIVERED
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+def test_invalid_unavailable_reason_does_not_commit_transition(
+    tmp_path: Path,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(tmp_path / "project", clock)
+    artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+    os.write(artifact.fd, b"captured")
+    finalized = store.commit_verified_snapshot(
+        _verified_snapshot(store, artifact, b"captured", clock),
+        issue_reference=True,
+    )
+    before = store.get_record(_CAPTURE_ID)
+    try:
+        with pytest.raises(CaptureAuthorityError, match="invalid unavailable capture reference"):
+            store.mark_reference_unavailable(finalized, reason_code="not-valid")
+
+        assert store.get_record(_CAPTURE_ID) == before
     finally:
         artifact.close_artifact_fd()
         artifact.release_lease()

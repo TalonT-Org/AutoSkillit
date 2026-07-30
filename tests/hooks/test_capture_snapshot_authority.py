@@ -385,6 +385,8 @@ def test_manifest_wire_decode_is_strict_and_non_authoritative(tmp_path: Path) ->
         assert not isinstance(decoded, CaptureFinalManifest)
         assert decoded.sha256 == hashlib.sha256(b"manifest").hexdigest()
         assert decoded.capture_status is CaptureStatus.COMPLETE
+        with pytest.raises(CaptureAuthorityError, match="fields"):
+            replace(decoded, schema_version=decoded.schema_version + 1)
 
         primitive = json.loads(encoded)
         primitive["extra"] = True

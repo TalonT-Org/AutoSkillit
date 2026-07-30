@@ -137,6 +137,7 @@ def mark_reference_unavailable(
         raise lifecycle_error("unavailable transition requires issued finalized capture")
     snapshot = finalized.snapshot
     manifest = snapshot.manifest
+    unavailable = _snapshot._make_unavailable_reference(snapshot, reason_code)
 
     def transform(
         current: _ledger.CaptureLifecycleRecord,
@@ -160,7 +161,7 @@ def mark_reference_unavailable(
         allowed_states={_ledger.CaptureState.FINALIZED},
         transform=transform,
     )
-    return _snapshot._make_unavailable_reference(snapshot, reason_code)
+    return unavailable
 
 
 def mark_reference_unknown(

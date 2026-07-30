@@ -159,7 +159,6 @@ class CommandOutcomeKind(StrEnum):
 class CaptureStatus(StrEnum):
     PENDING = "pending"
     COMPLETE = "complete"
-    PARTIAL = "partial"
     FAILED = "failed"
     LEGACY_CLEANUP_ONLY = "legacy_cleanup_only"
 
@@ -295,6 +294,9 @@ class CaptureManifestWire:
     reference_hash: str | None
     reference_expiry: float | None
     retention_deadline: float
+
+    def __post_init__(self) -> None:
+        _validate_manifest(self)
 
     @property
     def command_outcome(self) -> CommandOutcome:

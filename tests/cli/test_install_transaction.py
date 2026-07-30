@@ -126,6 +126,53 @@ def _sealed_env() -> dict[str, str]:
     return {"PATH": "/usr/bin", "SEALED": "yes"}
 
 
+@pytest.mark.parametrize("unsafe_kind", ["symlink", "non_directory", "escape"])
+def test_unsafe_install_targets_are_rejected_before_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    unsafe_kind: str,
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    target = marketplace._installed_plugin_root(_VERSION)
+    external = tmp_path / "external-sentinel"
+    external.mkdir()
+    sentinel = external / "keep.txt"
+    sentinel.write_text("untouched", encoding="utf-8")
+
+    if unsafe_kind == "symlink":
+        target.parent.mkdir(parents=True)
+        target.symlink_to(external, target_is_directory=True)
+    elif unsafe_kind == "non_directory":
+        target.parent.mkdir(parents=True)
+        target.write_text("not a directory", encoding="utf-8")
+    else:
+        monkeypatch.setattr(
+            marketplace,
+            "_installed_plugin_root",
+            lambda _version: external,
+        )
+
+    child_calls: list[tuple[str, ...]] = []
+
+    def record_child(argv, **_kwargs):
+        child_calls.append(tuple(argv))
+        raise AssertionError("unsafe target reached a mutating child command")
+
+    monkeypatch.setattr(marketplace, "_run_claude_admin", record_child)
+
+    result = marketplace.install(
+        request=_maintenance_request(),
+        child_env=_sealed_env(),
+        child_cwd=neutral_cwd,
+    )
+
+    assert result.outcome is InstallOutcome.FAILED
+    assert result.failure_kind is InstallFailureKind.PREFLIGHT
+    assert "Unsafe installed plugin target" in result.findings[0]
+    assert child_calls == []
+    assert sentinel.read_text(encoding="utf-8") == "untouched"
+
+
 def _filesystem_state(root: Path) -> tuple[tuple[str, str, bytes | str | None], ...]:
     state: list[tuple[str, str, bytes | str | None]] = []
     for path in sorted(root.rglob("*")):

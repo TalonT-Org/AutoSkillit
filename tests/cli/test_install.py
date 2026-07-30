@@ -81,7 +81,7 @@ class TestCLIInstall:
     ) -> None:
         """install prints manual instructions when claude is not on PATH."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(shutil, "which", lambda cmd: None)
+        monkeypatch.setattr(shutil, "which", lambda _cmd, *, path=None: None)
         monkeypatch.delenv("CLAUDECODE", raising=False)
         import importlib as _importlib
 
@@ -238,7 +238,7 @@ class TestCLIInstall:
     ) -> None:
         """install calls claude plugin marketplace add + claude plugin install."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr(shutil, "which", lambda _cmd, *, path=None: "/usr/bin/claude")
         monkeypatch.delenv("CLAUDECODE", raising=False)
         import importlib as _importlib
 
@@ -283,7 +283,7 @@ class TestCLIInstall:
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr(shutil, "which", lambda _cmd, *, path=None: "/usr/bin/claude")
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         mock_run.side_effect = _successful_claude_run(tmp_path)
@@ -305,7 +305,7 @@ class TestCLIInstall:
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr(shutil, "which", lambda _cmd, *, path=None: "/usr/bin/claude")
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         mock_run.side_effect = _successful_claude_run(tmp_path)
@@ -319,10 +319,10 @@ class TestCLIInstall:
         assert not published.is_symlink()
         assert (published / ".claude-plugin" / "plugin.json").is_file()
 
-    def test_install_backend_guard_returns_false_for_non_claude_code(
+    def test_install_backend_guard_returns_declined_for_non_claude_code(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
     ) -> None:
-        """install() returns False with message when capability is False."""
+        """install() returns a declined result when capability is false."""
         from unittest.mock import MagicMock
 
         from autoskillit.config import AgentBackendConfig, AutomationConfig
@@ -357,7 +357,7 @@ class TestCLIInstall:
         monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
         monkeypatch.setattr(Path, "cwd", staticmethod(lambda: tmp_path))
         monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/claude")
+        monkeypatch.setattr("shutil.which", lambda _cmd, *, path=None: "/usr/bin/claude")
 
         _app_mod = importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
@@ -425,7 +425,7 @@ class TestCLIInstall:
             )
         )
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr(shutil, "which", lambda _cmd, *, path=None: "/usr/bin/claude")
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         mock_run.side_effect = _successful_claude_run(tmp_path)
@@ -825,10 +825,10 @@ def test_clear_plugin_cache_noop_when_entry_absent(
     assert data == {"version": 2, "plugins": {}}
 
 
-def test_install_claudecode_guard_returns_false(
+def test_install_claudecode_guard_returns_deferred_result(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """install() must return False when CLAUDECODE guard fires, not None-as-success."""
+    """install() returns a deferred result when the CLAUDECODE guard fires."""
     import importlib as _importlib
 
     from autoskillit.cli._marketplace import install as _install
@@ -843,36 +843,42 @@ def test_install_claudecode_guard_returns_false(
     assert result.outcome is InstallOutcome.DEFERRED
 
 
-def test_install_claudecode_guard_exits_declined_without_next_steps(
+def test_install_claudecode_guard_exits_deferred_without_next_steps(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """app.install() represents the legacy False guard as a declined process."""
+    """app.install() preserves the typed deferred outcome at the process boundary."""
 
     import autoskillit.cli._init_helpers as _init_helpers_mod
     import autoskillit.cli._marketplace as _mkt_mod
-    from autoskillit.cli._install_contract import InstallProcessStatus
+    from autoskillit.cli._install_contract import (
+        InstallOutcome,
+        InstallProcessStatus,
+        InstallResult,
+    )
 
     next_steps_called: list[dict] = []
     monkeypatch.setattr(
         _init_helpers_mod, "_print_next_steps", lambda **kw: next_steps_called.append(kw)
     )
-    monkeypatch.setattr(_mkt_mod, "install", lambda **kw: False)
+    monkeypatch.setattr(
+        _mkt_mod,
+        "install",
+        lambda **kw: InstallResult(outcome=InstallOutcome.DEFERRED),
+    )
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     from autoskillit.cli.app import install as app_install
 
     with pytest.raises(SystemExit) as exc_info:
         app_install(scope="user")
-    assert exc_info.value.code == InstallProcessStatus.DECLINED
-    assert not next_steps_called, (
-        "_print_next_steps must not be called when install() returns False"
-    )
+    assert exc_info.value.code == InstallProcessStatus.DEFERRED
+    assert not next_steps_called, "_print_next_steps must not be called for deferred installs"
 
 
 def test_app_install_constructs_direct_request_and_prints_only_after_completion(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The direct command records its obligation before normalizing legacy True."""
+    """The direct command records its obligation and consumes typed completion."""
     import autoskillit.cli._init_helpers as _init_helpers_mod
     import autoskillit.cli._install_contract as _contract_mod
     import autoskillit.cli._marketplace as _mkt_mod
@@ -888,7 +894,11 @@ def test_app_install_constructs_direct_request_and_prints_only_after_completion(
         return request
 
     monkeypatch.setattr(_contract_mod, "InstallRequest", capture_request)
-    monkeypatch.setattr(_mkt_mod, "install", lambda **kw: True)
+    monkeypatch.setattr(
+        _mkt_mod,
+        "install",
+        lambda **kw: _contract_mod.InstallResult(outcome=_contract_mod.InstallOutcome.COMPLETED),
+    )
     monkeypatch.setattr(
         _init_helpers_mod, "_print_next_steps", lambda **kw: next_steps_called.append(kw)
     )
@@ -1068,7 +1078,7 @@ def test_install_creates_autoskillit_gitignore(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
     monkeypatch.delenv("CLAUDECODE", raising=False)
-    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/claude")
+    monkeypatch.setattr("shutil.which", lambda _cmd, *, path=None: "/usr/bin/claude")
     monkeypatch.setattr(
         "subprocess.run",
         _successful_claude_run(tmp_path),
@@ -1098,7 +1108,7 @@ def test_install_calls_upgrade_when_scripts_dir_exists(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
     monkeypatch.delenv("CLAUDECODE", raising=False)
-    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/claude")
+    monkeypatch.setattr("shutil.which", lambda _cmd, *, path=None: "/usr/bin/claude")
     monkeypatch.setattr(
         "subprocess.run",
         _successful_claude_run(tmp_path),

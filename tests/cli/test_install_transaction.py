@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import os
 import subprocess
 from pathlib import Path
@@ -38,6 +39,7 @@ def _configure_transaction(
     import autoskillit.workspace as workspace
     from autoskillit.cli import _marketplace, _plugin_artifact
 
+    update_checks = importlib.import_module("autoskillit.cli.update._update_checks")
     neutral_cwd = tmp_path / "neutral"
     neutral_cwd.mkdir()
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -80,10 +82,7 @@ def _configure_transaction(
             stderr="",
         ),
     )
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.invalidate_fetch_cache",
-        lambda _home: None,
-    )
+    monkeypatch.setattr(update_checks, "invalidate_fetch_cache", lambda _home: None)
     identity = SimpleNamespace(incarnation_id="0" * 32)
     monkeypatch.setattr(
         workspace,
@@ -95,6 +94,27 @@ def _configure_transaction(
 
 def _sealed_env() -> dict[str, str]:
     return {"PATH": "/usr/bin", "SEALED": "yes"}
+
+
+def test_claude_lookup_uses_sealed_path_once_without_ambient_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli import _marketplace
+
+    calls: list[tuple[str, str | None]] = []
+
+    def which(_cmd: str, *, path: str | None = None) -> str | None:
+        calls.append((_cmd, path))
+        if path is not None:
+            raise TypeError("sealed lookup failure")
+        return "/ambient/bin/claude"
+
+    monkeypatch.setattr(_marketplace.shutil, "which", which)
+
+    with pytest.raises(TypeError, match="sealed lookup failure"):
+        _marketplace._claude_on_path({"PATH": "/sealed/bin"})
+
+    assert calls == [("claude", "/sealed/bin")]
 
 
 def test_optional_maintenance_obligation_returns_before_any_preflight(

@@ -258,7 +258,6 @@ def install(
         InstallOutcome,
         InstallProcessStatus,
         InstallRequest,
-        InstallResult,
         process_status_for_result,
     )
     from autoskillit.cli._marketplace import install as _install
@@ -284,25 +283,14 @@ def install(
             expected_version=__version__,
         )
     if maintenance_update:
-        raw_result = _install(
+        result = _install(
             request=request,
             scope=request.scope,
             child_env=os.environ,
             child_cwd=Path.cwd(),
         )
     else:
-        raw_result = _install(request=request, scope=request.scope)
-    if isinstance(raw_result, InstallResult):
-        result = raw_result
-    elif raw_result is True:
-        result = InstallResult(outcome=InstallOutcome.COMPLETED)
-    elif raw_result is False:
-        result = InstallResult(outcome=InstallOutcome.DECLINED)
-    else:
-        result = InstallResult(
-            outcome=InstallOutcome.INDETERMINATE,
-            findings=(f"unexpected install result: {raw_result!r}",),
-        )
+        result = _install(request=request, scope=request.scope)
 
     status = process_status_for_result(result)
     if status is not InstallProcessStatus.SUCCESS:

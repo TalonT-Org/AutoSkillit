@@ -513,11 +513,8 @@ def _settings_path(scope: str, cwd: Path) -> Path:
 
 
 def _claude_on_path(env: Mapping[str, str]) -> bool:
-    """Resolve Claude against the sealed PATH, retaining monkeypatch compatibility."""
-    try:
-        return shutil.which("claude", path=env.get("PATH")) is not None
-    except TypeError:
-        return shutil.which("claude") is not None
+    """Resolve Claude exactly once against the sealed PATH."""
+    return shutil.which("claude", path=env.get("PATH")) is not None
 
 
 def _validate_transaction_target(target: Path, expected_version: str) -> None:

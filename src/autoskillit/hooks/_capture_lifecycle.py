@@ -13,10 +13,11 @@ from contextlib import contextmanager
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-_CAPTURE_PACKAGE = f"{__package__}._capture" if __package__ else "_capture"
-_MODULE_IDENTITY = importlib.import_module(f"{_CAPTURE_PACKAGE}._module_identity")
-_MODULE_IDENTITY.register_module_aliases(__name__)
-
+if __package__:
+    from ._capture import _module_identity
+else:
+    from _capture import _module_identity  # type: ignore[no-redef]
+_module_identity.register_module_aliases(__name__)
 if TYPE_CHECKING:
     from autoskillit.hooks._capture import _delivery as _capture_delivery
     from autoskillit.hooks._capture import _ledger as _capture_ledger
@@ -27,15 +28,14 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture import _syntax as _capture_syntax
     from autoskillit.hooks._capture import _types as _capture_types
 else:
-    _capture_delivery = importlib.import_module(f"{_CAPTURE_PACKAGE}._delivery")
-    _capture_ledger = importlib.import_module(f"{_CAPTURE_PACKAGE}._ledger")
-    _capture_reader = importlib.import_module(f"{_CAPTURE_PACKAGE}._reader")
-    _capture_resolver = importlib.import_module(f"{_CAPTURE_PACKAGE}._resolver")
-    _capture_snapshot = importlib.import_module(f"{_CAPTURE_PACKAGE}._snapshot")
-    _capture_sweep = importlib.import_module(f"{_CAPTURE_PACKAGE}._sweep")
-    _capture_syntax = importlib.import_module(f"{_CAPTURE_PACKAGE}._syntax")
-    _capture_types = importlib.import_module(f"{_CAPTURE_PACKAGE}._types")
-
+    _capture_delivery = importlib.import_module(f"{_module_identity.__package__}._delivery")
+    _capture_ledger = importlib.import_module(f"{_module_identity.__package__}._ledger")
+    _capture_reader = importlib.import_module(f"{_module_identity.__package__}._reader")
+    _capture_resolver = importlib.import_module(f"{_module_identity.__package__}._resolver")
+    _capture_snapshot = importlib.import_module(f"{_module_identity.__package__}._snapshot")
+    _capture_sweep = importlib.import_module(f"{_module_identity.__package__}._sweep")
+    _capture_syntax = importlib.import_module(f"{_module_identity.__package__}._syntax")
+    _capture_types = importlib.import_module(f"{_module_identity.__package__}._types")
 CaptureCleanupOutcome = _capture_types.CaptureCleanupOutcome
 _ObservedArtifact = _capture_types.ObservedArtifact
 _LockContended = _capture_types.LockContended

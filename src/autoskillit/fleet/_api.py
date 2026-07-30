@@ -387,6 +387,7 @@ async def execute_dispatch(
                         ),
                     )
                 except Exception:
+                    state_path = None
                     logger.warning(
                         "execute_dispatch crash-state persistence failed",
                         exc_info=True,

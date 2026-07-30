@@ -212,13 +212,23 @@ def _race_calls(*calls: Callable[[], object]) -> list[object]:
         barrier.wait(timeout=5)
         try:
             return call()
-        except (CaptureLifecycleError, OSError) as exc:
+        except CaptureLifecycleError as exc:
             return exc
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(calls)) as executor:
         futures = [executor.submit(invoke, call) for call in calls]
         barrier.wait(timeout=5)
         return [future.result(timeout=5) for future in futures]
+
+
+def _assert_one_lifecycle_race_loser(
+    results: list[object],
+    *allowed_messages: str,
+) -> None:
+    losers = [result for result in results if isinstance(result, Exception)]
+    assert len(losers) == 1
+    assert type(losers[0]) is CaptureLifecycleError
+    assert str(losers[0]) in allowed_messages
 
 
 def test_lifecycle_store_rejects_direct_construction(tmp_path: Path) -> None:
@@ -468,7 +478,11 @@ def test_verified_final_and_failure_commits_have_one_winner(
         )
         durable = store.get_record(_CAPTURE_ID)
 
-        assert sum(not isinstance(result, Exception) for result in results) == 1
+        _assert_one_lifecycle_race_loser(
+            results,
+            "stale or invalid lifecycle transition",
+            "verified snapshot does not match write authority",
+        )
         assert durable is not None
         assert durable.state in {CaptureState.FINALIZED, CaptureState.FAILED}
         assert durable.revision == artifact.authority.expected_revision + 1
@@ -494,7 +508,10 @@ def test_conflicting_final_commits_do_not_issue_twice(
         )
         durable = store.get_record(_CAPTURE_ID)
 
-        assert sum(not isinstance(result, Exception) for result in results) == 1
+        _assert_one_lifecycle_race_loser(
+            results,
+            "verified snapshot does not match write authority",
+        )
         assert durable is not None
         assert durable.state is CaptureState.FINALIZED
         assert durable.reference_status in {
@@ -527,6 +544,9 @@ def test_reference_publication_and_revocation_race_ends_revoked(
         durable = store.get_record(_CAPTURE_ID)
 
         assert not isinstance(results[1], Exception)
+        if isinstance(results[0], Exception):
+            assert type(results[0]) is CaptureLifecycleError
+            assert str(results[0]) == "capture reference transition predecessor changed"
         assert durable is not None
         assert durable.reference_status is CaptureReferenceStatus.REVOKED
     finally:

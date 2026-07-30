@@ -2743,6 +2743,12 @@ def _annotation_run_side_effect(
 ):
     def _run(args, **_kwargs):
         if args[:2] == ["gh", "api"]:
+            assert len(args) == 5
+            assert re.fullmatch(r"repos/\{owner\}/\{repo\}/pulls/\d+", args[2])
+            assert args[3:] == [
+                "--jq",
+                "{headRefOid: .head.sha, baseRefOid: .base.sha}",
+            ]
             payload = json.dumps(
                 {
                     "headRefOid": head_sha,

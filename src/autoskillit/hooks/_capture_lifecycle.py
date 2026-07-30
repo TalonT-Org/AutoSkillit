@@ -633,7 +633,11 @@ class CaptureLifecycleStore:
             published = self.mark_published(authority)
             authority = self._authority_for(published)
             return fd, lease_fd, record.public_name, identity, authority
-        except (CaptureLifecycleError, OSError) as primary_error:
+        except (
+            CaptureLifecycleError,
+            CaptureTransitionCommittedError,
+            OSError,
+        ) as primary_error:
             try:
                 current = self.get_record(capture_id)
                 if current is not None and current.state in {
@@ -649,7 +653,12 @@ class CaptureLifecycleStore:
                         ),
                         observed_size=os.fstat(fd).st_size if fd >= 0 else 0,
                     )
-            except (CaptureAuthorityError, CaptureLifecycleError, OSError) as recovery_error:
+            except (
+                CaptureAuthorityError,
+                CaptureLifecycleError,
+                CaptureTransitionCommittedError,
+                OSError,
+            ) as recovery_error:
                 primary_error.add_note(
                     "failed-state recovery also failed: "
                     f"{type(recovery_error).__name__}: {recovery_error}"

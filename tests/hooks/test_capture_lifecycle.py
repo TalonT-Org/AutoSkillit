@@ -31,6 +31,7 @@ from autoskillit.hooks._capture._snapshot import (
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
     CaptureRoot,
+    CaptureSetupError,
     create_capture_artifact,
     open_capture_root,
     open_project_anchor,
@@ -918,6 +919,39 @@ def test_creation_failure_preserves_failed_state_recovery_error(
         assert any(
             "secondary recovery failure" in note for note in getattr(raised.value, "__notes__", ())
         )
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_creation_committed_error_still_cleans_artifact_descriptors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(tmp_path / "project", clock)
+    real_mark_staged = store.mark_staged
+    real_close = os.close
+    closed: list[int] = []
+
+    def mark_staged_then_fail(authority, identity):
+        real_mark_staged(authority, identity)
+        raise capture_lifecycle.CaptureTransitionCommittedError("post-staged append fault")
+
+    def record_close(fd: int) -> None:
+        closed.append(fd)
+        real_close(fd)
+
+    monkeypatch.setattr(store, "mark_staged", mark_staged_then_fail)
+    monkeypatch.setattr(capture_lifecycle.os, "close", record_close)
+    try:
+        with pytest.raises(CaptureSetupError, match="cannot create managed capture"):
+            create_capture_artifact(root, _CAPTURE_ID, store)
+
+        assert len(set(closed)) >= 2
+        failed = store.get_record(_CAPTURE_ID)
+        assert failed is not None
+        assert failed.state is CaptureState.FAILED
     finally:
         root.close()
         anchor.close()

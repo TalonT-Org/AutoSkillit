@@ -247,7 +247,7 @@ def create_capture_artifact(
             authority=authority,
             _factory_token=_ARTIFACT_FACTORY_TOKEN,
         )
-    except (CaptureLifecycleError, OSError) as exc:
+    except (CaptureLifecycleError, CaptureTransitionCommittedError, OSError) as exc:
         raise CaptureSetupError("cannot create managed capture artifact") from exc
 
 

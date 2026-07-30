@@ -105,6 +105,79 @@ def _sealed_env() -> dict[str, str]:
     return {"PATH": "/usr/bin", "SEALED": "yes"}
 
 
+def _filesystem_state(root: Path) -> tuple[tuple[str, str, bytes | str | None], ...]:
+    state: list[tuple[str, str, bytes | str | None]] = []
+    for path in sorted(root.rglob("*")):
+        relative = str(path.relative_to(root))
+        if path.is_symlink():
+            state.append((relative, "symlink", os.readlink(path)))
+        elif path.is_dir():
+            state.append((relative, "directory", None))
+        else:
+            state.append((relative, "file", path.read_bytes()))
+    return tuple(state)
+
+
+def _instrument_transaction_ownership(
+    monkeypatch: pytest.MonkeyPatch,
+    events: list[str],
+) -> dict[str, bool]:
+    import autoskillit.core as core
+
+    ownership = {"install_lock": False, "artifact_lease": False}
+
+    class ObservedInstallLock:
+        def __enter__(self) -> ObservedInstallLock:
+            assert not ownership["install_lock"]
+            ownership["install_lock"] = True
+            events.append("install_lock_acquired")
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            assert ownership["install_lock"]
+            events.append("install_lock_released")
+            ownership["install_lock"] = False
+
+    class ObservedArtifactLease:
+        def __init__(self, lock_path: Path) -> None:
+            lock_path.parent.mkdir(parents=True, exist_ok=True)
+            self._fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+
+        @classmethod
+        def acquire_exclusive(
+            cls,
+            lock_path: Path,
+            *,
+            blocking: bool = False,
+        ) -> ObservedArtifactLease:
+            assert not blocking
+            assert ownership["install_lock"], (
+                "exclusive artifact lease was acquired before the install lock"
+            )
+            assert not ownership["artifact_lease"]
+            ownership["artifact_lease"] = True
+            events.append("artifact_lease_acquired")
+            return cls(lock_path)
+
+        def __enter__(self) -> ObservedArtifactLease:
+            assert ownership["artifact_lease"]
+            events.append("artifact_lease_entered")
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            assert ownership["artifact_lease"]
+            events.append("artifact_lease_released")
+            ownership["artifact_lease"] = False
+            os.close(self._fd)
+
+        def fileno(self) -> int:
+            return self._fd
+
+    monkeypatch.setattr(core, "_InstallLock", ObservedInstallLock)
+    monkeypatch.setattr(core, "ArtifactLease", ObservedArtifactLease)
+    return ownership
+
+
 def _configure_direct_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     backend = SimpleNamespace(
         capabilities=SimpleNamespace(plugin_install_capable=True),
@@ -176,6 +249,203 @@ def test_maintenance_distribution_mismatch_is_preflight_failure(
     assert result.failure_kind is InstallFailureKind.PREFLIGHT
     assert "expected distribution version" in result.findings[0]
     assert not (tmp_path / ".autoskillit" / "marketplace").exists()
+
+
+def test_install_boundary_rejects_worktree_without_persistent_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli import _marketplace
+
+    home = tmp_path / "home"
+    child_cwd = tmp_path / "neutral"
+    unsafe_worktree = tmp_path / "unsafe-worktree"
+    child_cwd.mkdir()
+    unsafe_worktree.mkdir()
+    marketplace_marker = home / ".autoskillit" / "marketplace" / "state.txt"
+    registry_marker = home / ".claude" / "plugins" / "installed_plugins.json"
+    marketplace_marker.parent.mkdir(parents=True)
+    registry_marker.parent.mkdir(parents=True)
+    marketplace_marker.write_text("published-prestate", encoding="utf-8")
+    registry_marker.write_text('{"version": 2, "plugins": {}}', encoding="utf-8")
+
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setattr(_marketplace, "pkg_root", lambda: unsafe_worktree)
+    monkeypatch.setattr(
+        _marketplace,
+        "is_git_worktree",
+        lambda path: path == unsafe_worktree,
+    )
+    monkeypatch.setattr(
+        _marketplace.importlib.metadata,
+        "version",
+        lambda _name: _VERSION,
+    )
+    before = _filesystem_state(tmp_path)
+
+    result = _marketplace.install(
+        request=_maintenance_request(),
+        child_env=_sealed_env(),
+        child_cwd=child_cwd,
+    )
+
+    assert result.outcome is InstallOutcome.FAILED
+    assert result.failure_kind is InstallFailureKind.PREFLIGHT
+    diagnostic = result.findings[0]
+    assert "git worktree" in diagnostic
+    assert f"Detected worktree path: {unsafe_worktree}" in diagnostic
+    assert "run 'autoskillit install' from the main project checkout" in diagnostic
+    assert _filesystem_state(tmp_path) == before
+
+
+def test_success_path_holds_both_transaction_guards_through_commit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    import autoskillit.workspace as workspace
+    from autoskillit.cli.update import _update_checks
+
+    events: list[str] = []
+    ownership = _instrument_transaction_ownership(monkeypatch, events)
+
+    def record_owned(event: str) -> None:
+        assert ownership == {"install_lock": True, "artifact_lease": True}, (
+            f"{event} ran outside the install lock or exclusive artifact lease"
+        )
+        events.append(event)
+
+    def reconcile() -> tuple[()]:
+        record_owned("reconciliation")
+        return ()
+
+    def clear_cache(**_kwargs) -> tuple[()]:
+        record_owned("registry_cleanup")
+        return ()
+
+    def evict_direct(_path: Path) -> bool:
+        record_owned("direct_registration_cleanup")
+        return False
+
+    def evict_hooks(_path: Path) -> None:
+        record_owned("settings_hook_cleanup")
+
+    def verify_exact(_spec):
+        record_owned("exact_verification")
+        return SimpleNamespace(
+            identity=SimpleNamespace(incarnation_id="0" * 32),
+            findings=(),
+        )
+
+    original_commit = marketplace._InstallSnapshot.commit
+
+    def commit(snapshot) -> None:
+        record_owned("commit")
+        original_commit(snapshot)
+
+    monkeypatch.setattr(workspace, "reconcile_install_artifacts", reconcile)
+    monkeypatch.setattr(marketplace, "_clear_plugin_cache", clear_cache)
+    monkeypatch.setattr(marketplace, "evict_direct_mcp_entry", evict_direct)
+    monkeypatch.setattr(
+        marketplace._hooks_mod,
+        "_evict_stale_autoskillit_hooks",
+        evict_hooks,
+    )
+    monkeypatch.setattr(
+        _update_checks,
+        "invalidate_fetch_cache",
+        lambda _home: record_owned("fetch_cache_invalidation"),
+    )
+    monkeypatch.setattr(
+        marketplace,
+        "_verify_cleanup",
+        lambda _settings, _fetch_cache: record_owned("cleanup_verification"),
+    )
+    monkeypatch.setattr(workspace, "verify_installed_plugin_artifact", verify_exact)
+    monkeypatch.setattr(marketplace._InstallSnapshot, "commit", commit)
+
+    result = marketplace.install(
+        request=_maintenance_request(),
+        child_env=_sealed_env(),
+        child_cwd=neutral_cwd,
+    )
+
+    assert result.outcome is InstallOutcome.COMPLETED
+    assert events == [
+        "install_lock_acquired",
+        "artifact_lease_acquired",
+        "artifact_lease_entered",
+        "reconciliation",
+        "registry_cleanup",
+        "direct_registration_cleanup",
+        "settings_hook_cleanup",
+        "fetch_cache_invalidation",
+        "cleanup_verification",
+        "exact_verification",
+        "commit",
+        "artifact_lease_released",
+        "install_lock_released",
+    ]
+    assert ownership == {"install_lock": False, "artifact_lease": False}
+
+
+def test_failure_path_holds_both_transaction_guards_through_rollback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    import autoskillit.workspace as workspace
+
+    events: list[str] = []
+    ownership = _instrument_transaction_ownership(monkeypatch, events)
+
+    def assert_owned(event: str) -> None:
+        assert ownership == {"install_lock": True, "artifact_lease": True}, (
+            f"{event} ran outside the install lock or exclusive artifact lease"
+        )
+        events.append(event)
+
+    def fail_reconciliation() -> tuple[()]:
+        assert_owned("reconciliation")
+        raise marketplace._InstallFailed(
+            InstallFailureKind.POSTCONDITION,
+            "injected reconciliation failure",
+        )
+
+    original_rollback = marketplace._InstallSnapshot.rollback
+
+    def rollback(snapshot, *, owned_lease_fd: int | None = None) -> tuple[str, ...]:
+        assert_owned("rollback")
+        assert owned_lease_fd is not None
+        os.fstat(owned_lease_fd)
+        return original_rollback(snapshot, owned_lease_fd=owned_lease_fd)
+
+    monkeypatch.setattr(
+        workspace,
+        "reconcile_install_artifacts",
+        fail_reconciliation,
+    )
+    monkeypatch.setattr(marketplace._InstallSnapshot, "rollback", rollback)
+
+    result = marketplace.install(
+        request=_maintenance_request(),
+        child_env=_sealed_env(),
+        child_cwd=neutral_cwd,
+    )
+
+    assert result.outcome is InstallOutcome.FAILED
+    assert result.failure_kind is InstallFailureKind.POSTCONDITION
+    assert result.findings[-1] == "compensation completed"
+    assert events == [
+        "install_lock_acquired",
+        "artifact_lease_acquired",
+        "artifact_lease_entered",
+        "reconciliation",
+        "rollback",
+        "artifact_lease_released",
+        "install_lock_released",
+    ]
+    assert ownership == {"install_lock": False, "artifact_lease": False}
 
 
 @pytest.mark.parametrize(

@@ -930,7 +930,18 @@ from autoskillit.smoke_utils import (
     validate_experimental_auditor_outputs,
 )
 
-STANDARD_FINDINGS = json.loads(STANDARD_RAW_FINDINGS)
+STANDARD_VALIDATION_ERRORS = []
+try:
+    STANDARD_FINDINGS_DECODED = json.loads(STANDARD_RAW_FINDINGS)
+except json.JSONDecodeError:
+    STANDARD_FINDINGS = []
+    STANDARD_VALIDATION_ERRORS.append("standard findings are not valid JSON")
+else:
+    if isinstance(STANDARD_FINDINGS_DECODED, list):
+        STANDARD_FINDINGS = STANDARD_FINDINGS_DECODED
+    else:
+        STANDARD_FINDINGS = []
+        STANDARD_VALIDATION_ERRORS.append("standard findings must be a JSON array")
 if GATE_STATE == "valid_true":
     VALIDATION_RESULT = validate_experimental_auditor_outputs(
         outputs=EXPERIMENTAL_OUTCOMES_BY_NAME,
@@ -958,16 +969,24 @@ EXPERIMENTAL_AUDITOR_STATUS = VALIDATION_RESULT["status_by_name"]
 MALFORMED_ENVELOPES = VALIDATION_RESULT["malformed_envelopes"]
 
 # Construct DISPOSITION_RECORDS only after the mandatory parent evidence reads.
-AGGREGATION_RESULT = aggregate_experimental_review_candidates(
-    candidates=EXPERIMENTAL_CANDIDATES,
-    dispositions=DISPOSITION_RECORDS,
-    prior_resolved_findings=prior_resolved_findings,
-    standard_findings=STANDARD_FINDINGS,
-    valid_diff_lines=VALID_DIFF_LINES,
-    valid_line_ranges=VALID_LINE_RANGES,
-    snapshot=GATE_AUTHORITY["snapshot"],
-    review_root=REVIEW_CHECKOUT_ROOT,
-)
+if STANDARD_VALIDATION_ERRORS:
+    AGGREGATION_RESULT = {
+        "state": "degraded",
+        "survivors": [],
+        "aggregation_records": [],
+        "validation_errors": STANDARD_VALIDATION_ERRORS,
+    }
+else:
+    AGGREGATION_RESULT = aggregate_experimental_review_candidates(
+        candidates=EXPERIMENTAL_CANDIDATES,
+        dispositions=DISPOSITION_RECORDS,
+        prior_resolved_findings=prior_resolved_findings,
+        standard_findings=STANDARD_FINDINGS,
+        valid_diff_lines=VALID_DIFF_LINES,
+        valid_line_ranges=VALID_LINE_RANGES,
+        snapshot=GATE_AUTHORITY["snapshot"],
+        review_root=REVIEW_CHECKOUT_ROOT,
+    )
 if AGGREGATION_RESULT["state"] == "degraded":
     EXPERIMENTAL_AUDIT_STATE = "degraded"
 FINAL_REVIEW_FINDINGS = [

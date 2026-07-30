@@ -80,6 +80,15 @@ def test_skill_has_post_completion_confirmation():
     assert "FAILED" in text or "failed" in text
 
 
+def test_standard_findings_decode_degrades_on_parse_or_type_failure() -> None:
+    assert "except json.JSONDecodeError:" in SKILL_TEXT
+    assert "standard findings are not valid JSON" in SKILL_TEXT
+    assert "isinstance(STANDARD_FINDINGS_DECODED, list)" in SKILL_TEXT
+    assert "standard findings must be a JSON array" in SKILL_TEXT
+    assert "if STANDARD_VALIDATION_ERRORS:" in SKILL_TEXT
+    assert '"validation_errors": STANDARD_VALIDATION_ERRORS' in SKILL_TEXT
+
+
 def test_skill_labels_tier2_as_degraded_failure():
     """Tier 2 (body dump) must be explicitly labeled as a degraded failure mode,
     not presented as an acceptable fallback."""

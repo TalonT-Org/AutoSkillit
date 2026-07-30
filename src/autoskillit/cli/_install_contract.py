@@ -71,6 +71,16 @@ class InstallRequest:
     require_registered_plugin: bool
     expected_version: str | None
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.scope, str):
+            raise TypeError("scope must be a string")
+        if not isinstance(self.mode, InstallMode):
+            raise TypeError("mode must be an InstallMode")
+        if type(self.require_registered_plugin) is not bool:
+            raise TypeError("require_registered_plugin must be a boolean")
+        if self.expected_version is not None and not isinstance(self.expected_version, str):
+            raise TypeError("expected_version must be a string or None")
+
 
 @dataclass(frozen=True, slots=True)
 class InstallResult:

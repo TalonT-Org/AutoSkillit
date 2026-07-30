@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
@@ -61,6 +61,28 @@ def test_request_and_result_are_immutable_slots() -> None:
         setattr(request, "scope", "project")
     with pytest.raises(FrozenInstanceError):
         setattr(result, "outcome", InstallOutcome.DECLINED)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("scope", 1, "scope must be a string"),
+        ("mode", "maintenance-update", "mode must be an InstallMode"),
+        (
+            "require_registered_plugin",
+            1,
+            "require_registered_plugin must be a boolean",
+        ),
+        ("expected_version", 1, "expected_version must be a string or None"),
+    ],
+)
+def test_request_rejects_untyped_boundary_values(
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    with pytest.raises(TypeError, match=message):
+        replace(_request(), **{field: value})
 
 
 @pytest.mark.parametrize(

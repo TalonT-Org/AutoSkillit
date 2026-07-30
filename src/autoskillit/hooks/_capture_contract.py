@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
-import importlib
 import json
 import re
 import sys
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
-_CAPTURE_PACKAGE = f"{__package__}._capture" if __package__ else "_capture"
-_capture_syntax = importlib.import_module(f"{_CAPTURE_PACKAGE}._syntax")
+if TYPE_CHECKING:
+    from autoskillit.hooks._capture._syntax import (
+        CAPTURE_ID_RE,
+        REFERENCE_RE,
+        SHA256_RE,
+    )
+elif __package__:
+    from ._capture._syntax import CAPTURE_ID_RE, REFERENCE_RE, SHA256_RE
+else:
+    from _capture._syntax import CAPTURE_ID_RE, REFERENCE_RE, SHA256_RE
 
 _THIS_MODULE = sys.modules[__name__]
 for _alias in ("_capture_contract", "autoskillit.hooks._capture_contract"):
@@ -46,10 +53,9 @@ _FAILURE_PREFIX = b"[AutoSkillit shell capture failure v2:"
 _FRAME_SUFFIX = b"]"
 _MAX_COMMAND_BYTES = 64 * 1024
 _MAX_SIGNED_VALUE = (1 << 63) - 1
-_CAPTURE_ID_RE = _capture_syntax.CAPTURE_ID_RE
-_INCARNATION_RE = _capture_syntax.INCARNATION_RE
-_REFERENCE_RE = _capture_syntax.REFERENCE_RE
-_SHA256_RE = _capture_syntax.SHA256_RE
+_CAPTURE_ID_RE = CAPTURE_ID_RE
+_REFERENCE_RE = REFERENCE_RE
+_SHA256_RE = SHA256_RE
 _REASON_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 _STAGE_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _CAPTURE_KEYS = frozenset(

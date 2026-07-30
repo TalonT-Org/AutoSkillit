@@ -15,19 +15,7 @@ from dataclasses import InitVar, dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, NoReturn, SupportsIndex
 
-from . import _descriptor
-from ._syntax import (
-    CAPTURE_ID_RE as _CAPTURE_ID_RE,
-)
-from ._syntax import (
-    INCARNATION_RE as _INCARNATION_RE,
-)
-from ._syntax import (
-    REFERENCE_RE as _REFERENCE_RE,
-)
-from ._syntax import (
-    SHA256_RE as _SHA256_RE,
-)
+from . import _descriptor, _syntax
 
 if TYPE_CHECKING:
     from autoskillit.hooks._capture_contract import (
@@ -224,7 +212,7 @@ class CaptureMeasurement:
     def __post_init__(self) -> None:
         if not _is_plain_int(self.total_bytes):
             raise CaptureAuthorityError("invalid capture measurement size")
-        if not isinstance(self.sha256, str) or not _SHA256_RE.fullmatch(self.sha256):
+        if not isinstance(self.sha256, str) or not _syntax.SHA256_RE.fullmatch(self.sha256):
             raise CaptureAuthorityError("invalid capture measurement digest")
         if not _is_plain_int(self.inline_bytes, minimum=1):
             raise CaptureAuthorityError("invalid capture measurement inline bound")
@@ -353,8 +341,8 @@ class CaptureWriteAuthority(_NoAuthorityCopy):
     def __post_init__(self, _factory_token: object | None) -> None:
         _require_factory(_factory_token, type(self).__name__)
         if (
-            not _CAPTURE_ID_RE.fullmatch(self.capture_id)
-            or not _INCARNATION_RE.fullmatch(self.incarnation)
+            not _syntax.CAPTURE_ID_RE.fullmatch(self.capture_id)
+            or not _syntax.INCARNATION_RE.fullmatch(self.incarnation)
             or not _is_plain_int(self.expected_revision, minimum=1)
         ):
             raise CaptureAuthorityError("invalid capture write authority")
@@ -491,15 +479,15 @@ def _validate_manifest(value: CaptureFinalManifest | CaptureManifestWire) -> Non
     if (
         value.schema_version != SNAPSHOT_SCHEMA_VERSION
         or value.producer != SNAPSHOT_PRODUCER
-        or not _CAPTURE_ID_RE.fullmatch(value.capture_id)
-        or not _INCARNATION_RE.fullmatch(value.incarnation)
+        or not _syntax.CAPTURE_ID_RE.fullmatch(value.capture_id)
+        or not _syntax.INCARNATION_RE.fullmatch(value.incarnation)
         or not _is_plain_int(value.finalized_at_revision, minimum=1)
         or not _CARRIER_NAME_RE.fullmatch(value.carrier_name)
         or value.carrier_name != f"shell_{value.capture_id}.log"
         or value.stream_domain != MANAGED_STREAM_DOMAIN
         or not _is_plain_int(value.total_bytes)
         or not isinstance(value.sha256, str)
-        or not _SHA256_RE.fullmatch(value.sha256)
+        or not _syntax.SHA256_RE.fullmatch(value.sha256)
         or not _is_plain_int(value.inline_length)
         or not _is_plain_int(value.head_length)
         or not _is_plain_int(value.tail_length)
@@ -524,7 +512,7 @@ def _validate_manifest(value: CaptureFinalManifest | CaptureManifestWire) -> Non
     if (value.reference_hash is None) != (value.reference_expiry is None):
         raise CaptureAuthorityError("incomplete capture reference binding")
     if value.reference_hash is not None:
-        if not _SHA256_RE.fullmatch(value.reference_hash):
+        if not _syntax.SHA256_RE.fullmatch(value.reference_hash):
             raise CaptureAuthorityError("invalid capture reference hash")
         expiry = _finite(value.reference_expiry, "reference expiry")
         if expiry < finalized_at or expiry > retention_deadline:
@@ -862,7 +850,7 @@ def parse_capture_reference(token: str) -> CaptureReferenceHint:
         raise CaptureAuthorityError("invalid capture reference") from exc
     if len(encoded) > MAX_REFERENCE_TOKEN_BYTES:
         raise CaptureAuthorityError("invalid capture reference")
-    matched = _REFERENCE_RE.fullmatch(token)
+    matched = _syntax.REFERENCE_RE.fullmatch(token)
     if matched is None:
         raise CaptureAuthorityError("invalid capture reference")
     return CaptureReferenceHint(

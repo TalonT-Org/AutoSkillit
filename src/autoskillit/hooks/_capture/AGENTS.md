@@ -10,6 +10,7 @@ owners. Modules must remain importable when the hooks directory alone is on
 |------|---------|
 | `_authority.py` | Project/root descriptor authority and lifecycle context factory |
 | `_ledger.py` | Strict bounded V1/current frame decoding, canonical encoding, and checked ledger writes |
+| `_lifecycle_policy.py` | Canonical lifecycle status enums and shared successor graphs |
 | `_reader.py` | Self-contained verified descriptor reader with exact bounded reads and retained carrier leases |
 | `_replay.py` | Checked hook-output replay, bounded failure transport, and runner settlement |
 | `_resolver.py` | Lifecycle-linearized published-reference resolution and producer-exclusive reader adoption |

@@ -84,7 +84,6 @@ _COMPACTION_THRESHOLD_BYTES = 3 * 1024 * 1024
 _MAX_COMPACTION_BYTES = 4 * 1024 * 1024
 _MAX_TOMBSTONES = 256
 _CAPTURE_ID_RE = _capture_syntax.CAPTURE_ID_RE
-_INCARNATION_RE = _capture_syntax.INCARNATION_RE
 _PUBLIC_NAME_RE = re.compile(r"^shell_[0-9a-f]{16}\.log$")
 _STAGING_NAME_RE = re.compile(r"^\.capture-staging-[0-9a-f]{16}-[0-9a-f]{16}$")
 _QUARANTINE_NAME_RE = re.compile(r"^\.capture-quarantine-[0-9a-f]{16}-[0-9a-f]{16}$")
@@ -128,13 +127,6 @@ def _record_to_dict(record: CaptureLifecycleRecord) -> dict[str, object]:
 def _record_from_dict(value: object) -> CaptureLifecycleRecord:
     try:
         return _capture_ledger.record_from_dict(value)
-    except _capture_ledger.LedgerCodecError as exc:
-        raise CaptureLedgerError(str(exc)) from exc
-
-
-def _validate_record(record: CaptureLifecycleRecord) -> None:
-    try:
-        _capture_ledger.validate_record(record)
     except _capture_ledger.LedgerCodecError as exc:
         raise CaptureLedgerError(str(exc)) from exc
 
@@ -331,7 +323,6 @@ class CaptureLifecycleStore:
         compaction_epoch: int,
         size: int,
     ) -> None:
-        _validate_record(record)
         previous = records.get(record.capture_id)
         if previous is None:
             if record.revision != 1:
@@ -481,27 +472,16 @@ class CaptureLifecycleStore:
         allowed_states: set[CaptureState],
         transform: Callable[[CaptureLifecycleRecord], CaptureLifecycleRecord],
     ) -> CaptureLifecycleRecord:
-        committed: CaptureLifecycleRecord | None = None
-        try:
-            with self._locked():
-                records, compaction_epoch, size = self._load_locked()
-                committed = self._transition_locked(
-                    records=records,
-                    compaction_epoch=compaction_epoch,
-                    ledger_size=size,
-                    authority=authority,
-                    allowed_states=allowed_states,
-                    transform=transform,
-                )
-        except CaptureTransitionCommittedError:
-            raise
-        except (OSError, RuntimeError) as exc:
-            if committed is not None:
-                raise CaptureTransitionCommittedError(
-                    "lifecycle transition committed before lock cleanup failed"
-                ) from exc
-            raise
-        return committed
+        with self._locked():
+            records, compaction_epoch, size = self._load_locked()
+            return self._transition_locked(
+                records=records,
+                compaction_epoch=compaction_epoch,
+                ledger_size=size,
+                authority=authority,
+                allowed_states=allowed_states,
+                transform=transform,
+            )
 
     def _transition_current(
         self,
@@ -511,30 +491,19 @@ class CaptureLifecycleStore:
         allowed_states: set[CaptureState],
         transform: Callable[[CaptureLifecycleRecord], CaptureLifecycleRecord],
     ) -> CaptureLifecycleRecord:
-        committed: CaptureLifecycleRecord | None = None
-        try:
-            with self._locked():
-                records, compaction_epoch, size = self._load_locked()
-                previous = records.get(capture_id)
-                if previous is None or previous.incarnation != incarnation:
-                    raise CaptureLifecycleError("capture transition authority is unavailable")
-                committed = self._transition_locked(
-                    records=records,
-                    compaction_epoch=compaction_epoch,
-                    ledger_size=size,
-                    authority=self._authority_for(previous),
-                    allowed_states=allowed_states,
-                    transform=transform,
-                )
-        except CaptureTransitionCommittedError:
-            raise
-        except (OSError, RuntimeError) as exc:
-            if committed is not None:
-                raise CaptureTransitionCommittedError(
-                    "lifecycle transition committed before lock cleanup failed"
-                ) from exc
-            raise
-        return committed
+        with self._locked():
+            records, compaction_epoch, size = self._load_locked()
+            previous = records.get(capture_id)
+            if previous is None or previous.incarnation != incarnation:
+                raise CaptureLifecycleError("capture transition authority is unavailable")
+            return self._transition_locked(
+                records=records,
+                compaction_epoch=compaction_epoch,
+                ledger_size=size,
+                authority=self._authority_for(previous),
+                allowed_states=allowed_states,
+                transform=transform,
+            )
 
     def reserve_capture(self, capture_id: str) -> CaptureLifecycleRecord:
         if not _CAPTURE_ID_RE.fullmatch(capture_id):
@@ -736,7 +705,6 @@ class CaptureLifecycleStore:
         base = verified.manifest
         candidate: CaptureLifecycleRecord | None = None
         finalized: FinalizedCapture | None = None
-        transition_committed = False
         try:
             with self._locked():
                 records, compaction_epoch, size = self._load_locked()
@@ -798,12 +766,7 @@ class CaptureLifecycleStore:
                     allowed_states={CaptureState.PUBLISHED_WRITING},
                     transform=lambda _current: candidate,
                 )
-                transition_committed = True
-        except (RuntimeError, OSError) as commit_error:
-            if not (
-                transition_committed or isinstance(commit_error, CaptureTransitionCommittedError)
-            ):
-                raise
+        except CaptureTransitionCommittedError as commit_error:
             if candidate is None or finalized is None:
                 raise
             try:

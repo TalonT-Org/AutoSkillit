@@ -1848,7 +1848,7 @@ def test_delivery_transition_does_not_accept_unclassified_successor_after_except
     assert injected
     assert captured.out == expected_stdout
     assert _single_failure_marker(captured.err).stage in {
-        "capture_delivery_start",
+        "capture_delivery_begin",
         "capture_delivery_finish",
     }
 

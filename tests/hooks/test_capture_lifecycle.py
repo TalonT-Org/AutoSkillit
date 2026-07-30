@@ -132,8 +132,11 @@ def test_ledger_rejects_invalid_outcome_projection_combinations(
         revision=1,
     )
 
-    with pytest.raises(CaptureLedgerError, match=message):
-        capture_lifecycle._record_to_dict(replace(record, **changes))
+    with pytest.raises(
+        capture_lifecycle._capture_ledger.LedgerCodecError,
+        match=message,
+    ):
+        replace(record, **changes)
 
 
 def _open_store(project: Path, clock: _Clock):
@@ -1192,7 +1195,7 @@ def test_foreign_ledger_authority_preserves_artifact_as_tampered(
 
     try:
         with pytest.raises(
-            CaptureLedgerError,
+            capture_lifecycle._capture_ledger.LedgerCodecError,
             match="FINAL manifest",
         ):
             store._transition(

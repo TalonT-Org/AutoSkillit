@@ -11,10 +11,20 @@ import re
 import struct
 import sys
 from dataclasses import dataclass, replace
-from enum import StrEnum
 from typing import Any, cast
 
 from . import _snapshot
+from ._lifecycle_policy import (
+    CaptureDeliveryStatus,
+    CaptureReferenceStatus,
+    CaptureRetentionPhase,
+    CaptureSnapshotStatus,
+    CaptureState,
+    is_delivery_successor,
+    is_reference_successor,
+    is_retention_successor,
+    is_state_successor,
+)
 from ._snapshot import (
     CaptureFailureEvidence,
     CaptureFinalManifest,
@@ -59,6 +69,8 @@ __all__ = [
     "same_record",
     "is_delivery_successor",
     "is_reference_successor",
+    "is_retention_successor",
+    "is_state_successor",
     "validate_successor",
     "validate_record",
     "write_all",
@@ -81,49 +93,6 @@ class LedgerCodecError(RuntimeError):
 
 class CaptureTransitionCommittedError(RuntimeError):
     """Raised only after a lifecycle transition frame was durably synced."""
-
-
-class CaptureState(StrEnum):
-    RESERVED = "RESERVED"
-    STAGED = "STAGED"
-    PUBLISHED_WRITING = "PUBLISHED_WRITING"
-    FINALIZED = "FINALIZED"
-    FAILED = "FAILED"
-    ABANDONED = "ABANDONED"
-    DELETING = "DELETING"
-    TAMPERED = "TAMPERED"
-    DELETED = "DELETED"
-
-
-class CaptureReferenceStatus(StrEnum):
-    NOT_REQUESTED = "not_requested"
-    ISSUED = "issued"
-    PUBLISHED = "published"
-    UNAVAILABLE = "unavailable"
-    UNKNOWN = "unknown"
-    EXPIRED = "expired"
-    REVOKED = "revoked"
-
-
-class CaptureDeliveryStatus(StrEnum):
-    NOT_ATTEMPTED = "not_attempted"
-    ATTEMPTING = "attempting"
-    DELIVERED = "delivered"
-    FAILED = "failed"
-    UNKNOWN = "unknown"
-
-
-class CaptureRetentionPhase(StrEnum):
-    ACTIVE = "active"
-    ELIGIBLE = "eligible"
-    DELETING = "deleting"
-    TAMPERED = "tampered"
-    DELETED = "deleted"
-
-
-class CaptureSnapshotStatus(StrEnum):
-    ABSENT = "absent"
-    VERIFIED = "verified"
 
 
 _PUBLIC_NAME_RE = re.compile(r"^shell_[0-9a-f]{16}\.log$")
@@ -515,160 +484,6 @@ def validate_record(record: CaptureLifecycleRecord) -> None:
         raise LedgerCodecError("deleting retention state is inconsistent")
 
 
-_STATE_SUCCESSORS = {
-    CaptureState.RESERVED: {
-        CaptureState.RESERVED,
-        CaptureState.STAGED,
-        CaptureState.FAILED,
-        CaptureState.ABANDONED,
-        CaptureState.DELETED,
-        CaptureState.TAMPERED,
-    },
-    CaptureState.STAGED: {
-        CaptureState.STAGED,
-        CaptureState.PUBLISHED_WRITING,
-        CaptureState.FAILED,
-        CaptureState.ABANDONED,
-        CaptureState.DELETED,
-        CaptureState.TAMPERED,
-    },
-    CaptureState.PUBLISHED_WRITING: {
-        CaptureState.PUBLISHED_WRITING,
-        CaptureState.FINALIZED,
-        CaptureState.FAILED,
-        CaptureState.ABANDONED,
-        CaptureState.DELETED,
-        CaptureState.TAMPERED,
-    },
-    CaptureState.FINALIZED: {
-        CaptureState.FINALIZED,
-        CaptureState.DELETING,
-        CaptureState.TAMPERED,
-    },
-    CaptureState.FAILED: {
-        CaptureState.FAILED,
-        CaptureState.DELETING,
-        CaptureState.TAMPERED,
-    },
-    CaptureState.ABANDONED: {
-        CaptureState.ABANDONED,
-        CaptureState.DELETING,
-        CaptureState.DELETED,
-        CaptureState.TAMPERED,
-    },
-    CaptureState.DELETING: {
-        CaptureState.DELETING,
-        CaptureState.DELETED,
-        CaptureState.TAMPERED,
-    },
-    CaptureState.TAMPERED: {CaptureState.TAMPERED},
-    CaptureState.DELETED: {CaptureState.DELETED},
-}
-
-_REFERENCE_SUCCESSORS = {
-    CaptureReferenceStatus.NOT_REQUESTED: {CaptureReferenceStatus.NOT_REQUESTED},
-    CaptureReferenceStatus.ISSUED: {
-        CaptureReferenceStatus.ISSUED,
-        CaptureReferenceStatus.PUBLISHED,
-        CaptureReferenceStatus.UNAVAILABLE,
-        CaptureReferenceStatus.UNKNOWN,
-        CaptureReferenceStatus.EXPIRED,
-        CaptureReferenceStatus.REVOKED,
-    },
-    CaptureReferenceStatus.PUBLISHED: {
-        CaptureReferenceStatus.PUBLISHED,
-        CaptureReferenceStatus.UNAVAILABLE,
-        CaptureReferenceStatus.UNKNOWN,
-        CaptureReferenceStatus.EXPIRED,
-        CaptureReferenceStatus.REVOKED,
-    },
-    CaptureReferenceStatus.UNAVAILABLE: {
-        CaptureReferenceStatus.UNAVAILABLE,
-        CaptureReferenceStatus.EXPIRED,
-        CaptureReferenceStatus.REVOKED,
-    },
-    CaptureReferenceStatus.UNKNOWN: {
-        CaptureReferenceStatus.UNKNOWN,
-        CaptureReferenceStatus.EXPIRED,
-        CaptureReferenceStatus.REVOKED,
-    },
-    CaptureReferenceStatus.EXPIRED: {CaptureReferenceStatus.EXPIRED},
-    CaptureReferenceStatus.REVOKED: {CaptureReferenceStatus.REVOKED},
-}
-
-_DELIVERY_SUCCESSORS = {
-    CaptureDeliveryStatus.NOT_ATTEMPTED: {
-        CaptureDeliveryStatus.NOT_ATTEMPTED,
-        CaptureDeliveryStatus.ATTEMPTING,
-        CaptureDeliveryStatus.UNKNOWN,
-    },
-    CaptureDeliveryStatus.ATTEMPTING: {
-        CaptureDeliveryStatus.ATTEMPTING,
-        CaptureDeliveryStatus.DELIVERED,
-        CaptureDeliveryStatus.FAILED,
-        CaptureDeliveryStatus.UNKNOWN,
-    },
-    CaptureDeliveryStatus.DELIVERED: {CaptureDeliveryStatus.DELIVERED},
-    CaptureDeliveryStatus.FAILED: {CaptureDeliveryStatus.FAILED},
-    CaptureDeliveryStatus.UNKNOWN: {CaptureDeliveryStatus.UNKNOWN},
-}
-
-_RETENTION_SUCCESSORS = {
-    CaptureRetentionPhase.ACTIVE: {
-        CaptureRetentionPhase.ACTIVE,
-        CaptureRetentionPhase.ELIGIBLE,
-        CaptureRetentionPhase.DELETING,
-        CaptureRetentionPhase.TAMPERED,
-        CaptureRetentionPhase.DELETED,
-    },
-    CaptureRetentionPhase.ELIGIBLE: {
-        CaptureRetentionPhase.ELIGIBLE,
-        CaptureRetentionPhase.DELETING,
-        CaptureRetentionPhase.TAMPERED,
-        CaptureRetentionPhase.DELETED,
-    },
-    CaptureRetentionPhase.DELETING: {
-        CaptureRetentionPhase.DELETING,
-        CaptureRetentionPhase.TAMPERED,
-        CaptureRetentionPhase.DELETED,
-    },
-    CaptureRetentionPhase.TAMPERED: {CaptureRetentionPhase.TAMPERED},
-    CaptureRetentionPhase.DELETED: {CaptureRetentionPhase.DELETED},
-}
-
-
-def is_reference_successor(
-    previous: CaptureReferenceStatus,
-    candidate: CaptureReferenceStatus,
-    *,
-    allow_same: bool = True,
-) -> bool:
-    """Return whether the shared reference-axis policy permits this successor."""
-
-    return (
-        type(previous) is CaptureReferenceStatus
-        and type(candidate) is CaptureReferenceStatus
-        and (allow_same or candidate is not previous)
-        and candidate in _REFERENCE_SUCCESSORS[previous]
-    )
-
-
-def is_delivery_successor(
-    previous: CaptureDeliveryStatus,
-    candidate: CaptureDeliveryStatus,
-    *,
-    allow_same: bool = True,
-) -> bool:
-    """Return whether the shared delivery-axis policy permits this successor."""
-
-    return (
-        type(previous) is CaptureDeliveryStatus
-        and type(candidate) is CaptureDeliveryStatus
-        and (allow_same or candidate is not previous)
-        and candidate in _DELIVERY_SUCCESSORS[previous]
-    )
-
-
 def validate_successor(
     previous: CaptureLifecycleRecord,
     candidate: CaptureLifecycleRecord,
@@ -715,13 +530,16 @@ def validate_successor(
         candidate.capture_id != previous.capture_id
         or candidate.incarnation != previous.incarnation
         or candidate.revision != previous.revision + 1
-        or candidate.state not in _STATE_SUCCESSORS[previous.state]
+        or not is_state_successor(previous.state, candidate.state)
         or not reference_successor
         or not is_delivery_successor(
             previous.delivery_status,
             candidate.delivery_status,
         )
-        or candidate.retention_phase not in _RETENTION_SUCCESSORS[previous.retention_phase]
+        or not is_retention_successor(
+            previous.retention_phase,
+            candidate.retention_phase,
+        )
         or candidate.project_identity != previous.project_identity
         or candidate.root_identity != previous.root_identity
         or candidate.staging_name != previous.staging_name

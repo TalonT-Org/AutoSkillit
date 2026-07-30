@@ -43,7 +43,9 @@ from autoskillit.core import (
     CmdSpec,
     CookSessionHandle,
     ExecutableLaunchBinding,
+    ManagedHeadlessSessionLineageRef,
     NamedResume,
+    NativeShellCaptureDecision,
     NoResume,
     OutputFormat,
     PluginLaunchBinding,
@@ -570,7 +572,15 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         output_format: OutputFormat = OutputFormat.JSON,
         plugin_binding: PluginLaunchBinding | None = None,
         env_extras: Mapping[str, str] | None = None,
+        native_shell_capture_decision: NativeShellCaptureDecision | None = None,
+        managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
+        managed_attempt_id: str | None = None,
     ) -> CmdSpec:
+        del (
+            native_shell_capture_decision,
+            managed_lineage_ref,
+            managed_attempt_id,
+        )
         cmd: list[str] = [
             "claude",
             ClaudeFlags.PRINT,
@@ -586,7 +596,9 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         merged[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         merged[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         if env_extras:
-            merged.update(env_extras)
+            for key, value in env_extras.items():
+                if key not in _PROVIDER_EXTRAS_BASE_DENYLIST:
+                    merged[key] = value
         env = dict(build_agent_env(base={}, extras=merged))
         env.update(_HEADLESS_ENV_HARDENING)
         return CmdSpec(
@@ -742,7 +754,15 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         allowed_write_prefixes: tuple[str, ...] = (),
         sentinel_contract: str = "",
         resume_message: str | None = None,
+        native_shell_capture_decision: NativeShellCaptureDecision | None = None,
+        managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
+        managed_attempt_id: str | None = None,
     ) -> CmdSpec:
+        del (
+            native_shell_capture_decision,
+            managed_lineage_ref,
+            managed_attempt_id,
+        )
         if resume_session_id:
             effective_prompt = _compose_resume_prompt(
                 base_prompt=orchestrator_prompt,

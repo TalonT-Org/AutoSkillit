@@ -588,6 +588,44 @@ def test_refused_gate_resume_selects_next(tmp_path):
     assert "- gate-check: refused" in decision.completed_dispatches_block
 
 
+def test_gate_record_replacement_preserves_managed_lineage_identity(tmp_path):
+    from autoskillit.core import ManagedHeadlessSessionLineageRef
+    from autoskillit.fleet.state_gates import record_gate_outcome
+
+    reference = ManagedHeadlessSessionLineageRef(
+        launch_id="a" * 32,
+        lineage_digest="b" * 64,
+        lineage_anchor=str(tmp_path.resolve()),
+        anchor_device=1,
+        anchor_inode=2,
+    )
+    sp = _state_path(tmp_path)
+    write_initial_state(
+        sp,
+        "cid",
+        "test-campaign",
+        "/m.yaml",
+        [
+            DispatchRecord(
+                name="gate-check",
+                campaign_id="cid",
+                caller_session_id="caller",
+                managed_lineage_ref=reference,
+            )
+        ],
+    )
+
+    result = record_gate_outcome(sp, "gate-check", approved=True)
+
+    assert result.success is True
+    state = read_state(sp)
+    assert state is not None
+    record = state.dispatches[0]
+    assert record.managed_lineage_ref == reference
+    assert record.campaign_id == "cid"
+    assert record.caller_session_id == "caller"
+
+
 # ---------------------------------------------------------------------------
 # Tests T1-T6: validation-failure state persistence
 # ---------------------------------------------------------------------------

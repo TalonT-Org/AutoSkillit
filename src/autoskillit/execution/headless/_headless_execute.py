@@ -65,6 +65,10 @@ from autoskillit.execution.headless._headless_launch import (
     _run_headless_attempt,
 )
 from autoskillit.execution.headless._headless_result import _build_skill_result
+from autoskillit.execution.headless._managed import (
+    _LineageCallbacks,
+    _ManagedLineageObserver,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import SubprocessResult
@@ -76,7 +80,7 @@ logger = get_logger(__name__)
 
 async def _execute_claude_headless(
     build_spec: Callable[
-        [PluginLaunchBinding | None, Mapping[str, str] | None],
+        [PluginLaunchBinding | None, Mapping[str, str] | None, str | None],
         CmdSpec,
     ],
     cwd: str,
@@ -126,6 +130,7 @@ async def _execute_claude_headless(
     closure_spec: ClosureAuthoritySpec | None = None,
     closure_report_root: Path | None = None,
     skill_contract: SkillContract | None = None,
+    managed_lineage_observer: _ManagedLineageObserver | None = None,
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -243,6 +248,7 @@ async def _execute_claude_headless(
     result: SubprocessResult
     skill_result: SkillResult
     _stream_parser = _step_backend.stream_parser(completion_marker=completion_marker)
+    lineage_callbacks = _LineageCallbacks(managed_lineage_observer, on_session_id_resolved)
     spec: CmdSpec
     while True:
         try:
@@ -268,8 +274,9 @@ async def _execute_claude_headless(
                 max_extension_seconds=max_extension_seconds,
                 marker_dir=marker_dir,
                 session_id=session_id,
-                on_session_id_resolved=on_session_id_resolved,
+                on_session_id_resolved=lineage_callbacks.on_candidate,
                 stream_parser=_stream_parser,
+                **lineage_callbacks.attempt_kwargs,
             )
         except Exception as exc:
             logger.error("headless_runner_crashed", exc_info=True)
@@ -459,12 +466,12 @@ async def _execute_claude_headless(
                 plugin_authority=plugin_authority,
                 plugin_load_mode=plugin_load_mode,
                 session_env=spec.env,
+                **lineage_callbacks.attempt_kwargs,
             )
             if nudge_success is not None:
                 skill_result = nudge_success
 
-        if on_session_id_resolved is not None and skill_result.session_id:
-            on_session_id_resolved(skill_result.session_id)
+        lineage_callbacks.bind_final(skill_result.session_id)
 
         _clone_reverted = False
         if _clone_snapshot is not None:

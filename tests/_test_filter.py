@@ -216,7 +216,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_inspector": frozenset({"core", "execution"}),
     "_type_intake_policy": frozenset({"core", "execution"}),
     "_type_invariant_registry": frozenset({"core"}),
-    "_type_native_shell_capture": frozenset({"core", "execution", "pipeline", "server"}),
+    "_type_native_shell_capture": frozenset(
+        {"cli", "core", "execution", "fleet", "pipeline", "server"}
+    ),
     "_install_detect": frozenset({"core", "cli", "config"}),
     "_linux_proc": frozenset({"core", "execution", "fleet", "cli"}),
     "_type_plugin_source": frozenset(

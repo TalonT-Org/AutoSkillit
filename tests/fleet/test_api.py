@@ -234,6 +234,38 @@ class TestExecuteDispatchCancelledErrorLockRelease:
         assert captured_kwargs[0].get("resume_session_id") == "abc-123"
 
     @pytest.mark.anyio
+    async def test_execute_dispatch_passes_typed_native_shell_capture_mode(
+        self, tool_ctx, monkeypatch
+    ) -> None:
+        from autoskillit.core import NativeShellCaptureMode
+        from autoskillit.fleet import execute_dispatch
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        captured_kwargs: list[dict] = []
+
+        async def _capture(**kwargs):
+            captured_kwargs.append(kwargs)
+            raise asyncio.CancelledError
+
+        monkeypatch.setattr("autoskillit.fleet._api._run_dispatch", _capture)
+
+        with pytest.raises(asyncio.CancelledError):
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="do something",
+                ingredients=None,
+                dispatch_name="test-dispatch",
+                timeout_sec=None,
+                prompt_builder=lambda *a, **kw: "prompt",
+                quota_checker=lambda *a, **kw: None,
+                quota_refresher=lambda *a, **kw: None,
+                native_shell_capture_mode=NativeShellCaptureMode.DIRECT,
+            )
+
+        assert captured_kwargs[0]["native_shell_capture_mode"] is NativeShellCaptureMode.DIRECT
+
+    @pytest.mark.anyio
     async def test_execute_dispatch_passes_caller_instructions_to_run_dispatch(
         self, tool_ctx, monkeypatch
     ) -> None:

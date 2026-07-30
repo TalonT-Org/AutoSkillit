@@ -20,10 +20,10 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.medium, pytest.mark.featu
 
 
 @pytest.mark.anyio
-async def test_dispatch_food_truck_tool_passes_resume_session_id_to_executor(
+async def test_dispatch_food_truck_missing_lineage_does_not_pass_resume_session_to_executor(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ):
-    """dispatch_food_truck MCP tool forwards resume_session_id all the way to the executor."""
+    """An unverified resume session cannot cross the food-truck executor boundary."""
     from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
@@ -50,14 +50,14 @@ async def test_dispatch_food_truck_tool_passes_resume_session_id_to_executor(
     )
 
     assert executor.dispatch_calls, "dispatch_food_truck executor was never called"
-    assert executor.dispatch_calls[0].resume_session_id == "sess-resume-123"
+    assert executor.dispatch_calls[0].resume_session_id is None
 
 
 @pytest.mark.anyio
-async def test_dispatch_food_truck_tool_passes_resume_message_to_executor(
+async def test_dispatch_food_truck_missing_lineage_drops_resume_message(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ):
-    """dispatch_food_truck MCP tool forwards resume_message all the way to the executor."""
+    """Resume context is dropped when no durable lineage proves its authority."""
     from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
@@ -85,7 +85,7 @@ async def test_dispatch_food_truck_tool_passes_resume_message_to_executor(
     )
 
     assert executor.dispatch_calls, "dispatch_food_truck executor was never called"
-    assert executor.dispatch_calls[0].resume_message == "retry with new quota"
+    assert executor.dispatch_calls[0].resume_message is None
 
 
 @pytest.mark.anyio
@@ -115,6 +115,95 @@ async def test_dispatch_food_truck_tool_passes_caller_instructions_into_prompt(
     assert executor.dispatch_calls, "dispatch_food_truck executor was never called"
     assert "CALLER INSTRUCTIONS" in executor.dispatch_calls[0].orchestrator_prompt
     assert "use opus for implement" in executor.dispatch_calls[0].orchestrator_prompt
+
+
+class TestDispatchFoodTruckNativeShellCaptureMode:
+    @staticmethod
+    def _setup(tool_ctx, monkeypatch) -> None:
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+        _patch_dispatch_quota_no_sleep(monkeypatch)
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=2)
+        repo = InMemoryRecipeRepository()
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe"))
+        tool_ctx.recipes = repo
+
+    @pytest.mark.anyio
+    async def test_typed_modes_are_isolated_across_concurrent_server_dispatches(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ) -> None:
+        import asyncio
+
+        from autoskillit.core import FleetErrorCode, NativeShellCaptureMode
+        from autoskillit.fleet import DispatchRejected, DispatchResult
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        self._setup(tool_ctx_kitchen_open, monkeypatch)
+        observed: list[NativeShellCaptureMode | None] = []
+
+        async def _capture_execute_dispatch(**kwargs):
+            observed.append(kwargs["native_shell_capture_mode"])
+            await asyncio.sleep(0)
+            return DispatchResult(
+                DispatchRejected(
+                    error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+                    message="test",
+                )
+            )
+
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_fleet_dispatch.execute_dispatch",
+            _capture_execute_dispatch,
+        )
+
+        await asyncio.gather(
+            dispatch_food_truck(
+                recipe="test-recipe",
+                task="capture",
+                native_shell_capture_mode=NativeShellCaptureMode.CAPTURE,
+            ),
+            dispatch_food_truck(
+                recipe="test-recipe",
+                task="direct",
+                native_shell_capture_mode=NativeShellCaptureMode.DIRECT,
+            ),
+        )
+
+        assert set(observed) == {
+            NativeShellCaptureMode.CAPTURE,
+            NativeShellCaptureMode.DIRECT,
+        }
+
+    @pytest.mark.anyio
+    async def test_long_lived_server_never_reads_ambient_capture_mode(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ) -> None:
+        from autoskillit.core import FleetErrorCode
+        from autoskillit.fleet import DispatchRejected, DispatchResult
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        self._setup(tool_ctx_kitchen_open, monkeypatch)
+        monkeypatch.setenv("AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE", "direct")
+        observed: list[object] = []
+
+        async def _capture_execute_dispatch(**kwargs):
+            observed.append(kwargs["native_shell_capture_mode"])
+            return DispatchResult(
+                DispatchRejected(
+                    error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+                    message="test",
+                )
+            )
+
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_fleet_dispatch.execute_dispatch",
+            _capture_execute_dispatch,
+        )
+
+        await dispatch_food_truck(recipe="test-recipe", task="ambient-must-not-win")
+
+        assert observed == [None]
 
 
 @pytest.mark.anyio

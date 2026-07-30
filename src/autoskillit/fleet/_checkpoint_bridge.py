@@ -7,10 +7,17 @@ Two progress sources feed into SessionCheckpoint:
 
 from __future__ import annotations
 
-from typing import Any
+import json
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
-from autoskillit.core import SessionCheckpoint
-from autoskillit.fleet.sidecar import IssueSidecarEntry
+from autoskillit.core import SessionCheckpoint, get_logger
+from autoskillit.fleet.sidecar import IssueSidecarEntry, read_sidecar_from_path
+
+if TYPE_CHECKING:
+    from autoskillit.pipeline.context import ToolContext
+
+logger = get_logger(__name__)
 
 
 def checkpoint_from_sidecar(
@@ -55,3 +62,44 @@ def checkpoint_from_tracker(
         backend_name=backend_name,
         skill_name=skill_name,
     )
+
+
+def load_dispatch_progress(
+    *,
+    tool_ctx: ToolContext,
+    dispatch_sidecar_path: str,
+    dispatch_id: str,
+    backend_name: str,
+    recipe: str,
+) -> tuple[Path, list[IssueSidecarEntry], SessionCheckpoint | None]:
+    """Load sidecar/tracker progress and choose the authoritative checkpoint."""
+    sidecar_file = Path(dispatch_sidecar_path)
+    sidecar_entries: list[IssueSidecarEntry] = []
+    dispatch_checkpoint: SessionCheckpoint | None = None
+    if sidecar_file.exists():
+        sidecar_entries = read_sidecar_from_path(sidecar_file).entries
+        if sidecar_entries:
+            dispatch_checkpoint = checkpoint_from_sidecar(
+                sidecar_entries,
+                backend_name=backend_name,
+                skill_name=recipe,
+            )
+
+    tracker_checkpoint: SessionCheckpoint | None = None
+    tracker_path = (
+        tool_ctx.project_dir / ".autoskillit" / "temp" / "pipeline_tracker" / f"{dispatch_id}.json"
+    )
+    if tracker_path.exists():
+        try:
+            tracker_data = json.loads(tracker_path.read_text())
+            tracker_checkpoint = checkpoint_from_tracker(
+                tracker_data,
+                backend_name=backend_name,
+                skill_name=recipe,
+            )
+        except (OSError, ValueError, TypeError, AttributeError):
+            logger.debug("tracker read failed for %s", dispatch_id, exc_info=True)
+
+    if dispatch_checkpoint is None and tracker_checkpoint is not None:
+        dispatch_checkpoint = tracker_checkpoint
+    return sidecar_file, sidecar_entries, dispatch_checkpoint

@@ -145,6 +145,52 @@ class TestClassifyDispatchOutcomeCompletedDirty:
         assert reason == FleetErrorCode.FLEET_L3_PARSE_FAILED
 
 
+class TestManagedCaptureDiagnosticBoundaries:
+    def test_failure_result_text_cannot_change_standard_classification_reason(self):
+        diagnostic = (
+            "requested_mode=direct effective_mode=capture "
+            "reason=invalid_lineage lineage_status=corrupt "
+            "launch_id=feedfacefeedfacefeedfacefeedface "
+            "attempt_id=deaddeaddeaddeaddeaddeaddeaddead"
+        )
+        skill_result = dataclasses.replace(
+            _DEFAULT_SKILL_RESULT,
+            result=diagnostic,
+            stderr=diagnostic,
+            success=False,
+        )
+
+        status, reason = classify_dispatch_outcome(
+            None,
+            skill_result,
+            sidecar_exists=False,
+        )
+
+        assert status == DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+        assert "feedface" not in reason
+        assert "deaddead" not in reason
+
+    def test_diagnostic_payload_reason_uses_standard_fleet_failure_wording(self):
+        diagnostic = "managed lineage validation failed launch_id=feedfacefeedfacefeedfacefeedface"
+        parsed = L3ParseResult(
+            outcome="completed_clean",
+            payload={"success": False, "reason": diagnostic},
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        )
+
+        status, reason = classify_dispatch_outcome(
+            parsed,
+            dataclasses.replace(_DEFAULT_SKILL_RESULT, success=False),
+        )
+
+        assert status == DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH
+        assert "feedface" not in reason
+
+
 class TestReasonAwareResumePolicy:
     def test_idle_stall_with_progress_is_failure(self):
         parsed, skill_result = _no_sentinel(session_id="sess-abc", lifespan_started=True)

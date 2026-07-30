@@ -11,11 +11,16 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import FleetErrorCode, ProcessCleanupResult, RetryReason
+from autoskillit.core import (
+    FleetErrorCode,
+    ManagedHeadlessSessionLineageRef,
+    ProcessCleanupResult,
+    RetryReason,
+)
 
 _resume_lock = threading.Lock()
 
-FLEET_STATE_SCHEMA_VERSION = 9
+FLEET_STATE_SCHEMA_VERSION = 10
 
 FLEET_HALTED_SENTINEL = "fleet_halted_on_failure"
 
@@ -30,6 +35,7 @@ _RETRY_IDENTITY_FIELDS: frozenset[str] = frozenset(
         "resume_count",
         "issue_url",
         "backend_name",
+        "managed_lineage_ref",
     }
 )
 
@@ -382,6 +388,7 @@ class DispatchRecord:
     resume_count: int = 0
     backend_name: str = ""
     effect_provenance: dict[str, Any] = field(default_factory=dict)
+    managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -419,6 +426,11 @@ class DispatchRecord:
             "resume_count": self.resume_count,
             "backend_name": self.backend_name,
             "effect_provenance": dict(self.effect_provenance),
+            "managed_lineage_ref": (
+                self.managed_lineage_ref.to_dict()
+                if self.managed_lineage_ref is not None
+                else None
+            ),
         }
 
     @classmethod
@@ -430,6 +442,12 @@ class DispatchRecord:
             raise TypeError(
                 f"caller_backend_name must be str, got {type(caller_backend_name).__name__!r}"
             )
+        managed_lineage_ref_raw = d.get("managed_lineage_ref")
+        managed_lineage_ref = (
+            ManagedHeadlessSessionLineageRef.from_dict(managed_lineage_ref_raw)
+            if managed_lineage_ref_raw is not None
+            else None
+        )
         return cls(
             name=d["name"],
             status=DispatchStatus(d.get("status", DispatchStatus.PENDING)),
@@ -487,6 +505,7 @@ class DispatchRecord:
             resume_count=d.get("resume_count", 0),
             backend_name=d.get("backend_name", ""),
             effect_provenance=d.get("effect_provenance", {}),
+            managed_lineage_ref=managed_lineage_ref,
         )
 
     @classmethod
@@ -499,6 +518,7 @@ class DispatchRecord:
         dispatch_id: str = "",
         caller_session_id: str = "",
         effect_provenance: dict[str, Any] | None = None,
+        managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
     ) -> DispatchRecord:
         if not diagnostic_message or not diagnostic_message.strip():
             raise ValueError("diagnostic_message is required for refused records")
@@ -510,6 +530,7 @@ class DispatchRecord:
             dispatch_id=dispatch_id,
             caller_session_id=caller_session_id,
             effect_provenance=effect_provenance or {},
+            managed_lineage_ref=managed_lineage_ref,
         )
 
     @classmethod
@@ -522,6 +543,7 @@ class DispatchRecord:
         dispatch_id: str = "",
         caller_session_id: str = "",
         effect_provenance: dict[str, Any] | None = None,
+        managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
     ) -> DispatchRecord:
         if diagnostic_message and diagnostic_message.strip():
             return cls.refused(
@@ -531,6 +553,7 @@ class DispatchRecord:
                 dispatch_id=dispatch_id,
                 caller_session_id=caller_session_id,
                 effect_provenance=effect_provenance,
+                managed_lineage_ref=managed_lineage_ref,
             )
         return cls(
             name=name,
@@ -539,6 +562,7 @@ class DispatchRecord:
             dispatch_id=dispatch_id,
             caller_session_id=caller_session_id,
             effect_provenance=effect_provenance or {},
+            managed_lineage_ref=managed_lineage_ref,
         )
 
 

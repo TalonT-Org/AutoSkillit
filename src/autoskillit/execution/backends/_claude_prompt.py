@@ -48,11 +48,24 @@ _HEADLESS_ENV_HARDENING: dict[str, str] = {
 # additions to that set do not silently change interactive env filtering.
 _INTERACTIVE_ENV_EXCLUSIONS: frozenset[str] = frozenset(_HEADLESS_ENV_HARDENING)
 
-_PROVIDER_EXTRAS_BASE_DENYLIST: frozenset[str] = frozenset(
+_PROTECTED_MANAGED_SESSION_ENV_VARS: frozenset[str] = frozenset(
     {
-        "AUTOSKILLIT_SESSION_TYPE",
-        "AUTOSKILLIT_HEADLESS",
+        NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
+        MANAGED_LAUNCH_ID_ENV_VAR,
+        MANAGED_ATTEMPT_ID_ENV_VAR,
+        MANAGED_LINEAGE_DIGEST_ENV_VAR,
+        MANAGED_LINEAGE_REF_ENV_VAR,
     }
+)
+
+_PROVIDER_EXTRAS_BASE_DENYLIST: frozenset[str] = (
+    frozenset(
+        {
+            "AUTOSKILLIT_SESSION_TYPE",
+            "AUTOSKILLIT_HEADLESS",
+        }
+    )
+    | _PROTECTED_MANAGED_SESSION_ENV_VARS
 )
 
 _SKILL_SESSION_EXTRAS_DENYLIST: frozenset[str] = _PROVIDER_EXTRAS_BASE_DENYLIST | frozenset(

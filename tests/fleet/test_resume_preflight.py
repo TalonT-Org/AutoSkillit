@@ -20,15 +20,15 @@ pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature
 
 class TestResumeJSONLPreflight:
     @pytest.mark.anyio
-    async def test_missing_jsonl_rejects_dispatch(self, tool_ctx, monkeypatch, tmp_path):
-        """Resume dispatch with missing JSONL returns FLEET_RESUME_SESSION_MISSING."""
-        from autoskillit.core import FleetErrorCode
-        from autoskillit.fleet import (
-            DispatchCompleted,
-            DispatchRecord,
-            DispatchStatus,
-            write_initial_state,
+    async def test_missing_lineage_degrades_to_fresh_capture_before_jsonl_preflight(
+        self, tool_ctx, monkeypatch, tmp_path
+    ):
+        """A session log alone cannot authorize resume without durable lineage."""
+        from autoskillit.core import (
+            ManagedHeadlessSessionLineageStatus,
+            NativeShellCaptureMode,
         )
+        from autoskillit.fleet import DispatchRecord, write_initial_state
         from autoskillit.fleet._api import execute_dispatch
 
         _setup_dispatch(tool_ctx, monkeypatch)
@@ -48,7 +48,7 @@ class TestResumeJSONLPreflight:
             project_log_dir=tmp_path, session_log_path=None
         )
 
-        result = await execute_dispatch(
+        await execute_dispatch(
             tool_ctx=tool_ctx,
             recipe="test-recipe",
             task="t",
@@ -62,10 +62,14 @@ class TestResumeJSONLPreflight:
             prior_dispatch_id=prior_id,
         )
 
-        assert isinstance(result.outcome, DispatchCompleted)
-        assert result.outcome.dispatch_status is DispatchStatus.REFUSED
-        assert result.outcome.reason == FleetErrorCode.FLEET_RESUME_SESSION_MISSING
-        assert len(tool_ctx.executor.dispatch_calls) == 0
+        assert len(tool_ctx.executor.dispatch_calls) == 1
+        call = tool_ctx.executor.dispatch_calls[0]
+        assert call.resume_session_id is None
+        assert call.native_shell_capture_decision.mode is NativeShellCaptureMode.CAPTURE
+        assert (
+            call.native_shell_capture_decision.lineage_status
+            is ManagedHeadlessSessionLineageStatus.MISSING
+        )
 
     @pytest.mark.anyio
     async def test_existing_jsonl_proceeds_past_preflight(self, tool_ctx, monkeypatch, tmp_path):
@@ -99,6 +103,7 @@ class TestResumeJSONLPreflight:
         )
 
         assert len(tool_ctx.executor.dispatch_calls) == 1
+        assert tool_ctx.executor.dispatch_calls[0].resume_session_id is None
 
     @pytest.mark.anyio
     async def test_chain_fallback_proceeds_when_primary_missing(
@@ -169,12 +174,15 @@ class TestResumeJSONLPreflight:
             f"Expected dispatch to proceed but got rejection: {result.outcome}"
         )
         assert len(tool_ctx.executor.dispatch_calls) == 1
+        assert tool_ctx.executor.dispatch_calls[0].resume_session_id is None
 
 
 class TestSessionChainContinuity:
     @pytest.mark.anyio
-    async def test_session_id_mismatch_logs_warning(self, tool_ctx, monkeypatch, tmp_path):
-        """When dispatched session_id differs from resume_session_id, a warning is logged."""
+    async def test_unverified_session_id_cannot_reach_continuity_check(
+        self, tool_ctx, monkeypatch, tmp_path
+    ):
+        """Missing lineage clears the untrusted resume ID before execution."""
         import dataclasses
 
         from autoskillit.fleet._api import execute_dispatch
@@ -217,9 +225,8 @@ class TestSessionChainContinuity:
         mismatch_logs = [
             log for log in logs if log.get("event") == "session_id_continuity_mismatch"
         ]
-        assert mismatch_logs, f"Expected session_id_continuity_mismatch warning, got: {logs}"
-        assert mismatch_logs[0]["resume_session_id"] == "original-session-id"
-        assert mismatch_logs[0]["returned_session_id"] == "returned-different-session"
+        assert mismatch_logs == []
+        assert tool_ctx.executor.dispatch_calls[0].resume_session_id is None
 
 
 class TestResumeSuccessGuard:

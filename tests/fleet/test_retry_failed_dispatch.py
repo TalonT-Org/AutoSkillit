@@ -486,6 +486,11 @@ def test_issue_url_in_retry_identity_fields():
     assert "issue_url" in _RETRY_IDENTITY_FIELDS
 
 
+def test_managed_lineage_ref_in_retry_identity_fields():
+    """managed_lineage_ref is durable logical identity across physical attempts."""
+    assert "managed_lineage_ref" in _RETRY_IDENTITY_FIELDS
+
+
 def test_issue_url_preserved_on_clear_dispatch_for_retry():
     """issue_url retains its value after _clear_dispatch_for_retry."""
     d = DispatchRecord(

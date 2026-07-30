@@ -12,6 +12,7 @@ imports from ``claude.py`` or ``codex.py`` (the two concrete backends).
 
 from __future__ import annotations
 
+import json
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
@@ -23,7 +24,16 @@ from autoskillit.core import (
     AUTOSKILLIT_APPLICABLE_GUARDS,
     AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES,
     CAMPAIGN_ID_ENV_VAR,
+    CODEX_COOK_RESERVED_ENV_VARS,
+    CODEX_STARTUP_TRACE_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
+    MANAGED_ATTEMPT_ID_ENV_VAR,
+    MANAGED_LAUNCH_ID_ENV_VAR,
+    MANAGED_LINEAGE_DIGEST_ENV_VAR,
+    MANAGED_LINEAGE_REF_ENV_VAR,
+    NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
+    ManagedHeadlessSessionLineageRef,
+    NativeShellCaptureDecision,
     SkillSessionConfig,
 )
 
@@ -50,6 +60,48 @@ SHARED_BASELINE_ENV: Mapping[str, str] = MappingProxyType(
         "MCP_CONNECTION_NONBLOCKING": "0",
     }
 )
+
+
+def _merge_caller_env_extras(
+    target: dict[str, str],
+    extras: Mapping[str, str] | None,
+    *,
+    denylist: frozenset[str] = frozenset(),
+) -> None:
+    """Merge caller extras without admitting Codex cook-owned controls."""
+    if extras is not None:
+        blocked = denylist | CODEX_COOK_RESERVED_ENV_VARS | {CODEX_STARTUP_TRACE_ENV_VAR}
+        target.update({key: value for key, value in extras.items() if key not in blocked})
+
+
+def _managed_native_shell_env(
+    *,
+    decision: NativeShellCaptureDecision | None,
+    lineage_ref: ManagedHeadlessSessionLineageRef | None,
+    attempt_id: str | None,
+) -> dict[str, str]:
+    """Serialize the complete trusted child control or reject partial identity."""
+    values = (decision, lineage_ref, attempt_id)
+    if all(value is None for value in values):
+        return {}
+    if not all(value is not None for value in values):
+        raise ValueError("managed native shell capture fields must be supplied together")
+    assert decision is not None
+    assert lineage_ref is not None
+    assert attempt_id is not None
+    if len(attempt_id) != 32 or any(char not in "0123456789abcdef" for char in attempt_id):
+        raise ValueError("managed_attempt_id must be 32 lowercase hexadecimal characters")
+    return {
+        NATIVE_SHELL_CAPTURE_MODE_ENV_VAR: decision.mode.value,
+        MANAGED_LAUNCH_ID_ENV_VAR: lineage_ref.launch_id,
+        MANAGED_ATTEMPT_ID_ENV_VAR: attempt_id,
+        MANAGED_LINEAGE_DIGEST_ENV_VAR: lineage_ref.lineage_digest,
+        MANAGED_LINEAGE_REF_ENV_VAR: json.dumps(
+            lineage_ref.to_dict(),
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+    }
 
 
 class FlagVocabulary(NamedTuple):
@@ -165,6 +217,9 @@ class BackendCmdBuilderBase(ABC):
             "resume_message": config.resume_message,
             "sandbox_mode": config.sandbox_mode,
             "network_access": config.network_access,
+            "native_shell_capture_decision": config.native_shell_capture_decision,
+            "managed_lineage_ref": config.managed_lineage_ref,
+            "managed_attempt_id": config.managed_attempt_id,
         }
 
 
@@ -172,4 +227,6 @@ __all__ = [
     "BackendCmdBuilderBase",
     "FlagVocabulary",
     "SHARED_BASELINE_ENV",
+    "_merge_caller_env_extras",
+    "_managed_native_shell_env",
 ]

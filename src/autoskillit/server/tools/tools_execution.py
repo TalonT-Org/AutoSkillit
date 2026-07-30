@@ -47,6 +47,8 @@ from autoskillit.core import (
     KillReason,
     RecipeExecutionId,
     ReservationDecision,
+    ManagedHeadlessSessionLineageRef,
+    NativeShellCaptureDecision,
     SkillContractError,
     SkillExecutionRole,
     SkillResult,
@@ -182,6 +184,10 @@ from autoskillit.server.tools._execution_helpers import (
 )
 from autoskillit.server.tools._execution_helpers import (
     validate_resumed_skill_contract as _validate_resumed_skill_contract,
+)
+from autoskillit.server.tools._native_shell_capture import (
+    prepare_skill_native_shell_lineage,
+    rebind_verified_final_session,
 )
 from autoskillit.server.tools._preflight import (
     _get_fix_required_hook_matchers,  # noqa: F401  (re-exported for tests/server/test_admission_dispatch_agreement.py)
@@ -815,6 +821,7 @@ async def run_skill(
     output_dir: str = "",
     resume_session_id: str = "",
     retry_after_audit_attempt_id: str = "",
+    native_shell_capture_mode: str = "",
     closure_authority_path: str = "",
     closure_authority_hash: str = "",
     closure_plan_paths: str = "",
@@ -857,6 +864,8 @@ async def run_skill(
             skill_command becomes a continuation instruction; pass the prior result's session_id.
         retry_after_audit_attempt_id: Server-issued rejected audit attempt to correct.
             This is attested control data and is never passed to the child as a skill input.
+        native_shell_capture_mode: Optional managed Codex shell I/O mode. Omission
+            defaults fresh launches to capture. Resumes inherit their durable lineage.
 
     Never raises.
     """
@@ -915,6 +924,10 @@ async def run_skill(
         _contract_store = tool_ctx.skill_session_contract_store
         contract_lifecycle.store = _contract_store
         _stored_contract_entry = None
+        _session_contract = None
+        _session_snapshot = None
+        _native_shell_capture_decision: NativeShellCaptureDecision | None = None
+        _managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
         _resume_backend_obj: CodingAgentBackend | None = None
         _effective_skill_resolver = None
         invocation: EffectiveSkillInvocationAuthority | None = None
@@ -1135,6 +1148,7 @@ async def run_skill(
                 "closure_diff_sha": closure_diff_sha,
                 "closure_target_sha": closure_target_sha,
                 "retry_after_audit_attempt_id": retry_after_audit_attempt_id,
+                "native_shell_capture_mode": native_shell_capture_mode,
             }
             if stale_threshold is not None:
                 _actual_mcp_kwargs["stale_threshold"] = stale_threshold
@@ -1877,10 +1891,6 @@ async def run_skill(
                     completion_required=completion_required,
                     skill_contract_json=_serialize_skill_contract(_skill_contract),
                 )
-                contract_lifecycle.correlation_key = _contract_store.create_provisional(
-                    contract=_session_contract,
-                    snapshot=_session_snapshot,
-                )
 
             _capability_contract = build_validated_skill_dispatch_contract(
                 resolved_command,
@@ -1888,6 +1898,28 @@ async def run_skill(
                 skill_add_dirs,
                 _stored_contract,
             )
+            _lineage_store = tool_ctx.managed_headless_session_lineage_store
+            _lineage_preparation = prepare_skill_native_shell_lineage(
+                store=_lineage_store,
+                backend=_effective_backend_obj,
+                lineage_anchor=Path(_capability_contract.cwd),
+                stored_reference=getattr(_stored_contract_entry, "managed_lineage_ref", None),
+                resume_session_id=resume_session_id,
+                requested_mode=native_shell_capture_mode,
+                is_resume=_stored_contract_entry is not None,
+            )
+            _native_shell_capture_decision = _lineage_preparation.decision
+            _managed_lineage_ref = _lineage_preparation.reference
+            if _stored_contract_entry is None:
+                if _session_contract is None or _session_snapshot is None:
+                    raise SkillContractError(
+                        "Fresh execution did not produce a provisional skill contract"
+                    )
+                contract_lifecycle.correlation_key = _contract_store.create_provisional(
+                    contract=_session_contract,
+                    snapshot=_session_snapshot,
+                    managed_lineage_ref=_managed_lineage_ref,
+                )
             allowed_write_prefix = ""
             allowed_write_prefixes: tuple[str, ...] = ()
             if write_watch_dirs:
@@ -1984,6 +2016,8 @@ async def run_skill(
                                 closure_report_root=closure_report_root,
                                 skill_contract=_skill_contract,
                                 capability_contract=_capability_contract,
+                                native_shell_capture_decision=(_native_shell_capture_decision),
+                                managed_lineage_ref=_managed_lineage_ref,
                                 on_session_id_resolved=(
                                     _observe_contract_session_id
                                     if contract_lifecycle.correlation_key is not None
@@ -2008,14 +2042,15 @@ async def run_skill(
 
                 contract_lifecycle.finalize(skill_result.session_id)
 
-                if (
-                    _stored_contract_entry is not None
-                    and skill_result.session_id
-                    and skill_result.session_id != resume_session_id
-                ):
-                    raise SkillContractError(
-                        "Resumed execution returned a different final session ID"
-                    )
+                rebind_verified_final_session(
+                    store=_lineage_store,
+                    backend=_effective_backend_obj,
+                    reference=_managed_lineage_ref,
+                    is_resume=_stored_contract_entry is not None,
+                    requested_session_id=resume_session_id,
+                    returned_session_id=skill_result.session_id,
+                    on_rebind=contract_lifecycle.rebind_final,
+                )
                 contract_lifecycle.apply_retention(skill_result.needs_retry)
 
                 _audit_outcome_to_finalize: AuditOutcome | None = None

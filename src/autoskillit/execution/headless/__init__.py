@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+import anyio
 import structlog
 
 from autoskillit.core import (
@@ -15,6 +16,10 @@ from autoskillit.core import (
     CodingAgentBackend,
     HeadlessSkillDispatchContract,
     HeadlessSkillDispatchPreparation,
+    ManagedHeadlessSessionKind,
+    ManagedHeadlessSessionLineageRef,
+    ManagedHeadlessSessionTerminalState,
+    NativeShellCaptureDecision,
     PluginArtifactAuthority,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
@@ -45,7 +50,7 @@ from autoskillit.execution.headless._headless_helpers import (
     _derive_step_name_from_skill_command,
     _resolve_model,  # noqa: F401
     _resolve_pty_mode,  # noqa: F401
-    _resolve_session_log_dir,
+    _resolve_session_log_dir,  # noqa: F401
     _session_log_dir,  # noqa: F401
     _stat_snapshot,  # noqa: F401
     assert_interactive_ordering,
@@ -55,7 +60,6 @@ from autoskillit.execution.headless._headless_launch import (
     _NUDGE_TIMEOUT,  # noqa: F401
     _attempt_contract_nudge,  # noqa: F401
     _food_truck_launch_spec_builder,
-    _headless_plugin_load_mode,
     _skill_launch_spec_builder,
 )
 from autoskillit.execution.headless._headless_outcome import validated_dispatch_cwd
@@ -91,6 +95,11 @@ from autoskillit.execution.headless._headless_result import (
     _build_skill_result,  # noqa: F401
     _parse_stdout,  # noqa: F401
     _resolve_skill_session_id,  # noqa: F401
+)
+from autoskillit.execution.headless._managed import (
+    _DefaultHeadlessExecutorBase,
+    _headless_plugin_load_mode,
+    _ManagedLineageObserver,
 )
 from autoskillit.execution.recording import RecordingSubprocessRunner
 
@@ -156,6 +165,8 @@ async def run_headless_core(
     on_session_id_resolved: Callable[[str], None] | None = None,
     skill_contract: SkillContract | None = None,
     capability_contract: HeadlessSkillDispatchContract | None = None,
+    native_shell_capture_decision: NativeShellCaptureDecision | None = None,
+    managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -197,6 +208,13 @@ async def run_headless_core(
                 ctx_backend=ctx.backend.name,
             )
         _cmd_backend = step_backend if step_backend is not None else ctx.backend
+        managed_lineage_observer = _ManagedLineageObserver.create(
+            store=ctx.managed_headless_session_lineage_store,
+            decision=native_shell_capture_decision,
+            reference=managed_lineage_ref,
+            backend=_cmd_backend.name,
+            session_kind=ManagedHeadlessSessionKind.SKILL,
+        )
         plugin_load_mode = _headless_plugin_load_mode(
             _cmd_backend,
             add_dirs=add_dirs_tuple,
@@ -221,6 +239,8 @@ async def run_headless_core(
             resume_message=resume_message,
             readonly_skill=readonly_skill,
             network_access=network_access,
+            native_shell_capture_decision=native_shell_capture_decision,
+            managed_lineage_ref=managed_lineage_ref,
         )
 
         logger.debug("run_headless_core_backend_dispatch", backend=_cmd_backend.name)
@@ -237,150 +257,69 @@ async def run_headless_core(
             add_dirs=list(add_dirs) if add_dirs else None,
         )
         effective_provider = provider_name or profile_name
-        return await _execute_claude_headless(
-            _build_spec,
-            cwd,
-            ctx,
-            skill_command=original_skill_command,
-            step_name=step_name,
-            kitchen_id=kitchen_id,
-            order_id=order_id,
-            campaign_id=campaign_id,
-            dispatch_id=dispatch_id,
-            project_dir=project_dir,
-            timeout=float(effective_timeout),
-            stale_threshold=float(effective_stale),
-            idle_output_timeout=idle_output_timeout,
-            expected_output_patterns=expected_output_patterns,
-            write_behavior=write_behavior,
-            completion_marker=effective_marker,
-            recipe_name=recipe_name,
-            recipe_content_hash=recipe_content_hash,
-            recipe_composite_hash=recipe_composite_hash,
-            recipe_version=recipe_version,
-            readonly_skill=readonly_skill,
-            completion_required=completion_required,
-            write_watch_dirs=write_watch_dirs,
-            provider_name=effective_provider,
-            plugin_authority=ctx.plugin_authority,
-            plugin_load_mode=plugin_load_mode,
-            provider_fallback_env=provider_fallback_env,
-            provider_fallback_name=provider_fallback_name,
-            provider_extras=provider_extras,
-            step_backend=step_backend,
-            model_identity=model_identity,
-            marker_dir=marker_dir,
-            session_id=caller_session_id,
-            inspector_eligible=inspector_eligible,
-            inspector_model=inspector_model,
-            backend_override_source=backend_override_source,
-            closure_spec=closure_spec,
-            closure_report_root=closure_report_root,
-            on_session_id_resolved=on_session_id_resolved,
-            skill_contract=skill_contract,
-        )
+        try:
+            skill_result = await _execute_claude_headless(
+                _build_spec,
+                cwd,
+                ctx,
+                skill_command=original_skill_command,
+                step_name=step_name,
+                kitchen_id=kitchen_id,
+                order_id=order_id,
+                campaign_id=campaign_id,
+                dispatch_id=dispatch_id,
+                project_dir=project_dir,
+                timeout=float(effective_timeout),
+                stale_threshold=float(effective_stale),
+                idle_output_timeout=idle_output_timeout,
+                expected_output_patterns=expected_output_patterns,
+                write_behavior=write_behavior,
+                completion_marker=effective_marker,
+                recipe_name=recipe_name,
+                recipe_content_hash=recipe_content_hash,
+                recipe_composite_hash=recipe_composite_hash,
+                recipe_version=recipe_version,
+                readonly_skill=readonly_skill,
+                completion_required=completion_required,
+                write_watch_dirs=write_watch_dirs,
+                provider_name=effective_provider,
+                plugin_authority=ctx.plugin_authority,
+                plugin_load_mode=plugin_load_mode,
+                provider_fallback_env=provider_fallback_env,
+                provider_fallback_name=provider_fallback_name,
+                provider_extras=provider_extras,
+                step_backend=step_backend,
+                model_identity=model_identity,
+                marker_dir=marker_dir,
+                session_id=caller_session_id,
+                inspector_eligible=inspector_eligible,
+                inspector_model=inspector_model,
+                backend_override_source=backend_override_source,
+                closure_spec=closure_spec,
+                closure_report_root=closure_report_root,
+                on_session_id_resolved=on_session_id_resolved,
+                skill_contract=skill_contract,
+                managed_lineage_observer=managed_lineage_observer,
+            )
+        except anyio.get_cancelled_exc_class():
+            if managed_lineage_observer is not None:
+                managed_lineage_observer.close(ManagedHeadlessSessionTerminalState.CANCELLED)
+            raise
+        except Exception:
+            if managed_lineage_observer is not None:
+                managed_lineage_observer.close(ManagedHeadlessSessionTerminalState.FAILED)
+            raise
+        if managed_lineage_observer is not None and not skill_result.needs_retry:
+            managed_lineage_observer.close(
+                ManagedHeadlessSessionTerminalState.SUCCEEDED
+                if skill_result.success
+                else ManagedHeadlessSessionTerminalState.FAILED
+            )
+        return skill_result
 
 
-class DefaultHeadlessExecutor:
+class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
     """Concrete HeadlessExecutor backed by run_headless_core."""
-
-    def __init__(self, ctx: ToolContext) -> None:
-        self._ctx = ctx
-
-    async def run(
-        self,
-        skill_command: str,
-        cwd: str,
-        *,
-        model: str = "",
-        step_name: str = "",
-        kitchen_id: str = "",
-        order_id: str = "",
-        add_dirs: Sequence[ValidatedAddDir] = (),
-        timeout: float | None = None,
-        stale_threshold: float | None = None,
-        idle_output_timeout: float | None = None,
-        expected_output_patterns: Sequence[str] = (),
-        write_behavior: WriteBehaviorSpec | None = None,
-        completion_marker: str = "",
-        recipe_name: str = "",
-        recipe_content_hash: str = "",
-        recipe_composite_hash: str = "",
-        recipe_version: str = "",
-        allowed_write_prefix: str = "",
-        allowed_write_prefixes: tuple[str, ...] = (),
-        readonly_skill: bool = False,
-        completion_required: bool = False,
-        write_watch_dirs: Sequence[Path] = (),
-        provider_extras: Mapping[str, str] | None = None,
-        profile_name: str = "",
-        provider_name: str = "",
-        provider_fallback_env: dict[str, str] | None = None,
-        provider_fallback_name: str = "",
-        resume_session_id: str = "",
-        resume_checkpoint: SessionCheckpoint | None = None,
-        resume_message: str | None = None,
-        backend_override: str | None = None,
-        backend_override_source: str | None = None,
-        marker_dir: Path | None = None,
-        caller_session_id: str | None = None,
-        inspector_eligible: bool = False,
-        inspector_model: str = "",
-        network_access: bool = False,
-        closure_spec: ClosureAuthoritySpec | None = None,
-        closure_report_root: Path | None = None,
-        on_session_id_resolved: Callable[[str], None] | None = None,
-        skill_contract: SkillContract | None = None,
-        capability_contract: HeadlessSkillDispatchContract | None = None,
-    ) -> SkillResult:
-        cfg = self._ctx.config.run_skill
-        effective_timeout = timeout if timeout is not None else cfg.timeout
-        effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold
-        return await run_headless_core(
-            skill_command,
-            cwd,
-            self._ctx,
-            model=model,
-            step_name=step_name,
-            kitchen_id=kitchen_id,
-            order_id=order_id,
-            add_dirs=add_dirs,
-            timeout=effective_timeout,
-            stale_threshold=effective_stale,
-            idle_output_timeout=idle_output_timeout,
-            expected_output_patterns=expected_output_patterns,
-            write_behavior=write_behavior,
-            completion_marker=completion_marker,
-            recipe_name=recipe_name,
-            recipe_content_hash=recipe_content_hash,
-            recipe_composite_hash=recipe_composite_hash,
-            recipe_version=recipe_version,
-            allowed_write_prefix=allowed_write_prefix,
-            allowed_write_prefixes=allowed_write_prefixes,
-            readonly_skill=readonly_skill,
-            completion_required=completion_required,
-            write_watch_dirs=write_watch_dirs,
-            provider_extras=provider_extras,
-            profile_name=profile_name,
-            provider_name=provider_name,
-            provider_fallback_env=provider_fallback_env,
-            provider_fallback_name=provider_fallback_name,
-            resume_session_id=resume_session_id,
-            resume_checkpoint=resume_checkpoint,
-            resume_message=resume_message,
-            backend_override=backend_override,
-            backend_override_source=backend_override_source,
-            marker_dir=marker_dir,
-            caller_session_id=caller_session_id,
-            inspector_eligible=inspector_eligible,
-            inspector_model=inspector_model,
-            network_access=network_access,
-            closure_spec=closure_spec,
-            closure_report_root=closure_report_root,
-            on_session_id_resolved=on_session_id_resolved,
-            skill_contract=skill_contract,
-            capability_contract=capability_contract,
-        )
 
     async def dispatch_food_truck(
         self,
@@ -419,7 +358,11 @@ class DefaultHeadlessExecutor:
         backend_override: str | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
         capability_preparation: HeadlessSkillDispatchPreparation | None = None,
+        native_shell_capture_decision: NativeShellCaptureDecision | None = None,
+        managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
     ) -> SkillResult:
+        import autoskillit.execution.headless as headless_facade
+
         cwd = validated_dispatch_cwd(
             None,
             resolved_command=orchestrator_prompt,
@@ -427,9 +370,7 @@ class DefaultHeadlessExecutor:
         )
         dispatch_backend: CodingAgentBackend | None
         if backend_override is not None:
-            from autoskillit.execution.backends import get_backend
-
-            dispatch_backend = get_backend(backend_override)
+            dispatch_backend = headless_facade.get_backend(backend_override)
         else:
             dispatch_backend = self._ctx.backend
         if dispatch_backend is not None and not dispatch_backend.capabilities.food_truck_capable:
@@ -472,8 +413,15 @@ class DefaultHeadlessExecutor:
                 "dispatch_backend must be resolved before dispatch_food_truck execution"
             )
         backend = dispatch_backend
+        managed_lineage_observer = _ManagedLineageObserver.create(
+            store=self._ctx.managed_headless_session_lineage_store,
+            decision=native_shell_capture_decision,
+            reference=managed_lineage_ref,
+            backend=backend.name,
+            session_kind=ManagedHeadlessSessionKind.FOOD_TRUCK,
+        )
         plugin_load_mode = _headless_plugin_load_mode(backend)
-        _build_spec = _food_truck_launch_spec_builder(
+        build_spec = _food_truck_launch_spec_builder(
             backend=backend,
             orchestrator_prompt=orchestrator_prompt,
             cwd=cwd,
@@ -491,6 +439,8 @@ class DefaultHeadlessExecutor:
             allowed_write_prefixes=allowed_write_prefixes,
             sentinel_contract=sentinel_contract,
             resume_message=resume_message,
+            native_shell_capture_decision=native_shell_capture_decision,
+            managed_lineage_ref=managed_lineage_ref,
         )
 
         effective_timeout = timeout if timeout is not None else fleet_cfg.default_timeout_sec
@@ -507,41 +457,60 @@ class DefaultHeadlessExecutor:
             else None
         )
         effective_marker_dir: Path | None = marker_dir or (
-            _resolve_session_log_dir(cwd, cast(CodingAgentBackend, dispatch_backend))
+            headless_facade._resolve_session_log_dir(
+                cwd, cast(CodingAgentBackend, dispatch_backend)
+            )
             if cwd
             else None
         )
-        return await _execute_claude_headless(
-            _build_spec,
-            cwd,
-            self._ctx,
-            skill_command="",
-            step_name=step_name,
-            kitchen_id=kitchen_id,
-            caller_session_id=caller_session_id,
-            order_id=order_id,
-            campaign_id=campaign_id,
-            dispatch_id=dispatch_id,
-            project_dir=project_dir,
-            timeout=float(effective_timeout),
-            stale_threshold=float(effective_stale),
-            idle_output_timeout=effective_idle_out,
-            completion_marker=completion_marker,
-            prior_completion_markers=prior_completion_markers,
-            on_spawn=on_spawn,
-            skip_clone_guard=True,
-            pty_override=False,
-            provider_name=provider_name,
-            provider_extras=merged_extras or None,
-            provider_fallback_env=provider_fallback_env,
-            provider_fallback_name=provider_fallback_name,
-            enable_deadline_extension=effective_deadline_ext,
-            max_extension_seconds=effective_max_ext,
-            marker_dir=effective_marker_dir,
-            session_id=session_id,
-            model_identity=model_identity,
-            on_session_id_resolved=on_session_id_resolved,
-            step_backend=dispatch_backend,
-            plugin_authority=plugin_authority or self._ctx.plugin_authority,
-            plugin_load_mode=plugin_load_mode,
-        )
+        try:
+            skill_result = await headless_facade._execute_claude_headless(
+                build_spec,
+                cwd,
+                self._ctx,
+                skill_command="",
+                step_name=step_name,
+                kitchen_id=kitchen_id,
+                caller_session_id=caller_session_id,
+                order_id=order_id,
+                campaign_id=campaign_id,
+                dispatch_id=dispatch_id,
+                project_dir=project_dir,
+                timeout=float(effective_timeout),
+                stale_threshold=float(effective_stale),
+                idle_output_timeout=effective_idle_out,
+                completion_marker=completion_marker,
+                prior_completion_markers=prior_completion_markers,
+                on_spawn=on_spawn,
+                skip_clone_guard=True,
+                pty_override=False,
+                provider_name=provider_name,
+                provider_extras=merged_extras or None,
+                provider_fallback_env=provider_fallback_env,
+                provider_fallback_name=provider_fallback_name,
+                enable_deadline_extension=effective_deadline_ext,
+                max_extension_seconds=effective_max_ext,
+                marker_dir=effective_marker_dir,
+                session_id=session_id,
+                model_identity=model_identity,
+                on_session_id_resolved=on_session_id_resolved,
+                step_backend=dispatch_backend,
+                plugin_authority=plugin_authority or self._ctx.plugin_authority,
+                plugin_load_mode=plugin_load_mode,
+                managed_lineage_observer=managed_lineage_observer,
+            )
+        except anyio.get_cancelled_exc_class():
+            if managed_lineage_observer is not None:
+                managed_lineage_observer.close(ManagedHeadlessSessionTerminalState.CANCELLED)
+            raise
+        except Exception:
+            if managed_lineage_observer is not None:
+                managed_lineage_observer.close(ManagedHeadlessSessionTerminalState.FAILED)
+            raise
+        if managed_lineage_observer is not None and not skill_result.needs_retry:
+            managed_lineage_observer.close(
+                ManagedHeadlessSessionTerminalState.SUCCEEDED
+                if skill_result.success
+                else ManagedHeadlessSessionTerminalState.FAILED
+            )
+        return skill_result

@@ -69,6 +69,34 @@ class TestStderrEnvelopeForwarding:
         assert result["stderr"] == "missing sentinel trace"
 
     @pytest.mark.anyio
+    async def test_managed_capture_diagnostics_are_not_forwarded_in_stderr(
+        self, tool_ctx, monkeypatch
+    ):
+        _setup_dispatch(tool_ctx, monkeypatch)
+        diagnostic = (
+            "requested_mode=direct effective_mode=capture "
+            "reason=invalid_lineage lineage_status=corrupt "
+            "launch_id=feedfacefeedfacefeedfacefeedface "
+            "attempt_id=deaddeaddeaddeaddeaddeaddeaddead"
+        )
+        tool_ctx.executor = InMemoryHeadlessExecutor(
+            default_result=dataclasses.replace(
+                _DEFAULT_SKILL_RESULT,
+                stderr=f"ordinary provider warning\n{diagnostic}\n",
+            )
+        )
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: _make_no_sentinel(),
+        )
+
+        result = await _run(tool_ctx)
+
+        assert result["stderr"] == "ordinary provider warning\n"
+        assert "feedface" not in result["stderr"]
+        assert "deaddead" not in result["stderr"]
+
+    @pytest.mark.anyio
     async def test_no_sentinel_envelope_stderr_truncated_to_envelope_max(
         self, tool_ctx, monkeypatch
     ):

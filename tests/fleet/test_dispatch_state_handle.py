@@ -268,14 +268,21 @@ class TestCaptureChainAcrossResumeBoundary:
             from autoskillit.fleet.state_types import DispatchCompleted
 
             assert isinstance(result, DispatchCompleted), f"Unexpected result type: {type(result)}"
-            assert result.dispatch_id == prior_id
+            assert result.dispatch_id != prior_id
 
 
 class TestSessionChainAccumulatesAcrossResume:
     @pytest.mark.anyio
     async def test_session_chain_accumulates_across_resume(self, tool_ctx, monkeypatch, tmp_path):
         """session_chain accumulates prior dispatched_session_id on resume."""
-        from autoskillit.core import RetryReason, SkillResult
+        from autoskillit.core import (
+            ManagedHeadlessSessionKind,
+            NativeShellCaptureMode,
+            RetryReason,
+            SkillResult,
+            new_managed_launch_id,
+            resolve_native_shell_capture_decision,
+        )
         from autoskillit.fleet._api import _run_dispatch
         from autoskillit.fleet.state import read_state
         from tests.fleet._helpers import (
@@ -297,12 +304,33 @@ class TestSessionChainAccumulatesAcrossResume:
 
         prior_id = "33333333-3333-3333-3333-333333333333"
         prior_state_path = dispatches_dir / f"{prior_id}.json"
+        lineage = tool_ctx.managed_headless_session_lineage_store.create(
+            lineage_anchor=tool_ctx.project_dir.resolve(),
+            launch_id=new_managed_launch_id(),
+            decision=resolve_native_shell_capture_decision(NativeShellCaptureMode.CAPTURE),
+            backend="mock-backend",
+            session_kind=ManagedHeadlessSessionKind.FOOD_TRUCK,
+            dispatch_id=prior_id,
+        )
+        lineage = tool_ctx.managed_headless_session_lineage_store.bind_final_native_session_id(
+            lineage_anchor=tool_ctx.project_dir.resolve(),
+            launch_id=lineage.launch_id,
+            session_id="sess-resume-1",
+            expected_generation=lineage.generation,
+            expected_record_digest=lineage.record_digest,
+        )
         write_initial_state(
             prior_state_path,
             campaign_id,
             "camp",
             "",
-            [DispatchRecord(name="test-recipe", dispatched_session_id="sess-original")],
+            [
+                DispatchRecord(
+                    name="test-recipe",
+                    dispatched_session_id="sess-original",
+                    managed_lineage_ref=lineage.reference,
+                )
+            ],
         )
 
         tool_ctx.executor.push(

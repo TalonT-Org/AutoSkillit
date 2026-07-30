@@ -15,20 +15,41 @@ import psutil
 from autoskillit.core import (
     CaptureEntrySpec,
     FleetErrorCode,
+    ManagedHeadlessSessionLineageRef,
+    ManagedHeadlessSessionTerminalState,
+    NativeShellCaptureMode,
     ProcessStaleError,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
     atomic_write,
     get_logger,
-    truncate_text,
 )
 from autoskillit.fleet._capture import _extract_captures, _normalize_capture_spec
+from autoskillit.fleet._checkpoint_bridge import load_dispatch_progress
 from autoskillit.fleet._expressions import _CAMPAIGN_REF_RE, _interpolate_campaign_refs
 from autoskillit.fleet._issue_url_helpers import extract_issue_urls
-from autoskillit.fleet._outcome import _checkpoint_to_dict, classify_dispatch_outcome
+from autoskillit.fleet._native_shell_capture import (
+    FoodTruckLineageInitializationError,
+    prepare_dispatch_identity,
+    prepare_food_truck_lineage,
+    resolve_dispatch_timeout,
+    set_lineage_terminal_state,
+)
+from autoskillit.fleet._native_shell_capture import (
+    build_capability_overrides as _build_capability_overrides,
+)
+from autoskillit.fleet._outcome import (
+    _checkpoint_to_dict,
+    _sanitize_managed_capture_diagnostics,
+    build_dispatch_result,
+    classify_dispatch_outcome,
+)
+from autoskillit.fleet._outcome import (
+    build_success_short_circuit as _build_success_short_circuit,
+)
 from autoskillit.fleet.result_parser import parse_l3_result_block
 from autoskillit.fleet.state import DispatchStatus
-from autoskillit.fleet.state_recovery import ResumePreflight, prepare_resume
+from autoskillit.fleet.state_recovery import prepare_resume
 from autoskillit.fleet.state_types import (
     DispatchAggregatePhase,
     DispatchCompleted,
@@ -41,13 +62,10 @@ from autoskillit.workspace import default_skill_resolver, prepare_effective_skil
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend
-    from autoskillit.fleet.sidecar import IssueSidecarEntry
-    from autoskillit.fleet.state import DispatchRecord, DispatchStateHandle
+    from autoskillit.fleet.state import DispatchStateHandle
     from autoskillit.pipeline.context import ToolContext
 
 logger = get_logger(__name__)
-
-ENVELOPE_STDERR_MAX = 2000
 
 
 class DispatchSpawnFailed(RuntimeError):
@@ -114,31 +132,6 @@ async def _dispatch_heartbeat(
             logger.warning(
                 "dispatch_heartbeat_unlink_failed", heartbeat=str(hb_path), exc_info=True
             )
-
-
-def resolve_dispatch_timeout(
-    timeout_sec: int | None,
-    default_timeout_sec: int,
-) -> float:
-    """Resolve dispatch timeout to a concrete float.
-
-    Single source of truth for all three timeout surfaces (prompt, process kill,
-    session deadline). Uses ``is not None`` to correctly handle ``timeout_sec=0``.
-    """
-    if timeout_sec is not None:
-        return float(timeout_sec)
-    return float(default_timeout_sec)
-
-
-def _build_capability_overrides(backend: Any) -> dict[str, str]:
-    """Compute capability-derived ingredient overrides for a backend.
-
-    Mirrors ``_backend_capability_overrides`` in ``server.tools._auto_overrides``
-    but is inlined here because fleet/ (IL-2) cannot import from server/ (IL-3).
-    A structural test asserts every ``BACKEND_CAPABILITY_INGREDIENTS`` key is covered.
-    """
-    _backend_writable = backend is None or backend.capabilities.git_metadata_writable
-    return {"backend_supports_git_write": "true" if _backend_writable else "false"}
 
 
 def _write_pid(
@@ -266,6 +259,7 @@ async def execute_dispatch(
     dispatch_backend: CodingAgentBackend | None = None,
     effective_backend_map: dict[str, str] | None = None,
     provenance: DispatchProvenanceTracker | None = None,
+    native_shell_capture_mode: NativeShellCaptureMode | None = None,
 ) -> DispatchResult:
     """Execute a single food truck dispatch.
 
@@ -342,6 +336,7 @@ async def execute_dispatch(
             dispatch_backend=dispatch_backend,
             effective_backend_map=effective_backend_map,
             provenance=provenance,
+            native_shell_capture_mode=native_shell_capture_mode,
         )
     except asyncio.CancelledError:
         raise
@@ -357,6 +352,8 @@ async def execute_dispatch(
             dispatch_name=effective_name,
             exc_info=True,
         )
+        failure_text = f"{type(underlying).__name__}: {underlying}"
+        sanitized_failure_text = _sanitize_managed_capture_diagnostics(failure_text)
         snapshot = provenance.snapshot()
         if snapshot.aggregate_phase != DispatchAggregatePhase.NOT_STARTED:
             identities = {
@@ -364,7 +361,11 @@ async def execute_dispatch(
                 for effect in snapshot.effects
                 for key, value in effect.known_downstream_identities
             }
-            diagnostic_message = f"{type(underlying).__name__}: {underlying}"
+            diagnostic_message = (
+                sanitized_failure_text
+                if sanitized_failure_text
+                else "Food-truck dispatch failed during startup."
+            )
             failure_status = DispatchStatus.FAILURE
             state_path = Path(identities["state_path"]) if identities.get("state_path") else None
             if state_path is not None:
@@ -406,62 +407,14 @@ async def execute_dispatch(
             )
         return _reject(
             error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
-            message=f"{type(underlying).__name__}: {underlying}",
+            message=(
+                sanitized_failure_text
+                if sanitized_failure_text
+                else "Food-truck dispatch failed during startup."
+            ),
         )
     finally:
         lock.release()
-
-
-def _build_success_short_circuit(
-    record: DispatchRecord,
-    handle: DispatchStateHandle,
-    provenance: DispatchProvenanceTracker,
-) -> DispatchResult:
-    """Return a DispatchResult that mirrors a prior succeeded dispatch without re-launching."""
-    provenance.confirm(
-        DispatchEffectName.DISPATCH_ALLOCATION,
-        receipt="opened authoritative prior dispatch state",
-        identities={
-            "dispatch_id": record.dispatch_id,
-            "state_path": handle.state_path,
-        },
-    )
-    provenance.confirm(
-        DispatchEffectName.PRIOR_DISPATCH_BINDING,
-        receipt="authoritative prior dispatch state reported success",
-        retry_relevant=False,
-        identities={
-            "dispatch_id": record.dispatch_id,
-            "dispatched_session_id": record.dispatched_session_id,
-        },
-    )
-    provenance.start(
-        DispatchEffectName.COMMIT,
-        identities={
-            "dispatch_id": record.dispatch_id,
-            "dispatched_session_id": record.dispatched_session_id,
-        },
-    )
-    provenance.confirm(
-        DispatchEffectName.COMMIT,
-        receipt="reused committed prior dispatch",
-        identities={
-            "dispatch_id": record.dispatch_id,
-            "dispatched_session_id": record.dispatched_session_id,
-        },
-    )
-    return DispatchResult(
-        outcome=DispatchCompleted(
-            success=True,
-            dispatch_status=DispatchStatus.SUCCESS,
-            dispatch_id=record.dispatch_id,
-            dispatched_session_id=record.dispatched_session_id,
-            reason=record.reason,
-            effect_provenance=provenance.snapshot(),
-            token_usage=dict(record.token_usage),
-        ),
-        per_dispatch_state_path=handle.state_path,
-    )
 
 
 async def _run_dispatch(
@@ -487,6 +440,7 @@ async def _run_dispatch(
     dispatch_backend: CodingAgentBackend | None = None,
     effective_backend_map: dict[str, str] | None = None,
     provenance: DispatchProvenanceTracker | None = None,
+    native_shell_capture_mode: NativeShellCaptureMode | None = None,
 ) -> DispatchResult:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.fleet.state import (
@@ -650,12 +604,7 @@ async def _run_dispatch(
         "content_hash": recipe_obj.content_hash or "",
         "effective_ingredients": dict(effective_ingredients),
     }
-    prior_session_chain: list[str] = []
-    prior_dispatched_session_id = ""
-    # Hoisted: closure-captured by _on_spawn to derive is_resume_branch for
-    # the enforce_max_resume_attempts kwarg on _write_pid. A non-None value
-    # means the resume branch executed prepare_resume (vs. fresh dispatch path).
-    preflight: ResumePreflight | None = None
+
     if resume_session_id:
         provenance.start(
             DispatchEffectName.REQUESTED_RESUME_BINDING,
@@ -673,88 +622,14 @@ async def _run_dispatch(
         identities={"prior_dispatch_id": prior_dispatch_id or ""},
     )
     if resume_session_id and prior_dispatch_id:
-        try:
-            provenance.start(
-                DispatchEffectName.PRIOR_DISPATCH_BINDING,
-                retry_relevant=False,
-                identities={"prior_dispatch_id": prior_dispatch_id},
-            )
-            handle = DispatchStateHandle.open_continued(dispatches_dir, prior_dispatch_id)
-            prior_state = read_state(handle.state_path)
-            if prior_state is None:
-                # Corrupt or missing prior state — degrade to fresh.
-                handle = DispatchStateHandle.create_fresh(
-                    dispatches_dir,
-                    campaign_id,
-                    effective_name,
-                    "",
-                    [
-                        DispatchRecord(
-                            name=effective_name,
-                            caller_session_id=caller_session_id,
-                            caller_backend_name=_caller_backend_name,
-                        ),
-                    ],
-                    recipe_snapshot,
-                )
-            else:
-                # Single precondition chokepoint. Funnels every resume entry
-                # point through one function so the bug class becomes
-                # structurally impossible.
-                preflight = prepare_resume(
-                    handle.state_path,
-                    effective_name,
-                    continue_on_failure=True,
-                )
-                if preflight is not None:
-                    if preflight.short_circuit is not None:
-                        logger.info(
-                            "resume_skipped_prior_success",
-                            dispatch_name=effective_name,
-                            prior_dispatch_id=prior_dispatch_id,
-                        )
-                        return _build_success_short_circuit(
-                            preflight.short_circuit,
-                            handle,
-                            provenance,
-                        )
-                    if preflight.halt:
-                        return DispatchResult(
-                            outcome=DispatchRejected(
-                                error_code=FleetErrorCode.FLEET_CAMPAIGN_HALTED,
-                                message=preflight.halted_reason
-                                or "Resume refused by precondition chokepoint",
-                                effect_provenance=provenance.snapshot(),
-                                dispatch_id=handle.identity.dispatch_id,
-                            ),
-                            per_dispatch_state_path=None,
-                        )
-                    prior_session_chain = preflight.prior_session_chain
-                    prior_dispatched_session_id = preflight.prior_dispatched_session_id
-        except (OSError, KeyError, TypeError):
-            # OSError covers FileNotFoundError from DispatchStateHandle.open_continued
-            # when the prior state file is missing (fail-open to fresh dispatch) and
-            # write failures from reset_blocking_dispatch. ValueError is intentionally
-            # NOT caught so ResumeCountExceeded (a ValueError subclass raised by the
-            # cap check in mark_dispatch_running) propagates instead of being silently
-            # degraded to a create_fresh path.
-            logger.warning("failed to read prior session chain from state", exc_info=True)
-            handle = DispatchStateHandle.create_fresh(
-                dispatches_dir,
-                campaign_id,
-                effective_name,
-                "",
-                [
-                    DispatchRecord(
-                        name=effective_name,
-                        caller_session_id=caller_session_id,
-                        caller_backend_name=_caller_backend_name,
-                    ),
-                ],
-                recipe_snapshot,
-            )
-    else:
-        handle = DispatchStateHandle.create_fresh(
+        provenance.start(
+            DispatchEffectName.PRIOR_DISPATCH_BINDING,
+            retry_relevant=False,
+            identities={"prior_dispatch_id": prior_dispatch_id},
+        )
+
+    def _create_fresh_handle() -> DispatchStateHandle:
+        return DispatchStateHandle.create_fresh(
             dispatches_dir,
             campaign_id,
             effective_name,
@@ -767,6 +642,64 @@ async def _run_dispatch(
                 ),
             ],
             recipe_snapshot,
+        )
+
+    identity_preparation = prepare_dispatch_identity(
+        create_fresh_handle=_create_fresh_handle,
+        dispatches_dir=dispatches_dir,
+        effective_name=effective_name,
+        resume_session_id=resume_session_id,
+        prior_dispatch_id=prior_dispatch_id,
+    )
+    handle = identity_preparation.handle
+    if identity_preparation.prior_success_record is not None:
+        logger.info(
+            "resume_skipped_prior_success",
+            dispatch_name=effective_name,
+            prior_dispatch_id=prior_dispatch_id,
+        )
+        provenance.confirm(
+            DispatchEffectName.DISPATCH_ALLOCATION,
+            receipt="opened authoritative prior dispatch state",
+            identities={
+                "dispatch_id": identity_preparation.prior_success_record.dispatch_id,
+                "state_path": handle.state_path,
+            },
+        )
+        provenance.confirm(
+            DispatchEffectName.PRIOR_DISPATCH_BINDING,
+            receipt="authoritative prior dispatch state reported success",
+            retry_relevant=False,
+            identities={
+                "dispatch_id": identity_preparation.prior_success_record.dispatch_id,
+                "dispatched_session_id": (
+                    identity_preparation.prior_success_record.dispatched_session_id
+                ),
+            },
+        )
+        provenance.start(
+            DispatchEffectName.COMMIT,
+            identities={
+                "dispatch_id": identity_preparation.prior_success_record.dispatch_id,
+                "dispatched_session_id": (
+                    identity_preparation.prior_success_record.dispatched_session_id
+                ),
+            },
+        )
+        provenance.confirm(
+            DispatchEffectName.COMMIT,
+            receipt="reused committed prior dispatch",
+            identities={
+                "dispatch_id": identity_preparation.prior_success_record.dispatch_id,
+                "dispatched_session_id": (
+                    identity_preparation.prior_success_record.dispatched_session_id
+                ),
+            },
+        )
+        return _build_success_short_circuit(
+            identity_preparation.prior_success_record,
+            handle,
+            provenance.snapshot(),
         )
 
     identity = handle.identity
@@ -790,6 +723,7 @@ async def _run_dispatch(
                 "dispatch_id": dispatch_id,
             },
         )
+    managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
 
     def _complete_failure_with_state(
         error_code: FleetErrorCode,
@@ -811,6 +745,18 @@ async def _run_dispatch(
             diagnostic_message=message,
             effect_provenance=provenance.snapshot(),
         )
+        if managed_lineage_ref is not None:
+            try:
+                set_lineage_terminal_state(
+                    tool_ctx,
+                    managed_lineage_ref,
+                    ManagedHeadlessSessionTerminalState.FAILED,
+                )
+            except Exception:
+                logger.warning(
+                    "_reject_with_state: managed lineage close failed",
+                    exc_info=True,
+                )
         try:
             append_dispatch_record(
                 state_path,
@@ -822,6 +768,7 @@ async def _run_dispatch(
                     dispatch_id=dispatch_id,
                     dispatched_session_id=dispatched_session_id,
                     effect_provenance=provenance.snapshot().to_dict(),
+                    managed_lineage_ref=managed_lineage_ref,
                 ),
             )
         except Exception:
@@ -876,6 +823,137 @@ async def _run_dispatch(
     quota_result = await quota_checker(tool_ctx.config.quota_guard)
     if quota_result.get("should_sleep"):
         await asyncio.sleep(quota_result.get("sleep_seconds", 0))
+
+    resolved_timeout = resolve_dispatch_timeout(
+        timeout_sec, tool_ctx.config.fleet.default_timeout_sec
+    )
+    if tool_ctx.executor is None:
+        return _complete_failure_with_state(
+            FleetErrorCode.FLEET_MANIFEST_MISSING,
+            "Executor not configured.",
+        )
+
+    def _prepare_launch(for_dispatch_id: str) -> tuple[str, Any, Any, Path]:
+        prepared_prompt = prompt_builder(
+            recipe=recipe,
+            task=task,
+            ingredients=effective_ingredients,
+            dispatch_id=for_dispatch_id,
+            campaign_id=campaign_id,
+            l3_timeout_sec=int(resolved_timeout),
+            capture=capture,
+            caller_instructions=caller_instructions,
+        )
+        plugin_authority = capability_preparation = None
+        if _effective_backend is not None:
+            plugin_authority, capability_preparation = prepare_effective_skill_dispatch(
+                resolved_command=prepared_prompt,
+                project_root=tool_ctx.project_dir,
+                cwd=tool_ctx.project_dir,
+                resolver=tool_ctx.skill_resolver or default_skill_resolver(),
+                visibility=tool_ctx.config.skill_visibility_spec(),
+                default_base_branch=tool_ctx.config.branching.default_base_branch,
+                recipe_packs=tool_ctx.active_recipe_packs,
+                recipe_features=tool_ctx.active_recipe_features,
+            )
+        authoritative_cwd = (
+            capability_preparation.cwd
+            if capability_preparation is not None
+            else tool_ctx.project_dir
+        ).resolve()
+        return (
+            prepared_prompt,
+            plugin_authority,
+            capability_preparation,
+            authoritative_cwd,
+        )
+
+    lineage_backend_name = (
+        _effective_backend.name
+        if _effective_backend is not None
+        else (_caller_backend_name or "unknown")
+    )
+    try:
+        lineage_preparation = prepare_food_truck_lineage(
+            tool_ctx=tool_ctx,
+            identity_preparation=identity_preparation,
+            launch=_prepare_launch(dispatch_id),
+            prepare_launch=_prepare_launch,
+            create_fresh_handle=_create_fresh_handle,
+            effective_name=effective_name,
+            prior_dispatch_id=prior_dispatch_id,
+            resume_session_id=resume_session_id,
+            resume_checkpoint=resume_checkpoint,
+            resume_message=resume_message,
+            resume_preparer=lambda: prepare_resume(
+                state_path,
+                effective_name,
+                continue_on_failure=True,
+            ),
+            native_shell_capture_mode=native_shell_capture_mode,
+            lineage_backend_name=lineage_backend_name,
+        )
+    except FoodTruckLineageInitializationError:
+        return _complete_failure_with_state(
+            FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+            "Food-truck dispatch initialization failed.",
+        )
+
+    handle = lineage_preparation.handle
+    identity = handle.identity
+    dispatch_id = identity.dispatch_id
+    state_path = handle.state_path
+    (
+        prompt,
+        food_truck_plugin_authority,
+        food_truck_capability_preparation,
+        _lineage_anchor,
+    ) = lineage_preparation.launch
+    capture_decision = lineage_preparation.capture_decision
+    managed_lineage_ref = lineage_preparation.managed_lineage_ref
+    preflight = lineage_preparation.preflight
+    resume_session_id = lineage_preparation.resume_session_id
+    resume_checkpoint = lineage_preparation.resume_checkpoint
+    resume_message = lineage_preparation.resume_message
+    prior_session_chain = list(lineage_preparation.prior_session_chain)
+    prior_dispatched_session_id = lineage_preparation.prior_dispatched_session_id
+    if lineage_preparation.halted_reason is not None:
+        return DispatchResult(
+            outcome=DispatchRejected(
+                error_code=FleetErrorCode.FLEET_CAMPAIGN_HALTED,
+                message=lineage_preparation.halted_reason,
+                effect_provenance=provenance.snapshot(),
+                dispatch_id=dispatch_id,
+            ),
+            per_dispatch_state_path=state_path,
+        )
+
+    try:
+        current_state = read_state(state_path)
+        current_record = (
+            next(
+                (d for d in current_state.dispatches if d.name == effective_name),
+                None,
+            )
+            if current_state is not None
+            else None
+        )
+        if current_record is None:
+            current_record = DispatchRecord(name=effective_name)
+        current_record.dispatch_id = dispatch_id
+        current_record.campaign_id = campaign_id
+        current_record.caller_session_id = caller_session_id
+        current_record.caller_backend_name = _caller_backend_name
+        current_record.backend_name = lineage_backend_name
+        current_record.effect_provenance = provenance.snapshot().to_dict()
+        current_record.managed_lineage_ref = managed_lineage_ref
+        upsert_dispatch_record_by_name(state_path, current_record)
+    except Exception:
+        logger.warning("managed_food_truck_lineage_state_write_failed", exc_info=True)
+        return _complete_failure_with_state(
+            FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+            "Food-truck dispatch initialization failed.",
+        )
 
     _locator = _effective_backend.session_locator() if _effective_backend is not None else None
 
@@ -944,38 +1022,6 @@ async def _run_dispatch(
     from autoskillit.fleet.sidecar import sidecar_path as compute_sidecar_path  # noqa: PLC0415
 
     dispatch_sidecar_path = str(compute_sidecar_path(dispatch_id, tool_ctx.project_dir))
-    resolved_timeout = resolve_dispatch_timeout(
-        timeout_sec, tool_ctx.config.fleet.default_timeout_sec
-    )
-    prompt = prompt_builder(
-        recipe=recipe,
-        task=task,
-        ingredients=effective_ingredients,
-        dispatch_id=dispatch_id,
-        campaign_id=campaign_id,
-        l3_timeout_sec=int(resolved_timeout),
-        capture=capture,
-        caller_instructions=caller_instructions,
-    )
-    if tool_ctx.executor is None:
-        return _complete_failure_with_state(
-            FleetErrorCode.FLEET_MANIFEST_MISSING,
-            "Executor not configured.",
-        )
-    food_truck_plugin_authority = food_truck_capability_preparation = None
-    if _effective_backend is not None:
-        food_truck_plugin_authority, food_truck_capability_preparation = (
-            prepare_effective_skill_dispatch(
-                resolved_command=prompt,
-                project_root=tool_ctx.project_dir,
-                cwd=tool_ctx.project_dir,
-                resolver=tool_ctx.skill_resolver or default_skill_resolver(),
-                visibility=tool_ctx.config.skill_visibility_spec(),
-                default_base_branch=tool_ctx.config.branching.default_base_branch,
-                recipe_packs=tool_ctx.active_recipe_packs,
-                recipe_features=tool_ctx.active_recipe_features,
-            )
-        )
     started_at = time.time()
     _dispatched_pid: list[int] = []
     _dispatched_ticks: list[int] = []
@@ -1036,11 +1082,7 @@ async def _run_dispatch(
         # Cap enforcement (MAX_CONSECUTIVE_RESUME_ATTEMPTS) lives one layer down
         # in mark_dispatch_running.
         is_resume_branch = preflight is not None
-        # _write_pid returns None on success or an error string on failure.
-        # We record the error in closure-scoped _spawn_error rather than
-        # raising — raising from on_spawn would be swallowed by the executor
-        # and converted to SkillResult.crashed, never reaching the outer
-        # execute_dispatch wrapper.
+        # Record instead of raising: the executor converts callback errors to a crashed result.
         err = _write_pid(
             state_path,
             effective_name,
@@ -1132,6 +1174,8 @@ async def _run_dispatch(
                     backend_override=dispatch_backend.name
                     if dispatch_backend is not None
                     else None,
+                    native_shell_capture_decision=capture_decision,
+                    managed_lineage_ref=managed_lineage_ref,
                 )
 
         # L2 fail-closed spawn gate: check closure-scoped error state.
@@ -1154,6 +1198,19 @@ async def _run_dispatch(
         _dispatch_completed_normally = True
     except asyncio.CancelledError:
         provenance.request_cancel()
+        try:
+            with anyio.CancelScope(shield=True):
+                set_lineage_terminal_state(
+                    tool_ctx,
+                    managed_lineage_ref,
+                    ManagedHeadlessSessionTerminalState.CANCELLED,
+                )
+        except Exception:
+            logger.warning(
+                "failed to record managed lineage cancellation",
+                dispatch_name=effective_name,
+                exc_info=True,
+            )
         if _dispatched_pid:
             try:
                 from autoskillit.execution import kill_process_tree  # noqa: PLC0415
@@ -1221,6 +1278,20 @@ async def _run_dispatch(
                     exc_info=True,
                 )
         raise
+    except Exception:
+        try:
+            set_lineage_terminal_state(
+                tool_ctx,
+                managed_lineage_ref,
+                ManagedHeadlessSessionTerminalState.FAILED,
+            )
+        except Exception:
+            logger.warning(
+                "failed to record managed lineage failure",
+                dispatch_name=effective_name,
+                exc_info=True,
+            )
+        raise
     finally:
         if not _dispatch_completed_normally:
             from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels  # noqa: PLC0415
@@ -1247,44 +1318,13 @@ async def _run_dispatch(
                         identities={"dispatch_id": dispatch_id},
                     )
 
-    sidecar_file = Path(dispatch_sidecar_path)
-    sidecar_entries: list[IssueSidecarEntry] = []
-    dispatch_checkpoint: SessionCheckpoint | None = None
-    if sidecar_file.exists():
-        from autoskillit.fleet._checkpoint_bridge import checkpoint_from_sidecar  # noqa: PLC0415
-        from autoskillit.fleet.sidecar import read_sidecar_from_path  # noqa: PLC0415
-
-        sidecar_entries = read_sidecar_from_path(sidecar_file).entries
-        if sidecar_entries:
-            dispatch_checkpoint = checkpoint_from_sidecar(
-                sidecar_entries,
-                backend_name=_effective_backend.name if _effective_backend else "",
-                skill_name=recipe,
-            )
-
-    tracker_checkpoint: SessionCheckpoint | None = None
-    _tracker_path = (
-        tool_ctx.project_dir / ".autoskillit" / "temp" / "pipeline_tracker" / f"{dispatch_id}.json"
+    sidecar_file, sidecar_entries, dispatch_checkpoint = load_dispatch_progress(
+        tool_ctx=tool_ctx,
+        dispatch_sidecar_path=dispatch_sidecar_path,
+        dispatch_id=dispatch_id,
+        backend_name=_effective_backend.name if _effective_backend else "",
+        recipe=recipe,
     )
-    if _tracker_path.exists():
-        try:
-            import json as _json_mod  # noqa: PLC0415
-
-            _tracker_data = _json_mod.loads(_tracker_path.read_text())
-            from autoskillit.fleet._checkpoint_bridge import (
-                checkpoint_from_tracker,  # noqa: PLC0415
-            )
-
-            tracker_checkpoint = checkpoint_from_tracker(
-                _tracker_data,
-                backend_name=_effective_backend.name if _effective_backend else "",
-                skill_name=recipe,
-            )
-        except (OSError, ValueError, TypeError, AttributeError):
-            logger.debug("tracker read failed for %s", dispatch_id, exc_info=True)
-
-    if dispatch_checkpoint is None and tracker_checkpoint is not None:
-        dispatch_checkpoint = tracker_checkpoint
 
     extended_chain = prior_session_chain[:]
     additional_jsonl_paths: list[Path] = []
@@ -1343,6 +1383,25 @@ async def _run_dispatch(
         checkpoint=dispatch_checkpoint,
         subtype=skill_result.subtype,
     )
+    if final_status != DispatchStatus.RESUMABLE:
+        terminal_state = (
+            ManagedHeadlessSessionTerminalState.SUCCEEDED
+            if final_status == DispatchStatus.SUCCESS
+            else ManagedHeadlessSessionTerminalState.FAILED
+        )
+        try:
+            set_lineage_terminal_state(
+                tool_ctx,
+                managed_lineage_ref,
+                terminal_state,
+            )
+        except Exception:
+            logger.warning(
+                "failed to record managed lineage terminal state",
+                dispatch_name=effective_name,
+                terminal_state=terminal_state.value,
+                exc_info=True,
+            )
 
     _branch_name = ""
     if sidecar_entries and tool_ctx.runner is not None:
@@ -1451,6 +1510,7 @@ async def _run_dispatch(
         backend_name=_effective_backend.name if _effective_backend else "",
         resume_checkpoint=_checkpoint_to_dict(dispatch_checkpoint),
         effect_provenance=provenance.snapshot().to_dict(),
+        managed_lineage_ref=managed_lineage_ref,
     )
 
     extracted: dict[str, str] = {}
@@ -1479,64 +1539,15 @@ async def _run_dispatch(
     upsert_dispatch_record_by_name(state_path, record)
     _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
 
-    if parsed_result is not None and parsed_result.outcome == "completed_clean":
-        envelope_success = bool(
-            parsed_result.payload and parsed_result.payload.get("success", False)
-        )
-        return DispatchResult(
-            DispatchCompleted(
-                success=envelope_success,
-                dispatch_status=final_status,
-                dispatch_id=dispatch_id,
-                dispatched_session_id=skill_result.session_id or "",
-                reason=reason,
-                effect_provenance=provenance.snapshot(),
-                token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
-                l3_payload=parsed_result.payload,
-                l3_parse_source=parsed_result.source,
-                lifespan_started=skill_result.lifespan_started,
-                stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),
-                elapsed_seconds=ended_at - started_at,
-            ),
-            per_dispatch_state_path=state_path,
-        )
-    elif parsed_result is not None and parsed_result.outcome == "completed_dirty":
-        return DispatchResult(
-            DispatchCompleted(
-                success=False,
-                dispatch_status=final_status,
-                dispatch_id=dispatch_id,
-                dispatched_session_id=skill_result.session_id or "",
-                reason=FleetErrorCode.FLEET_L3_PARSE_FAILED,
-                effect_provenance=provenance.snapshot(),
-                token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
-                l3_payload=None,
-                l3_raw_body=parsed_result.raw_body,
-                l3_parse_error=parsed_result.parse_error,
-                l3_parse_source=parsed_result.source,
-                lifespan_started=skill_result.lifespan_started,
-                stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),
-                elapsed_seconds=ended_at - started_at,
-            ),
-            per_dispatch_state_path=state_path,
-        )
-    else:
-        parse_source = parsed_result.source if parsed_result is not None else "stdout"
-        return DispatchResult(
-            DispatchCompleted(
-                success=False,
-                dispatch_status=final_status,
-                dispatch_id=dispatch_id,
-                dispatched_session_id=skill_result.session_id or "",
-                reason=reason,
-                effect_provenance=provenance.snapshot(),
-                token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
-                l3_payload=None,
-                l3_parse_source=parse_source,
-                lifespan_started=skill_result.lifespan_started,
-                resume_checkpoint=_checkpoint_to_dict(dispatch_checkpoint),
-                stderr=truncate_text(skill_result.stderr or "", ENVELOPE_STDERR_MAX),
-                elapsed_seconds=ended_at - started_at,
-            ),
-            per_dispatch_state_path=state_path,
-        )
+    return build_dispatch_result(
+        parsed_result=parsed_result,
+        final_status=final_status,
+        reason=reason,
+        dispatch_id=dispatch_id,
+        skill_result=skill_result,
+        dispatch_checkpoint=dispatch_checkpoint,
+        started_at=started_at,
+        ended_at=ended_at,
+        state_path=state_path,
+        effect_provenance=provenance.snapshot(),
+    )

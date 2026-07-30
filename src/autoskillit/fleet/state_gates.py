@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from autoskillit.fleet.state_types import (
-    DispatchRecord,
     DispatchStatus,
     GateRecordResult,
     _validate_transition,
@@ -54,8 +54,8 @@ def record_gate_outcome(
 
         status = DispatchStatus.SUCCESS if approved else DispatchStatus.REFUSED
         now = time.time()
-        new_record = DispatchRecord(
-            name=dispatch_name,
+        new_record = replace(
+            match,
             status=status,
             reason="gate_approved" if approved else "gate_rejected",
             started_at=now,

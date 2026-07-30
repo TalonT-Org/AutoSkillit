@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import Mock
 
 import pytest
 
@@ -157,6 +158,8 @@ class TestRunSkillAgentResult:
     @pytest.mark.anyio
     async def test_normal_success_result_passes_through(self, tool_ctx_kitchen_open):
         """Normal success result text is preserved."""
+        lineage_store = Mock()
+        tool_ctx_kitchen_open.managed_headless_session_lineage_store = lineage_store
         stdout = json.dumps(
             {
                 "type": "result",
@@ -169,6 +172,7 @@ class TestRunSkillAgentResult:
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx_kitchen_open.runner.push(_make_result(0, stdout, ""))
         result = json.loads(await run_skill("/investigate plan.md", "/tmp"))
+        lineage_store.create.assert_not_called()
         assert result["result"] == "Done."
 
 

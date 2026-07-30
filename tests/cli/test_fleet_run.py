@@ -218,6 +218,74 @@ class TestFleetRunDispatch:
                 )
         assert captured_args["ingredients"] == {"key1": "val1", "key2": "val2"}
 
+    def test_fleet_run_consumes_native_shell_capture_mode_once(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import os
+
+        from autoskillit.core import NativeShellCaptureMode
+
+        monkeypatch.setenv("AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE", "direct")
+        monkeypatch.setattr(
+            "autoskillit.config.load_config",
+            lambda path=None: _make_test_config(fleet=True, fleet_headless_run=True),
+        )
+        captured_args: dict[str, object] = {}
+
+        async def fake_execute(**kwargs: object) -> DispatchResult:
+            captured_args.update(kwargs)
+            os.environ["AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE"] = "capture"
+            return _mock_success_result()
+
+        with patch(
+            "autoskillit.cli.fleet._fleet_run._execute_fleet_run",
+            new=AsyncMock(side_effect=fake_execute),
+        ):
+            from autoskillit.cli.fleet import fleet_run
+
+            with pytest.raises(SystemExit):
+                fleet_run("test-recipe", task="test")
+
+        assert captured_args["native_shell_capture_mode"] is NativeShellCaptureMode.DIRECT
+
+    def test_fleet_run_invalid_native_shell_capture_mode_fails_closed_with_diagnostic(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import structlog.testing
+
+        from autoskillit.core import NativeShellCaptureMode
+
+        monkeypatch.setenv("AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE", "invalid")
+        monkeypatch.setattr(
+            "autoskillit.config.load_config",
+            lambda path=None: _make_test_config(fleet=True, fleet_headless_run=True),
+        )
+        captured_args: dict[str, object] = {}
+
+        async def fake_execute(**kwargs: object) -> DispatchResult:
+            captured_args.update(kwargs)
+            return _mock_success_result()
+
+        with (
+            patch(
+                "autoskillit.cli.fleet._fleet_run._execute_fleet_run",
+                new=AsyncMock(side_effect=fake_execute),
+            ),
+            structlog.testing.capture_logs() as logs,
+        ):
+            from autoskillit.cli.fleet import fleet_run
+
+            with pytest.raises(SystemExit):
+                fleet_run("test-recipe", task="test")
+
+        assert captured_args["native_shell_capture_mode"] is NativeShellCaptureMode.CAPTURE
+        assert any(
+            entry.get("event") == "fleet_run_invalid_native_shell_capture_mode"
+            and entry.get("reason") == "invalid_environment"
+            and entry.get("lineage_status") == "corrupt"
+            for entry in logs
+        )
+
     def test_fleet_run_rejects_invalid_ingredient(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:

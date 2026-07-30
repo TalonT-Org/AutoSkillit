@@ -6,11 +6,17 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from fastmcp.exceptions import ResourceError
 
 from autoskillit.core.types._type_constants_registries import AGENT_PACK_REGISTRY
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+_OVERENGINEERING_AGENT_NAMES = {
+    "pr-review-auditor-reachability",
+    "pr-review-auditor-abstraction-surface",
+}
 
 
 # T1: AGENT_PACK_REGISTRY keys are lowercase
@@ -260,6 +266,30 @@ def test_agent_definition_frontmatter_valid():
             frontmatter = load_yaml(parts[1])
             for field in ("name", "description", "tools", "model", "maxTurns"):
                 assert field in frontmatter, f"{md_file.name}: missing frontmatter field '{field}'"
+
+
+def test_overengineering_agent_frontmatter_is_read_only() -> None:
+    from autoskillit.core import pkg_root
+    from autoskillit.core.io import load_yaml
+
+    for name in _OVERENGINEERING_AGENT_NAMES:
+        content = (pkg_root() / "agents" / f"{name}.md").read_text()
+        assert content.startswith("---\n")
+        parts = content.split("---", 2)
+        assert len(parts) == 3
+        frontmatter = load_yaml(parts[1])
+        assert frontmatter["name"] == name
+        assert set(frontmatter["tools"]) == {"Read", "Grep", "Glob"}
+        assert frontmatter["model"] == "sonnet"
+        assert frontmatter["maxTurns"] == 30
+
+
+@pytest.mark.parametrize("name", sorted(_OVERENGINEERING_AGENT_NAMES))
+def test_packless_overengineering_agents_are_not_plan_resources(name: str) -> None:
+    from autoskillit.server.tools.tools_agents import get_plan_review_agent
+
+    with pytest.raises(ResourceError, match="Unknown agent"):
+        get_plan_review_agent(name)
 
 
 # T13: RETIRED_AGENT_NAMES contains all 4 replaced agent names

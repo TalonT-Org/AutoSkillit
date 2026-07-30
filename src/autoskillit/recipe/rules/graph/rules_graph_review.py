@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import regex as re
+
 from autoskillit.core import SKILL_TOOLS, Severity, get_logger, resolve_skill_name
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._analysis_bfs import bfs_reachable_without_barrier
@@ -210,6 +212,31 @@ def _check_run_skill_missing_rate_limit(ctx: ValidationContext) -> list[RuleFind
 
 
 _REVIEW_EFFECT_ADVANCE_GATES = frozenset({"check_review_loop", "derive_batch_ci_event"})
+_STALE_SNAPSHOT_WHEN_RE = re.compile(
+    r"(?:\$\{\{\s*)?result\.verdict(?:\s*\}\})?\s*==\s*"
+    r"""(?:"stale_snapshot"|'stale_snapshot'|stale_snapshot)"""
+)
+
+
+def _stale_snapshot_bypass_edges(
+    ctx: ValidationContext,
+    start: str,
+) -> frozenset[tuple[str, str]]:
+    """Return the proved no-effect review-loop edge exempt from receipt checking."""
+    step = ctx.recipe.steps[start]
+    if step.on_result is None:
+        return frozenset()
+    loop_conditions = [
+        condition
+        for condition in step.on_result.conditions
+        if condition.route == "check_review_loop"
+    ]
+    if not loop_conditions or not all(
+        condition.when is not None and _STALE_SNAPSHOT_WHEN_RE.fullmatch(condition.when.strip())
+        for condition in loop_conditions
+    ):
+        return frozenset()
+    return frozenset({(start, "check_review_loop")})
 
 
 def _get_review_pr_steps(ctx: ValidationContext) -> list[str]:
@@ -232,8 +259,10 @@ def _get_review_pr_steps(ctx: ValidationContext) -> list[str]:
     description=(
         "No advance gate (check_review_loop or derive_batch_ci_event) must be reachable "
         "from any review-pr skill step on the success path without first crossing "
-        "check_review_posted. Applies to all steps dispatching the review-pr skill "
-        "regardless of step id (covers review_pr_integration in merge-prs.yaml)."
+        "check_review_posted, except an exact stale_snapshot route to check_review_loop "
+        "because that verdict publishes no review effect. Applies to all steps dispatching "
+        "the review-pr skill regardless of step id (covers review_pr_integration in "
+        "merge-prs.yaml)."
     ),
 )
 def _review_effect_verification_waypoint(ctx: ValidationContext) -> list[RuleFinding]:
@@ -246,6 +275,7 @@ def _review_effect_verification_waypoint(ctx: ValidationContext) -> list[RuleFin
             ctx.recipe,
             start=start,
             barrier=frozenset({"check_review_posted"}),
+            ignored_edges=_stale_snapshot_bypass_edges(ctx, start),
         )
         for advance_gate in _REVIEW_EFFECT_ADVANCE_GATES:
             if advance_gate in reachable:

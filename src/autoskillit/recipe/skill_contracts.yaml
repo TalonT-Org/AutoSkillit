@@ -716,17 +716,19 @@ skills:
         - approved_with_comments
         - changes_requested
         - needs_human
+        - stale_snapshot
     - name: local_findings_path
       type: string
       description: "Written when mode=local. Path to local_findings_{pr_number}.json output."
     expected_output_patterns:
-    - "verdict[ \\t]*=[ \\t]*(approved|approved_with_comments|changes_requested|needs_human)"
+    - "verdict[ \\t]*=[ \\t]*(approved|approved_with_comments|changes_requested|needs_human|stale_snapshot)"
     - "(?:%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%|verdict[ \\t]*=[ \\t]*approved_with_comments)"
     pattern_examples:
     - "verdict = approved\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
     - "verdict = approved_with_comments\n%%ORDER_UP%%"
     - "verdict = changes_requested\n%%REVIEW_GATE::LOOP_REQUIRED%%\n%%ORDER_UP%%"
     - "verdict = needs_human\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
+    - "verdict = stale_snapshot\n%%REVIEW_GATE::LOOP_REQUIRED%%\n%%ORDER_UP%%"
     negative_examples:
     - "verdict = approved\n%%ORDER_UP%%"
 
@@ -2723,12 +2725,32 @@ callable_contracts:
     - name: previous_verdict
       type: str
       required: false
+    - name: local_review_rounds
+      type: str
+      required: false
     outputs:
     - name: next_iteration
+      type: str
+    - name: prev_iteration
       type: str
     - name: max_exceeded
       type: str
     - name: had_blocking
+      type: str
+  autoskillit.smoke_utils.clear_review_annotation_context:
+    inputs: []
+    outputs:
+    - name: annotated_diff_path
+      type: str
+    - name: hunk_ranges_path
+      type: str
+    - name: valid_lines_path
+      type: str
+    - name: diff_metrics_path
+      type: str
+    - name: review_mode
+      type: str
+    - name: pr_head_sha
       type: str
   autoskillit.smoke_utils.check_review_posted:
     description: >

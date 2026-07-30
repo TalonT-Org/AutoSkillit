@@ -115,3 +115,19 @@ def test_step35_accesses_code_region_from_dict():
     """Step 3.5 must access code_region via .get('code_region') on the dict value."""
     section = _step35_section()
     assert '.get("code_region"' in section or ".get('code_region'" in section
+
+
+def test_enriched_context_fields_remain_opaque_dict_values() -> None:
+    section = _step2_section()
+    assert "copy the complete entry dictionary" in section
+    for field in (
+        "evidence",
+        "trace",
+        "boundary_checks",
+        "confidence",
+        "simpler_behavior",
+        "candidate_id",
+        "disposition_id",
+        "snapshot",
+    ):
+        assert field in section

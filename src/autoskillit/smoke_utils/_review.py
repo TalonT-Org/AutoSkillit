@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC
 from pathlib import Path
@@ -21,12 +22,7 @@ def annotate_pr_diff(
     local_review_rounds: str = "",
     current_iteration: str = "",
 ) -> dict[str, str]:
-    """Fetch and annotate a PR diff server-side for review-pr.
-
-    Called by run_python from the annotate_pr_diff step in merge-prs.yaml.
-    Fetches the diff via `gh pr diff`, annotates it, and writes both the
-    annotated diff and hunk ranges to disk.
-    """
+    """Publish one snapshot-bound PR annotation bundle for review-pr."""
     import subprocess  # noqa: PLC0415
 
     from autoskillit.core import atomic_write  # noqa: PLC0415
@@ -41,6 +37,16 @@ def annotate_pr_diff(
     out = Path(output_dir)
     if not out.is_absolute():
         raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
+    review_root = Path(cwd)
+    if not review_root.is_absolute():
+        raise ValueError(f"cwd must be absolute, got {cwd!r}")
+    review_root = review_root.resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    annotated_path = out / f"annotated_diff_{pr_number}.txt"
+    ranges_path = out / f"ranges_{pr_number}.json"
+    valid_lines_path = out / f"valid_lines_{pr_number}.json"
+    metrics_path = out / f"metrics_{pr_number}.json"
+    metrics_path.unlink(missing_ok=True)
 
     try:
         local_rounds = int(local_review_rounds.strip()) if local_review_rounds.strip() else 0
@@ -52,72 +58,197 @@ def annotate_pr_diff(
         iteration = 0
     review_mode = "local" if local_rounds > 0 and iteration < local_rounds else "github"
 
-    if review_mode == "local" and base_branch.strip():
+    def _stdout_bytes(result: subprocess.CompletedProcess[bytes]) -> bytes:
+        return result.stdout
+
+    def _run(args: list[str], *, timeout: int) -> subprocess.CompletedProcess[bytes]:
         result = subprocess.run(
-            ["git", "diff", f"{base_branch.strip()}...HEAD"],
+            args,
             capture_output=True,
-            text=True,
-            check=True,
-            cwd=cwd,
-            timeout=60,
+            text=False,
+            check=False,
+            cwd=str(review_root),
+            timeout=timeout,
         )
-    else:
-        if review_mode == "local":
+        if result.returncode != 0:
+            stderr = result.stderr
+            detail = (
+                stderr.decode("utf-8", errors="replace")
+                if isinstance(stderr, bytes)
+                else str(stderr or "")
+            ).strip()
+            raise RuntimeError(f"annotation command failed ({' '.join(args)}): {detail}")
+        return result
+
+    def _required_scalar(args: list[str], *, timeout: int) -> str:
+        value = _stdout_bytes(_run(args, timeout=timeout)).decode("utf-8", errors="strict").strip()
+        if not value or any(character.isspace() for character in value):
+            raise RuntimeError(f"annotation command returned an invalid ref ({' '.join(args)})")
+        return value
+
+    def _read_pr_refs(*, required: bool) -> tuple[str, str] | None:
+        result = subprocess.run(
+            ["gh", "pr", "view", str(pr_number), "--json", "headRefOid,baseRefOid"],
+            capture_output=True,
+            text=False,
+            check=False,
+            cwd=str(review_root),
+            timeout=30,
+        )
+        if result.returncode != 0:
+            if required:
+                raise RuntimeError("unable to resolve live PR head/base refs")
+            return None
+        try:
+            payload = json.loads(_stdout_bytes(result).decode("utf-8", errors="strict"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("live PR head/base refs were malformed") from exc
+        if not isinstance(payload, dict):
+            raise RuntimeError("live PR head/base refs were malformed")
+        head_sha = payload.get("headRefOid")
+        base_sha = payload.get("baseRefOid")
+        if not isinstance(head_sha, str) or not head_sha.strip():
+            raise RuntimeError("live PR head ref was missing")
+        if not isinstance(base_sha, str) or not base_sha.strip():
+            raise RuntimeError("live PR base ref was missing")
+        return head_sha.strip(), base_sha.strip()
+
+    try:
+        merge_base_sha = ""
+        if review_mode == "local" and not base_branch.strip():
             logger.warning(
                 "local_review_mode_downgrade: base_branch empty, falling back to gh pr diff"
             )
             review_mode = "github"
-        result = subprocess.run(
-            ["gh", "pr", "diff", str(pr_number)],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=cwd,
-            timeout=60,
+
+        if review_mode == "local":
+            head_sha = _required_scalar(["git", "rev-parse", "HEAD"], timeout=10)
+            base_sha = _required_scalar(
+                ["git", "rev-parse", base_branch.strip()],
+                timeout=10,
+            )
+            live_refs = _read_pr_refs(required=False)
+            if live_refs is not None and live_refs[1] != base_sha:
+                raise RuntimeError(
+                    "local base ref does not match the live PR baseRefOid authority"
+                )
+            merge_base_sha = _required_scalar(
+                ["git", "merge-base", base_sha, head_sha],
+                timeout=10,
+            )
+            diff_args = [
+                "git",
+                "diff",
+                "--no-color",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--find-renames=50%",
+                "--unified=3",
+                merge_base_sha,
+                head_sha,
+            ]
+            diff_bytes = _stdout_bytes(_run(diff_args, timeout=60))
+            profile_id = "local_git_pinned_v1"
+            diff_source = {
+                "kind": "local_git",
+                "comparison": "merge_base_to_head",
+                "context_lines": 3,
+                "rename_detection": "50%",
+                "external_diff": False,
+                "text_conversion": False,
+                "profile_id": profile_id,
+            }
+        else:
+            refs_before = _read_pr_refs(required=True)
+            assert refs_before is not None
+            head_sha, base_sha = refs_before
+            diff_bytes = _stdout_bytes(_run(["gh", "pr", "diff", str(pr_number)], timeout=60))
+            refs_after = _read_pr_refs(required=True)
+            if refs_after != refs_before:
+                raise RuntimeError("live PR head/base refs moved during diff acquisition")
+            profile_id = "github_pr_diff_v1"
+            diff_source = {
+                "kind": "github_pr",
+                "comparison": "pull_request",
+                "context_lines": 3,
+                "rename_detection": "provider_default",
+                "external_diff": False,
+                "text_conversion": False,
+                "profile_id": profile_id,
+            }
+
+        diff_text = diff_bytes.decode("utf-8", errors="strict")
+        annotated_text = f"# sha: {head_sha}\n{annotate_diff(diff_text)}"
+        ranges_text = json.dumps(
+            parse_hunk_ranges(diff_text),
+            sort_keys=True,
+            separators=(",", ":"),
         )
-    diff = result.stdout
-    if review_mode == "github":
-        head_sha_result = subprocess.run(
-            ["gh", "pr", "view", str(pr_number), "--json", "headRefOid", "-q", ".headRefOid"],
-            capture_output=True,
-            text=True,
-            cwd=cwd,
-            timeout=30,
+        valid_lines_text = json.dumps(
+            extract_valid_lines(diff_text),
+            sort_keys=True,
+            separators=(",", ":"),
         )
-    else:
-        head_sha_result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            cwd=cwd,
-            timeout=10,
+        metrics = compute_diff_metrics(diff_text)
+        loc_thresh = int(loc_threshold) if loc_threshold else 200
+        file_thresh = int(file_threshold) if file_threshold else 5
+        dispatch = select_review_agents(
+            metrics,
+            loc_threshold=loc_thresh,
+            file_threshold=file_thresh,
         )
-    head_sha = head_sha_result.stdout.strip() if head_sha_result.returncode == 0 else ""
-    out.mkdir(parents=True, exist_ok=True)
-    annotated_path = out / f"annotated_diff_{pr_number}.txt"
-    ranges_path = out / f"ranges_{pr_number}.json"
-    valid_lines_path = out / f"valid_lines_{pr_number}.json"
-    atomic_write(annotated_path, f"# sha: {head_sha}\n{annotate_diff(diff)}")
-    atomic_write(ranges_path, json.dumps(parse_hunk_ranges(diff)))
-    atomic_write(valid_lines_path, json.dumps(extract_valid_lines(diff)))
-    metrics = compute_diff_metrics(diff)
-    loc_thresh = int(loc_threshold) if loc_threshold else 200
-    file_thresh = int(file_threshold) if file_threshold else 5
-    dispatch = select_review_agents(
-        metrics,
-        loc_threshold=loc_thresh,
-        file_threshold=file_thresh,
-    )
-    metrics_data = {
-        "_head_sha": head_sha,
-        "added_lines": metrics.added_lines,
-        "removed_lines": metrics.removed_lines,
-        "changed_files": metrics.changed_files,
-        "file_paths": metrics.file_paths,
-        "dispatch_agents": dispatch,
-    }
-    metrics_path = out / f"metrics_{pr_number}.json"
-    atomic_write(metrics_path, json.dumps(metrics_data))
+        diff_sha256 = hashlib.sha256(diff_bytes).hexdigest()
+
+        def _artifact_record(path: Path, text: str) -> dict[str, str | int]:
+            encoded = text.encode("utf-8")
+            return {
+                "basename": path.name,
+                "sha256": hashlib.sha256(encoded).hexdigest(),
+                "byte_length": len(encoded),
+            }
+
+        artifacts = {
+            "annotated_diff": _artifact_record(annotated_path, annotated_text),
+            "hunk_ranges": _artifact_record(ranges_path, ranges_text),
+            "valid_lines": _artifact_record(valid_lines_path, valid_lines_text),
+        }
+        generation_material = json.dumps(
+            {
+                "head_sha": head_sha,
+                "base_sha": base_sha,
+                "merge_base_sha": merge_base_sha,
+                "diff_sha256": diff_sha256,
+                "profile": diff_source,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        metrics_data = {
+            "_head_sha": head_sha,
+            "_base_sha": base_sha,
+            "_merge_base_sha": merge_base_sha,
+            "review_mode": review_mode,
+            "generation_id": hashlib.sha256(generation_material).hexdigest(),
+            "diff_sha256": diff_sha256,
+            "diff_byte_length": len(diff_bytes),
+            "diff_source": diff_source,
+            "artifacts": artifacts,
+            "added_lines": metrics.added_lines,
+            "removed_lines": metrics.removed_lines,
+            "changed_files": metrics.changed_files,
+            "file_paths": metrics.file_paths,
+            "dispatch_agents": dispatch,
+            "run_overengineering_audits": (metrics.added_lines + metrics.removed_lines) > 2000,
+        }
+        metrics_text = json.dumps(metrics_data, sort_keys=True, separators=(",", ":"))
+        atomic_write(annotated_path, annotated_text)
+        atomic_write(ranges_path, ranges_text)
+        atomic_write(valid_lines_path, valid_lines_text)
+        atomic_write(metrics_path, metrics_text)
+    except Exception:
+        metrics_path.unlink(missing_ok=True)
+        raise
+
     return {
         "head_sha": head_sha,
         "review_mode": review_mode,
@@ -185,7 +316,7 @@ def check_review_loop(
         local_rounds = 0
 
     verdict = previous_verdict.strip()
-    is_blocking_verdict = verdict == "changes_requested"
+    is_blocking_verdict = verdict in {"changes_requested", "stale_snapshot"}
     local_rounds_not_exhausted = (
         local_rounds > 0
         and iteration < local_rounds
@@ -342,6 +473,18 @@ def enrich_diff_context(
         "enriched": "true",
         "enriched_count": str(enriched_count),
         "total_entries": str(len(entries)),
+    }
+
+
+def clear_review_annotation_context() -> dict[str, str]:
+    """Clear every captured annotation authority before a new publication attempt."""
+    return {
+        "annotated_diff_path": "",
+        "hunk_ranges_path": "",
+        "valid_lines_path": "",
+        "diff_metrics_path": "",
+        "review_mode": "",
+        "pr_head_sha": "",
     }
 
 

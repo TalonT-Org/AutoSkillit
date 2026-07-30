@@ -23,6 +23,7 @@ _VULNERABLE_FILES = [
     "prior_threads_{pr_number}.json",
     "diff_context_{pr_number}.json",
     "raw_findings_{pr_number}.json",
+    "local_findings_{pr_number}.json",
 ]
 
 _WINDOW = 600
@@ -82,3 +83,23 @@ def test_write_instruction_includes_idempotent_guidance(filename_pattern: str) -
         f"{_WINDOW} chars of at least one occurrence. "
         f"First window: {windows[0][:300]!r}"
     )
+
+
+def test_effect_artifacts_use_same_directory_temporary_and_atomic_rename() -> None:
+    text = _SKILL_PATH.read_text()
+    step8 = text[text.index("### Step 8") :]
+    assert "same-directory temporary file" in step8
+    assert "atomic rename" in step8
+    assert "local_findings_{pr_number}.json last" in step8
+    assert "review_generation_id" in step8
+    assert "annotation_generation_id" in step8
+
+
+def test_fixed_destinations_reject_direct_redirects() -> None:
+    text = _SKILL_PATH.read_text()
+    for filename in (
+        "diff_context_${pr_number}.json",
+        "raw_findings_${pr_number}.json",
+        "local_findings_${pr_number}.json",
+    ):
+        assert f'> "${{REVIEW_OUTPUT_DIR}}{filename}"' not in text

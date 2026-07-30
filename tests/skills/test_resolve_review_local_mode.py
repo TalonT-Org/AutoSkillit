@@ -326,3 +326,42 @@ def test_resolve_review_local_mode_reject_patterns_no_timestamp():
         "resolve-review/SKILL.md Step 6.6 local mode must use stable "
         "reject_patterns_{pr_number}.json filename (no timestamp)"
     )
+
+
+def test_local_normalization_preserves_experimental_finding_fields() -> None:
+    text = _skill_text()
+    local_start = text.index("**When `mode=local`:**")
+    github_start = text.index("**When `mode=github`:**", local_start)
+    local_mode = text[local_start:github_start]
+
+    assert "copy the complete entry dictionary" in local_mode
+    assert "normalize `file` to" in local_mode
+    for field in (
+        "evidence",
+        "trace",
+        "boundary_checks",
+        "confidence",
+        "simpler_behavior",
+        "candidate_id",
+        "disposition_id",
+        "snapshot",
+    ):
+        assert f"`{field}`" in local_mode
+
+
+def test_local_artifacts_require_matching_generation_metadata() -> None:
+    text = _skill_text()
+    normalized_text = " ".join(text.split())
+
+    assert "from the same `REVIEW_PR_OUTPUT` root" in normalized_text
+    assert "identical non-empty `_head_sha`" in normalized_text
+    assert "`annotation_generation_id`" in normalized_text
+    assert "`review_generation_id`" in normalized_text
+    assert "A missing or mismatched value is a stale/mixed handoff" in normalized_text
+
+
+def test_local_mode_recognizes_overengineering_dimensions() -> None:
+    text = _skill_text()
+
+    assert "overengineering_reachability" in text
+    assert "overengineering_abstraction_surface" in text

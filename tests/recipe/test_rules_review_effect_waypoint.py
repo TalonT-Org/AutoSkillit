@@ -147,6 +147,61 @@ def test_effect_waypoint_rule_silent_when_gate_present():
     assert len(rule_violations) == 0
 
 
+def test_effect_waypoint_rule_allows_exact_stale_snapshot_bypass():
+    recipe = _make_recipe(
+        {
+            "review_pr": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:review-pr main feature"},
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            when="${{ result.verdict }} == stale_snapshot",
+                            route="check_review_loop",
+                        ),
+                        StepResultCondition(when=None, route="check_review_posted"),
+                    ]
+                ),
+            ),
+            "check_review_posted": RecipeStep(on_success="check_review_loop"),
+            "check_review_loop": RecipeStep(on_success="done"),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+
+    violations = run_semantic_rules(recipe)
+
+    assert [violation for violation in violations if violation.rule == RULE_ID] == []
+
+
+def test_effect_waypoint_rule_rejects_non_stale_bypass_to_same_loop():
+    recipe = _make_recipe(
+        {
+            "review_pr": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:review-pr main feature"},
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            when="${{ result.verdict }} == stale_snapshot",
+                            route="check_review_loop",
+                        ),
+                        StepResultCondition(when="true", route="check_review_loop"),
+                        StepResultCondition(when=None, route="check_review_posted"),
+                    ]
+                ),
+            ),
+            "check_review_posted": RecipeStep(on_success="check_review_loop"),
+            "check_review_loop": RecipeStep(on_success="done"),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+
+    violations = run_semantic_rules(recipe)
+
+    assert any(violation.rule == RULE_ID for violation in violations)
+
+
 def test_effect_waypoint_rule_skips_recipes_without_review_pr_skill_steps():
     """Recipes without run_skill steps dispatching review-pr are not subject to this rule."""
     recipe = _make_recipe(

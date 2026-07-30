@@ -180,3 +180,52 @@ def test_review_pr_step6_mode_branching_header():
     assert "MODE" in step6_section or "mode" in step6_section, (
         "Step 6 must begin with mode branching to separate local vs github behavior"
     )
+
+
+def test_local_gate_validates_head_base_and_merge_base_authority() -> None:
+    text = _skill_text()
+    step_2_7 = text[
+        text.index("### Step 2.7: Deterministic Diff Annotation") : text.index(
+            "### Step 2.5: Deletion Context Pre-Computation"
+        )
+    ]
+
+    assert 'git -C "$REVIEW_CHECKOUT_ROOT" rev-parse HEAD' in step_2_7
+    assert 'git -C "$REVIEW_CHECKOUT_ROOT" rev-parse "${base_branch}"' in step_2_7
+    assert (
+        'git -C "$REVIEW_CHECKOUT_ROOT" merge-base "$CHECKOUT_BASE_SHA" "$CHECKOUT_HEAD_SHA"'
+    ) in step_2_7
+    assert '"$CHECKOUT_HEAD_SHA" != "$METRICS_HEAD_SHA"' in step_2_7
+    assert '"$CHECKOUT_BASE_SHA" != "$METRICS_BASE_SHA"' in step_2_7
+    assert '"$CHECKOUT_MERGE_BASE_SHA" != "$METRICS_MERGE_BASE_SHA"' in step_2_7
+
+
+def test_local_handoff_is_generation_bound_and_published_last() -> None:
+    text = _skill_text()
+    step_6 = text[text.index("### Step 6") : text.index("### Step 7")]
+
+    for field in (
+        '"_head_sha"',
+        '"_base_sha"',
+        '"_merge_base_sha"',
+        '"annotation_generation_id"',
+        '"review_generation_id"',
+    ):
+        assert field in step_6
+    assert "local_findings_{pr_number}.json` last" in step_6
+    assert "same-directory temporary file and atomic rename" in text
+
+
+def test_stale_snapshot_prevents_local_effect_handoff() -> None:
+    text = _skill_text()
+    aggregate = text[
+        text.index("### Step 4: Aggregate and Deduplicate Findings") : text.index(
+            "### Step 4.5: Echo Primary Obligation"
+        )
+    ]
+
+    assert "FINAL_SNAPSHOT_STATE=stale" in aggregate
+    assert "Do not publish diff context, local findings" in aggregate
+    assert aggregate.index("FINAL_SNAPSHOT_STATE=stale") < aggregate.index(
+        "Do not publish diff context, local findings"
+    )

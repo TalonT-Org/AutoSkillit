@@ -378,6 +378,76 @@ class TestComputeDiffMetrics:
         assert metrics.added_lines == 0
         assert metrics.removed_lines == 0
 
+    def test_counts_exactly_two_thousand_changed_lines(self):
+        diff = "diff --git a/f.py b/f.py\n--- a/f.py\n+++ b/f.py\n@@ -0,0 +1,2000 @@\n" + "".join(
+            f"+line_{index}\n" for index in range(2000)
+        )
+        metrics = compute_diff_metrics(diff)
+        assert metrics.added_lines + metrics.removed_lines == 2000
+
+    def test_counts_two_thousand_and_one_changed_lines(self):
+        diff = "diff --git a/f.py b/f.py\n--- a/f.py\n+++ b/f.py\n@@ -0,0 +1,2001 @@\n" + "".join(
+            f"+line_{index}\n" for index in range(2001)
+        )
+        metrics = compute_diff_metrics(diff)
+        assert metrics.added_lines + metrics.removed_lines == 2001
+
+    def test_counts_mixed_addition_and_removal_churn(self):
+        diff = (
+            "diff --git a/f.py b/f.py\n"
+            "--- a/f.py\n"
+            "+++ b/f.py\n"
+            "@@ -1,1001 +1,1000 @@\n"
+            + "".join(f"-old_{index}\n" for index in range(1001))
+            + "".join(f"+new_{index}\n" for index in range(1000))
+        )
+        metrics = compute_diff_metrics(diff)
+        assert metrics.added_lines == 1000
+        assert metrics.removed_lines == 1001
+
+    def test_counts_removal_only_churn(self):
+        diff = (
+            "diff --git a/f.py b/f.py\n"
+            "--- a/f.py\n"
+            "+++ /dev/null\n"
+            "@@ -1,2001 +0,0 @@\n" + "".join(f"-old_{index}\n" for index in range(2001))
+        )
+        metrics = compute_diff_metrics(diff)
+        assert metrics.added_lines == 0
+        assert metrics.removed_lines == 2001
+
+    def test_hunk_state_ends_at_next_file_section(self):
+        diff = (
+            "diff --git a/a.py b/a.py\n"
+            "--- a/a.py\n"
+            "+++ b/a.py\n"
+            "@@ -1 +1 @@\n"
+            "+counted\n"
+            "diff --git a/b.py b/b.py\n"
+            "+metadata_not_in_hunk\n"
+            "--- a/b.py\n"
+            "+++ b/b.py\n"
+            "@@ -1 +1 @@\n"
+            "+also_counted\n"
+        )
+        metrics = compute_diff_metrics(diff)
+        assert metrics.added_lines == 2
+        assert metrics.file_paths == ["a.py", "b.py"]
+
+    def test_header_shaped_payload_is_counted_inside_hunk(self):
+        diff = (
+            "diff --git a/f.py b/f.py\n"
+            "--- a/f.py\n"
+            "+++ b/f.py\n"
+            "@@ -1 +1 @@\n"
+            "+++ b/not-a-header\n"
+            "--- a/not-a-header\n"
+        )
+        metrics = compute_diff_metrics(diff)
+        assert metrics.added_lines == 1
+        assert metrics.removed_lines == 1
+        assert metrics.file_paths == ["f.py"]
+
 
 # --- select_review_agents ---
 

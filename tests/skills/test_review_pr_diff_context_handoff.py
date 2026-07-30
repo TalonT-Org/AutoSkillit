@@ -89,3 +89,32 @@ def test_step8_writes_raw_findings_json():
     """Step 8 must declare writing raw_findings_{pr_number}.json."""
     section = _step8_section()
     assert "raw_findings_{pr_number}.json" in section
+
+
+def test_experimental_context_preserves_evidence_and_disposition() -> None:
+    section = _step8_section()
+    for field in (
+        "evidence",
+        "trace",
+        "boundary_checks",
+        "confidence",
+        "simpler_behavior",
+        "candidate_id",
+        "disposition_id",
+        "snapshot",
+    ):
+        assert field in section
+
+
+def test_ledger_records_are_immutable_and_linked() -> None:
+    section = _step8_section()
+    for record in (
+        "validation_records",
+        "disposition_records",
+        "aggregation_records",
+        "verdict_use_records",
+        "publication_records",
+    ):
+        assert record in section
+    assert "record_digest" in section
+    assert "dedup_group_id" in section

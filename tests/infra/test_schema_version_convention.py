@@ -141,12 +141,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/cli/update/_update_checks.py", 77),
     # _update_checks_fetch.py — fetch cache (extracted from _update_checks.py)
     ("src/autoskillit/cli/update/_update_checks_fetch.py", 58),
-    # smoke_utils/_review.py — ranges, valid lines, diff metrics, enriched handoff, manifest
-    ("src/autoskillit/smoke_utils/_review.py", 101),
-    ("src/autoskillit/smoke_utils/_review.py", 102),
-    ("src/autoskillit/smoke_utils/_review.py", 120),
-    ("src/autoskillit/smoke_utils/_review.py", 340),
-    ("src/autoskillit/smoke_utils/_review.py", 432),
+    # smoke_utils/_review.py — enriched handoff and manifest
+    ("src/autoskillit/smoke_utils/_review.py", 471),
+    ("src/autoskillit/smoke_utils/_review.py", 575),
     # smoke_utils/_git.py — partitions, merge queue data
     # Line 110 is a list-payload write site (dual membership: also in list_sites
     # in test_allowlist_includes_list_payloads_as_documented). The AST scanner catches
@@ -230,7 +227,6 @@ class TestSchemaVersionConvention:
         """List-payload sites are included since the AST scanner can't distinguish return types."""
         # These sites write list payloads through function calls but are caught by the scanner
         list_sites = [
-            ("src/autoskillit/smoke_utils/_review.py", 101),
             ("src/autoskillit/smoke_utils/_git.py", 110),
         ]
         for site in list_sites:

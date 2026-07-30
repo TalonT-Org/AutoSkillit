@@ -43,6 +43,10 @@ _EMPTY_ARRAY_DOC = re.compile(
     r"\[\s*\]|\bempty\b.*\barray\b|\barray\b.*\bempty\b|\bno findings\b|\bzero findings\b",
     re.IGNORECASE,
 )
+_PROOF_ONLY_AUDITORS = {
+    "pr-review-auditor-reachability.md",
+    "pr-review-auditor-abstraction-surface.md",
+}
 
 
 def test_agent_definitions_with_must_gate_have_fallback() -> None:
@@ -96,11 +100,81 @@ def test_agent_definitions_inconclusive_specifies_output_format() -> None:
         parts = content.split("---", 2)
         body = parts[2] if len(parts) >= 3 else content
         if _INCONCLUSIVE_SECTION_HEADING.search(body):
-            if not _INCONCLUSIVE_OUTPUT_FORMAT.search(body):
+            has_output_format = (
+                _EMPTY_ARRAY_DOC.search(body)
+                if md_file.name in _PROOF_ONLY_AUDITORS
+                else _INCONCLUSIVE_OUTPUT_FORMAT.search(body)
+            )
+            if not has_output_format:
                 failures.append(
                     f"{md_file.name}: inconclusive fallback without output format specification"
                 )
     assert not failures, "\n".join(failures)
+
+
+def test_overengineering_auditors_encode_closed_proof_contract() -> None:
+    required_boundaries = {
+        "reflection_decorators",
+        "dependency_injection",
+        "plugin_registry",
+        "cli_entrypoint",
+        "serialization",
+        "generated_code",
+        "public_api",
+    }
+    for filename in _PROOF_ONLY_AUDITORS:
+        body = (_AGENTS_DIR / filename).read_text()
+        assert "quote" in body.lower()
+        assert "re-read" in body.lower()
+        assert "exact right-side changed-line authority" in body
+        assert "current PR checkout/worktree" in body
+        assert "Return `[]`" in body
+        assert "at least two distinct" in body
+        assert "simpler_behavior" in body
+        assert "confidence" in body
+        assert "trace" in body
+        assert "boundary_checks" in body
+        for boundary in required_boundaries:
+            assert boundary in body
+
+
+@pytest.mark.parametrize(
+    "boundary_phrase",
+    [
+        "reflection",
+        "dependency injection",
+        "plugin/registry",
+        "CLI entry",
+        "serialization",
+        "generated code",
+        "public API",
+    ],
+)
+def test_overengineering_auditors_reject_unchecked_boundary_hypotheses(
+    boundary_phrase: str,
+) -> None:
+    for filename in _PROOF_ONLY_AUDITORS:
+        body = (_AGENTS_DIR / filename).read_text()
+        assert boundary_phrase.lower() in body.lower()
+        assert "Return `[]`" in body
+
+
+@pytest.mark.parametrize(
+    "justified_machinery",
+    [
+        "Atomic writes",
+        "locks",
+        "security checks",
+        "compatibility behavior",
+        "exception-context wrappers",
+    ],
+)
+def test_abstraction_auditor_rejects_reachable_machinery_as_redundant(
+    justified_machinery: str,
+) -> None:
+    body = (_AGENTS_DIR / "pr-review-auditor-abstraction-surface.md").read_text()
+    assert justified_machinery in body
+    assert "are not redundant" in body
 
 
 def test_agent_definitions_output_format_mentions_empty_array() -> None:

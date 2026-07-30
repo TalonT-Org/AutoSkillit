@@ -54,15 +54,22 @@ def compute_diff_metrics(diff_text: str) -> DiffMetrics:
     added = 0
     removed = 0
     file_paths: list[str] = []
+    in_hunk = False
 
     for line in diff_text.splitlines():
-        if line.startswith("+++ b/"):
-            file_paths.append(line[6:])
+        if line.startswith("diff --git "):
+            in_hunk = False
             continue
-        if line.startswith("+++"):
+        if line.startswith("@@"):
+            in_hunk = True
             continue
-        if line.startswith("---"):
+
+        if not in_hunk:
+            file_match = _FILE_HEADER.match(line)
+            if file_match:
+                file_paths.append(file_match.group(1))
             continue
+
         if line.startswith("+"):
             added += 1
         elif line.startswith("-"):

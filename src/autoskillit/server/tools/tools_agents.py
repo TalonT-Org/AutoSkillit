@@ -15,11 +15,20 @@ logger = get_logger(__name__)
 AGENT_PACK_TAGS: dict[str, frozenset[str]] = {
     name: frozenset({name}) for name in AGENT_PACK_REGISTRY
 }
+PLAN_REVIEW_AGENT_NAMES: frozenset[str] = frozenset(
+    {
+        "plan-foundation-auditor",
+        "plan-interface-mapper",
+        "plan-registry-tracer",
+    }
+)
 
 
 @mcp.resource("agent://plan-review/{name}", tags={"plan-review"}, mime_type="text/markdown")
 def get_plan_review_agent(name: str) -> str:
     """Return a bundled agent definition for plan review."""
+    if name not in PLAN_REVIEW_AGENT_NAMES:
+        raise ResourceError(f"Unknown agent: {name}")
     agent_path = pkg_root() / "agents" / f"{name}.md"
     if not agent_path.is_file():
         raise ResourceError(f"Unknown agent: {name}")
@@ -34,9 +43,7 @@ def get_plan_review_agent(name: str) -> str:
 @mcp.resource("agent://plan-review/_index", tags={"plan-review"}, mime_type="application/json")
 def list_plan_review_agents() -> str:
     """List all available plan-review agents."""
-    agents_dir = pkg_root() / "agents"
-    agents = sorted(p.stem for p in agents_dir.glob("plan-*.md"))
-    return json.dumps(agents)
+    return json.dumps(sorted(PLAN_REVIEW_AGENT_NAMES))
 
 
 @mcp.tool(

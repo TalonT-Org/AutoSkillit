@@ -414,12 +414,12 @@ def test_pmp_has_check_mergeability_step(recipe) -> None:
 
 
 def test_pmp_check_mergeability_routes_mergeable_to_review_pr_integration(recipe) -> None:
-    """B6: check_mergeability routes MERGEABLE to annotate_pr_diff."""
+    """B6: MERGEABLE invalidates prior annotation context before annotation."""
     step = recipe.steps["check_mergeability"]
     assert step.on_result is not None
     conditions = step.on_result.conditions
     mergeable_routes = [c for c in conditions if c.when and "MERGEABLE" in c.when]
-    assert any(c.route == "annotate_pr_diff" for c in mergeable_routes)
+    assert any(c.route == "clear_review_annotation_context" for c in mergeable_routes)
 
 
 def test_pmp_check_mergeability_routes_conflicting_to_resolve_integration_conflicts(
@@ -484,12 +484,12 @@ def test_pmp_has_check_mergeability_post_rebase_step(recipe) -> None:
 
 
 def test_pmp_check_mergeability_post_rebase_routes_mergeable_to_review(recipe) -> None:
-    """B12: post_rebase mergeability check routes MERGEABLE to annotate_pr_diff."""
+    """B12: post-rebase MERGEABLE invalidates prior context before annotation."""
     step = recipe.steps["check_mergeability_post_rebase"]
     assert step.on_result is not None
     conditions = step.on_result.conditions
     mergeable_routes = [c for c in conditions if c.when and "MERGEABLE" in c.when]
-    assert any(c.route == "annotate_pr_diff" for c in mergeable_routes)
+    assert any(c.route == "clear_review_annotation_context" for c in mergeable_routes)
 
 
 def test_pmp_has_review_pr_integration_step(recipe) -> None:

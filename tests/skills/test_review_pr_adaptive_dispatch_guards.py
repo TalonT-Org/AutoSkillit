@@ -22,6 +22,13 @@ def _skill_text() -> str:
     return SKILL_PATH.read_text()
 
 
+def _section(start_heading: str, end_heading: str) -> str:
+    text = _skill_text()
+    start = text.index(start_heading)
+    end = text.index(end_heading, start)
+    return text[start:end]
+
+
 def test_skill_accepts_diff_metrics_path_argument():
     text = _skill_text()
     assert "diff_metrics_path" in text
@@ -65,3 +72,39 @@ def test_step3_requires_single_message_dispatch():
         "review-pr/SKILL.md Step 3 must contain 'single message' dispatch "
         "instruction to prevent sequential subagent dispatch"
     )
+
+
+def test_gate_validation_precedes_boolean_consumption() -> None:
+    section = _section("### Step 2.7", "### Step 2.5")
+    assert section.index("METRICS_MARKER_BEFORE") < section.index("run_overengineering_audits")
+    assert section.index("artifact_digest_mismatch") < section.index("GATE_STATE=valid_true")
+    assert 'type == "boolean"' in section
+
+
+def test_standard_and_experimental_dispatch_are_separate() -> None:
+    section = _section("### Step 2.9", "### Step 3")
+    assert "STANDARD_DISPATCH_AGENTS" in section
+    assert "EXPERIMENTAL_DISPATCH_AGENTS" in section
+    assert "STANDARD_AGENT_ALLOWLIST" in section
+    assert "EXPERIMENTAL_AGENT_ALLOWLIST" in section
+    assert "intersection" in section.lower()
+    assert "deletion_context" in section
+
+
+def test_true_gate_dispatches_both_registered_agents_once() -> None:
+    section = _section("### Step 3", "### Step 4")
+    for name in (
+        "autoskillit:pr-review-auditor-reachability",
+        "autoskillit:pr-review-auditor-abstraction-surface",
+    ):
+        assert section.count(f'Agent(subagent_type="{name}", model="sonnet")') == 1
+    assert "ANNOTATED_DIFF" in section
+    assert "VALID_DIFF_LINES" in section
+    assert "fixed configured agent order" in section
+
+
+def test_standard_fallback_never_contains_experimental_agents() -> None:
+    section = _section("### Step 2.9", "### Step 3")
+    fallback = section[section.index("all six standard agents") :]
+    assert "pr-review-auditor-reachability" not in fallback
+    assert "pr-review-auditor-abstraction-surface" not in fallback

@@ -1525,7 +1525,7 @@
       "on_result": [
         {
           "when": "${{ result.mergeable_status }} == MERGEABLE",
-          "route": "annotate_pr_diff"
+          "route": "clear_review_annotation_context"
         },
         {
           "when": "${{ result.mergeable_status }} == CONFLICTING",
@@ -1600,7 +1600,7 @@
       "on_result": [
         {
           "when": "${{ result.mergeable_status }} == MERGEABLE",
-          "route": "annotate_pr_diff"
+          "route": "clear_review_annotation_context"
         },
         {
           "route": "register_clone_failure"
@@ -1609,13 +1609,29 @@
       "on_failure": "register_clone_failure",
       "note": "Re-checks mergeability after the rebase and force-push. MERGEABLE proceeds to the review cycle. Any other state means automated resolution did not succeed — escalates to register_clone_failure for human intervention (REQ-MERGE-004). No second conflict resolution attempt — one cycle only.\n"
     },
+    "clear_review_annotation_context": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.clear_review_annotation_context"
+      },
+      "capture": {
+        "annotated_diff_path": "${{ result.annotated_diff_path }}",
+        "hunk_ranges_path": "${{ result.hunk_ranges_path }}",
+        "valid_lines_path": "${{ result.valid_lines_path }}",
+        "diff_metrics_path": "${{ result.diff_metrics_path }}",
+        "pr_head_sha": "${{ result.pr_head_sha }}"
+      },
+      "on_success": "annotate_pr_diff",
+      "on_failure": "annotate_pr_diff",
+      "note": "Invalidates every previously captured annotation path before the one-shot integration review attempt, so annotation failure cannot reuse an older authority.\n"
+    },
     "annotate_pr_diff": {
       "tool": "run_python",
       "with": {
         "callable": "autoskillit.smoke_utils.annotate_pr_diff",
         "pr_number": "${{ context.review_pr_number }}",
         "cwd": "${{ context.work_dir }}",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}/review-pr",
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/review-pr/integration_${{ context.review_pr_number }}",
         "local_review_rounds": "0",
         "work_dir": "${{ context.work_dir }}"
       },
@@ -1646,12 +1662,16 @@
         },
         "cwd": "${{ context.work_dir }}",
         "step_name": "review_pr_integration",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}/review-pr"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/review-pr/integration_${{ context.review_pr_number }}"
       },
       "capture": {
         "review_verdict": "${{ result.verdict }}"
       },
       "on_result": [
+        {
+          "when": "${{ result.verdict }} == stale_snapshot",
+          "route": "register_clone_failure"
+        },
         {
           "when": "${{ result.verdict }} == changes_requested",
           "route": "resolve_review_integration"
@@ -1682,7 +1702,7 @@
       "with": {
         "callable": "autoskillit.smoke_utils.check_review_posted",
         "pr_number": "${{ context.review_pr_number }}",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}/review-pr",
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/review-pr/integration_${{ context.review_pr_number }}",
         "mode": "github",
         "work_dir": "${{ context.work_dir }}"
       },
@@ -1711,7 +1731,7 @@
           "feature_branch": "${{ context.batch_branch }}"
         },
         "cwd": "${{ context.work_dir }}",
-        "output_dir": ".",
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/review-pr/integration_${{ context.review_pr_number }}",
         "step_name": "resolve_review_integration"
       },
       "capture": {

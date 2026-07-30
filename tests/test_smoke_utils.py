@@ -1278,12 +1278,47 @@ def test_enrich_diff_context_missing_handoff_file(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 _DIFF_OUTPUT = "+++ b/src/app.py\n@@ -1,3 +1,4 @@\n line1\n+added\n"
+_SHA = "abc1234567890"
+_BASE_SHA = "def1234567890"
+_MERGE_BASE_SHA = "0123456789abc"
+
+
+def _annotation_run_side_effect(
+    diff_output: str = _DIFF_OUTPUT,
+    *,
+    head_sha: str = _SHA,
+    base_sha: str = _BASE_SHA,
+    live_base_sha: str | None = None,
+    merge_base_sha: str = _MERGE_BASE_SHA,
+):
+    def _run(args, **_kwargs):
+        if args[:3] == ["gh", "pr", "view"]:
+            payload = json.dumps(
+                {
+                    "headRefOid": head_sha,
+                    "baseRefOid": live_base_sha or base_sha,
+                }
+            )
+            return subprocess.CompletedProcess(args, 0, payload.encode(), b"")
+        if args[:3] == ["gh", "pr", "diff"]:
+            return subprocess.CompletedProcess(args, 0, diff_output.encode(), b"")
+        if args[:3] == ["git", "rev-parse", "HEAD"]:
+            return subprocess.CompletedProcess(args, 0, head_sha.encode(), b"")
+        if args[:2] == ["git", "rev-parse"]:
+            return subprocess.CompletedProcess(args, 0, base_sha.encode(), b"")
+        if args[:2] == ["git", "merge-base"]:
+            return subprocess.CompletedProcess(args, 0, merge_base_sha.encode(), b"")
+        if args[:2] == ["git", "diff"]:
+            return subprocess.CompletedProcess(args, 0, diff_output.encode(), b"")
+        raise AssertionError(f"unexpected annotation command: {args}")
+
+    return _run
 
 
 @patch("subprocess.run")
 def test_annotate_pr_diff_returns_review_mode_local(mock_run, tmp_path: Path) -> None:
     """T3.1: iteration < local_rounds → review_mode=local."""
-    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    mock_run.side_effect = _annotation_run_side_effect()
     result = annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -1298,7 +1333,7 @@ def test_annotate_pr_diff_returns_review_mode_local(mock_run, tmp_path: Path) ->
 @patch("subprocess.run")
 def test_annotate_pr_diff_returns_review_mode_github(mock_run, tmp_path: Path) -> None:
     """T3.2: iteration >= local_rounds → review_mode=github."""
-    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    mock_run.side_effect = _annotation_run_side_effect()
     result = annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -1311,8 +1346,8 @@ def test_annotate_pr_diff_returns_review_mode_github(mock_run, tmp_path: Path) -
 
 @patch("subprocess.run")
 def test_annotate_pr_diff_local_mode_uses_git_diff(mock_run, tmp_path: Path) -> None:
-    """T3.3: local mode calls git diff with base...HEAD."""
-    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    """T3.3: local mode resolves refs before a pinned git diff."""
+    mock_run.side_effect = _annotation_run_side_effect()
     annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -1321,15 +1356,16 @@ def test_annotate_pr_diff_local_mode_uses_git_diff(mock_run, tmp_path: Path) -> 
         current_iteration="0",
         base_branch="main",
     )
-    args = mock_run.call_args_list[0][0][0]
-    assert args[:3] == ["git", "diff", "main...HEAD"]
-    assert mock_run.call_count == 2
+    commands = [call[0][0] for call in mock_run.call_args_list]
+    diff_command = next(command for command in commands if command[:2] == ["git", "diff"])
+    assert diff_command[-2:] == [_MERGE_BASE_SHA, _SHA]
+    assert commands.index(diff_command) > commands.index(["git", "merge-base", _BASE_SHA, _SHA])
 
 
 @patch("subprocess.run")
 def test_annotate_pr_diff_github_mode_uses_gh_pr_diff(mock_run, tmp_path: Path) -> None:
     """T3.4: github mode calls gh pr diff."""
-    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    mock_run.side_effect = _annotation_run_side_effect()
     annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -1338,15 +1374,18 @@ def test_annotate_pr_diff_github_mode_uses_gh_pr_diff(mock_run, tmp_path: Path) 
         current_iteration="2",
         base_branch="",
     )
-    assert mock_run.call_count == 2
-    args = mock_run.call_args_list[0][0][0]
-    assert args[:3] == ["gh", "pr", "diff"]
+    commands = [call[0][0] for call in mock_run.call_args_list]
+    diff_index = next(
+        index for index, command in enumerate(commands) if command[:3] == ["gh", "pr", "diff"]
+    )
+    assert commands[diff_index - 1][:3] == ["gh", "pr", "view"]
+    assert commands[diff_index + 1][:3] == ["gh", "pr", "view"]
 
 
 @patch("subprocess.run")
 def test_annotate_pr_diff_zero_local_rounds_always_github(mock_run, tmp_path: Path) -> None:
     """T3.5: local_review_rounds=0 → always github."""
-    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    mock_run.side_effect = _annotation_run_side_effect()
     result = annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -1360,7 +1399,7 @@ def test_annotate_pr_diff_zero_local_rounds_always_github(mock_run, tmp_path: Pa
 @patch("subprocess.run")
 def test_annotate_pr_diff_missing_iteration_defaults_zero(mock_run, tmp_path: Path) -> None:
     """T3.6: empty current_iteration defaults to 0 → local mode when local_rounds > 0."""
-    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    mock_run.side_effect = _annotation_run_side_effect()
     result = annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -1377,7 +1416,7 @@ def test_annotate_pr_diff_local_mode_empty_base_branch_falls_back_to_github(
     mock_run, tmp_path: Path
 ) -> None:
     """T3.8: local mode with empty base_branch falls back to gh pr diff and returns github."""
-    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    mock_run.side_effect = _annotation_run_side_effect()
     result = annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -1387,14 +1426,14 @@ def test_annotate_pr_diff_local_mode_empty_base_branch_falls_back_to_github(
         base_branch="",
     )
     assert result["review_mode"] == "github"
-    args = mock_run.call_args_list[0][0][0]
-    assert args[:3] == ["gh", "pr", "diff"]
+    commands = [call[0][0] for call in mock_run.call_args_list]
+    assert any(command[:3] == ["gh", "pr", "diff"] for command in commands)
 
 
 @patch("subprocess.run")
 def test_annotate_pr_diff_backward_compat_no_new_params(mock_run, tmp_path: Path) -> None:
     """T3.7: old 3-arg call works and defaults review_mode=github."""
-    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    mock_run.side_effect = _annotation_run_side_effect()
     result = annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -1415,17 +1454,16 @@ def test_annotate_pr_diff_int_pr_number(mock_run, tmp_path: Path) -> None:
     TypeError: argument of type 'int' is not iterable when constructing
     the gh subprocess command list.
     """
-    mock_run.return_value = subprocess.CompletedProcess(
-        args=[], returncode=0, stdout="+ diff content", stderr=""
-    )
+    mock_run.side_effect = _annotation_run_side_effect("+diff content\n")
     output_dir = tmp_path / "output"
     output_dir.mkdir()
     result = annotate_pr_diff(pr_number=42, cwd=str(tmp_path), output_dir=str(output_dir))  # type: ignore[arg-type]
     assert result["annotated_diff_path"]
 
     # Verify the subprocess call received str "42", not int 42
-    gh_diff_call = mock_run.call_args_list[0]
-    cmd_list = gh_diff_call[0][0]
+    cmd_list = next(
+        call[0][0] for call in mock_run.call_args_list if call[0][0][:3] == ["gh", "pr", "diff"]
+    )
     assert "42" in cmd_list, f"Expected '42' in command, got {cmd_list}"
 
 
@@ -1436,7 +1474,7 @@ def test_annotate_pr_diff_produces_valid_lines_artifact(mock_run, tmp_path: Path
 
     from autoskillit.execution.diff_annotator import extract_valid_lines
 
-    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    mock_run.side_effect = _annotation_run_side_effect()
     output_dir = tmp_path / "output"
     output_dir.mkdir()
     result = annotate_pr_diff(
@@ -1452,18 +1490,140 @@ def test_annotate_pr_diff_produces_valid_lines_artifact(mock_run, tmp_path: Path
     assert content == expected
 
 
-# ─── SHA embedding tests (T_SHA_1–T_SHA_4) ──────────────────────────────────
+def _churn_diff(*, additions: int, removals: int) -> str:
+    return (
+        "diff --git a/f.py b/f.py\n"
+        "--- a/f.py\n"
+        "+++ b/f.py\n"
+        f"@@ -1,{removals} +1,{additions} @@\n"
+        + "".join(f"-old_{index}\n" for index in range(removals))
+        + "".join(f"+new_{index}\n" for index in range(additions))
+    )
 
-_SHA = "abc1234567890"
+
+@pytest.mark.parametrize(
+    ("additions", "removals", "expected"),
+    [
+        (2000, 0, False),
+        (2001, 0, True),
+        (1000, 1001, True),
+        (0, 2001, True),
+    ],
+)
+@patch("subprocess.run")
+def test_annotate_pr_diff_writes_native_overengineering_gate(
+    mock_run,
+    tmp_path: Path,
+    additions: int,
+    removals: int,
+    expected: bool,
+) -> None:
+    mock_run.side_effect = _annotation_run_side_effect(
+        _churn_diff(additions=additions, removals=removals)
+    )
+    annotate_pr_diff(pr_number="91", cwd=str(tmp_path), output_dir=str(tmp_path))
+    gate = json.loads((tmp_path / "metrics_91.json").read_text())["run_overengineering_audits"]
+    assert type(gate) is bool
+    assert gate is expected
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_publishes_snapshot_manifest_last(mock_run, tmp_path: Path) -> None:
+    import hashlib
+
+    diff = _churn_diff(additions=2, removals=1)
+    mock_run.side_effect = _annotation_run_side_effect(diff)
+    annotate_pr_diff(
+        pr_number="92",
+        cwd=str(tmp_path),
+        output_dir=str(tmp_path),
+        local_review_rounds="1",
+        current_iteration="0",
+        base_branch="main",
+    )
+    metrics = json.loads((tmp_path / "metrics_92.json").read_text())
+    assert metrics["_head_sha"] == _SHA
+    assert metrics["_base_sha"] == _BASE_SHA
+    assert metrics["_merge_base_sha"] == _MERGE_BASE_SHA
+    assert metrics["diff_sha256"] == hashlib.sha256(diff.encode()).hexdigest()
+    assert metrics["diff_byte_length"] == len(diff.encode())
+    assert set(metrics["diff_source"]) == {
+        "kind",
+        "comparison",
+        "context_lines",
+        "rename_detection",
+        "external_diff",
+        "text_conversion",
+        "profile_id",
+    }
+    for artifact in metrics["artifacts"].values():
+        artifact_bytes = (tmp_path / artifact["basename"]).read_bytes()
+        assert artifact["byte_length"] == len(artifact_bytes)
+        assert artifact["sha256"] == hashlib.sha256(artifact_bytes).hexdigest()
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_invalidates_old_marker_when_diff_fails(mock_run, tmp_path: Path) -> None:
+    metrics_path = tmp_path / "metrics_93.json"
+    metrics_path.write_text('{"generation_id":"stale"}')
+
+    def fail_diff(args, **_kwargs):
+        if args[:3] == ["gh", "pr", "view"]:
+            payload = json.dumps({"headRefOid": _SHA, "baseRefOid": _BASE_SHA})
+            return subprocess.CompletedProcess(args, 0, payload.encode(), b"")
+        if args[:3] == ["gh", "pr", "diff"]:
+            return subprocess.CompletedProcess(args, 1, b"", b"diff failed")
+        raise AssertionError(f"unexpected annotation command: {args}")
+
+    mock_run.side_effect = fail_diff
+    with pytest.raises(RuntimeError, match="annotation command failed"):
+        annotate_pr_diff(pr_number="93", cwd=str(tmp_path), output_dir=str(tmp_path))
+    assert not metrics_path.exists()
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_rejects_moving_github_refs(mock_run, tmp_path: Path) -> None:
+    ref_reads = 0
+
+    def moving_refs(args, **_kwargs):
+        nonlocal ref_reads
+        if args[:3] == ["gh", "pr", "view"]:
+            ref_reads += 1
+            head = _SHA if ref_reads == 1 else f"{_SHA}moved"
+            payload = json.dumps({"headRefOid": head, "baseRefOid": _BASE_SHA})
+            return subprocess.CompletedProcess(args, 0, payload.encode(), b"")
+        if args[:3] == ["gh", "pr", "diff"]:
+            return subprocess.CompletedProcess(args, 0, _DIFF_OUTPUT.encode(), b"")
+        raise AssertionError(f"unexpected annotation command: {args}")
+
+    mock_run.side_effect = moving_refs
+    with pytest.raises(RuntimeError, match="moved during diff acquisition"):
+        annotate_pr_diff(pr_number="94", cwd=str(tmp_path), output_dir=str(tmp_path))
+    assert not (tmp_path / "metrics_94.json").exists()
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_rejects_local_base_disagreement(mock_run, tmp_path: Path) -> None:
+    mock_run.side_effect = _annotation_run_side_effect(live_base_sha="live-base")
+    with pytest.raises(RuntimeError, match="local base ref does not match"):
+        annotate_pr_diff(
+            pr_number="95",
+            cwd=str(tmp_path),
+            output_dir=str(tmp_path),
+            local_review_rounds="1",
+            current_iteration="0",
+            base_branch="main",
+        )
+    assert not (tmp_path / "metrics_95.json").exists()
+
+
+# ─── SHA embedding tests (T_SHA_1–T_SHA_4) ──────────────────────────────────
 
 
 @patch("subprocess.run")
 def test_annotate_pr_diff_embeds_head_sha_in_metrics(mock_run, tmp_path: Path) -> None:
     """T_SHA_1: metrics_{pr}.json must include _head_sha field."""
-    mock_run.side_effect = [
-        subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, ""),
-        subprocess.CompletedProcess([], 0, _SHA, ""),
-    ]
+    mock_run.side_effect = _annotation_run_side_effect()
     annotate_pr_diff(pr_number="999", cwd=str(tmp_path), output_dir=str(tmp_path))
     metrics = json.loads((tmp_path / "metrics_999.json").read_text())
     assert "_head_sha" in metrics
@@ -1473,10 +1633,7 @@ def test_annotate_pr_diff_embeds_head_sha_in_metrics(mock_run, tmp_path: Path) -
 @patch("subprocess.run")
 def test_annotate_pr_diff_embeds_sha_header_in_diff_text(mock_run, tmp_path: Path) -> None:
     """T_SHA_2: annotated_diff_{pr}.txt first line must be # sha: {sha}."""
-    mock_run.side_effect = [
-        subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, ""),
-        subprocess.CompletedProcess([], 0, _SHA, ""),
-    ]
+    mock_run.side_effect = _annotation_run_side_effect()
     annotate_pr_diff(pr_number="999", cwd=str(tmp_path), output_dir=str(tmp_path))
     first_line = (tmp_path / "annotated_diff_999.txt").read_text().split("\n")[0]
     assert first_line.startswith("# sha:")
@@ -1485,10 +1642,7 @@ def test_annotate_pr_diff_embeds_sha_header_in_diff_text(mock_run, tmp_path: Pat
 @patch("subprocess.run")
 def test_annotate_pr_diff_returns_head_sha(mock_run, tmp_path: Path) -> None:
     """T_SHA_3: Return dict must include head_sha for downstream capture."""
-    mock_run.side_effect = [
-        subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, ""),
-        subprocess.CompletedProcess([], 0, _SHA, ""),
-    ]
+    mock_run.side_effect = _annotation_run_side_effect()
     result = annotate_pr_diff(pr_number="999", cwd=str(tmp_path), output_dir=str(tmp_path))
     assert "head_sha" in result
     assert len(result["head_sha"]) >= 7
@@ -1497,10 +1651,7 @@ def test_annotate_pr_diff_returns_head_sha(mock_run, tmp_path: Path) -> None:
 @patch("subprocess.run")
 def test_annotate_pr_diff_valid_lines_flat_schema(mock_run, tmp_path: Path) -> None:
     """T_SHA_4: valid_lines_{pr}.json must be a flat {filepath: [lines]} dict, not wrapped."""
-    mock_run.side_effect = [
-        subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, ""),
-        subprocess.CompletedProcess([], 0, _SHA, ""),
-    ]
+    mock_run.side_effect = _annotation_run_side_effect()
     annotate_pr_diff(pr_number="999", cwd=str(tmp_path), output_dir=str(tmp_path))
     data = json.loads((tmp_path / "valid_lines_999.json").read_text())
     assert "_head_sha" not in data, (
@@ -2724,7 +2875,7 @@ def test_diagnose_merge_gate_rejects_empty_output_dir() -> None:
 
 
 def test_smoke_utils_all_exports_complete() -> None:
-    """smoke_utils.__all__ must list all 30 public names."""
+    """smoke_utils.__all__ must list every public name."""
     import autoskillit.smoke_utils as su
 
     expected = {
@@ -2739,6 +2890,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "check_ref_state",
         "check_review_loop",
         "check_review_posted",
+        "clear_review_annotation_context",
         "close_issue_already_done",
         "compile_eval_scorecard",
         "consolidate_health_reports",
@@ -2775,6 +2927,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "check_loop_iteration",
         "check_loop_with_progress",
         "check_review_loop",
+        "clear_review_annotation_context",
         "close_issue_already_done",
         "compile_eval_scorecard",
         "consolidate_health_reports",

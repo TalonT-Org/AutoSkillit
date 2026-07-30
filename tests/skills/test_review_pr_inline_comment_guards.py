@@ -756,3 +756,47 @@ def test_resolve_research_review_handles_null_line_file_level_threads():
         "resolve-research-review Step 3 must handle null-line file-level comment "
         "threads by skipping them — they have no code anchor."
     )
+
+
+def test_review_pr_effects_use_authoritative_commit_after_freshness_guard() -> None:
+    step6_start = SKILL_TEXT.index("### Step 6: Post Inline Review Comments")
+    step7_start = SKILL_TEXT.index("### Step 7: Submit Summary Review")
+    step6 = SKILL_TEXT[step6_start:step7_start]
+
+    stale_guard = step6.index("stale_snapshot")
+    commit_binding = step6.index('COMMIT_ID="$METRICS_HEAD_SHA"')
+    first_mutation = step6.index("gh api ")
+
+    assert stale_guard < commit_binding < first_mutation
+    assert "Never replace it with a later HEAD query" in step6
+    assert "--arg commit_id" in step6
+
+
+def test_review_pr_batch_success_and_mutation_delay_contract() -> None:
+    step7 = SKILL_TEXT[
+        SKILL_TEXT.index("### Step 7: Submit Summary Review") : SKILL_TEXT.index(
+            "### Step 8: Write Summary and Emit Verdict"
+        )
+    ]
+
+    normalized_step7 = " ".join(step7.split())
+    assert "Treat HTTP 200 as success" in normalized_step7
+    assert "without inspecting a returned `comments` array" in normalized_step7
+    assert "one-second delay" in normalized_step7
+
+
+def test_rejected_experimental_candidates_never_reach_comment_payloads() -> None:
+    step4 = SKILL_TEXT[
+        SKILL_TEXT.index("### Step 4: Aggregate and Deduplicate Findings") : SKILL_TEXT.index(
+            "### Step 4.5: Echo Primary Obligation"
+        )
+    ]
+    step6 = SKILL_TEXT[
+        SKILL_TEXT.index("### Step 6: Post Inline Review Comments") : SKILL_TEXT.index(
+            "### Step 7: Submit Summary Review"
+        )
+    ]
+
+    assert "Feed only parent-accepted experimental findings" in step4
+    assert "FILTERED_FINDINGS only" in step6
+    assert "not `UNPOSTABLE_FINDINGS`" in step6

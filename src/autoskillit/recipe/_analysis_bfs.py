@@ -100,6 +100,8 @@ def bfs_reachable_without_barrier(
     recipe: Recipe,
     start: str,
     barrier: str | frozenset[str],
+    *,
+    ignored_edges: frozenset[tuple[str, str]] = frozenset(),
 ) -> set[str]:
     """BFS from ``start`` through success-path routing edges, stopping at ``barrier``.
 
@@ -110,6 +112,10 @@ def bfs_reachable_without_barrier(
     ``barrier`` may be a single step name (str) or a frozenset of step names.
     When a frozenset is provided, any of the named steps acts as a barrier.
 
+    ``ignored_edges`` removes explicitly exempted success-path edges before
+    traversal. Callers must prove an edge is exempt rather than broadly treating
+    its target as a barrier, which would hide other paths to the same target.
+
     Only follows on_result conditions and on_success edges — error paths
     (on_failure, on_context_limit) are excluded because they are not
     verdict-driven routing and must not be checked by waypoint invariants.
@@ -119,6 +125,8 @@ def bfs_reachable_without_barrier(
     """
     barriers: set[str] = {barrier} if isinstance(barrier, str) else set(barrier)
     graph = _build_success_step_graph(recipe)
+    for source, target in ignored_edges:
+        graph.get(source, set()).discard(target)
     return _bfs_capped(graph, {start}, barriers)
 
 

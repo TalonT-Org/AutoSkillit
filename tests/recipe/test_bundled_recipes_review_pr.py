@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
+from autoskillit.core.io import load_yaml
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -499,3 +502,122 @@ def test_merge_prs_check_review_posted_true_routes_to_derive_batch_ci_event() ->
     assert crp_step is not None
     true_cond = next(c for c in crp_step.on_result.conditions if "true" in str(c.when))
     assert true_cond.route == "derive_batch_ci_event"
+
+
+_REVIEW_RECIPES = (
+    "implementation",
+    "implementation-groups",
+    "remediation",
+    "merge-prs",
+)
+_LOOPED_REVIEW_RECIPES = _REVIEW_RECIPES[:3]
+
+
+@pytest.mark.parametrize("recipe_name", _REVIEW_RECIPES)
+def test_review_recipe_yaml_and_json_mirrors_have_canonical_parity(
+    recipe_name: str,
+) -> None:
+    recipes_dir = builtin_recipes_dir()
+
+    yaml_data = load_yaml(recipes_dir / f"{recipe_name}.yaml")
+    json_data = json.loads((recipes_dir / f"{recipe_name}.json").read_text(encoding="utf-8"))
+
+    assert yaml_data == json_data
+
+
+@pytest.mark.parametrize("recipe_name", _REVIEW_RECIPES)
+def test_every_annotation_attempt_crosses_context_invalidation(
+    recipe_name: str,
+) -> None:
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    clear_step = recipe.steps["clear_review_annotation_context"]
+
+    assert (
+        clear_step.with_args["callable"]
+        == "autoskillit.smoke_utils.clear_review_annotation_context"
+    )
+    assert clear_step.on_success == "annotate_pr_diff"
+    assert clear_step.on_failure == "annotate_pr_diff"
+    expected_capture = {
+        "annotated_diff_path",
+        "hunk_ranges_path",
+        "valid_lines_path",
+        "diff_metrics_path",
+        "pr_head_sha",
+    }
+    if recipe_name != "merge-prs":
+        expected_capture.add("review_mode")
+    assert set(clear_step.capture) == expected_capture
+
+    direct_annotate_predecessors: set[str] = set()
+    for step_name, step in recipe.steps.items():
+        direct_routes = {
+            step.on_success,
+            step.on_failure,
+            step.on_context_limit,
+            step.on_rate_limit,
+            step.on_exhausted,
+        }
+        if step.on_result is not None:
+            direct_routes.update(step.on_result.routes.values())
+            direct_routes.update(condition.route for condition in step.on_result.conditions)
+        if "annotate_pr_diff" in direct_routes:
+            direct_annotate_predecessors.add(step_name)
+
+    assert direct_annotate_predecessors == {"clear_review_annotation_context"}
+
+
+@pytest.mark.parametrize("recipe_name", _REVIEW_RECIPES)
+def test_annotation_and_review_share_attempt_scoped_output_root(
+    recipe_name: str,
+) -> None:
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    review_step_name = "review_pr_integration" if recipe_name == "merge-prs" else "review_pr"
+    annotation_root = recipe.steps["annotate_pr_diff"].with_args["output_dir"]
+    review_root = recipe.steps[review_step_name].with_args["output_dir"]
+
+    assert annotation_root == review_root
+    assert annotation_root != "{{AUTOSKILLIT_TEMP}}/review-pr"
+    assert "iter_" in annotation_root or "integration_" in annotation_root
+    assert (
+        recipe.steps[review_step_name].with_args["skill_inputs"]["diff_metrics_path"]
+        == "${{ context.diff_metrics_path }}"
+    )
+
+
+@pytest.mark.parametrize("recipe_name", _LOOPED_REVIEW_RECIPES)
+def test_stale_snapshot_uses_bounded_review_loop_without_receipt_check(
+    recipe_name: str,
+) -> None:
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    review_step = recipe.steps["review_pr"]
+    stale_route = next(
+        condition
+        for condition in review_step.on_result.conditions
+        if "stale_snapshot" in str(condition.when)
+    )
+
+    assert stale_route.route == "check_review_loop"
+    check_loop = recipe.steps["check_review_loop"]
+    exhausted_stale_route = next(
+        condition
+        for condition in check_loop.on_result.conditions
+        if "stale_snapshot" in str(condition.when)
+    )
+    assert "max_exceeded" in str(exhausted_stale_route.when)
+    assert exhausted_stale_route.route in {
+        "release_issue_failure",
+        "register_clone_failure",
+    }
+
+
+def test_merge_prs_stale_snapshot_uses_existing_human_recovery_route() -> None:
+    recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
+    review_step = recipe.steps["review_pr_integration"]
+    stale_route = next(
+        condition
+        for condition in review_step.on_result.conditions
+        if "stale_snapshot" in str(condition.when)
+    )
+
+    assert stale_route.route == "register_clone_failure"

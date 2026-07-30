@@ -13,7 +13,6 @@ statements continue to work unchanged.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -30,25 +29,6 @@ from autoskillit.workspace import (
 
 _PRE_DISPATCH_SCOPE = "pre_dispatch"
 _POST_RECEIPT_SCOPE = "post_receipt"
-
-
-class McpStartupRecoveryEventKind(Enum):
-    """Closed event vocabulary for deterministic startup-recovery traces."""
-
-    PRE_DISPATCH_FAILURE = "pre_dispatch_failure"
-    RETRY = "retry"
-    EXHAUSTED = "exhausted"
-    TOOL_ERROR_RESULT = "tool_error_result"
-    APPLICATION_RESULT = "application_result"
-
-
-@dataclass(frozen=True, slots=True)
-class McpStartupRecoveryEvent:
-    """One deterministic transition emitted by the startup policy reducer."""
-
-    kind: McpStartupRecoveryEventKind
-    attempt: int | None = None
-    message: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,46 +91,6 @@ class _McpStartupRecoverySpec:
             "MCP STARTUP RECOVERY — POST-RECEIPT:\n"
             f"{post_receipt}"
         )
-
-    def validate_rendered(self, rendered: str) -> tuple[str, ...]:
-        pre_header = "MCP STARTUP RECOVERY — PRE-DISPATCH:"
-        post_header = "MCP STARTUP RECOVERY — POST-RECEIPT:"
-        if pre_header not in rendered or post_header not in rendered:
-            return tuple(clause.clause_id for clause in self.clauses)
-        pre_start = rendered.index(pre_header)
-        post_start = rendered.index(post_header, pre_start)
-        sections = {
-            _PRE_DISPATCH_SCOPE: rendered[pre_start:post_start],
-            _POST_RECEIPT_SCOPE: rendered[post_start:],
-        }
-        return tuple(
-            clause.clause_id
-            for clause in self.clauses
-            if rendered.count(f"[{clause.clause_id}]") != 1
-            or sections[clause.scope].count(clause.render()) != 1
-        )
-
-    def reduce_pre_dispatch_failure(self, attempt: int) -> McpStartupRecoveryEvent:
-        if attempt < 1 or attempt > self.attempt_cap:
-            raise ValueError("MCP startup attempt is outside the configured cap")
-        if attempt < self.attempt_cap:
-            return McpStartupRecoveryEvent(
-                kind=McpStartupRecoveryEventKind.RETRY,
-                attempt=attempt,
-            )
-        return McpStartupRecoveryEvent(
-            kind=McpStartupRecoveryEventKind.EXHAUSTED,
-            attempt=attempt,
-            message=self.exhaustion_message,
-        )
-
-    def reduce_received_result(self, kind: McpStartupRecoveryEventKind) -> McpStartupRecoveryEvent:
-        if kind not in {
-            McpStartupRecoveryEventKind.TOOL_ERROR_RESULT,
-            McpStartupRecoveryEventKind.APPLICATION_RESULT,
-        }:
-            raise ValueError("received-result reducer requires a received result event")
-        return McpStartupRecoveryEvent(kind=kind)
 
 
 _MCP_STARTUP_RECOVERY_SPEC = _McpStartupRecoverySpec(

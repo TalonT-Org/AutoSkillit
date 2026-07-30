@@ -118,12 +118,30 @@ def assert_no_timing(timing_log: DefaultTimingLog) -> None:
     assert timing_log.get_report() == []
 
 
+def _set_mock_kitchen_transition(ctx: MagicMock, *, kitchen_id: str = "") -> None:
+    """Give a mock context the typed transition state guaranteed by make_context()."""
+    from threading import RLock
+
+    from autoskillit.pipeline import closed_kitchen_open_state, new_kitchen_open_state
+
+    closed_state = closed_kitchen_open_state()
+    ctx.kitchen_transition_lock = RLock()
+    ctx.kitchen_open_state = (
+        new_kitchen_open_state(
+            kitchen_id=kitchen_id,
+            context_id=closed_state.context_id,
+        )
+        if kitchen_id
+        else closed_state
+    )
+
+
 def _make_mock_ctx() -> MagicMock:
     """Return a minimal mock ToolContext with a gate."""
     from threading import RLock
 
     from autoskillit.config import OutputBudgetConfig, QuotaGuardConfig
-    from autoskillit.pipeline import NoActiveRecipe, closed_kitchen_open_state
+    from autoskillit.pipeline import NoActiveRecipe
     from autoskillit.server._factory import make_recipe_execution
 
     gate = MagicMock()
@@ -140,8 +158,7 @@ def _make_mock_ctx() -> MagicMock:
     ctx.config.subsets.disabled = []  # REQ-VIS-008: no subsets disabled by default
     ctx.active_recipe_ingredients = None
     ctx.gate_infrastructure_ready = False
-    ctx.kitchen_transition_lock = RLock()
-    ctx.kitchen_open_state = closed_kitchen_open_state()
+    _set_mock_kitchen_transition(ctx)
     ctx.recipe_execution_lock = RLock()
     ctx.recipe_initialization_state = NoActiveRecipe()
     ctx.recipe_execution_factory = make_recipe_execution

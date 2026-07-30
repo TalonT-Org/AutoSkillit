@@ -1259,19 +1259,21 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "tool and delivery registries that define its surfaces.",
     ),
     "core/context_admission.py": (
-        3000,
+        3050,
         "REQ-CNST-010-E13: #4333 freezes one exhaustive protocol-v1 reducer and replay "
         "surface. Keeping all closed event transitions together makes atomic batch, "
         "idempotency, protected-pool, reconciliation, rollover, and declarative effect "
-        "semantics plus released-version dispatch reviewable as one state machine; "
-        "splitting dispatch branches would fragment exhaustiveness.",
+        "semantics, released-version dispatch, and configuration-aware coverage resolution "
+        "reviewable as one state machine; splitting dispatch branches would fragment "
+        "exhaustiveness.",
     ),
     "core/types/_type_context_admission.py": (
-        2300,
+        2350,
         "REQ-CNST-010-E14: #4333 freezes the complete content-free protocol-v1 schema in "
         "one IL-0 shard. Co-locating identities, records, closed event/effect unions, "
-        "states, canonical serialization, and the static coverage registry prevents "
-        "downstream layers from defining incompatible wire contracts.",
+        "states, canonical serialization, and the static coverage registry with its pinned "
+        "configuration variants prevents downstream layers from defining incompatible "
+        "wire contracts.",
     ),
     "pipeline/context_admission_ledger.py": (
         2300,

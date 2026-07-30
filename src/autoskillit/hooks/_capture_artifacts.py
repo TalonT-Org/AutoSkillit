@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import base64
-import binascii
 import errno
 import hashlib
 import json
@@ -53,6 +51,11 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture_contract import (
         _CAPTURE_ID_RE,
         _MAX_COMMAND_BYTES,
+        PROTECTED_CAPTURE_ENV_VARS,
+        CaptureLineageRef,
+        CaptureProtocolError,
+        CaptureRequest,
+        decode_capture_request,
     )
     from autoskillit.hooks._capture_lifecycle import (
         CaptureDeliveryStatus,
@@ -99,6 +102,11 @@ else:
     from _capture_contract import (
         _CAPTURE_ID_RE,
         _MAX_COMMAND_BYTES,
+        PROTECTED_CAPTURE_ENV_VARS,
+        CaptureLineageRef,
+        CaptureProtocolError,
+        CaptureRequest,
+        decode_capture_request,
     )
     from _capture_lifecycle import (
         CaptureDeliveryStatus,
@@ -131,7 +139,6 @@ __all__ = [
 _DEFAULT_INLINE_BYTES = 12_000
 _MAX_INLINE_BYTES = 1_000_000
 _MAX_POLICY_FILE_BYTES = 64 * 1024
-_MAX_ENCODED_COMMAND_BYTES = ((_MAX_COMMAND_BYTES + 2) // 3) * 4
 _DRAIN_CHUNK_BYTES = 64 * 1024
 _MAX_CLEANUP_DETAIL_BYTES = 240
 _TRUSTED_BASH_CANDIDATES = ("/bin/bash", "/usr/bin/bash")
@@ -414,6 +421,13 @@ def _wrap_user_command(command: str) -> str:
     return f"(\ntrap '__as_user_ec=$?; wait; exit \"$__as_user_ec\"' EXIT\n{command}{separator})"
 
 
+def _scrubbed_user_environment() -> dict[str, str]:
+    child_environment = dict(os.environ)
+    for name in PROTECTED_CAPTURE_ENV_VARS:
+        child_environment.pop(name, None)
+    return child_environment
+
+
 def _spawn_bash(
     anchor: ProjectAnchor,
     bash_path: str,
@@ -435,8 +449,13 @@ def _spawn_bash(
             stdout=subprocess.PIPE if capture_output else None,
             stderr=subprocess.STDOUT if capture_output else None,
             close_fds=True,
+            env=_scrubbed_user_environment(),
         )
     except OSError as exc:
+        if exc.errno == errno.E2BIG:
+            raise CaptureSetupError(
+                "capture shell spawn rejected: argument/environment exceeds system limit"
+            ) from exc
         raise CaptureSetupError("cannot spawn capture shell") from exc
     finally:
         try:
@@ -631,9 +650,23 @@ def _publish_oversized_capture(
         raise
 
 
-def run_capture(command: str, cwd: str, capture_id: str) -> int:
+def run_capture(
+    command: str,
+    cwd: str,
+    capture_id: str,
+    *,
+    requested_mode: str = "capture",
+    attempt_id: str | None = None,
+    lineage_ref: CaptureLineageRef | None = None,
+) -> int:
     """Run ``command`` from a descriptor-anchored project and capture its output."""
 
+    if (
+        requested_mode not in {"capture", "direct"}
+        or (attempt_id is None) != (lineage_ref is None)
+        or (requested_mode == "direct" and lineage_ref is None)
+    ):
+        raise CaptureSetupError("invalid capture authority")
     try:
         command_bytes = command.encode("utf-8")
     except UnicodeEncodeError as exc:
@@ -857,26 +890,8 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
                 pass
 
 
-def _decode_command(value: str) -> str:
-    if len(value) > _MAX_ENCODED_COMMAND_BYTES:
-        raise CaptureSetupError("encoded command exceeds limit")
-    try:
-        raw = base64.b64decode(value, validate=True)
-        command = raw.decode("utf-8")
-    except (binascii.Error, UnicodeDecodeError, ValueError) as exc:
-        raise CaptureSetupError("invalid command transport") from exc
-    if len(raw) > _MAX_COMMAND_BYTES or "\x00" in command:
-        raise CaptureSetupError("decoded command exceeds limit")
-    return command
-
-
-def _dispatch_runner(
-    verb: str,
-    payload: str,
-    requested_cwd: str,
-    capture_id: str,
-) -> int:
-    if verb == "reject":
+def _dispatch_runner(request: CaptureRequest) -> int:
+    if request.action == "reject":
         return _capture_replay.capture_failure_return(
             _capture_replay.runner_failure(
                 "capture_request",
@@ -884,8 +899,16 @@ def _dispatch_runner(
             )
         )
     try:
-        command = _decode_command(payload)
-        return run_capture(command, requested_cwd, capture_id)
+        if request.command is None:
+            raise CaptureSetupError("run request is missing command")
+        return run_capture(
+            request.command,
+            request.cwd,
+            request.capture_id,
+            requested_mode=request.mode,
+            attempt_id=request.attempt_id,
+            lineage_ref=request.lineage_ref,
+        )
     except CaptureSetupError as exc:
         return _capture_replay.capture_failure_return(
             _capture_replay.runner_failure("capture_setup", str(exc))
@@ -924,37 +947,27 @@ def _sweep_after_runner(requested_cwd: str) -> None:
 
 def _main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
-    if len(args) != 4:
+    if len(args) != 1:
         return _capture_replay.capture_failure_return(
             _capture_replay.runner_failure(
                 "capture_invocation", "invalid capture runner invocation"
             )
-        )
-    verb, payload, requested_cwd, capture_id = args
-    if (
-        verb not in {"run", "reject"}
-        or (verb == "reject" and payload)
-        or not isinstance(requested_cwd, str)
-        or not requested_cwd
-        or not os.path.isabs(requested_cwd)
-        or "\x00" in requested_cwd
-    ):
-        return _capture_replay.capture_failure_return(
-            _capture_replay.runner_failure(
-                "capture_invocation", "invalid capture runner invocation"
-            )
-        )
-    if not _CAPTURE_ID_RE.fullmatch(capture_id):
-        return _capture_replay.capture_failure_return(
-            _capture_replay.runner_failure("capture_invocation", "invalid capture id")
         )
     try:
-        user_result = _dispatch_runner(verb, payload, requested_cwd, capture_id)
+        request = decode_capture_request(args[0])
+    except CaptureProtocolError:
+        return _capture_replay.capture_failure_return(
+            _capture_replay.runner_failure(
+                "capture_invocation", "invalid capture runner invocation"
+            )
+        )
+    try:
+        user_result = _dispatch_runner(request)
     except _CAPTURE_RUNTIME_ERRORS:
         user_result = _capture_replay.capture_failure_return(
             _capture_replay.runner_failure("capture_runner", "capture runner failed")
         )
-    _sweep_after_runner(requested_cwd)
+    _sweep_after_runner(request.cwd)
     return user_result
 
 

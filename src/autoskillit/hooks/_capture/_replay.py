@@ -5,6 +5,7 @@ from __future__ import annotations
 import errno
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
@@ -76,6 +77,7 @@ def write_all_stream(
     payload: bytes,
     *,
     boundary: str,
+    on_progress: Callable[[int], None] | None = None,
 ) -> None:
     view = memoryview(payload)
     while view:
@@ -87,11 +89,22 @@ def write_all_stream(
             or written > len(view)
         ):
             raise OSError(errno.EIO, f"{boundary} write made no progress")
+        if on_progress is not None:
+            on_progress(written)
         view = view[written:]
 
 
-def write_and_flush_hook_stdout(payload: bytes) -> None:
-    write_all_stream(sys.stdout.buffer, payload, boundary="hook stdout")
+def write_and_flush_hook_stdout(
+    payload: bytes,
+    *,
+    on_progress: Callable[[int], None] | None = None,
+) -> None:
+    write_all_stream(
+        sys.stdout.buffer,
+        payload,
+        boundary="hook stdout",
+        on_progress=on_progress,
+    )
     sys.stdout.buffer.flush()
 
 

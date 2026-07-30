@@ -11,7 +11,6 @@ import os
 import stat
 import subprocess
 import sys
-import time
 from dataclasses import InitVar, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -714,7 +713,7 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
                     )
                 )
             failure_stage = "capture artifact integrity verification"
-            finalized_at = time.time()
+            finalized_at, retention_deadline = lifecycle.capture_finalization_window()
             verified = verify_capture_snapshot(
                 fd=artifact.fd,
                 capture_id=artifact.authority.capture_id,
@@ -730,7 +729,7 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
                 command_outcome=command_outcome,
                 expected_revision=artifact.authority.expected_revision,
                 finalized_at=finalized_at,
-                retention_deadline=finalized_at + 3600.0,
+                retention_deadline=retention_deadline,
             )
             failure_stage = "capture finalization"
             finalized = lifecycle.commit_verified_snapshot(
@@ -773,8 +772,15 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
                 else:
                     raise CaptureSetupError("capture delivery value is unavailable")
                 failure_stage = "capture stdout write and flush"
-                _write_and_flush_hook_stdout(payload)
-                delivery_bytes_flushed = True
+
+                def record_delivery_progress(_written: int) -> None:
+                    nonlocal delivery_bytes_flushed
+                    delivery_bytes_flushed = True
+
+                _write_and_flush_hook_stdout(
+                    payload,
+                    on_progress=record_delivery_progress,
+                )
                 failure_stage = "capture delivery finish"
                 _capture_delivery.transition_delivery_checked(
                     lifecycle,

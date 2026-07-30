@@ -220,6 +220,10 @@ class CaptureLifecycleStore:
         if _identity(os.fstat(self._root_fd)) != self._root_identity:
             raise CaptureLifecycleError("capture root identity changed")
 
+    def capture_finalization_window(self) -> tuple[float, float]:
+        finalized_at = self._wall_clock()
+        return finalized_at, finalized_at + _RETENTION_SECONDS
+
     @contextmanager
     def _locked(self, *, blocking: bool = True) -> Iterator[None]:
         self._validate_root()

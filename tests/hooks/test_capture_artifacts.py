@@ -1522,7 +1522,7 @@ def test_stdout_delivery_failure_closes_resources_without_success(
         pytest.param([7], False, b"inline", id="oversized-count"),
     ),
 )
-def test_partial_write_and_flush_failures_record_failed_delivery(
+def test_partial_write_and_flush_failures_record_delivery_authoritatively(
     results: list[int | None | BaseException],
     fail_flush: bool,
     expected: bytes,
@@ -1549,7 +1549,8 @@ def test_partial_write_and_flush_failures_record_failed_delivery(
     assert _single_failure_marker(captured.err).stage == "capture_stdout_write_and_flush"
     assert record.state is CaptureState.FINALIZED
     assert record.reference_status is CaptureReferenceStatus.NOT_REQUESTED
-    assert record.delivery_status is CaptureDeliveryStatus.FAILED
+    expected_status = CaptureDeliveryStatus.UNKNOWN if expected else CaptureDeliveryStatus.FAILED
+    assert record.delivery_status is expected_status
 
 
 def test_progressive_short_writes_complete_delivery(
@@ -1578,6 +1579,30 @@ def test_progressive_short_writes_complete_delivery(
     assert record.state is CaptureState.FINALIZED
     assert record.reference_status is CaptureReferenceStatus.NOT_REQUESTED
     assert record.delivery_status is CaptureDeliveryStatus.DELIVERED
+
+
+def test_successful_finalization_uses_lifecycle_time_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    process = _FakeCaptureProcess(b"inline")
+    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(
+        CaptureLifecycleStore,
+        "capture_finalization_window",
+        lambda _self: (123.0, 456.0),
+    )
+
+    assert run_capture("printf inline", str(project), _CAPTURE_ID) == 0
+
+    capfd.readouterr()
+    record = _capture_record(project)
+    assert record.manifest is not None
+    assert record.manifest.finalized_at == 123.0
+    assert record.manifest.retention_deadline == 456.0
 
 
 def test_begin_delivery_failure_emits_no_capture_bytes(

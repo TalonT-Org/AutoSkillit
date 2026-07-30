@@ -32,6 +32,17 @@ def _maintenance_request(*, required: bool = True) -> InstallRequest:
     )
 
 
+def _direct_request(*, scope: str = "user") -> InstallRequest:
+    from autoskillit import __version__
+
+    return InstallRequest(
+        scope=scope,
+        mode=InstallMode.DIRECT,
+        require_registered_plugin=True,
+        expected_version=__version__,
+    )
+
+
 @pytest.mark.parametrize(
     ("scope", "relative_path"),
     [
@@ -1211,7 +1222,7 @@ def test_direct_mode_snapshots_caller_env_and_cwd(
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
     monkeypatch.setattr(marketplace, "_run_claude_admin", capture)
-    result = marketplace.install(scope="user")
+    result = marketplace.install(request=_direct_request())
 
     assert result.outcome is InstallOutcome.COMPLETED
     assert [env["DIRECT_SNAPSHOT"] for env, _ in calls] == ["original", "original"]

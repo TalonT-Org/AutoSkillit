@@ -402,8 +402,7 @@ def _verify_cleanup(settings_path: Path, fetch_cache_path: Path) -> None:
 
 def install(
     *,
-    request: InstallRequest | None = None,
-    scope: str = "user",
+    request: InstallRequest,
     child_env: Mapping[str, str] | None = None,
     child_cwd: Path | None = None,
 ) -> InstallResult:
@@ -412,12 +411,7 @@ def install(
     ambient_cwd = Path.cwd().resolve()
     from autoskillit import __version__
 
-    install_request = request or InstallRequest(
-        scope=scope,
-        mode=InstallMode.DIRECT,
-        require_registered_plugin=True,
-        expected_version=__version__,
-    )
+    install_request = request
     effective_scope = install_request.scope
     if (
         install_request.mode is InstallMode.MAINTENANCE_UPDATE

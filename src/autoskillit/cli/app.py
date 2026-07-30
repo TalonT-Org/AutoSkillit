@@ -285,12 +285,11 @@ def install(
     if maintenance_update:
         result = _install(
             request=request,
-            scope=request.scope,
             child_env=os.environ,
             child_cwd=Path.cwd(),
         )
     else:
-        result = _install(request=request, scope=request.scope)
+        result = _install(request=request)
 
     status = process_status_for_result(result)
     if status is not InstallProcessStatus.SUCCESS:

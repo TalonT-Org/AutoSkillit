@@ -12,9 +12,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from autoskillit import cli
+from autoskillit import __version__, cli
+from autoskillit.cli._install_contract import InstallMode, InstallRequest
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+
+
+def _direct_request(scope: str = "user") -> InstallRequest:
+    return InstallRequest(
+        scope=scope,
+        mode=InstallMode.DIRECT,
+        require_registered_plugin=True,
+        expected_version=__version__,
+    )
 
 
 def _seed_current_installed_plugin(home: Path) -> Path:
@@ -70,7 +80,7 @@ class TestCLIInstall:
         from autoskillit.cli._install_contract import InstallFailureKind, InstallOutcome
         from autoskillit.cli._marketplace import install
 
-        result = install(scope="invalid")
+        result = install(request=_direct_request("invalid"))
         assert result.outcome is InstallOutcome.FAILED
         assert result.failure_kind is InstallFailureKind.PREFLIGHT
         captured = capsys.readouterr()
@@ -247,7 +257,7 @@ class TestCLIInstall:
         mock_run.side_effect = _successful_claude_run(tmp_path)
         from autoskillit.cli._marketplace import install
 
-        install(scope="user")
+        install(request=_direct_request())
 
         assert mock_run.call_count == 2
         marketplace_call = mock_run.call_args_list[0]
@@ -289,7 +299,7 @@ class TestCLIInstall:
         mock_run.side_effect = _successful_claude_run(tmp_path)
         from autoskillit.cli._marketplace import install
 
-        install(scope="project")
+        install(request=_direct_request("project"))
 
         install_call = mock_run.call_args_list[1][0][0]
         scope_idx = install_call.index("--scope")
@@ -338,7 +348,7 @@ class TestCLIInstall:
 
         from autoskillit.cli._marketplace import install
 
-        result = install(scope="user")
+        result = install(request=_direct_request())
 
         from autoskillit.cli._install_contract import InstallOutcome
 
@@ -376,7 +386,7 @@ class TestCLIInstall:
         monkeypatch.setattr(_app_mod, "atomic_write", lambda *a, **kw: None)
         from autoskillit.cli._marketplace import install
 
-        result = install(scope="user")
+        result = install(request=_direct_request())
 
         from autoskillit.cli._install_contract import InstallOutcome
 
@@ -431,7 +441,7 @@ class TestCLIInstall:
         mock_run.side_effect = _successful_claude_run(tmp_path)
         from autoskillit.cli._marketplace import install
 
-        install(scope="user")
+        install(request=_direct_request())
 
         data = json.loads(claude_json.read_text())
         assert "autoskillit" not in data.get("mcpServers", {})
@@ -839,7 +849,7 @@ def test_install_claudecode_guard_returns_deferred_result(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from autoskillit.cli._install_contract import InstallOutcome
 
-    result = _install(scope="user")
+    result = _install(request=_direct_request())
     assert result.outcome is InstallOutcome.DEFERRED
 
 
@@ -1088,7 +1098,7 @@ def test_install_creates_autoskillit_gitignore(
     monkeypatch.setattr("autoskillit.cli._marketplace.generate_hooks_json", lambda: {})
     monkeypatch.setattr("autoskillit.cli._marketplace.atomic_write", lambda *a, **kw: None)
     (tmp_path / ".autoskillit").mkdir()
-    _install(scope="user")
+    _install(request=_direct_request())
 
     assert (tmp_path / ".autoskillit" / ".gitignore").exists(), (
         ".autoskillit/.gitignore must be created by install(), not just by init()"
@@ -1120,7 +1130,7 @@ def test_install_calls_upgrade_when_scripts_dir_exists(
     scripts_dir = tmp_path / ".autoskillit" / "scripts"
     scripts_dir.mkdir(parents=True)
 
-    _install(scope="user")
+    _install(request=_direct_request())
 
     assert (tmp_path / ".autoskillit" / "recipes").exists(), (
         "install() must migrate scripts/ to recipes/ when scripts/ exists"

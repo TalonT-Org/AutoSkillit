@@ -4,7 +4,19 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit import __version__
+from autoskillit.cli._install_contract import InstallMode, InstallRequest
+
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+
+
+def _direct_request() -> InstallRequest:
+    return InstallRequest(
+        scope="user",
+        mode=InstallMode.DIRECT,
+        require_registered_plugin=True,
+        expected_version=__version__,
+    )
 
 
 # MK1
@@ -15,6 +27,13 @@ def test_marketplace_module_exists():
 # MK2
 def test_install_importable_from_marketplace():
     from autoskillit.cli._marketplace import install  # noqa: F401
+
+
+def test_install_requires_typed_request() -> None:
+    from autoskillit.cli._marketplace import install
+
+    with pytest.raises(TypeError, match="request"):
+        install()  # type: ignore[call-arg]
 
 
 # MK3
@@ -87,7 +106,7 @@ class TestInstallPluginInstallCapableGuard:
 
         from autoskillit.cli._marketplace import install
 
-        result = install(scope="user")
+        result = install(request=_direct_request())
 
         assert result.outcome is InstallOutcome.DECLINED
         captured = capsys.readouterr()
@@ -114,7 +133,7 @@ class TestInstallPluginInstallCapableGuard:
 
         from autoskillit.cli._marketplace import install
 
-        result = install(scope="user")
+        result = install(request=_direct_request())
 
         assert result.outcome is InstallOutcome.DEFERRED
         captured = capsys.readouterr()

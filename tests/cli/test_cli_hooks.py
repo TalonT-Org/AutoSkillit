@@ -7,7 +7,19 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit import __version__
+from autoskillit.cli._install_contract import InstallMode, InstallRequest
+
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+
+
+def _direct_request(scope: str = "user") -> InstallRequest:
+    return InstallRequest(
+        scope=scope,
+        mode=InstallMode.DIRECT,
+        require_registered_plugin=True,
+        expected_version=__version__,
+    )
 
 
 def _extract_script_from_cmd(cmd: str) -> str:
@@ -406,7 +418,7 @@ def test_install_does_not_write_hooks_when_plugin_active(tmp_path, monkeypatch):
     monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-    install(scope="local")
+    install(request=_direct_request("local"))
 
     data = json.loads(settings_path.read_text()) if settings_path.exists() else {}
     all_commands = [

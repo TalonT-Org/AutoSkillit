@@ -10,6 +10,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from autoskillit import __version__
+from autoskillit.cli._install_contract import InstallMode, InstallRequest
 from autoskillit.cli.update._transaction import (
     UpdateTransactionOutcome,
     UpdateTransactionResult,
@@ -25,6 +27,15 @@ from ._update_checks_helpers import (
 )
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+
+
+def _direct_request() -> InstallRequest:
+    return InstallRequest(
+        scope="user",
+        mode=InstallMode.DIRECT,
+        require_registered_plugin=True,
+        expected_version=__version__,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -251,7 +262,7 @@ def test_install_invalidates_fetch_cache(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
     from autoskillit.cli._marketplace import install as _install
 
-    _install(scope="user")
+    _install(request=_direct_request())
     assert not cache_file.exists(), "Fetch cache must be deleted after plugin install"
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.schema import StepResultCondition
 from autoskillit.smoke_utils import check_review_loop
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -33,6 +34,7 @@ def test_review_loop_routes_to_pre_review_cleanup_after_resolve_cycle(recipe_nam
     step = recipe.steps["check_review_loop"]
     assert step.on_result is not None
     conditions = step.on_result.conditions
+    _assert_review_condition_order(conditions)
     retry_condition = next(
         condition for condition in conditions if condition.route == "pre_review_cleanup"
     )
@@ -62,6 +64,7 @@ def test_review_loop_routes_to_ci_watch_at_max_iterations(recipe_name: str) -> N
     step = recipe.steps["check_review_loop"]
     assert step.on_result is not None
     conditions = step.on_result.conditions
+    _assert_review_condition_order(conditions)
     retry_condition = next(
         condition for condition in conditions if condition.route == "pre_review_cleanup"
     )
@@ -105,6 +108,15 @@ def _eval_compound_condition(when_expr: str) -> bool:
         lhs, rhs = [s.strip() for s in part.split("==", 1)]
         results.append(lhs == rhs)
     return all(results)
+
+
+def _assert_review_condition_order(conditions: list[StepResultCondition]) -> None:
+    assert [condition.route for condition in conditions] == [
+        "release_issue_failure",
+        "pre_review_cleanup",
+        "check_repo_ci_event",
+    ]
+    assert conditions[-1].when is None
 
 
 @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)

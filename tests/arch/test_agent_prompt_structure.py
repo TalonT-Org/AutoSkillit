@@ -155,8 +155,17 @@ def test_overengineering_auditors_reject_unchecked_boundary_hypotheses(
 ) -> None:
     for filename in _PROOF_ONLY_AUDITORS:
         body = (_AGENTS_DIR / filename).read_text()
-        assert boundary_phrase.lower() in body.lower()
-        assert "Return `[]`" in body
+        fail_closed_sections = [
+            section
+            for section in re.split(r"(?=^##\s)", body, flags=re.MULTILINE)
+            if "Return `[]`" in section
+            and "unchecked" in section.lower()
+            and "boundary" in section.lower()
+        ]
+        assert fail_closed_sections, f"{filename}: missing fail-closed boundary rule"
+        assert any(
+            boundary_phrase.lower() in section.lower() for section in fail_closed_sections
+        ), f"{filename}: {boundary_phrase} is not connected to the empty-result rule"
 
 
 @pytest.mark.parametrize(

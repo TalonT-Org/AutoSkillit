@@ -411,6 +411,33 @@ def test_standard_and_experimental_dispatch_are_separate() -> None:
     assert "deletion_context" in section
 
 
+@pytest.mark.parametrize(
+    ("deletion_context", "expected"),
+    [({"merge_base": "merge-base-sha"}, True), (None, False)],
+)
+def test_deletion_dispatch_decision_is_gate_independent(
+    deletion_context: object,
+    expected: bool,
+) -> None:
+    text = _skill_text()
+    marker = "from autoskillit.smoke_utils import deletion_regression_is_eligible"
+    marker_index = text.index(marker)
+    block_start = text.rfind("```python", 0, marker_index) + len("```python")
+    block_end = text.index("```", marker_index)
+    deletion_dispatch_script = text[block_start:block_end]
+
+    results = {}
+    for gate_state in ("valid_true", "valid_false", "degraded"):
+        namespace = {
+            "deletion_context": deletion_context,
+            "GATE_STATE": gate_state,
+        }
+        exec(deletion_dispatch_script, namespace)
+        results[gate_state] = namespace["DELETION_DISPATCH_REQUIRED"]
+
+    assert results == {gate_state: expected for gate_state in results}
+
+
 def test_true_gate_dispatches_both_registered_agents_once() -> None:
     section = _section("### Step 3", "### Step 4")
     for name in (

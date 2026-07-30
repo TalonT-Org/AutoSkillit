@@ -2839,11 +2839,25 @@ def test_annotate_pr_diff_writes_native_overengineering_gate(
 
 
 @patch("subprocess.run")
-def test_annotate_pr_diff_publishes_snapshot_manifest_last(mock_run, tmp_path: Path) -> None:
+def test_annotate_pr_diff_publishes_snapshot_manifest_last(
+    mock_run,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import hashlib
+
+    import autoskillit.core as core
 
     diff = _churn_diff(additions=2, removals=1)
     mock_run.side_effect = _annotation_run_side_effect(diff)
+    original_atomic_write = core.atomic_write
+    write_order: list[str] = []
+
+    def recording_atomic_write(path: Path, content: str) -> None:
+        write_order.append(path.name)
+        original_atomic_write(path, content)
+
+    monkeypatch.setattr(core, "atomic_write", recording_atomic_write)
     annotate_pr_diff(
         pr_number="92",
         cwd=str(tmp_path),
@@ -2871,6 +2885,48 @@ def test_annotate_pr_diff_publishes_snapshot_manifest_last(mock_run, tmp_path: P
         artifact_bytes = (tmp_path / artifact["basename"]).read_bytes()
         assert artifact["byte_length"] == len(artifact_bytes)
         assert artifact["sha256"] == hashlib.sha256(artifact_bytes).hexdigest()
+    assert write_order == [
+        "annotated_diff_92.txt",
+        "ranges_92.json",
+        "valid_lines_92.json",
+        "metrics_92.json",
+    ]
+
+
+@pytest.mark.parametrize(
+    "failure_name",
+    ["annotated_diff_94.txt", "ranges_94.json", "valid_lines_94.json"],
+)
+@patch("subprocess.run")
+def test_annotate_pr_diff_never_publishes_manifest_after_sidecar_failure(
+    mock_run,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_name: str,
+) -> None:
+    import autoskillit.core as core
+
+    mock_run.side_effect = _annotation_run_side_effect(_churn_diff(additions=2, removals=1))
+    original_atomic_write = core.atomic_write
+    write_order: list[str] = []
+
+    def failing_atomic_write(path: Path, content: str) -> None:
+        write_order.append(path.name)
+        if path.name == failure_name:
+            raise OSError("injected sidecar write failure")
+        original_atomic_write(path, content)
+
+    monkeypatch.setattr(core, "atomic_write", failing_atomic_write)
+    with pytest.raises(OSError, match="injected sidecar write failure"):
+        annotate_pr_diff(
+            pr_number="94",
+            cwd=str(tmp_path),
+            output_dir=str(tmp_path),
+            base_branch="main",
+        )
+
+    assert "metrics_94.json" not in write_order
+    assert not (tmp_path / "metrics_94.json").exists()
 
 
 @patch("subprocess.run")

@@ -343,7 +343,17 @@ from .types import LAUNCH_ID_ENV_VAR as LAUNCH_ID_ENV_VAR
 from .types import (
     MACHINE_ONLY_SKILL_FRONTMATTER_KEYS as MACHINE_ONLY_SKILL_FRONTMATTER_KEYS,
 )
+from .types import MANAGED_ATTEMPT_ID_ENV_VAR as MANAGED_ATTEMPT_ID_ENV_VAR
+from .types import (
+    MANAGED_HEADLESS_SESSION_LINEAGE_SCHEMA_VERSION as MANAGED_HEADLESS_SESSION_LINEAGE_SCHEMA_VERSION,  # noqa: E501
+)
+from .types import MANAGED_LAUNCH_ID_ENV_VAR as MANAGED_LAUNCH_ID_ENV_VAR
+from .types import MANAGED_LINEAGE_DIGEST_ENV_VAR as MANAGED_LINEAGE_DIGEST_ENV_VAR
+from .types import MANAGED_LINEAGE_REF_ENV_VAR as MANAGED_LINEAGE_REF_ENV_VAR
 from .types import MCP_CLIENT_BACKEND_ENV_VAR as MCP_CLIENT_BACKEND_ENV_VAR
+from .types import (
+    NATIVE_SHELL_CAPTURE_MODE_ENV_VAR as NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
+)
 from .types import NON_VARIADIC_CLAUDE_FLAGS as NON_VARIADIC_CLAUDE_FLAGS
 from .types import ORCHESTRATOR_SESSION_REQUIRED_ENV as ORCHESTRATOR_SESSION_REQUIRED_ENV
 from .types import ORDER_INTERACTIVE_REQUIRED_ENV as ORDER_INTERACTIVE_REQUIRED_ENV
@@ -679,6 +689,18 @@ from .types import LegacyRetiringEvidence as LegacyRetiringEvidence
 from .types import LensEntry as LensEntry
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
+from .types import ManagedHeadlessSessionKind as ManagedHeadlessSessionKind
+from .types import ManagedHeadlessSessionLineage as ManagedHeadlessSessionLineage
+from .types import ManagedHeadlessSessionLineageRef as ManagedHeadlessSessionLineageRef
+from .types import (
+    ManagedHeadlessSessionLineageStatus as ManagedHeadlessSessionLineageStatus,
+)
+from .types import (
+    ManagedHeadlessSessionLineageStore as ManagedHeadlessSessionLineageStore,
+)
+from .types import (
+    ManagedHeadlessSessionTerminalState as ManagedHeadlessSessionTerminalState,
+)
 from .types import ManagedSessionHome as ManagedSessionHome
 from .types import MarkGenerationIndeterminateEvent as MarkGenerationIndeterminateEvent
 from .types import MarkIndeterminateEvent as MarkIndeterminateEvent
@@ -693,6 +715,11 @@ from .types import ModelItemId as ModelItemId
 from .types import ModelTotalEntry as ModelTotalEntry
 from .types import ModelTranslation as ModelTranslation
 from .types import NamedResume as NamedResume
+from .types import NativeShellCaptureDecision as NativeShellCaptureDecision
+from .types import NativeShellCaptureMode as NativeShellCaptureMode
+from .types import NativeShellCaptureObservation as NativeShellCaptureObservation
+from .types import NativeShellCaptureReason as NativeShellCaptureReason
+from .types import NativeShellCaptureStatus as NativeShellCaptureStatus
 from .types import NdjsonDriftOutcome as NdjsonDriftOutcome
 from .types import NoResume as NoResume
 from .types import ObserverStatus as ObserverStatus
@@ -923,14 +950,22 @@ from .types import (
     make_stored_context_admission_envelope as make_stored_context_admission_envelope,
 )
 from .types import model_class as model_class
+from .types import new_managed_attempt_id as new_managed_attempt_id
+from .types import new_managed_launch_id as new_managed_launch_id
 from .types import new_plugin_artifact_incarnation_id as new_plugin_artifact_incarnation_id
 from .types import normalize_inherited_fds as normalize_inherited_fds
 from .types import parse_plan_paths as parse_plan_paths
+from .types import (
+    pop_native_shell_capture_decision as pop_native_shell_capture_decision,
+)
 from .types import recipe_section_digest as recipe_section_digest
 from .types import recipe_section_element_digest as recipe_section_element_digest
 from .types import recipe_section_plan_digest as recipe_section_plan_digest
 from .types import render_intake_digest as render_intake_digest
 from .types import render_target_skill_command as render_target_skill_command
+from .types import (
+    resolve_native_shell_capture_decision as resolve_native_shell_capture_decision,
+)
 from .types import resolve_payload_field as resolve_payload_field
 from .types import resolve_skill_name as resolve_skill_name
 from .types import resolve_target_skill as resolve_target_skill

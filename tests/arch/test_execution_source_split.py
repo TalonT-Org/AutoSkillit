@@ -111,7 +111,7 @@ NEW_SESSION_MODULES = ["_session_model.py", "_session_content.py"]
 NEW_MQ_MODULES = ["_merge_queue_classifier.py", "_merge_queue_repo_state.py"]
 
 SESSION_SIZE_BUDGETS = {
-    "session/__init__.py": 66,  # was 420; facade is ~40 lines after P2
+    "session/__init__.py": 74,  # +managed lineage store facade exports
     "session/_session_model.py": 540,
     "session/_session_content.py": 245,
 }

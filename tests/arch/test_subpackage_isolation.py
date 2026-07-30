@@ -945,7 +945,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
         "core": 30,  # +plugin identity authority + strict audit semantic codec
-        "core/types": 44,  # +audit admission ownership, ledger contracts, and protocols
+        "core/types": 45,  # +audit admission and native shell capture contracts
         "cli": 23,  # +_install_contract typed install process boundary (#4409)
         "cli/doctor": 11,  # +_doctor_skills capability declaration authenticity checks
         "workspace": 15,  # +_installed_artifact exact lease-protected authority (#4409);
@@ -1471,6 +1471,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "core/types/_type_recipe_execution.py",
         "core/types/_type_subprocess.py",
         "core/types/_type_context_admission_persistence.py",
+        "core/types/_type_native_shell_capture.py",
     ):
         types_path = AUTOSKILLIT_ROOT / types_filename
         if not types_path.exists():

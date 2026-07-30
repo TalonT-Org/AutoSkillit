@@ -52,6 +52,8 @@ from ._type_intake_policy import *  # noqa: F401, F403
 from ._type_intake_policy import __all__ as _intake_policy_all
 from ._type_invariant_registry import *  # noqa: F401, F403
 from ._type_invariant_registry import __all__ as _invariant_registry_all
+from ._type_native_shell_capture import *  # noqa: F401, F403
+from ._type_native_shell_capture import __all__ as _native_shell_capture_all
 from ._type_phoropter import *  # noqa: F401, F403
 from ._type_phoropter import __all__ as _phoropter_all
 from ._type_plugin_source import *  # noqa: F401, F403
@@ -118,6 +120,7 @@ __all__ = (
     + _inspector_all
     + _intake_policy_all
     + _invariant_registry_all
+    + _native_shell_capture_all
     + _phoropter_all
     + _plugin_source_all
     + _protocols_logging_all

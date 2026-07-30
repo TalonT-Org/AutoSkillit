@@ -26,7 +26,10 @@ from autoskillit.pipeline.context_admission_ledger import (
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.pipeline.timings import DefaultTimingLog
 from autoskillit.pipeline.tokens import DefaultTokenLog
-from tests.fakes import FakeSkillSessionContractStore
+from tests.fakes import (
+    FakeManagedHeadlessSessionLineageStore,
+    FakeSkillSessionContractStore,
+)
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
@@ -76,6 +79,7 @@ def test_tool_context_fields_accessible(tmp_path):
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        managed_headless_session_lineage_store=FakeManagedHeadlessSessionLineageStore(),
         context_admission_ledger=_ledger(tmp_path),
         audit_admission_ledger=_audit_ledger(tmp_path),
         audit_authority_materializer=_AUDIT_AUTHORITY_MATERIALIZER,
@@ -98,6 +102,7 @@ def test_tool_context_audit_isolation(tmp_path):
         temp_dir=tmp_path / "a" / ".autoskillit" / "temp",
         project_dir=tmp_path / "a",
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        managed_headless_session_lineage_store=FakeManagedHeadlessSessionLineageStore(),
         context_admission_ledger=_ledger(tmp_path / "a"),
         audit_admission_ledger=_audit_ledger(tmp_path / "a"),
         audit_authority_materializer=_AUDIT_AUTHORITY_MATERIALIZER,
@@ -114,6 +119,7 @@ def test_tool_context_audit_isolation(tmp_path):
         temp_dir=tmp_path / "b" / ".autoskillit" / "temp",
         project_dir=tmp_path / "b",
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        managed_headless_session_lineage_store=FakeManagedHeadlessSessionLineageStore(),
         context_admission_ledger=_ledger(tmp_path / "b"),
         audit_admission_ledger=_audit_ledger(tmp_path / "b"),
         audit_authority_materializer=_AUDIT_AUTHORITY_MATERIALIZER,
@@ -147,6 +153,7 @@ def test_gate_state_replacement(tmp_path):
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        managed_headless_session_lineage_store=FakeManagedHeadlessSessionLineageStore(),
         context_admission_ledger=_ledger(tmp_path),
         audit_admission_ledger=_audit_ledger(tmp_path),
         audit_authority_materializer=_AUDIT_AUTHORITY_MATERIALIZER,
@@ -170,6 +177,7 @@ def test_toolcontext_new_optional_fields_default_none(tmp_path):
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        managed_headless_session_lineage_store=FakeManagedHeadlessSessionLineageStore(),
         context_admission_ledger=_ledger(tmp_path),
         audit_admission_ledger=_audit_ledger(tmp_path),
         audit_authority_materializer=_AUDIT_AUTHORITY_MATERIALIZER,
@@ -292,6 +300,7 @@ def _make_ctx(tmp_path: Path) -> ToolContext:
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        managed_headless_session_lineage_store=FakeManagedHeadlessSessionLineageStore(),
         context_admission_ledger=_ledger(tmp_path),
         audit_admission_ledger=_audit_ledger(tmp_path),
         audit_authority_materializer=_AUDIT_AUTHORITY_MATERIALIZER,
@@ -350,6 +359,7 @@ async def test_toolcontext_default_background_wired_with_audit(tmp_path):
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        managed_headless_session_lineage_store=FakeManagedHeadlessSessionLineageStore(),
         context_admission_ledger=_ledger(tmp_path),
         audit_admission_ledger=_audit_ledger(tmp_path),
         audit_authority_materializer=_AUDIT_AUTHORITY_MATERIALIZER,
@@ -435,6 +445,7 @@ def test_toolcontext_raises_typeerror_when_temp_dir_unset(tmp_path):
             runner=None,
             project_dir=tmp_path,
             skill_session_contract_store=FakeSkillSessionContractStore(),
+            managed_headless_session_lineage_store=(FakeManagedHeadlessSessionLineageStore()),
             context_admission_ledger=_ledger(tmp_path),
             audit_admission_ledger=_audit_ledger(tmp_path),
             audit_authority_materializer=_AUDIT_AUTHORITY_MATERIALIZER,
@@ -453,6 +464,33 @@ def test_toolcontext_raises_typeerror_when_project_dir_unset(tmp_path):
             plugin_authority=_UnusedPluginAuthority(),
             runner=None,
             temp_dir=tmp_path / ".autoskillit" / "temp",
+            skill_session_contract_store=FakeSkillSessionContractStore(),
+            managed_headless_session_lineage_store=(FakeManagedHeadlessSessionLineageStore()),
+            context_admission_ledger=_ledger(tmp_path),
+        )
+
+
+def test_toolcontext_requires_il0_managed_lineage_store_protocol(tmp_path):
+    from autoskillit.core import ManagedHeadlessSessionLineageStore
+
+    assert (
+        get_type_hints(ToolContext)["managed_headless_session_lineage_store"]
+        is ManagedHeadlessSessionLineageStore
+    )
+    with pytest.raises(
+        TypeError,
+        match="managed_headless_session_lineage_store",
+    ):
+        ToolContext(
+            config=AutomationConfig(),
+            audit=DefaultAuditLog(),
+            token_log=DefaultTokenLog(),
+            timing_log=DefaultTimingLog(),
+            gate=DefaultGateState(),
+            plugin_authority=_UnusedPluginAuthority(),
+            runner=None,
+            temp_dir=tmp_path / ".autoskillit" / "temp",
+            project_dir=tmp_path,
             skill_session_contract_store=FakeSkillSessionContractStore(),
             context_admission_ledger=_ledger(tmp_path),
             audit_admission_ledger=_audit_ledger(tmp_path),
@@ -474,6 +512,7 @@ def test_toolcontext_raises_typeerror_when_context_ledger_unset(tmp_path):
             temp_dir=tmp_path / ".autoskillit" / "temp",
             project_dir=tmp_path,
             skill_session_contract_store=FakeSkillSessionContractStore(),
+            managed_headless_session_lineage_store=(FakeManagedHeadlessSessionLineageStore()),
         )
 
 
@@ -506,6 +545,7 @@ def test_toolcontext_accepts_explicit_path_fields(tmp_path):
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        managed_headless_session_lineage_store=FakeManagedHeadlessSessionLineageStore(),
         context_admission_ledger=_ledger(tmp_path),
         audit_admission_ledger=_audit_ledger(tmp_path),
         audit_authority_materializer=_AUDIT_AUTHORITY_MATERIALIZER,

@@ -381,7 +381,11 @@ def minimal_ctx(tmp_path):
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.pipeline.timings import DefaultTimingLog
     from autoskillit.pipeline.tokens import DefaultTokenLog
-    from tests.fakes import FakePluginArtifactAuthority, FakeSkillSessionContractStore
+    from tests.fakes import (
+        FakeManagedHeadlessSessionLineageStore,
+        FakePluginArtifactAuthority,
+        FakeSkillSessionContractStore,
+    )
 
     plugin_authority = FakePluginArtifactAuthority(tmp_path)
     audit_admission_ledger = DefaultAuditAdmissionLedger(
@@ -404,6 +408,7 @@ def minimal_ctx(tmp_path):
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        managed_headless_session_lineage_store=(FakeManagedHeadlessSessionLineageStore()),
         context_admission_ledger=DefaultContextAdmissionLedger(
             ContextAdmissionStoreAuthority(
                 database_path=(

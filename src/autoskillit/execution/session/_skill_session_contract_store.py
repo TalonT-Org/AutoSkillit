@@ -18,6 +18,7 @@ import regex as re
 from autoskillit.core import (
     SKILL_PROJECTION_VERSION,
     SKILL_SESSION_CONTRACT_SCHEMA_VERSION,
+    ManagedHeadlessSessionLineageRef,
     SkillContractError,
     SkillExecutionRole,
     SkillSessionContract,
@@ -39,7 +40,7 @@ __all__ = [
     "delete_skill_session_contracts",
 ]
 
-_STORE_MANIFEST_SCHEMA_VERSION = 1
+_STORE_MANIFEST_SCHEMA_VERSION = 2
 _MANIFEST_FILENAME = "manifest.json"
 _SNAPSHOT_DIRNAME = "snapshot"
 _CORRELATION_KEY_RE = re.compile(r"^[0-9a-f]{32}$")
@@ -62,6 +63,7 @@ class DefaultSkillSessionContractStore:
         self,
         contract: SkillSessionContract,
         snapshot: Mapping[str, str],
+        managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
     ) -> str:
         """Atomically persist an unbound contract under a random correlation key."""
         _validate_contract(contract)
@@ -84,6 +86,7 @@ class DefaultSkillSessionContractStore:
                 raw_session_id=None,
                 candidate_session_ids=(),
                 snapshot_paths=snapshot_paths,
+                managed_lineage_ref=managed_lineage_ref,
             )
             write_versioned_json(
                 temp_path / _MANIFEST_FILENAME,
@@ -129,6 +132,43 @@ class DefaultSkillSessionContractStore:
                 raise FileExistsError(f"Session contract already finalized: {session_id!r}")
             os.replace(provisional, destination)
 
+    def rebind_final_session(
+        self,
+        session_id: str,
+        final_session_id: str,
+        managed_lineage_ref: ManagedHeadlessSessionLineageRef,
+    ) -> None:
+        """Move finalized ownership after a verified same-lineage continuation."""
+        _validate_raw_session_id(session_id)
+        _validate_raw_session_id(final_session_id)
+        if not isinstance(managed_lineage_ref, ManagedHeadlessSessionLineageRef):
+            raise TypeError("managed_lineage_ref must be a ManagedHeadlessSessionLineageRef")
+        source = self._session_path(session_id)
+        destination = self._session_path(final_session_id)
+        with self._lock:
+            manifest = self._read_manifest(source)
+            self._validate_entry(
+                source,
+                manifest,
+                expected_raw_session_id=session_id,
+            )
+            stored_ref = _managed_lineage_ref_from_manifest(manifest)
+            if stored_ref is None or stored_ref != managed_lineage_ref:
+                raise ValueError("Skill session managed lineage reference mismatch")
+            if session_id == final_session_id:
+                return
+            if destination.exists():
+                existing = self._read_manifest(destination)
+                self._validate_entry(
+                    destination,
+                    existing,
+                    expected_raw_session_id=final_session_id,
+                )
+                raise FileExistsError(f"Session contract already finalized: {final_session_id!r}")
+            manifest["raw_session_id"] = final_session_id
+            self._write_manifest(source, manifest)
+            os.replace(source, destination)
+
     def load(self, session_id: str) -> StoredSkillSessionContract:
         """Load and fully validate the contract bound to ``session_id``."""
         _validate_raw_session_id(session_id)
@@ -144,6 +184,7 @@ class DefaultSkillSessionContractStore:
             contract=contract,
             snapshot_dir=entry / _SNAPSHOT_DIRNAME,
             raw_session_id=session_id,
+            managed_lineage_ref=_managed_lineage_ref_from_manifest(manifest),
         )
 
     def delete(self, session_id: str) -> None:
@@ -200,6 +241,7 @@ class DefaultSkillSessionContractStore:
     ) -> SkillSessionContract:
         if manifest.get("schema_version") != _STORE_MANIFEST_SCHEMA_VERSION:
             raise ValueError("Unsupported skill session store schema")
+        _managed_lineage_ref_from_manifest(manifest)
         raw_session_id = manifest.get("raw_session_id")
         if raw_session_id != expected_raw_session_id:
             raise ValueError("Skill session contract raw session ID mismatch")
@@ -558,13 +600,31 @@ def _build_manifest(
     raw_session_id: str | None,
     candidate_session_ids: tuple[str, ...],
     snapshot_paths: Mapping[str, str],
+    managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
 ) -> dict[str, Any]:
     contract_data = _contract_to_dict(contract)
     return {
         "schema_version": _STORE_MANIFEST_SCHEMA_VERSION,
         "raw_session_id": raw_session_id,
         "candidate_session_ids": list(candidate_session_ids),
+        "managed_lineage_ref": (
+            managed_lineage_ref.to_dict() if managed_lineage_ref is not None else None
+        ),
         "contract": contract_data,
         "contract_digest": _digest_json(contract_data),
         "snapshot_paths": dict(sorted(snapshot_paths.items())),
     }
+
+
+def _managed_lineage_ref_from_manifest(
+    manifest: Mapping[str, Any],
+) -> ManagedHeadlessSessionLineageRef | None:
+    if "managed_lineage_ref" not in manifest:
+        raise ValueError("Skill session manifest is missing managed lineage reference")
+    value = manifest.get("managed_lineage_ref")
+    if value is None:
+        return None
+    try:
+        return ManagedHeadlessSessionLineageRef.from_dict(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid skill session managed lineage reference") from exc

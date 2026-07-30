@@ -8,6 +8,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from ._type_checkpoint import SessionCheckpoint  # noqa: F401, TC001
 from ._type_enums import SkillExecutionRole
+from ._type_native_shell_capture import ManagedHeadlessSessionLineageRef
 from ._type_plugin_source import PluginLaunchBinding
 from ._type_protocols_backend import CodingAgentBackend
 from ._type_protocols_workspace import PluginArtifactAuthority
@@ -171,11 +172,19 @@ class SkillSessionContractStore(Protocol):
         *,
         contract: SkillSessionContract,
         snapshot: Mapping[str, str],
+        managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
     ) -> str: ...
 
     def observe_candidate(self, correlation_key: str, session_id: str) -> None: ...
 
     def finalize(self, correlation_key: str, session_id: str) -> None: ...
+
+    def rebind_final_session(
+        self,
+        session_id: str,
+        final_session_id: str,
+        managed_lineage_ref: ManagedHeadlessSessionLineageRef,
+    ) -> None: ...
 
     def load(self, session_id: str) -> StoredSkillSessionContract: ...
 

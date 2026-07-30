@@ -45,7 +45,14 @@ from autoskillit.core.types import (
 class FakeSkillSessionContractStore:
     """Always-present protocol fake for contexts that never launch skill sessions."""
 
-    def create_provisional(self, *, contract: Any, snapshot: Any) -> str:
+    def create_provisional(
+        self,
+        *,
+        contract: Any,
+        snapshot: Any,
+        managed_lineage_ref: Any = None,
+    ) -> str:
+        del managed_lineage_ref
         raise AssertionError("unexpected skill session contract persistence")
 
     def observe_candidate(self, correlation_key: str, session_id: str) -> None:
@@ -53,6 +60,14 @@ class FakeSkillSessionContractStore:
 
     def finalize(self, correlation_key: str, session_id: str) -> None:
         raise AssertionError("unexpected skill session finalization")
+
+    def rebind_final_session(
+        self,
+        session_id: str,
+        final_session_id: str,
+        managed_lineage_ref: Any,
+    ) -> None:
+        raise AssertionError("unexpected skill session final rebind")
 
     def load(self, session_id: str) -> Any:
         raise AssertionError("unexpected skill session resume")
@@ -62,6 +77,13 @@ class FakeSkillSessionContractStore:
 
     def discard(self, correlation_key: str) -> None:
         raise AssertionError("unexpected skill session discard")
+
+
+class FakeManagedHeadlessSessionLineageStore:
+    """Always-present protocol fake for contexts that never launch managed sessions."""
+
+    def __getattr__(self, name: str) -> Any:
+        raise AssertionError(f"unexpected managed headless lineage operation: {name}")
 
 
 @dataclasses.dataclass

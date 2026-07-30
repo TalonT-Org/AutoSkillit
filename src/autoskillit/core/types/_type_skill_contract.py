@@ -13,6 +13,7 @@ from ._type_constants_registries import (
 )
 from ._type_enums import SkillExecutionRole, SkillSource
 from ._type_exceptions import SkillContractError
+from ._type_native_shell_capture import ManagedHeadlessSessionLineageRef
 from ._type_results import WriteBehaviorSpec
 
 __all__ = [
@@ -216,3 +217,4 @@ class StoredSkillSessionContract:
     contract: SkillSessionContract
     snapshot_dir: Path
     raw_session_id: str
+    managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None

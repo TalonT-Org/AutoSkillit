@@ -258,7 +258,11 @@ def build_ctx(tmp_path):
         DefaultAuditAuthorityMaterializer,
         DefaultCommittedDispositionResolver,
     )
-    from tests.fakes import FakePluginArtifactAuthority, FakeSkillSessionContractStore
+    from tests.fakes import (
+        FakeManagedHeadlessSessionLineageStore,
+        FakePluginArtifactAuthority,
+        FakeSkillSessionContractStore,
+    )
 
     owned_authorities = []
     context_count = 0
@@ -295,6 +299,7 @@ def build_ctx(tmp_path):
             temp_dir=tmp_path / ".autoskillit" / "temp",
             project_dir=tmp_path,
             skill_session_contract_store=FakeSkillSessionContractStore(),
+            managed_headless_session_lineage_store=(FakeManagedHeadlessSessionLineageStore()),
             context_admission_ledger=DefaultContextAdmissionLedger(
                 ContextAdmissionStoreAuthority(
                     database_path=(

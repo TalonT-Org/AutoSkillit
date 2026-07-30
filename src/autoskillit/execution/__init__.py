@@ -138,7 +138,10 @@ from autoskillit.execution.remote_resolver import (
 from autoskillit.execution.session import (
     ClaudeSessionResult,
     ContentState,
+    DefaultManagedHeadlessSessionLineageStore,
     DefaultSkillSessionContractStore,
+    ManagedHeadlessSessionLineageCASMismatch,
+    ManagedHeadlessSessionLineageConflictError,
     SessionState,
     SkillSessionContract,
     _collapse_hr_split_delimiters,  # noqa: F401 — re-exported for fleet.result_parser
@@ -199,7 +202,10 @@ __all__ = [
     # session
     "ClaudeSessionResult",
     "ContentState",
+    "DefaultManagedHeadlessSessionLineageStore",
     "DefaultSkillSessionContractStore",
+    "ManagedHeadlessSessionLineageCASMismatch",
+    "ManagedHeadlessSessionLineageConflictError",
     "SessionState",
     "SkillSessionContract",
     "SkillResult",

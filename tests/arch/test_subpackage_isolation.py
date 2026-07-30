@@ -1048,7 +1048,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "splitting into sub-modules would obscure the check sequence and break the test "
         "filter cascade",
     ),
-    "_api.py": (
+    "fleet/_api.py": (
         1550,
         "REQ-CNST-010-E6: fleet dispatch engine — evaluate_skip_when inlined here to avoid "
         "a 16th fleet/ module (sub-package file ceiling); keeps dispatch-related helpers "

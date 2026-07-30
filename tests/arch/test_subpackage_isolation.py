@@ -92,7 +92,6 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_validate",  # cli/_validate.py: validate_app = App(name="validate", ...)
         "_type_backend",  # core/types/_type_backend.py: CLAUDE_CODE_CAPABILITIES constant
         "_prompts",  # cli/_prompts.py: immutable startup recovery spec and rendering
-        "tools_kitchen",  # request-scoped open-kitchen transition ContextVar
         "tools_fleet_dispatch",  # request-scoped fleet provenance ContextVars
         # Released reducer definitions are immutable registry values keyed by their own
         # protocol version so the selector cannot drift from the registered definition.
@@ -153,6 +152,7 @@ _SINGLETON_SAFE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
         ("context_admission_ledger", "_EVENT_TYPES"),
         ("context_admission_ledger", "_EFFECT_TYPES"),
         ("context_admission_ledger", "_STATE_TYPES"),
+        ("tools_kitchen", "_OPEN_KITCHEN_REQUEST_CTX"),
     }
 )
 

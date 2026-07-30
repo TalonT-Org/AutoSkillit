@@ -168,9 +168,9 @@ def _seed_due_capture(project: Path) -> Path:
     lifecycle.commit_verified_snapshot(verified, issue_reference=False)
     path = project.joinpath(*CAPTURE_PATH_COMPONENTS, artifact.name)
     artifact.close_artifact_fd()
+    artifact.release_lease()
     root.close()
     anchor.close()
-    artifact.release_lease()
     return path
 
 

@@ -41,6 +41,20 @@ def _stub_artifact_authorities(
 ) -> None:
     plugin_dir = tmp_path / "autoskillit-test-plugin"
     plugin_dir.mkdir()
+    binary_dir = tmp_path / "bin"
+    binary_dir.mkdir()
+    binaries: dict[str, Path] = {}
+    for name in ("claude", "codex"):
+        binary = binary_dir / name
+        binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        binary.chmod(0o755)
+        binaries[name] = binary
+
+    monkeypatch.setattr(
+        shutil,
+        "which",
+        lambda name, **_kwargs: str(binaries[name]) if name in binaries else None,
+    )
     monkeypatch.setattr(
         "autoskillit.workspace.project_default_plugin_authority",
         lambda **_kwargs: _TestAuthority(plugin_dir),
@@ -95,10 +109,8 @@ class _BackendLifecycleStub:
 
 
 def _capture_subprocess(monkeypatch: pytest.MonkeyPatch) -> dict:
-    """Replace subprocess.run with a capturing stub and preserve real binary lookup."""
+    """Replace subprocess.run with a capturing stub."""
     captured: dict = {}
-    real_which = shutil.which
-    monkeypatch.setattr(shutil, "which", lambda name, **kwargs: real_which(name, **kwargs))
 
     def mock_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
         if len(cmd) > 1 and cmd[1] == "--version":

@@ -682,13 +682,13 @@ def install(
                         exc,
                         owned_lease_fd=target_writer.fileno(),
                     )
-                except Exception as exc:
+                except BaseException as exc:
                     logger.warning(
                         "install_transaction_unexpected_failure",
                         failure=str(exc),
                         exc_info=True,
                     )
-                    return _compensated_result(
+                    compensated = _compensated_result(
                         snapshot,
                         _InstallFailed(
                             InstallFailureKind.POSTCONDITION,
@@ -696,6 +696,9 @@ def install(
                         ),
                         owned_lease_fd=target_writer.fileno(),
                     )
+                    if not isinstance(exc, Exception):
+                        raise
+                    return compensated
     except (OSError, RuntimeError, ValueError) as exc:
         return _typed_result(
             InstallOutcome.FAILED,

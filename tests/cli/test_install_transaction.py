@@ -184,6 +184,33 @@ def test_unsafe_install_targets_are_rejected_before_mutation(
     assert sentinel.read_text(encoding="utf-8") == "untouched"
 
 
+@pytest.mark.parametrize("control_flow", [KeyboardInterrupt, SystemExit])
+def test_control_flow_exceptions_compensate_before_propagation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    control_flow: type[BaseException],
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    settings = tmp_path / ".claude" / "settings.json"
+    settings.parent.mkdir(parents=True)
+    settings.write_text("before", encoding="utf-8")
+
+    def interrupt_after_mutation(**_kwargs) -> tuple[()]:
+        settings.write_text("mutated", encoding="utf-8")
+        raise control_flow("stop")
+
+    monkeypatch.setattr(marketplace, "_clear_plugin_cache", interrupt_after_mutation)
+
+    with pytest.raises(control_flow, match="stop"):
+        marketplace.install(
+            request=_maintenance_request(),
+            child_env=_sealed_env(),
+            child_cwd=neutral_cwd,
+        )
+
+    assert settings.read_text(encoding="utf-8") == "before"
+
+
 def _filesystem_state(root: Path) -> tuple[tuple[str, str, bytes | str | None], ...]:
     state: list[tuple[str, str, bytes | str | None]] = []
     for path in sorted(root.rglob("*")):

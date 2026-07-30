@@ -1480,37 +1480,52 @@ from autoskillit.smoke_utils import (
 )
 
 SNAPSHOT_IS_FRESH = FINAL_SNAPSHOT_STATE == "fresh"
-if not SNAPSHOT_IS_FRESH:
+if FINAL_SNAPSHOT_STATE == "stale":
     verdict = "stale_snapshot"
     FINAL_REVIEW_FINDINGS = []
     HANDOFF_METADATA = {**HANDOFF_METADATA, "verdict": verdict}
     RAW_LEDGER = {**RAW_LEDGER, "verdict": verdict}
+elif FINAL_SNAPSHOT_STATE == "authority_degraded":
+    verdict = "needs_human"
+    FINAL_REVIEW_FINDINGS = []
+    HANDOFF_METADATA = {**HANDOFF_METADATA, "verdict": verdict}
+    RAW_LEDGER = {**RAW_LEDGER, "verdict": verdict}
 
-PUBLICATION = prepare_experimental_review_publication(
-    raw_ledger=RAW_LEDGER,
-    survivors=FINAL_REVIEW_FINDINGS,
-    snapshot=GATE_AUTHORITY["snapshot"],
-    annotation_generation_id=ANNOTATION_GENERATION_ID,
-    mode=MODE,
-    snapshot_is_fresh=SNAPSHOT_IS_FRESH,
-    handoff_metadata=HANDOFF_METADATA,
-    receipt=(
-        json.loads(RECEIPT_DOCUMENT)
-        if MODE == "github" and RECEIPT_DOCUMENT
-        else None
-    ),
-)
-if SNAPSHOT_IS_FRESH:
-    publication_generation_id = PUBLICATION["artifacts"]["raw_findings"][
-        "review_generation_id"
-    ]
-    if publication_generation_id != REVIEW_GENERATION_ID:
-        raise RuntimeError("publication generation changed after external effects")
-PUBLICATION_RESULT = publish_experimental_review_artifacts(
-    publication=PUBLICATION,
-    output_dir=REVIEW_OUTPUT_DIR,
-    pr_number=str(pr_number),
-)
+if FINAL_SNAPSHOT_STATE == "authority_degraded":
+    # No retained snapshot or annotation generation exists, so fixed-name
+    # publication cannot satisfy its identity contract. Keep the bounded
+    # diagnostics in the timestamped summary and emit needs_human instead.
+    PUBLICATION = None
+    PUBLICATION_RESULT = {
+        "state": "authority_degraded",
+        "publication_records": [],
+    }
+else:
+    PUBLICATION = prepare_experimental_review_publication(
+        raw_ledger=RAW_LEDGER,
+        survivors=FINAL_REVIEW_FINDINGS,
+        snapshot=GATE_AUTHORITY["snapshot"],
+        annotation_generation_id=ANNOTATION_GENERATION_ID,
+        mode=MODE,
+        snapshot_is_fresh=SNAPSHOT_IS_FRESH,
+        handoff_metadata=HANDOFF_METADATA,
+        receipt=(
+            json.loads(RECEIPT_DOCUMENT)
+            if MODE == "github" and RECEIPT_DOCUMENT
+            else None
+        ),
+    )
+    if SNAPSHOT_IS_FRESH:
+        publication_generation_id = PUBLICATION["artifacts"]["raw_findings"][
+            "review_generation_id"
+        ]
+        if publication_generation_id != REVIEW_GENERATION_ID:
+            raise RuntimeError("publication generation changed after external effects")
+    PUBLICATION_RESULT = publish_experimental_review_artifacts(
+        publication=PUBLICATION,
+        output_dir=REVIEW_OUTPUT_DIR,
+        pr_number=str(pr_number),
+    )
 ```
 
 This publisher is the only writer of the fixed raw-findings, diff-context,

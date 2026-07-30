@@ -182,6 +182,7 @@ def test_shell_capture_code_has_no_pathname_harness_or_cleanup() -> None:
             "hooks/_capture_contract.py",
             "hooks/shell_capture_hook.py",
             "hooks/_capture_artifacts.py",
+            "hooks/_capture_process.py",
         )
     }
     violations = {}

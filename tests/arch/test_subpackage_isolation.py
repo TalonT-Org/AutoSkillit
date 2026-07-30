@@ -952,7 +952,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_install_state (single install-state consistency authority,
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
-        "hooks": 20,  # +_capture_lifecycle state leaf and +capture_lifecycle_hook SessionStart owner  # noqa: E501
+        "hooks": 21,  # +_capture_process owned shell process-group boundary  # noqa: E501
         "pipeline": 16,  # +context/audit admission ledgers +recipe initialization
         # +kitchen transition authority
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501

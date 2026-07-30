@@ -5,10 +5,14 @@ from __future__ import annotations
 import errno
 import hashlib
 import json
+import logging
 import os
+import selectors
+import signal
 import stat
 import subprocess
 import sys
+import time
 from dataclasses import InitVar, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -63,6 +67,10 @@ if TYPE_CHECKING:
         CaptureLifecycleStore,
         CaptureTransitionCommittedError,
     )
+    from autoskillit.hooks._capture_process import (
+        OwnedProcessGroup,
+        adopt_owned_process,
+    )
     from autoskillit.hooks._hook_settings import (
         HOOK_CONFIG_FILENAME,
         HOOK_CONFIG_OVERLAY_FILENAME,
@@ -114,6 +122,7 @@ else:
         CaptureLifecycleStore,
         CaptureTransitionCommittedError,
     )
+    from _capture_process import OwnedProcessGroup, adopt_owned_process
     from _hook_settings import (
         HOOK_CONFIG_FILENAME,
         HOOK_CONFIG_OVERLAY_FILENAME,
@@ -140,6 +149,9 @@ _DEFAULT_INLINE_BYTES = 12_000
 _MAX_INLINE_BYTES = 1_000_000
 _MAX_POLICY_FILE_BYTES = 64 * 1024
 _DRAIN_CHUNK_BYTES = 64 * 1024
+_POST_EXIT_TERM_SECONDS = 0.25
+_POST_EXIT_KILL_SECONDS = 0.5
+_DRAIN_POLL_SECONDS = 0.05
 _MAX_CLEANUP_DETAIL_BYTES = 240
 _TRUSTED_BASH_CANDIDATES = ("/bin/bash", "/usr/bin/bash")
 _EXECUTABLE_MODE_BITS = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
@@ -152,6 +164,9 @@ _CAPTURE_RUNTIME_ERRORS = (
     ValueError,
 )
 _ARTIFACT_FACTORY_TOKEN = object()
+logger = logging.getLogger(__name__)  # noqa: TID251 - isolated stdlib runner
+logger.addHandler(logging.NullHandler())
+logger.propagate = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,6 +235,7 @@ class CapturePolicy:
 class _DrainResult:
     measurement: CaptureMeasurement
     write_error: OSError | None
+    truncated: bool = False
 
 
 def create_capture_artifact(
@@ -450,6 +466,8 @@ def _spawn_bash(
             stderr=subprocess.STDOUT if capture_output else None,
             close_fds=True,
             env=_scrubbed_user_environment(),
+            process_group=0,
+            start_new_session=False,
         )
     except OSError as exc:
         if exc.errno == errno.E2BIG:
@@ -466,7 +484,7 @@ def _spawn_bash(
 
     if restore_error is not None:
         if process is not None:
-            _capture_replay.settle_failed_capture(process)
+            _settle_failed_capture(_own_spawned_process(process, capture_output=capture_output))
         raise CaptureSetupError("cannot restore runner cwd") from restore_error
     if process is None:
         raise CaptureSetupError("capture shell did not start")
@@ -483,7 +501,7 @@ def _write_all(fd: int, data: bytes) -> None:
 
 
 def _drain_capture(
-    process: subprocess.Popen[bytes],
+    process: subprocess.Popen[bytes] | OwnedProcessGroup,
     artifact_writer_fd: int,
     inline_bytes: int,
 ) -> _DrainResult:
@@ -502,10 +520,8 @@ def _drain_capture(
     tail = bytearray()
     write_error: OSError | None = None
 
-    while True:
-        chunk = stream.read(_DRAIN_CHUNK_BYTES)
-        if not chunk:
-            break
+    def consume(chunk: bytes) -> None:
+        nonlocal total, write_error
         total += len(chunk)
         digest.update(chunk)
         if write_error is None:
@@ -523,6 +539,62 @@ def _drain_capture(
             if len(tail) > tail_limit:
                 del tail[:-tail_limit]
 
+    truncated = False
+    if not isinstance(process, OwnedProcessGroup):
+        while True:
+            chunk = stream.read(_DRAIN_CHUNK_BYTES)
+            if not chunk:
+                break
+            consume(chunk)
+    else:
+        descriptor = stream.fileno()
+        os.set_blocking(descriptor, False)
+        selector_factory = selectors.DefaultSelector
+        selector = selector_factory()
+        selector.register(descriptor, selectors.EVENT_READ)
+        leader_exit_at: float | None = None
+        kill_sent_at: float | None = None
+        try:
+            while True:
+                for _key, _events in selector.select(_DRAIN_POLL_SECONDS):
+                    while True:
+                        try:
+                            chunk = os.read(descriptor, _DRAIN_CHUNK_BYTES)
+                        except BlockingIOError:
+                            break
+                        if not chunk:
+                            selector.unregister(descriptor)
+                            return _DrainResult(
+                                measurement=CaptureMeasurement(
+                                    total_bytes=total,
+                                    sha256=digest.hexdigest(),
+                                    inline_bytes=inline_bytes,
+                                    inline=bytes(inline),
+                                    head=bytes(head),
+                                    tail=bytes(tail),
+                                ),
+                                write_error=write_error,
+                                truncated=truncated,
+                            )
+                        consume(chunk)
+
+                if process.poll() is None:
+                    continue
+                now = time.monotonic()
+                if leader_exit_at is None:
+                    leader_exit_at = now
+                    process.signal_group(signal.SIGTERM)
+                    continue
+                if kill_sent_at is None and now - leader_exit_at >= _POST_EXIT_TERM_SECONDS:
+                    kill_sent_at = now
+                    process.signal_group(signal.SIGKILL)
+                    continue
+                if kill_sent_at is not None and now - kill_sent_at >= _POST_EXIT_KILL_SECONDS:
+                    truncated = True
+                    break
+        finally:
+            selector.close()
+
     return _DrainResult(
         measurement=CaptureMeasurement(
             total_bytes=total,
@@ -533,6 +605,7 @@ def _drain_capture(
             tail=bytes(tail),
         ),
         write_error=write_error,
+        truncated=truncated,
     )
 
 
@@ -650,6 +723,37 @@ def _publish_oversized_capture(
         raise
 
 
+def _settle_failed_capture(
+    process: subprocess.Popen[bytes] | OwnedProcessGroup,
+) -> _capture_replay.RunnerSettlementEvidence:
+    if not isinstance(process, OwnedProcessGroup):
+        return _capture_replay.settle_failed_capture(process)
+    try:
+        return _capture_replay.RunnerSettlementEvidence(
+            action="settled_owned_group",
+            returncode=process.settle(),
+        )
+    except BaseException:
+        logger.error("owned_capture_settlement_failed", exc_info=True)
+        return _capture_replay.RunnerSettlementEvidence(
+            action="owned_group_settlement_failed",
+            returncode=None,
+        )
+
+
+def _own_spawned_process(
+    process: subprocess.Popen[bytes],
+    *,
+    capture_output: bool,
+) -> subprocess.Popen[bytes] | OwnedProcessGroup:
+    """Adopt real subprocesses while retaining narrow injected test doubles."""
+
+    pid = getattr(process, "pid", None)
+    if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 1:
+        return process
+    return adopt_owned_process(process, inherit_terminal=not capture_output)
+
+
 def run_capture(
     command: str,
     cwd: str,
@@ -659,7 +763,7 @@ def run_capture(
     attempt_id: str | None = None,
     lineage_ref: CaptureLineageRef | None = None,
 ) -> int:
-    """Run ``command`` from a descriptor-anchored project and capture its output."""
+    """Run ``command`` with descriptor-anchored cwd and owned process settlement."""
 
     if (
         requested_mode not in {"capture", "direct"}
@@ -682,13 +786,32 @@ def run_capture(
     root: CaptureRoot | None = None
     lifecycle: CaptureLifecycleStore | None = None
     artifact: CaptureArtifact | None = None
-    process: subprocess.Popen[bytes] | None = None
+    artifact_writer_fd = -1
+    process: subprocess.Popen[bytes] | OwnedProcessGroup | None = None
     try:
         policy = read_capture_policy(anchor)
         bash_path = _resolve_bash()
-        if policy.disabled:
-            process = _spawn_bash(anchor, bash_path, command, capture_output=False)
-            return _normalized_returncode(process.wait())
+        effective_direct = requested_mode == "direct" or policy.disabled
+        if effective_direct:
+            try:
+                spawned = _spawn_bash(anchor, bash_path, command, capture_output=False)
+                process = _own_spawned_process(spawned, capture_output=False)
+                return _normalized_returncode(process.wait())
+            except BaseException as exc:
+                logger.error("direct_shell_execution_failed", exc_info=True)
+                settlement = (
+                    _settle_failed_capture(process) if process is not None else None
+                )
+                return _capture_replay.capture_failure_return(
+                    _capture_replay.failure_transport(
+                        stage="direct process",
+                        detail=f"direct process failed: {type(exc).__name__}: {exc}",
+                        shell_returncode=(
+                            None if settlement is None else settlement.returncode
+                        ),
+                        settlement=settlement,
+                    )
+                )
 
         root = open_capture_root(anchor, create=True)
         lifecycle = CaptureLifecycleStore.from_open_authorities(anchor, root)
@@ -706,13 +829,35 @@ def run_capture(
         finalized_capture: FinalizedCapture | None = None
         failure_stage = "capture process spawn"
         try:
-            process = _spawn_bash(anchor, bash_path, command, capture_output=True)
+            spawned = _spawn_bash(anchor, bash_path, command, capture_output=True)
+            process = _own_spawned_process(spawned, capture_output=True)
             failure_stage = "capture readback"
             result = _drain_capture(process, artifact_writer_fd, policy.inline_bytes)
             artifact.close_drain_writer()
             failure_stage = "capture process wait"
             command_outcome = CommandOutcome.from_wait_result(process.wait())
             command_returncode = command_outcome.shell_returncode
+            if result.truncated:
+                failure_stage = "capture truncated-state commit"
+                lifecycle.commit_capture_failure(
+                    artifact.authority,
+                    CaptureFailureEvidence(
+                        stage="artifact_read",
+                        detail="capture output drain truncated after process-group settlement",
+                    ),
+                    observed_size=max(0, os.fstat(artifact.fd).st_size),
+                )
+                terminal_committed = True
+                return _capture_replay.capture_failure_return(
+                    _capture_replay.failure_transport(
+                        stage=failure_stage,
+                        detail=(
+                            "capture output drain truncated after process-group settlement"
+                        ),
+                        shell_returncode=command_returncode,
+                        settlement=None,
+                    )
+                )
             if result.write_error is not None:
                 failure_stage = "capture failed-state commit"
                 lifecycle.commit_capture_failure(
@@ -812,10 +957,11 @@ def run_capture(
                 )
                 delivery_attempting = False
             return command_returncode
-        except _CAPTURE_RUNTIME_ERRORS as exc:
+        except BaseException as exc:
+            logger.error("capture_shell_execution_failed", exc_info=True)
             recovery_detail = ""
             if command_outcome is None and process is not None:
-                settlement = _capture_replay.settle_failed_capture(process)
+                settlement = _settle_failed_capture(process)
             if not terminal_committed:
                 try:
                     failure_detail = _capture_replay._bounded_detail(

@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.hooks._capture_contract import _MAX_COMMAND_BYTES
+from autoskillit.hooks._capture_contract import _MAX_COMMAND_BYTES, parse_capture_v2
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -144,7 +144,7 @@ def test_verified_disabled_policy_is_runner_owned(monkeypatch, tmp_path):
 
     assert completed.returncode == 0
     assert completed.stdout == "hello\n"
-    assert "SHELL_OUTPUT_CAPTURED" not in completed.stdout
+    assert "shell capture v2:" not in completed.stdout
     assert not (config_dir / "shell_capture").exists()
 
 
@@ -278,6 +278,13 @@ def test_marker_provenance_is_emitted_by_runner(monkeypatch, tmp_path):
         timeout=_TIMEOUT,
     )
     assert completed.returncode == 0
-    assert "AutoSkillit hook shell_capture_hook" in completed.stdout
-    assert "SHELL_OUTPUT_CAPTURED" in completed.stdout
-    assert f"shell_{argv[-1]}.log" in completed.stdout
+    candidates = [
+        line.encode()
+        for line in completed.stdout.splitlines()
+        if line.startswith("[AutoSkillit shell capture v2:")
+    ]
+    assert len(candidates) == 1
+    parsed = parse_capture_v2(candidates[0])
+    assert parsed.reference_status == "published"
+    assert parsed.reference is not None
+    assert f"shell_{argv[-1]}.log" not in completed.stdout

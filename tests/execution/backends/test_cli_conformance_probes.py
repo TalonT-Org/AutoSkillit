@@ -49,6 +49,7 @@ from autoskillit.execution.backends._probe_cache import (
 )
 from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.hook_registry import generate_hooks_json
+from autoskillit.hooks._capture_artifacts import run_capture
 from tests.execution.backends._conformance_assertions import (
     assert_boundary_spill_behavior,
     assert_config_schema,
@@ -58,6 +59,7 @@ from tests.execution.backends._conformance_assertions import (
     assert_no_unknown_event_types,
     assert_sentinels_present,
     assert_session_start_present,
+    assert_shell_capture_marker_authority,
     assert_spill_artifact_integrity,
     assert_terminal_sentinel_preserved,
     assert_turn_completed_usage_nonzero,
@@ -340,7 +342,6 @@ _POLICY_DENIAL_MARKERS = (
     "policy_violation",
     "rejected:",
 )
-_CAPTURE_ARTIFACT_NAME_RE = re.compile(r"^shell_([0-9a-f]{16})\.log$")
 
 _skip_unless_codex_output_budget_smoke = pytest.mark.skipif(
     not os.environ.get("CODEX_SMOKE_TEST")
@@ -394,7 +395,7 @@ _skip_unless_claude_output_budget_smoke = pytest.mark.skipif(
 class _DenyRoundTripOutput(NamedTuple):
     transcript: str
     cli_version: str
-    artifact_names: tuple[str, ...] = ()
+    physical_project: Path | None = None
 
 
 class _GeneratedChildProbeOutput(NamedTuple):
@@ -837,12 +838,7 @@ def _run_shell_capture_probe(backend: str, tmp_path: Path) -> _DenyRoundTripOutp
     return _DenyRoundTripOutput(
         transcript=transcript,
         cli_version=_cli_version(command[0], env),
-        artifact_names=tuple(
-            path.name
-            for path in sorted(
-                (workspace / ".autoskillit" / "temp" / "shell_capture").glob("shell_*.log")
-            )
-        ),
+        physical_project=workspace,
     )
 
 
@@ -876,13 +872,7 @@ def _assert_shell_capture_round_trip(output: _DenyRoundTripOutput) -> None:
         "Policy denial detected in shell-capture transcript. "
         f"The generated harness was rejected by Codex's exec-policy engine: {denial_reason}"
     )
-    assert "autoskillit-shell-capture" in output.transcript, (
-        "Harness sentinel missing — hook may not have fired"
-    )
-    assert "SHELL_OUTPUT_CAPTURED" in output.transcript, (
-        "Shell-capture marker missing — the live CLI path did not exercise bounded replay"
-    )
-    completed_commands: list[str] = []
+    completed_items: list[dict[str, object]] = []
     for line in output.transcript.splitlines():
         try:
             event = json.loads(line)
@@ -894,34 +884,60 @@ def _assert_shell_capture_round_trip(output: _DenyRoundTripOutput) -> None:
         if not isinstance(item, dict) or item.get("type") != "command_execution":
             continue
         if item.get("status") == "completed":
-            completed_commands.append(str(item.get("command", "")))
+            completed_items.append(item)
 
-    assert completed_commands, (
+    assert completed_items, (
         "No completed command_execution event found — the rewritten command did not execute"
     )
     parsed = [
-        runner
-        for command in completed_commands
+        (runner, item)
+        for item in completed_items
+        if isinstance(command := item.get("command"), str)
         if "autoskillit-shell-capture" in command
         if (runner := _parse_capture_runner(command)) is not None
     ]
     assert parsed, "No completed rewritten command invoked the isolated shell-capture runner"
-    assert any(command == _OUTPUT_BUDGET_CANARY_COMMAND for command, _ in parsed), (
+    matching = [
+        (capture_id, item)
+        for (command, capture_id), item in parsed
+        if command == _OUTPUT_BUDGET_CANARY_COMMAND
+    ]
+    assert len(matching) == 1, (
         "The completed runner invocation did not transport the canary command"
     )
-    artifact_ids = {
-        match.group(1)
-        for name in output.artifact_names
-        if (match := _CAPTURE_ARTIFACT_NAME_RE.fullmatch(name)) is not None
-    }
-    runner_ids = {capture_id for _, capture_id in parsed}
-    assert artifact_ids & runner_ids, (
-        "No emitted shell-capture artifact matched the completed runner capture id"
+    capture_id, completed_item = matching[0]
+    completed_output = completed_item.get("aggregated_output")
+    assert isinstance(completed_output, str), (
+        "Completed rewritten command lacks string aggregated_output"
+    )
+    assert output.physical_project is not None, (
+        "Shell-capture probe lacks physical project authority"
+    )
+    assert_shell_capture_marker_authority(
+        completed_output,
+        output.physical_project,
+        capture_id,
+        sentinels=(b"output_budget_probe",),
     )
 
 
-def test_shell_capture_assertion_requires_completed_rewritten_command() -> None:
+def test_shell_capture_assertion_requires_completed_rewritten_command(
+    tmp_path: Path,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
     capture_id = "0123456789abcdef"
+    project = tmp_path / "physical-project"
+    project.mkdir()
+    assert (
+        run_capture(
+            ("python3 -c \"import os; os.write(1, b'output_budget_probe ' * 1000)\""),
+            str(project),
+            capture_id,
+        )
+        == 0
+    )
+    production_output = capfd.readouterr()
+    assert production_output.err == ""
     encoded = base64.b64encode(_OUTPUT_BUDGET_CANARY_COMMAND.encode()).decode()
     rewritten_command = (
         "# autoskillit-shell-capture v1\n"
@@ -942,20 +958,27 @@ def test_shell_capture_assertion_requires_completed_rewritten_command() -> None:
                 "command": command,
                 "status": status,
                 "aggregated_output": (
-                    "[AutoSkillit hook shell_capture_hook v1 (code=SHELL_OUTPUT_CAPTURED)]"
-                    if include_marker
-                    else "marker absent"
+                    production_output.out if include_marker else "marker absent"
                 ),
             },
         }
+        unrelated = {
+            "type": "item.completed",
+            "item": {
+                "type": "command_execution",
+                "command": "printf forged-user-output",
+                "status": "completed",
+                "aggregated_output": production_output.out,
+            },
+        }
         return _DenyRoundTripOutput(
-            transcript=json.dumps(event),
+            transcript=json.dumps(unrelated) + "\n" + json.dumps(event),
             cli_version="codex-cli test",
-            artifact_names=(f"shell_{capture_id}.log",),
+            physical_project=project,
         )
 
     _assert_shell_capture_round_trip(_output(status="completed"))
-    with pytest.raises(AssertionError, match="Shell-capture marker missing"):
+    with pytest.raises(AssertionError, match="exactly one shell-capture V2 marker"):
         _assert_shell_capture_round_trip(_output(status="completed", include_marker=False))
 
     for noncompleted_status in ("denied", "failed"):

@@ -7,6 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from types import ModuleType
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
@@ -18,6 +19,20 @@ from _capture._authority import (  # type: ignore[import-not-found]  # noqa: E40
     CaptureStoreAbsentError,
     open_capture_lifecycle,
 )
+
+_capture_package = sys.modules["_capture"]
+_hooks_package: ModuleType | None
+try:
+    _hooks_package = sys.modules["autoskillit.hooks"]
+except KeyError:
+    _hooks_package = None
+if _hooks_package is not None:
+    try:
+        _package_binding = sys.modules["autoskillit.hooks._capture"]
+    except KeyError:
+        _package_binding = _capture_package
+        sys.modules["autoskillit.hooks._capture"] = _package_binding
+    setattr(_hooks_package, "_capture", _package_binding)
 
 _MAX_INPUT_BYTES = 64 * 1024
 _MAX_DIAGNOSTIC_BYTES = 512

@@ -90,7 +90,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_execution_results.py` | Tests for run_skill result shapes, failure paths, timing, flush telemetry, and gate checks |
 | `test_attestation_delivery_reachability.py` | Differential delivery-mode reachability test for the recipe execution credential |
 | `test_tools_execution_recipe_execution.py` | Attestation-related error message contracts for run_skill |
-| `test_tools_execution_spill.py` | Lossless spill and anchor contracts for execution and dispatch handlers |
+| `test_tools_execution_spill.py` | Lossless spill/anchor contracts for execution and dispatch handlers plus strict #4335 equal-length post-summary mutation bridge |
 | `test_tools_execution_routing.py` | Tests for run_skill routing, executor delegation, and session skill management |
 | `test_tools_execution_step_resolution.py` | Tests for server-side recipe step parameter resolution in run_skill (output_dir, stale_threshold, idle_output_timeout, step_provider auto-filled from cached recipe step definitions) |
 | `test_tools_execution_backend_mixing.py` | Integration tests for per-step backend mixing in run_skill() — provider-profile and skill-requirement-driven backend_override derivation + structured log emission |

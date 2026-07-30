@@ -991,8 +991,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "infra/test_session_scope_enforcement.py",
             "infra/test_session_type_exemption_enforcement.py",
             "infra/test_skill_exemption_enforcement.py",
-            # docs/ narrowed to 1 file
+            # docs/ file-level entries
             "docs/test_doc_counts.py",
+            "docs/test_shell_capture_snapshot_authority_decision.py",
         }
     ),
     # Standalone modules (not subpackage directories)

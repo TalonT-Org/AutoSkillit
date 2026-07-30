@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import ast
 import dataclasses
+from pathlib import Path
 
 import pytest
 
+import autoskillit.hooks._capture_lifecycle as capture_lifecycle
 from autoskillit.execution.backends._codex_hooks import generate_codex_hooks_config
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
@@ -19,6 +22,8 @@ from autoskillit.hook_registry import (
     hook_applies_to_backend,
     validate_lifecycle_contracts,
 )
+from autoskillit.hooks._capture_artifacts import CAPTURE_PATH_COMPONENTS
+from autoskillit.hooks._capture_lifecycle import LEDGER_NAME, LOCK_NAME
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
@@ -30,6 +35,31 @@ def _replace_hook(script: str, **changes: object) -> list[HookDef]:
         dataclasses.replace(hook_def, **changes) if script in hook_def.scripts else hook_def
         for hook_def in HOOK_REGISTRY
     ]
+
+
+def test_capture_shards_use_canonical_store_ports() -> None:
+    capture_dir = Path(capture_lifecycle.__file__).with_name("_capture")
+    for filename in ("_delivery.py", "_resolver.py", "_sweep.py"):
+        tree = ast.parse((capture_dir / filename).read_text())
+        local_store_protocols = [
+            node.name
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and "Store" in node.name
+        ]
+        assert not local_store_protocols, (
+            f"{filename} defines local store protocols: {local_store_protocols}"
+        )
+        store_annotations = [
+            ast.unparse(argument.annotation)
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            for argument in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
+            if argument.arg == "store" and argument.annotation is not None
+        ]
+        assert store_annotations
+        assert all(annotation.startswith("_store_port.") for annotation in store_annotations), (
+            f"{filename} has noncanonical store annotations: {store_annotations}"
+        )
 
 
 def test_resource_fields_are_immutable_with_independent_factories() -> None:
@@ -73,6 +103,65 @@ def test_real_lifecycle_contract_passes_every_generator_boundary() -> None:
     validate_lifecycle_contracts(HOOK_REGISTRY, LIFECYCLE_CONTRACTS, backend="claude_code")
     assert generate_codex_hooks_config()
     assert generate_hooks_json()["hooks"]
+
+
+def test_snapshot_reference_and_reader_reuse_one_registered_resource_owner() -> None:
+    capture_contracts = [
+        contract for contract in LIFECYCLE_CONTRACTS if contract.resource == _RESOURCE
+    ]
+    assert len(capture_contracts) == 1
+    assert capture_contracts[0].required_owner_roles == {
+        "same_runner",
+        "session_start",
+    }
+    capture_hooks = [
+        hook
+        for hook in HOOK_REGISTRY
+        if _RESOURCE
+        in (hook.produces_resources | hook.reclaims_resources | hook.self_reclaims_resources)
+    ]
+    assert {script for hook in capture_hooks for script in hook.scripts} == {
+        "shell_capture_hook.py",
+        "capture_lifecycle_hook.py",
+    }
+    assert {resource for hook in capture_hooks for resource in hook.produces_resources} == {
+        _RESOURCE
+    }
+    assert CAPTURE_PATH_COMPONENTS == (".autoskillit", "temp", "shell_capture")
+    assert {LEDGER_NAME, LOCK_NAME} == {
+        ".capture-lifecycle.ledger",
+        ".capture-lifecycle.lock",
+    }
+
+
+def test_every_shell_capture_persistent_path_constant_is_registered() -> None:
+    hooks_dir = Path(capture_lifecycle.__file__).resolve().parent
+    capture_dir = hooks_dir / "_capture"
+    observed: set[tuple[str, str]] = set()
+    for path in (*capture_dir.glob("*.py"), hooks_dir / "_capture_lifecycle.py"):
+        for node in ast.parse(path.read_text()).body:
+            if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+                continue
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                if not isinstance(target, ast.Name):
+                    continue
+                name = target.id
+                if (
+                    name == "CAPTURE_PATH_COMPONENTS"
+                    or name.endswith("_NAME")
+                    or name.endswith("_NAME_RE")
+                ):
+                    observed.add((path.name, name))
+
+    assert observed == {
+        ("_authority.py", "CAPTURE_PATH_COMPONENTS"),
+        ("_syntax.py", "PUBLIC_NAME_RE"),
+        ("_syntax.py", "QUARANTINE_NAME_RE"),
+        ("_syntax.py", "STAGING_NAME_RE"),
+        ("_capture_lifecycle.py", "LEDGER_NAME"),
+        ("_capture_lifecycle.py", "LOCK_NAME"),
+    }
 
 
 @pytest.mark.parametrize(

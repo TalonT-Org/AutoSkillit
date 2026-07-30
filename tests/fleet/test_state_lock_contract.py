@@ -52,6 +52,7 @@ _FCNTL_ALLOWED_RELATIVE_PATHS: frozenset[str] = frozenset(
         "server/tools/tools_pipeline_tracker.py",  # mark_step_complete: flock sidecar
         "server/_recipe_delivery.py",  # shared/exclusive immutable-generation lifecycle lock
         "hooks/resume_gate_post_hook.py",
+        "hooks/_capture/_resolver.py",
         "hooks/_capture_lifecycle.py",
     }
 )
@@ -94,6 +95,9 @@ class TestFlockLockTarget:
             src_root / "planner" / "merge.py": None,
             src_root / "hooks" / "_capture_lifecycle.py": frozenset(
                 {"acquire_writer_lease", "_try_artifact_lease"}
+            ),
+            src_root / "hooks" / "_capture" / "_resolver.py": frozenset(
+                {"_acquire_shared_lease", "acquire_writer_lease"}
             ),
         }
 

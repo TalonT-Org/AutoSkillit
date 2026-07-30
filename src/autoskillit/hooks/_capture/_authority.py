@@ -17,6 +17,10 @@ from dataclasses import InitVar, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ._module_identity import register_module_aliases
+
+register_module_aliases(__name__)
+
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
@@ -58,7 +62,12 @@ _DIRECTORY_FLAGS = (
     | getattr(os, "O_CLOEXEC", 0)
     | getattr(os, "O_NOFOLLOW", 0)
 )
-_READ_FLAGS = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+_READ_FLAGS = (
+    os.O_RDONLY
+    | getattr(os, "O_CLOEXEC", 0)
+    | getattr(os, "O_NOFOLLOW", 0)
+    | getattr(os, "O_NONBLOCK", 0)
+)
 
 
 class CaptureSetupError(RuntimeError):

@@ -8,10 +8,84 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from autoskillit.core.types._type_enums import CodexEventType
 from autoskillit.execution.process._process_jsonl import _marker_is_standalone
+from autoskillit.hooks._capture._snapshot import CaptureFinalManifest
+from autoskillit.hooks._capture_artifacts import (
+    CaptureSetupError,
+    open_capture_lifecycle,
+)
+from autoskillit.hooks._capture_contract import (
+    CaptureContractError,
+    CaptureV2Fields,
+    parse_capture_v2,
+)
+from autoskillit.hooks._capture_lifecycle import CaptureLifecycleError
+
+
+@dataclass(frozen=True, slots=True)
+class ShellCaptureAuthorityAssertion:
+    fields: CaptureV2Fields
+    manifest: CaptureFinalManifest
+    capture_bytes: bytes
+
+
+def assert_shell_capture_marker_authority(
+    completed_output: str,
+    physical_project: Path,
+    expected_capture_id: str,
+    *,
+    sentinels: tuple[bytes, ...] = (),
+) -> ShellCaptureAuthorityAssertion:
+    candidates = [
+        line.encode("utf-8")
+        for line in completed_output.splitlines()
+        if line.startswith("[AutoSkillit shell capture v2:")
+    ]
+    assert len(candidates) == 1, (
+        f"expected exactly one shell-capture V2 marker in completed output, got {len(candidates)}"
+    )
+    try:
+        fields = parse_capture_v2(candidates[0])
+    except CaptureContractError as exc:
+        raise AssertionError(f"shell-capture V2 marker is invalid: {exc}") from exc
+    assert fields.capture_id == expected_capture_id
+    assert fields.reference_status == "published"
+    assert fields.reference is not None
+
+    chunks: list[bytes] = []
+    try:
+        with open_capture_lifecycle(str(physical_project), create=False) as lifecycle:
+            with lifecycle.open_verified_capture(fields.reference) as reader:
+                manifest = cast(CaptureFinalManifest, reader.manifest)
+                offset = 0
+                while offset < manifest.total_bytes:
+                    chunk = reader.read(
+                        offset,
+                        min(64 * 1024, manifest.total_bytes - offset),
+                    )
+                    if not chunk:
+                        raise AssertionError("verified capture reader returned early EOF")
+                    chunks.append(chunk)
+                    offset += len(chunk)
+    except (CaptureSetupError, CaptureLifecycleError, OSError) as exc:
+        raise AssertionError(f"shell-capture reference did not resolve: {exc}") from exc
+
+    capture_bytes = b"".join(chunks)
+    assert manifest.capture_id == fields.capture_id
+    assert manifest.finalized_at_revision == fields.finalized_at_revision
+    assert manifest.total_bytes == fields.total_bytes == len(capture_bytes)
+    assert manifest.sha256 == fields.sha256 == hashlib.sha256(capture_bytes).hexdigest()
+    assert manifest.command_outcome.kind.value == fields.command_outcome_kind
+    assert manifest.command_outcome.value == fields.command_outcome_value
+    assert manifest.command_outcome.shell_returncode == fields.shell_returncode
+    missing = [sentinel for sentinel in sentinels if sentinel not in capture_bytes]
+    assert not missing, f"verified shell-capture bytes lack sentinels: {missing}"
+    return ShellCaptureAuthorityAssertion(fields, manifest, capture_bytes)
 
 
 def assert_vocabulary_coverage(events: list[dict], expected_types: set[str]) -> None:

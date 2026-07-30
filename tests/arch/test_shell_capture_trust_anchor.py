@@ -200,28 +200,41 @@ def test_shell_capture_code_has_no_pathname_harness_or_cleanup() -> None:
 
 
 def test_capture_deletion_is_confined_to_lifecycle_transactions() -> None:
-    tree = ast.parse(_source("hooks/_capture_lifecycle.py"))
-    functions_with_unlink = {
-        function.name
-        for function in ast.walk(tree)
-        if isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and any(
-            isinstance(node, ast.Call) and _called_operation_name(node.func) == "unlink"
-            for node in ast.walk(function)
+    trees = {
+        relative: ast.parse(_source(relative))
+        for relative in (
+            "hooks/_capture_lifecycle.py",
+            "hooks/_capture/_sweep.py",
         )
     }
+    functions_with_unlink = {
+        relative: {
+            function.name
+            for function in ast.walk(tree)
+            if isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and any(
+                isinstance(node, ast.Call) and _called_operation_name(node.func) == "unlink"
+                for node in ast.walk(function)
+            )
+        }
+        for relative, tree in trees.items()
+    }
     assert functions_with_unlink == {
-        "_compact_locked",
-        "_normalize_abandoned",
-        "_quarantine_delete",
-        "create_artifact",
-        "unlink_quarantine",
+        "hooks/_capture_lifecycle.py": {
+            "_compact_locked",
+            "create_artifact",
+        },
+        "hooks/_capture/_sweep.py": {
+            "normalize_abandoned",
+            "quarantine_delete",
+            "unlink_quarantine",
+        },
     }
 
     quarantine = next(
         node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == "_quarantine_delete"
+        for node in ast.walk(trees["hooks/_capture/_sweep.py"])
+        if isinstance(node, ast.FunctionDef) and node.name == "quarantine_delete"
     )
     assert (
         sum(

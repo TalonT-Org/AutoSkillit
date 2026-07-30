@@ -22,6 +22,11 @@ from autoskillit.hooks._capture._authority import (
     open_capture_root,
     open_project_anchor,
 )
+from autoskillit.hooks._capture._snapshot import (
+    CaptureMeasurement,
+    CommandOutcome,
+    verify_capture_snapshot,
+)
 from autoskillit.hooks._capture_artifacts import create_capture_artifact
 from autoskillit.hooks._capture_lifecycle import (
     LEDGER_NAME,
@@ -82,6 +87,35 @@ def test_standalone_authority_uses_standalone_lifecycle_identity() -> None:
     assert completed.stdout == ""
 
 
+@pytest.mark.parametrize(
+    "prelude",
+    ("", "import autoskillit.hooks._capture._types\n"),
+    ids=("standalone-first", "package-first"),
+)
+def test_package_cleanup_hook_preserves_direct_capture_package_imports(
+    prelude: str,
+) -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                prelude + "import autoskillit.hooks.capture_lifecycle_hook\n"
+                "import autoskillit.hooks._capture._reader as reader\n"
+                "assert reader.__name__ in "
+                "{'_capture._reader', 'autoskillit.hooks._capture._reader'}\n"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout == ""
+
+
 def _run_hook(
     project: Path,
     payload: object,
@@ -117,17 +151,26 @@ def _seed_due_capture(project: Path) -> Path:
     )
     artifact = create_capture_artifact(root, _CAPTURE_ID, lifecycle)
     os.write(artifact.fd, b"due")
-    lifecycle.finalize_capture(
-        _CAPTURE_ID,
-        size=3,
-        sha256="0" * 64,
-        failed=False,
+    verified = verify_capture_snapshot(
+        fd=artifact.fd,
+        capture_id=artifact.authority.capture_id,
+        incarnation=artifact.authority.incarnation,
+        project_identity=(anchor.identity.device, anchor.identity.inode),
+        root_identity=(root.identity.device, root.identity.inode),
+        carrier_name=artifact.name,
+        carrier_identity=(artifact.identity.device, artifact.identity.inode),
+        measurement=CaptureMeasurement.from_bytes(b"due", inline_bytes=3),
+        command_outcome=CommandOutcome.exited(0),
+        expected_revision=artifact.authority.expected_revision,
+        finalized_at=old,
+        retention_deadline=old + 3600.0,
     )
+    lifecycle.commit_verified_snapshot(verified, issue_reference=False)
     path = project.joinpath(*CAPTURE_PATH_COMPONENTS, artifact.name)
     artifact.close_artifact_fd()
+    artifact.release_lease()
     root.close()
     anchor.close()
-    artifact.release_lease()
     return path
 
 

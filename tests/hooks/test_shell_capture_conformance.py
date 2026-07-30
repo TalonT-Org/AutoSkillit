@@ -15,7 +15,10 @@ import json
 import os
 import shlex
 import shutil
+import signal
+import socket
 import subprocess
+import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
@@ -24,6 +27,9 @@ from uuid import uuid4
 import pytest
 
 import autoskillit.hooks.shell_capture_hook as shell_capture_hook
+from autoskillit.hooks._capture_artifacts import open_capture_lifecycle
+from autoskillit.hooks._capture_contract import CaptureV2Fields, parse_capture_v2
+from autoskillit.hooks._capture_lifecycle import CaptureState
 from autoskillit.hooks.shell_capture_hook import _build_harness
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
@@ -90,6 +96,34 @@ def _artifact_files(tmp_path: Path) -> list[Path]:
     return sorted(_capture_dir(tmp_path).glob("shell_*.log"))
 
 
+def _parse_single_capture_v2(output: bytes) -> CaptureV2Fields:
+    candidates = [
+        line for line in output.splitlines() if line.startswith(b"[AutoSkillit shell capture v2:")
+    ]
+    assert len(candidates) == 1
+    return parse_capture_v2(candidates[0])
+
+
+def _assert_published_capture_v2(project: Path, output: bytes, expected: bytes) -> None:
+    parsed = _parse_single_capture_v2(output)
+    assert parsed.reference_status == "published"
+    assert parsed.reference is not None
+    assert parsed.total_bytes == len(expected)
+    assert parsed.sha256 == hashlib.sha256(expected).hexdigest()
+    assert b"complete=true" not in output
+    assert b".log" not in output
+    chunks: list[bytes] = []
+    with open_capture_lifecycle(str(project), create=False) as lifecycle:
+        with lifecycle.open_verified_capture(parsed.reference) as reader:
+            offset = 0
+            while offset < parsed.total_bytes:
+                chunk = reader.read(offset, min(64 * 1024, parsed.total_bytes - offset))
+                assert chunk
+                chunks.append(chunk)
+                offset += len(chunk)
+    assert b"".join(chunks) == expected
+
+
 def _run_raw(command: str, tmp_path: Path) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run(
         ["bash", "-c", command],
@@ -117,6 +151,82 @@ def _run_wrapped(command: str, tmp_path: Path) -> subprocess.CompletedProcess[by
         cwd=str(tmp_path),
         timeout=_TIMEOUT,
     )
+
+
+def _write_detached_pipe_helper(tmp_path: Path) -> Path:
+    helper = tmp_path / "detached_pipe_child.py"
+    helper.write_text(
+        """import os
+import socket
+import sys
+
+mode, host, port = sys.argv[1:]
+parent_read, parent_write = os.pipe()
+pid = os.fork()
+if pid:
+    os.close(parent_read)
+    os.write(1, b"early\\n")
+    os._exit(0)
+
+os.close(parent_write)
+os.setsid()
+while os.read(parent_read, 1):
+    pass
+os.close(parent_read)
+if mode == "closed":
+    os.close(1)
+    os.close(2)
+barrier = socket.create_connection((host, int(port)))
+barrier.sendall(f"{os.getpid()}\\n".encode())
+if barrier.recv(1) != b"R":
+    os._exit(2)
+if mode == "retained":
+    os.write(1, b"late\\n")
+barrier.close()
+os._exit(0)
+"""
+    )
+    return helper
+
+
+def _accept_detached_child(server: socket.socket) -> tuple[socket.socket, int]:
+    connection, _address = server.accept()
+    connection.settimeout(_TIMEOUT)
+    message = bytearray()
+    while b"\n" not in message:
+        chunk = connection.recv(64)
+        if not chunk or len(message) + len(chunk) > 64:
+            connection.close()
+            raise AssertionError("detached child did not provide a bounded PID")
+        message.extend(chunk)
+    line, separator, remainder = bytes(message).partition(b"\n")
+    if not separator or remainder or not line.isdigit():
+        connection.close()
+        raise AssertionError("detached child PID message is invalid")
+    return connection, int(line)
+
+
+def _release_detached_child(
+    connection: socket.socket | None,
+    child_pid: int | None,
+) -> None:
+    if connection is None:
+        return
+    released = False
+    try:
+        connection.sendall(b"R")
+        while connection.recv(64):
+            pass
+        released = True
+    except OSError:
+        pass
+    finally:
+        connection.close()
+    if not released and child_pid is not None:
+        try:
+            os.kill(child_pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
 
 
 def _main_generated_wrapper(command: str, cwd: Path, monkeypatch: pytest.MonkeyPatch) -> str:
@@ -217,6 +327,7 @@ def test_capture_conformance(label: str, command: str, tmp_path: Path) -> None:
             f"[{label}] artifact content mismatch with raw combined output"
         )
         artifact_bytes.decode("utf-8")
+        _assert_published_capture_v2(tmp_path, wrapped.stdout, raw_combined)
         return
 
     if len(raw_combined) <= _INLINE_BYTES:
@@ -234,6 +345,114 @@ def test_capture_conformance(label: str, command: str, tmp_path: Path) -> None:
         assert artifact_bytes == raw_combined, (
             f"[{label}] artifact content mismatch with raw combined output"
         )
+        _assert_published_capture_v2(tmp_path, wrapped.stdout, raw_combined)
+
+
+def test_retained_pipe_waits_for_actual_eof_and_includes_late_bytes(
+    tmp_path: Path,
+) -> None:
+    _make_project_dirs(tmp_path)
+    helper = _write_detached_pipe_helper(tmp_path)
+    capture_id = "0123456789abcdef"
+    connection: socket.socket | None = None
+    child_pid: int | None = None
+    process: subprocess.Popen[bytes] | None = None
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        server.settimeout(_TIMEOUT)
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        port = server.getsockname()[1]
+        command = "exec " + shlex.join(
+            [sys.executable, str(helper), "retained", "127.0.0.1", str(port)]
+        )
+        wrapped = _build_harness(command, str(tmp_path), capture_id)
+        try:
+            process = subprocess.Popen(
+                ["bash", "-c", wrapped],
+                cwd=tmp_path,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            connection, child_pid = _accept_detached_child(server)
+
+            with pytest.raises(subprocess.TimeoutExpired):
+                process.wait(timeout=0.2)
+            with open_capture_lifecycle(str(tmp_path), create=False) as lifecycle:
+                pending = lifecycle.get_record(capture_id)
+            assert pending is not None
+            assert pending.state is CaptureState.PUBLISHED_WRITING
+            assert pending.manifest is None
+
+            _release_detached_child(connection, child_pid)
+            connection = None
+            child_pid = None
+            stdout, stderr = process.communicate(timeout=_TIMEOUT)
+
+            expected = b"early\nlate\n"
+            assert process.returncode == 0
+            assert stdout == expected
+            assert stderr == b""
+            artifacts = _artifact_files(tmp_path)
+            assert len(artifacts) == 1
+            assert artifacts[0].read_bytes() == expected
+            with open_capture_lifecycle(str(tmp_path), create=False) as lifecycle:
+                finalized = lifecycle.get_record(capture_id)
+            assert finalized is not None and finalized.manifest is not None
+            assert finalized.state is CaptureState.FINALIZED
+            assert finalized.manifest.total_bytes == len(expected)
+            assert finalized.manifest.sha256 == hashlib.sha256(expected).hexdigest()
+            assert finalized.manifest.inline_length == len(expected)
+            assert finalized.manifest.head_length == len(expected)
+            assert finalized.manifest.tail_length == len(expected)
+        finally:
+            _release_detached_child(connection, child_pid)
+            if process is not None and process.poll() is None:
+                process.kill()
+                process.communicate(timeout=_TIMEOUT)
+
+
+def test_detached_child_with_closed_pipe_does_not_delay_finalization(
+    tmp_path: Path,
+) -> None:
+    _make_project_dirs(tmp_path)
+    helper = _write_detached_pipe_helper(tmp_path)
+    capture_id = "fedcba9876543210"
+    connection: socket.socket | None = None
+    child_pid: int | None = None
+    process: subprocess.Popen[bytes] | None = None
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        server.settimeout(_TIMEOUT)
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        port = server.getsockname()[1]
+        command = "exec " + shlex.join(
+            [sys.executable, str(helper), "closed", "127.0.0.1", str(port)]
+        )
+        wrapped = _build_harness(command, str(tmp_path), capture_id)
+        try:
+            process = subprocess.Popen(
+                ["bash", "-c", wrapped],
+                cwd=tmp_path,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            connection, child_pid = _accept_detached_child(server)
+            stdout, stderr = process.communicate(timeout=_TIMEOUT)
+
+            assert process.returncode == 0
+            assert stdout == b"early\n"
+            assert stderr == b""
+            with open_capture_lifecycle(str(tmp_path), create=False) as lifecycle:
+                finalized = lifecycle.get_record(capture_id)
+            assert finalized is not None and finalized.manifest is not None
+            assert finalized.state is CaptureState.FINALIZED
+            assert finalized.manifest.total_bytes == len(stdout)
+            assert finalized.manifest.sha256 == hashlib.sha256(stdout).hexdigest()
+        finally:
+            _release_detached_child(connection, child_pid)
+            if process is not None and process.poll() is None:
+                process.kill()
+                process.communicate(timeout=_TIMEOUT)
 
 
 def test_interleaved_stdout_stderr_ordering(tmp_path: Path) -> None:
@@ -267,7 +486,7 @@ def test_capture_dir_uncreatable_fail_stops(tmp_path: Path) -> None:
 
     assert wrapped.returncode == 1
     combined = (wrapped.stdout + wrapped.stderr).decode(errors="replace")
-    assert "capture_failed" in combined.lower() or "CAPTURE_FAILED" in combined
+    assert '"status":"capture_failed"' in combined
     assert "should_not_run" not in combined
 
 
@@ -312,7 +531,7 @@ def test_main_generated_wrapper_rejects_symlinked_capture_components(
     )
 
     assert completed.returncode == 1
-    assert "CAPTURE_FAILED" in completed.stdout + completed.stderr
+    assert '"status":"capture_failed"' in completed.stdout + completed.stderr
     assert not (project / "command_ran").exists()
     assert not list(external.glob("shell_*.log"))
     assert secret.read_text() == "must-not-be-read"
@@ -384,7 +603,7 @@ def test_main_generated_wrapper_rejects_final_artifact_collisions(
 
     assert completed.returncode == 1
     combined = (completed.stdout + completed.stderr).decode()
-    assert "CAPTURE_FAILED" in combined
+    assert '"status":"capture_failed"' in combined
     assert "must-survive" not in combined
     assert not (project / "command_ran").exists()
     assert external.read_bytes() == b"must-survive"
@@ -419,11 +638,14 @@ def test_capture_directory_replacement_uses_open_fds_and_hides_path(
     )
 
     assert completed.returncode == 0
-    assert b"-> unavailable " in completed.stdout
-    assert b"SHELL_OUTPUT_CAPTURED" in completed.stdout
     expected = b"0123456789abcdef"
-    assert f"full output {len(expected)} bytes".encode() in completed.stdout
-    assert f"sha256={hashlib.sha256(expected).hexdigest()}".encode() in completed.stdout
+    parsed = _parse_single_capture_v2(completed.stdout)
+    assert parsed.reference_status == "unavailable"
+    assert parsed.reference is None
+    assert parsed.unavailable_reason == "PUBLICATION_BINDING_UNAVAILABLE"
+    assert parsed.total_bytes == len(expected)
+    assert parsed.sha256 == hashlib.sha256(expected).hexdigest()
+    assert b"complete=true" not in completed.stdout
     assert completed.stdout.startswith(expected[:5])
     assert completed.stdout.endswith(expected[-3:])
     displaced = project / ".autoskillit" / "temp" / "shell_capture-original"
@@ -468,10 +690,13 @@ def test_capture_artifact_replacement_uses_open_fd_and_hides_path(
     )
 
     assert completed.returncode == 0
-    assert b"-> unavailable " in completed.stdout
     expected = b"fedcba9876543210"
-    assert f"full output {len(expected)} bytes".encode() in completed.stdout
-    assert f"sha256={hashlib.sha256(expected).hexdigest()}".encode() in completed.stdout
+    parsed = _parse_single_capture_v2(completed.stdout)
+    assert parsed.reference_status == "unavailable"
+    assert parsed.reference is None
+    assert parsed.unavailable_reason == "PUBLICATION_BINDING_UNAVAILABLE"
+    assert parsed.total_bytes == len(expected)
+    assert parsed.sha256 == hashlib.sha256(expected).hexdigest()
     assert completed.stdout.startswith(expected[:5])
     assert completed.stdout.endswith(expected[-3:])
     assert displaced.read_bytes() == expected

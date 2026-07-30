@@ -7,6 +7,14 @@ import pytest
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
 
+def test_capture_transport_has_single_owner() -> None:
+    import autoskillit.hooks._capture_contract as capture_contract
+    import autoskillit.hooks._policy_event as policy_event
+
+    assert not hasattr(policy_event, "render_capture_marker")
+    assert hasattr(capture_contract, "render_capture_v2")
+
+
 def test_render_provenance_prefix_contains_required_fields():
     from autoskillit.hooks._policy_event import PolicyEvent, render_provenance_prefix
 

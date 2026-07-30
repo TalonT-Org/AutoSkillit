@@ -2333,7 +2333,9 @@ def test_combined_findings_survive_local_publication_for_every_gate_state(
     assert all(finding["body"] == render_review_finding_body(finding) for finding in findings)
     assert local_document["iteration"] == 2
     assert local_document["verdict"] == "changes_requested"
-    assert any(finding.get("opaque_standard") == {"retained": True} for finding in findings)
+    standard_finding = next(finding for finding in findings if finding["dimension"] == "bugs")
+    assert standard_finding["record_digest"]
+    assert standard_finding["snapshot"] == {"head_sha": "head", "base_sha": "base"}
 
 
 def test_github_receipt_shares_prederived_generation_and_is_published_last(

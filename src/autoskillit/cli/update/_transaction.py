@@ -28,6 +28,7 @@ from autoskillit.cli._install_contract import (
 from autoskillit.cli._install_info import detect_install, upgrade_command
 from autoskillit.cli._installed_plugins import InstalledPluginsFile
 from autoskillit.core import (
+    _AUTOSKILLIT_PLUGIN_KEY,
     Severity,
     _installed_plugins_path,
     build_maintenance_env,
@@ -48,7 +49,6 @@ __all__ = [
     "run_update_transaction",
 ]
 
-_PLUGIN_REF = "autoskillit@autoskillit-local"
 _MAINTENANCE_EXTRAS = {
     "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
     "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
@@ -271,7 +271,7 @@ def run_update_transaction(
         )
 
     registry = InstalledPluginsFile(_installed_plugins_path(resolved_home))
-    registration_snapshot = registry.contains(_PLUGIN_REF)
+    registration_snapshot = registry.contains(_AUTOSKILLIT_PLUGIN_KEY)
 
     progress.enter(UpdateTransactionPhase.PLUGIN_OBLIGATION_DERIVATION)
     require_registered_plugin = registration_snapshot
@@ -427,7 +427,7 @@ def run_update_transaction(
             verification = verify_installed_plugin_artifact(
                 InstallStateSpec(
                     home=resolved_home,
-                    plugin_ref=_PLUGIN_REF,
+                    plugin_ref=_AUTOSKILLIT_PLUGIN_KEY,
                     expected_version=expected_version,
                     require_registered_plugin=True,
                     require_shared_lease=True,

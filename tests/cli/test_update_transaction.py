@@ -29,6 +29,7 @@ from autoskillit.cli.update._transaction import (
     UpdateTransactionPhase,
     run_update_transaction,
 )
+from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY as _PLUGIN_REF
 from autoskillit.core import Severity
 from tests.fixtures.plugin_artifact_state import (
     PluginArtifactStateKind,
@@ -36,8 +37,6 @@ from tests.fixtures.plugin_artifact_state import (
 )
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
-
-_PLUGIN_REF = "autoskillit@autoskillit-local"
 
 
 def _info() -> InstallInfo:

@@ -185,7 +185,7 @@ def _install_harness(
         return SimpleNamespace(pid=101, pgid=101, returncode=returncode)
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/claude")
+    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: "/usr/bin/claude")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr(
         "autoskillit.workspace.DefaultSessionSkillManager",
@@ -395,7 +395,7 @@ def test_cook_missing_backend_binary_exits(
 ) -> None:
     backend = _Backend()
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(shutil, "which", lambda _name: None)
+    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: None)
 
     with pytest.raises(SystemExit, match="1"):
         cli.cook(backend=backend)
@@ -499,7 +499,7 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
         cli.cook(backend=_Backend())
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/claude")
+    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: "/usr/bin/claude")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
     monkeypatch.setattr(

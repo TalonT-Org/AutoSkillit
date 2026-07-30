@@ -98,12 +98,7 @@ class ExecutableLaunchBinding:
             if not candidate.is_absolute():
                 raise ValueError(f"{explicit_path_env} must be an absolute path")
         else:
-            try:
-                resolved = shutil.which(binary_name, path=environment.get("PATH"))
-            except TypeError:
-                # Test doubles and older compatibility shims may expose the
-                # historical one-argument shape.
-                resolved = shutil.which(binary_name)
+            resolved = shutil.which(binary_name, path=environment.get("PATH"))
             if resolved is None:
                 raise ValueError(f"'{binary_name}' not found in the effective PATH")
             candidate = Path(resolved)

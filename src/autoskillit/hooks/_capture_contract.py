@@ -100,6 +100,9 @@ class CaptureV2Fields:
     reference: str | None
     unavailable_reason: str | None
 
+    def __post_init__(self) -> None:
+        _validate_capture_fields(self)
+
     @property
     def schema_version(self) -> int:
         return CAPTURE_V2_SCHEMA_VERSION
@@ -187,6 +190,9 @@ class CaptureFailureV2:
     detail: str
     shell_returncode: int | None
     settlement_returncode: int | None
+
+    def __post_init__(self) -> None:
+        _validate_failure(self)
 
 
 def _plain_int(value: object, *, minimum: int = 0, maximum: int) -> bool:

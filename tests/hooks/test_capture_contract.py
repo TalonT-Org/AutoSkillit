@@ -128,17 +128,19 @@ def test_capture_parser_rejects_oversized_and_wrong_status_fields() -> None:
 
 
 @pytest.mark.parametrize(
-    "fields",
+    "changes",
     (
-        replace(_published_fields(), command_outcome_value=True),
-        replace(_published_fields(), shell_returncode=143),
-        replace(_published_fields(), reference="0" * 64),
-        replace(_published_fields(), unavailable_reason="UNEXPECTED"),
+        {"command_outcome_value": True},
+        {"shell_returncode": 143},
+        {"reference": "0" * 64},
+        {"unavailable_reason": "UNEXPECTED"},
     ),
 )
-def test_renderer_rejects_inconsistent_typed_fields(fields: CaptureV2Fields) -> None:
+def test_capture_fields_reject_inconsistent_construction(
+    changes: dict[str, object],
+) -> None:
     with pytest.raises(CaptureContractError):
-        render_capture_v2(_Renderable(fields))
+        replace(_published_fields(), **changes)
 
 
 def test_typed_failure_frame_is_bounded_distinct_and_strict() -> None:
@@ -157,4 +159,4 @@ def test_typed_failure_frame_is_bounded_distinct_and_strict() -> None:
     with pytest.raises(CaptureContractError):
         parse_capture_failure_v2(encoded.replace(b":{", b":{ ", 1))
     with pytest.raises(CaptureContractError):
-        render_capture_failure_v2(replace(failure, detail="x" * 241))
+        replace(failure, detail="x" * 241)

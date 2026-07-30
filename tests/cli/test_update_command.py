@@ -7,11 +7,24 @@ from pathlib import Path
 import pytest
 
 from autoskillit.cli.update._transaction import (
+    UpdateProcessStatus,
     UpdateTransactionOutcome,
     UpdateTransactionResult,
+    process_status_for_update_outcome,
 )
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+
+_EXIT_STATUS_CASES = (
+    (UpdateTransactionOutcome.COMPLETED, 0),
+    (UpdateTransactionOutcome.DECLINED, 10),
+    (UpdateTransactionOutcome.DEFERRED, 11),
+    (UpdateTransactionOutcome.FAILED_UPGRADE, 20),
+    (UpdateTransactionOutcome.FAILED_INSTALL, 21),
+    (UpdateTransactionOutcome.FAILED_POSTCONDITION, 22),
+    (UpdateTransactionOutcome.RECOVERY_REQUIRED, 23),
+    (UpdateTransactionOutcome.INDETERMINATE, 24),
+)
 
 
 class _TerminalGuard:
@@ -49,20 +62,38 @@ def test_update_subcommand_registered_in_help() -> None:
 
 
 @pytest.mark.parametrize(
-    "outcome",
-    [
-        outcome
-        for outcome in UpdateTransactionOutcome
-        if outcome is not UpdateTransactionOutcome.COMPLETED
-    ],
+    ("outcome", "expected_status"),
+    _EXIT_STATUS_CASES,
 )
-def test_explicit_noncompleted_outcomes_exit_nonzero_without_success_effects(
+def test_every_update_outcome_has_one_stable_public_status(
+    outcome: UpdateTransactionOutcome,
+    expected_status: int,
+) -> None:
+    status = process_status_for_update_outcome(outcome)
+
+    assert isinstance(status, UpdateProcessStatus)
+    assert int(status) == expected_status
+
+
+def test_noncompleted_update_statuses_are_distinct_and_nonzero() -> None:
+    noncompleted_statuses = [int(status) for _, status in _EXIT_STATUS_CASES[1:]]
+
+    assert all(noncompleted_statuses)
+    assert len(set(noncompleted_statuses)) == len(noncompleted_statuses)
+
+
+@pytest.mark.parametrize(
+    ("outcome", "expected_status"),
+    _EXIT_STATUS_CASES[1:],
+)
+def test_registered_explicit_update_exits_with_exact_status_without_success_effects(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     outcome: UpdateTransactionOutcome,
+    expected_status: int,
 ) -> None:
-    from autoskillit.cli.update._update import run_update_command
+    from autoskillit.cli.app import app
 
     state_file = tmp_path / ".autoskillit" / "update_check.json"
     state_file.parent.mkdir(parents=True)
@@ -85,11 +116,15 @@ def test_explicit_noncompleted_outcomes_exit_nonzero_without_success_effects(
         "autoskillit.cli.update._update.perform_restart",
         lambda: effects.append("restart"),
     )
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update.Path.home",
+        lambda: tmp_path,
+    )
 
     with pytest.raises(SystemExit) as exc_info:
-        run_update_command(home=tmp_path)
+        app(["update"])
 
-    assert exc_info.value.code != 0
+    assert exc_info.value.code == expected_status
     assert effects == []
     assert state_file.read_text(encoding="utf-8") == original
     assert "updated successfully" not in capsys.readouterr().out

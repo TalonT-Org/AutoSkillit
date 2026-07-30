@@ -215,9 +215,19 @@ def test_install_invalidates_fetch_cache(monkeypatch: pytest.MonkeyPatch, tmp_pa
     monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
     monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.setattr("shutil.which", lambda *_args, **_kwargs: "/usr/bin/claude")
+
+    from autoskillit import __version__
+
+    expected_target = _app_mod._installed_plugin_root(__version__)
+
+    def _fake_claude_run(argv: tuple[str, ...], **_kwargs: object) -> object:
+        if argv[:3] == ("claude", "plugin", "install"):
+            expected_target.mkdir(parents=True)
+        return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
     monkeypatch.setattr(
         "subprocess.run",
-        lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
+        _fake_claude_run,
     )
     monkeypatch.setattr("autoskillit.cli._marketplace.evict_direct_mcp_entry", lambda _: False)
     monkeypatch.setattr("autoskillit.cli._hooks._evict_stale_autoskillit_hooks", lambda _: None)

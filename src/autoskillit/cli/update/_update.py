@@ -8,7 +8,8 @@ from pathlib import Path
 from autoskillit.cli._restart import perform_restart
 from autoskillit.cli.ui._terminal import terminal_guard
 from autoskillit.cli.update._transaction import (
-    UpdateTransactionOutcome,
+    UpdateProcessStatus,
+    process_status_for_update_outcome,
     run_update_transaction,
 )
 
@@ -31,14 +32,15 @@ def run_update_command(home: Path | None = None) -> None:
             process_runner=subprocess.run,
         )
 
-    if result.outcome is not UpdateTransactionOutcome.COMPLETED:
+    process_status = process_status_for_update_outcome(result.outcome)
+    if process_status is not UpdateProcessStatus.SUCCESS:
         for finding in result.findings:
             print(finding, flush=True)
         print(
             f"AutoSkillit update did not complete ({result.outcome.value}).",
             flush=True,
         )
-        raise SystemExit(1)
+        raise SystemExit(int(process_status))
 
     state = _read_dismiss_state(_home)
     state.pop("update_prompt", None)

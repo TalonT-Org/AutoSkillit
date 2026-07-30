@@ -72,15 +72,24 @@ def _configure_transaction(
         "_evict_stale_autoskillit_hooks",
         lambda _path: None,
     )
-    monkeypatch.setattr(
-        _marketplace,
-        "_run_claude_admin",
-        lambda argv, **_kwargs: subprocess.CompletedProcess(
+
+    def successful_claude_admin(argv, **_kwargs):
+        if tuple(argv)[:3] == ("claude", "plugin", "install"):
+            target = _marketplace._installed_plugin_root(_VERSION)
+            assert _marketplace._InstallSnapshot._shape(target) == "missing"
+            target.mkdir(parents=True)
+            (target / "fresh.txt").write_text("fresh", encoding="utf-8")
+        return subprocess.CompletedProcess(
             argv,
             0,
             stdout="",
             stderr="",
-        ),
+        )
+
+    monkeypatch.setattr(
+        _marketplace,
+        "_run_claude_admin",
+        successful_claude_admin,
     )
     monkeypatch.setattr(update_checks, "invalidate_fetch_cache", lambda _home: None)
     identity = SimpleNamespace(incarnation_id="0" * 32)
@@ -449,6 +458,108 @@ def test_child_failure_restores_every_staged_shared_surface(
         assert path.read_text() == content
 
 
+def test_same_version_target_is_quarantined_and_restored_after_child_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    target = marketplace._installed_plugin_root(_VERSION)
+    target.mkdir(parents=True)
+    (target / "stale.txt").write_text("staged prestate", encoding="utf-8")
+    saw_fresh_install_surface = False
+
+    def fail_plugin_install(argv, **_kwargs):
+        nonlocal saw_fresh_install_surface
+        if tuple(argv)[:3] == ("claude", "plugin", "install"):
+            assert marketplace._InstallSnapshot._shape(target) == "missing"
+            saw_fresh_install_surface = True
+            target.mkdir(parents=True)
+            (target / "fresh.txt").write_text("failed install", encoding="utf-8")
+            return subprocess.CompletedProcess(argv, 7, stdout="", stderr="boom")
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(marketplace, "_run_claude_admin", fail_plugin_install)
+
+    result = marketplace.install(
+        request=_maintenance_request(),
+        child_env=_sealed_env(),
+        child_cwd=neutral_cwd,
+    )
+
+    assert saw_fresh_install_surface
+    assert result.outcome is InstallOutcome.FAILED
+    assert result.failure_kind is InstallFailureKind.CHILD
+    assert result.findings[-1] == "compensation completed"
+    assert (target / "stale.txt").read_text(encoding="utf-8") == "staged prestate"
+    assert {entry.name for entry in target.iterdir()} == {"stale.txt"}
+
+
+def test_failed_first_install_removes_new_lease_sidecar(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    from autoskillit.cli import _plugin_artifact
+
+    target = marketplace._installed_plugin_root(_VERSION)
+    lease_path = _plugin_artifact.installed_artifact_lock_path(target)
+    assert marketplace._InstallSnapshot._shape(lease_path) == "missing"
+
+    def fail_first_child(argv, **_kwargs):
+        assert lease_path.is_file()
+        return subprocess.CompletedProcess(argv, 7, stdout="", stderr="boom")
+
+    monkeypatch.setattr(marketplace, "_run_claude_admin", fail_first_child)
+
+    result = marketplace.install(
+        request=_maintenance_request(),
+        child_env=_sealed_env(),
+        child_cwd=neutral_cwd,
+    )
+
+    assert result.outcome is InstallOutcome.FAILED
+    assert result.failure_kind is InstallFailureKind.CHILD
+    assert result.findings[-1] == "compensation completed"
+    assert marketplace._InstallSnapshot._shape(lease_path) == "missing"
+
+
+def test_failed_install_restores_existing_lease_sidecar_in_place(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    from autoskillit.cli import _plugin_artifact
+
+    target = marketplace._installed_plugin_root(_VERSION)
+    lease_path = _plugin_artifact.installed_artifact_lock_path(target)
+    lease_path.parent.mkdir(parents=True)
+    lease_path.write_text("staged lease prestate", encoding="utf-8")
+    lease_path.chmod(0o640)
+    staged_inode = lease_path.lstat().st_ino
+
+    def fail_first_child(argv, **_kwargs):
+        acquired_stat = lease_path.lstat()
+        assert acquired_stat.st_ino == staged_inode
+        assert acquired_stat.st_mode & 0o777 == 0o600
+        return subprocess.CompletedProcess(argv, 7, stdout="", stderr="boom")
+
+    monkeypatch.setattr(marketplace, "_run_claude_admin", fail_first_child)
+
+    result = marketplace.install(
+        request=_maintenance_request(),
+        child_env=_sealed_env(),
+        child_cwd=neutral_cwd,
+    )
+
+    restored_stat = lease_path.lstat()
+    assert result.outcome is InstallOutcome.FAILED
+    assert result.failure_kind is InstallFailureKind.CHILD
+    assert result.findings[-1] == "compensation completed"
+    assert restored_stat.st_ino == staged_inode
+    assert restored_stat.st_mode & 0o777 == 0o640
+    assert lease_path.read_text(encoding="utf-8") == "staged lease prestate"
+
+
 def test_snapshot_restores_directory_and_symlink_shapes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -566,6 +677,10 @@ def test_maintenance_uses_only_passed_env_and_non_project_cwd(
 
     def capture(argv, *, env, cwd):
         calls.append((tuple(argv), dict(env), cwd))
+        if tuple(argv)[:3] == ("claude", "plugin", "install"):
+            target = marketplace._installed_plugin_root(_VERSION)
+            assert marketplace._InstallSnapshot._shape(target) == "missing"
+            target.mkdir(parents=True)
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
     monkeypatch.setattr(marketplace, "_run_claude_admin", capture)
@@ -589,6 +704,8 @@ def test_direct_mode_snapshots_caller_env_and_cwd(
     marketplace, _neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
     from unittest.mock import MagicMock
 
+    from autoskillit import __version__ as installed_version
+
     caller_cwd = tmp_path / "caller"
     changed_cwd = tmp_path / "changed"
     caller_cwd.mkdir()
@@ -608,6 +725,10 @@ def test_direct_mode_snapshots_caller_env_and_cwd(
         calls.append((dict(env), cwd))
         if len(calls) == 1:
             os.environ["DIRECT_SNAPSHOT"] = "changed"
+        if tuple(argv)[:3] == ("claude", "plugin", "install"):
+            target = marketplace._installed_plugin_root(installed_version)
+            assert marketplace._InstallSnapshot._shape(target) == "missing"
+            target.mkdir(parents=True)
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
     monkeypatch.setattr(marketplace, "_run_claude_admin", capture)

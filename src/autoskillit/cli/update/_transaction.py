@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import IntEnum, StrEnum
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
@@ -39,9 +39,11 @@ from autoskillit.workspace import InstallStateSpec, verify_installed_plugin_arti
 __all__ = [
     "IRREVERSIBLE_PIVOT_PHASE",
     "UPDATE_TRANSACTION_PHASES",
+    "UpdateProcessStatus",
     "UpdateTransactionOutcome",
     "UpdateTransactionPhase",
     "UpdateTransactionResult",
+    "process_status_for_update_outcome",
     "run_update_transaction",
 ]
 
@@ -88,6 +90,45 @@ class UpdateTransactionOutcome(StrEnum):
     DEFERRED = "deferred"
     RECOVERY_REQUIRED = "recovery-required"
     INDETERMINATE = "indeterminate"
+
+
+class UpdateProcessStatus(IntEnum):
+    """Stable public statuses for the explicit update process boundary."""
+
+    SUCCESS = int(InstallProcessStatus.SUCCESS)
+    DECLINED = int(InstallProcessStatus.DECLINED)
+    DEFERRED = int(InstallProcessStatus.DEFERRED)
+    FAILED_UPGRADE = int(InstallProcessStatus.FAILED_PREFLIGHT)
+    FAILED_INSTALL = int(InstallProcessStatus.FAILED_CHILD)
+    FAILED_POSTCONDITION = int(InstallProcessStatus.FAILED_POSTCONDITION)
+    RECOVERY_REQUIRED = int(InstallProcessStatus.RECOVERY_REQUIRED)
+    INDETERMINATE = int(InstallProcessStatus.INDETERMINATE)
+
+
+_PROCESS_STATUS_BY_OUTCOME: Mapping[UpdateTransactionOutcome, UpdateProcessStatus] = (
+    MappingProxyType(
+        {
+            UpdateTransactionOutcome.COMPLETED: UpdateProcessStatus.SUCCESS,
+            UpdateTransactionOutcome.DECLINED: UpdateProcessStatus.DECLINED,
+            UpdateTransactionOutcome.DEFERRED: UpdateProcessStatus.DEFERRED,
+            UpdateTransactionOutcome.FAILED_UPGRADE: UpdateProcessStatus.FAILED_UPGRADE,
+            UpdateTransactionOutcome.FAILED_INSTALL: UpdateProcessStatus.FAILED_INSTALL,
+            UpdateTransactionOutcome.FAILED_POSTCONDITION: (
+                UpdateProcessStatus.FAILED_POSTCONDITION
+            ),
+            UpdateTransactionOutcome.RECOVERY_REQUIRED: (UpdateProcessStatus.RECOVERY_REQUIRED),
+            UpdateTransactionOutcome.INDETERMINATE: UpdateProcessStatus.INDETERMINATE,
+        }
+    )
+)
+
+
+def process_status_for_update_outcome(
+    outcome: UpdateTransactionOutcome,
+) -> UpdateProcessStatus:
+    """Return the stable explicit-update process status for ``outcome``."""
+
+    return _PROCESS_STATUS_BY_OUTCOME[outcome]
 
 
 @dataclass(frozen=True, slots=True)

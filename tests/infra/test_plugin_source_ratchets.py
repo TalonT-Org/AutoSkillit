@@ -54,23 +54,23 @@ DESTINATION_RESOLVE_ALLOWLIST: dict[str, str] = {
 }
 
 PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
-    ("cli/_marketplace.py", "_remove", "path.unlink"): (
+    ("cli/_install_snapshot/_snapshot.py", "_remove", "path.unlink"): (
         1,
         "Transaction restoration removes the failed replacement before restoring its staged copy.",
     ),
-    ("cli/_marketplace.py", "_remove", "shutil.rmtree"): (
+    ("cli/_install_snapshot/_snapshot.py", "_remove", "shutil.rmtree"): (
         1,
         "Transaction restoration removes a failed replacement directory under install ownership.",
     ),
-    ("cli/_marketplace.py", "commit", "shutil.rmtree"): (
+    ("cli/_install_snapshot/_snapshot.py", "commit", "shutil.rmtree"): (
         1,
         "The transaction-owned backup is removed only after the installed replacement commits.",
     ),
-    ("cli/_marketplace.py", "rollback", "shutil.rmtree"): (
+    ("cli/_install_snapshot/_snapshot.py", "rollback", "shutil.rmtree"): (
         1,
         "Rollback removes its private staging directory after restoring every covered surface.",
     ),
-    ("cli/_marketplace.py", "stage", "shutil.rmtree"): (
+    ("cli/_install_snapshot/_snapshot.py", "stage", "shutil.rmtree"): (
         1,
         "A failed snapshot construction removes only its private transaction staging directory.",
     ),
@@ -291,6 +291,7 @@ _PLUGIN_LIFECYCLE_SYMBOLS = frozenset(
     {
         "ArtifactLease",
         "InstalledPluginArtifactRetirementOwner",
+        "_InstallSnapshot",
         "PluginArtifactIdentity",
         "PluginArtifactKind",
         "PluginArtifactRetirementOwner",

@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import filecmp
 import importlib.metadata
 import json
 import os
 import shutil
-import stat
 import subprocess
-import uuid
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
@@ -30,8 +27,15 @@ from autoskillit.cli._install_contract import (
     InstallRequest,
     InstallResult,
 )
+from autoskillit.cli._install_snapshot import (
+    _installed_plugin_root,
+    _InstallSnapshot,
+    _plugin_cache_dir,
+)
+from autoskillit.cli._install_snapshot import (
+    _installed_plugins_json_path as _installed_plugins_json_path,
+)
 from autoskillit.core import (
-    DIRECT_INSTALL_CACHE_SUBDIR,
     SkillExecutionRole,
     SkillSource,
     atomic_write,
@@ -60,20 +64,6 @@ class _InstallFailed(Exception):
     def __init__(self, kind: InstallFailureKind, message: str) -> None:
         self.kind = kind
         super().__init__(message)
-
-
-def _plugin_cache_dir() -> Path:
-    return (
-        Path.home() / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / "autoskillit"
-    )
-
-
-def _installed_plugin_root(version: str | None = None) -> Path:
-    if version is None:
-        from autoskillit.cli._plugin_artifact import current_installed_plugin_root
-
-        return current_installed_plugin_root()
-    return _plugin_cache_dir() / version
 
 
 def _clear_plugin_cache(
@@ -249,261 +239,8 @@ def _ensure_workspace_ready(*, cwd: Path | None = None) -> None:
             print(f"Warning: migration upgrade() failed (non-fatal): {exc}")
 
 
-class _InstallSnapshot:
-    """Staged filesystem image of every shared surface mutated by install."""
-
-    def __init__(
-        self,
-        *,
-        target_root: Path | None = None,
-        settings_path: Path | None = None,
-        workspace_cwd: Path | None = None,
-    ) -> None:
-        from autoskillit.cli._plugin_artifact import installed_artifact_manifest_path
-        from autoskillit.cli.update._update_checks_fetch import _fetch_cache_path
-
-        home = Path.home()
-        self._target_root = target_root or _installed_plugin_root()
-        self._artifact_manifest_path = installed_artifact_manifest_path(self._target_root)
-        settings = settings_path or home / ".claude" / "settings.json"
-        paths = [
-            home / ".autoskillit" / "marketplace",
-            home / ".claude" / "plugins" / "known_marketplaces.json",
-            _installed_plugins_json_path(),
-            self._target_root,
-            self._artifact_manifest_path,
-            home / ".autoskillit" / "retiring_cache.json",
-            _user_claude_json_path(),
-            settings,
-            _fetch_cache_path(home),
-        ]
-        if workspace_cwd is not None:
-            project_state = Path(workspace_cwd) / ".autoskillit"
-            paths.extend(
-                (
-                    project_state / ".gitignore",
-                    project_state / "temp" / ".gitignore",
-                )
-            )
-            if (project_state / "scripts").exists():
-                paths.extend((project_state / "scripts", project_state / "recipes"))
-        self._paths = tuple(dict.fromkeys(paths))
-        self._stage_dir = home / ".autoskillit" / (f".install-transaction-{uuid.uuid4().hex}")
-        self._entries: list[tuple[Path, str, Path | None]] = []
-        self._staged = False
-        self._committed = False
-
-    @staticmethod
-    def _shape(path: Path) -> str:
-        try:
-            mode = path.lstat().st_mode
-        except FileNotFoundError:
-            return "missing"
-        if stat.S_ISLNK(mode):
-            return "symlink"
-        if stat.S_ISREG(mode):
-            return "file"
-        if stat.S_ISDIR(mode):
-            return "directory"
-        raise OSError(f"unsupported install snapshot artifact shape at {path}")
-
-    @staticmethod
-    def _remove(path: Path) -> None:
-        shape = _InstallSnapshot._shape(path)
-        if shape == "missing":
-            return
-        if shape == "directory":
-            shutil.rmtree(path)
-        else:
-            path.unlink()
-
-    @classmethod
-    def _restore_entry(
-        cls,
-        path: Path,
-        shape: str,
-        backup: Path | None,
-    ) -> None:
-        if shape != "missing":
-            if backup is None:
-                raise OSError(f"staged backup is missing for {path}")
-            backup_shape = cls._shape(backup)
-            if backup_shape != shape:
-                raise OSError(
-                    f"staged backup for {path} has shape {backup_shape}, expected {shape}"
-                )
-        cls._remove(path)
-        if shape == "missing":
-            return
-        assert backup is not None
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if shape == "directory":
-            shutil.copytree(backup, path, symlinks=True)
-        elif shape == "symlink":
-            path.symlink_to(os.readlink(backup))
-        else:
-            shutil.copy2(backup, path, follow_symlinks=False)
-        restored_shape = cls._shape(path)
-        if restored_shape != shape:
-            raise OSError(f"restored {path} has shape {restored_shape}, expected {shape}")
-        if not cls._matches_staged_state(path, shape, backup):
-            raise OSError(f"restored {path} does not match its staged prestate")
-
-    @classmethod
-    def _matches_staged_state(
-        cls,
-        path: Path,
-        shape: str,
-        backup: Path | None,
-    ) -> bool:
-        if shape == "missing":
-            return cls._shape(path) == "missing"
-        if backup is None or cls._shape(path) != shape or cls._shape(backup) != shape:
-            return False
-        if stat.S_IMODE(path.lstat().st_mode) != stat.S_IMODE(backup.lstat().st_mode):
-            return False
-        if shape == "symlink":
-            return os.readlink(path) == os.readlink(backup)
-        if shape == "file":
-            return filecmp.cmp(path, backup, shallow=False)
-
-        current_entries = {entry.relative_to(path) for entry in path.rglob("*")}
-        backup_entries = {entry.relative_to(backup) for entry in backup.rglob("*")}
-        if current_entries != backup_entries:
-            return False
-        for relative in current_entries:
-            current_entry = path / relative
-            backup_entry = backup / relative
-            entry_shape = cls._shape(current_entry)
-            if entry_shape != cls._shape(backup_entry):
-                return False
-            if stat.S_IMODE(current_entry.lstat().st_mode) != stat.S_IMODE(
-                backup_entry.lstat().st_mode
-            ):
-                return False
-            if entry_shape == "symlink" and os.readlink(current_entry) != os.readlink(
-                backup_entry
-            ):
-                return False
-            if entry_shape == "file" and not filecmp.cmp(
-                current_entry,
-                backup_entry,
-                shallow=False,
-            ):
-                return False
-        return True
-
-    def stage(self) -> None:
-        """Copy every covered surface before reconciliation or mutation."""
-        if self._staged:
-            return
-        self._stage_dir.mkdir(parents=True, mode=0o700)
-        try:
-            for index, path in enumerate(self._paths):
-                shape = self._shape(path)
-                backup: Path | None = None
-                if shape != "missing":
-                    backup = self._stage_dir / str(index)
-                    if shape == "directory":
-                        shutil.copytree(path, backup, symlinks=True)
-                    elif shape == "symlink":
-                        backup.symlink_to(os.readlink(path))
-                    else:
-                        shutil.copy2(path, backup, follow_symlinks=False)
-                self._entries.append((path, shape, backup))
-            self._staged = True
-        except BaseException:
-            logger.warning(
-                "install_snapshot_stage_failed",
-                stage_dir=str(self._stage_dir),
-                exc_info=True,
-            )
-            shutil.rmtree(self._stage_dir, ignore_errors=True)
-            self._entries.clear()
-            raise
-
-    def track_retirement(self, _record_id: str) -> None:
-        """Retirement state is covered by the exact staged cache file."""
-
-    def rollback(self) -> tuple[str, ...]:
-        """Best-effort exact restoration; return every rollback diagnostic."""
-        if not self._staged or self._committed:
-            return ()
-        diagnostics: list[str] = []
-        for path, shape, backup in reversed(self._entries):
-            try:
-                self._restore_entry(path, shape, backup)
-            except BaseException as exc:
-                logger.warning(
-                    "install_snapshot_restore_failed",
-                    path=str(path),
-                    exc_info=True,
-                )
-                diagnostics.append(f"rollback failed for {path}: {exc}")
-                try:
-                    residual_shape = self._shape(path)
-                except BaseException as residual_exc:
-                    logger.warning(
-                        "install_snapshot_residual_shape_inspection_failed",
-                        path=str(path),
-                        exc_info=True,
-                    )
-                    residual_shape = f"unreadable ({residual_exc})"
-                try:
-                    residual_matches = self._matches_staged_state(path, shape, backup)
-                except BaseException:
-                    logger.warning(
-                        "install_snapshot_residual_comparison_failed",
-                        path=str(path),
-                        exc_info=True,
-                    )
-                    residual_matches = False
-                comparison = (
-                    "matches staged prestate"
-                    if residual_matches
-                    else "differs from staged prestate"
-                )
-                diagnostics.append(
-                    f"residual state for {path}: expected {shape}, "
-                    f"observed {residual_shape}; {comparison}"
-                )
-        if diagnostics:
-            diagnostics.append(f"recovery evidence preserved at {self._stage_dir}")
-            return tuple(diagnostics)
-        try:
-            shutil.rmtree(self._stage_dir)
-        except FileNotFoundError:
-            pass
-        except BaseException as exc:
-            logger.warning(
-                "install_snapshot_cleanup_failed",
-                stage_dir=str(self._stage_dir),
-                exc_info=True,
-            )
-            diagnostics.append(f"rollback staging cleanup failed: {exc}")
-            if self._shape(self._stage_dir) != "missing":
-                diagnostics.append(f"recovery evidence preserved at {self._stage_dir}")
-            return tuple(diagnostics)
-        self._entries.clear()
-        self._staged = False
-        return tuple(diagnostics)
-
-    def commit(self) -> None:
-        """Discard staged state only after every required postcondition passes."""
-        if not self._staged:
-            raise RuntimeError("install snapshot was not staged")
-        shutil.rmtree(self._stage_dir)
-        self._committed = True
-        self._entries.clear()
-        self._staged = False
-
-
 def _marketplace_manifest_path() -> Path:
     return Path.home() / ".autoskillit" / "marketplace" / ".claude-plugin" / "marketplace.json"
-
-
-def _installed_plugins_json_path() -> Path:
-    return Path.home() / ".claude" / "plugins" / "installed_plugins.json"
 
 
 def _settings_path(scope: str, cwd: Path) -> Path:
@@ -574,8 +311,10 @@ def _typed_result(
 def _compensated_result(
     snapshot: _InstallSnapshot,
     primary: _InstallFailed,
+    *,
+    owned_lease_fd: int | None = None,
 ) -> InstallResult:
-    rollback_findings = snapshot.rollback()
+    rollback_findings = snapshot.rollback(owned_lease_fd=owned_lease_fd)
     primary_finding = f"{primary.kind.value} failure: {primary}"
     if rollback_findings:
         return _typed_result(
@@ -776,37 +515,47 @@ def install(
     )
 
     settings_path = _settings_path(effective_scope, operation_cwd)
+    lease_path = installed_artifact_lock_path(target_root)
     try:
         with _InstallLock():
+            snapshot = _InstallSnapshot(
+                target_root=target_root,
+                settings_path=settings_path,
+                workspace_cwd=(
+                    operation_cwd if install_request.mode is InstallMode.DIRECT else None
+                ),
+            )
+            try:
+                snapshot.stage()
+            except (OSError, RuntimeError, ValueError) as exc:
+                return _typed_result(
+                    InstallOutcome.FAILED,
+                    failure_kind=InstallFailureKind.PREFLIGHT,
+                    findings=(f"preflight snapshot failure: {exc}",),
+                )
+
             try:
                 target_writer = ArtifactLease.acquire_exclusive(
-                    installed_artifact_lock_path(target_root),
+                    lease_path,
                     blocking=False,
                 )
             except ArtifactLeaseContention:
+                snapshot.discard()
                 return _typed_result(
                     InstallOutcome.DEFERRED,
                     findings=(
                         "Installed plugin is in use by an active session; retry after it exits",
                     ),
                 )
-            with target_writer:
-                snapshot = _InstallSnapshot(
-                    target_root=target_root,
-                    settings_path=settings_path,
-                    workspace_cwd=(
-                        operation_cwd if install_request.mode is InstallMode.DIRECT else None
+            except (OSError, RuntimeError, ValueError) as exc:
+                return _compensated_result(
+                    snapshot,
+                    _InstallFailed(
+                        InstallFailureKind.PREFLIGHT,
+                        f"Could not acquire installed plugin lease: {exc}",
                     ),
                 )
-                try:
-                    snapshot.stage()
-                except (OSError, RuntimeError, ValueError) as exc:
-                    return _typed_result(
-                        InstallOutcome.FAILED,
-                        failure_kind=InstallFailureKind.PREFLIGHT,
-                        findings=(f"preflight snapshot failure: {exc}",),
-                    )
-
+            with target_writer:
                 try:
                     for repaired in reconcile_install_artifacts():
                         print(f"Repaired legacy install artifact: ~/{repaired}")
@@ -845,6 +594,14 @@ def install(
                             f"Failed to register marketplace: {result.stderr.strip()}",
                         )
 
+                    _InstallSnapshot._remove(target_root)
+                    if _InstallSnapshot._shape(target_root) != "missing":
+                        raise _InstallFailed(
+                            InstallFailureKind.POSTCONDITION,
+                            "Could not quarantine the pre-existing expected-version "
+                            f"plugin target before installation: {target_root}",
+                        )
+
                     try:
                         result = _run_claude_admin(
                             (
@@ -867,6 +624,12 @@ def install(
                         raise _InstallFailed(
                             InstallFailureKind.CHILD,
                             f"Failed to install plugin: {result.stderr.strip()}",
+                        )
+                    if _InstallSnapshot._shape(target_root) != "directory":
+                        raise _InstallFailed(
+                            InstallFailureKind.POSTCONDITION,
+                            "Claude plugin install did not freshly materialize the "
+                            f"expected-version target: {target_root}",
                         )
 
                     try:
@@ -918,7 +681,11 @@ def install(
                     verified_identity = verification.identity.incarnation_id
                     snapshot.commit()
                 except _InstallFailed as exc:
-                    return _compensated_result(snapshot, exc)
+                    return _compensated_result(
+                        snapshot,
+                        exc,
+                        owned_lease_fd=target_writer.fileno(),
+                    )
                 except Exception as exc:
                     logger.warning(
                         "install_transaction_unexpected_failure",
@@ -931,6 +698,7 @@ def install(
                             InstallFailureKind.POSTCONDITION,
                             f"Install transaction failed: {exc}",
                         ),
+                        owned_lease_fd=target_writer.fileno(),
                     )
     except (OSError, RuntimeError, ValueError) as exc:
         return _typed_result(

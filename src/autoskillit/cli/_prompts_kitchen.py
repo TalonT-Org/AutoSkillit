@@ -215,26 +215,35 @@ the reason is an infrastructure code — any of:
   fleet_hard_refusal_headless, fleet_cleanup_failed,
   fleet_resume_session_missing
 
-These are TRANSIENT infrastructure failures (L3 session disconnections,
-process crashes, timeouts). They are NOT logic errors in the dispatched work.
+These are infrastructure failures, not proof that the dispatched work had no
+effects. Read effect_provenance.retry_disposition before choosing recovery:
 
-The correct and complete recovery action is to retry the dispatch fresh for
-the same issue. No reset or cleanup is needed — infrastructure already
-cleaned up.
+- [fresh-only-on-proof] fresh_dispatch_allowed: every retry-relevant effect is
+  proven not started or authoritatively compensated. Retry fresh with a new
+  dispatch_name and the same ingredients.
+- [resume-confirmed-effect] resume_by_identity: an effect or commit is
+  confirmed. Preserve dispatch_id and dispatched_session_id and resume that
+  identity; never create a fresh dispatch.
+- [reconcile-ambiguity] reconcile_required: an effect started without
+  authoritative confirmation. Reconcile the recorded operation/downstream
+  identities. Do not redispatch the ambiguous effect and do not create a fresh
+  dispatch.
+- [missing-provenance-fails-closed] Missing effect_provenance never authorizes a
+  fresh dispatch.
+
+[cleanup-is-orthogonal] Local process cleanup, label cleanup, or compensation
+claims are orthogonal evidence. [remote-effects-survive-cleanup] They authorize
+a fresh dispatch only when retry_disposition explicitly equals
+fresh_dispatch_allowed; an empty local survivor set does not prove remote
+effects were reversed.
 
 Action:
-- Retry the dispatch fresh with a new dispatch_name and the same ingredients.
-  Do not pass resume_session_id (there is no session to resume). Do not halt
-  or mark the issue as failed.
-- Example: if dispatch returns fleet_l3_timeout for issue #42, immediately
-  call dispatch_food_truck with dispatch_name="issue-42-retry" and the same
-  ingredients.
-- If fleet_claim_guard blocks the fresh dispatch (because an in-progress label
-  remains from the failed session), first attempt to resume using the prior
-  dispatch's dispatched_session_id as resume_session_id and prior dispatch_id
-  as prior_dispatch_id. If the prior session is truly unrecoverable,
-  THEN call {mcp_prefix}reset_dispatch(dispatch_id=<prior_dispatch_id>) and
-  re-dispatch fresh with a new dispatch_name.
+- Follow the explicit retry_disposition. For identity-based recovery, pass the
+  prior dispatched_session_id as resume_session_id and dispatch_id as
+  prior_dispatch_id.
+- Call {mcp_prefix}reset_dispatch(dispatch_id=<prior_dispatch_id>) only as an
+  explicit reconciliation step. After reset, retry fresh only when the returned
+  provenance explicitly authorizes fresh_dispatch_allowed.
 - If the retry also fails with an infrastructure code: report to the human
   operator. Do not retry more than once.
 

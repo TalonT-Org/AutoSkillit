@@ -515,7 +515,7 @@ class TestHeadlessCLIPriorFailure:
         state_file.write_text(
             json.dumps(
                 {
-                    "schema_version": 8,
+                    "schema_version": 9,
                     "campaign_id": "cid",
                     "campaign_name": "test",
                     "manifest_path": "/m.yaml",

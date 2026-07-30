@@ -93,6 +93,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_type_backend",  # core/types/_type_backend.py: CLAUDE_CODE_CAPABILITIES constant
         "_prompts",  # cli/_prompts.py: immutable startup recovery spec and rendering
         "tools_kitchen",  # request-scoped open-kitchen transition ContextVar
+        "tools_fleet_dispatch",  # request-scoped fleet provenance ContextVars
         # Released reducer definitions are immutable registry values keyed by their own
         # protocol version so the selector cannot drift from the registered definition.
         "context_admission",
@@ -1048,12 +1049,15 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "filter cascade",
     ),
     "_api.py": (
-        1200,
+        1550,
         "REQ-CNST-010-E6: fleet dispatch engine — evaluate_skip_when inlined here to avoid "
         "a 16th fleet/ module (sub-package file ceiling); keeps dispatch-related helpers "
         "co-located with the execution engine that calls them. Bumped to 1200 by the "
         "fleet-resume-precondition-chokepoint plan: prepare_resume chokepoint, "
-        "closure-scoped _spawn_error, and _write_pid fail-closed contract add ~33 lines",
+        "closure-scoped _spawn_error, and _write_pid fail-closed contract add ~33 lines. "
+        "Bumped to 1550 for #4417's per-effect dispatch provenance checkpoints and "
+        "post-start crash persistence; those checkpoints must remain adjacent to the "
+        "side effects whose ambiguity they record.",
     ),
     "server/_recipe_delivery.py": (
         1450,

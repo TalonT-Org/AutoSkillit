@@ -631,6 +631,7 @@ from .types import PluginRetirementCoordinator as PluginRetirementCoordinator
 from .types import PreflightEvidence as PreflightEvidence
 from .types import PreflightKind as PreflightKind
 from .types import PrepareBatchEvent as PrepareBatchEvent
+from .types import ProcessCleanupResult as ProcessCleanupResult
 from .types import ProcessedEventRecord as ProcessedEventRecord
 from .types import ProcessStaleError as ProcessStaleError
 from .types import ProducerCoverageDef as ProducerCoverageDef

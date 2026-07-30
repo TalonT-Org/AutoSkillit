@@ -77,11 +77,11 @@ class TestCrashPathDiagnosticPersistence:
 
         state = read_state(campaign_state_path)
         assert state is not None
-        refused = [d for d in state.dispatches if d.status.value == "refused"]
-        assert len(refused) == 1
-        assert "RuntimeError" in refused[0].diagnostic_message
-        assert "kaboom: database connection lost" in refused[0].diagnostic_message
-        assert refused[0].reason == "fleet_l3_startup_or_crash"
+        failed = [d for d in state.dispatches if d.status.value == "failure"]
+        assert len(failed) == 1
+        assert "RuntimeError" in failed[0].diagnostic_message
+        assert "kaboom: database connection lost" in failed[0].diagnostic_message
+        assert failed[0].reason == "fleet_l3_startup_or_crash"
 
     @pytest.mark.anyio
     async def test_crash_logs_structured_fields(self, tool_ctx, monkeypatch) -> None:

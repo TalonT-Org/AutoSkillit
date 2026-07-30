@@ -368,18 +368,32 @@ and the reason is an infrastructure code — any of:
   fleet_hard_refusal_headless, fleet_cleanup_failed,
   fleet_resume_session_missing
 
-These are TRANSIENT infrastructure failures, not logic errors. Do not halt
-the campaign and do not mark the dispatch as permanently failed. No reset or
-cleanup is needed — infrastructure already cleaned up.
+These are infrastructure failures, not proof that no effect occurred. Read
+effect_provenance.retry_disposition before choosing recovery:
+
+- [fresh-only-on-proof] fresh_dispatch_allowed: retry fresh with a new
+  dispatch_name only because every retry-relevant effect is proven not started
+  or authoritatively compensated.
+- [resume-confirmed-effect] resume_by_identity: preserve dispatch_id and
+  dispatched_session_id and resume that exact dispatch; never create a fresh
+  dispatch.
+- [reconcile-ambiguity] reconcile_required: reconcile the recorded
+  operation/downstream identities; do not redispatch an ambiguous effect and do
+  not create a fresh dispatch.
+- [missing-provenance-fails-closed] Missing effect_provenance never authorizes a
+  fresh dispatch.
+
+[cleanup-is-orthogonal] Local process cleanup, label cleanup, and compensation
+are orthogonal evidence. [remote-effects-survive-cleanup] They do not erase
+committed or remote effect history, and authorize a fresh dispatch only when
+retry_disposition explicitly equals fresh_dispatch_allowed.
 
 Action:
-- Retry the dispatch fresh for the same issue with a new dispatch_name and
-  the same ingredients. Do not pass resume_session_id.
-- Example: if dispatch returns fleet_l3_timeout, immediately retry with
-  dispatch_name="<original>-retry" and the same ingredients.
-- If fleet_claim_guard blocks, attempt resume with the prior dispatch's
-  dispatched_session_id first. Only call {mcp_prefix}reset_dispatch as a
-  last resort if the prior session is unrecoverable.
+- Follow retry_disposition. For resume_by_identity, pass the prior
+  dispatched_session_id and dispatch_id as resume_session_id and
+  prior_dispatch_id.
+- Use {mcp_prefix}reset_dispatch only to reconcile a prior identity. Retry fresh
+  after reset only when the resulting provenance says fresh_dispatch_allowed.
 - If the retry also fails with an infrastructure code: mark dispatch failed
   and apply continue_on_failure={campaign_recipe.continue_on_failure} policy.
 - Emit %%FLEET_PROGRESS%% with state=retry on the first attempt, state=failure

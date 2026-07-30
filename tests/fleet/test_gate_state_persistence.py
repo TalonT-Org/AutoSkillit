@@ -10,7 +10,6 @@ import pytest
 from autoskillit.fleet import (
     DispatchCompleted,
     DispatchRecord,
-    DispatchRejected,
     DispatchResult,
     DispatchStatus,
     read_state,
@@ -796,8 +795,8 @@ class TestValidationFailureCampaignState:
         assert decision.completed_dispatches_block == "fleet_halted_on_failure"
 
     @pytest.mark.anyio
-    async def test_dispatch_rejected_carries_dispatch_id(self, tool_ctx, tmp_path):
-        """T6: DispatchRejected returned from execute_dispatch carries non-empty dispatch_id."""
+    async def test_post_allocation_refusal_carries_dispatch_id(self, tool_ctx, tmp_path):
+        """T6: Post-allocation refusal is completed with its durable dispatch identity."""
         from autoskillit.core import RecipeSource
         from autoskillit.fleet import FleetSemaphore
         from autoskillit.recipe.schema import Recipe, RecipeInfo, RecipeIngredient, RecipeKind
@@ -842,5 +841,6 @@ class TestValidationFailureCampaignState:
         )
 
         result = result.outcome
-        assert isinstance(result, DispatchRejected)
+        assert isinstance(result, DispatchCompleted)
+        assert result.dispatch_status is DispatchStatus.REFUSED
         assert result.dispatch_id != ""

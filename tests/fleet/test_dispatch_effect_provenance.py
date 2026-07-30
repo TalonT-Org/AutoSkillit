@@ -1,0 +1,153 @@
+"""Effect-provenance contracts for fleet dispatch retry safety."""
+
+from __future__ import annotations
+
+import pytest
+
+from autoskillit.core import FleetErrorCode, ProcessCleanupResult
+from autoskillit.fleet import (
+    FLEET_STATE_SCHEMA_VERSION,
+    DispatchAggregatePhase,
+    DispatchCompleted,
+    DispatchEffectName,
+    DispatchEffectPhase,
+    DispatchProvenanceTracker,
+    DispatchRecord,
+    DispatchRejected,
+    DispatchRetryDisposition,
+    DispatchStatus,
+)
+
+pytestmark = [
+    pytest.mark.layer("fleet"),
+    pytest.mark.small,
+    pytest.mark.feature("fleet"),
+]
+
+
+def test_not_started_provenance_alone_allows_fresh_dispatch() -> None:
+    tracker = DispatchProvenanceTracker(operation_id="operation-1")
+
+    snapshot = tracker.snapshot()
+
+    assert snapshot.aggregate_phase is DispatchAggregatePhase.NOT_STARTED
+    assert snapshot.retry_disposition is DispatchRetryDisposition.FRESH_DISPATCH_ALLOWED
+
+
+def test_confirmed_spawn_requires_identity_resume() -> None:
+    tracker = DispatchProvenanceTracker(operation_id="operation-2")
+    tracker.start(DispatchEffectName.PROCESS_SPAWN, identities={"dispatch_id": "dispatch-1"})
+    tracker.confirm(
+        DispatchEffectName.PROCESS_SPAWN,
+        receipt="executor callback",
+        identities={"dispatch_id": "dispatch-1", "pid": 123},
+    )
+
+    snapshot = tracker.snapshot()
+
+    assert snapshot.aggregate_phase is DispatchAggregatePhase.STARTED
+    assert snapshot.retry_disposition is DispatchRetryDisposition.RESUME_BY_IDENTITY
+    assert snapshot.effects[0].phase is DispatchEffectPhase.CONFIRMED
+
+
+def test_started_unconfirmed_effect_requires_reconciliation() -> None:
+    tracker = DispatchProvenanceTracker(operation_id="operation-3")
+    tracker.start(DispatchEffectName.PROCESS_SPAWN, identities={"dispatch_id": "dispatch-2"})
+
+    snapshot = tracker.snapshot()
+
+    assert snapshot.aggregate_phase is DispatchAggregatePhase.UNKNOWN
+    assert snapshot.retry_disposition is DispatchRetryDisposition.RECONCILE_REQUIRED
+
+
+def test_local_cleanup_does_not_erase_confirmed_spawn() -> None:
+    tracker = DispatchProvenanceTracker(operation_id="operation-4")
+    tracker.confirm(
+        DispatchEffectName.PROCESS_SPAWN,
+        receipt="executor callback",
+        identities={"dispatch_id": "dispatch-3", "pid": 456},
+    )
+    tracker.record_local_cleanup(
+        ProcessCleanupResult(
+            root_pid=456,
+            process_identities=((456, 100.5),),
+            terminated_pids=(456,),
+        )
+    )
+
+    snapshot = tracker.snapshot()
+
+    assert snapshot.local_cleanup is not None
+    assert snapshot.local_cleanup.complete is True
+    assert snapshot.aggregate_phase is DispatchAggregatePhase.STARTED
+    assert snapshot.retry_disposition is DispatchRetryDisposition.RESUME_BY_IDENTITY
+
+
+def test_commit_dominates_confirmed_effect_history() -> None:
+    tracker = DispatchProvenanceTracker(operation_id="operation-5")
+    tracker.confirm(
+        DispatchEffectName.PROCESS_SPAWN,
+        receipt="executor callback",
+        identities={"dispatch_id": "dispatch-4"},
+    )
+    tracker.confirm(
+        DispatchEffectName.COMMIT,
+        receipt="terminal result",
+        identities={"dispatch_id": "dispatch-4"},
+    )
+
+    snapshot = tracker.snapshot()
+
+    assert snapshot.aggregate_phase is DispatchAggregatePhase.COMMITTED
+    assert snapshot.retry_disposition is DispatchRetryDisposition.RESUME_BY_IDENTITY
+
+
+def test_every_dispatch_envelope_carries_provenance() -> None:
+    tracker = DispatchProvenanceTracker(operation_id="operation-6")
+    rejected = DispatchRejected(
+        error_code=FleetErrorCode.FLEET_ACQUIRE_TIMEOUT,
+        message="busy",
+        effect_provenance=tracker.snapshot(),
+    )
+    completed = DispatchCompleted(
+        success=False,
+        dispatch_status=DispatchStatus.FAILURE,
+        dispatch_id="dispatch-5",
+        dispatched_session_id="session-5",
+        reason="failed",
+        effect_provenance=tracker.snapshot(),
+    )
+
+    assert '"operation_id": "operation-6"' in rejected.to_envelope()
+    assert '"operation_id": "operation-6"' in completed.to_envelope()
+
+
+def test_legacy_constructor_provenance_fails_closed() -> None:
+    rejected = DispatchRejected(
+        error_code=FleetErrorCode.FLEET_ACQUIRE_TIMEOUT,
+        message="busy",
+    )
+
+    assert (
+        rejected.effect_provenance.retry_disposition is DispatchRetryDisposition.RECONCILE_REQUIRED
+    )
+
+
+def test_dispatch_record_persists_provenance_in_schema_v9() -> None:
+    tracker = DispatchProvenanceTracker(operation_id="operation-7")
+    tracker.confirm(
+        DispatchEffectName.DISPATCH_ALLOCATION,
+        receipt="state identity",
+        identities={"dispatch_id": "dispatch-7"},
+    )
+    record = DispatchRecord(
+        name="dispatch",
+        dispatch_id="dispatch-7",
+        effect_provenance=tracker.snapshot().to_dict(),
+    )
+
+    restored = DispatchRecord.from_dict(record.to_dict())
+
+    assert FLEET_STATE_SCHEMA_VERSION == 9
+    assert restored.effect_provenance["operation_id"] == "operation-7"
+    assert restored.effect_provenance["retry_disposition"] == "resume_by_identity"

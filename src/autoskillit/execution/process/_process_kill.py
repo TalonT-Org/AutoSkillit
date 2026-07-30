@@ -8,12 +8,12 @@ import anyio
 import anyio.abc
 import psutil
 
-from autoskillit.core import get_logger
+from autoskillit.core import ProcessCleanupResult, get_logger
 
 logger = get_logger(__name__)
 
 
-def kill_process_tree(pid: int, timeout: float = 2.0) -> None:
+def kill_process_tree(pid: int, timeout: float = 2.0) -> ProcessCleanupResult:
     """Kill a process and all its descendants. SIGTERM → wait → SIGKILL.
 
     Uses psutil to find ALL descendants (not just same process group),
@@ -26,7 +26,7 @@ def kill_process_tree(pid: int, timeout: float = 2.0) -> None:
     try:
         parent = psutil.Process(pid)
     except psutil.NoSuchProcess:
-        return
+        return ProcessCleanupResult(root_pid=pid)
 
     # Collect all children first (recursive)
     try:
@@ -36,31 +36,52 @@ def kill_process_tree(pid: int, timeout: float = 2.0) -> None:
 
     # Include the parent in the kill list
     all_procs = children + [parent]
+    identities: list[tuple[int, float]] = []
+    for proc in all_procs:
+        try:
+            identities.append((proc.pid, proc.create_time()))
+        except psutil.NoSuchProcess:
+            continue
 
     # Send SIGTERM to all
+    access_denied: set[int] = set()
     for proc in all_procs:
         try:
             proc.send_signal(signal.SIGTERM)
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
+        except psutil.NoSuchProcess:
             pass
+        except psutil.AccessDenied:
+            access_denied.add(proc.pid)
 
     # Wait for graceful shutdown
-    _, alive = psutil.wait_procs(all_procs, timeout=timeout)
+    _, alive_after_term = psutil.wait_procs(all_procs, timeout=timeout)
 
     # SIGKILL survivors
-    for proc in alive:
+    for proc in alive_after_term:
         try:
             proc.send_signal(signal.SIGKILL)
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
+        except psutil.NoSuchProcess:
             pass
+        except psutil.AccessDenied:
+            access_denied.add(proc.pid)
 
-    # Brief wait for kernel cleanup
-    psutil.wait_procs(alive, timeout=1.0)
+    # Brief final wait produces authoritative local survivor evidence.
+    _, alive_after_kill = psutil.wait_procs(alive_after_term, timeout=1.0)
+    survivor_pids = tuple(sorted(proc.pid for proc in alive_after_kill))
+    observed_pids = {observed_pid for observed_pid, _ in identities}
+    terminated_pids = tuple(sorted(observed_pids - set(survivor_pids)))
+    return ProcessCleanupResult(
+        root_pid=pid,
+        process_identities=tuple(sorted(identities)),
+        terminated_pids=terminated_pids,
+        survivor_pids=survivor_pids,
+        access_denied_pids=tuple(sorted(access_denied)),
+    )
 
 
-async def async_kill_process_tree(pid: int, timeout: float = 2.0) -> None:
+async def async_kill_process_tree(pid: int, timeout: float = 2.0) -> ProcessCleanupResult:
     """Non-blocking wrapper around kill_process_tree for async callers."""
-    await anyio.to_thread.run_sync(kill_process_tree, pid, timeout)
+    return await anyio.to_thread.run_sync(kill_process_tree, pid, timeout)
 
 
 async def _wait_process_dead(proc: psutil.Process, timeout: float = 5.0) -> bool:

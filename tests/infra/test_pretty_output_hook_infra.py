@@ -535,6 +535,7 @@ def test_shape_field_obligations_per_kind():
         "lifespan_started": False,
         "stderr": "",
         "elapsed_seconds": 1.0,
+        "effect_provenance": {"operation_id": "operation-shape-c"},
     }
     event_c = {
         "tool_name": "mcp__plugin_autoskillit_autoskillit__dispatch_food_truck",
@@ -547,6 +548,7 @@ def test_shape_field_obligations_per_kind():
         "dispatch_id": "dispatch_id: d-shape-c",
         "dispatched_session_id": "dispatched_session_id: s-shape-c",
         "reason": "reason: ok",
+        "effect_provenance": "effect_provenance:",
     }
     for field in completed_required:
         assert field in completed_expected, (
@@ -563,6 +565,7 @@ def test_shape_field_obligations_per_kind():
         "error": "fleet_quota_exhausted",
         "user_visible_message": "quota hit",
         "details": None,
+        "effect_provenance": {"operation_id": "operation-shape-r"},
     }
     event_r = {
         "tool_name": "mcp__plugin_autoskillit_autoskillit__dispatch_food_truck",
@@ -573,6 +576,7 @@ def test_shape_field_obligations_per_kind():
     rejected_expected = {
         "error": "fleet_quota_exhausted",
         "user_visible_message": "quota hit",
+        "effect_provenance": "effect_provenance:",
     }
     for field in rejected_required:
         assert field in rejected_expected, (

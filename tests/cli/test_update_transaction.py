@@ -1185,8 +1185,6 @@ def test_update_consumers_compose_with_registered_real_child_transaction(
         automatic_state = dict(initial_state)
         assert (
             _update_checks._run_update_sequence(
-                _info(),
-                "0.0.0",
                 home,
                 automatic_state,
             )

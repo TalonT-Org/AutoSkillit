@@ -236,8 +236,19 @@ def test_build_agent_env_rejects_invalid_session_type() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "protected_key",
+    [
+        "AUTOSKILLIT_AGENT_BACKEND",
+        "AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "AUTOSKILLIT_SESSION_TYPE",
+        "AUTOSKILLIT_CAMPAIGN_ID",
+        "AUTOSKILLIT_ORDER_ID",
+    ],
+)
 def test_build_maintenance_env_preserves_only_named_base_values(
     monkeypatch: pytest.MonkeyPatch,
+    protected_key: str,
 ) -> None:
     monkeypatch.setattr(claude_env.os, "name", "posix")
     allowed = {
@@ -275,17 +286,21 @@ def test_build_maintenance_env_preserves_only_named_base_values(
         "UV_EXTRA_INDEX_URL": "https://uv-extra.example/simple",
         "UV_DEFAULT_INDEX": "https://uv-default.example/simple",
     }
+    maintenance_flags = {
+        "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
+        "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
+    }
     base = {
         **allowed,
         "SYSTEMROOT": r"C:\Windows",
-        "AUTOSKILLIT_AGENT_BACKEND": "codex",
+        protected_key: f"sensitive-{protected_key.lower()}",
         "PYTHONPATH": "/host/python",
         "SECRET_TOKEN": "must-not-cross-boundary",
     }
 
-    result = build_maintenance_env(base)
+    result = build_maintenance_env(base, maintenance_flags)
 
-    assert dict(result) == allowed
+    assert dict(result) == {**allowed, **maintenance_flags}
     assert isinstance(result, MappingProxyType)
 
 
@@ -329,6 +344,7 @@ def test_build_maintenance_env_accepts_only_declared_skip_flags() -> None:
         "CLAUDECODE",
         "CODEX_HOME",
         "AUTOSKILLIT_AGENT_BACKEND",
+        "AUTOSKILLIT_AGENT_BACKEND__BACKEND",
         "AUTOSKILLIT_SESSION_TYPE",
         "AUTOSKILLIT_CAMPAIGN_ID",
         "AUTOSKILLIT_ORDER_ID",

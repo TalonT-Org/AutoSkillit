@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import structlog.testing
 
 from autoskillit.cli._install_contract import (
     InstallFailureKind,
@@ -84,20 +85,73 @@ def _assert_terminal_history(
     )
 
 
-def _prepare(monkeypatch: pytest.MonkeyPatch) -> None:
+def _prepare(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    stub_git_checks: bool = True,
+) -> None:
     monkeypatch.setattr("autoskillit.cli.update._transaction.detect_install", _info)
     monkeypatch.setattr(
         "autoskillit.cli.update._transaction.upgrade_command",
         lambda _info: ["uv", "tool", "upgrade", "autoskillit"],
     )
-    monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.is_git_worktree",
-        lambda _path: False,
+    if stub_git_checks:
+        monkeypatch.setattr(
+            "autoskillit.cli.update._transaction.is_git_worktree",
+            lambda _path: False,
+        )
+        monkeypatch.setattr(
+            "autoskillit.cli.update._transaction.is_git_main_checkout",
+            lambda _path: False,
+        )
+
+
+def _create_caller_git_worktree(tmp_path: Path) -> Path:
+    main_checkout = tmp_path / "caller-main"
+    main_checkout.mkdir()
+    subprocess.run(
+        ["git", "init"],
+        cwd=main_checkout,
+        check=True,
+        capture_output=True,
     )
-    monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.is_git_main_checkout",
-        lambda _path: False,
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.email=autoskillit@example.invalid",
+            "-c",
+            "user.name=AutoSkillit Test",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "--allow-empty",
+            "--no-verify",
+            "-m",
+            "initial",
+        ],
+        cwd=main_checkout,
+        check=True,
+        capture_output=True,
     )
+    caller_worktree = tmp_path / "caller-worktree"
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(caller_worktree), "HEAD"],
+        cwd=main_checkout,
+        check=True,
+        capture_output=True,
+    )
+    return caller_worktree.resolve()
+
+
+def _assert_environment_not_logged(
+    logs: list[dict[str, Any]],
+    sensitive_env: dict[str, str],
+) -> None:
+    serialized = json.dumps(logs, sort_keys=True, default=str)
+    for key, value in sensitive_env.items():
+        assert key not in serialized
+        assert value not in serialized
 
 
 def _recording_success_runner(
@@ -139,19 +193,26 @@ def test_claudecode_with_existing_registration_defers_before_mutation(
     _prepare(monkeypatch)
     _register_plugin(tmp_path)
     calls: list[list[str]] = []
+    sensitive_env = {
+        "CLAUDECODE": "sentinel-required-refresh",
+        "AUTOSKILLIT_SESSION_TYPE": "sentinel-session",
+        "SECRET_TOKEN": "sentinel-deferral-secret",
+    }
 
-    result = run_update_transaction(
-        home=tmp_path,
-        base_env={"CLAUDECODE": "1", "PATH": "/bin"},
-        version_reader=lambda _name: "1.0.0",
-        process_runner=_recording_success_runner(calls),
-    )
+    with structlog.testing.capture_logs() as logs:
+        result = run_update_transaction(
+            home=tmp_path,
+            base_env={"PATH": "/bin", **sensitive_env},
+            version_reader=lambda _name: "1.0.0",
+            process_runner=_recording_success_runner(calls),
+        )
 
     assert result.outcome is UpdateTransactionOutcome.DEFERRED
     assert not calls
     assert not list((tmp_path / ".autoskillit").glob("update-maintenance-*"))
     _assert_terminal_history(result, UpdateTransactionPhase.SAFETY_CAPABILITY_PREFLIGHT)
     assert result.irreversible_pivot_crossed is False
+    _assert_environment_not_logged(logs, sensitive_env)
 
 
 def test_upgrade_failure_gates_install_and_cleans_cwd(
@@ -323,6 +384,87 @@ def test_success_uses_sealed_env_explicit_cwd_and_maintenance_flags(
     assert "--require-registered-plugin" not in install_command
     assert result.phase_history == UPDATE_TRANSACTION_PHASES
     assert result.irreversible_pivot_crossed is True
+
+
+@pytest.mark.parametrize(
+    "backend_override",
+    [
+        "AUTOSKILLIT_AGENT_BACKEND",
+        "AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+    ],
+)
+def test_success_from_real_worktree_seals_env_and_uses_home_maintenance_cwd(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    backend_override: str,
+) -> None:
+    _prepare(monkeypatch, stub_git_checks=False)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.verify_installed_plugin_artifact",
+        lambda _spec: pytest.fail("no prior registration must not invent an obligation"),
+    )
+    caller_worktree = _create_caller_git_worktree(tmp_path)
+    caller_toplevel = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=caller_worktree,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert Path(caller_toplevel.stdout.strip()).resolve() == caller_worktree
+    monkeypatch.chdir(caller_worktree)
+
+    home = (tmp_path / "authority-home").resolve()
+    approved_base_env = {
+        "HOME": str(home),
+        "PATH": "/bin",
+        "TERM": "xterm-256color",
+        "XDG_CONFIG_HOME": str(home / "xdg-config"),
+    }
+    sensitive_env = {
+        "CLAUDECODE": "sentinel-success-claudecode",
+        backend_override: f"sentinel-{backend_override.lower()}",
+        "AUTOSKILLIT_SESSION_TYPE": "sentinel-session",
+        "AUTOSKILLIT_CAMPAIGN_ID": "sentinel-campaign",
+        "AUTOSKILLIT_ORDER_ID": "sentinel-order",
+        "PYTHONPATH": "sentinel-pythonpath",
+        "SECRET_TOKEN": "sentinel-success-secret",
+        "AUTOSKILLIT_SKIP_STALE_CHECK": "sentinel-parent-stale-skip",
+        "AUTOSKILLIT_SKIP_UPDATE_CHECK": "sentinel-parent-update-skip",
+    }
+    expected_child_env = {
+        **approved_base_env,
+        "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
+        "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
+    }
+    versions = iter(["1.0.0", "1.1.0"])
+    calls: list[tuple[list[str], dict[str, Any]]] = []
+
+    def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        calls.append((list(cmd), kwargs))
+        return subprocess.CompletedProcess(cmd, 0)
+
+    with structlog.testing.capture_logs() as logs:
+        result = run_update_transaction(
+            home=home,
+            base_env={**approved_base_env, **sensitive_env},
+            version_reader=lambda _name: next(versions),
+            process_runner=runner,
+        )
+
+    assert result.outcome is UpdateTransactionOutcome.COMPLETED
+    assert len(calls) == 2
+    for _, kwargs in calls:
+        assert kwargs["check"] is False
+        assert dict(kwargs["env"]) == expected_child_env
+
+    maintenance_cwds = [Path(kwargs["cwd"]).resolve() for _, kwargs in calls]
+    assert maintenance_cwds[0] == maintenance_cwds[1]
+    maintenance_cwd = maintenance_cwds[0]
+    assert maintenance_cwd.parent == (home / ".autoskillit").resolve()
+    assert not maintenance_cwd.is_relative_to(caller_worktree)
+    assert not maintenance_cwd.exists()
+    _assert_environment_not_logged(logs, sensitive_env)
 
 
 def test_codex_caller_with_old_claude_registration_completes_only_after_matching_publication(

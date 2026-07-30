@@ -77,6 +77,7 @@ Enumerated by `run_doctor` in `src/autoskillit/cli/doctor/__init__.py`:
 | 2b | Dual MCP registration | No duplicate direct + marketplace registration |
 | 2c | Plugin cache exists | `~/.claude/plugins/cache/autoskillit-local/` directory exists |
 | 2d | installed_plugins.json | AutoSkillit entry present in installed_plugins.json |
+| 2e | Plugin cache integrity | Cached `hooks.json` paths resolve to real files |
 | 2f | Install state consistency | Exact install artifacts, registry entries, retired shapes, and derived versions agree |
 | 3 | `autoskillit` on PATH | The CLI command is reachable |
 | 4 | Config exists | `.autoskillit/config.yaml` is present |

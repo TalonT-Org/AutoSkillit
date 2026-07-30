@@ -14,6 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import autoskillit.hooks._capture._replay as capture_replay
 import autoskillit.hooks._capture_artifacts as capture_artifacts
 from autoskillit.hooks._capture._snapshot import (
     CaptureMeasurement,
@@ -240,14 +241,14 @@ def test_settle_failed_capture_preserves_raw_kill_result_after_timeout() -> None
 
     process = StubbornProcess()
 
-    settlement = capture_artifacts._settle_failed_capture(process)
+    settlement = capture_replay.settle_failed_capture(process)
     assert settlement.action == "killed"
     assert settlement.returncode == -9
     assert process.terminated
     assert process.killed
     assert process.wait_timeouts == [
-        capture_artifacts._PROCESS_SETTLE_TIMEOUT_SECONDS,
-        capture_artifacts._PROCESS_SETTLE_TIMEOUT_SECONDS,
+        capture_replay._PROCESS_SETTLE_TIMEOUT_SECONDS,
+        capture_replay._PROCESS_SETTLE_TIMEOUT_SECONDS,
     ]
 
 
@@ -1480,8 +1481,8 @@ def test_stdout_delivery_failure_closes_resources_without_success(
 
     monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(
-        capture_artifacts,
-        "_write_and_flush_hook_stdout",
+        capture_replay,
+        "write_and_flush_hook_stdout",
         fail_stdout_delivery,
     )
 
@@ -1712,7 +1713,7 @@ def test_render_failure_after_begin_records_failed_delivery(
         raise RuntimeError("render failed")
 
     monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
-    monkeypatch.setattr(capture_artifacts, "_render_inline_capture", fail_render)
+    monkeypatch.setattr(capture_replay, "render_inline_capture", fail_render)
 
     assert run_capture("printf inline", str(project), _CAPTURE_ID) == 1
 
@@ -2097,11 +2098,11 @@ def test_failure_marker_emission_failure_returns_capture_failure_code(
 
     monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(
-        capture_artifacts,
-        "_write_and_flush_hook_stdout",
+        capture_replay,
+        "write_and_flush_hook_stdout",
         fail_marker,
     )
-    monkeypatch.setattr(capture_artifacts._capture_replay, "_emit_failure", fail_marker)
+    monkeypatch.setattr(capture_replay, "_emit_failure", fail_marker)
 
     assert run_capture("printf output", str(project), _CAPTURE_ID) == 1
     assert process.stdout.closed
@@ -2156,7 +2157,7 @@ class _ShortWriteStream:
 def test_hook_output_write_all_accepts_progressive_short_writes() -> None:
     stream = _ShortWriteStream([1, 2, 3])
 
-    capture_artifacts._write_all_stream(stream, b"abcdef", boundary="test")
+    capture_replay.write_all_stream(stream, b"abcdef", boundary="test")
     stream.flush()
 
     assert bytes(stream.written) == b"abcdef"
@@ -2168,7 +2169,7 @@ def test_hook_output_write_all_rejects_invalid_progress(result: int | None) -> N
     stream = _ShortWriteStream([result])
 
     with pytest.raises(OSError, match="made no progress"):
-        capture_artifacts._write_all_stream(
+        capture_replay.write_all_stream(
             stream,
             b"abc",
             boundary="test",
@@ -2179,7 +2180,7 @@ def test_hook_output_write_all_preserves_partial_error_boundary() -> None:
     stream = _ShortWriteStream([2, OSError("write failed")])
 
     with pytest.raises(OSError, match="write failed"):
-        capture_artifacts._write_all_stream(
+        capture_replay.write_all_stream(
             stream,
             b"abcdef",
             boundary="test",

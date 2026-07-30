@@ -112,19 +112,6 @@ else:
         merge_hook_configs,
     )
 
-_RunnerSettlementEvidence = _capture_replay.RunnerSettlementEvidence
-_PROCESS_SETTLE_TIMEOUT_SECONDS = _capture_replay._PROCESS_SETTLE_TIMEOUT_SECONDS
-_bounded_detail = _capture_replay._bounded_detail
-_capture_failure_return = _capture_replay.capture_failure_return
-_failure_stage = _capture_replay._failure_stage
-_failure_transport = _capture_replay.failure_transport
-_render_inline_capture = _capture_replay.render_inline_capture
-_render_oversized_capture = _capture_replay.render_oversized_capture
-_runner_failure = _capture_replay.runner_failure
-_settle_failed_capture = _capture_replay.settle_failed_capture
-_write_all_stream = _capture_replay.write_all_stream
-_write_and_flush_hook_stdout = _capture_replay.write_and_flush_hook_stdout
-
 __all__ = [
     "CAPTURE_PATH_COMPONENTS",
     "CaptureArtifact",
@@ -460,7 +447,7 @@ def _spawn_bash(
 
     if restore_error is not None:
         if process is not None:
-            _settle_failed_capture(process)
+            _capture_replay.settle_failed_capture(process)
         raise CaptureSetupError("cannot restore runner cwd") from restore_error
     if process is None:
         raise CaptureSetupError("capture shell did not start")
@@ -676,7 +663,7 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
         artifact_writer_fd = _duplicate_artifact_writer(artifact)
         command_outcome: CommandOutcome | None = None
         command_returncode: int | None = None
-        settlement: _RunnerSettlementEvidence | None = None
+        settlement: _capture_replay.RunnerSettlementEvidence | None = None
         delivery_value: (
             FinalizedCapture | PublishedCaptureReference | UnavailableCaptureReference | None
         ) = None
@@ -704,8 +691,8 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
                     observed_size=max(0, os.fstat(artifact.fd).st_size),
                 )
                 terminal_committed = True
-                return _capture_failure_return(
-                    _failure_transport(
+                return _capture_replay.capture_failure_return(
+                    _capture_replay.failure_transport(
                         stage="artifact_write",
                         detail="capture artifact write failed",
                         shell_returncode=command_returncode,
@@ -763,12 +750,12 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
                 delivery_attempting = True
                 failure_stage = "capture replay rendering"
                 if isinstance(delivery_value, FinalizedCapture):
-                    payload = _render_inline_capture(delivery_value)
+                    payload = _capture_replay.render_inline_capture(delivery_value)
                 elif isinstance(
                     delivery_value,
                     (PublishedCaptureReference, UnavailableCaptureReference),
                 ):
-                    payload = _render_oversized_capture(delivery_value)
+                    payload = _capture_replay.render_oversized_capture(delivery_value)
                 else:
                     raise CaptureSetupError("capture delivery value is unavailable")
                 failure_stage = "capture stdout write and flush"
@@ -777,7 +764,7 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
                     nonlocal delivery_bytes_flushed
                     delivery_bytes_flushed = True
 
-                _write_and_flush_hook_stdout(
+                _capture_replay.write_and_flush_hook_stdout(
                     payload,
                     on_progress=record_delivery_progress,
                 )
@@ -795,14 +782,16 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
         except _CAPTURE_RUNTIME_ERRORS as exc:
             recovery_detail = ""
             if command_outcome is None and process is not None:
-                settlement = _settle_failed_capture(process)
+                settlement = _capture_replay.settle_failed_capture(process)
             if not terminal_committed:
                 try:
-                    failure_detail = _bounded_detail(f"{type(exc).__name__}: {exc}")
+                    failure_detail = _capture_replay._bounded_detail(
+                        f"{type(exc).__name__}: {exc}"
+                    )
                     lifecycle.commit_capture_failure(
                         artifact.authority,
                         CaptureFailureEvidence(
-                            stage=_failure_stage(failure_stage),
+                            stage=_capture_replay._failure_stage(failure_stage),
                             detail=failure_detail,
                             settlement_returncode=(
                                 None if settlement is None else settlement.returncode
@@ -826,8 +815,8 @@ def run_capture(command: str, cwd: str, capture_id: str) -> int:
                     lifecycle_error=CaptureLifecycleError,
                     runtime_errors=_CAPTURE_RUNTIME_ERRORS,
                 )
-            return _capture_failure_return(
-                _failure_transport(
+            return _capture_replay.capture_failure_return(
+                _capture_replay.failure_transport(
                     stage=failure_stage,
                     detail=(
                         f"{failure_stage} failed: {type(exc).__name__}: {exc}{recovery_detail}"
@@ -888,8 +877,8 @@ def _dispatch_runner(
     capture_id: str,
 ) -> int:
     if verb == "reject":
-        return _capture_failure_return(
-            _runner_failure(
+        return _capture_replay.capture_failure_return(
+            _capture_replay.runner_failure(
                 "capture_request",
                 "capture request rejected before command execution",
             )
@@ -898,9 +887,13 @@ def _dispatch_runner(
         command = _decode_command(payload)
         return run_capture(command, requested_cwd, capture_id)
     except CaptureSetupError as exc:
-        return _capture_failure_return(_runner_failure("capture_setup", str(exc)))
+        return _capture_replay.capture_failure_return(
+            _capture_replay.runner_failure("capture_setup", str(exc))
+        )
     except (OSError, subprocess.SubprocessError):
-        return _capture_failure_return(_runner_failure("capture_runner", "capture runner failed"))
+        return _capture_replay.capture_failure_return(
+            _capture_replay.runner_failure("capture_runner", "capture runner failed")
+        )
 
 
 def _emit_cleanup_failure(detail: str) -> None:
@@ -932,8 +925,10 @@ def _sweep_after_runner(requested_cwd: str) -> None:
 def _main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
     if len(args) != 4:
-        return _capture_failure_return(
-            _runner_failure("capture_invocation", "invalid capture runner invocation")
+        return _capture_replay.capture_failure_return(
+            _capture_replay.runner_failure(
+                "capture_invocation", "invalid capture runner invocation"
+            )
         )
     verb, payload, requested_cwd, capture_id = args
     if (
@@ -944,16 +939,20 @@ def _main(argv: list[str] | None = None) -> int:
         or not os.path.isabs(requested_cwd)
         or "\x00" in requested_cwd
     ):
-        return _capture_failure_return(
-            _runner_failure("capture_invocation", "invalid capture runner invocation")
+        return _capture_replay.capture_failure_return(
+            _capture_replay.runner_failure(
+                "capture_invocation", "invalid capture runner invocation"
+            )
         )
     if not _CAPTURE_ID_RE.fullmatch(capture_id):
-        return _capture_failure_return(_runner_failure("capture_invocation", "invalid capture id"))
+        return _capture_replay.capture_failure_return(
+            _capture_replay.runner_failure("capture_invocation", "invalid capture id")
+        )
     try:
         user_result = _dispatch_runner(verb, payload, requested_cwd, capture_id)
     except _CAPTURE_RUNTIME_ERRORS:
-        user_result = _capture_failure_return(
-            _runner_failure("capture_runner", "capture runner failed")
+        user_result = _capture_replay.capture_failure_return(
+            _capture_replay.runner_failure("capture_runner", "capture runner failed")
         )
     _sweep_after_runner(requested_cwd)
     return user_result

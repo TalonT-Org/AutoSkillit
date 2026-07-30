@@ -1766,35 +1766,65 @@ def test_review_finding_renderer_is_shared_and_preserves_proof_provenance() -> N
 
 
 @pytest.mark.parametrize(
-    "reason",
+    (
+        "retained_snapshot_was_valid",
+        "final_snapshot_is_fresh",
+        "gate_state",
+        "experimental_audit_state",
+        "findings",
+        "expected",
+    ),
     [
-        "metrics_missing",
-        "metrics_invalid_json",
-        "manifest_missing",
-        "manifest_invalid",
-        "profile_invalid",
-        "ref_missing",
-        "snapshot_mismatch",
-        "artifact_missing",
-        "artifact_name_mismatch",
-        "artifact_length_mismatch",
-        "artifact_digest_mismatch",
-        "marker_changed",
-        "gate_missing",
-        "gate_not_boolean",
+        (True, False, "valid_true", "complete", [], "stale_snapshot"),
+        (
+            True,
+            True,
+            "degraded",
+            "degraded",
+            [{"severity": "critical", "requires_decision": False}],
+            "changes_requested",
+        ),
+        (False, False, "degraded", "not_eligible", [], "needs_human"),
+        (True, True, "valid_true", "degraded", [], "needs_human"),
+        (
+            True,
+            True,
+            "valid_true",
+            "complete",
+            [
+                {"severity": "warning", "requires_decision": False},
+                {"severity": "info", "requires_decision": True},
+            ],
+            "approved_with_comments",
+        ),
+        (
+            True,
+            True,
+            "valid_true",
+            "complete",
+            [{"severity": "info", "requires_decision": True}],
+            "needs_human",
+        ),
+        (True, True, "valid_false", "not_required", [], "approved"),
     ],
 )
-def test_gate_authority_degradation_is_needs_human_not_stale(reason: str) -> None:
-    assert reason
+def test_experimental_review_verdict_branches_and_precedence(
+    retained_snapshot_was_valid: bool,
+    final_snapshot_is_fresh: bool,
+    gate_state: str,
+    experimental_audit_state: str,
+    findings: list[dict[str, object]],
+    expected: str,
+) -> None:
     assert (
         determine_experimental_review_verdict(
-            retained_snapshot_was_valid=False,
-            final_snapshot_is_fresh=False,
-            gate_state="degraded",
-            experimental_audit_state="not_eligible",
-            findings=[],
+            retained_snapshot_was_valid=retained_snapshot_was_valid,
+            final_snapshot_is_fresh=final_snapshot_is_fresh,
+            gate_state=gate_state,
+            experimental_audit_state=experimental_audit_state,
+            findings=findings,
         )
-        == "needs_human"
+        == expected
     )
 
 

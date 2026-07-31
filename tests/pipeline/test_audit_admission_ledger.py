@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
 import sqlite3
@@ -1089,7 +1090,18 @@ class TestStoreSecurity:
             target = tmp_path / "hardlink-target.sqlite3"
             target.write_bytes(b"")
             target.chmod(0o600)
-            os.link(target, path)
+            try:
+                os.link(target, path)
+            except OSError as exc:
+                unsupported_link_errnos = {
+                    errno.EPERM,
+                    errno.EXDEV,
+                    errno.ENOTSUP,
+                    errno.EOPNOTSUPP,
+                }
+                if exc.errno not in unsupported_link_errnos:
+                    raise
+                pytest.skip(f"hardlinks unavailable: {exc}")
         else:
             path.write_bytes(b"")
             path.chmod(0o602 if scenario == "world_writable" else 0o600)

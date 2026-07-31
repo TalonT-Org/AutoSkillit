@@ -13,7 +13,12 @@ from tests.cli._fleet_helpers import (
     _stub_guards,
 )
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium, pytest.mark.feature("fleet")]
+pytestmark = [
+    pytest.mark.layer("cli"),
+    pytest.mark.medium,
+    pytest.mark.feature("fleet"),
+    pytest.mark.usefixtures("_stub_interactive_prelaunch"),
+]
 
 
 def _fake_recipe(name: str, source: str, description: str) -> object:

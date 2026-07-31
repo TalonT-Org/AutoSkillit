@@ -77,11 +77,82 @@ class TestCrashPathDiagnosticPersistence:
 
         state = read_state(campaign_state_path)
         assert state is not None
-        refused = [d for d in state.dispatches if d.status.value == "refused"]
-        assert len(refused) == 1
-        assert "RuntimeError" in refused[0].diagnostic_message
-        assert "kaboom: database connection lost" in refused[0].diagnostic_message
-        assert refused[0].reason == "fleet_l3_startup_or_crash"
+        failed = [d for d in state.dispatches if d.status.value == "failure"]
+        assert len(failed) == 1
+        assert "RuntimeError" in failed[0].diagnostic_message
+        assert "kaboom: database connection lost" in failed[0].diagnostic_message
+        assert failed[0].reason == "fleet_l3_startup_or_crash"
+
+    @pytest.mark.anyio
+    async def test_crash_does_not_return_state_path_when_persistence_fails(
+        self, tool_ctx, monkeypatch
+    ) -> None:
+        """A failed crash record write must not expose an untrustworthy state path."""
+        from autoskillit.fleet import state
+        from tests.fakes import InMemoryHeadlessExecutor
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        executor = InMemoryHeadlessExecutor()
+
+        async def crashing_run(*args, **kwargs):
+            raise RuntimeError("dispatch crashed")
+
+        def failing_append(*args, **kwargs) -> None:
+            raise OSError("state disk unavailable")
+
+        executor.dispatch_food_truck = crashing_run  # type: ignore[method-assign]
+        tool_ctx.executor = executor
+        monkeypatch.setattr(state, "append_dispatch_record", failing_append)
+
+        from autoskillit.fleet._api import execute_dispatch
+
+        result = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="do something",
+            ingredients=None,
+            dispatch_name="dispatch-a",
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+
+        envelope = json.loads(result.outcome.to_envelope())
+        assert envelope["error"] == "fleet_l3_startup_or_crash"
+        assert result.per_dispatch_state_path is None
+
+    @pytest.mark.anyio
+    async def test_rejection_does_not_return_state_path_when_persistence_fails(
+        self, tool_ctx, monkeypatch
+    ) -> None:
+        """A failed rejection write must not expose an untrustworthy state path."""
+        from autoskillit.fleet import state
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        def failing_append(*args, **kwargs) -> None:
+            raise OSError("state disk unavailable")
+
+        monkeypatch.setattr(state, "append_dispatch_record", failing_append)
+
+        from autoskillit.fleet._api import execute_dispatch
+
+        result = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="do something",
+            ingredients={"unknown_ingredient_key": "value"},
+            dispatch_name="dispatch-a",
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+
+        envelope = json.loads(result.outcome.to_envelope())
+        assert envelope["error"] == "fleet_unknown_ingredient"
+        assert result.per_dispatch_state_path is None
 
     @pytest.mark.anyio
     async def test_crash_logs_structured_fields(self, tool_ctx, monkeypatch) -> None:

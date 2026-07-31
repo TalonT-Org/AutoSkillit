@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from autoskillit.core import CodingAgentBackend
+from tests.server.conftest import _set_mock_kitchen_transition
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
@@ -105,6 +106,7 @@ class TestOpenKitchenInjection:
         }
         mock_ctx.recipes.find.return_value = None
         mock_ctx.temp_dir = tmp_path
+        _set_mock_kitchen_transition(mock_ctx)
 
         mock_mcp_ctx = AsyncMock()
         mock_mcp_ctx.enable_components = AsyncMock()
@@ -156,6 +158,7 @@ class TestOpenKitchenInjection:
         }
         mock_ctx.recipes.find.return_value = None
         mock_ctx.temp_dir = tmp_path
+        _set_mock_kitchen_transition(mock_ctx)
 
         mock_mcp_ctx = AsyncMock()
         mock_mcp_ctx.enable_components = AsyncMock()
@@ -375,6 +378,7 @@ class TestOpenKitchenMergeOrderCapabilityWins:
         }
         mock_ctx.recipes.find.return_value = None
         mock_ctx.temp_dir = tmp_path
+        _set_mock_kitchen_transition(mock_ctx)
 
         mock_mcp_ctx = AsyncMock()
         mock_mcp_ctx.enable_components = AsyncMock()
@@ -560,6 +564,7 @@ class TestRealCompositionPruning:
         mock_ctx.recipes.find.return_value = None
         mock_ctx.project_dir = tmp_path
         mock_ctx.temp_dir = tmp_path
+        _set_mock_kitchen_transition(mock_ctx)
 
         mock_mcp_ctx = AsyncMock()
         mock_mcp_ctx.enable_components = AsyncMock()

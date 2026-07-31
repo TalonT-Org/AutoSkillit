@@ -174,6 +174,23 @@ class TestTaskfile:
         assert "CODEX_SMOKE_TEST" in preconditions
         assert "CLAUDE_CODE_SMOKE_TEST" in preconditions
 
+    def test_claude_startup_target_selects_exact_interactive_probe(self) -> None:
+        data = self._load()
+        task = data["tasks"]["test-smoke-claude-startup"]
+        commands = "\n".join(str(command) for command in task.get("cmds", []))
+        preconditions = "\n".join(
+            str(precondition) for precondition in task.get("preconditions", [])
+        )
+        assert "tests/execution/backends/test_cli_conformance_probes.py" in commands
+        assert "CLAUDE_STARTUP_K:-claude_startup_readiness" in commands
+        assert ".autoskillit/temp/smoke-claude-startup-" in commands
+        assert task["env"]["CLAUDE_CODE_SMOKE_TEST"] == "1"
+        assert task["env"]["CLAUDE_STARTUP_READINESS_SMOKE"] == "1"
+        assert "command -v claude" in preconditions
+        assert "ANTHROPIC_API_KEY" in preconditions
+        assert "CLAUDE_CODE_OAUTH_TOKEN" in preconditions
+        assert ".credentials.json" not in preconditions
+
     def test_test_check_sets_experimental_enabled(self):
         """T16 — test-check must set AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED to "true".
 

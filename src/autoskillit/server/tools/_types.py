@@ -209,6 +209,7 @@ class DispatchEnvelopeResult(TypedDict, total=False):
     error: str
     user_visible_message: str
     details: dict[str, Any] | None
+    effect_provenance: dict[str, Any]
     missing_provider_steps: list[str]
     escape_hatch: str
 

@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from autoskillit.fleet import DispatchEffectProvenance
 from tests.fleet._helpers import (
     _make_completed_clean,
     _make_completed_dirty,
@@ -35,6 +36,7 @@ class TestElapsedSecondsEnvelopeField:
             reason="",
             token_usage={"input": 100, "output": 50, "cache_read": 10, "cache_creation": 5},
             elapsed_seconds=42.5,
+            effect_provenance=DispatchEffectProvenance(operation_id="test-dispatch-id"),
         )
         result = json.loads(completed.to_envelope())
         assert "elapsed_seconds" in result, "to_envelope() must include elapsed_seconds"
@@ -151,6 +153,7 @@ class TestKindDiscriminatorEnvelopeField:
             dispatch_id="d-c",
             dispatched_session_id="s-c",
             reason="ok",
+            effect_provenance=DispatchEffectProvenance(operation_id="d-c"),
         )
         completed_env = json.loads(completed.to_envelope())
         assert completed_env.get("kind") == "completed", (
@@ -161,6 +164,7 @@ class TestKindDiscriminatorEnvelopeField:
             error_code=FleetErrorCode.FLEET_QUOTA_EXHAUSTED,
             message="quota hit",
             dispatch_id="d-r",
+            effect_provenance=DispatchEffectProvenance(operation_id="d-r"),
         )
         rejected_env = json.loads(rejected.to_envelope())
         assert rejected_env.get("kind") == "rejected", (
@@ -180,6 +184,7 @@ class TestKindDiscriminatorEnvelopeField:
             error_code=FleetErrorCode.FLEET_QUOTA_EXHAUSTED,
             message="quota hit",
             dispatch_id="d-r",
+            effect_provenance=DispatchEffectProvenance(operation_id="d-r"),
         )
         env = json.loads(rejected.to_envelope())
         excluded_keys = {
@@ -211,6 +216,7 @@ class TestHealthReportEnvelopeField:
             dispatched_session_id="sess-id",
             reason="",
             health_report={"findings": [], "summary": "clean"},
+            effect_provenance=DispatchEffectProvenance(operation_id="test-id"),
         )
         result = json.loads(completed.to_envelope())
         assert "health_report" in result
@@ -225,6 +231,7 @@ class TestHealthReportEnvelopeField:
             dispatch_id="test-id",
             dispatched_session_id="sess-id",
             reason="",
+            effect_provenance=DispatchEffectProvenance(operation_id="test-id"),
         )
         result = json.loads(completed.to_envelope())
         assert "health_report" not in result
@@ -269,6 +276,7 @@ class TestHealthReportDispatchEnrichment:
             dispatch_id="test-id",
             dispatched_session_id="sess-id",
             reason="",
+            effect_provenance=DispatchEffectProvenance(operation_id="test-id"),
         )
         report = {"findings": [{"severity": "anomaly", "summary": "test"}]}
         enriched = replace(original, health_report=report)

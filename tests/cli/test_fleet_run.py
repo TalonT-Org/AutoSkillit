@@ -10,6 +10,7 @@ import pytest
 from autoskillit.core import FleetErrorCode
 from autoskillit.fleet import (
     DispatchCompleted,
+    DispatchEffectProvenance,
     DispatchRejected,
     DispatchResult,
     DispatchStatus,
@@ -20,6 +21,8 @@ pytestmark = [
     pytest.mark.medium,
     pytest.mark.feature("fleet"),
 ]
+
+_TEST_PROVENANCE = DispatchEffectProvenance(operation_id="fleet-run-test")
 
 
 def _make_test_config(
@@ -44,6 +47,7 @@ def _mock_success_result(dispatch_id="test-dispatch-001", session_id="test-sessi
             dispatch_id=dispatch_id,
             dispatched_session_id=session_id,
             reason="completed",
+            effect_provenance=_TEST_PROVENANCE,
         ),
     )
 
@@ -56,6 +60,7 @@ def _mock_failure_result(status=DispatchStatus.FAILURE):
             dispatch_id="test-dispatch-002",
             dispatched_session_id="test-session-002",
             reason="failed",
+            effect_provenance=_TEST_PROVENANCE,
         ),
     )
 
@@ -65,6 +70,7 @@ def _mock_rejected_result():
         outcome=DispatchRejected(
             error_code=FleetErrorCode.FLEET_RECIPE_NOT_FOUND,
             message="recipe not found",
+            effect_provenance=_TEST_PROVENANCE,
         ),
     )
 
@@ -515,7 +521,7 @@ class TestHeadlessCLIPriorFailure:
         state_file.write_text(
             json.dumps(
                 {
-                    "schema_version": 8,
+                    "schema_version": 9,
                     "campaign_id": "cid",
                     "campaign_name": "test",
                     "manifest_path": "/m.yaml",

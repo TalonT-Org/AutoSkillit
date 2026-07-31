@@ -54,6 +54,7 @@ from autoskillit.core import (
     ClaudeDirectoryConventions,
     CmdSpec,
     CookSessionHandle,
+    ExecutableLaunchBinding,
     HookTrustPolicy,
     NamedResume,
     NoResume,
@@ -1422,6 +1423,7 @@ class CodexBackend(BackendCmdBuilderBase):
         *,
         initial_prompt: str | None = None,
         model: str | None = None,
+        executable: ExecutableLaunchBinding | None = None,
         plugin_binding: PluginLaunchBinding | None = None,
         add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
         generated_home: Path | None = None,
@@ -1436,7 +1438,7 @@ class CodexBackend(BackendCmdBuilderBase):
                 "codex_tools_ignored",
                 extra={"tools": list(tools)},
             )
-        builder = CmdBuilder("codex")
+        builder = CmdBuilder(str(executable.path) if executable is not None else "codex")
         if _should_bypass_hook_trust(
             self.capabilities.hook_trust_policy,
             automated_session=False,
@@ -1512,10 +1514,12 @@ class CodexBackend(BackendCmdBuilderBase):
         env = CodexEnvPolicy().build_env(
             base_env, extras=merged_extras, required=effective_required
         )
+        if executable is not None and dict(env) != dict(executable.launch_environment):
+            raise ValueError("interactive environment changed after executable binding")
         partial = builder.build()
         return CmdSpec(
             cmd=partial.cmd,
-            env=env,
+            env=executable.launch_environment if executable is not None else env,
             origin=partial.origin,
             is_resume=isinstance(resume_spec, (NamedResume, BareResume)),
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
@@ -1727,7 +1731,13 @@ class CodexBackend(BackendCmdBuilderBase):
     def list_plugins(self) -> list[dict[str, Any]]:
         return []
 
-    def ensure_pre_launch(self, *, session_dir: Path | None = None) -> list[str]:
+    def ensure_pre_launch(
+        self,
+        *,
+        session_dir: Path | None = None,
+        executable: ExecutableLaunchBinding | None = None,
+    ) -> list[str]:
+        del executable
         os.environ[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
         try:
             assert self.source_codex_home is not None

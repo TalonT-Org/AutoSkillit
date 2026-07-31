@@ -43,10 +43,17 @@ from autoskillit.fleet.state_types import (
     TERMINAL_DISPATCH_STATUSES,
     TERMINAL_UNCLEANED_STATUSES,
     CampaignState,
+    DispatchAggregatePhase,
     DispatchCompleted,
+    DispatchEffectName,
+    DispatchEffectPhase,
+    DispatchEffectProvenance,
+    DispatchEffectRecord,
+    DispatchProvenanceTracker,
     DispatchRecord,
     DispatchRejected,
     DispatchResult,
+    DispatchRetryDisposition,
     DispatchStatus,
     GateRecordResult,
     ResumeDecision,
@@ -68,10 +75,17 @@ __all__ = [
     "TERMINAL_DISPATCH_STATUSES",
     "TERMINAL_UNCLEANED_STATUSES",
     "CampaignState",
+    "DispatchAggregatePhase",
     "DispatchCompleted",
+    "DispatchEffectName",
+    "DispatchEffectPhase",
+    "DispatchEffectProvenance",
+    "DispatchEffectRecord",
+    "DispatchProvenanceTracker",
     "DispatchRecord",
     "DispatchRejected",
     "DispatchResult",
+    "DispatchRetryDisposition",
     "DispatchStatus",
     "GateRecordResult",
     "ResumeDecision",
@@ -430,13 +444,15 @@ def mark_dispatch_interrupted(
     dispatched_session_id: str = "",
     session_chain: list[str] | None = None,
     dispatched_session_log_dir: str = "",
+    effect_provenance: dict[str, Any] | None = None,
 ) -> None:
     """Atomically mark a dispatch as interrupted with a reason.
 
     Identity fields (dispatched_session_id, session_chain, dispatched_session_log_dir)
     are additive — they are only written if the corresponding field on the record is
     still empty, preventing the cancellation handler from overwriting values already
-    eagerly persisted by the on_session_id_resolved callback.
+    eagerly persisted by the on_session_id_resolved callback. When supplied, the
+    effect-provenance snapshot replaces the record's pre-cancellation snapshot.
     """
     with CampaignStateMutator(state_path) as m:
         if m.state is None:
@@ -453,6 +469,8 @@ def mark_dispatch_interrupted(
                     d.session_chain = session_chain
                 if dispatched_session_log_dir and not d.dispatched_session_log_dir:
                     d.dispatched_session_log_dir = dispatched_session_log_dir
+                if effect_provenance is not None:
+                    d.effect_provenance = dict(effect_provenance)
                 m.mark_dirty()
                 return
         else:

@@ -17,6 +17,7 @@ import pytest
 
 from autoskillit.fleet import (
     DispatchCompleted,
+    DispatchEffectProvenance,
     DispatchRejected,
     DispatchResult,
     DispatchStatus,
@@ -28,6 +29,8 @@ pytestmark = [
     pytest.mark.feature("fleet"),
 ]
 
+_TEST_PROVENANCE = DispatchEffectProvenance(operation_id="fleet-admission-test")
+
 
 def _make_success_result() -> DispatchResult:
     return DispatchResult(
@@ -37,6 +40,7 @@ def _make_success_result() -> DispatchResult:
             dispatch_id="test-dispatch",
             dispatched_session_id="test-session",
             reason="completed",
+            effect_provenance=_TEST_PROVENANCE,
         ),
     )
 
@@ -50,6 +54,7 @@ def _make_rejection_result(
         outcome=DispatchRejected(
             error_code=FleetErrorCode.FLEET_RECIPE_INVALID,
             message=msg,
+            effect_provenance=_TEST_PROVENANCE,
         ),
     )
 

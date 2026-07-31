@@ -12,7 +12,11 @@ import pytest
 from autoskillit import cli
 from tests.cli.conftest import _GITHUB_RECIPE_YAML
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+pytestmark = [
+    pytest.mark.layer("cli"),
+    pytest.mark.medium,
+    pytest.mark.usefixtures("_stub_interactive_prelaunch"),
+]
 
 
 class TestOrderSubsetGate:

@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from tests.server._helpers import _with_finalized_projection
+from tests.server.conftest import _set_mock_kitchen_transition
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -41,6 +42,7 @@ def _make_mock_ctx(recipes: MagicMock, temp_dir: Path) -> MagicMock:
     mock_ctx.recipe_execution_lock = RLock()
     mock_ctx.recipe_initialization_state = NoActiveRecipe()
     mock_ctx.recipe_execution_factory = make_recipe_execution
+    _set_mock_kitchen_transition(mock_ctx)
     return mock_ctx
 
 

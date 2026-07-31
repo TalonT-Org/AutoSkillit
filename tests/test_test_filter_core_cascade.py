@@ -108,6 +108,7 @@ class TestModuleCascadeCore:
             "_type_protocols_backend",
             "_install_detect",
             "_linux_proc",
+            "executable_binding",
             "_type_plugin_source",
             "kitchen_state",
             "readiness",

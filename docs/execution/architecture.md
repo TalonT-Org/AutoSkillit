@@ -215,6 +215,19 @@ inode (or follow an explicitly supported representation transition) and that
 a live Codex process retains the inherited lease after the parent closes its
 copy. Failure blocks the hard-link design for that version.
 
+### Claude MCP addressability
+
+Interactive Claude launches bind one canonical executable and a sealed
+environment before the mandatory version probe. The client-owned MCP
+connection deadline governs the initial tool-list snapshot; the server
+readiness sentinel does not establish client addressability. Fresh-session
+prompt retry is a bounded defense after a pre-dispatch failure. A received
+`CallToolResult` crosses into tool/application recovery and cannot be
+reclassified as a startup transport failure.
+
+See [Claude startup readiness](claude-startup-readiness.md) for the pinned
+versions, exact environment values, trace contract, and resume boundary.
+
 ## Safety
 
 See **[Hooks](../safety/hooks.md)** for the complete safety system: protected branches, quota management, format validation, and session boundary enforcement.

@@ -325,6 +325,64 @@ class TestTrackResponseSize:
         ledger.commit.assert_called_once()
         ledger.abort.assert_not_called()
 
+    @pytest.mark.anyio
+    async def test_attested_inline_open_kitchen_confirms_response_enforcement(self):
+        from threading import RLock
+
+        from autoskillit.core import RecipeDeliveryMode
+        from autoskillit.pipeline import (
+            KitchenEffectPhase,
+            new_kitchen_open_state,
+            start_kitchen_effect,
+        )
+        from autoskillit.server._notify import track_response_size
+        from autoskillit.server._recipe_delivery import FinalizedRecipeResponse
+
+        rendered = (
+            '{"recipe_delivery":{"mode":"attested_inline"}}\n'
+            "<<<AUTOSKILLIT_RECIPE_BODY>>>\n"
+            "non-JSON recipe body"
+        )
+        finalized = FinalizedRecipeResponse(
+            rendered=rendered,
+            decision=MagicMock(
+                selected_result_token_limit=56_750,
+                mode=RecipeDeliveryMode.ATTESTED_INLINE,
+            ),
+        )
+        ctx = _tracking_ctx()
+        ctx.kitchen_transition_lock = RLock()
+        ctx.kitchen_open_state = start_kitchen_effect(
+            new_kitchen_open_state(
+                kitchen_id="kitchen",
+                context_id="context",
+                operation_id="operation",
+            ),
+            "response_enforcement",
+        )
+
+        @track_response_size("open_kitchen")
+        async def fake_handler():
+            return finalized
+
+        with (
+            patch("autoskillit.server._notify._get_ctx_or_none", return_value=ctx),
+            patch(
+                "autoskillit.server._notify.enforce_response_budget",
+                return_value=rendered,
+            ),
+        ):
+            result = await fake_handler()
+
+        effect = next(
+            effect
+            for effect in ctx.kitchen_open_state.effects
+            if effect.name == "response_enforcement"
+        )
+        assert result == rendered
+        assert effect.phase is KitchenEffectPhase.CONFIRMED
+        assert effect.receipt == "response:enforced"
+
     @pytest.mark.parametrize(
         "enforced",
         ["transformed response", {"success": True, "artifact_path": "response.txt"}],

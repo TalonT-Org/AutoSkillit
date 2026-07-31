@@ -10,12 +10,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import regex as re
+from packaging.version import InvalidVersion, Version
+
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
     AGENT_BACKEND_DYNACONF_ENV_VAR,
     AGENT_BACKEND_ENV_VAR,
     CAMPAIGN_ID_ENV_VAR,
     CLAUDE_CODE_CAPABILITIES,
+    CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR,
+    CLAUDE_MCP_CONNECT_TIMEOUT_MS,
+    CLAUDE_MCP_CONNECTION_NONBLOCKING,
     CONTEXT_EXHAUSTION_MARKER,
     NON_VARIADIC_CLAUDE_FLAGS,
     ORCHESTRATOR_SESSION_REQUIRED_ENV,
@@ -36,6 +42,7 @@ from autoskillit.core import (
     ClaudeFlags,
     CmdSpec,
     CookSessionHandle,
+    ExecutableLaunchBinding,
     NamedResume,
     NoResume,
     OutputFormat,
@@ -51,11 +58,13 @@ from autoskillit.core import (
     build_agent_env,
     claude_code_log_path,
     claude_code_project_dir,
+    executable_binding_matches_current_file,
     extract_skill_name,
     fast_loads,
     load_yaml,
     pkg_root,
     read_registry,
+    truncate_text,
 )
 from autoskillit.execution.backends._backend_cmd_builder_base import (
     SHARED_BASELINE_ENV,
@@ -455,6 +464,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         *,
         initial_prompt: str | None = None,
         model: str | None = None,
+        executable: ExecutableLaunchBinding | None = None,
         plugin_binding: PluginLaunchBinding | None = None,
         add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
         generated_home: Path | None = None,
@@ -505,7 +515,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         ``SESSION_TYPE`` env variable.
         """
         del generated_home
-        builder = CmdBuilder("claude")
+        builder = CmdBuilder(str(executable.path) if executable is not None else "claude")
         builder.mode_flag(ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS)
         match resume_spec:
             case NamedResume(session_id=sid):
@@ -531,13 +541,22 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         merged[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         if env_extras:
             merged.update(env_extras)
+        merged["MCP_CONNECTION_NONBLOCKING"] = CLAUDE_MCP_CONNECTION_NONBLOCKING
+        merged[CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR] = str(CLAUDE_MCP_CONNECT_TIMEOUT_MS)
         interactive_base = {
             k: v for k, v in os.environ.items() if k not in _INTERACTIVE_ENV_EXCLUSIONS
         }
+        effective_env = build_agent_env(
+            base=interactive_base,
+            extras=merged,
+            required=required_env,
+        )
+        if executable is not None and dict(effective_env) != dict(executable.launch_environment):
+            raise ValueError("interactive environment changed after executable binding")
         partial = builder.build()
         return CmdSpec(
             cmd=partial.cmd,
-            env=build_agent_env(base=interactive_base, extras=merged, required=required_env),
+            env=(executable.launch_environment if executable is not None else effective_env),
             origin=partial.origin,
             is_resume=isinstance(resume_spec, (NamedResume, BareResume)),
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
@@ -891,8 +910,60 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         del spec
         return []
 
-    def ensure_pre_launch(self, *, session_dir: Path | None = None) -> list[str]:
+    def ensure_pre_launch(
+        self,
+        *,
+        session_dir: Path | None = None,
+        executable: ExecutableLaunchBinding | None = None,
+    ) -> list[str]:
         del session_dir
+        if executable is None:
+            return ["Claude Code launch requires an exact executable binding"]
+        if not executable_binding_matches_current_file(executable):
+            return ["Claude Code executable changed after capability probing"]
+        environment = executable.launch_environment
+        if environment.get("MCP_CONNECTION_NONBLOCKING") != CLAUDE_MCP_CONNECTION_NONBLOCKING:
+            return ["Claude Code MCP blocking startup policy is not sealed"]
+        if environment.get(CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR) != str(
+            CLAUDE_MCP_CONNECT_TIMEOUT_MS
+        ):
+            return ["Claude Code MCP connection timeout policy is not sealed"]
+        try:
+            result = subprocess.run(
+                (str(executable.path), "--version"),
+                capture_output=True,
+                text=True,
+                timeout=5,
+                env=dict(environment),
+                cwd=str(executable.cwd),
+            )
+        except subprocess.TimeoutExpired:
+            return ["Claude Code capability probe timed out"]
+        except OSError as exc:
+            return [f"Claude Code capability probe failed: {exc}"]
+        stdout = result.stdout if isinstance(result.stdout, str) else ""
+        stderr = result.stderr if isinstance(result.stderr, str) else ""
+        if result.returncode != 0:
+            raw_diagnostic = "\n".join(part for part in (stderr.strip(), stdout.strip()) if part)
+            normalized = "".join(char if char.isprintable() else " " for char in raw_diagnostic)
+            diagnostic = truncate_text(" ".join(normalized.split()), max_len=1_000)
+            detail = f": {diagnostic}" if diagnostic else ""
+            return [
+                f"Claude Code capability probe failed with exit code {result.returncode}{detail}"
+            ]
+        output = stdout.strip() or stderr.strip()
+        if not output:
+            return ["Claude Code capability probe returned empty output"]
+        match = re.search(r"\b(\d+\.\d+\.\d+)\b", output)
+        if match is None:
+            return ["Claude Code capability probe returned unparseable version output"]
+        try:
+            installed = Version(match.group(1))
+            minimum = Version(self.capabilities.min_version)
+        except InvalidVersion:
+            return ["Claude Code capability probe returned unparseable version output"]
+        if installed < minimum:
+            return [f"AutoSkillit requires Claude Code {minimum} or newer; found {installed}"]
         return []
 
     def recover_cook_history(self) -> None:

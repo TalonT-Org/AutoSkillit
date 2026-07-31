@@ -139,7 +139,11 @@ class TestDispatchFoodTruckHaltEnforcement:
 
         write_initial_state(state_path, "cid", "camp", "/m.yaml", [])
 
-        from autoskillit.fleet import DispatchCompleted, DispatchResult
+        from autoskillit.fleet import (
+            DispatchCompleted,
+            DispatchEffectProvenance,
+            DispatchResult,
+        )
         from autoskillit.fleet import DispatchStatus as _DS
 
         monkeypatch.setattr(
@@ -152,6 +156,9 @@ class TestDispatchFoodTruckHaltEnforcement:
                         dispatch_id="test-dispatch-id",
                         dispatched_session_id="sess-abc",
                         reason="fleet_l3_no_result_block",
+                        effect_provenance=DispatchEffectProvenance(
+                            operation_id="test-dispatch-id"
+                        ),
                         token_usage={},
                         l3_parse_source="stdout",
                         lifespan_started=True,
@@ -394,6 +401,18 @@ class TestDispatchFoodTruckSkipWhen:
         )
         assert result["success"] is False
         assert result["error"] == "fleet_dispatch_skipped"
+        state = json.loads(state_path.read_text())
+        persisted = state["dispatches"][0]["effect_provenance"]
+        persisted_write = next(
+            effect for effect in persisted["effects"] if effect["name"] == "campaign_state_write"
+        )
+        returned_write = next(
+            effect
+            for effect in result["effect_provenance"]["effects"]
+            if effect["name"] == "campaign_state_write"
+        )
+        assert persisted_write["phase"] == "confirmed"
+        assert persisted_write == returned_write
 
     @pytest.mark.anyio
     async def test_skip_when_false_proceeds_normally(

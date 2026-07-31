@@ -38,6 +38,7 @@ PROBE_SUITE_CONTRACT: tuple[str, ...] = (
     "generated-codex-child-v1",
     "deep-investigate-codex-v2",
     "deep-investigate-claude-200k-v2",
+    "claude-startup-readiness-v1",
     "codex-recipe-delivery-v2",
 )
 PROBE_SUITE_CONTRACT_DIGEST: str = hashlib.sha256(

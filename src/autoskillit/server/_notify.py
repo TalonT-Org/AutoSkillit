@@ -15,8 +15,14 @@ from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
     RESERVED_LOG_RECORD_KEYS,
     BackendCapabilities,
+    RecipeDeliveryMode,
     get_logger,
     resolve_general_output_token_limit,
+)
+from autoskillit.pipeline import (
+    KITCHEN_EFFECT_RESPONSE_ENFORCEMENT,
+    confirm_kitchen_effect,
+    start_kitchen_effect,
 )
 from autoskillit.server._recipe_delivery import (
     FinalizedRecipeResponse,
@@ -184,6 +190,25 @@ def track_response_size(
                 caps = getattr(backend, "capabilities", None) if backend is not None else None
                 if isinstance(caps, BackendCapabilities):
                     selected_result_token_limit = resolve_general_output_token_limit(caps)
+            kitchen_response_success = False
+            if tool_name == "open_kitchen" and ctx is not None:
+                attested_inline_response = (
+                    finalized is not None
+                    and finalized.decision.mode is RecipeDeliveryMode.ATTESTED_INLINE
+                )
+                try:
+                    candidate = json.loads(response_value)
+                    kitchen_response_success = (
+                        isinstance(candidate, dict) and candidate.get("success") is True
+                    )
+                except (TypeError, json.JSONDecodeError):
+                    kitchen_response_success = attested_inline_response
+                if kitchen_response_success:
+                    with ctx.kitchen_transition_lock:
+                        ctx.kitchen_open_state = start_kitchen_effect(
+                            ctx.kitchen_open_state,
+                            KITCHEN_EFFECT_RESPONSE_ENFORCEMENT,
+                        )
             try:
                 result = enforce_response_budget(
                     response_value,
@@ -234,6 +259,24 @@ def track_response_size(
                 result = complete_section_response(finalized_section, result)
             elif finalized_initialization is not None:
                 result = complete_initialization_response(finalized_initialization, result)
+            if kitchen_response_success and ctx is not None and isinstance(result, str):
+                response_enforcement_succeeded = result == response_value
+                if not response_enforcement_succeeded:
+                    try:
+                        enforced_candidate = json.loads(result)
+                    except json.JSONDecodeError:
+                        enforced_candidate = None
+                    response_enforcement_succeeded = (
+                        isinstance(enforced_candidate, dict)
+                        and enforced_candidate.get("success") is True
+                    )
+                if response_enforcement_succeeded:
+                    with ctx.kitchen_transition_lock:
+                        ctx.kitchen_open_state = confirm_kitchen_effect(
+                            ctx.kitchen_open_state,
+                            KITCHEN_EFFECT_RESPONSE_ENFORCEMENT,
+                            receipt="response:enforced",
+                        )
             return result
 
         return wrapper

@@ -782,15 +782,17 @@ def test_fleet_dispatch_prompt_lists_infrastructure_codes():
     assert "fleet_l3_startup_or_crash" in prompt
 
 
-def test_fleet_dispatch_infrastructure_section_prescribes_fresh_retry():
-    """T3: Infrastructure failure section prescribes fresh retry as recovery action."""
+def test_fleet_dispatch_infrastructure_section_uses_provenance_disposition():
+    """T3: Infrastructure recovery branches on effect provenance."""
     from autoskillit.cli._prompts_kitchen import _build_fleet_dispatch_prompt
 
     prompt = _build_fleet_dispatch_prompt(mcp_prefix="mcp__autoskillit__")
     start = prompt.index("INFRASTRUCTURE FAILURE")
     next_section = prompt.find("\n## ", start + 1)
     section = prompt[start:next_section] if next_section != -1 else prompt[start:]
-    assert "No reset or cleanup is needed" in section
+    assert "[fresh-only-on-proof]" in section
+    assert "[resume-confirmed-effect]" in section
+    assert "[reconcile-ambiguity]" in section
 
 
 def test_campaign_prompt_includes_infrastructure_failure_section():
@@ -839,8 +841,8 @@ def test_campaign_prompt_lists_infrastructure_codes():
     assert "fleet_l3_startup_or_crash" in prompt
 
 
-def test_campaign_prompt_infrastructure_section_says_do_not_halt():
-    """T6: Infrastructure failure section tells campaign not to halt."""
+def test_campaign_prompt_infrastructure_section_uses_provenance_disposition():
+    """T6: Campaign recovery follows provenance before failure policy."""
     from autoskillit.cli._prompts import _build_fleet_campaign_prompt
     from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
 
@@ -861,7 +863,10 @@ def test_campaign_prompt_infrastructure_section_says_do_not_halt():
     start = prompt.index("INFRASTRUCTURE FAILURE")
     next_section = prompt.find("\n## ", start + 1)
     section = prompt[start:next_section] if next_section != -1 else prompt[start:]
-    assert "do not halt" in section.lower()
+    assert "[fresh-only-on-proof]" in section
+    assert "[resume-confirmed-effect]" in section
+    assert "[reconcile-ambiguity]" in section
+    assert "continue_on_failure=False" in section
 
 
 def test_campaign_prompt_includes_gate_dispatch_handling_section():

@@ -59,7 +59,13 @@ from autoskillit.hook_registry import (
     load_hooks_json_hash,
     validate_plugin_cache_hooks,
 )
-from autoskillit.pipeline import create_background_task
+from autoskillit.pipeline import (
+    KitchenOpenPhase,
+    confirm_kitchen_effect,
+    create_background_task,
+    new_kitchen_open_state,
+    start_kitchen_effect,
+)
 from autoskillit.server._guards import _backend_supports_quota
 from autoskillit.server._state import _get_ctx_or_none, deferred_initialize
 from autoskillit.workspace import verify_install_state
@@ -370,7 +376,19 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
     from autoskillit.server._misc import _prime_quota_cache  # circular-break
     from autoskillit.server.tools.tools_kitchen import _write_hook_config  # circular-break
 
-    ctx.kitchen_id = resolve_kitchen_id()
+    with ctx.kitchen_transition_lock:
+        state = ctx.kitchen_open_state
+        if state.phase is KitchenOpenPhase.CLOSED:
+            state = new_kitchen_open_state(
+                kitchen_id=resolve_kitchen_id(),
+                context_id=state.context_id,
+            )
+            ctx.kitchen_open_state = state
+        ctx.kitchen_id = state.kitchen_id
+        ctx.kitchen_open_state = start_kitchen_effect(
+            ctx.kitchen_open_state,
+            "pre_reveal_bootstrap",
+        )
     ctx.active_recipe_packs = frozenset()
     ctx.active_recipe_features = frozenset()
     ctx.active_recipe_steps = {}
@@ -391,6 +409,13 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
     _supports_quota = _backend_supports_quota(ctx)
     await _prime_quota_cache(supports_quota_check=_supports_quota)
     ctx.gate_infrastructure_ready = True
+    with ctx.kitchen_transition_lock:
+        ctx.kitchen_open_state = confirm_kitchen_effect(
+            ctx.kitchen_open_state,
+            "pre_reveal_bootstrap",
+            receipt="pre_reveal:ready",
+            downstream_identity=ctx.kitchen_id,
+        )
 
 
 async def _food_truck_auto_gate_boot(ctx: Any) -> None:

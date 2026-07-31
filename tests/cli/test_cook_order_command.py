@@ -13,7 +13,11 @@ from autoskillit import cli
 from autoskillit.core import ClaudeFlags
 from tests.cli.conftest import _SCRIPT_YAML
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+pytestmark = [
+    pytest.mark.layer("cli"),
+    pytest.mark.medium,
+    pytest.mark.usefixtures("_stub_interactive_prelaunch"),
+]
 
 
 class TestCLIOrderCommand:
@@ -116,7 +120,7 @@ class TestCLIOrderCommand:
             cli.order("test-script")
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
-        assert "claude" in captured.out.lower()
+        assert "claude" in captured.err.lower()
 
     def test_order_invalid_script_exits(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
@@ -157,7 +161,8 @@ class TestCLIOrderCommand:
 
         mock_run.assert_called_once()
         cmd = mock_run.call_args[0][0]
-        assert cmd[0] == "claude"
+        assert Path(cmd[0]).is_absolute()
+        assert Path(cmd[0]).name == "claude"
         assert ClaudeFlags.PLUGIN_DIR in cmd
         plugin_dir_idx = cmd.index(ClaudeFlags.PLUGIN_DIR)
         plugin_dir_val = Path(cmd[plugin_dir_idx + 1])
@@ -470,7 +475,7 @@ class TestCLIOrderCommand:
         monkeypatch.setattr(
             CodexBackend,
             "ensure_pre_launch",
-            lambda _self, *, session_dir=None: [],
+            lambda _self, *, session_dir=None, executable=None: [],
         )
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-canary-key")
@@ -490,8 +495,9 @@ class TestCLIOrderCommand:
         cmd = captured["cmd"]
         env = captured["env"]
 
-        assert cmd[0] == real_backend.binary_name(), (
-            f"Expected {real_backend.binary_name()!r}, got {cmd[0]!r}"
+        assert Path(cmd[0]).is_absolute()
+        assert Path(cmd[0]).name == real_backend.binary_name(), (
+            f"Expected {real_backend.binary_name()!r}, got {Path(cmd[0]).name!r}"
         )
 
         claude_flag_values = {str(f) for f in ClaudeFlags}

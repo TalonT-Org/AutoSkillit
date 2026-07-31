@@ -28,6 +28,7 @@ __all__ = [
     "CmdOrigin",
     "CmdSpec",
     "CookSessionHandle",
+    "ExecutableLaunchBinding",
     "ModelTranslation",
     "SessionSummary",
     "SkillSessionConfig",
@@ -39,6 +40,20 @@ __all__ = [
     "model_class",
     "strip_context_window_suffix",
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutableLaunchBinding:
+    """Canonical executable and sealed environment for one interactive launch."""
+
+    path: Path
+    device: int
+    inode: int
+    size: int
+    mtime_ns: int
+    file_sha256: str
+    cwd: Path
+    launch_environment: Mapping[str, str] = field(repr=False, compare=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -301,7 +316,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     applicable_guards=frozenset({"skill_load_guard"}),
     write_guard_tool_names=frozenset({"Write", "Edit", "Bash", "apply_patch"}),
     env_denylist_prefixes=(),
-    min_version="",
+    min_version="2.1.142",
     version_check_command="claude --version",
     process_name="claude",
     process_name_aliases=frozenset({"claude"}),

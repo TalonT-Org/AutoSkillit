@@ -23,9 +23,13 @@ class TestResumeJSONLPreflight:
     async def test_missing_jsonl_rejects_dispatch(self, tool_ctx, monkeypatch, tmp_path):
         """Resume dispatch with missing JSONL returns FLEET_RESUME_SESSION_MISSING."""
         from autoskillit.core import FleetErrorCode
-        from autoskillit.fleet import DispatchRecord, write_initial_state
+        from autoskillit.fleet import (
+            DispatchCompleted,
+            DispatchRecord,
+            DispatchStatus,
+            write_initial_state,
+        )
         from autoskillit.fleet._api import execute_dispatch
-        from autoskillit.fleet.state_types import DispatchRejected
 
         _setup_dispatch(tool_ctx, monkeypatch)
 
@@ -58,8 +62,9 @@ class TestResumeJSONLPreflight:
             prior_dispatch_id=prior_id,
         )
 
-        assert isinstance(result.outcome, DispatchRejected)
-        assert result.outcome.error_code == FleetErrorCode.FLEET_RESUME_SESSION_MISSING
+        assert isinstance(result.outcome, DispatchCompleted)
+        assert result.outcome.dispatch_status is DispatchStatus.REFUSED
+        assert result.outcome.reason == FleetErrorCode.FLEET_RESUME_SESSION_MISSING
         assert len(tool_ctx.executor.dispatch_calls) == 0
 
     @pytest.mark.anyio

@@ -8,6 +8,7 @@ import pytest
 
 from autoskillit.server.tools.tools_pipeline_tracker import record_pipeline_step
 from tests.server._helpers import _with_finalized_projection
+from tests.server.conftest import _set_mock_kitchen_transition
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -219,6 +220,7 @@ class TestOpenKitchenAutoInitTracker:
         ctx.gate_infrastructure_ready = True
         ctx.recipe_name = ""
         ctx.kitchen_id = "kitchen-abc"
+        _set_mock_kitchen_transition(ctx, kitchen_id=ctx.kitchen_id)
         _configure_open_kitchen_mock(ctx, steps, tmp_path)
 
         with patch("autoskillit.server._get_ctx", return_value=ctx):
@@ -252,6 +254,7 @@ class TestOpenKitchenAutoInitTracker:
         ctx1.gate_infrastructure_ready = True
         ctx1.recipe_name = ""
         ctx1.kitchen_id = "kitchen-abc"
+        _set_mock_kitchen_transition(ctx1, kitchen_id=ctx1.kitchen_id)
         _configure_open_kitchen_mock(ctx1, steps, tmp_path)
         with patch("autoskillit.server._get_ctx", return_value=ctx1):
             result1 = json.loads(await open_kitchen(name="remediation", ctx=ctx1))
@@ -268,6 +271,7 @@ class TestOpenKitchenAutoInitTracker:
         ctx2.gate_infrastructure_ready = True
         ctx2.recipe_name = "remediation"
         ctx2.kitchen_id = "kitchen-abc"
+        _set_mock_kitchen_transition(ctx2, kitchen_id=ctx2.kitchen_id)
         _configure_open_kitchen_mock(ctx2, steps, tmp_path)
         with patch("autoskillit.server._get_ctx", return_value=ctx2):
             result2 = json.loads(await open_kitchen(name="remediation", ctx=ctx2))
@@ -300,6 +304,7 @@ class TestOpenKitchenAutoInitTracker:
         ctx.gate_infrastructure_ready = True
         ctx.recipe_name = ""
         ctx.kitchen_id = "kitchen-multi"
+        _set_mock_kitchen_transition(ctx, kitchen_id=ctx.kitchen_id)
         _configure_open_kitchen_mock(ctx, steps, tmp_path)
 
         tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"

@@ -13,6 +13,7 @@ from ._type_backend import (
     BackendConventions,
     CmdSpec,
     CookSessionHandle,
+    ExecutableLaunchBinding,
     SessionEvent,
     SessionSummary,
     SkillSessionConfig,
@@ -185,6 +186,7 @@ class CodingAgentBackend(Protocol):
         *,
         initial_prompt: str | None = None,
         model: str | None = None,
+        executable: ExecutableLaunchBinding | None = None,
         plugin_binding: PluginLaunchBinding | None = None,
         add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
         generated_home: Path | None = None,
@@ -210,7 +212,19 @@ class CodingAgentBackend(Protocol):
 
     def list_plugins(self) -> list[dict[str, Any]]: ...
 
-    def ensure_pre_launch(self, *, session_dir: Path | None = None) -> list[str]: ...
+    def ensure_pre_launch(
+        self,
+        *,
+        session_dir: Path | None = None,
+        executable: ExecutableLaunchBinding | None = None,
+    ) -> list[str]:
+        """Return backend-specific launch-readiness errors.
+
+        ``executable`` carries the shared exact launch binding. Backends whose
+        readiness policy seals or probes that binding validate it here; backends
+        with a different readiness boundary may intentionally ignore it.
+        """
+        ...
 
     def recover_cook_history(self) -> None: ...
 

@@ -321,6 +321,7 @@ def test_backend_module_all_exhaustive():
         "CmdOrigin",
         "CmdSpec",
         "CookSessionHandle",
+        "ExecutableLaunchBinding",
         "ModelTranslation",
         "SessionSummary",
         "SkillSessionConfig",

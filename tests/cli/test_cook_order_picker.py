@@ -14,7 +14,11 @@ from autoskillit import cli
 from autoskillit.core import ClaudeFlags
 from tests.cli.conftest import _SCRIPT_YAML
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+pytestmark = [
+    pytest.mark.layer("cli"),
+    pytest.mark.medium,
+    pytest.mark.usefixtures("_stub_interactive_prelaunch"),
+]
 
 
 class TestCLIOrderPicker:
@@ -522,7 +526,10 @@ class TestOrderResumeParsing:
             skill_catalog=None,
             backend=None,
         ):
+            captured["prompt"] = prompt
             captured["resume_spec"] = resume_spec
+            captured["project_dir"] = project_dir
+            captured["backend"] = backend
 
         with (
             patch(
@@ -544,6 +551,9 @@ class TestOrderResumeParsing:
         assert captured["resume_spec"] == NamedResume(
             session_id="fa910a41-d1ca-4cae-b878-01028a0c7c1c"
         )
+        assert captured["prompt"] == ""
+        assert captured["project_dir"] == tmp_path
+        assert captured["backend"] is not None
 
     def test_order_resume_uuid_without_recipe_routes_correctly(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -563,11 +573,15 @@ class TestOrderResumeParsing:
             initial_message=None,
             extra_env=None,
             resume_spec=NoResume(),
+            project_dir=None,
             required_env=None,
             skill_catalog=None,
             backend=None,
         ):
+            captured["prompt"] = prompt
             captured["resume_spec"] = resume_spec
+            captured["project_dir"] = project_dir
+            captured["backend"] = backend
 
         with patch(
             "autoskillit.cli.session._session_order._launch_cook_session", side_effect=fake_launch
@@ -579,6 +593,9 @@ class TestOrderResumeParsing:
         assert captured["resume_spec"] == NamedResume(
             session_id="4b581974-1f19-4aec-8405-78c5ede5e233"
         )
+        assert captured["prompt"] == ""
+        assert captured["project_dir"] == tmp_path
+        assert captured["backend"] is not None
 
     def test_order_bare_resume_skips_recipe_validation(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -598,11 +615,15 @@ class TestOrderResumeParsing:
             initial_message=None,
             extra_env=None,
             resume_spec=NoResume(),
+            project_dir=None,
             required_env=None,
             skill_catalog=None,
             backend=None,
         ):
+            captured["prompt"] = prompt
             captured["resume_spec"] = resume_spec
+            captured["project_dir"] = project_dir
+            captured["backend"] = backend
 
         with (
             patch(
@@ -617,6 +638,9 @@ class TestOrderResumeParsing:
 
         assert captured, "fake_launch was never called"
         assert captured["resume_spec"] == NoResume()
+        assert "MCP STARTUP RECOVERY" in captured["prompt"]
+        assert captured["project_dir"] == tmp_path
+        assert captured["backend"] is not None
 
     def test_order_resume_uuid_does_not_validate_recipe(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

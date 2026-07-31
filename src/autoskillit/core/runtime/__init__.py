@@ -8,6 +8,10 @@ from __future__ import annotations
 
 from ._linux_proc import is_session_alive, read_boot_id, read_starttime_ticks
 from .artifact_lease import ArtifactLease, ArtifactLeaseContention
+from .executable_binding import (
+    executable_binding_matches_current_file,
+    resolve_executable_launch_binding,
+)
 from .kitchen_state import (
     KitchenMarker,
     find_caller_session_id,
@@ -41,6 +45,7 @@ from .session_registry import (
 __all__ = [
     "ArtifactLease",
     "ArtifactLeaseContention",
+    "executable_binding_matches_current_file",
     "is_session_alive",
     "KitchenMarker",
     "bridge_claude_session_id",
@@ -58,6 +63,7 @@ __all__ = [
     "read_registry",
     "read_starttime_ticks",
     "readiness_sentinel_path",
+    "resolve_executable_launch_binding",
     "registry_path",
     "sweep_stale_markers",
     "write_marker",

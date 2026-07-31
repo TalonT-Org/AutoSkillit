@@ -14,7 +14,11 @@ from autoskillit.config import AutomationConfig
 from autoskillit.core import ClaudeFlags, SkillContractError
 from tests.cli.conftest import _SCRIPT_YAML
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+pytestmark = [
+    pytest.mark.layer("cli"),
+    pytest.mark.medium,
+    pytest.mark.usefixtures("_stub_interactive_prelaunch"),
+]
 
 
 @pytest.mark.parametrize(

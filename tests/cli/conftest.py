@@ -8,6 +8,7 @@ is_git_worktree to True themselves.
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -36,6 +37,70 @@ def _stub_detect_mcp_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "autoskillit.core.detect_autoskillit_mcp_prefix",
         lambda _capabilities: DIRECT_PREFIX,
+    )
+
+
+@pytest.fixture
+def _stub_interactive_prelaunch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Bind legacy CLI tests to hermetic executables below the strict probe boundary."""
+    import autoskillit.cli.session._session_launch as _session_launch
+    from autoskillit.core import (
+        ExecutableLaunchBinding,
+        resolve_executable_launch_binding,
+    )
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    binary_dir = tmp_path / "interactive-binaries"
+    binary_dir.mkdir()
+    binaries: dict[str, Path] = {}
+    for name in ("claude", "codex"):
+        binary = binary_dir / name
+        binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        binary.chmod(0o755)
+        binaries[name] = binary
+
+    monkeypatch.setattr(
+        shutil,
+        "which",
+        lambda name, **_kwargs: str(binaries[name]) if name in binaries else None,
+    )
+
+    def resolve_binding(
+        *,
+        binary_name: str,
+        environment: dict[str, str],
+        cwd: Path,
+        explicit_path_env: str | None = None,
+    ) -> ExecutableLaunchBinding:
+        del explicit_path_env
+        if shutil.which(binary_name) is None:
+            raise ValueError(f"'{binary_name}' not found in the effective PATH")
+        with pytest.MonkeyPatch.context() as binding_patch:
+            binding_patch.setattr(
+                shutil,
+                "which",
+                lambda name, **_kwargs: str(binaries[name]) if name in binaries else None,
+            )
+            return resolve_executable_launch_binding(
+                binary_name=binary_name,
+                environment=environment,
+                cwd=cwd,
+            )
+
+    monkeypatch.setattr(_session_launch, "resolve_executable_launch_binding", resolve_binding)
+    monkeypatch.setattr(
+        ClaudeCodeBackend,
+        "ensure_pre_launch",
+        lambda _self, *, session_dir=None, executable=None: [],
+    )
+    monkeypatch.setattr(
+        CodexBackend,
+        "ensure_pre_launch",
+        lambda _self, *, session_dir=None, executable=None: [],
     )
 
 

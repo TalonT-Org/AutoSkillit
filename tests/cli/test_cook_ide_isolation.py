@@ -19,7 +19,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+pytestmark = [
+    pytest.mark.layer("cli"),
+    pytest.mark.small,
+    pytest.mark.usefixtures("_stub_interactive_prelaunch"),
+]
 
 
 def test_cook_session_ignores_ide_lock_file(
@@ -62,4 +66,5 @@ def test_cook_session_ignores_ide_lock_file(
 
     # Argv must no longer carry a leading ['env', ...] prefix.
     cmd = mock_run.call_args.args[0]
-    assert cmd[0] == "claude"
+    assert Path(cmd[0]).is_absolute()
+    assert Path(cmd[0]).name == "claude"

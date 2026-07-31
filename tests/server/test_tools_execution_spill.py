@@ -359,10 +359,13 @@ async def test_decorated_dispatch_preserves_routing_scalars_artifact_and_small_i
     small_outcome = SimpleNamespace(to_envelope=lambda: small_envelope)
     execute.return_value = SimpleNamespace(outcome=small_outcome)
 
-    assert (
+    small_data = json.loads(
         await tools_fleet_dispatch.dispatch_food_truck(recipe="probe", task="small")
-        == small_envelope
     )
+    assert small_data["success"] is True
+    assert small_data["dispatch_status"] == "success"
+    assert small_data["dispatch_id"] == "dispatch-small"
+    assert small_data["effect_provenance"]["retry_disposition"] == "fresh_dispatch_allowed"
 
 
 @pytest.mark.anyio

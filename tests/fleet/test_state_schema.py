@@ -10,6 +10,7 @@ import pytest
 
 from autoskillit.fleet import (
     FLEET_STATE_SCHEMA_VERSION,
+    DispatchEffectProvenance,
     DispatchRecord,
     DispatchStatus,
     DispatchTokenUsage,
@@ -76,8 +77,8 @@ class TestDispatchRecordSchemaV2:
         assert dispatch_raw["dispatched_boot_id"] == "abc-boot"
         assert dispatch_raw["issue_url"] == "https://github.com/org/repo/issues/42"
 
-    def test_schema_version_is_8(self) -> None:
-        assert FLEET_STATE_SCHEMA_VERSION == 8
+    def test_schema_version_is_9(self) -> None:
+        assert FLEET_STATE_SCHEMA_VERSION == 9
 
     def test_read_state_returns_none_on_version_mismatch(self, tmp_path: Path) -> None:
         """read_state returns None when schema_version is stale (v1)."""
@@ -397,6 +398,7 @@ class TestDispatchRecordToDict:
             "labels_cleaned",
             "resume_count",
             "backend_name",
+            "effect_provenance",
         }
 
     def test_dispatch_record_to_dict_token_usage_is_shallow_copy(self) -> None:
@@ -798,6 +800,7 @@ class TestDispatchCompletedEnvelopeCoverage:
             reason="",
             token_usage={"input": 100, "output": 50, "cache_read": 10, "cache_creation": 5},
             elapsed_seconds=42.5,
+            effect_provenance=DispatchEffectProvenance(operation_id="test-dispatch-id"),
         )
         envelope = json.loads(completed.to_envelope())
 

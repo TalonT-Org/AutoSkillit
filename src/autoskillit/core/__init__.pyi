@@ -158,6 +158,12 @@ from .runtime._linux_proc import read_starttime_ticks as read_starttime_ticks
 from .runtime.artifact_lease import ArtifactLease as ArtifactLease
 from .runtime.artifact_lease import ArtifactLeaseContention as ArtifactLeaseContention
 from .runtime.artifact_lease import plugin_launch_binding_scope as plugin_launch_binding_scope
+from .runtime.executable_binding import (
+    executable_binding_matches_current_file as executable_binding_matches_current_file,
+)
+from .runtime.executable_binding import (
+    resolve_executable_launch_binding as resolve_executable_launch_binding,
+)
 from .runtime.kitchen_state import KitchenMarker as KitchenMarker
 from .runtime.kitchen_state import find_caller_session_id as find_caller_session_id
 from .runtime.kitchen_state import get_state_dir as get_state_dir
@@ -232,6 +238,9 @@ from .types import CAPABILITY_INGREDIENT_TO_SKIP_GUARD as CAPABILITY_INGREDIENT_
 from .types import CAPTURE_VALID_VALUE_TYPES as CAPTURE_VALID_VALUE_TYPES
 from .types import CATEGORY_TAGS as CATEGORY_TAGS
 from .types import CLAUDE_CODE_CAPABILITIES as CLAUDE_CODE_CAPABILITIES
+from .types import CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR as CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR
+from .types import CLAUDE_MCP_CONNECT_TIMEOUT_MS as CLAUDE_MCP_CONNECT_TIMEOUT_MS
+from .types import CLAUDE_MCP_CONNECTION_NONBLOCKING as CLAUDE_MCP_CONNECTION_NONBLOCKING
 from .types import CLAUDE_MODEL_ALIASES as CLAUDE_MODEL_ALIASES
 from .types import CLOSURE_REPORT_SCHEMA_VERSION as CLOSURE_REPORT_SCHEMA_VERSION
 from .types import CODEX_ACTIVE_VIEWS_SUBDIR as CODEX_ACTIVE_VIEWS_SUBDIR
@@ -535,6 +544,7 @@ from .types import EffectiveSkillInvocationAuthority as EffectiveSkillInvocation
 from .types import EnvPolicy as EnvPolicy
 from .types import EpochClosedEffect as EpochClosedEffect
 from .types import EpochFenceProof as EpochFenceProof
+from .types import ExecutableLaunchBinding as ExecutableLaunchBinding
 from .types import ExecutionInstallSiteDef as ExecutionInstallSiteDef
 from .types import ExpiredIdempotencyTombstone as ExpiredIdempotencyTombstone
 from .types import ExpireIdempotencyKeyEvent as ExpireIdempotencyKeyEvent
@@ -581,6 +591,7 @@ from .types import InventoryAdmissionDecision as InventoryAdmissionDecision
 from .types import InvocationTemplate as InvocationTemplate
 from .types import IssueLabelState as IssueLabelState
 from .types import KillReason as KillReason
+from .types import KitchenTransitionLock as KitchenTransitionLock
 from .types import LabelDef as LabelDef
 from .types import LegacyRetiringEvidence as LegacyRetiringEvidence
 from .types import LensEntry as LensEntry
@@ -626,6 +637,7 @@ from .types import PluginRetirementCoordinator as PluginRetirementCoordinator
 from .types import PreflightEvidence as PreflightEvidence
 from .types import PreflightKind as PreflightKind
 from .types import PrepareBatchEvent as PrepareBatchEvent
+from .types import ProcessCleanupResult as ProcessCleanupResult
 from .types import ProcessedEventRecord as ProcessedEventRecord
 from .types import ProcessStaleError as ProcessStaleError
 from .types import ProducerCoverageDef as ProducerCoverageDef

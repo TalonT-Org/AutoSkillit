@@ -54,6 +54,11 @@ def _fmt_dispatch_food_truck(data: dict, _pipeline: bool) -> str:
         escape_hatch = data.get("escape_hatch", "")
         if escape_hatch:
             lines.append(f"escape_hatch: {escape_hatch}")
+        effect_provenance = data.get("effect_provenance")
+        if effect_provenance:
+            lines.append("")
+            lines.append("effect_provenance:")
+            lines.append(json.dumps(effect_provenance, indent=2))
         return "\n".join(lines)
 
     # Success path — DispatchCompleted shape
@@ -70,6 +75,11 @@ def _fmt_dispatch_food_truck(data: dict, _pipeline: bool) -> str:
     reason = data.get("reason", "")
     if reason:
         lines.append(f"reason: {reason}")
+    effect_provenance = data.get("effect_provenance")
+    if effect_provenance:
+        lines.append("")
+        lines.append("effect_provenance:")
+        lines.append(json.dumps(effect_provenance, indent=2))
 
     token_usage = data.get("token_usage")
     if isinstance(token_usage, dict) and token_usage:
@@ -159,6 +169,7 @@ _FMT_DISPATCH_FOOD_TRUCK_RENDERED: frozenset[str] = frozenset(
         "details",
         "missing_provider_steps",
         "escape_hatch",
+        "effect_provenance",
     }
 )
 _FMT_DISPATCH_FOOD_TRUCK_SUPPRESSED: frozenset[str] = frozenset({"kind"})
@@ -169,11 +180,13 @@ _FMT_DISPATCH_COMPLETED_REQUIRED: frozenset[str] = frozenset(
         "dispatch_id",
         "dispatched_session_id",
         "reason",
+        "effect_provenance",
     }
 )
 _FMT_DISPATCH_REJECTED_REQUIRED: frozenset[str] = frozenset(
     {
         "error",
         "user_visible_message",
+        "effect_provenance",
     }
 )

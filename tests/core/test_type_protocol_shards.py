@@ -151,6 +151,7 @@ def test_infra_shard_all():
         "GateState",
         "BackgroundSupervisor",
         "FleetLock",
+        "KitchenTransitionLock",
         "QuotaRefreshTask",
         "TokenFactory",
         "CampaignProtector",

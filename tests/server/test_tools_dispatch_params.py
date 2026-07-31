@@ -249,10 +249,10 @@ class TestDispatchFoodTruckIdleTimeout:
 
 
 @pytest.mark.anyio
-async def test_dispatch_food_truck_returns_fleet_error_on_mcp_timeout(
+async def test_dispatch_food_truck_preserves_inner_timeout_semantics(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ):
-    """dispatch_food_truck returns fleet_l3_timeout envelope on MCP tool TimeoutError."""
+    """An inner TimeoutError is not misclassified as the outer cancel-scope deadline."""
     import json
 
     from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
@@ -279,4 +279,5 @@ async def test_dispatch_food_truck_returns_fleet_error_on_mcp_timeout(
     result_json = await dispatch_food_truck(recipe="test-recipe", task="do-work")
     result = json.loads(result_json)
     assert result["success"] is False
-    assert result["error"] == "fleet_l3_timeout"
+    assert result["error"] == "fleet_l3_startup_or_crash"
+    assert "TimeoutError" in result["user_visible_message"]

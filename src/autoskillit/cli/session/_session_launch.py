@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import NamedResume, NoResume, plugin_launch_binding_scope
+from autoskillit.core import (
+    NamedResume,
+    NoResume,
+    executable_binding_matches_current_file,
+    plugin_launch_binding_scope,
+    resolve_executable_launch_binding,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend, ResumeSpec
@@ -77,17 +82,6 @@ def _run_interactive_session(
                 backend = get_backend("claude-code")
                 break
 
-    if shutil.which(backend.binary_name()) is None:
-        print(
-            f"ERROR: '{backend.binary_name()}' not found. "
-            "Install: https://docs.anthropic.com/en/docs/claude-code"
-        )
-        sys.exit(1)
-    pre_launch_errors = backend.ensure_pre_launch()
-    if pre_launch_errors:
-        for err in pre_launch_errors:
-            print(f"ERROR: {err}", file=sys.stderr)
-        sys.exit(1)
     from autoskillit.cli.session._session_reload import consume_reload_sentinel
     from autoskillit.cli.ui._terminal import terminal_guard
     from autoskillit.core import InfraExitCategory
@@ -113,9 +107,39 @@ def _run_interactive_session(
         backend=backend,
         load_mode=load_mode,
     ) as binding:
+        final_resume_spec = resume_spec if resume_spec is not None else NoResume()
+        candidate_spec = backend.build_interactive_cmd(
+            initial_prompt=initial_message,
+            resume_spec=final_resume_spec,
+            system_prompt=system_prompt,
+            env_extras=extra_env,
+            required_env=required_env,
+            plugin_binding=binding,
+            tools=tools_arg,
+        )
+        try:
+            executable = resolve_executable_launch_binding(
+                binary_name=backend.binary_name(),
+                environment=candidate_spec.env,
+                cwd=_project_dir,
+                explicit_path_env=(
+                    "CLAUDE_CODE_EXECPATH"
+                    if "CLAUDE_CODE_EXECPATH" in candidate_spec.env
+                    else None
+                ),
+            )
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
+        pre_launch_errors = backend.ensure_pre_launch(executable=executable)
+        if pre_launch_errors:
+            for err in pre_launch_errors:
+                print(f"ERROR: {err}", file=sys.stderr)
+            sys.exit(1)
         spec = backend.build_interactive_cmd(
             initial_prompt=initial_message,
-            resume_spec=resume_spec if resume_spec is not None else NoResume(),
+            executable=executable,
+            resume_spec=final_resume_spec,
             system_prompt=system_prompt,
             env_extras=extra_env,
             required_env=required_env,
@@ -123,11 +147,18 @@ def _run_interactive_session(
             tools=tools_arg,
         )
         assert_interactive_ordering(spec=spec)
+        if not executable_binding_matches_current_file(executable):
+            print(
+                "ERROR: interactive executable changed after capability probing",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         cmd = [*spec.cmd]
         with terminal_guard():
             result = subprocess.run(
                 cmd,
                 env=spec.env,
+                cwd=str(executable.cwd),
                 pass_fds=spec.inherited_fds,
             )
     reload_session_id = consume_reload_sentinel(_project_dir)

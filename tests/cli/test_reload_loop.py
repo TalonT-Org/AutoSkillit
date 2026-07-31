@@ -12,7 +12,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+pytestmark = [
+    pytest.mark.layer("cli"),
+    pytest.mark.small,
+    pytest.mark.usefixtures("_stub_interactive_prelaunch"),
+]
 
 
 class _ReloadBinding:

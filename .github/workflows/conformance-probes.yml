@@ -124,13 +124,30 @@ jobs:
             "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
   claude-probe:
-    name: Claude Code CLI conformance probe
-    runs-on: ubuntu-latest
+    name: Claude Code ${{ matrix.claude-version }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            claude-version: "2.1.142"
+            probe-tmpdir: /dev/shm/pytest-probes
+          - os: ubuntu-22.04
+            claude-version: "2.1.197"
+            probe-tmpdir: /dev/shm/pytest-probes
+          - os: macos-14
+            claude-version: "2.1.142"
+            probe-tmpdir: /tmp/pytest-probes
+          - os: macos-14
+            claude-version: "2.1.197"
+            probe-tmpdir: /tmp/pytest-probes
     env:
       CLAUDE_CODE_SMOKE_TEST: "1"
+      CLAUDE_STARTUP_READINESS_SMOKE: "1"
       AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED: "true"
-      TMPDIR: /dev/shm/pytest-probes
+      TMPDIR: ${{ matrix.probe-tmpdir }}
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -166,10 +183,21 @@ jobs:
           mkdir -p .autoskillit/temp
           uv sync --locked --extra dev
 
+      - name: Install pinned Claude CLI
+        run: |
+          npm install --global "@anthropic-ai/claude-code@${{ matrix.claude-version }}"
+          CLAUDE_BIN=$(command -v claude)
+          if [ -z "$CLAUDE_BIN" ]; then
+            echo "::error::Pinned Claude CLI installation did not provide claude"
+            exit 1
+          fi
+          CLAUDE_BIN=$(realpath "$CLAUDE_BIN")
+          echo "CLAUDE_CODE_EXECPATH=$CLAUDE_BIN" >> "$GITHUB_ENV"
+
       - name: Resolve Claude CLI version
         id: resolve-version
         run: |
-          CLI_VERSION=$(claude --version 2>/dev/null || echo 'unknown')
+          CLI_VERSION=$("$CLAUDE_CODE_EXECPATH" --version 2>/dev/null || echo 'unknown')
           if [ "$CLI_VERSION" = "unknown" ]; then
             echo "::error::Claude CLI is not installed — cannot run conformance probes"
             exit 1
@@ -214,6 +242,15 @@ jobs:
         with:
           path: .autoskillit/temp/probe-cache/claude
           key: probe-claude-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}
+
+      - name: Upload bounded startup-readiness traces
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: claude-startup-readiness-${{ matrix.os }}-${{ matrix.claude-version }}
+          path: .autoskillit/temp/claude-startup-readiness/*
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Post probe failure
         if: failure()

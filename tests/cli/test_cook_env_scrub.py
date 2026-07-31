@@ -18,7 +18,11 @@ import pytest
 from autoskillit.core import CmdSpec, ManagedSessionHome, ValidatedAddDir
 from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
 
-pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+pytestmark = [
+    pytest.mark.layer("cli"),
+    pytest.mark.small,
+    pytest.mark.usefixtures("_stub_interactive_prelaunch"),
+]
 
 
 def test_launch_cook_session_env_excludes_ide_vars(

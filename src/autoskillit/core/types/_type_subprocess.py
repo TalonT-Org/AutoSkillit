@@ -15,6 +15,7 @@ from ._type_enums import ChannelConfirmation, KillReason, TerminationReason
 from ._type_inspector import InspectorCallback, InspectorVerdict
 
 __all__ = [
+    "ProcessCleanupResult",
     "SubprocessResult",
     "SubprocessRunner",
 ]
@@ -65,6 +66,42 @@ __all__ = [
 #:   downstream consumers. When both sources are empty (crash/pre-start): "".
 #:   channel_b_session_id is retained alongside for diagnostic provenance.
 _TERMINATION_CONTRACT = None  # Marker — contract is documented above in comments.
+
+
+@dataclass(frozen=True, slots=True)
+class ProcessCleanupResult:
+    """Observed result of terminating one local process tree.
+
+    ``process_identities`` captures ``(pid, create_time)`` pairs before signals
+    are sent.  ``survivor_pids`` is measured after the final bounded wait; an
+    empty tuple is therefore positive local cleanup evidence, while a non-empty
+    tuple keeps the cleanup result explicitly incomplete.
+    """
+
+    root_pid: int
+    process_identities: tuple[tuple[int, float], ...] = ()
+    terminated_pids: tuple[int, ...] = ()
+    survivor_pids: tuple[int, ...] = ()
+    access_denied_pids: tuple[int, ...] = ()
+
+    @property
+    def complete(self) -> bool:
+        """Whether every observed local process was confirmed absent."""
+        return not self.survivor_pids
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the stable JSON-compatible cleanup evidence."""
+        return {
+            "root_pid": self.root_pid,
+            "process_identities": [
+                {"pid": pid, "create_time": create_time}
+                for pid, create_time in self.process_identities
+            ],
+            "terminated_pids": list(self.terminated_pids),
+            "survivor_pids": list(self.survivor_pids),
+            "access_denied_pids": list(self.access_denied_pids),
+            "complete": self.complete,
+        }
 
 
 @dataclass

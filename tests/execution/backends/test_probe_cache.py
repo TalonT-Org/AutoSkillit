@@ -184,6 +184,7 @@ def test_probe_policy_identity_uses_output_discipline_authorities() -> None:
         "generated-codex-child-v1",
         "deep-investigate-codex-v2",
         "deep-investigate-claude-200k-v2",
+        "claude-startup-readiness-v1",
         "codex-recipe-delivery-v2",
     )
 

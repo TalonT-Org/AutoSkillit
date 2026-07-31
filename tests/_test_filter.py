@@ -172,6 +172,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_cmd_runner": frozenset({"cli", "core", "recipe", "smoke_utils", "_probe_canary"}),
     "_json": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
     "artifact_lease": frozenset({"core", "workspace"}),
+    "executable_binding": frozenset({"cli", "core", "execution"}),
     "feature_flags": frozenset(
         {"core", "cli", "config", "execution", "recipe", "server", "workspace"}
     ),

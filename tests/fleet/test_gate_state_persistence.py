@@ -9,8 +9,8 @@ import pytest
 
 from autoskillit.fleet import (
     DispatchCompleted,
+    DispatchEffectProvenance,
     DispatchRecord,
-    DispatchRejected,
     DispatchResult,
     DispatchStatus,
     read_state,
@@ -161,6 +161,7 @@ class TestDispatchFoodTruckCampaignState:
                     dispatched_session_id="s1",
                     reason="",
                     token_usage={},
+                    effect_provenance=DispatchEffectProvenance(operation_id="d1"),
                 ),
                 per_dispatch_state_path=None,
             )
@@ -194,6 +195,7 @@ class TestDispatchFoodTruckCampaignState:
                     dispatched_session_id="s1",
                     reason="l2_crashed",
                     token_usage={},
+                    effect_provenance=DispatchEffectProvenance(operation_id="d1"),
                 ),
                 per_dispatch_state_path=None,
             )
@@ -226,6 +228,7 @@ class TestDispatchFoodTruckCampaignState:
                     dispatched_session_id="s1",
                     reason="",
                     token_usage={},
+                    effect_provenance=DispatchEffectProvenance(operation_id="d1"),
                 ),
                 per_dispatch_state_path=None,
             )
@@ -261,6 +264,7 @@ class TestDispatchFoodTruckCampaignState:
                     dispatched_session_id="s1",
                     reason="",
                     token_usage={},
+                    effect_provenance=DispatchEffectProvenance(operation_id="d1"),
                 ),
                 per_dispatch_state_path=None,
             )
@@ -338,6 +342,7 @@ class TestCampaignStateFieldCompleteness:
                         "cache_creation": 5,
                     },
                     elapsed_seconds=7.25,
+                    effect_provenance=DispatchEffectProvenance(operation_id="d-timing"),
                 ),
                 per_dispatch_state_path=per_dispatch_sp,
             )
@@ -406,6 +411,7 @@ class TestCampaignStateFieldCompleteness:
                         "cache_read": 10,
                         "cache_creation": 5,
                     },
+                    effect_provenance=DispatchEffectProvenance(operation_id="d-token"),
                 ),
                 per_dispatch_state_path=per_dispatch_sp,
             )
@@ -476,6 +482,7 @@ class TestCampaignStateFieldCompleteness:
                         "cache_creation": 10,
                     },
                     elapsed_seconds=15.0,
+                    effect_provenance=DispatchEffectProvenance(operation_id="d-field"),
                 ),
                 per_dispatch_state_path=per_dispatch_sp,
             )
@@ -514,6 +521,7 @@ class TestCampaignStateFieldCompleteness:
                     dispatched_session_id="s-fallback",
                     reason="completed",
                     token_usage={"input": 50, "output": 25, "cache_read": 0, "cache_creation": 0},
+                    effect_provenance=DispatchEffectProvenance(operation_id="d-fallback"),
                 ),
                 per_dispatch_state_path=None,
             )
@@ -760,6 +768,7 @@ class TestValidationFailureCampaignState:
                     dispatched_session_id="s1",
                     reason="fleet_missing_ingredient",
                     token_usage={},
+                    effect_provenance=DispatchEffectProvenance(operation_id="d1"),
                 ),
                 per_dispatch_state_path=None,
             )
@@ -796,8 +805,8 @@ class TestValidationFailureCampaignState:
         assert decision.completed_dispatches_block == "fleet_halted_on_failure"
 
     @pytest.mark.anyio
-    async def test_dispatch_rejected_carries_dispatch_id(self, tool_ctx, tmp_path):
-        """T6: DispatchRejected returned from execute_dispatch carries non-empty dispatch_id."""
+    async def test_post_allocation_refusal_carries_dispatch_id(self, tool_ctx, tmp_path):
+        """T6: Post-allocation refusal is completed with its durable dispatch identity."""
         from autoskillit.core import RecipeSource
         from autoskillit.fleet import FleetSemaphore
         from autoskillit.recipe.schema import Recipe, RecipeInfo, RecipeIngredient, RecipeKind
@@ -842,5 +851,6 @@ class TestValidationFailureCampaignState:
         )
 
         result = result.outcome
-        assert isinstance(result, DispatchRejected)
+        assert isinstance(result, DispatchCompleted)
+        assert result.dispatch_status is DispatchStatus.REFUSED
         assert result.dispatch_id != ""

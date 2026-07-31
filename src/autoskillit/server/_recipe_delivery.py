@@ -56,11 +56,18 @@ from autoskillit.execution import (
     RecipeReceiptHandle,
     codex_recipe_delivery_calling_contract,
 )
-from autoskillit.pipeline import InitializingRecipe, RecipeInitializationRequirement
-from autoskillit.server._recipe_execution import (
-    install_recipe_execution,
-    prepare_recipe_execution,
+from autoskillit.pipeline import (
+    KITCHEN_EFFECT_RECIPE_SERVING as _RECIPE_SERVING,
 )
+from autoskillit.pipeline import (
+    InitializingRecipe,
+    KitchenEffectPhase,
+    KitchenTransitionToken,
+    RecipeInitializationRequirement,
+    confirm_kitchen_effect,
+    mark_kitchen_effect_ambiguous,
+)
+from autoskillit.server._recipe_execution import install_recipe_execution, prepare_recipe_execution
 from autoskillit.server._recipe_generation import (
     RecipeGenerationError,
     RecipeGenerationRecord,
@@ -117,6 +124,7 @@ class FinalizedRecipeResponse:
     initialization_activating: bool = False
     initialization_id: str | None = None
     initialization_requirements: tuple[RecipeInitializationRequirement, ...] = ()
+    kitchen_transition_token: KitchenTransitionToken | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1141,6 +1149,23 @@ def finalize_recipe_delivery(
                 {"success": False, "error": "recipe_initialization_plan_failed"},
                 separators=(",", ":"),
             )
+    kitchen_transition_token = None
+    if (
+        surface.startswith("open_kitchen")
+        and hasattr(tool_ctx, "kitchen_transition_lock")
+        and hasattr(tool_ctx, "kitchen_open_state")
+    ):
+        with tool_ctx.kitchen_transition_lock:
+            state = tool_ctx.kitchen_open_state
+            serving_effect = next(
+                (effect for effect in state.effects if effect.name == _RECIPE_SERVING),
+                None,
+            )
+            if serving_effect is not None:
+                kitchen_transition_token = KitchenTransitionToken(
+                    operation_id=state.operation_id,
+                    effect_id=serving_effect.effect_id,
+                )
     return FinalizedRecipeResponse(
         rendered=rendered,
         decision=decision,
@@ -1151,11 +1176,16 @@ def finalize_recipe_delivery(
         flow_generation=flow_generation,
         execution_snapshot=execution_snapshot,
         normalized_compile_key=normalized_compile_key,
-        tool_ctx=tool_ctx if execution_snapshot is not None else None,
+        tool_ctx=(
+            tool_ctx
+            if execution_snapshot is not None or kitchen_transition_token is not None
+            else None
+        ),
         recipe_name=recipe_name,
         initialization_activating=surface_definition.initialization_activating,
         initialization_id=initialization_id,
         initialization_requirements=initialization_requirements,
+        kitchen_transition_token=kitchen_transition_token,
     )
 
 
@@ -1171,6 +1201,29 @@ def complete_finalized_recipe_response(
     parsed: dict[str, Any] | None = None
     prepared_execution: Any = None
     previous_initialization_state: Any = None
+    transition_token = finalized.kitchen_transition_token
+    if enforced == finalized.rendered and transition_token is not None:
+        transition_owned = False
+        if (
+            finalized.tool_ctx is not None
+            and hasattr(finalized.tool_ctx, "kitchen_transition_lock")
+            and hasattr(finalized.tool_ctx, "kitchen_open_state")
+        ):
+            with finalized.tool_ctx.kitchen_transition_lock:
+                state = finalized.tool_ctx.kitchen_open_state
+                transition_owned = state.operation_id == transition_token.operation_id and any(
+                    effect.name == _RECIPE_SERVING
+                    and effect.effect_id == transition_token.effect_id
+                    for effect in state.effects
+                )
+        if not transition_owned:
+            enforced = json.dumps(
+                {
+                    "success": False,
+                    "error": "kitchen_transition_ownership_mismatch",
+                },
+                separators=(",", ":"),
+            )
     if enforced == finalized.rendered and finalized.initialization_activating:
         required_values = (
             finalized.tool_ctx,
@@ -1299,14 +1352,52 @@ def complete_finalized_recipe_response(
             )
         else:
             handle = None
-    if enforced == finalized.rendered:
-        return enforced
     if handle is not None and (ledger is None or not ledger.abort(handle)):
-        return json.dumps(
+        enforced = json.dumps(
             {"success": False, "error": "recipe_delivery_receipt_abort_failed"},
             separators=(",", ":"),
         )
+    _complete_kitchen_serving_transition(finalized, enforced)
     return enforced
+
+
+def _complete_kitchen_serving_transition(
+    finalized: FinalizedRecipeResponse,
+    enforced: Any,
+) -> None:
+    """Close the owned serving effect at the response-enforcement boundary."""
+    transition_token = finalized.kitchen_transition_token
+    tool_ctx = finalized.tool_ctx
+    if transition_token is None or tool_ctx is None:
+        return
+    with tool_ctx.kitchen_transition_lock:
+        state = tool_ctx.kitchen_open_state
+        if state.operation_id != transition_token.operation_id:
+            return
+        effect = next(
+            (
+                candidate
+                for candidate in state.effects
+                if candidate.name == _RECIPE_SERVING
+                and candidate.effect_id == transition_token.effect_id
+            ),
+            None,
+        )
+        if effect is None or effect.phase is not KitchenEffectPhase.STARTED:
+            return
+        if enforced == finalized.rendered:
+            state = confirm_kitchen_effect(
+                state,
+                effect.name,
+                receipt=f"response:{effect.effect_id}",
+            )
+        else:
+            state = mark_kitchen_effect_ambiguous(
+                state,
+                effect.name,
+                evidence="finalized recipe response changed during enforcement",
+            )
+        tool_ctx.kitchen_open_state = state
 
 
 def enforce_recipe_resource_response(

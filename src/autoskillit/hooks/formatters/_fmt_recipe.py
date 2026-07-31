@@ -197,6 +197,15 @@ _FMT_OPEN_KITCHEN_RENDERED: frozenset[str] = frozenset(
         "orchestration_rules",
         "version",
         "warnings",
+        "kitchen_id",
+        "operation_id",
+        "intent_fingerprint",
+        "received_intent_fingerprint",
+        "phase",
+        "effects",
+        "degraded_evidence",
+        "ambiguity",
+        "retry_disposition",
         *_RECIPE_INITIALIZATION_FIELDS,
     }
 )
@@ -223,17 +232,44 @@ _FMT_OPEN_KITCHEN_SUPPRESSED: frozenset[str] = frozenset(
 )
 
 
+def _fmt_kitchen_transition(data: OpenKitchenResult) -> list[str]:
+    """Preserve replay and reconciliation authority in pretty output."""
+    lines: list[str] = []
+    for field in (
+        "kitchen_id",
+        "operation_id",
+        "intent_fingerprint",
+        "received_intent_fingerprint",
+        "phase",
+        "retry_disposition",
+    ):
+        value = data.get(field)
+        if value not in (None, ""):
+            lines.append(f"{field}: {value}")
+    for field in ("effects", "degraded_evidence", "ambiguity"):
+        value = data.get(field)
+        if value:
+            lines.append(f"{field}: {value!r}")
+    return lines
+
+
 def _fmt_open_kitchen(data: OpenKitchenResult, pipeline: bool) -> str:
     """Format open_kitchen combined kitchen+recipe result."""
     version = data.get("version", "")
 
     error = data.get("error")
     if error:
-        return f"## open_kitchen {_CROSS_MARK} v{version}\n\nKitchen open. Recipe error: {error}"
+        error_lines = [
+            f"## open_kitchen {_CROSS_MARK} v{version}",
+            f"\nKitchen open. Recipe error: {error}",
+        ]
+        error_lines.extend(_fmt_kitchen_transition(data))
+        return "\n".join(error_lines)
 
     valid = data.get("valid", True)
     mark = _CHECK_MARK if valid else _CROSS_MARK
     lines: list[str] = [f"## open_kitchen {mark} v{version}"]
+    lines.extend(_fmt_kitchen_transition(data))
     lines.extend(_fmt_recipe_body(data))
     formatted = "\n".join(lines)
 

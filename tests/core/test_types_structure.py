@@ -89,7 +89,11 @@ def test_supports_debug_in_core_all() -> None:
 def test_subprocess_shard_all() -> None:
     from autoskillit.core.types._type_subprocess import __all__
 
-    assert set(__all__) == {"SubprocessResult", "SubprocessRunner"}
+    assert set(__all__) == {
+        "ProcessCleanupResult",
+        "SubprocessResult",
+        "SubprocessRunner",
+    }
     assert "_TERMINATION_CONTRACT" not in __all__
 
 

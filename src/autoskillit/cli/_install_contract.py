@@ -62,6 +62,13 @@ class InstallProcessStatus(IntEnum):
     INDETERMINATE = 24
 
 
+_FAILED_STATUS_BY_KIND: dict[InstallFailureKind, InstallProcessStatus] = {
+    InstallFailureKind.PREFLIGHT: InstallProcessStatus.FAILED_PREFLIGHT,
+    InstallFailureKind.CHILD: InstallProcessStatus.FAILED_CHILD,
+    InstallFailureKind.POSTCONDITION: InstallProcessStatus.FAILED_POSTCONDITION,
+}
+
+
 @dataclass(frozen=True, slots=True)
 class InstallRequest:
     """Install obligation supplied by a direct or maintenance caller."""
@@ -93,11 +100,7 @@ class InstallResult:
 
     def __post_init__(self) -> None:
         if self.outcome is InstallOutcome.FAILED:
-            if self.failure_kind not in {
-                InstallFailureKind.PREFLIGHT,
-                InstallFailureKind.CHILD,
-                InstallFailureKind.POSTCONDITION,
-            }:
+            if self.failure_kind not in _FAILED_STATUS_BY_KIND:
                 raise ValueError(
                     "FAILED requires a preflight, child, or postcondition failure kind"
                 )
@@ -113,27 +116,16 @@ class InstallResult:
             raise TypeError("findings must be a tuple of strings")
 
 
-_FAILED_STATUS_BY_KIND = {
-    InstallFailureKind.PREFLIGHT: InstallProcessStatus.FAILED_PREFLIGHT,
-    InstallFailureKind.CHILD: InstallProcessStatus.FAILED_CHILD,
-    InstallFailureKind.POSTCONDITION: InstallProcessStatus.FAILED_POSTCONDITION,
-}
-
-_OUTCOME_BY_STATUS = {
+_OUTCOME_BY_STATUS: dict[
+    InstallProcessStatus,
+    tuple[InstallOutcome, InstallFailureKind | None],
+] = {
     InstallProcessStatus.DECLINED: (InstallOutcome.DECLINED, None),
     InstallProcessStatus.DEFERRED: (InstallOutcome.DEFERRED, None),
-    InstallProcessStatus.FAILED_PREFLIGHT: (
-        InstallOutcome.FAILED,
-        InstallFailureKind.PREFLIGHT,
-    ),
-    InstallProcessStatus.FAILED_CHILD: (
-        InstallOutcome.FAILED,
-        InstallFailureKind.CHILD,
-    ),
-    InstallProcessStatus.FAILED_POSTCONDITION: (
-        InstallOutcome.FAILED,
-        InstallFailureKind.POSTCONDITION,
-    ),
+    **{
+        status: (InstallOutcome.FAILED, failure_kind)
+        for failure_kind, status in _FAILED_STATUS_BY_KIND.items()
+    },
     InstallProcessStatus.RECOVERY_REQUIRED: (
         InstallOutcome.RECOVERY_REQUIRED,
         InstallFailureKind.ROLLBACK,

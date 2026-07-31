@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -347,6 +348,9 @@ def test_closed_gate_degradation_reasons_execute(tmp_path: Path, reason: str) ->
         metrics["artifacts"]["annotated_diff"]["sha256"] = "0" * 64
         _write_metrics(case)
     elif reason == "marker_changed":
+        real_sha256sum = shutil.which("sha256sum")
+        if real_sha256sum is None:
+            pytest.skip("sha256sum is required by the extracted review-pr gate")
         fake_bin = case["output_dir"] / "bin"
         fake_bin.mkdir()
         wrapper = fake_bin / "sha256sum"
@@ -356,12 +360,13 @@ def test_closed_gate_degradation_reasons_execute(tmp_path: Path, reason: str) ->
             '  : > "$MUTATION_SENTINEL"\n'
             '  printf "\\n" >> "$MUTATE_MARKER_PATH"\n'
             "fi\n"
-            'exec /usr/bin/sha256sum "$@"\n'
+            'exec "$REAL_SHA256SUM" "$@"\n'
         )
         wrapper.chmod(0o755)
         case["env"]["PATH"] = f"{fake_bin}:{case['env']['PATH']}"
         case["env"]["MUTATION_SENTINEL"] = str(case["output_dir"] / "mutated")
         case["env"]["MUTATE_MARKER_PATH"] = str(case["metrics_path"])
+        case["env"]["REAL_SHA256SUM"] = real_sha256sum
     elif reason == "gate_missing":
         metrics.pop("run_overengineering_audits")
         _write_metrics(case)
@@ -378,6 +383,9 @@ def test_closed_gate_degradation_reasons_execute(tmp_path: Path, reason: str) ->
 
 def test_overlapping_sidecar_replacement_never_reaches_effect_revalidation(tmp_path: Path) -> None:
     case = _make_gate_case(tmp_path)
+    real_sha256sum = shutil.which("sha256sum")
+    if real_sha256sum is None:
+        pytest.skip("sha256sum is required by the extracted review-pr gate")
     old_body = "[L1]+old-generation"
     expected_sha = hashlib.sha256(old_body.encode()).hexdigest()
     fake_bin = case["output_dir"] / "bin"
@@ -389,12 +397,13 @@ def test_overlapping_sidecar_replacement_never_reaches_effect_revalidation(tmp_p
         '  : > "$MUTATION_SENTINEL"\n'
         '  printf "metadata\\n[L1]+new-generation\\n" > "$MUTATE_SIDECAR_PATH"\n'
         "fi\n"
-        'exec /usr/bin/sha256sum "$@"\n'
+        'exec "$REAL_SHA256SUM" "$@"\n'
     )
     wrapper.chmod(0o755)
     case["env"]["PATH"] = f"{fake_bin}:{case['env']['PATH']}"
     case["env"]["MUTATION_SENTINEL"] = str(case["output_dir"] / "mutated")
     case["env"]["MUTATE_SIDECAR_PATH"] = str(case["annotated"])
+    case["env"]["REAL_SHA256SUM"] = real_sha256sum
 
     result, annotated_sha = _run_gate(case)
     assert result == "valid_true|none|pending|1"

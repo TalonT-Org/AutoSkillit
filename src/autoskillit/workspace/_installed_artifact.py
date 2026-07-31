@@ -36,6 +36,8 @@ __all__ = [
     "verify_installed_plugin_artifact",
 ]
 
+_INSTALLED_PLUGIN_ARTIFACT_UNREADABLE_CHECK = "installed_plugin_artifact_unreadable"
+
 
 class InstallStateLeaseMode(StrEnum):
     """Lease ownership required while verifying installed artifact identity."""
@@ -319,7 +321,7 @@ def verify_installed_plugin_artifact(
     except PluginArtifactUnavailableError as exc:
         findings.append(
             _finding(
-                "installed_plugin_artifact_unreadable",
+                _INSTALLED_PLUGIN_ARTIFACT_UNREADABLE_CHECK,
                 f"the exact installed plugin artifact at {spec.managed_root} cannot "
                 f"be read under lease: {exc}. Restore filesystem access, then run "
                 "`autoskillit install`.",

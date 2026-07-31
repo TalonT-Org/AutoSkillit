@@ -47,6 +47,7 @@ from autoskillit.core import (  # IL-005: core only — never cli.InstalledPlugi
     registered_install_paths,
 )
 from autoskillit.workspace._installed_artifact import (
+    _INSTALLED_PLUGIN_ARTIFACT_UNREADABLE_CHECK,
     InstallStateFinding,
     InstallStateLeaseMode,
     InstallStateSpec,
@@ -229,7 +230,7 @@ def _record_matches_current_installed_artifact(
             (
                 finding
                 for finding in verification.findings
-                if finding.check == "installed_plugin_artifact_unreadable"
+                if finding.check == _INSTALLED_PLUGIN_ARTIFACT_UNREADABLE_CHECK
             ),
             None,
         )

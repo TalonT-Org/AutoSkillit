@@ -406,7 +406,8 @@ def test_standard_and_experimental_dispatch_are_separate() -> None:
     assert "STANDARD_DISPATCH_AGENTS" in section
     assert "EXPERIMENTAL_DISPATCH_AGENTS" in section
     assert "STANDARD_AGENT_ALLOWLIST" in section
-    assert "EXPERIMENTAL_AGENT_ALLOWLIST" in section
+    assert "select_experimental_review_dispatch" in section
+    assert "EXPERIMENTAL_AGENT_ALLOWLIST" not in section
     assert "intersection" in section.lower()
     assert "deletion_context" in section
 

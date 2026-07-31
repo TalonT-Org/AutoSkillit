@@ -609,9 +609,7 @@ eligibility as separate authorities:
 
 ```bash
 STANDARD_AGENT_ALLOWLIST="arch,tests,defense,bugs,cohesion,slop"
-EXPERIMENTAL_AGENT_ALLOWLIST="pr-review-auditor-reachability,pr-review-auditor-abstraction-surface"
 STANDARD_DISPATCH_AGENTS=""
-EXPERIMENTAL_DISPATCH_AGENTS=""
 
 if [ -n "$METRICS_MARKER_BEFORE" ]; then
     STANDARD_DISPATCH_AGENTS="$(
@@ -621,28 +619,30 @@ if [ -n "$METRICS_MARKER_BEFORE" ]; then
     )"
 fi
 
-if [ "$GATE_STATE" = valid_true ] &&
-   [ -n "$ANNOTATED_DIFF" ] &&
-   printf '%s' "$VALID_DIFF_LINES" | jq -e 'type == "object"' >/dev/null; then
-    EXPERIMENTAL_DISPATCH_AGENTS="$EXPERIMENTAL_AGENT_ALLOWLIST"
-    EXPERIMENTAL_AUDIT_STATE=pending
-elif [ "$GATE_STATE" = valid_true ]; then
-    EXPERIMENTAL_AUDIT_STATE=degraded
-fi
-
-# Assert the two allowlists have an empty intersection before dispatch.
-ALLOWLIST_INTERSECTION="$(comm -12 \
-  <(tr ',' '\n' <<<"$STANDARD_AGENT_ALLOWLIST" | sort) \
-  <(tr ',' '\n' <<<"$EXPERIMENTAL_AGENT_ALLOWLIST" | sort))"
-if [ -n "$ALLOWLIST_INTERSECTION" ]; then
-    EXPERIMENTAL_DISPATCH_AGENTS=""
-    EXPERIMENTAL_AUDIT_STATE=degraded
-fi
-
 if [ -z "$STANDARD_DISPATCH_AGENTS" ]; then
     STANDARD_DISPATCH_AGENTS="$STANDARD_AGENT_ALLOWLIST"
 fi
 ```
+
+Resolve experimental dispatch from the installed ordered registry and keep its
+agent/dimension relationship structured:
+
+```python
+from autoskillit.smoke_utils import select_experimental_review_dispatch
+
+EXPERIMENTAL_DISPATCH = select_experimental_review_dispatch(
+    gate_state=GATE_STATE,
+    annotated_diff=ANNOTATED_DIFF,
+    valid_diff_lines=VALID_DIFF_LINES,
+    standard_agent_names=STANDARD_AGENT_ALLOWLIST.split(","),
+)
+EXPERIMENTAL_DISPATCH_AGENTS = EXPERIMENTAL_DISPATCH["dispatch_agents"]
+EXPERIMENTAL_AUDIT_STATE = EXPERIMENTAL_DISPATCH["audit_state"]
+```
+
+Do not rebuild the registry as a shell comma-string or print Python values back
+through a shell bridge. The helper checks that the standard allowlist intersection is
+empty and returns `degraded` with no proof-only dispatch if it is not.
 
 `GATE_STATE=valid_false` dispatches neither proof-only auditor and leaves
 `EXPERIMENTAL_AUDIT_STATE=not_required`; by itself it does not block approval.
@@ -661,7 +661,8 @@ auditor to that fallback.
 
 ### Step 3: Run Parallel Audit Subagents (SINGLE MESSAGE)
 
-Parse `STANDARD_DISPATCH_AGENTS` and `EXPERIMENTAL_DISPATCH_AGENTS` independently.
+Parse `STANDARD_DISPATCH_AGENTS` and iterate the structured
+`EXPERIMENTAL_DISPATCH_AGENTS` records independently.
 Add deletion work only when `DELETION_DISPATCH_REQUIRED` is true, independently of
 `GATE_STATE`, and only while constructing the existing single foreground parallel batch.
 

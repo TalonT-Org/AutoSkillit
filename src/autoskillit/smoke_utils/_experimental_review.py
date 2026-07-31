@@ -10,19 +10,22 @@ import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-EXPERIMENTAL_REVIEW_AUDITORS = (
-    "pr-review-auditor-reachability",
-    "pr-review-auditor-abstraction-surface",
+EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY = (
+    ("pr-review-auditor-reachability", "overengineering_reachability"),
+    (
+        "pr-review-auditor-abstraction-surface",
+        "overengineering_abstraction_surface",
+    ),
+)
+EXPERIMENTAL_REVIEW_AUDITORS = tuple(
+    auditor_name for auditor_name, _dimension in EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY
 )
 REVIEW_HANDOFF_IDENTITY_FIELDS = (
     "_head_sha",
     "annotation_generation_id",
     "review_generation_id",
 )
-_EXPERIMENTAL_DIMENSIONS = {
-    "pr-review-auditor-reachability": "overengineering_reachability",
-    "pr-review-auditor-abstraction-surface": "overengineering_abstraction_surface",
-}
+_EXPERIMENTAL_DIMENSIONS = dict(EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY)
 _EXPERIMENTAL_CANDIDATE_KEYS = {
     "file",
     "line",
@@ -155,6 +158,48 @@ def review_handoff_pair_error(
         if first_value != second_value:
             return f"paired review artifacts have mismatched {field}"
     return None
+
+
+def select_experimental_review_dispatch(
+    *,
+    gate_state: str,
+    annotated_diff: object,
+    valid_diff_lines: object,
+    standard_agent_names: Sequence[str],
+) -> dict[str, object]:
+    """Return the structured proof-auditor dispatch without duplicating its registry."""
+    auditors = [
+        {"agent_name": agent_name, "dimension": dimension}
+        for agent_name, dimension in EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY
+    ]
+    overlap = sorted(set(standard_agent_names) & set(EXPERIMENTAL_REVIEW_AUDITORS))
+    if gate_state != "valid_true":
+        return {
+            "audit_state": "not_required" if gate_state == "valid_false" else "degraded",
+            "dispatch_agents": [],
+            "auditors": auditors,
+            "reason": "gate_false" if gate_state == "valid_false" else "gate_degraded",
+        }
+    if overlap:
+        return {
+            "audit_state": "degraded",
+            "dispatch_agents": [],
+            "auditors": auditors,
+            "reason": f"standard_allowlist_overlap:{','.join(overlap)}",
+        }
+    if not _is_non_empty_string(annotated_diff) or not isinstance(valid_diff_lines, Mapping):
+        return {
+            "audit_state": "degraded",
+            "dispatch_agents": [],
+            "auditors": auditors,
+            "reason": "missing_dispatch_authority",
+        }
+    return {
+        "audit_state": "pending",
+        "dispatch_agents": auditors,
+        "auditors": auditors,
+        "reason": "",
+    }
 
 
 def _is_positive_int(value: object) -> bool:

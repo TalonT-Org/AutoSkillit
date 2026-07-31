@@ -872,7 +872,13 @@ def _write_temp_bytes(directory: Path, final_name: str, content: bytes) -> Path:
     )
     temporary_path = Path(temporary_name)
     try:
-        with os.fdopen(fd, "wb") as stream:
+        stream = os.fdopen(fd, "wb")
+    except Exception:
+        os.close(fd)
+        temporary_path.unlink(missing_ok=True)
+        raise
+    try:
+        with stream:
             stream.write(content)
     except Exception:
         temporary_path.unlink(missing_ok=True)

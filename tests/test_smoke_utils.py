@@ -2682,6 +2682,35 @@ def test_github_receipt_shares_prederived_generation_and_is_published_last(
     assert documents["review_receipt"]["commit_id"] == "head"
 
 
+def test_write_temp_bytes_closes_descriptor_when_fdopen_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import autoskillit.smoke_utils._experimental_review as experimental_review
+
+    real_close = os.close
+    opened_fd = -1
+    closed_fds: list[int] = []
+
+    def failing_fdopen(fd: int, mode: str) -> None:
+        nonlocal opened_fd
+        opened_fd = fd
+        raise OSError("injected fdopen failure")
+
+    def recording_close(fd: int) -> None:
+        closed_fds.append(fd)
+        real_close(fd)
+
+    monkeypatch.setattr(experimental_review.os, "fdopen", failing_fdopen)
+    monkeypatch.setattr(experimental_review.os, "close", recording_close)
+
+    with pytest.raises(OSError, match="injected fdopen failure"):
+        experimental_review._write_temp_bytes(tmp_path, "artifact.json", b"payload")
+
+    assert closed_fds == [opened_fd]
+    assert not list(tmp_path.iterdir())
+
+
 def test_experimental_publication_executes_same_directory_marker_last_renames(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

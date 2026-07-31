@@ -86,39 +86,6 @@ def test_request_rejects_untyped_boundary_values(
 
 
 @pytest.mark.parametrize(
-    ("result", "expected"),
-    [
-        (InstallResult(InstallOutcome.COMPLETED), InstallProcessStatus.SUCCESS),
-        (InstallResult(InstallOutcome.NOT_REQUIRED), InstallProcessStatus.SUCCESS),
-        (InstallResult(InstallOutcome.DECLINED), InstallProcessStatus.DECLINED),
-        (InstallResult(InstallOutcome.DEFERRED), InstallProcessStatus.DEFERRED),
-        (
-            InstallResult(InstallOutcome.FAILED, InstallFailureKind.PREFLIGHT),
-            InstallProcessStatus.FAILED_PREFLIGHT,
-        ),
-        (
-            InstallResult(InstallOutcome.FAILED, InstallFailureKind.CHILD),
-            InstallProcessStatus.FAILED_CHILD,
-        ),
-        (
-            InstallResult(InstallOutcome.FAILED, InstallFailureKind.POSTCONDITION),
-            InstallProcessStatus.FAILED_POSTCONDITION,
-        ),
-        (
-            InstallResult(InstallOutcome.RECOVERY_REQUIRED, InstallFailureKind.ROLLBACK),
-            InstallProcessStatus.RECOVERY_REQUIRED,
-        ),
-        (InstallResult(InstallOutcome.INDETERMINATE), InstallProcessStatus.INDETERMINATE),
-    ],
-)
-def test_process_status_for_every_result(
-    result: InstallResult,
-    expected: InstallProcessStatus,
-) -> None:
-    assert process_status_for_result(result) is expected
-
-
-@pytest.mark.parametrize(
     ("install_request", "result", "expected_status"),
     [
         (

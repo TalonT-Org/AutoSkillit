@@ -80,13 +80,13 @@ def _clear_plugin_cache(
         InstalledPluginArtifactRetirementOwner,
         _read_installed_plugin_identity,
         default_plugin_retirement_coordinator,
-        installed_artifact_lock_path,
     )
     from autoskillit.core import (
         _AUTOSKILLIT_PLUGIN_KEY,
         ArtifactLease,
         PluginArtifactValidationError,
         _InstallLock,
+        installed_plugin_artifact_lease_path,
     )
 
     cache_dir = _plugin_cache_dir()
@@ -110,7 +110,7 @@ def _clear_plugin_cache(
         created_ids: list[str] = []
         deadline = datetime.now(UTC) + timedelta(hours=6)
         for candidate in candidates:
-            reader = ArtifactLease.acquire_shared(installed_artifact_lock_path(candidate))
+            reader = ArtifactLease.acquire_shared(installed_plugin_artifact_lease_path(candidate))
             with reader:
                 try:
                     identity = _read_installed_plugin_identity(candidate)
@@ -480,7 +480,6 @@ def install(
         )
 
     from autoskillit.cli._plugin_artifact import (
-        installed_artifact_lock_path,
         installed_plugin_semantic_key,
         publish_installed_plugin_artifact,
     )
@@ -489,6 +488,7 @@ def install(
         ArtifactLeaseContention,
         PluginArtifactPublicationError,
         _InstallLock,
+        installed_plugin_artifact_lease_path,
     )
     from autoskillit.workspace import (
         InstallStateLeaseMode,
@@ -501,7 +501,7 @@ def install(
         effective_scope,
         cwd=operation_cwd,
     )
-    lease_path = installed_artifact_lock_path(target_root)
+    lease_path = installed_plugin_artifact_lease_path(target_root)
     try:
         with _InstallLock():
             snapshot = _InstallSnapshot(

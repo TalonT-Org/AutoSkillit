@@ -292,7 +292,7 @@ class TestInstalledPluginArtifactAuthority:
     ) -> None:
         from autoskillit.cli._plugin_artifact import (
             InstalledPluginArtifactAuthority,
-            installed_artifact_manifest_path,
+            installed_plugin_artifact_manifest_path,
             publish_installed_plugin_artifact,
         )
         from autoskillit.core import (
@@ -316,7 +316,7 @@ class TestInstalledPluginArtifactAuthority:
 
         published = publish_installed_plugin_artifact(root, semantic_key=semantic_key)
         _write_installed_registry(tmp_path, root)
-        manifest_path = installed_artifact_manifest_path(root)
+        manifest_path = installed_plugin_artifact_manifest_path(root)
         assert published.manifest_path == manifest_path
         assert manifest_path.parent == root.parent
         assert not manifest_path.is_relative_to(root)
@@ -352,7 +352,7 @@ class TestInstalledPluginArtifactAuthority:
     ) -> None:
         from autoskillit.cli._plugin_artifact import (
             InstalledPluginArtifactAuthority,
-            installed_artifact_lock_path,
+            installed_plugin_artifact_lease_path,
             publish_installed_plugin_artifact,
         )
         from autoskillit.core import (
@@ -380,7 +380,7 @@ class TestInstalledPluginArtifactAuthority:
                 load_mode=PluginLoadMode.IMPLICIT_INSTALLED,
             )
         with ArtifactLease.acquire_exclusive(
-            installed_artifact_lock_path(root),
+            installed_plugin_artifact_lease_path(root),
             blocking=False,
         ):
             pass
@@ -390,7 +390,7 @@ class TestInstalledPluginArtifactAuthority:
         tmp_path: Path,
     ) -> None:
         from autoskillit.cli._plugin_artifact import (
-            installed_artifact_manifest_path,
+            installed_plugin_artifact_manifest_path,
             publish_installed_plugin_artifact,
         )
         from autoskillit.core import PluginArtifactPublicationError
@@ -407,12 +407,12 @@ class TestInstalledPluginArtifactAuthority:
 
         assert internal_link.is_symlink()
         assert external.read_text() == "must survive"
-        assert not installed_artifact_manifest_path(root).exists()
+        assert not installed_plugin_artifact_manifest_path(root).exists()
 
     @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO creation requires POSIX")
     def test_publication_rejects_internal_special_file(self, tmp_path: Path) -> None:
         from autoskillit.cli._plugin_artifact import (
-            installed_artifact_manifest_path,
+            installed_plugin_artifact_manifest_path,
             publish_installed_plugin_artifact,
         )
         from autoskillit.core import PluginArtifactPublicationError
@@ -426,7 +426,7 @@ class TestInstalledPluginArtifactAuthority:
             publish_installed_plugin_artifact(root, semantic_key="plugin:1.2.3")
 
         assert special.exists()
-        assert not installed_artifact_manifest_path(root).exists()
+        assert not installed_plugin_artifact_manifest_path(root).exists()
 
     def test_generated_home_codex_does_not_construct_projection_authority(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

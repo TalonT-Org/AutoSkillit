@@ -106,7 +106,7 @@ def test_installed_reclaim_defers_until_final_reader_closes(
 ) -> None:
     from autoskillit.cli._plugin_artifact import (
         InstalledPluginArtifactRetirementOwner,
-        installed_artifact_lock_path,
+        installed_plugin_artifact_lease_path,
     )
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -119,7 +119,9 @@ def test_installed_reclaim_defers_until_final_reader_closes(
         for record in read_retiring_cache().records
         if record.record_id == append_result.record_id
     )
-    reader = ArtifactLease.acquire_shared(installed_artifact_lock_path(identity.managed_path))
+    reader = ArtifactLease.acquire_shared(
+        installed_plugin_artifact_lease_path(identity.managed_path)
+    )
     try:
         assert (
             owner.try_reclaim(record, deadline + timedelta(seconds=1))

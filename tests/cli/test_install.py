@@ -271,17 +271,17 @@ class TestCLIInstall:
         assert "user" in install_call[0][0]
         from autoskillit.cli._plugin_artifact import (
             current_installed_plugin_root,
-            installed_artifact_manifest_path,
+            installed_plugin_artifact_manifest_path,
         )
 
         installed_root = current_installed_plugin_root()
         artifact_manifest = json.loads(
-            installed_artifact_manifest_path(installed_root).read_text()
+            installed_plugin_artifact_manifest_path(installed_root).read_text()
         )
         assert artifact_manifest["artifact_kind"] == "installed_plugin"
         assert artifact_manifest["managed_path"] == str(installed_root)
         assert artifact_manifest["manifest_path"] == str(
-            installed_artifact_manifest_path(installed_root)
+            installed_plugin_artifact_manifest_path(installed_root)
         )
 
     @patch("autoskillit.cli._marketplace.subprocess.run")

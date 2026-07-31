@@ -28,6 +28,8 @@ from autoskillit.core import (
     directory_tree_digest,
     due_retiring_records,
     get_logger,
+    installed_plugin_artifact_lease_path,
+    installed_plugin_artifact_manifest_path,
     installed_plugin_artifact_manifest_payload,
     installed_plugin_artifact_root,
     installed_plugin_semantic_key,
@@ -37,12 +39,6 @@ from autoskillit.core import (
     read_installed_plugin_artifact_identity,
     read_retiring_cache,
     write_versioned_json,
-)
-from autoskillit.core import (
-    installed_plugin_artifact_lease_path as installed_artifact_lock_path,
-)
-from autoskillit.core import (
-    installed_plugin_artifact_manifest_path as installed_artifact_manifest_path,
 )
 
 logger = get_logger(__name__)
@@ -115,13 +111,13 @@ def publish_installed_plugin_artifact(
     """Persist a new exact identity after a successful plugin installation."""
     try:
         managed_path = _canonical_installed_root(root)
-        manifest_path = installed_artifact_manifest_path(managed_path)
+        manifest_path = installed_plugin_artifact_manifest_path(managed_path)
         if not manifest_path.is_absolute():
             raise PluginArtifactPublicationError(
                 f"installed plugin manifest path is not absolute: {manifest_path}"
             )
         if _owned_exclusive_lease is not None:
-            expected_lock = installed_artifact_lock_path(managed_path)
+            expected_lock = installed_plugin_artifact_lease_path(managed_path)
             if (
                 _owned_exclusive_lease.closed
                 or _owned_exclusive_lease.shared
@@ -135,7 +131,7 @@ def publish_installed_plugin_artifact(
                 semantic_key=semantic_key,
             )
         with ArtifactLease.acquire_exclusive(
-            installed_artifact_lock_path(managed_path),
+            installed_plugin_artifact_lease_path(managed_path),
             blocking=True,
         ):
             return _publish_installed_plugin_artifact_locked(
@@ -157,7 +153,7 @@ def _publish_installed_plugin_artifact_locked(
 ) -> PluginArtifactIdentity:
     """Publish identity while the caller owns the stable exclusive sidecar."""
     managed_path = _canonical_installed_root(managed_path)
-    manifest_path = installed_artifact_manifest_path(managed_path)
+    manifest_path = installed_plugin_artifact_manifest_path(managed_path)
     identity = PluginArtifactIdentity(
         semantic_key=semantic_key,
         incarnation_id=new_plugin_artifact_incarnation_id(),
@@ -276,8 +272,8 @@ class InstalledPluginArtifactRetirementOwner:
         self._retirement = PluginArtifactRetirementEngine(
             managed_root=managed_root,
             artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
-            manifest_path=installed_artifact_manifest_path,
-            lease_path=installed_artifact_lock_path,
+            manifest_path=installed_plugin_artifact_manifest_path,
+            lease_path=installed_plugin_artifact_lease_path,
             current_identity=self._current_identity,
             logger=logger,
         )
@@ -397,7 +393,7 @@ def _read_and_validate_identity(
     return read_installed_plugin_artifact_identity(
         managed_path,
         expected_semantic_key=expected_semantic_key,
-        manifest_path=installed_artifact_manifest_path(managed_path),
+        manifest_path=installed_plugin_artifact_manifest_path(managed_path),
     )
 
 
@@ -405,7 +401,7 @@ def _read_installed_plugin_identity(managed_path: Path) -> PluginArtifactIdentit
     """Validate an installed identity whose semantic key is persisted on disk."""
     return read_installed_plugin_artifact_identity(
         managed_path,
-        manifest_path=installed_artifact_manifest_path(managed_path),
+        manifest_path=installed_plugin_artifact_manifest_path(managed_path),
     )
 
 
@@ -439,8 +435,8 @@ __all__ = [
     "current_installed_plugin_authority",
     "current_installed_plugin_root",
     "default_plugin_retirement_coordinator",
-    "installed_artifact_lock_path",
-    "installed_artifact_manifest_path",
+    "installed_plugin_artifact_lease_path",
+    "installed_plugin_artifact_manifest_path",
     "installed_plugin_semantic_key",
     "interactive_plugin_authority",
     "publish_installed_plugin_artifact",

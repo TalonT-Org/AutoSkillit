@@ -228,7 +228,7 @@ def test_control_flow_exceptions_compensate_before_propagation(
     target = marketplace._installed_plugin_root(_VERSION)
     target.mkdir(parents=True)
     (target / "old.txt").write_text("old target", encoding="utf-8")
-    manifest = _plugin_artifact.installed_artifact_manifest_path(target)
+    manifest = _plugin_artifact.installed_plugin_artifact_manifest_path(target)
     manifest.write_text('{"old": true}', encoding="utf-8")
     settings = tmp_path / ".claude" / "settings.json"
     settings.write_text("before", encoding="utf-8")
@@ -704,7 +704,7 @@ def test_failure_after_every_persistent_mutation_stage_restores_prestate(
     known = tmp_path / ".claude" / "plugins" / "known_marketplaces.json"
     installed = _installed_plugins_json_path()
     target = marketplace._installed_plugin_root(_VERSION)
-    identity = _plugin_artifact.installed_artifact_manifest_path(target)
+    identity = _plugin_artifact.installed_plugin_artifact_manifest_path(target)
     retiring = tmp_path / ".autoskillit" / "retiring_cache.json"
     settings = tmp_path / ".claude" / "settings.json"
     direct_registration = marketplace._user_claude_json_path()
@@ -1024,7 +1024,7 @@ def test_child_failure_restores_every_staged_shared_surface(
     target = marketplace._installed_plugin_root(_VERSION)
     target.mkdir(parents=True)
     (target / "old.txt").write_text("old target")
-    manifest = _plugin_artifact.installed_artifact_manifest_path(target)
+    manifest = _plugin_artifact.installed_plugin_artifact_manifest_path(target)
     manifest.write_text('{"old": true}')
     before = {
         projection / "old.txt": "old projection",
@@ -1109,7 +1109,7 @@ def test_failed_first_install_removes_new_lease_sidecar(
     from autoskillit.cli import _plugin_artifact
 
     target = marketplace._installed_plugin_root(_VERSION)
-    lease_path = _plugin_artifact.installed_artifact_lock_path(target)
+    lease_path = _plugin_artifact.installed_plugin_artifact_lease_path(target)
     assert marketplace._InstallSnapshot._shape(lease_path) == "missing"
 
     def fail_first_child(argv, **_kwargs):
@@ -1138,7 +1138,7 @@ def test_failed_install_restores_existing_lease_sidecar_in_place(
     from autoskillit.cli import _plugin_artifact
 
     target = marketplace._installed_plugin_root(_VERSION)
-    lease_path = _plugin_artifact.installed_artifact_lock_path(target)
+    lease_path = _plugin_artifact.installed_plugin_artifact_lease_path(target)
     lease_path.parent.mkdir(parents=True)
     lease_path.write_text("staged lease prestate", encoding="utf-8")
     lease_path.chmod(0o640)

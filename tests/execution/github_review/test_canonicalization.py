@@ -126,6 +126,49 @@ def test_reordered_findings_have_the_same_semantic_identity() -> None:
     assert compute_review_operation_key(reordered) == compute_review_operation_key(_request())
 
 
+def test_reordered_findings_differing_only_by_start_side_have_stable_identity() -> None:
+    comments = (
+        GitHubReviewComment(
+            path="src/a.py",
+            line=10,
+            start_line=8,
+            side="RIGHT",
+            start_side="LEFT",
+            body="Same body",
+        ),
+        GitHubReviewComment(
+            path="src/a.py",
+            line=10,
+            start_line=8,
+            side="RIGHT",
+            start_side="RIGHT",
+            body="Same body",
+        ),
+    )
+    baseline = _request(comments=comments)
+    reordered = _request(comments=tuple(reversed(comments)))
+
+    assert canonicalize_review_request(reordered) == canonicalize_review_request(baseline)
+    assert compute_review_operation_key(reordered) == compute_review_operation_key(baseline)
+
+
+def test_repository_identity_is_validated_and_case_normalized() -> None:
+    mixed_case = _request(repository="TalonT-Org/AutoSkillit")
+    lowercase = _request(repository="talont-org/autoskillit")
+
+    assert canonicalize_review_request(mixed_case) == canonicalize_review_request(lowercase)
+    assert compute_review_operation_key(mixed_case) == compute_review_operation_key(lowercase)
+    assert json.loads(canonicalize_review_request(mixed_case))["repository"] == (
+        "talont-org/autoskillit"
+    )
+
+
+@pytest.mark.parametrize("repository", ["", "not-a-repository", "owner/repo/extra"])
+def test_malformed_repository_identity_is_rejected(repository: str) -> None:
+    with pytest.raises(ValueError, match="canonical owner/repo"):
+        compute_review_operation_key(_request(repository=repository))
+
+
 def test_canonicalization_does_not_mutate_the_request() -> None:
     request = _request()
     before = request.comments

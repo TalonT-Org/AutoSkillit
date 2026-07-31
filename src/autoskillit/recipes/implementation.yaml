@@ -1124,7 +1124,7 @@ steps:
   capture_review_repository:
     tool: run_cmd
     with:
-      cmd: gh repo view --json nameWithOwner -q .nameWithOwner
+      cmd: gh repo view --json nameWithOwner -q '.nameWithOwner | ascii_downcase'
       cwd: ${{ context.work_dir }}
       step_name: capture_review_repository
     capture:
@@ -1295,6 +1295,10 @@ steps:
     on_context_limit: release_issue_failure
     on_rate_limit: release_issue_failure
     on_result:
+    - when: ${{ result.review_post_state }} == 'SUCCEEDED'
+      route: check_resolve_review_posted
+    - when: ${{ result.review_post_state }} == 'RECONCILED'
+      route: check_resolve_review_posted
     - when: ${{ result.verdict }} == 'real_fix'
       route: pre_review_rebase
     - when: ${{ result.verdict }} == 'already_green'
@@ -1316,6 +1320,28 @@ steps:
       before push); ci_only_failure cannot be emitted without CI context.
 
       '
+  check_resolve_review_posted:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.check_review_posted
+      work_dir: ${{ context.work_dir }}
+      args:
+        cwd: ${{ context.work_dir }}
+        receipt_path: ${{ context.resolve_review_receipt_path }}
+        mode: github
+        repository: ${{ context.review_repository }}
+        pr_number: ${{ context.pr_number }}
+        head_sha: ${{ context.resolve_review_head_sha }}
+        logical_iteration: resolve-review:${{ context.review_loop_count }}
+        operation_key: ${{ context.resolve_review_operation_key }}
+        post_state: ${{ context.resolve_review_post_state }}
+    on_result:
+    - when: ${{ result.reviews_posted }} == 'true'
+      route: pre_review_rebase
+    - route: release_issue_failure
+    on_failure: release_issue_failure
+    optional_context_refs:
+    - review_loop_count
   pre_review_rebase:
     tool: run_python
     with:

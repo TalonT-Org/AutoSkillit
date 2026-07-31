@@ -18,14 +18,16 @@ def test_linux_uses_xdg_state_home_without_touching_filesystem(tmp_path: Path) -
         environ={"XDG_STATE_HOME": str(xdg_state)},
         platform="linux",
     )
-    assert result == xdg_state / "autoskillit" / "github-review" / "ledger.sqlite3"
+    assert result == xdg_state / "autoskillit" / "github-mutations" / "ledger.sqlite3"
     assert not xdg_state.exists()
 
 
 def test_linux_falls_back_to_home_local_state(tmp_path: Path) -> None:
     home = tmp_path / "home"
     result = github_review_ledger_path(home=home, environ={}, platform="linux")
-    assert result == home / ".local" / "state" / "autoskillit" / "github-review" / "ledger.sqlite3"
+    assert (
+        result == home / ".local" / "state" / "autoskillit" / "github-mutations" / "ledger.sqlite3"
+    )
 
 
 def test_darwin_uses_application_support_and_ignores_xdg(tmp_path: Path) -> None:
@@ -40,7 +42,7 @@ def test_darwin_uses_application_support_and_ignores_xdg(tmp_path: Path) -> None
         / "Library"
         / "Application Support"
         / "autoskillit"
-        / "github-review"
+        / "github-mutations"
         / "ledger.sqlite3"
     )
 

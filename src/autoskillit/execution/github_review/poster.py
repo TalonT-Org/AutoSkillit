@@ -30,6 +30,7 @@ from . import _poster_support
 from .canonical import (
     canonicalize_review_request,
     compute_review_operation_key,
+    normalize_review_repository,
 )
 from .gateway import CredentialScopeMaterial, DefaultGitHubReviewGateway
 from .ledger import (
@@ -87,6 +88,10 @@ class DefaultGitHubReviewPoster:
                 )
 
     async def _post(self, request: GitHubReviewRequest) -> GitHubReviewPostResult:
+        request = replace(
+            request,
+            repository=normalize_review_repository(request.repository),
+        )
         canonical_request = canonicalize_review_request(request)
         operation_key = compute_review_operation_key(request)
         findings = _poster_support.canonical_findings(request)
@@ -272,6 +277,7 @@ class DefaultGitHubReviewPoster:
             attempt_digest=attempt_digest,
             payload_json=payload_json,
             canonical_indexes=tuple(item.canonical_index for item in findings),
+            omitted_dispositions=omitted,
             effective_event=effective_event,
             effective_body_digest=_poster_support.text_digest(request.body),
         )
@@ -692,16 +698,6 @@ class DefaultGitHubReviewPoster:
                 operation_key=operation_key,
                 reconciliation=reconciliation.result,
             )
-        omitted = tuple(
-            GitHubReviewFindingDisposition(
-                original_index=finding.original_index,
-                canonical_index=finding.canonical_index,
-                kind=ReviewFindingDispositionKind.OMITTED_INVALID,
-                reason="omitted by persisted reduced-batch attempt",
-            )
-            for finding in findings
-            if finding.canonical_index not in set(attempt.canonical_indexes)
-        )
         state = (
             ReviewOperationState.SUCCEEDED
             if attempt.response_class is ReviewResponseClass.SUCCESS
@@ -711,7 +707,7 @@ class DefaultGitHubReviewPoster:
             request=request,
             operation_key=operation_key,
             findings=attempted,
-            omitted=omitted,
+            omitted=attempt.omitted_dispositions,
             effective_event=attempt.effective_event,
             attempt_digest=attempt.attempt_digest,
             response_class=attempt.response_class,

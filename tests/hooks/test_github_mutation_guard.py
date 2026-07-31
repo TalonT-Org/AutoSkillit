@@ -80,6 +80,8 @@ def test_raw_pull_review_post_is_denied_for_both_command_tools(
         ),
         f"/usr/bin/gh api --method POST {_REVIEW_ROUTE} -f event=COMMENT",
         f"/usr/bin/curl -X POST https://api.github.com{_REVIEW_ROUTE} -d '{{}}'",
+        f"curl -d'{{}}' https://api.github.com{_REVIEW_ROUTE}",
+        "gh api --method POST /repos/o/r/pulls/7/comments/99/replies -f body=x",
     ],
     ids=[
         "gh-pr-review",
@@ -88,14 +90,18 @@ def test_raw_pull_review_post_is_denied_for_both_command_tools(
         "curl-request",
         "absolute-gh",
         "absolute-curl",
+        "attached-curl-data",
+        "review-reply",
     ],
 )
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
 def test_every_direct_rest_review_mutation_is_denied(
     command: str,
+    event_factory,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    assert _decision(_bash_event(command, cwd=str(tmp_path)), monkeypatch) == "deny"
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) == "deny"
 
 
 @pytest.mark.parametrize(
@@ -116,12 +122,14 @@ def test_every_direct_rest_review_mutation_is_denied(
     ],
     ids=["and-join", "newline-join", "two-non-review-mutations"],
 )
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
 def test_multiple_mutations_are_denied(
     command: str,
+    event_factory,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    assert _decision(_bash_event(command, cwd=str(tmp_path)), monkeypatch) == "deny"
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) == "deny"
 
 
 @pytest.mark.parametrize(
@@ -153,12 +161,14 @@ def test_multiple_mutations_are_denied(
         "python-os-system",
     ],
 )
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
 def test_wrappers_and_repeatable_shell_constructs_cannot_bypass_guard(
     command: str,
+    event_factory,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    assert _decision(_bash_event(command, cwd=str(tmp_path)), monkeypatch) == "deny"
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) == "deny"
 
 
 @pytest.mark.parametrize(
@@ -178,12 +188,14 @@ def test_wrappers_and_repeatable_shell_constructs_cannot_bypass_guard(
         "missing-method-value",
     ],
 )
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
 def test_dynamic_or_unresolved_mutations_fail_closed(
     command: str,
+    event_factory,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    assert _decision(_run_cmd_event(command, cwd=str(tmp_path)), monkeypatch) == "deny"
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) == "deny"
 
 
 @pytest.mark.parametrize(
@@ -198,26 +210,40 @@ def test_dynamic_or_unresolved_mutations_fail_closed(
             "mutation { addPullRequestReviewComment("
             'input:{pullRequestReviewId:"R",body:"x"}) { clientMutationId } }'
         ),
-        ('mutation { resolveReviewThread(input:{threadId:"T"}) { thread { isResolved } } }'),
     ],
     ids=[
         "add-review",
         "submit-review",
         "add-review-comment",
-        "resolve-review-thread",
     ],
 )
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
 def test_graphql_review_mutations_are_denied(
     document: str,
+    event_factory,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     command = f"gh api graphql -f query={json.dumps(document)}"
 
-    assert _decision(_bash_event(command, cwd=str(tmp_path)), monkeypatch) == "deny"
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) == "deny"
 
 
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
+def test_graphql_thread_resolution_remains_a_proven_nonpublication_mutation(
+    event_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    document = 'mutation { resolveReviewThread(input:{threadId:"T"}) { thread { isResolved } } }'
+    command = f"gh api graphql -f query={json.dumps(document)}"
+
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) is None
+
+
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
 def test_literal_review_input_file_is_still_denied(
+    event_factory,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -237,7 +263,22 @@ def test_literal_review_input_file_is_still_denied(
     )
     command = f"gh api --method POST {_REVIEW_ROUTE} --input review.json"
 
-    assert _decision(_run_cmd_event(command, cwd=str(tmp_path)), monkeypatch) == "deny"
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) == "deny"
+
+
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
+def test_prior_literal_input_rewrite_fails_closed(
+    event_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "payload.json").write_text(json.dumps({"body": "before"}), encoding="utf-8")
+    command = (
+        "printf '%s' '{\"body\":\"after\"}' > payload.json && "
+        f"gh api --method POST {_OTHER_ROUTE} --input payload.json"
+    )
+
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) == "deny"
 
 
 def test_regular_non_symlink_json_object_preserves_single_non_review_mutation(
@@ -305,21 +346,43 @@ def test_relative_input_file_without_explicit_cwd_fails_closed(
     ],
     ids=["quoted-echo", "quoted-printf", "gh-read", "curl-read", "gh-pr-view"],
 )
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
 def test_inert_mentions_and_read_only_commands_are_allowed(
     command: str,
+    event_factory,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    assert _decision(_bash_event(command, cwd=str(tmp_path)), monkeypatch) is None
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) is None
 
 
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
 def test_proven_single_non_review_mutation_is_preserved(
+    event_factory,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     command = "gh api --method PATCH /repos/o/r/issues/7 -f title=updated"
 
-    assert _decision(_bash_event(command, cwd=str(tmp_path)), monkeypatch) is None
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) is None
+
+
+@pytest.mark.parametrize("surface", ["bash", "run-cmd"])
+def test_conflicting_cwd_authorities_fail_closed(
+    surface: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    other = tmp_path / "other"
+    command = "gh api --method PATCH /repos/o/r/issues/7 -f title=updated"
+    if surface == "bash":
+        event = _bash_event(command, cwd=str(tmp_path))
+        event["tool_input"]["cwd"] = str(other)
+    else:
+        event = _run_cmd_event(command, cwd=str(tmp_path))
+        event["cwd"] = str(other)
+
+    assert _decision(event, monkeypatch) == "deny"
 
 
 def test_guard_registration_is_exact() -> None:

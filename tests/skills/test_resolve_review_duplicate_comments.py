@@ -23,8 +23,6 @@ REVIEW_PR_SKILL_MD = (
     / "SKILL.md"
 ).read_text()
 
-MARKER_RE = re.compile(r"<!--\s*autoskillit:resolved\s+comment_id=")
-
 
 def _extract_section(text: str, heading: str) -> str:
     pattern = re.compile(
@@ -46,42 +44,6 @@ def _extract_graphql_block(section_text: str) -> str:
         if "query" in content or "mutation" in content:
             return content
     return ""
-
-
-def _extract_reply_block(text: str, verdict: str) -> str:
-    pattern = re.compile(
-        r"#\s+" + re.escape(verdict) + r"[^\n]*\n(BODY=.*?)(?=\n#\s+\w|```|$)",
-        re.DOTALL,
-    )
-    m = pattern.search(text)
-    assert m, f"Reply block for verdict {verdict!r} not found"
-    return m.group(1)
-
-
-def test_accept_reply_has_marker() -> None:
-    accept_block = _extract_reply_block(RESOLVE_SKILL_MD, "ACCEPT")
-    assert MARKER_RE.search(accept_block), (
-        "ACCEPT reply template missing autoskillit:resolved marker"
-    )
-
-
-def test_reject_reply_has_marker() -> None:
-    reject_block = _extract_reply_block(RESOLVE_SKILL_MD, "REJECT")
-    assert MARKER_RE.search(reject_block), (
-        "REJECT reply template missing autoskillit:resolved marker"
-    )
-
-
-def test_discuss_reply_has_marker() -> None:
-    discuss_block = _extract_reply_block(RESOLVE_SKILL_MD, "DISCUSS")
-    assert MARKER_RE.search(discuss_block), (
-        "DISCUSS reply template missing autoskillit:resolved marker"
-    )
-
-
-def test_info_reply_has_marker() -> None:
-    info_block = _extract_reply_block(RESOLVE_SKILL_MD, "INFO")
-    assert MARKER_RE.search(info_block), "INFO reply template missing autoskillit:resolved marker"
 
 
 def test_step2_graphql_fetches_five_comments_with_body() -> None:
@@ -139,8 +101,9 @@ def test_step15_marker_bearing_threads_are_resolved() -> None:
     assert "has_marker_reply" in step15_section or "marker" in step15_section.lower()
 
 
-def test_marker_format_consistent_across_skills() -> None:
-    resolve_mentions = RESOLVE_SKILL_MD.count("autoskillit:resolved")
+def test_legacy_marker_reads_remain_compatible_across_skills() -> None:
     review_mentions = REVIEW_PR_SKILL_MD.count("autoskillit:resolved")
-    assert resolve_mentions >= 5, "resolve-review must reference the marker at least 5 times"
+    assert "autoskillit:resolved" in RESOLVE_SKILL_MD
+    assert "marker-bearing" in RESOLVE_SKILL_MD
+    assert "may be read" in RESOLVE_SKILL_MD
     assert review_mentions >= 3, "review-pr must reference the marker at least 3 times"

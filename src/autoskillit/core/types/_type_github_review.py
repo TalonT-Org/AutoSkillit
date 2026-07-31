@@ -71,14 +71,16 @@ class GitHubReviewComment:
     def from_wire(cls, item: Mapping[str, object]) -> GitHubReviewComment:
         """Construct a typed comment from the MCP wire representation."""
         return cls(
-            path=str(item["path"]),
+            path=_required_str(item, "path"),
             line=_required_int(item, "line"),
-            body=str(item["body"]),
-            side=str(item.get("side", "RIGHT")),
+            body=_required_str(item, "body"),
+            side=_optional_str(item, "side", default="RIGHT"),
             start_line=(
                 _required_int(item, "start_line") if item.get("start_line") is not None else None
             ),
-            start_side=(str(item["start_side"]) if item.get("start_side") is not None else None),
+            start_side=(
+                _required_str(item, "start_side") if item.get("start_side") is not None else None
+            ),
         )
 
 
@@ -184,4 +186,18 @@ def _required_int(item: Mapping[str, object], key: str) -> int:
     value = item[key]
     if not isinstance(value, int) or isinstance(value, bool):
         raise TypeError(f"{key} must be an integer")
+    return value
+
+
+def _required_str(item: Mapping[str, object], key: str) -> str:
+    value = item[key]
+    if not isinstance(value, str):
+        raise TypeError(f"{key} must be a string")
+    return value
+
+
+def _optional_str(item: Mapping[str, object], key: str, *, default: str) -> str:
+    value = item.get(key, default)
+    if not isinstance(value, str):
+        raise TypeError(f"{key} must be a string")
     return value

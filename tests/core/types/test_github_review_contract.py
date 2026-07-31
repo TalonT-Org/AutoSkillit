@@ -124,6 +124,22 @@ def test_comment_defaults_and_range_fields_are_immutable() -> None:
         comment.line = 18  # type: ignore[misc]
 
 
+@pytest.mark.parametrize("field", ["path", "body", "side", "start_side"])
+def test_comment_from_wire_rejects_non_string_scalars(field: str) -> None:
+    payload: dict[str, object] = {
+        "path": "src/example.py",
+        "line": 17,
+        "body": "Comment",
+        "side": "RIGHT",
+        "start_line": 14,
+        "start_side": "RIGHT",
+    }
+    payload[field] = ["not", "a", "string"]
+
+    with pytest.raises(TypeError, match=rf"{field} must be a string"):
+        GitHubReviewComment.from_wire(payload)
+
+
 def test_request_uses_tuple_comments_and_preserves_explicit_identity(tmp_path: Path) -> None:
     receipt_path = tmp_path / "receipt.json"
     request = _request(receipt_path=receipt_path, dry_run=True)

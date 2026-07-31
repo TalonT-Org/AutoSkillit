@@ -42,7 +42,7 @@ def github_review_ledger_path(
     else:
         configured = resolved_environ.get("XDG_STATE_HOME")
         base = Path(configured) if configured else resolved_home / ".local" / "state"
-    return base / "autoskillit" / "github-review" / "ledger.sqlite3"
+    return base / "autoskillit" / "github-mutations" / "ledger.sqlite3"
 
 
 def default_log_dir() -> Path:

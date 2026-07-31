@@ -63,6 +63,7 @@ CREATE TABLE attempts (
     attempt_digest TEXT NOT NULL,
     payload_json BLOB NOT NULL,
     canonical_indexes_json BLOB NOT NULL,
+    omitted_dispositions_json BLOB NOT NULL,
     effective_event TEXT NOT NULL,
     effective_body_digest TEXT NOT NULL,
     state TEXT NOT NULL,
@@ -110,6 +111,7 @@ class ReviewAttemptRecord:
     attempt_digest: str
     payload_json: bytes
     canonical_indexes: tuple[int, ...]
+    omitted_dispositions: tuple[GitHubReviewFindingDisposition, ...]
     effective_event: str
     effective_body_digest: str
     state: str
@@ -305,29 +307,33 @@ class GitHubReviewLedger:
         attempt_digest: str,
         payload_json: bytes,
         canonical_indexes: tuple[int, ...],
+        omitted_dispositions: tuple[GitHubReviewFindingDisposition, ...],
         effective_event: str,
         effective_body_digest: str,
     ) -> ReviewAttemptRecord:
         now = time.time()
         indexes_json = json.dumps(canonical_indexes, separators=(",", ":")).encode()
+        omitted_json = _dispositions_json(omitted_dispositions)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 "SELECT attempt_digest, payload_json, canonical_indexes_json, "
-                "effective_event, effective_body_digest, state, response_class, "
+                "omitted_dispositions_json, effective_event, effective_body_digest, "
+                "state, response_class, "
                 "status_code, error, created_at, updated_at FROM attempts "
                 "WHERE operation_key = ? AND attempt_number = ?",
                 (operation_key, attempt_number),
             ).fetchone()
             if row is None:
                 connection.execute(
-                    "INSERT INTO attempts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO attempts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         operation_key,
                         attempt_number,
                         attempt_digest,
                         payload_json,
                         indexes_json,
+                        omitted_json,
                         effective_event,
                         effective_body_digest,
                         ReviewOperationState.POSTING.value,
@@ -348,6 +354,7 @@ class GitHubReviewLedger:
                     attempt_digest=attempt_digest,
                     payload_json=payload_json,
                     canonical_indexes=canonical_indexes,
+                    omitted_dispositions=omitted_dispositions,
                     effective_event=effective_event,
                     effective_body_digest=effective_body_digest,
                     state=ReviewOperationState.POSTING.value,
@@ -361,13 +368,15 @@ class GitHubReviewLedger:
                 str(row[0]),
                 bytes(row[1]),
                 bytes(row[2]),
-                str(row[3]),
+                bytes(row[3]),
                 str(row[4]),
+                str(row[5]),
             )
             expected = (
                 attempt_digest,
                 payload_json,
                 indexes_json,
+                omitted_json,
                 effective_event,
                 effective_body_digest,
             )
@@ -427,6 +436,7 @@ class GitHubReviewLedger:
             attempt_digest=attempt_digest,
             payload_json=payload_json,
             canonical_indexes=(),
+            omitted_dispositions=(),
             effective_event="",
             effective_body_digest="",
         )
@@ -446,7 +456,8 @@ class GitHubReviewLedger:
         with self._connect() as connection:
             rows = connection.execute(
                 "SELECT attempt_number, attempt_digest, payload_json, "
-                "canonical_indexes_json, effective_event, effective_body_digest, "
+                "canonical_indexes_json, omitted_dispositions_json, effective_event, "
+                "effective_body_digest, "
                 "state, response_class, status_code, error, created_at, updated_at "
                 "FROM attempts WHERE operation_key = ? ORDER BY attempt_number",
                 (operation_key,),
@@ -472,8 +483,22 @@ class GitHubReviewLedger:
             sort_keys=True,
             separators=(",", ":"),
         ).encode()
+        if not receipt.final_attempt_digest:
+            raise ValueError("final review receipt must identify its exact attempt")
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            cursor = connection.execute(
+                "UPDATE attempts SET state = ?, updated_at = ? "
+                "WHERE operation_key = ? AND attempt_digest = ?",
+                (
+                    receipt.state.value,
+                    time.time(),
+                    receipt.operation_key,
+                    receipt.final_attempt_digest,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("final review receipt does not match one persisted attempt")
             connection.execute(
                 "INSERT INTO receipts VALUES (?, ?, ?) "
                 "ON CONFLICT(operation_key) DO UPDATE SET receipt_json = excluded.receipt_json",
@@ -789,19 +814,41 @@ def _attempt_from_row(
         attempt_digest=str(row[0]),
         payload_json=bytes(row[1]),
         canonical_indexes=tuple(int(item) for item in json.loads(bytes(row[2]))),
-        effective_event=str(row[3]),
-        effective_body_digest=str(row[4]),
-        state=str(row[5]),
-        response_class=ReviewResponseClass(row[6]),
-        status_code=None if row[7] is None else int(row[7]),
-        error=None if row[8] is None else str(row[8]),
-        created_at=float(row[9]),
-        updated_at=float(row[10]),
+        omitted_dispositions=_dispositions_from_wire(json.loads(bytes(row[3]))),
+        effective_event=str(row[4]),
+        effective_body_digest=str(row[5]),
+        state=str(row[6]),
+        response_class=ReviewResponseClass(row[7]),
+        status_code=None if row[8] is None else int(row[8]),
+        error=None if row[9] is None else str(row[9]),
+        created_at=float(row[10]),
+        updated_at=float(row[11]),
     )
 
 
-def _receipt_from_wire(data: dict[str, Any]) -> GitHubReviewReceipt:
-    dispositions = tuple(
+def _dispositions_json(
+    dispositions: tuple[GitHubReviewFindingDisposition, ...],
+) -> bytes:
+    return json.dumps(
+        [
+            {
+                "canonical_index": item.canonical_index,
+                "kind": item.kind.value,
+                "original_index": item.original_index,
+                "reason": item.reason,
+                "remote_comment_id": item.remote_comment_id,
+            }
+            for item in dispositions
+        ],
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+
+
+def _dispositions_from_wire(
+    data: list[dict[str, Any]],
+) -> tuple[GitHubReviewFindingDisposition, ...]:
+    return tuple(
         GitHubReviewFindingDisposition(
             original_index=int(item["original_index"]),
             kind=ReviewFindingDispositionKind(item["kind"]),
@@ -813,8 +860,12 @@ def _receipt_from_wire(data: dict[str, Any]) -> GitHubReviewReceipt:
             ),
             reason=item.get("reason"),
         )
-        for item in data["finding_dispositions"]
+        for item in data
     )
+
+
+def _receipt_from_wire(data: dict[str, Any]) -> GitHubReviewReceipt:
+    dispositions = _dispositions_from_wire(data["finding_dispositions"])
     return GitHubReviewReceipt(
         schema_version=int(data["schema_version"]),
         operation_key=str(data["operation_key"]),

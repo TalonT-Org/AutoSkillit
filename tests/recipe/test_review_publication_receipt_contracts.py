@@ -110,7 +110,9 @@ def test_review_consumer_has_explicit_canonical_repository_producer(
     with_args = producer["with"]
 
     assert producer["tool"] == "run_cmd", producer_name
-    assert with_args["cmd"] == "gh repo view --json nameWithOwner -q .nameWithOwner"
+    assert with_args["cmd"] == (
+        "gh repo view --json nameWithOwner -q '.nameWithOwner | ascii_downcase'"
+    )
     assert with_args["cwd"] == consumer.work_dir_ref
     assert producer["capture"]["review_repository"] == "${{ result.stdout | trim }}"
     assert producer["on_failure"] == consumer.failure_route
@@ -208,3 +210,98 @@ def test_check_review_posted_receives_the_exact_publication_identity(
         "when": "${{ result.reviews_posted }} == 'false'",
         "route": consumer.failure_route,
     }
+
+
+@pytest.mark.parametrize(
+    (
+        "recipe_name",
+        "resolve_step",
+        "pr_ref",
+        "logical_iteration",
+        "success_route",
+        "failure_route",
+    ),
+    (
+        (
+            "implementation",
+            "resolve_review",
+            "${{ context.pr_number }}",
+            "resolve-review:${{ context.review_loop_count }}",
+            "pre_review_rebase",
+            "release_issue_failure",
+        ),
+        (
+            "implementation-groups",
+            "resolve_review",
+            "${{ context.pr_number }}",
+            "resolve-review:${{ context.review_loop_count }}",
+            "pre_review_rebase",
+            "release_issue_failure",
+        ),
+        (
+            "remediation",
+            "resolve_review",
+            "${{ context.pr_number }}",
+            "resolve-review:${{ context.review_loop_count }}",
+            "pre_review_rebase",
+            "release_issue_failure",
+        ),
+        (
+            "merge-prs",
+            "resolve_review_integration",
+            "${{ context.review_pr_number }}",
+            "resolve-review:integration",
+            "pre_review_rebase_integration",
+            "register_clone_failure",
+        ),
+    ),
+)
+def test_resolve_review_publication_is_effect_verified(
+    recipe_name: str,
+    resolve_step: str,
+    pr_ref: str,
+    logical_iteration: str,
+    success_route: str,
+    failure_route: str,
+) -> None:
+    """Conditional resolve-review publication must cross the same exact receipt gate."""
+    steps = load_yaml(builtin_recipes_dir() / f"{recipe_name}.yaml")["steps"]
+    resolve = steps[resolve_step]
+    check = steps["check_resolve_review_posted"]
+    args = check["with"]["args"]
+
+    assert (
+        resolve["capture"]
+        | {
+            "resolve_review_operation_key": "${{ result.review_operation_key }}",
+            "resolve_review_head_sha": "${{ result.review_head_sha }}",
+            "resolve_review_post_state": "${{ result.review_post_state }}",
+            "resolve_review_receipt_path": "${{ result.review_receipt_path }}",
+        }
+        == resolve["capture"]
+    )
+    assert {
+        "when": "${{ result.review_post_state }} == 'SUCCEEDED'",
+        "route": "check_resolve_review_posted",
+    } in resolve["on_result"]
+    assert {
+        "when": "${{ result.review_post_state }} == 'RECONCILED'",
+        "route": "check_resolve_review_posted",
+    } in resolve["on_result"]
+    assert check["with"]["callable"] == "autoskillit.smoke_utils.check_review_posted"
+    assert args == {
+        "cwd": "${{ context.work_dir }}",
+        "receipt_path": "${{ context.resolve_review_receipt_path }}",
+        "mode": "github",
+        "repository": "${{ context.review_repository }}",
+        "pr_number": pr_ref,
+        "head_sha": "${{ context.resolve_review_head_sha }}",
+        "logical_iteration": logical_iteration,
+        "operation_key": "${{ context.resolve_review_operation_key }}",
+        "post_state": "${{ context.resolve_review_post_state }}",
+    }
+    assert check["on_result"][0] == {
+        "when": "${{ result.reviews_posted }} == 'true'",
+        "route": success_route,
+    }
+    assert check["on_failure"] == failure_route

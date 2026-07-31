@@ -104,22 +104,13 @@ def test_resolve_review_local_mode_skips_thread_resolution():
 
 
 def test_resolve_review_local_mode_skips_inline_replies():
-    """Assert SKILL.md contains instruction to skip posting inline reply comments
-    when mode=local."""
+    """Raw inline replies are disabled in local and GitHub modes."""
     text = _skill_text()
     step65_idx = text.find("### Step 6.5")
     assert step65_idx >= 0
     step65_section = text[step65_idx : step65_idx + 1500]
-    local_mode_idx = step65_section.lower().find("mode=local")
-    assert local_mode_idx >= 0, "Step 6.5 must have a mode=local section"
-    after_local = step65_section[local_mode_idx : local_mode_idx + 300]
-    assert any(
-        phrase in after_local.lower()
-        for phrase in ["skip", "do not post", "no github", "no inline"]
-    ), (
-        "resolve-review/SKILL.md Step 6.5 mode=local section must skip "
-        "posting inline reply comments"
-    )
+    assert "In both modes" in step65_section
+    assert "do not post raw inline replies" in step65_section.lower()
 
 
 def test_resolve_review_local_mode_still_runs_tests():

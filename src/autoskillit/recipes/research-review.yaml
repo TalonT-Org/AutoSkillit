@@ -209,7 +209,7 @@ steps:
     tool: run_cmd
     optional_context_refs: [worktree_path]
     with:
-      cmd: gh repo view --json nameWithOwner -q .nameWithOwner
+      cmd: gh repo view --json nameWithOwner -q '.nameWithOwner | ascii_downcase'
       cwd: "${{ inputs.worktree_path }}"
       step_name: capture_review_repository
     capture:

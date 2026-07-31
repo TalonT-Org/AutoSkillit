@@ -17,7 +17,18 @@ _SIDES = frozenset({"LEFT", "RIGHT"})
 
 
 def _normalize_text(value: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError("review text values must be strings")
     return value.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def normalize_review_repository(value: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError("repository must be a string")
+    repository = normalize_owner_repo(value)
+    if repository is None:
+        raise ValueError("repository must be a canonical owner/repo identity")
+    return repository.casefold()
 
 
 def _comment_wire(comment: GitHubReviewComment) -> dict[str, Any]:
@@ -80,6 +91,7 @@ def canonical_comment_records(
                 item[1]["line"],
                 item[1]["start_line"] or 0,
                 item[1]["side"],
+                item[1]["start_side"] or "",
                 item[1]["body"],
             ),
         )
@@ -87,7 +99,7 @@ def canonical_comment_records(
 
 
 def _validated_identity_wire(request: GitHubReviewRequest) -> dict[str, Any]:
-    repository = normalize_owner_repo(request.repository)
+    repository = normalize_review_repository(request.repository)
     if isinstance(request.pr_number, bool) or request.pr_number <= 0:
         raise ValueError("pr_number must be positive")
     if not _SHA_RE.fullmatch(request.head_sha):

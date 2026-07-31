@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 from pathlib import Path
 
 import pytest
@@ -1030,8 +1031,6 @@ class TestAnalyzeGitHubMutations:
             "addPullRequestReview",
             "submitPullRequestReview",
             "addPullRequestReviewComment",
-            "resolveReviewThread",
-            "unresolveReviewThread",
         ],
     )
     def test_graphql_review_mutation_is_classified(
@@ -1054,6 +1053,85 @@ class TestAnalyzeGitHubMutations:
                 review_comment_count=None,
             ),
         )
+
+    @pytest.mark.parametrize("mutation_name", ["resolveReviewThread", "unresolveReviewThread"])
+    def test_graphql_thread_resolution_is_not_review_publication(
+        self,
+        mutation_name: str,
+    ) -> None:
+        document = (
+            f'mutation {{ {mutation_name}(input:{{threadId:"T"}}) {{ thread {{ isResolved }} }} }}'
+        )
+
+        analysis = analyze_github_mutations(f"gh api graphql -f query={json.dumps(document)}")
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.mutations[0].kind is GitHubMutationKind.OTHER
+
+    @pytest.mark.parametrize("data_flag", ["-d{}", "-Fbody=x", "-Tpayload.json"])
+    def test_attached_curl_write_flags_are_not_misclassified_as_get(
+        self,
+        data_flag: str,
+    ) -> None:
+        command = f"curl {data_flag} https://api.github.com/repos/o/r/pulls/7/reviews"
+
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.mutations[0].kind is GitHubMutationKind.PULL_REVIEW
+
+    def test_identical_nested_mutation_payloads_are_counted_per_occurrence(self) -> None:
+        nested = "gh api --method POST /repos/o/r/pulls/7/reviews -f event=COMMENT"
+
+        analysis = analyze_github_mutations(
+            f"bash -c {shlex.quote(nested)} && bash -c {shlex.quote(nested)}"
+        )
+
+        assert analysis.status is GitHubMutationStatus.MULTIPLE
+        assert analysis.request_count == 2
+        assert len(analysis.mutations) == 2
+
+    def test_prior_command_that_can_rewrite_literal_input_is_unresolved(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        payload = tmp_path / "payload.json"
+        payload.write_text(json.dumps({"body": "before"}), encoding="utf-8")
+        command = (
+            "printf '%s' '{\"body\":\"after\"}' > payload.json && "
+            "gh api --method POST /repos/o/r/issues/7/comments --input payload.json"
+        )
+
+        analysis = analyze_github_mutations(command, cwd=str(tmp_path))
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert "prior command may rewrite" in analysis.reason
+
+    def test_literal_interpreter_cwd_is_used_for_input_resolution(self, tmp_path: Path) -> None:
+        nested = tmp_path / "nested"
+        nested.mkdir()
+        (nested / "payload.json").write_text(json.dumps({"body": "x"}), encoding="utf-8")
+        command = (
+            'python3 -c "import subprocess; subprocess.run('
+            "['gh','api','--method','POST','/repos/o/r/issues/7/comments',"
+            "'--input','payload.json'], cwd='nested')\""
+        )
+
+        analysis = analyze_github_mutations(command, cwd=str(tmp_path))
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.mutations[0].kind is GitHubMutationKind.OTHER
+
+    def test_dynamic_interpreter_cwd_is_unresolved(self, tmp_path: Path) -> None:
+        command = (
+            "python3 -c \"import subprocess; target = 'nested'; subprocess.run("
+            "['gh','api','--method','POST','/repos/o/r/issues/7/comments'], cwd=target)\""
+        )
+
+        analysis = analyze_github_mutations(command, cwd=str(tmp_path))
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert "cwd is unresolved" in analysis.reason
 
     def test_non_review_graphql_mutation_remains_other(self) -> None:
         document = 'mutation { addComment(input:{subjectId:"I",body:"x"}) { clientMutationId } }'

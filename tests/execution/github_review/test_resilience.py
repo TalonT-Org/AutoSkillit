@@ -13,6 +13,7 @@ from autoskillit.core import (
     ReviewReconciliationResult,
 )
 from autoskillit.execution import GitHubReviewLedger
+from autoskillit.execution.github_review import _poster_support
 
 from .fakes import CreateOutcome, ManualClock, StatefulReviewGateway
 from .test_poster import _poster, _request
@@ -162,8 +163,9 @@ async def test_crash_after_reduced_batch_reconciles_persisted_subset_without_rep
     request = _request(
         tmp_path,
         comments=(
-            GitHubReviewComment(path="src/a.py", line=10, body="Keep"),
+            GitHubReviewComment(path="src/a.py", line=10, body="Already present"),
             GitHubReviewComment(path="src/b.py", line=20, body="Reject"),
+            GitHubReviewComment(path="src/c.py", line=30, body="Keep"),
         ),
     )
     database_path = tmp_path / "ledger.sqlite3"
@@ -180,6 +182,15 @@ async def test_crash_after_reduced_batch_reconciles_persisted_subset_without_rep
             ),
         ],
     )
+    findings = _poster_support.canonical_findings(request)
+    gateway._commit(
+        _poster_support.payload(
+            request=request,
+            operation_key="preexisting-operation",
+            findings=(findings[0],),
+            event="COMMENT",
+        )
+    )
     first = await _poster(database_path, gateway, clock).post(request)
     gateway.fail_reads = False
 
@@ -187,10 +198,22 @@ async def test_crash_after_reduced_batch_reconciles_persisted_subset_without_rep
 
     assert first.state is ReviewOperationState.AMBIGUOUS
     assert recovered.state is ReviewOperationState.RECONCILED
-    assert recovered.review_id == 700
+    assert recovered.review_id == 701
     assert len(gateway.create_calls) == 2
     assert recovered.receipt is not None
-    assert len(recovered.receipt.finding_dispositions) == 2
+    dispositions = {item.original_index: item for item in recovered.receipt.finding_dispositions}
+    assert dispositions[0].kind is ReviewFindingDispositionKind.ALREADY_PRESENT
+    assert dispositions[0].remote_comment_id == 900
+    assert dispositions[1].kind is ReviewFindingDispositionKind.OMITTED_INVALID
+    assert dispositions[1].reason and "diff" in dispositions[1].reason
+    assert dispositions[2].kind is ReviewFindingDispositionKind.POSTED
+    assert dispositions[2].remote_comment_id == 901
+    final_attempt = GitHubReviewLedger(database_path).load_attempts(recovered.operation_key)[-1]
+    assert final_attempt.state == ReviewOperationState.RECONCILED.value
+    assert final_attempt.omitted_dispositions == (
+        dispositions[1],
+        dispositions[0],
+    )
 
 
 @pytest.mark.anyio

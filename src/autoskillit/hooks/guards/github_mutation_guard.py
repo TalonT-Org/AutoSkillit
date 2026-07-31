@@ -74,11 +74,15 @@ def _normalized_input(data: dict[str, Any]) -> tuple[str, str] | None:
             _deny()
         command = tool_input.get("command")
         cwd = data.get("cwd", "")
+        if "cwd" in tool_input and tool_input["cwd"] != cwd:
+            _deny()
     elif tool_name.endswith(_RUN_CMD_SUFFIX) and "autoskillit" in tool_name:
         if "command" in tool_input:
             _deny()
         command = tool_input.get("cmd")
         cwd = tool_input.get("cwd", "")
+        if "cwd" in data and data["cwd"] != cwd:
+            _deny()
     else:
         return None
 

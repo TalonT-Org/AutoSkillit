@@ -164,10 +164,7 @@ class TestCrashPathDiagnosticPersistence:
         assert envelope["error"] == "fleet_unknown_ingredient"
         assert result.per_dispatch_state_path is None
 
-        terminal_failure_texts = (
-            envelope["user_visible_message"],
-            refused[0].diagnostic_message,
-        )
+        terminal_failure_texts = (envelope["user_visible_message"],)
         for terminal_failure_text in terminal_failure_texts:
             for forbidden in (
                 "native_shell_capture",

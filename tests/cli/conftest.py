@@ -8,6 +8,7 @@ is_git_worktree to True themselves.
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -62,6 +63,12 @@ def _stub_interactive_prelaunch(
         binary.chmod(0o755)
         binaries[name] = binary
 
+    monkeypatch.setattr(
+        shutil,
+        "which",
+        lambda name, **_kwargs: str(binaries[name]) if name in binaries else None,
+    )
+
     def resolve_binding(
         *,
         binary_name: str,
@@ -70,17 +77,19 @@ def _stub_interactive_prelaunch(
         explicit_path_env: str | None = None,
     ) -> ExecutableLaunchBinding:
         del explicit_path_env
-        test_path_env = "AUTOSKILLIT_TEST_EXECUTABLE_PATH"
-        bound_environment = {
-            **environment,
-            test_path_env: str(binaries[binary_name]),
-        }
-        return resolve_executable_launch_binding(
-            binary_name=binary_name,
-            environment=bound_environment,
-            cwd=cwd,
-            explicit_path_env=test_path_env,
-        )
+        if shutil.which(binary_name) is None:
+            raise ValueError(f"'{binary_name}' not found in the effective PATH")
+        with pytest.MonkeyPatch.context() as binding_patch:
+            binding_patch.setattr(
+                shutil,
+                "which",
+                lambda name, **_kwargs: str(binaries[name]) if name in binaries else None,
+            )
+            return resolve_executable_launch_binding(
+                binary_name=binary_name,
+                environment=environment,
+                cwd=cwd,
+            )
 
     monkeypatch.setattr(_session_launch, "resolve_executable_launch_binding", resolve_binding)
     monkeypatch.setattr(

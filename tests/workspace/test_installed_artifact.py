@@ -37,6 +37,17 @@ pytestmark = [pytest.mark.layer("workspace"), pytest.mark.medium]
 
 _PLUGIN_REF = "autoskillit@autoskillit-local"
 _VERSION = "1.2.3"
+_ARTIFACT_INVALID_MESSAGE_BY_KIND = {
+    PluginArtifactStateKind.MISSING_IDENTITY: "incarnation manifest is missing",
+    PluginArtifactStateKind.MALFORMED_IDENTITY: "incarnation manifest is missing or invalid",
+    PluginArtifactStateKind.WRONG_SEMANTIC_KEY: "semantic identity does not match",
+    PluginArtifactStateKind.WRONG_INCARNATION: "incarnation is not canonical",
+    PluginArtifactStateKind.WRONG_MANAGED_PATH: "managed path identity mismatch",
+    PluginArtifactStateKind.VERSION_MISMATCH: "metadata version does not match",
+    PluginArtifactStateKind.DIGEST_MISMATCH: "content digest mismatch",
+    PluginArtifactStateKind.DANGLING_MANAGED_ROOT: "plugin root is unavailable",
+    PluginArtifactStateKind.DANGLING_MANIFEST: "incarnation manifest is not a regular file",
+}
 
 
 @pytest.fixture
@@ -239,6 +250,14 @@ def test_complete_production_shaped_artifact_matrix(
             assert all(finding.severity.value == "error" for finding in result.findings)
             assert any(str(state.managed_root) in finding.message for finding in result.findings)
             assert all("autoskillit install" in finding.message for finding in result.findings)
+            expected_message = _ARTIFACT_INVALID_MESSAGE_BY_KIND.get(kind)
+            if expected_message is not None:
+                artifact_finding = next(
+                    finding
+                    for finding in result.findings
+                    if finding.check == "installed_plugin_artifact_invalid"
+                )
+                assert expected_message in artifact_finding.message
     finally:
         if result.lease is not None:
             result.lease.close()
@@ -289,10 +308,11 @@ def test_registry_path_is_obligation_evidence_never_path_authority(home: Path) -
 
     result = verify_installed_plugin_artifact(spec)
 
-    checks = {finding.check for finding in result.findings}
-    assert "installed_plugins_install_path" in checks
-    assert "installed_plugin_registry_missing" in checks
-    assert "installed_plugin_lease_unavailable" in checks
+    findings = {finding.check: finding for finding in result.findings}
+    assert str(stale) in findings["installed_plugins_install_path"].message
+    assert str(spec.managed_root) in findings["installed_plugins_install_path"].message
+    assert str(spec.managed_root) in findings["installed_plugin_registry_missing"].message
+    assert str(spec.lease_path) in findings["installed_plugin_lease_unavailable"].message
     assert not spec.lease_path.exists()
     assert not any(stale == identity.managed_path for identity in [result.identity] if identity)
 

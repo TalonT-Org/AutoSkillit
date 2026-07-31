@@ -434,6 +434,13 @@ def _build_success_short_circuit(
             "dispatched_session_id": record.dispatched_session_id,
         },
     )
+    provenance.start(
+        DispatchEffectName.COMMIT,
+        identities={
+            "dispatch_id": record.dispatch_id,
+            "dispatched_session_id": record.dispatched_session_id,
+        },
+    )
     provenance.confirm(
         DispatchEffectName.COMMIT,
         receipt="reused committed prior dispatch",
@@ -1398,6 +1405,13 @@ async def _run_dispatch(
         )
 
     if final_status == DispatchStatus.SUCCESS:
+        provenance.start(
+            DispatchEffectName.COMMIT,
+            identities={
+                "dispatch_id": dispatch_id,
+                "dispatched_session_id": skill_result.session_id or "",
+            },
+        )
         provenance.confirm(
             DispatchEffectName.COMMIT,
             receipt="dispatch outcome classifier confirmed success",

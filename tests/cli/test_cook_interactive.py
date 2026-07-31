@@ -11,7 +11,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from autoskillit import cli
-from autoskillit.cli.session._session_cook import COOK_PARENT_COORDINATION_INSTRUCTION
 from autoskillit.core import (
     CODEX_COOK_RESERVED_ENV_VARS,
     CODEX_STARTUP_TRACE_ENV_VAR,
@@ -82,7 +81,6 @@ class _Backend:
     capabilities = SimpleNamespace(
         hook_trust_policy=HookTrustPolicy.AUTOMATED,
         session_dir_persistent=False,
-        cook_parent_coordination_capable=False,
         skill_injection_capable=True,
     )
 
@@ -133,17 +131,6 @@ class _Backend:
             _record_spawn=lambda _pid, _pgid: None,
             _record_reaped=lambda _pid, _pgid: None,
         )
-
-
-class _CodexBackend(_Backend):
-    name = "codex"
-    capabilities = SimpleNamespace(
-        hook_trust_policy=HookTrustPolicy.REVIEW_EACH_SESSION,
-        session_dir_persistent=False,
-        cook_startup_observer_capable=False,
-        cook_parent_coordination_capable=True,
-        skill_injection_capable=True,
-    )
 
 
 def _install_harness(
@@ -277,7 +264,6 @@ def test_cook_uses_managed_home_for_final_child_context(
     assert build["generated_home"] == generated_home
     assert build["add_dirs"] == [ValidatedAddDir(str(skills_dir))]
     assert build["resume_spec"] == NoResume()
-    assert build["system_prompt"] is None
     assert backend.recover_count == 0
     assert backend.context_calls[0]["session_home"] == generated_home
     assert backend.context_calls[0]["project_dir"] == tmp_path
@@ -312,66 +298,40 @@ def test_cook_real_claude_builder_receives_plugin_and_skills(
     assert "--dangerously-skip-permissions" in spec.cmd
 
 
-def test_cook_fresh_capable_backend_receives_parent_coordination_instruction(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    backend = _CodexBackend()
-    _install_harness(monkeypatch, tmp_path)
-
-    cli.cook(backend=backend)
-
-    assert backend.build_calls[0]["resume_spec"] == NoResume()
-    assert backend.build_calls[0]["system_prompt"] == COOK_PARENT_COORDINATION_INSTRUCTION
-
-
-def test_cook_parent_coordination_instruction_is_one_scoped_paragraph() -> None:
-    instruction = COOK_PARENT_COORDINATION_INSTRUCTION
-
-    assert "\n" not in instruction
-    assert "multiple sub-agents" in instruction
-    assert "additional sub-agents while delegates are active" in instruction
-    assert "while any remain active, wait and do not perform task work yourself" in instruction
-    assert "sole exception is an explicit user instruction to perform specific work" in instruction
-    assert "do only that work, then resume waiting if any delegate remains active" in instruction
-
-
 def test_cook_bare_resume_recovers_then_uses_picker(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    backend = _CodexBackend()
+    backend = _Backend()
     _install_harness(monkeypatch, tmp_path, picked_session="thread-123")
 
     cli.cook(backend=backend, resume=True)
 
     assert backend.recover_count == 1
     assert backend.build_calls[0]["resume_spec"] == NamedResume("thread-123")
-    assert backend.build_calls[0]["system_prompt"] is None
 
 
 def test_cook_bare_resume_without_selection_starts_fresh(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    backend = _CodexBackend()
+    backend = _Backend()
     _install_harness(monkeypatch, tmp_path)
 
     cli.cook(backend=backend, resume=True)
 
     assert backend.recover_count == 1
     assert backend.build_calls[0]["resume_spec"] == NoResume()
-    assert backend.build_calls[0]["system_prompt"] == COOK_PARENT_COORDINATION_INSTRUCTION
 
 
 def test_cook_explicit_resume_does_not_run_recovery(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    backend = _CodexBackend()
+    backend = _Backend()
     _install_harness(monkeypatch, tmp_path)
 
     cli.cook(backend=backend, session_id="thread-explicit")
 
     assert backend.recover_count == 0
     assert backend.build_calls[0]["resume_spec"] == NamedResume("thread-explicit")
-    assert backend.build_calls[0]["system_prompt"] is None
 
 
 def test_cook_marks_onboarded_only_after_success(
@@ -487,7 +447,6 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
         capabilities = SimpleNamespace(
             hook_trust_policy=HookTrustPolicy.AUTOMATED,
             session_dir_persistent=False,
-            cook_parent_coordination_capable=False,
             skill_injection_capable=True,
         )
 
@@ -579,7 +538,6 @@ def test_cook_does_not_treat_persistent_sessions_as_codex(
         hook_trust_policy=HookTrustPolicy.AUTOMATED,
         session_dir_persistent=True,
         cook_startup_observer_capable=False,
-        cook_parent_coordination_capable=False,
         skill_injection_capable=True,
     )
     captured = _install_harness(monkeypatch, tmp_path)

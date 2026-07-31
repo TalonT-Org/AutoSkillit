@@ -1060,7 +1060,6 @@ class CodexBackend(BackendCmdBuilderBase):
             skill_sigil="$",
             session_dir_persistent=True,
             cook_startup_observer_capable=True,
-            cook_parent_coordination_capable=True,
             supports_model_invocation_gating=False,
             unnegotiated_tool_result_token_limit=(
                 CODEX_RECIPE_DELIVERY_BUDGET.ordinary_omitted_result_token_limit

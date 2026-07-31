@@ -198,6 +198,18 @@ def test_rendered_digest_equals_registry_render() -> None:
     )
 
 
+def test_subagent_parent_wait_rule_is_concise_and_exception_qualified() -> None:
+    (rule,) = (rule for rule in CODEX_INTAKE_RULES if rule.id == "subagent-parent-wait")
+
+    assert len(rule.text.encode("utf-8")) <= 140
+    assert "wait for every active sub-agent" in rule.text
+    assert "only do work the user explicitly requests" in rule.text
+    assert rule.exception == (
+        "The user may explicitly request work while sub-agents remain active."
+    )
+    assert rule.text in CODEX_INTAKE_DISCIPLINE_DIGEST
+
+
 def test_digest_header_carries_the_version() -> None:
     assert CODEX_INTAKE_DISCIPLINE_DIGEST.startswith(
         f"Context Intake Discipline v{CODEX_INTAKE_DISCIPLINE_VERSION}:"

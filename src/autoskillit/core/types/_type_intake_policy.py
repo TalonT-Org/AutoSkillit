@@ -17,13 +17,13 @@ __all__ = [
     "CODEX_INTAKE_DISCIPLINE_DIGEST",
 ]
 
-CODEX_INTAKE_DISCIPLINE_VERSION: Final[int] = 2
+CODEX_INTAKE_DISCIPLINE_VERSION: Final[int] = 3
 
 # Always-on injection: every byte is replicated into 11 bundled agent TOMLs at session
 # setup plus one copy per session prompt across 5 delivery surfaces. Raising either
 # ceiling is a decision, not a consequence — record measured before/after in the PR.
 CODEX_INTAKE_DISCIPLINE_BYTE_BUDGET: Final[int] = 1200
-CODEX_DISCIPLINE_SUFFIX_BYTE_BUDGET: Final[int] = 3000
+CODEX_DISCIPLINE_SUFFIX_BYTE_BUDGET: Final[int] = 3150
 
 
 class IntakeRuleDef(NamedTuple):
@@ -123,6 +123,19 @@ CODEX_INTAKE_RULES: Final[tuple[IntakeRuleDef, ...]] = (
         evidence="docs/decisions/0005-output-budget-protocol.md",
         evidence_anchor='fork_turns "none"',
         exception="Sub-agents may still perform task work when the selected skill allows it.",
+        path_classes=(),
+    ),
+    IntakeRuleDef(
+        id="subagent-parent-wait",
+        subject="subagent-spawning",
+        text=(
+            "After delegating, wait for every active sub-agent; do not duplicate their work. "
+            "While they run, only do work the user explicitly requests."
+        ),
+        basis="local-policy",
+        evidence="#4447",
+        evidence_anchor="wait for every active sub-agent",
+        exception="The user may explicitly request work while sub-agents remain active.",
         path_classes=(),
     ),
 )

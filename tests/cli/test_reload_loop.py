@@ -81,7 +81,6 @@ def _write_sentinel(project_dir: Path, session_id: str) -> Path:
 def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attempt_exit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from autoskillit.cli.session._session_cook import COOK_PARENT_COORDINATION_INSTRUCTION
     from autoskillit.core import (
         BackendConventions,
         CmdSpec,
@@ -127,7 +126,6 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
         capabilities = SimpleNamespace(
             hook_trust_policy=HookTrustPolicy.AUTOMATED,
             session_dir_persistent=False,
-            cook_parent_coordination_capable=False,
             skill_injection_capable=True,
         )
 
@@ -140,7 +138,7 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
         def build_interactive_cmd(self, **kwargs):
             resume_spec = kwargs["resume_spec"]
             plugin_binding = kwargs["plugin_binding"]
-            events.append(("build", resume_spec, kwargs["system_prompt"]))
+            events.append(("build", resume_spec))
             return CmdSpec(
                 cmd=("claude",),
                 env={"ATTEMPT": str(len(events))},
@@ -180,16 +178,6 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
                 )
             finally:
                 events.append(("attempt-exit", attempt, current_resume_spec))
-
-    class _CodexBackend(_MockBackend):
-        name = "codex"
-        capabilities = SimpleNamespace(
-            hook_trust_policy=HookTrustPolicy.REVIEW_EACH_SESSION,
-            session_dir_persistent=False,
-            cook_startup_observer_capable=False,
-            cook_parent_coordination_capable=True,
-            skill_injection_capable=True,
-        )
 
     results = iter(
         (
@@ -265,7 +253,7 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
     from autoskillit import cli
 
     with pytest.raises(SystemExit) as exc_info:
-        cli.cook(backend=_CodexBackend())
+        cli.cook(backend=_MockBackend())
     assert exc_info.value.code == 42
 
     managed_enters = [event for event in events if event[0] == "managed-enter"]
@@ -278,9 +266,6 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
     assert isinstance(attempt_enters[0][2], NoResume)
     assert isinstance(attempt_enters[1][2], NamedResume)
     assert attempt_enters[1][2].session_id == "sess-001"
-    build_events = [event for event in events if event[0] == "build"]
-    assert build_events[0][2] == COOK_PARENT_COORDINATION_INSTRUCTION
-    assert build_events[1][2] is None
 
     first_sentinel = events.index(
         next(event for event in events if event[:2] == ("sentinel", "sess-001"))
@@ -363,7 +348,6 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
         capabilities = SimpleNamespace(
             hook_trust_policy=HookTrustPolicy.AUTOMATED,
             session_dir_persistent=False,
-            cook_parent_coordination_capable=False,
             skill_injection_capable=True,
         )
 

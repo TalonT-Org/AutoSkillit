@@ -22,15 +22,6 @@ if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend
 
 
-COOK_PARENT_COORDINATION_INSTRUCTION = (
-    "Cook parent: You may launch multiple sub-agents; this rule does not prohibit launching "
-    "additional sub-agents while delegates are active. Other than launching delegates, while "
-    "any remain active, wait and do not perform task work yourself. The sole exception is an "
-    "explicit user instruction to perform specific work during that interval: do only that "
-    "work, then resume waiting if any delegate remains active."
-)
-
-
 def _print_recipes_list() -> None:
     """Print available recipes grouped by category to stdout."""
     from autoskillit.recipe import GROUP_LABELS, group_rank, list_recipes
@@ -270,12 +261,6 @@ def cook(
         try:
             while True:
                 attempt += 1
-                cook_parent_system_prompt = (
-                    COOK_PARENT_COORDINATION_INSTRUCTION
-                    if backend.capabilities.cook_parent_coordination_capable
-                    and isinstance(current_resume_spec, NoResume)
-                    else None
-                )
                 with plugin_launch_binding_scope(
                     authority=artifact_authority,
                     backend=backend,
@@ -287,7 +272,6 @@ def cook(
                         generated_home=managed_home.generated_home,
                         initial_prompt=current_initial_prompt,
                         resume_spec=current_resume_spec,
-                        system_prompt=cook_parent_system_prompt,
                         env_extras=cook_env_extras,
                     )
                     final_cmd = built_spec.cmd

@@ -104,7 +104,6 @@ def test_backend_capabilities_field_count():
         "git_metadata_writable",
         "session_dir_persistent",
         "cook_startup_observer_capable",
-        "cook_parent_coordination_capable",
         "supports_model_invocation_gating",
         "github_api_callable",
         "protected_recipe_delivery_capable",
@@ -182,7 +181,6 @@ def test_backend_capabilities_field_names_locked():
         "process_name_aliases",
         "session_dir_persistent",
         "cook_startup_observer_capable",
-        "cook_parent_coordination_capable",
         "supports_model_invocation_gating",
         "github_api_callable",
         "unnegotiated_tool_result_token_limit",
@@ -209,7 +207,6 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.mcp_config_capable is False
     assert CLAUDE_CODE_CAPABILITIES.claude_marketplace_tool_prefix_capable is True
     assert CLAUDE_CODE_CAPABILITIES.food_truck_capable is True
-    assert CLAUDE_CODE_CAPABILITIES.cook_parent_coordination_capable is False
     assert CLAUDE_CODE_CAPABILITIES.completion_record_types == frozenset({"result"})
     assert CLAUDE_CODE_CAPABILITIES.session_record_types == frozenset({"assistant"})
     assert CLAUDE_CODE_CAPABILITIES.triage_capable is True

@@ -74,6 +74,25 @@ def test_repeated_start_preserves_original_journal_entry() -> None:
     assert dict(effect.known_downstream_identities) == {"dispatch_id": "dispatch-1"}
 
 
+def test_ambiguity_preserves_non_retry_relevant_effect_metadata() -> None:
+    tracker = DispatchProvenanceTracker(operation_id="operation-non-retry-ambiguous")
+    tracker.start(
+        DispatchEffectName.REQUESTED_RESUME_BINDING,
+        retry_relevant=False,
+        identities={"session_id": "session-1"},
+    )
+
+    tracker.mark_ambiguous(
+        DispatchEffectName.REQUESTED_RESUME_BINDING,
+        evidence="resume binding outcome unavailable",
+    )
+
+    effect = tracker.snapshot().effects[0]
+    assert effect.phase is DispatchEffectPhase.STARTED
+    assert effect.retry_relevant is False
+    assert effect.ambiguity == "resume binding outcome unavailable"
+
+
 def test_confirm_requires_started_effect() -> None:
     tracker = DispatchProvenanceTracker(operation_id="operation-missing-start")
 

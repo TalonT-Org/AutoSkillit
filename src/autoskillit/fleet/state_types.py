@@ -264,7 +264,7 @@ class DispatchProvenanceTracker:
                 name=name,
                 phase=DispatchEffectPhase.STARTED,
                 effect_id=existing.effect_id if existing is not None else self._effect_id(name),
-                retry_relevant=True,
+                retry_relevant=(existing.retry_relevant if existing is not None else True),
                 known_downstream_identities=self._identities(merged_identities),
                 ambiguity=evidence,
             )

@@ -23,6 +23,7 @@ from datetime import UTC
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     CONTEXT_ADMISSION_PROTOCOL_VERSION,
+    AuditAdmissionStorageHealthStatus,
     ContextAdmissionStorageHealthStatus,
     get_logger,
 )
@@ -108,6 +109,15 @@ async def deferred_initialize(ctx: ToolContext, *, ready_event: asyncio.Event) -
     Sets ready_event when complete — tools needing audit data await this event.
     """
     try:
+        audit_recovery = ctx.audit_admission_ledger.recover_all()
+        if audit_recovery.store_health.status is not AuditAdmissionStorageHealthStatus.HEALTHY:
+            logger.warning(
+                "audit_admission_recovery_failed",
+                extra={
+                    "status": audit_recovery.store_health.status.value,
+                    "reason": audit_recovery.store_health.reason_code or "recovery_contended",
+                },
+            )
         accounting_recovery = ctx.context_admission_ledger.recover_all()
         failed_streams = tuple(
             health

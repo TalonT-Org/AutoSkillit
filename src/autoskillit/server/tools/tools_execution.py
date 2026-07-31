@@ -27,11 +27,26 @@ from autoskillit.core import (
     RECIPE_EXECUTION_INACTIVE_MESSAGE,
     SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,
+    AuditAttemptId,
+    AuditCycleVerificationError,
+    AuditCycleVerifier,
+    AuditIdentityReservation,
+    AuditMaterializationResult,
+    AuditMaterializationStatus,
+    AuditOutcome,
+    AuditOutcomeStatus,
+    AuditPrepareRequest,
+    AuditReservationRequest,
+    AuditResultOutcome,
+    AuditVerdict,
     BoundScalar,
     ClosureAuthoritySpec,
     CodingAgentBackend,
     EffectiveSkillInvocationAuthority,
     InvocationTemplate,
+    KillReason,
+    RecipeExecutionId,
+    ReservationDecision,
     SkillContractError,
     SkillExecutionRole,
     SkillResult,
@@ -39,6 +54,8 @@ from autoskillit.core import (
     ValidatedAddDir,
     WriteBehaviorSpec,
     closure_authority_spec_from_args,
+    compute_audit_slot_intent_digest,
+    compute_bytes_hash,
     compute_runtime_binding_digest,
     execution_marker,
     extract_skill_name,
@@ -58,6 +75,11 @@ from autoskillit.execution import (
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.pipeline import gate_error_result
 from autoskillit.server import mcp
+from autoskillit.server._audit_authority_materializer import (
+    derive_initial_lifecycle_ids,
+    load_current_prior_authority,
+    normalize_audited_plan_refs,
+)
 from autoskillit.server._guards import (
     _check_dry_walkthrough,
     _check_input_contracts,
@@ -88,7 +110,10 @@ from autoskillit.server._recipe_execution import (
     resolve_attested_input_preflight,
 )
 from autoskillit.server._recipe_execution import (
-    publish_audit_cycle_result as _publish_audit_result,
+    complete_audit_finalization_effects as _complete_audit_finalization_effects,
+)
+from autoskillit.server._recipe_execution import (
+    required_audit_finalization_effect_names as _required_audit_finalization_effect_names,
 )
 from autoskillit.server._subprocess import _run_subprocess_captured
 from autoskillit.server.tools._backend_compat import (
@@ -97,6 +122,7 @@ from autoskillit.server.tools._backend_compat import (
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (
+    AuditOutputMode,
     _import_and_call,
     _RunSkillContractLifecycle,
     _spill_spec,
@@ -112,6 +138,8 @@ from autoskillit.server.tools._execution_helpers import (
     resolve_relative_path_args,
     resolve_skill_dispatch_metadata,
     run_cmd_artifact_root,
+    select_audit_output_contract,
+    server_injected_run_python_args,
     shape_execution_response,
     spill_run_cmd_result,
     validate_path_arg_anchoring,
@@ -178,6 +206,170 @@ def _recipe_execution_deny(code: str, message: str) -> str:
             stage="preflight:recipe_execution",
             retriable=False,
         )
+    )
+
+
+def _audit_preflight_step_names(
+    tool_ctx: ToolContext,
+    installed,
+) -> tuple[str, ...]:
+    resolver = tool_ctx.skill_contract_resolver
+    if resolver is None:
+        raise RecipeExecutionAdmissionError(
+            "audit_preflight_resolver_unavailable",
+            "audit publication requires the compiled skill-contract resolver",
+        )
+    names = tuple(
+        step_name
+        for step_name, template in installed.snapshot.templates.items()
+        if (
+            template.invocation.skill_name is not None
+            and (contract := resolver(f"/autoskillit:{template.invocation.skill_name}"))
+            is not None
+            and getattr(contract, "input_preflight", None) == "audit_cycle_inventory"
+        )
+    )
+    if not names:
+        raise RecipeExecutionAdmissionError(
+            "audit_preflight_consumers_missing",
+            "audit publication has no compiled preflight consumer steps",
+        )
+    return names
+
+
+def _audit_response(
+    *,
+    status: AuditOutcomeStatus,
+    attempt_id: AuditAttemptId,
+    verdict: AuditVerdict | None,
+    path: Path | None,
+    error: str | None,
+    kill_reason: KillReason = KillReason.NATURAL_EXIT,
+) -> str:
+    success = status in {
+        AuditOutcomeStatus.PUBLISHED,
+        AuditOutcomeStatus.EXACT_REPLAY,
+    }
+    return json.dumps(
+        {
+            "success": success,
+            "exit_code": 0 if success else 1,
+            "kill_reason": kill_reason.value,
+            "result": (
+                f"Server-authored audit outcome: {status.value}"
+                if success
+                else f"Audit admission failed: {error or status.value}"
+            ),
+            "audit_status": status.value,
+            "audit_verdict": verdict.value if verdict is not None else None,
+            "audit_cycle_path": str(path) if path is not None else None,
+            "audit_attempt_id": attempt_id.value,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
+def _materialization_outcome_status(
+    result: AuditMaterializationResult,
+) -> AuditOutcomeStatus:
+    match result.status:
+        case AuditMaterializationStatus.PUBLISHED_PENDING_FINALIZATION:
+            return AuditOutcomeStatus.PUBLISHED
+        case AuditMaterializationStatus.SEMANTIC_REJECTED:
+            return AuditOutcomeStatus.SEMANTIC_REJECTED
+        case AuditMaterializationStatus.CONFLICT:
+            return AuditOutcomeStatus.CONFLICT
+        case AuditMaterializationStatus.STORAGE_FAILURE:
+            return AuditOutcomeStatus.STORAGE_FAILURE
+        case AuditMaterializationStatus.QUARANTINED:
+            return AuditOutcomeStatus.QUARANTINED
+
+
+def _reject_missing_semantic_result(
+    tool_ctx: ToolContext,
+    reservation: AuditIdentityReservation,
+) -> AuditMaterializationResult:
+    """Terminally reject a successful child that omitted its semantic artifact."""
+    prepared = tool_ctx.audit_admission_ledger.prepare(
+        AuditPrepareRequest(
+            attempt_id=reservation.current_attempt_id,
+            installation_version=reservation.slot_key.installation_version,
+            semantic_digest=compute_bytes_hash(b""),
+            accepted=False,
+        )
+    )
+    if prepared.conflict_detail is not None:
+        return AuditMaterializationResult(
+            status=AuditMaterializationStatus.CONFLICT,
+            attempt_id=reservation.current_attempt_id,
+            verdict=None,
+            path=None,
+            error=prepared.conflict_detail,
+        )
+    return AuditMaterializationResult(
+        status=AuditMaterializationStatus.SEMANTIC_REJECTED,
+        attempt_id=reservation.current_attempt_id,
+        verdict=None,
+        path=None,
+        error="successful audit child omitted audit_semantic_result_path",
+    )
+
+
+def _complete_resumed_audit(
+    tool_ctx: ToolContext,
+    *,
+    result: AuditMaterializationResult,
+    skill_command: str,
+    step_name: str,
+    order_id: str,
+) -> str:
+    status = _materialization_outcome_status(result)
+    if status is AuditOutcomeStatus.PUBLISHED:
+        assert result.verdict is not None
+        assert result.path is not None
+        response = _audit_response(
+            status=status,
+            attempt_id=result.attempt_id,
+            verdict=result.verdict,
+            path=result.path,
+            error=None,
+        )
+        replay_payload = json.loads(response)
+        replay_payload["audit_status"] = AuditOutcomeStatus.EXACT_REPLAY.value
+        replay_response = json.dumps(
+            replay_payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        _complete_audit_finalization_effects(
+            tool_ctx,
+            attempt_id=result.attempt_id,
+            skill_command=skill_command,
+            step_name=step_name,
+            order_id=order_id,
+            mark_step_complete=_mark_step_complete_server_side,
+        )
+        outcome = AuditOutcome(
+            status=AuditOutcomeStatus.PUBLISHED,
+            attempt_id=result.attempt_id,
+            verdict=result.verdict,
+            path=result.path,
+            error=None,
+            replay_response_json=replay_response,
+        )
+        tool_ctx.audit_admission_ledger.finalize_response(
+            result.attempt_id,
+            outcome,
+            required_effect_names=_required_audit_finalization_effect_names(step_name),
+        )
+        return response
+    return _audit_response(
+        status=status,
+        attempt_id=result.attempt_id,
+        verdict=result.verdict,
+        path=result.path,
+        error=result.error,
     )
 
 
@@ -581,7 +773,12 @@ async def run_python(
             resolved_args = args
             if work_dir:
                 resolved_args = resolve_relative_path_args(args or {}, work_dir)
-            result = await _import_and_call(callable, args=resolved_args, timeout=float(timeout))
+            result = await _import_and_call(
+                callable,
+                args=resolved_args,
+                timeout=float(timeout),
+                server_injected_args=server_injected_run_python_args(callable, tool_ctx),
+            )
             if not result.get("success"):
                 await _notify(
                     ctx,
@@ -617,6 +814,7 @@ async def run_skill(
     idle_output_timeout: int | None = None,
     output_dir: str = "",
     resume_session_id: str = "",
+    retry_after_audit_attempt_id: str = "",
     closure_authority_path: str = "",
     closure_authority_hash: str = "",
     closure_plan_paths: str = "",
@@ -657,6 +855,8 @@ async def run_skill(
         resume_session_id: Session ID from a previous run_skill call that was interrupted.
             When set, resume that coding-agent session instead of starting fresh. The
             skill_command becomes a continuation instruction; pass the prior result's session_id.
+        retry_after_audit_attempt_id: Server-issued rejected audit attempt to correct.
+            This is attested control data and is never passed to the child as a skill input.
 
     Never raises.
     """
@@ -842,6 +1042,18 @@ async def run_skill(
         _preflight_result = None
         _bound_recipe_inputs: tuple[tuple[str, BoundScalar], ...] = ()
         _invocation_template: InvocationTemplate | None = None
+        _audit_reservation: AuditIdentityReservation | None = None
+        _audit_preflight_steps: tuple[str, ...] = ()
+        _target_contract = (
+            tool_ctx.skill_contract_resolver(skill_command)
+            if (_stored_contract_entry is None and tool_ctx.skill_contract_resolver is not None)
+            else None
+        )
+        _audit_publication = getattr(
+            _target_contract,
+            "audit_authority_publication",
+            None,
+        )
         child_skill_command = skill_command
         _claims_recipe_execution = bool(recipe_execution_id or invocation_template_digest)
         _dynamic_recipe_call = bool(
@@ -849,6 +1061,16 @@ async def run_skill(
             and step_name
             and step_name in _installed_execution.snapshot.dynamic_skill_step_names
         )
+        _audit_output_mode: AuditOutputMode | None = None
+        if _audit_publication is not None and not resume_session_id:
+            _audit_output_mode = (
+                AuditOutputMode.ATTESTED
+                if _installed_execution is not None and not _dynamic_recipe_call
+                else AuditOutputMode.STANDALONE
+            )
+            if _target_contract is None:
+                raise SkillContractError("audit output contract is unavailable")
+            select_audit_output_contract(_target_contract, _audit_output_mode)
         # Resolved from cwd so the audit-cycle containment anchor matches the
         # clone's actual artifact directory (orchestrator's tool_ctx.temp_dir
         # is disjoint from the clone's temp tree in clone-based pipelines).
@@ -880,6 +1102,7 @@ async def run_skill(
                         skill_command,
                         cwd,
                         skill_inputs,
+                        audit_output_mode=_audit_output_mode,
                     )
                 except RecipeExecutionAdmissionError as exc:
                     return _recipe_execution_deny(exc.code, str(exc))
@@ -911,6 +1134,7 @@ async def run_skill(
                 "closure_base_sha": closure_base_sha,
                 "closure_diff_sha": closure_diff_sha,
                 "closure_target_sha": closure_target_sha,
+                "retry_after_audit_attempt_id": retry_after_audit_attempt_id,
             }
             if stale_threshold is not None:
                 _actual_mcp_kwargs["stale_threshold"] = stale_threshold
@@ -941,11 +1165,6 @@ async def run_skill(
                 )
             except RecipeExecutionAdmissionError as exc:
                 return _recipe_execution_deny(exc.code, str(exc))
-            child_skill_command = build_bound_child_prompt(
-                skill_command,
-                _bound_recipe_inputs,
-                _preflight_result,
-            )
             _runtime_digest = compute_runtime_binding_digest(
                 execution_id=recipe_execution_id,
                 step_name=step_name,
@@ -953,9 +1172,10 @@ async def run_skill(
                 bound_inputs=_bound_recipe_inputs,
                 actual_mcp_kwargs=_actual_mcp_kwargs,
                 preflight=_preflight_result,
+                retry_after_audit_attempt_id=retry_after_audit_attempt_id or None,
             )
             try:
-                record_runtime_binding_digest(
+                _installed_execution = record_runtime_binding_digest(
                     tool_ctx,
                     execution_id=recipe_execution_id,
                     step_name=step_name,
@@ -963,6 +1183,178 @@ async def run_skill(
                 )
             except RecipeExecutionAdmissionError as exc:
                 return _recipe_execution_deny(exc.code, str(exc))
+            if _audit_publication is not None:
+                try:
+                    _slot_intent_digest = compute_audit_slot_intent_digest(
+                        execution_id=recipe_execution_id,
+                        step_name=step_name,
+                        template_digest=invocation_template_digest,
+                        bound_inputs=_bound_recipe_inputs,
+                        actual_mcp_kwargs=_actual_mcp_kwargs,
+                        preflight=_preflight_result,
+                        retry_after_audit_attempt_id=(retry_after_audit_attempt_id or None),
+                    )
+                    _bound_input_map = dict(_bound_recipe_inputs)
+                    _prior_input_field = _audit_publication.prior_input_field
+                    _prior_path = _bound_input_map.get(_prior_input_field)
+                    _recipe_execution_key = RecipeExecutionId(recipe_execution_id)
+                    if isinstance(_prior_path, str) and _prior_path:
+                        _prior_authority = load_current_prior_authority(
+                            _prior_path,
+                            allowed_root=_clone_allowed_root,
+                            ledger=tool_ctx.audit_admission_ledger,
+                            recipe_execution_id=_recipe_execution_key,
+                        )
+                        _audited_plan_refs = (
+                            normalize_audited_plan_refs(
+                                str(_bound_input_map.get("all_plan_paths") or ""),
+                                allowed_root=_clone_allowed_root,
+                            )
+                            if _bound_input_map.get("all_plan_paths")
+                            else _prior_authority.audited_plan_refs
+                        )
+                        _cycle_id = _prior_authority.cycle_id
+                        _scope_id = _prior_authority.scope_id
+                        _part_id = _prior_authority.part_id
+                        _parent_digest = _prior_authority.authority_digest
+                    else:
+                        _audited_plan_refs = normalize_audited_plan_refs(
+                            str(_bound_input_map.get("all_plan_paths") or ""),
+                            allowed_root=_clone_allowed_root,
+                        )
+                        _cycle_id, _scope_id, _part_id = derive_initial_lifecycle_ids(
+                            recipe_execution_id=_recipe_execution_key,
+                            step_name=step_name,
+                            slot_intent_digest=_slot_intent_digest,
+                        )
+                        _parent_digest = None
+                    _audit_preflight_steps = _audit_preflight_step_names(
+                        tool_ctx,
+                        _installed_execution,
+                    )
+                    with tool_ctx.recipe_execution_lock:
+                        if get_recipe_execution(tool_ctx) is not _installed_execution:
+                            raise RecipeExecutionAdmissionError(
+                                "recipe_execution_replaced",
+                                "active recipe execution changed before audit reservation",
+                            )
+                        _reservation_outcome = tool_ctx.audit_admission_ledger.reserve(
+                            AuditReservationRequest(
+                                recipe_execution_id=_recipe_execution_key,
+                                installation_version=(_installed_execution.installation_version),
+                                step_name=step_name,
+                                invocation_template_digest=(invocation_template_digest),
+                                slot_intent_digest=_slot_intent_digest,
+                                runtime_binding_digest=_runtime_digest,
+                                audited_plan_refs=_audited_plan_refs,
+                                cycle_id=_cycle_id,
+                                scope_id=_scope_id,
+                                part_id=_part_id,
+                                allowed_root=_clone_allowed_root,
+                                parent_authority_digest=_parent_digest,
+                                retry_after_audit_attempt_id=(
+                                    AuditAttemptId(retry_after_audit_attempt_id)
+                                    if retry_after_audit_attempt_id
+                                    else None
+                                ),
+                            )
+                        )
+                    match _reservation_outcome.decision:
+                        case (
+                            ReservationDecision.DISPATCH_NEW | ReservationDecision.REDISPATCH_OPEN
+                        ):
+                            assert _reservation_outcome.reservation is not None
+                            assert _reservation_outcome.reservation_handle is not None
+                            _audit_reservation = _reservation_outcome.reservation
+                            child_skill_command = build_bound_child_prompt(
+                                skill_command,
+                                _bound_recipe_inputs,
+                                _preflight_result,
+                                audit_reservation_handle=(_reservation_outcome.reservation_handle),
+                                audit_reserved_plan_refs=_audited_plan_refs,
+                                audit_output_mode=_audit_output_mode,
+                            )
+                        case ReservationDecision.EXACT_REPLAY:
+                            assert _reservation_outcome.replay_outcome is not None
+                            _replay = _reservation_outcome.replay_outcome
+                            if _replay.replay_response_json is not None:
+                                return _replay.replay_response_json
+                            return _audit_response(
+                                status=AuditOutcomeStatus.EXACT_REPLAY,
+                                attempt_id=_replay.attempt_id,
+                                verdict=_replay.verdict,
+                                path=_replay.path,
+                                error=_replay.error,
+                                kill_reason=_replay.kill_reason,
+                            )
+                        case ReservationDecision.RESUME_PREPARED:
+                            assert _reservation_outcome.reservation is not None
+                            with tool_ctx.recipe_execution_lock:
+                                if get_recipe_execution(tool_ctx) is not _installed_execution:
+                                    raise RecipeExecutionAdmissionError(
+                                        "recipe_execution_replaced",
+                                        "active recipe execution changed before audit recovery",
+                                    )
+                                _resumed = tool_ctx.audit_authority_materializer.materialize(
+                                    reservation=_reservation_outcome.reservation,
+                                    semantic_result_path=(
+                                        _reservation_outcome.reservation.semantic_result_path
+                                    ),
+                                    preflight_step_names=_audit_preflight_steps,
+                                )
+                            return _complete_resumed_audit(
+                                tool_ctx,
+                                result=_resumed,
+                                skill_command=skill_command,
+                                step_name=step_name,
+                                order_id=order_id,
+                            )
+                        case ReservationDecision.PUBLISHED_PENDING_FINALIZATION:
+                            assert _reservation_outcome.reservation is not None
+                            _authority = AuditCycleVerifier(_clone_allowed_root).load_authority(
+                                _reservation_outcome.reservation.authority_path
+                            )
+                            _published = AuditMaterializationResult(
+                                status=(AuditMaterializationStatus.PUBLISHED_PENDING_FINALIZATION),
+                                attempt_id=_reservation_outcome.attempt_id,
+                                verdict=_authority.verdict,
+                                path=_reservation_outcome.reservation.authority_path,
+                                error=None,
+                            )
+                            return _complete_resumed_audit(
+                                tool_ctx,
+                                result=_published,
+                                skill_command=skill_command,
+                                step_name=step_name,
+                                order_id=order_id,
+                            )
+                        case ReservationDecision.CONFLICT:
+                            return _audit_response(
+                                status=AuditOutcomeStatus.CONFLICT,
+                                attempt_id=_reservation_outcome.attempt_id,
+                                verdict=None,
+                                path=None,
+                                error=_reservation_outcome.conflict_detail,
+                            )
+                except (
+                    AuditCycleVerificationError,
+                    OSError,
+                    RecipeExecutionAdmissionError,
+                    ValueError,
+                ) as exc:
+                    code = (
+                        exc.code
+                        if isinstance(exc, RecipeExecutionAdmissionError)
+                        else "audit_reservation_failed"
+                    )
+                    return _recipe_execution_deny(code, str(exc))
+            else:
+                child_skill_command = build_bound_child_prompt(
+                    skill_command,
+                    _bound_recipe_inputs,
+                    _preflight_result,
+                    audit_output_mode=_audit_output_mode,
+                )
         elif _claims_recipe_execution:
             return _recipe_execution_deny(
                 "recipe_execution_inactive",
@@ -974,6 +1366,7 @@ async def run_skill(
                     skill_command,
                     cwd,
                     skill_inputs,
+                    audit_output_mode=_audit_output_mode,
                 )
             except RecipeExecutionAdmissionError as exc:
                 return _recipe_execution_deny(
@@ -1240,7 +1633,12 @@ async def run_skill(
                 )
 
             expected_output_patterns, write_spec, _skill_contract = (
-                resolve_skill_dispatch_metadata(tool_ctx, skill_command, _stored_contract)
+                resolve_skill_dispatch_metadata(
+                    tool_ctx,
+                    skill_command,
+                    _stored_contract,
+                    audit_output_mode=_audit_output_mode,
+                )
             )
 
             # Resolve closure spec from explicit MCP tool parameters.
@@ -1620,23 +2018,106 @@ async def run_skill(
                     )
                 contract_lifecycle.apply_retention(skill_result.needs_retry)
 
+                _audit_outcome_to_finalize: AuditOutcome | None = None
                 if skill_result.success:
-                    _publish_audit_result(
-                        tool_ctx,
-                        target_name,
-                        skill_result,
-                        (_installed_execution if _invocation_template is not None else None),
-                        _bound_recipe_inputs,
-                        allowed_root=_clone_allowed_root,
-                    )
-                    tool_ctx.audit.record_success(skill_command)
-                    clear_run_skill_state(tool_ctx.project_dir)
-                    if step_name:
-                        _pipeline_marker = _mark_step_complete_server_side(
-                            tool_ctx, step_name, order_id
+                    if _audit_reservation is not None:
+                        _semantic_path = (skill_result.outcome_fields or {}).get(
+                            "audit_semantic_result_path"
+                        )
+                        if not isinstance(_semantic_path, str) or not _semantic_path:
+                            _materialized = _reject_missing_semantic_result(
+                                tool_ctx,
+                                _audit_reservation,
+                            )
+                        else:
+                            with tool_ctx.recipe_execution_lock:
+                                if get_recipe_execution(tool_ctx) is not _installed_execution:
+                                    _materialized = AuditMaterializationResult(
+                                        status=AuditMaterializationStatus.CONFLICT,
+                                        attempt_id=_audit_reservation.current_attempt_id,
+                                        verdict=None,
+                                        path=None,
+                                        error=(
+                                            "active recipe execution changed before "
+                                            "audit materialization"
+                                        ),
+                                    )
+                                else:
+                                    _materialized = (
+                                        tool_ctx.audit_authority_materializer.materialize(
+                                            reservation=_audit_reservation,
+                                            semantic_result_path=Path(_semantic_path),
+                                            preflight_step_names=_audit_preflight_steps,
+                                        )
+                                    )
+                        _materialized_status = _materialization_outcome_status(_materialized)
+                        match _materialized_status:
+                            case AuditOutcomeStatus.PUBLISHED:
+                                assert _materialized.verdict is not None
+                                assert _materialized.path is not None
+                                skill_result.result = (
+                                    "Server-authored audit outcome: "
+                                    f"{AuditOutcomeStatus.PUBLISHED.value}"
+                                )
+                                skill_result.outcome_fields = None
+                                skill_result.audit = AuditResultOutcome(
+                                    status=AuditOutcomeStatus.PUBLISHED,
+                                    verdict=_materialized.verdict,
+                                    cycle_path=str(_materialized.path),
+                                    attempt_id=_materialized.attempt_id,
+                                )
+                                _audit_outcome_to_finalize = AuditOutcome(
+                                    status=AuditOutcomeStatus.PUBLISHED,
+                                    attempt_id=_materialized.attempt_id,
+                                    verdict=_materialized.verdict,
+                                    path=_materialized.path,
+                                    error=None,
+                                    kill_reason=skill_result.kill_reason,
+                                )
+                            case AuditOutcomeStatus.EXACT_REPLAY:
+                                return _audit_response(
+                                    status=_materialized_status,
+                                    attempt_id=_materialized.attempt_id,
+                                    verdict=_materialized.verdict,
+                                    path=_materialized.path,
+                                    error=_materialized.error,
+                                    kill_reason=skill_result.kill_reason,
+                                )
+                            case (
+                                AuditOutcomeStatus.SEMANTIC_REJECTED
+                                | AuditOutcomeStatus.CONFLICT
+                                | AuditOutcomeStatus.STORAGE_FAILURE
+                                | AuditOutcomeStatus.QUARANTINED
+                                | AuditOutcomeStatus.NON_PUBLISHED_STANDALONE
+                            ):
+                                skill_result.result = ""
+                                skill_result.outcome_fields = None
+                                return _audit_response(
+                                    status=_materialized_status,
+                                    attempt_id=_materialized.attempt_id,
+                                    verdict=None,
+                                    path=None,
+                                    error=_materialized.error,
+                                    kill_reason=skill_result.kill_reason,
+                                )
+                    if _audit_outcome_to_finalize is not None:
+                        _pipeline_marker = _complete_audit_finalization_effects(
+                            tool_ctx,
+                            attempt_id=_audit_outcome_to_finalize.attempt_id,
+                            skill_command=skill_command,
+                            step_name=step_name,
+                            order_id=order_id,
+                            mark_step_complete=_mark_step_complete_server_side,
                         )
                     else:
-                        _pipeline_marker = None
+                        tool_ctx.audit.record_success(skill_command)
+                        clear_run_skill_state(tool_ctx.project_dir)
+                        if step_name:
+                            _pipeline_marker = _mark_step_complete_server_side(
+                                tool_ctx, step_name, order_id
+                            )
+                        else:
+                            _pipeline_marker = None
                 else:
                     _pipeline_marker = None
                     await _notify(
@@ -1690,12 +2171,34 @@ async def run_skill(
                     )
                 if _pipeline_marker is not None:
                     _parsed["pipeline_tracker"] = _pipeline_marker
-                return shape_execution_response(
+                _shaped_response = shape_execution_response(
                     tool_ctx,
                     _parsed,
                     tool_name="run_skill",
                     work_dir=cwd,
                 )
+                if _audit_outcome_to_finalize is not None:
+                    _replay_payload = json.loads(_shaped_response)
+                    _replay_payload["audit_status"] = AuditOutcomeStatus.EXACT_REPLAY.value
+                    _replay_response = json.dumps(
+                        _replay_payload,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                    tool_ctx.audit_admission_ledger.finalize_response(
+                        _audit_outcome_to_finalize.attempt_id,
+                        AuditOutcome(
+                            status=_audit_outcome_to_finalize.status,
+                            attempt_id=_audit_outcome_to_finalize.attempt_id,
+                            verdict=_audit_outcome_to_finalize.verdict,
+                            path=_audit_outcome_to_finalize.path,
+                            error=_audit_outcome_to_finalize.error,
+                            kill_reason=_audit_outcome_to_finalize.kill_reason,
+                            replay_response_json=_replay_response,
+                        ),
+                        required_effect_names=_required_audit_finalization_effect_names(step_name),
+                    )
+                return _shaped_response
             except Exception as exc:
                 contract_lifecycle.retain_bound = False
                 logger.error("run_skill executor raised unexpectedly", exc_info=True)

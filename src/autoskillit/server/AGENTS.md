@@ -63,7 +63,7 @@ Controls whether the tool succeeds when called (independent of visibility):
 | Standard kitchen | `kitchen` | Yes | Yes (`_require_enabled`) | `run_cmd`, `run_skill`, `report_bug` |
 | Fleet tool | `fleet`, `kitchen-core` | Yes (via `ALL_VISIBILITY_TAGS` loop) | Yes (`_require_fleet` or `_require_enabled`) | `dispatch_food_truck`, `record_gate_dispatch` |
 | Fleet-dispatch tool | `fleet-dispatch` (± `kitchen-core`) | Yes (via `ALL_VISIBILITY_TAGS` loop) | Yes (`_require_enabled`) | `fetch_github_issue`, `list_recipes` |
-| Headless-exempt | `kitchen`, `headless` | Yes | No | `test_check`, `commit_files`, `unlock_agent_pack`, `write_audit_cycle_artifact` |
+| Headless-exempt | `kitchen`, `headless` | Yes | No | `test_check`, `commit_files`, `unlock_agent_pack`, typed audit artifact producers |
 | Free-range | _(none of the above)_ | No | No | `open_kitchen`, `close_kitchen` |
 
 ### Registry Constants
@@ -72,7 +72,7 @@ The canonical tool sets are in `core/types/_type_constants_registries.py`:
 
 - `GATED_TOOLS` — all tools that call `_require_enabled()` (validated by arch test)
 - `UNGATED_TOOLS` = `FREE_RANGE_TOOLS` — tools with no gating at all
-- `HEADLESS_TOOLS` — `{"test_check", "unlock_agent_pack", "commit_files", "write_audit_cycle_artifact"}` — kitchen-tagged but not application-gated
+- `HEADLESS_TOOLS` — the six kitchen-tagged, application-ungated worker tools: testing, commit, legacy audit-cycle, and the three typed audit artifact producers
 - `FLEET_TOOLS` — fleet-session-only tools
 - `FLEET_DISPATCH_TOOLS` — fleet-dispatch-mode tools (hidden at startup, application-gated)
 - `ALL_VISIBILITY_TAGS` — `{"kitchen", "headless", "fleet", "fleet-dispatch", "kitchen-core", "plan-review"}`

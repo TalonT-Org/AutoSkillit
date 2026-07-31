@@ -105,6 +105,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_type_intake_policy",
         "_type_constants_registries",  # measured response-exemption registry digest
         "tool_registry",  # immutable canonical MCP tool definition registry
+        # Frozen static ownership and identity-profile definitions are derived once.
+        "_type_audit_admission",
         "_codex_config",  # Codex output ceiling derived from measured exemptions
         "_fmt_response_spill",  # standalone spill schema and exemption mirror digests
         "_response_budget",  # canonical spill schema digest
@@ -939,25 +941,27 @@ def test_no_subpackage_exceeds_10_files() -> None:
     """
     EXEMPTIONS: dict[str, int] = {
         # +generation-bound replay store and post-enforcement initialization commits.
-        "server": 19,
+        "server": 20,  # +_audit_authority_materializer canonical publication boundary
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
-        "core": 29,  # +plugin artifact identity authority
-        "core/types": 41,  # +context persistence, audit, binding, execution, intake types
+        "core": 30,  # +plugin identity authority + strict audit semantic codec
+        "core/types": 44,  # +audit admission ownership, ledger contracts, and protocols
         "cli": 22,  # +_plugin_artifact exact installed-incarnation authority (#4382)
         "cli/doctor": 11,  # +_doctor_skills capability declaration authenticity checks
         "workspace": 14,  # +_install_state (single install-state consistency authority,
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
         "hooks": 20,  # +_capture_lifecycle state leaf and +capture_lifecycle_hook SessionStart owner  # noqa: E501
-        "pipeline": 15,  # +context admission ledger +recipe initialization +kitchen transition
+        "pipeline": 16,  # +context/audit admission ledgers +recipe initialization
+        # +kitchen transition authority
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
-        "recipe/rules": 55,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery  # noqa: E501
+        "recipe/rules": 56,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing  # noqa: E501
         "server/tools": 33,  # +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
         # auto-init dependency tracker + REVIEW_BEFORE_PLAN ordering telemetry)
         # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate
         # for direct headless executor callers — report_bug, prepare_issue, enrich_issues)
-        # +tools_audit_cycle.py (server-side write_audit_cycle_artifact MCP tool, #4406)
+        # +tools_audit_artifacts.py (typed audit semantic/disposition producers, #4419;
+        # replaces the retired generic audit-cycle writer)
         "hooks/guards": 32,  # -output_budget_guard (#4286)
         # Three private Codex ownership modules keep lock, prelaunch transaction,
         # and per-attempt storage concerns out of the public backend gateway:
@@ -1060,7 +1064,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "side effects whose ambiguity they record.",
     ),
     "server/_recipe_delivery.py": (
-        1450,
+        1460,
         "REQ-CNST-010-E12: immutable recipe generation persistence, host-attested delivery "
         "selection, receipt reservation, and compiled-execution publication form one "
         "transactional authority boundary; the snapshot carrier keeps installation before "
@@ -1069,7 +1073,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "provenance, and activating/non-activating lifecycle staging remain in that same "
         "finalizer transaction so no second wire authority can drift; #4399's exemption-aware "
         "ordinary-inline override and success-shaped surface payload preserve complete bodies "
-        "for registered non-protected surfaces.",
+        "for registered non-protected surfaces; #4419's audit installation/finalization fence "
+        "and #4425's kitchen-effect transition remain co-located to preserve that single "
+        "delivery authority.",
     ),
     "tools_kitchen.py": (
         2260,
@@ -1274,6 +1280,21 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "row/byte budgets remain beside replay validation so storage and reducer "
         "publication invariants cannot drift across independently mutable modules.",
     ),
+    "pipeline/audit_admission_ledger.py": (
+        2300,
+        "REQ-CNST-010-E17: #4419 keeps installation fencing, reservation and attempt "
+        "transitions, trusted head/preflight publication, disposition CAS, and recovery "
+        "inside one crash-safe SQLite authority. Splitting the transactional state machine "
+        "would let independently mutable storage paths drift from its atomic publication "
+        "and fail-closed health invariants.",
+    ),
+    "server/tools/tools_execution.py": (
+        2300,
+        "REQ-CNST-010-E18: #4419 keeps the attested reservation, dispatch, exhaustive "
+        "materialization outcome routing, and durable response finalization at the existing "
+        "run_skill transaction boundary. Splitting that control flow would separate success "
+        "bookkeeping from the ledger state it must atomically finalize.",
+    ),
 }
 
 
@@ -1436,6 +1457,9 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     core_protocols: set[str] = set()
     for types_filename in (
         "core/types/__init__.py",
+        "core/types/_type_audit_admission.py",
+        "core/types/_type_audit_admission_ledger.py",
+        "core/types/_type_audit_protocols.py",
         "core/types/_type_protocols_logging.py",
         "core/types/_type_protocols_execution.py",
         "core/types/_type_protocols_github.py",

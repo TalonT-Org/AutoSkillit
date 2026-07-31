@@ -304,7 +304,19 @@ def _project_json_object(
 
     if delivery_bound_triggered and "result" in parsed:
         priority_keys = tuple(
-            key for key in ("success", "kitchen", "version", "errors") if key in parsed
+            key
+            for key in (
+                "success",
+                "kitchen",
+                "version",
+                "errors",
+                "kill_reason",
+                "audit_status",
+                "audit_verdict",
+                "audit_cycle_path",
+                "audit_attempt_id",
+            )
+            if key in parsed
         )
         deprioritized_keys = tuple(key for key in parsed if key not in {*priority_keys, "result"})
         return _tiered_projection(

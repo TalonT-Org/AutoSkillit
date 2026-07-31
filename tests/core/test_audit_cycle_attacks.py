@@ -122,64 +122,13 @@ def test_artifact_reference_rejects_size_digest_and_post_reference_mutation(
 
 
 def test_authority_rejects_forged_digest_and_noncanonical_bytes(tmp_path: Path) -> None:
-    """The legitimate-bytes half is produced by the sanctioned production
-    write path (write_audit_cycle_artifact_sync), not by AuditCycleAuthority
-    constructed and serialized directly in the test — closing the gap where
-    this attack test's own "legitimate" fixture bypassed the real producer.
-    """
-    from autoskillit.server.tools.tools_audit_cycle import write_audit_cycle_artifact_sync
-
-    (tmp_path / "plan.md").write_bytes(b"plan")
-    (tmp_path / "inventory.json").write_bytes(b"inventory")
-    (tmp_path / "remediation.md").write_bytes(b"remediation")
-
+    """The pure verifier rejects mutation of canonical authority bytes."""
+    authority = _authority(tmp_path)
     path = tmp_path / "authority.json"
-    result = write_audit_cycle_artifact_sync(
-        kind="authority",
-        path=str(path),
-        fields={
-            "execution_generation": "generation-1",
-            "cycle_id": "cycle-1",
-            "plan_set_id": "plans-1",
-            "scope_id": "scope-1",
-            "part_id": "part-a",
-            "audit_round": 1,
-            "parent_authority_digest": None,
-            "audited_plan_refs": [
-                {
-                    "locator": str(tmp_path / "plan.md"),
-                    "media_type": "application/json",
-                    "schema_version": 1,
-                },
-            ],
-            "inventory_ref": {
-                "locator": str(tmp_path / "inventory.json"),
-                "media_type": "application/json",
-                "schema_version": 1,
-            },
-            "remediation_ref": {
-                "locator": str(tmp_path / "remediation.md"),
-                "media_type": "application/json",
-                "schema_version": 1,
-            },
-            "assessments": [
-                {
-                    "requirement_id": "REQ-001",
-                    "requirement_text": "requirement",
-                    "assessment": "MISSING",
-                    "evidence_summary": "missing",
-                }
-            ],
-            "verdict": "NO GO",
-            "generated_at": "2026-07-23T00:01:00Z",
-        },
-        cwd=str(tmp_path),
-    )
-    assert result["success"] is True, result
+    path.write_bytes(authority.canonical_bytes)
 
     verifier = AuditCycleVerifier(tmp_path)
     authority = verifier.load_authority(path)
-    assert authority.cycle_id == "cycle-1"
     forged = authority.to_dict()
     forged["cycle_id"] = "forged"
     import json

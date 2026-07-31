@@ -62,6 +62,10 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     has_progress_evidence: bool
     has_implementation_progress: bool
     completion_required: bool
+    audit_status: str | None
+    audit_verdict: str | None
+    audit_cycle_path: str | None
+    audit_attempt_id: str | None
     provider_fallback: bool
     provider_used: str
     api_retry_count: int

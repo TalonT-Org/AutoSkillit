@@ -146,7 +146,14 @@ GATED_TOOLS: frozenset[str] = frozenset(
 )
 
 HEADLESS_TOOLS: frozenset[str] = frozenset(
-    {"test_check", "unlock_agent_pack", "commit_files", "write_audit_cycle_artifact"}
+    {
+        "test_check",
+        "unlock_agent_pack",
+        "commit_files",
+        "write_audit_semantic_result",
+        "write_standalone_audit_evidence",
+        "write_audit_disposition_bundle",
+    }
 )
 
 FLEET_TOOLS: frozenset[str] = frozenset(
@@ -792,7 +799,9 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "reset_workspace": frozenset({"kitchen-core"}),
     "classify_fix": frozenset({"kitchen-core"}),
     "commit_files": frozenset({"kitchen-core"}),
-    "write_audit_cycle_artifact": frozenset({"kitchen-core"}),
+    "write_audit_semantic_result": frozenset({"kitchen-core"}),
+    "write_standalone_audit_evidence": frozenset({"kitchen-core"}),
+    "write_audit_disposition_bundle": frozenset({"kitchen-core"}),
     "list_recipes": frozenset({"kitchen-core", "fleet-dispatch"}),
     "load_recipe": frozenset({"kitchen-core", "fleet-dispatch"}),
     "validate_recipe": frozenset({"kitchen-core"}),
@@ -920,11 +929,18 @@ SKILL_CAPABILITY_REGISTRY: dict[str, SkillCapabilityDef] = {
         codex_status="works-as-is",
         allowed_execution_roles=_ALL_SKILL_EXECUTION_ROLES,
     ),
-    "write_audit_cycle_artifact": SkillCapabilityDef(
-        description=(
-            "write_audit_cycle_artifact MCP tool — server-side construction, digest "
-            "computation, and canonical write for hash-bound audit-cycle artifacts"
-        ),
+    "write_audit_semantic_result": SkillCapabilityDef(
+        description="Typed child-semantic submission through a server reservation",
+        codex_status="works-as-is",
+        allowed_execution_roles=_ALL_SKILL_EXECUTION_ROLES,
+    ),
+    "write_standalone_audit_evidence": SkillCapabilityDef(
+        description="Typed non-authoritative standalone audit evidence writer",
+        codex_status="works-as-is",
+        allowed_execution_roles=_ALL_SKILL_EXECUTION_ROLES,
+    ),
+    "write_audit_disposition_bundle": SkillCapabilityDef(
+        description="Verified-copy disposition and association transaction",
         codex_status="works-as-is",
         allowed_execution_roles=_ALL_SKILL_EXECUTION_ROLES,
     ),

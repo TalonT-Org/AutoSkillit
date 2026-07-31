@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 from collections.abc import Callable, Mapping
@@ -23,6 +24,8 @@ from autoskillit.recipe._contracts_types import (
     _TEMPLATE_REF_RE,
     INPUT_REF_RE,
     AuditAuthorityPublicationSpec,
+    AuditOutputContract,
+    AuditOutputMode,
     OutcomeInvariantEntry,
     ResultFieldSpec,
     SkillContract,
@@ -122,6 +125,40 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
             )
         success_qualifiers.append(SuccessQualifierEntry(when=w, qualifier=q))
 
+    audit_output_contracts: dict[AuditOutputMode, AuditOutputContract] = {}
+    raw_mode_contracts = skill_data.get("audit_output_contracts", {})
+    if not isinstance(raw_mode_contracts, Mapping):
+        raise ValueError(f"audit_output_contracts for skill '{skill_name}' must be a mapping")
+    for raw_mode, raw_contract in raw_mode_contracts.items():
+        try:
+            mode = AuditOutputMode(raw_mode)
+        except ValueError as exc:
+            raise ValueError(
+                f"unsupported audit output mode {raw_mode!r} for skill '{skill_name}'"
+            ) from exc
+        if not isinstance(raw_contract, Mapping):
+            raise ValueError(
+                f"audit_output_contracts.{mode.value} for skill '{skill_name}' must be a mapping"
+            )
+        mode_outputs = tuple(
+            SkillOutput(
+                name=out["name"],
+                type=out["type"],
+                allowed_values=out.get("allowed_values", []),
+            )
+            for out in raw_contract.get("outputs", [])
+        )
+        if not mode_outputs:
+            raise ValueError(
+                f"audit_output_contracts.{mode.value} for skill '{skill_name}' "
+                "must declare outputs"
+            )
+        audit_output_contracts[mode] = AuditOutputContract(
+            outputs=mode_outputs,
+            expected_output_patterns=tuple(raw_contract.get("expected_output_patterns", [])),
+            pattern_examples=tuple(raw_contract.get("pattern_examples", [])),
+        )
+
     authority_data = skill_data.get("audit_authority_publication")
     authority_publication = None
     if authority_data is not None:
@@ -129,10 +166,26 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
             raise ValueError(
                 f"audit_authority_publication for skill '{skill_name}' must be a mapping"
             )
+        required_modes = {AuditOutputMode.ATTESTED, AuditOutputMode.STANDALONE}
+        if set(audit_output_contracts) != required_modes:
+            declared = sorted(mode.value for mode in audit_output_contracts)
+            required_mode_values = [
+                mode.value for mode in sorted(required_modes, key=lambda item: item.value)
+            ]
+            raise ValueError(
+                f"audit publication skill '{skill_name}' must declare exact output "
+                f"modes {required_mode_values}; got {declared}"
+            )
         output_field = authority_data.get("output_field", "")
         prior_input_field = authority_data.get("prior_input_field", "")
         input_names = {item.name for item in inputs}
-        if output_field not in output_names:
+        attested_contract = audit_output_contracts.get(AuditOutputMode.ATTESTED)
+        attested_output_names = (
+            {output.name for output in attested_contract.outputs}
+            if attested_contract is not None
+            else set()
+        )
+        if output_field not in output_names | attested_output_names:
             raise ValueError(
                 f"audit_authority_publication references undeclared output "
                 f"'{output_field}' in skill '{skill_name}'"
@@ -161,6 +214,28 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         success_qualifiers=success_qualifiers,
         input_preflight=skill_data.get("input_preflight"),
         audit_authority_publication=authority_publication,
+        audit_output_contracts=audit_output_contracts,
+    )
+
+
+def select_audit_output_contract(
+    contract: SkillContract,
+    mode: AuditOutputMode,
+) -> SkillContract:
+    """Freeze one audit child-output contract before prompt and parser construction."""
+    selected = contract.audit_output_contracts.get(mode)
+    if selected is None:
+        raise ValueError(f"audit output contract does not declare mode {mode.value!r}")
+    return dataclasses.replace(
+        contract,
+        outputs=list(selected.outputs),
+        expected_output_patterns=list(selected.expected_output_patterns),
+        pattern_examples=list(selected.pattern_examples),
+        audit_authority_publication=(
+            contract.audit_authority_publication if mode is AuditOutputMode.ATTESTED else None
+        ),
+        audit_output_contracts={},
+        audit_output_mode=mode,
     )
 
 
@@ -179,6 +254,23 @@ def compute_skill_contract_identity(
     if contract is None:
         raise ValueError(f"skill contract is unavailable for {skill_name!r}")
     publication = contract.audit_authority_publication
+    mode_contracts = {
+        mode.value: {
+            "expected_output_patterns": list(definition.expected_output_patterns),
+            "outputs": [
+                {
+                    "allowed_values": list(output.allowed_values),
+                    "name": output.name,
+                    "type": output.type,
+                }
+                for output in definition.outputs
+            ],
+        }
+        for mode, definition in sorted(
+            contract.audit_output_contracts.items(),
+            key=lambda item: item[0].value,
+        )
+    }
     payload = json.dumps(
         {
             "audit_authority_publication": (
@@ -189,6 +281,7 @@ def compute_skill_contract_identity(
                 if publication is not None
                 else None
             ),
+            "audit_output_contracts": mode_contracts,
             "completion_required": contract.completion_required,
             "input_preflight": contract.input_preflight,
             "inputs": [

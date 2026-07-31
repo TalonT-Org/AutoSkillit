@@ -141,6 +141,7 @@ def _make_mock_ctx() -> MagicMock:
     from threading import RLock
 
     from autoskillit.config import OutputBudgetConfig, QuotaGuardConfig
+    from autoskillit.core import InstallationVersion
     from autoskillit.pipeline import NoActiveRecipe
     from autoskillit.server._factory import make_recipe_execution
 
@@ -162,6 +163,9 @@ def _make_mock_ctx() -> MagicMock:
     ctx.recipe_execution_lock = RLock()
     ctx.recipe_initialization_state = NoActiveRecipe()
     ctx.recipe_execution_factory = make_recipe_execution
+    ctx.audit_admission_ledger.create_or_get_installation.return_value = InstallationVersion(
+        "test-installation"
+    )
     # Issue #4399: open_kitchen's `_use_global_enable` branch (formerly
     # `_skip_notify`) now sends `await ctx.send_notification(...)` after global
     # re-enables. A bare MagicMock is not awaitable, so provide a default
@@ -237,8 +241,12 @@ def _patch_kitchen_reaper(monkeypatch):
 def build_ctx(tmp_path):
     """Factory: build_ctx(**overrides) → minimal ToolContext with overrides applied."""
     from autoskillit.config.settings import AutomationConfig
-    from autoskillit.core import ContextAdmissionStoreAuthority
+    from autoskillit.core import (
+        AuditAdmissionStoreAuthority,
+        ContextAdmissionStoreAuthority,
+    )
     from autoskillit.pipeline.audit import DefaultAuditLog
+    from autoskillit.pipeline.audit_admission_ledger import DefaultAuditAdmissionLedger
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.pipeline.context_admission_ledger import (
         DefaultContextAdmissionLedger,
@@ -246,16 +254,36 @@ def build_ctx(tmp_path):
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.pipeline.timings import DefaultTimingLog
     from autoskillit.pipeline.tokens import DefaultTokenLog
+    from autoskillit.server._audit_authority_materializer import (
+        DefaultAuditAuthorityMaterializer,
+        DefaultCommittedDispositionResolver,
+    )
     from tests.fakes import FakePluginArtifactAuthority, FakeSkillSessionContractStore
 
     owned_authorities = []
+    context_count = 0
 
     def _factory(**overrides):
+        nonlocal context_count
+        context_count += 1
         if "plugin_authority" in overrides:
             plugin_authority = overrides.pop("plugin_authority")
         else:
             plugin_authority = FakePluginArtifactAuthority(tmp_path)
             owned_authorities.append(plugin_authority)
+        audit_admission_ledger = DefaultAuditAdmissionLedger(
+            AuditAdmissionStoreAuthority(
+                database_path=(
+                    tmp_path
+                    / ".autoskillit"
+                    / "temp"
+                    / f"audit-admission-{context_count}"
+                    / "ledger.sqlite3"
+                ).resolve(),
+                expected_owner_id=os.getuid(),
+            )
+        )
+        audit_admission_ledger.recover_all()
         ctx = ToolContext(
             config=AutomationConfig(features={"fleet": True}),
             audit=DefaultAuditLog(),
@@ -270,10 +298,19 @@ def build_ctx(tmp_path):
             context_admission_ledger=DefaultContextAdmissionLedger(
                 ContextAdmissionStoreAuthority(
                     database_path=(
-                        tmp_path / ".autoskillit" / "temp" / "context-admission" / "ledger.sqlite3"
+                        tmp_path
+                        / ".autoskillit"
+                        / "temp"
+                        / f"context-admission-{context_count}"
+                        / "ledger.sqlite3"
                     ).resolve(),
                     expected_owner_id=os.getuid(),
                 )
+            ),
+            audit_admission_ledger=audit_admission_ledger,
+            audit_authority_materializer=DefaultAuditAuthorityMaterializer(audit_admission_ledger),
+            committed_disposition_resolver=DefaultCommittedDispositionResolver(
+                audit_admission_ledger
             ),
         )
         for field_name, value in overrides.items():

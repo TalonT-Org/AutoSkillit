@@ -40,10 +40,9 @@ _REPORT_DOMAIN = "autoskillit:audit-cycle:plan-disposition:v1:sha256"
 _SATISFIED_RE = re.compile(r"^satisfied-by-round-([1-9][0-9]*)$")
 _T = TypeVar("_T")
 
-# Shared by the write-side write_audit_cycle_artifact MCP tool (server/tools/
-# tools_audit_cycle.py) and the read-side _resolve_plan_disposition
-# (recipe/_cmd_rpc_guards.py) — a single IL-0 definition so the two sides of
-# the plan-association contract cannot drift into DUAL-COPY CONSTANTS.
+# Shared by the private verified-copy disposition producer and the read-side
+# _resolve_plan_disposition (recipe/_cmd_rpc_guards.py) so the two sides of the
+# plan-association contract cannot drift into DUAL-COPY CONSTANTS.
 _PLAN_ASSOCIATION_DOMAIN = "autoskillit:audit-cycle:plan-association:v1:sha256"
 _PLAN_ASSOCIATION_KEYS = frozenset(
     {
@@ -56,9 +55,8 @@ _PLAN_ASSOCIATION_KEYS = frozenset(
 )
 _MAX_ASSOCIATION_FILES = 256
 
-# Bounds the number of referenced-artifact entries (audited_plan_refs,
-# assessments, dispositions, etc.) accepted in a single write_audit_cycle_artifact
-# request payload. Distinct from _MAX_ASSOCIATION_FILES, which bounds the count
+# Bounds the number of referenced-artifact entries accepted by one admitted
+# materialization. Distinct from _MAX_ASSOCIATION_FILES, which bounds the count
 # of association files already on disk under an associations/ directory glob.
 _MAX_REFERENCED_ARTIFACTS_PER_CALL = 256
 

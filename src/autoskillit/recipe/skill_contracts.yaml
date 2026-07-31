@@ -423,8 +423,33 @@ skills:
     outputs: []
   audit-impl:
     audit_authority_publication:
-      output_field: audit_cycle_path
+      output_field: audit_semantic_result_path
       prior_input_field: prior_audit_cycle_path
+    audit_output_contracts:
+      attested:
+        outputs:
+        - name: audit_semantic_result_path
+          type: file_path
+        - name: semantic_digest
+          type: string
+        expected_output_patterns:
+        - "audit_semantic_result_path[ \\t]*=[ \\t]*/.+"
+        pattern_examples:
+        - "audit_semantic_result_path = /tmp/audit/semantic.json\nsemantic_digest = sha256:abc\n%%ORDER_UP%%"
+      standalone:
+        outputs:
+        - name: audit_status
+          type: string
+          allowed_values: [NON_PUBLISHED_STANDALONE]
+        - name: standalone_evidence_path
+          type: file_path
+        - name: content_digest
+          type: string
+        expected_output_patterns:
+        - "audit_status[ \\t]*=[ \\t]*NON_PUBLISHED_STANDALONE"
+        - "standalone_evidence_path[ \\t]*=[ \\t]*/.+"
+        pattern_examples:
+        - "audit_status = NON_PUBLISHED_STANDALONE\nstandalone_evidence_path = /tmp/audit/standalone.json\ncontent_digest = sha256:def\n%%ORDER_UP%%"
     inputs:
     - name: all_plan_paths
       type: file_path_list
@@ -454,17 +479,35 @@ skills:
     - name: verdict
       type: string
       allowed_values: [GO, "NO GO"]
+      server_computed: true
     - name: remediation_path
       type: file_path
+      server_computed: true
     - name: audit_cycle_path
       type: file_path
+      server_computed: true
+    - name: audit_status
+      type: string
+      server_computed: true
+    - name: audit_verdict
+      type: string
+      server_computed: true
+    - name: audit_attempt_id
+      type: string
+      server_computed: true
     - name: verified_verdict
+      type: string
+      server_computed: true
+    - name: audit_semantic_result_path
+      type: file_path
+    - name: semantic_digest
       type: string
     expected_output_patterns:
     - "verdict[ \\t]*=[ \\t]*(GO|NO GO)"
+    - "audit_semantic_result_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
-    - "verdict = GO\naudit_cycle_path = /tmp/cycles/round-1/authority.json\n%%ORDER_UP%%"
-    - "verdict = NO GO\nremediation_path = /tmp/remediation.md\naudit_cycle_path = /tmp/cycles/round-1/authority.json\n%%ORDER_UP%%"
+    - "verdict = GO\naudit_semantic_result_path = /tmp/audit/semantic.json\nsemantic_digest = sha256:abc\n%%ORDER_UP%%"
+    - "verdict = NO GO\nremediation_path = /tmp/remediation.md\naudit_semantic_result_path = /tmp/audit/semantic.json\nsemantic_digest = sha256:def\n%%ORDER_UP%%"
   migrate-recipes:
     inputs: []
     outputs: []

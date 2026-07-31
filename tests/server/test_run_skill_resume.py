@@ -195,7 +195,7 @@ async def test_resume_uses_bound_snapshot_without_current_metadata_or_source_rea
         )
     )
 
-    assert result["success"] is True
+    assert result["success"] is True, json.dumps(result, sort_keys=True)
     resolver.resolve_invocation.assert_not_called()
     output_resolver.assert_not_called()
     write_resolver.assert_not_called()

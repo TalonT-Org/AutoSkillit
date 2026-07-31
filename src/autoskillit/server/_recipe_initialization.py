@@ -12,6 +12,7 @@ from autoskillit.core import (
     RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
     RecipeArtifactGeneration,
     RecipeExecutionCredential,
+    RecipeExecutionId,
     RecipeExecutionSnapshot,
     RecipeFlowGeneration,
     ToolInitializationOperation,
@@ -104,17 +105,47 @@ def stage_recipe_initialization(
     generation_store_key: str,
 ) -> InitializingRecipe:
     """Replace all prior recipe authority with one immutable INITIALIZING state."""
-    candidate = start_recipe_initialization(
-        kitchen_id=tool_ctx.kitchen_id,
-        recipe_name=recipe_name,
-        artifact_generation=artifact_generation,
-        flow_generation=flow_generation,
-        initialization_id=initialization_id,
-        staged_snapshot=staged_snapshot,
-        requirements=requirements,
-        generation_store_key=generation_store_key,
-    )
     with tool_ctx.recipe_execution_lock:
+        previous = tool_ctx.recipe_initialization_state
+        previous_identity = (
+            (
+                RecipeExecutionId(previous.staged_snapshot.execution_id),
+                previous.installation_version,
+            )
+            if isinstance(previous, InitializingRecipe)
+            else (
+                (
+                    RecipeExecutionId(previous.installed_execution.snapshot.execution_id),
+                    previous.installed_execution.installation_version,
+                )
+                if isinstance(previous, ReadyRecipe)
+                else None
+            )
+        )
+        execution_id = RecipeExecutionId(staged_snapshot.execution_id)
+        installation_version = tool_ctx.audit_admission_ledger.create_or_get_installation(
+            recipe_execution_id=execution_id,
+            snapshot_digest=staged_snapshot.snapshot_digest,
+        )
+        candidate = start_recipe_initialization(
+            kitchen_id=tool_ctx.kitchen_id,
+            recipe_name=recipe_name,
+            artifact_generation=artifact_generation,
+            flow_generation=flow_generation,
+            initialization_id=initialization_id,
+            staged_snapshot=staged_snapshot,
+            installation_version=installation_version,
+            requirements=requirements,
+            generation_store_key=generation_store_key,
+        )
+        if previous_identity is not None and previous_identity != (
+            execution_id,
+            installation_version,
+        ):
+            tool_ctx.audit_admission_ledger.retire_installation(
+                recipe_execution_id=previous_identity[0],
+                installation_version=previous_identity[1],
+            )
         tool_ctx.recipe_initialization_state = candidate
     return candidate
 

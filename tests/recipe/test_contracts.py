@@ -595,19 +595,20 @@ def test_card_generator_positional_template_escape(tmp_path: Path) -> None:
 
 
 def test_sc1_audit_impl_has_real_inputs_and_outputs() -> None:
-    """T_SC1: audit-impl has non-empty inputs and declares verdict/remediation_path outputs."""
+    """T_SC1: audit-impl declares semantic and transitional recipe result outputs."""
     manifest = load_bundled_manifest()
     audit_impl = manifest["skills"]["audit-impl"]
     assert audit_impl["inputs"], "audit-impl should have non-empty inputs"
     output_names = {o["name"] for o in audit_impl["outputs"]}
     assert "verdict" in output_names
     assert "remediation_path" in output_names
+    assert "audit_semantic_result_path" in output_names
     verdict_out = next(o for o in audit_impl["outputs"] if o["name"] == "verdict")
     assert verdict_out["type"] == "string"
     remediation_out = next(o for o in audit_impl["outputs"] if o["name"] == "remediation_path")
     assert remediation_out["type"] == "file_path"
     assert audit_impl["audit_authority_publication"] == {
-        "output_field": "audit_cycle_path",
+        "output_field": "audit_semantic_result_path",
         "prior_input_field": "prior_audit_cycle_path",
     }
 

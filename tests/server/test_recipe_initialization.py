@@ -12,7 +12,6 @@ from autoskillit.core import (
     RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
     RECIPE_ARTIFACT_SCHEMA_VERSION,
     RECIPE_FLOW_SCHEMA_VERSION,
-    InstalledRecipeExecution,
     RecipeArtifactGeneration,
     RecipeBindingProjection,
     RecipeFlowGeneration,
@@ -23,11 +22,8 @@ from autoskillit.pipeline import (
     RecipeInitializationRequirement,
     record_initialization_page,
 )
-from autoskillit.server._recipe_execution import (
-    DefaultAuditCycleHeadStore,
-    DefaultInputPreflightResolver,
-    build_recipe_execution_snapshot,
-)
+from autoskillit.server._factory import make_recipe_execution
+from autoskillit.server._recipe_execution import build_recipe_execution_snapshot
 from autoskillit.server._recipe_initialization import (
     FinalizedRecipeInitializationResponse,
     admit_registered_tool_during_initialization,
@@ -77,21 +73,8 @@ def _stage(tool_ctx, tmp_path) -> InitializingRecipe:
         flow_size_bytes=flow.flow_size_bytes,
         flow_record_count=flow.record_count,
     )
-    store = DefaultAuditCycleHeadStore()
-
-    def factory(*, snapshot, allowed_root):
-        return InstalledRecipeExecution(
-            snapshot=snapshot,
-            runtime_binding_digests={},
-            audit_cycle_heads=store,
-            input_preflight_resolver=DefaultInputPreflightResolver(
-                allowed_root=allowed_root,
-                head_store=store,
-            ),
-        )
-
     tool_ctx.project_dir = tmp_path
-    tool_ctx.recipe_execution_factory = factory
+    tool_ctx.recipe_execution_factory = make_recipe_execution
     return stage_recipe_initialization(
         tool_ctx,
         recipe_name="recipe",

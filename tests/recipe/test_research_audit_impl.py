@@ -171,9 +171,15 @@ class TestResearchImplementRemediationLoop:
     def test_audit_impl_nogo_routes_to_remediate(self, recipe) -> None:
         step = recipe.steps["audit_impl"]
         conditions = step.on_result.conditions
-        default_cond = next((c for c in conditions if c.when is None), None)
-        assert default_cond is not None
-        assert default_cond.route == "remediate"
+        nogo_conditions = [
+            condition
+            for condition in conditions
+            if condition.when and "audit_verdict" in condition.when and "NO GO" in condition.when
+        ]
+        assert len(nogo_conditions) == 2
+        assert {condition.route for condition in nogo_conditions} == {"remediate"}
+        default_cond = next(condition for condition in conditions if condition.when is None)
+        assert default_cond.route == "escalate_stop"
 
     def test_audit_impl_error_routes_to_escalate_stop(self, recipe) -> None:
         step = recipe.steps["audit_impl"]
@@ -235,14 +241,18 @@ class TestResearchRemediationLoop:
         return load_recipe(builtin_recipes_dir() / "research.yaml")
 
     def test_audit_impl_nogo_routes_to_remediate(self, recipe) -> None:
-        """research.yaml audit_impl default (NO GO) route must target remediate."""
+        """Published and replayed NO GO outcomes must target remediate."""
         step = recipe.steps["audit_impl"]
         conditions = step.on_result.conditions
-        default_cond = next((c for c in conditions if c.when is None), None)
-        assert default_cond is not None, "audit_impl must have a default route"
-        assert default_cond.route == "remediate", (
-            f"audit_impl default route must be 'remediate', got '{default_cond.route}'"
-        )
+        nogo_conditions = [
+            condition
+            for condition in conditions
+            if condition.when and "audit_verdict" in condition.when and "NO GO" in condition.when
+        ]
+        assert len(nogo_conditions) == 2
+        assert {condition.route for condition in nogo_conditions} == {"remediate"}
+        default_cond = next(condition for condition in conditions if condition.when is None)
+        assert default_cond.route == "escalate_stop"
 
     def test_audit_impl_error_routes_to_escalate_stop(self, recipe) -> None:
         step = recipe.steps["audit_impl"]

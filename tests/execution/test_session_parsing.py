@@ -621,6 +621,10 @@ class TestSkillResult:
             "has_progress_evidence",
             "has_implementation_progress",
             "completion_required",
+            "audit_status",
+            "audit_verdict",
+            "audit_cycle_path",
+            "audit_attempt_id",
             "infra_exit_category",
             "api_retry_count",
             "api_retry_last_error",
@@ -637,6 +641,45 @@ class TestSkillResult:
         sr = self._make(needs_retry=True, retry_reason=RetryReason.RESUME)
         parsed = json.loads(sr.to_json())
         assert parsed["retry_reason"] == "resume"
+
+    def test_audit_result_outcome_is_frozen_slotted_and_defaulted(self):
+        first = self._make()
+        second = self._make()
+
+        assert first.audit is not second.audit
+        assert first.audit.status is None
+        assert first.audit.verdict is None
+        assert first.audit.cycle_path is None
+        assert first.audit.attempt_id is None
+        assert not hasattr(first.audit, "__dict__")
+        with pytest.raises(AttributeError):
+            first.audit.status = None  # type: ignore[misc]
+
+    def test_to_json_flattens_server_authored_audit_outcome(self):
+        from autoskillit.core import (
+            AuditAttemptId,
+            AuditOutcomeStatus,
+            AuditResultOutcome,
+            AuditVerdict,
+        )
+
+        sr = self._make(
+            audit=AuditResultOutcome(
+                status=AuditOutcomeStatus.PUBLISHED,
+                verdict=AuditVerdict.GO,
+                cycle_path="/tmp/audit-cycle.json",
+                attempt_id=AuditAttemptId(value="attempt-123"),
+            )
+        )
+
+        parsed = json.loads(sr.to_json())
+
+        assert parsed["audit_status"] == "PUBLISHED"
+        assert parsed["audit_verdict"] == "GO"
+        assert parsed["audit_cycle_path"] == "/tmp/audit-cycle.json"
+        assert parsed["audit_attempt_id"] == "attempt-123"
+        assert parsed["kill_reason"] == "natural_exit"
+        assert "audit" not in parsed
 
     def test_to_json_preserves_token_usage_dict(self):
         sr = self._make(token_usage={"input_tokens": 10, "model_breakdown": {}})

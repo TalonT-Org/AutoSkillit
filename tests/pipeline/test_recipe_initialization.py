@@ -13,6 +13,7 @@ from autoskillit.core import (
     RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
     RECIPE_ARTIFACT_SCHEMA_VERSION,
     RECIPE_FLOW_SCHEMA_VERSION,
+    InstallationVersion,
     InstalledRecipeExecution,
     RecipeArtifactGeneration,
     RecipeExecutionSnapshot,
@@ -100,6 +101,7 @@ def _initializing() -> InitializingRecipe:
         flow_generation=flow,
         initialization_id="initialization",
         staged_snapshot=_snapshot(),
+        installation_version=InstallationVersion("installation-a"),
         requirements=(
             RecipeInitializationRequirement(
                 section="flow_records",
@@ -175,8 +177,9 @@ def test_ready_requires_complete_coverage_and_the_staged_snapshot() -> None:
     state = _initializing()
     installed = InstalledRecipeExecution(
         snapshot=state.staged_snapshot,
+        installation_version=state.installation_version,
         runtime_binding_digests={},
-        audit_cycle_heads=cast(Any, object()),
+        audit_admission_ledger=cast(Any, object()),
         input_preflight_resolver=cast(Any, object()),
     )
 
@@ -225,8 +228,9 @@ def test_ready_recipe_rejects_direct_construction_without_transition_authority()
     state = _initializing()
     installed = InstalledRecipeExecution(
         snapshot=state.staged_snapshot,
+        installation_version=state.installation_version,
         runtime_binding_digests={},
-        audit_cycle_heads=cast(Any, object()),
+        audit_admission_ledger=cast(Any, object()),
         input_preflight_resolver=cast(Any, object()),
     )
 
@@ -260,8 +264,9 @@ def test_ready_execution_replacement_rejects_cross_generation_without_mutation()
             )
     installed = InstalledRecipeExecution(
         snapshot=state.staged_snapshot,
+        installation_version=state.installation_version,
         runtime_binding_digests={},
-        audit_cycle_heads=cast(Any, object()),
+        audit_admission_ledger=cast(Any, object()),
         input_preflight_resolver=cast(Any, object()),
     )
     ready = transition_recipe_ready(

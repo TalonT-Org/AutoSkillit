@@ -401,7 +401,7 @@ class TestBundledContractActivation:
 
         assert _parse_single_enum_binding(contract) is None
 
-        stdout = _write_ndjson("no verdict token here\n%%ORDER_UP%%", "/tmp/remediation.md")
+        stdout = _write_ndjson("no verdict token here\n%%ORDER_UP%%", "")
         hints = _extract_missing_token_hints(
             stdout,
             contract.expected_output_patterns,

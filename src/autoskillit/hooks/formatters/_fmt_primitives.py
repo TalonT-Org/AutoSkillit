@@ -45,6 +45,12 @@ _Payload = _DictPayload | _PlainTextPayload
 _CHECK_MARK = "\u2713"  # ✓
 _CROSS_MARK = "\u2717"  # ✗
 _WARN_MARK = "\u26a0"  # ⚠
+_AUDIT_RESULT_FIELDS = (
+    "audit_status",
+    "audit_verdict",
+    "audit_cycle_path",
+    "audit_attempt_id",
+)
 
 
 def _is_pipeline_mode() -> bool:
@@ -64,6 +70,14 @@ def _fmt_tokens(n: int | None) -> str:
     if n >= 1_000:
         return f"{n / 1_000:.1f}k"
     return str(n)
+
+
+def _maybe_audit_lines(data: dict, lines: list[str]) -> None:
+    """Render populated server-authored audit outcome fields."""
+    for key in _AUDIT_RESULT_FIELDS:
+        value = data.get(key)
+        if value not in (None, ""):
+            lines.append(f"{key}: {value}")
 
 
 def _extract_tool_short_name(tool_name: str) -> str:

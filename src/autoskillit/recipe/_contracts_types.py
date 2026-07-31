@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+from enum import StrEnum
 
 import regex as re
 
@@ -49,6 +50,18 @@ class SkillOutput:
     allowed_values: list[str] = dataclasses.field(default_factory=list)
 
 
+class AuditOutputMode(StrEnum):
+    ATTESTED = "attested"
+    STANDALONE = "standalone"
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class AuditOutputContract:
+    outputs: tuple[SkillOutput, ...]
+    expected_output_patterns: tuple[str, ...]
+    pattern_examples: tuple[str, ...]
+
+
 @dataclasses.dataclass(frozen=True, slots=True)
 class ResultFieldSpec:
     name: str
@@ -89,6 +102,10 @@ class SkillContract:
     success_qualifiers: list[SuccessQualifierEntry] = dataclasses.field(default_factory=list)
     input_preflight: str | None = None
     audit_authority_publication: AuditAuthorityPublicationSpec | None = None
+    audit_output_contracts: dict[AuditOutputMode, AuditOutputContract] = dataclasses.field(
+        default_factory=dict
+    )
+    audit_output_mode: AuditOutputMode | None = None
 
     def __post_init__(self) -> None:
         if self.input_preflight is None:

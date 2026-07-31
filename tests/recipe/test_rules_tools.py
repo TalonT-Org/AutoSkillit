@@ -355,7 +355,7 @@ _SERVER_TOOL_MODULES = [
     "autoskillit.server.tools.tools_pr_ops",
     "autoskillit.server.tools.tools_workspace",
     "autoskillit.server.tools.tools_agents",
-    "autoskillit.server.tools.tools_audit_cycle",
+    "autoskillit.server.tools.tools_audit_artifacts",
     "autoskillit.server.tools.tools_config",
     "autoskillit.server.tools.tools_kitchen",
     "autoskillit.server.tools.tools_pipeline_tracker",

@@ -39,6 +39,7 @@ from autoskillit.core import (
     RecipeDeliveryDecision,
     RecipeDeliveryMode,
     RecipeDeliveryRequest,
+    RecipeExecutionId,
     RecipeExecutionSnapshot,
     RecipeFlowGeneration,
     atomic_write,
@@ -63,6 +64,7 @@ from autoskillit.pipeline import (
     InitializingRecipe,
     KitchenEffectPhase,
     KitchenTransitionToken,
+    ReadyRecipe,
     RecipeInitializationRequirement,
     confirm_kitchen_effect,
     mark_kitchen_effect_ambiguous,
@@ -1257,25 +1259,6 @@ def complete_finalized_recipe_response(
                 )
             else:
                 parsed = candidate
-                if parsed.get("delivery_bound_spill") is not True:
-                    try:
-                        prepared_execution = prepare_recipe_execution(
-                            finalized.tool_ctx,
-                            snapshot=finalized.execution_snapshot,
-                        )
-                    except Exception:
-                        get_logger(__name__).error(
-                            "recipe execution snapshot installation failed",
-                            initialization_id=finalized.initialization_id,
-                            exc_info=True,
-                        )
-                        enforced = json.dumps(
-                            {
-                                "success": False,
-                                "error": "recipe_execution_install_failed",
-                            },
-                            separators=(",", ":"),
-                        )
     if enforced == finalized.rendered and finalized.initialization_activating:
         assert finalized.tool_ctx is not None
         assert finalized.recipe_name is not None
@@ -1303,7 +1286,10 @@ def complete_finalized_recipe_response(
                 generation_store_key=finalized.normalized_compile_key,
             )
             if parsed.get("delivery_bound_spill") is not True:
-                assert prepared_execution is not None
+                prepared_execution = prepare_recipe_execution(
+                    finalized.tool_ctx,
+                    snapshot=finalized.execution_snapshot,
+                )
                 install_recipe_execution(
                     finalized.tool_ctx,
                     prepared_execution=prepared_execution,
@@ -1316,6 +1302,27 @@ def complete_finalized_recipe_response(
                 )
         except Exception:
             with finalized.tool_ctx.recipe_execution_lock:
+                current_state = finalized.tool_ctx.recipe_initialization_state
+                if current_state is not previous_initialization_state and isinstance(
+                    current_state, InitializingRecipe
+                ):
+                    finalized.tool_ctx.audit_admission_ledger.retire_installation(
+                        recipe_execution_id=RecipeExecutionId(
+                            current_state.staged_snapshot.execution_id
+                        ),
+                        installation_version=current_state.installation_version,
+                    )
+                elif current_state is not previous_initialization_state and isinstance(
+                    current_state, ReadyRecipe
+                ):
+                    finalized.tool_ctx.audit_admission_ledger.retire_installation(
+                        recipe_execution_id=RecipeExecutionId(
+                            current_state.installed_execution.snapshot.execution_id
+                        ),
+                        installation_version=(
+                            current_state.installed_execution.installation_version
+                        ),
+                    )
                 finalized.tool_ctx.recipe_initialization_state = previous_initialization_state
             get_logger(__name__).error(
                 "recipe execution snapshot installation failed",

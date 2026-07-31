@@ -223,6 +223,17 @@ class TestDefaultAuditLogBudget:
         assert report[0].subtype == "success"
         assert report[0].needs_retry is False
 
+    def test_record_success_deduplicates_by_attempt_key_until_clear(self) -> None:
+        log = DefaultAuditLog()
+
+        log.record_success("/autoskillit:audit-impl", dedupe_key="attempt-1")
+        log.record_success("/autoskillit:audit-impl", dedupe_key="attempt-1")
+
+        assert len(log.get_report()) == 1
+        log.clear()
+        log.record_success("/autoskillit:audit-impl", dedupe_key="attempt-1")
+        assert len(log.get_report()) == 1
+
 
 def _write_audit_session(
     log_root: Path, dir_name: str, records: list, timestamp: str = "2026-03-07T00:00:00+00:00"

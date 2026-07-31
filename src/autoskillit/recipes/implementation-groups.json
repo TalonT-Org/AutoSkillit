@@ -1026,6 +1026,7 @@
         "cwd": "${{ context.work_dir }}",
         "step_name": "audit_impl",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/audit-impl",
+        "retry_after_audit_attempt_id": "${{ context.audit_attempt_id }}",
         "closure_authority_path": "${{ inputs.closure_authority_path }}",
         "closure_authority_hash": "${{ inputs.closure_authority_hash }}",
         "closure_plan_paths": "${{ context.all_plan_paths }}",
@@ -1035,23 +1036,54 @@
       },
       "capture": {
         "remediation_path": "${{ result.remediation_path }}",
-        "audit_cycle_path": "${{ result.audit_cycle_path }}"
+        "audit_cycle_path": "${{ result.audit_cycle_path }}",
+        "audit_status": "${{ result.audit_status }}",
+        "audit_verdict": "${{ result.audit_verdict }}",
+        "audit_attempt_id": "${{ result.audit_attempt_id }}"
       },
       "on_result": [
         {
-          "when": "${{ result.verdict }} == GO",
+          "when": "${{ result.audit_status }} == SEMANTIC_REJECTED",
+          "route": "check_audit_remediation_loop"
+        },
+        {
+          "when": "${{ result.audit_status }} == CONFLICT",
+          "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.audit_status }} == STORAGE_FAILURE",
+          "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.audit_status }} == QUARANTINED",
+          "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.audit_status }} == NON_PUBLISHED_STANDALONE",
+          "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }} == GO",
           "route": "push"
+        },
+        {
+          "when": "${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == GO",
+          "route": "push"
+        },
+        {
+          "when": "${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }} == NO GO",
+          "route": "check_audit_remediation_loop"
+        },
+        {
+          "when": "${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == NO GO",
+          "route": "check_audit_remediation_loop"
         },
         {
           "when": "result.error",
           "route": "register_clone_failure"
         },
         {
-          "when": "${{ result.verdict }} == NO GO",
-          "route": "check_audit_remediation_loop"
-        },
-        {
-          "route": "check_audit_remediation_loop"
+          "route": "register_clone_failure"
         }
       ],
       "on_failure": "register_clone_failure",
@@ -1060,7 +1092,8 @@
       "optional": true,
       "skip_when_false": "inputs.audit_impl",
       "optional_context_refs": [
-        "audit_cycle_path"
+        "audit_cycle_path",
+        "audit_attempt_id"
       ],
       "note": "Only execute if inputs.audit_impl is 'true'. If false, skip directly to push. Captures audit_cycle_path on both verdicts. NO GO re-enters planning with that exact authority and the successor audit receives it as prior authority. GO replaces the previous cycle before push. All groups and parts have been merged at this point — no worktree exists. Uses context.base_sha (a stable commit SHA captured before any merge began) as implementation_ref. A SHA names a git object and survives git branch -D unconditionally. The diff git diff base_sha..base_branch (two-dot, SHA on the left) covers the full implementation across all plan groups.\n"
     },

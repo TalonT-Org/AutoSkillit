@@ -1076,6 +1076,7 @@
         "cwd": "${{ context.work_dir }}",
         "step_name": "audit_impl",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/audit-impl",
+        "retry_after_audit_attempt_id": "${{ context.audit_attempt_id }}",
         "closure_authority_path": "${{ inputs.closure_authority_path }}",
         "closure_authority_hash": "${{ inputs.closure_authority_hash }}",
         "closure_plan_paths": "${{ context.all_plan_paths }}",
@@ -1085,28 +1086,54 @@
       },
       "capture": {
         "remediation_path": "${{ result.remediation_path }}",
-        "audit_cycle_path": "${{ result.audit_cycle_path }}"
+        "audit_cycle_path": "${{ result.audit_cycle_path }}",
+        "audit_status": "${{ result.audit_status }}",
+        "audit_verdict": "${{ result.audit_verdict }}",
+        "audit_attempt_id": "${{ result.audit_attempt_id }}"
       },
       "on_result": [
         {
-          "when": "${{ result.verdict }} == GO",
+          "when": "${{ result.audit_status }} == SEMANTIC_REJECTED",
+          "route": "check_audit_remediation_loop"
+        },
+        {
+          "when": "${{ result.audit_status }} == CONFLICT",
+          "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.audit_status }} == STORAGE_FAILURE",
+          "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.audit_status }} == QUARANTINED",
+          "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.audit_status }} == NON_PUBLISHED_STANDALONE",
+          "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }} == GO",
           "route": "check_has_commits"
         },
         {
-          "when": "${{ result.stage }} starts with preflight",
-          "route": "register_clone_failure",
-          "note": "Preflight/infrastructure failure — the gate could not run. Distinct from a genuine NO GO verdict. register_clone_failure preserves the clone for diagnosis.\n"
+          "when": "${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == GO",
+          "route": "check_has_commits"
+        },
+        {
+          "when": "${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }} == NO GO",
+          "route": "check_audit_remediation_loop"
+        },
+        {
+          "when": "${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == NO GO",
+          "route": "check_audit_remediation_loop"
         },
         {
           "when": "result.error",
-          "route": "check_audit_remediation_loop"
+          "route": "register_clone_failure"
         },
         {
-          "when": "${{ result.verdict }} == NO GO",
-          "route": "check_audit_remediation_loop"
-        },
-        {
-          "route": "check_audit_remediation_loop"
+          "route": "register_clone_failure"
         }
       ],
       "on_failure": "register_clone_failure",
@@ -1116,7 +1143,8 @@
       "skip_when_false": "inputs.audit_impl",
       "optional_context_refs": [
         "deviation_manifest_path",
-        "audit_cycle_path"
+        "audit_cycle_path",
+        "audit_attempt_id"
       ],
       "note": "Captures immutable audit_cycle_path on GO and NO GO. NO GO re-enters planning with that exact authority; a successor audit receives it as prior_audit_cycle_path. GO replaces the prior cycle before completion."
     },

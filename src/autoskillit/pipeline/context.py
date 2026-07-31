@@ -14,6 +14,8 @@ from typing import Any
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
+    AuditAdmissionLedger,
+    AuditAuthorityMaterializer,
     AuditLog,
     BackgroundSupervisor,
     CampaignProtector,
@@ -21,6 +23,7 @@ from autoskillit.core import (
     CIWatcher,
     CloneManager,
     CodingAgentBackend,
+    CommittedDispositionResolver,
     CompletionRequiredResolver,
     ContextAdmissionLedger,
     DatabaseReader,
@@ -133,6 +136,8 @@ class ToolContext:
     skill_session_contract_store: SkillSessionContractStore — binds projected skill
                           contracts and snapshots to resumable backend session IDs.
     context_admission_ledger: ContextAdmissionLedger — durable, shadow-only cumulative
+    audit_admission_ledger: AuditAdmissionLedger — durable audit installation, attempt,
+                            head, preflight, and disposition authority
                           context accounting and recovery service.
     kitchen_id:           UUID string assigned when open_kitchen fires; scopes token telemetry
                           to the current kitchen session lifetime.
@@ -154,6 +159,12 @@ class ToolContext:
                           generation, its staged snapshot, progress, and installed execution.
     recipe_execution_lock: RecipeExecutionLock — serializes installation, lookup, and
                           cleanup of the active compiled execution state.
+    audit_authority_materializer:
+                          AuditAuthorityMaterializer — converts reserved child semantics
+                          into server-owned canonical audit authority artifacts.
+    committed_disposition_resolver:
+                          CommittedDispositionResolver — resolves only disposition paths
+                          backed by the durable audit-admission ledger.
     temp_dir:             Resolved temp directory for this project. Sentinel-guarded: raises
                           TypeError if not supplied explicitly. Use make_context() or pass
                           temp_dir=<path>.
@@ -201,6 +212,9 @@ class ToolContext:
     skill_resolver: SkillResolver | None = field(default=None)
     skill_session_contract_store: SkillSessionContractStore = field(default=_MISSING)
     context_admission_ledger: ContextAdmissionLedger = field(default=_MISSING)
+    audit_admission_ledger: AuditAdmissionLedger = field(default=_MISSING)
+    audit_authority_materializer: AuditAuthorityMaterializer = field(default=_MISSING)
+    committed_disposition_resolver: CommittedDispositionResolver = field(default=_MISSING)
     recipe_name: str = field(default="")
     recipe_content_hash: str = field(default="")
     recipe_composite_hash: str = field(default="")
@@ -249,6 +263,21 @@ class ToolContext:
             raise TypeError(
                 "context_admission_ledger must be supplied explicitly. "
                 "Use make_context() or pass an isolated ledger directly."
+            )
+        if self.audit_admission_ledger is _MISSING:
+            raise TypeError(
+                "audit_admission_ledger must be supplied explicitly. "
+                "Use make_context() or pass an isolated ledger directly."
+            )
+        if self.audit_authority_materializer is _MISSING:
+            raise TypeError(
+                "audit_authority_materializer must be supplied explicitly. "
+                "Use make_context() or pass an isolated materializer directly."
+            )
+        if self.committed_disposition_resolver is _MISSING:
+            raise TypeError(
+                "committed_disposition_resolver must be supplied explicitly. "
+                "Use make_context() or pass an isolated resolver directly."
             )
         if self.background is None:
             self.background = DefaultBackgroundSupervisor(audit=self.audit)

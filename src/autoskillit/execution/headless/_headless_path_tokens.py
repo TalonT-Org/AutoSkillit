@@ -84,22 +84,26 @@ def _build_path_token_registry() -> tuple[
         if not isinstance(outputs, list):
             by_skill[skill_name] = frozenset()
             continue
+        mode_contracts = skill_data.get("audit_output_contracts", {})
+        mode_values = mode_contracts.values() if isinstance(mode_contracts, dict) else ()
+        mode_outputs = (
+            contract.get("outputs", []) for contract in mode_values if isinstance(contract, dict)
+        )
         raw_outputs: set[str] = set()
-        for out in outputs:
-            if not isinstance(out, dict):
-                continue
-            name = out.get("name", "")
-            out_type = out.get("type", "")
-            if not isinstance(name, str) or not isinstance(out_type, str):
-                continue
-            if not name:
-                continue
-            if out_type.startswith("file_path"):
-                raw_outputs.add(name)
-                output_tokens.add(name)
-                recoverable_tokens.add(name)
-            elif out_type == "directory_path":
-                recoverable_tokens.add(name)
+        for group in (outputs, *(item for item in mode_outputs if isinstance(item, list))):
+            for out in group:
+                if not isinstance(out, dict):
+                    continue
+                name = out.get("name", "")
+                out_type = out.get("type", "")
+                if not isinstance(name, str) or not isinstance(out_type, str) or not name:
+                    continue
+                if out_type.startswith("file_path"):
+                    raw_outputs.add(name)
+                    output_tokens.add(name)
+                    recoverable_tokens.add(name)
+                elif out_type == "directory_path":
+                    recoverable_tokens.add(name)
         by_skill[skill_name] = frozenset(raw_outputs)
     excluded = _INTENTIONALLY_EXCLUDED_PATH_TOKENS
     return (

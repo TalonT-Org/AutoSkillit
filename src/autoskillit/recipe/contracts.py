@@ -23,6 +23,7 @@ from autoskillit.recipe._contracts_manifest import (  # noqa: F401
     get_tool_output_contract,
     load_bundled_manifest,
     resolve_input_specs,
+    select_audit_output_contract,
 )
 from autoskillit.recipe._contracts_staleness import (  # noqa: F401
     check_contract_staleness,
@@ -33,6 +34,9 @@ from autoskillit.recipe._contracts_types import (  # noqa: F401
     _TEMPLATE_REF_RE,
     INPUT_REF_RE,
     RESULT_CAPTURE_RE,
+    AuditAuthorityPublicationSpec,
+    AuditOutputContract,
+    AuditOutputMode,
     BlockFingerprint,
     DataFlowEntry,
     OutcomeInvariantEntry,

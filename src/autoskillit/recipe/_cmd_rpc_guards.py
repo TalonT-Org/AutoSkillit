@@ -18,6 +18,7 @@ from autoskillit.core import (
     ArtifactRef,
     AuditCycleVerifier,
     AuditVerdict,
+    CommittedDispositionResolver,
     atomic_write,
     compute_canonical_hash,
     decode_versioned_json_bytes,
@@ -234,7 +235,12 @@ def _log_plan_disposition_rejection(
     )
 
 
-def _resolve_plan_disposition(*, audit_cycle_path: str, current_plan_path: Path) -> str | None:
+def _resolve_plan_disposition(
+    *,
+    audit_cycle_path: str,
+    current_plan_path: Path,
+    committed_disposition_resolver: CommittedDispositionResolver | None,
+) -> str | None:
     authority_path = Path(audit_cycle_path)
     if not authority_path.is_absolute() or not current_plan_path.is_absolute():
         return None
@@ -379,12 +385,42 @@ def _resolve_plan_disposition(*, audit_cycle_path: str, current_plan_path: Path)
             current_plan_path=current_plan_path,
         )
         return None
-    return disposition_ref.locator
+    if committed_disposition_resolver is None:
+        _log_plan_disposition_rejection(
+            "committed disposition resolver is unavailable",
+            authority_path=authority_path,
+            current_plan_path=current_plan_path,
+        )
+        return None
+    try:
+        committed_path = committed_disposition_resolver.resolve(
+            authority_digest=authority.authority_digest,
+            plan_digest=plan_ref.content_digest,
+        )
+    except Exception as exc:
+        logger.warning(
+            "plan_disposition_validation_rejected",
+            reason="committed disposition lookup failed",
+            audit_cycle_path=str(authority_path),
+            current_plan_path=str(current_plan_path),
+            error=f"{type(exc).__name__}: {exc}",
+            exc_info=True,
+        )
+        return None
+    if committed_path is None or committed_path != Path(disposition_ref.locator):
+        _log_plan_disposition_rejection(
+            "verified disposition does not match a committed ledger projection",
+            authority_path=authority_path,
+            current_plan_path=current_plan_path,
+        )
+        return None
+    return str(committed_path)
 
 
 def verify_plan_artifacts(
     plan_parts: str,
     audit_cycle_path: str = "",
+    _committed_disposition_resolver: CommittedDispositionResolver | None = None,
 ) -> dict[str, str]:
     """Deterministically verify captured plan_parts artifacts for context-limit salvage.
 
@@ -414,6 +450,7 @@ def verify_plan_artifacts(
         disposition_path = _resolve_plan_disposition(
             audit_cycle_path=audit_cycle_path,
             current_plan_path=Path(items[0]),
+            committed_disposition_resolver=_committed_disposition_resolver,
         )
         if disposition_path is None:
             return {"verdict": "unsalvageable"}

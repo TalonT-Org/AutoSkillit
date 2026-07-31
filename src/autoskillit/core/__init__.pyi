@@ -63,6 +63,16 @@ from .audit_cycle_verifier import AuditCycleVerificationError as AuditCycleVerif
 from .audit_cycle_verifier import AuditCycleVerifier as AuditCycleVerifier
 from .audit_cycle_verifier import InventoryAdmissionEvaluator as InventoryAdmissionEvaluator
 from .audit_cycle_verifier import VerifiedAuditCycle as VerifiedAuditCycle
+from .audit_semantic_codec import AuditSemanticCodecError as AuditSemanticCodecError
+from .audit_semantic_codec import (
+    canonical_full_reference_records_match as canonical_full_reference_records_match,
+)
+from .audit_semantic_codec import (
+    load_audit_semantic_result as load_audit_semantic_result,
+)
+from .audit_semantic_codec import (
+    load_standalone_audit_evidence as load_standalone_audit_evidence,
+)
 from .bash_write_targets import extract_bash_write_targets as extract_bash_write_targets
 from .branch_guard import is_protected_branch as is_protected_branch
 from .claude_conventions import ClaudeDirectoryConventions as ClaudeDirectoryConventions
@@ -224,7 +234,14 @@ from .types import AGENT_BACKEND_ENV_VAR as AGENT_BACKEND_ENV_VAR
 from .types import AGENT_PACK_REGISTRY as AGENT_PACK_REGISTRY
 from .types import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS as ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
 from .types import ALL_VISIBILITY_TAGS as ALL_VISIBILITY_TAGS
+from .types import (
+    AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY as AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY,
+)
 from .types import AUDIT_CYCLE_SCHEMA_VERSION as AUDIT_CYCLE_SCHEMA_VERSION
+from .types import (
+    AUDIT_REFERENCE_IDENTITY_PROFILE_V1 as AUDIT_REFERENCE_IDENTITY_PROFILE_V1,
+)
+from .types import AUDIT_SEMANTIC_SCHEMA_VERSION as AUDIT_SEMANTIC_SCHEMA_VERSION
 from .types import AUTOSKILLIT_APPLICABLE_GUARDS as AUTOSKILLIT_APPLICABLE_GUARDS
 from .types import AUTOSKILLIT_INSTALLED_VERSION as AUTOSKILLIT_INSTALLED_VERSION
 from .types import AUTOSKILLIT_PRIVATE_ENV_VARS as AUTOSKILLIT_PRIVATE_ENV_VARS
@@ -408,6 +425,10 @@ from .types import SKILL_SESSION_CONTRACT_SCHEMA_VERSION as SKILL_SESSION_CONTRA
 from .types import SKILL_SESSION_REQUIRED_ENV as SKILL_SESSION_REQUIRED_ENV
 from .types import SKILL_TOOLS as SKILL_TOOLS
 from .types import SOUS_CHEF_MANDATORY_SECTIONS as SOUS_CHEF_MANDATORY_SECTIONS
+from .types import STANDALONE_AUDIT_EVIDENCE_KIND as STANDALONE_AUDIT_EVIDENCE_KIND
+from .types import (
+    STANDALONE_AUDIT_EVIDENCE_SCHEMA_VERSION as STANDALONE_AUDIT_EVIDENCE_SCHEMA_VERSION,
+)
 from .types import TOOL_SUBSET_TAGS as TOOL_SUBSET_TAGS
 from .types import UNGATED_TOOLS as UNGATED_TOOLS
 from .types import VALID_INPUT_SPEC_TYPES as VALID_INPUT_SPEC_TYPES
@@ -445,12 +466,56 @@ from .types import AgentSessionResult as AgentSessionResult
 from .types import AggregateRevision as AggregateRevision
 from .types import ApiRetryOutcome as ApiRetryOutcome
 from .types import ArtifactRef as ArtifactRef
+from .types import AuditAdmissionLedger as AuditAdmissionLedger
+from .types import AuditAdmissionRecoveryResult as AuditAdmissionRecoveryResult
+from .types import AuditAdmissionStorageError as AuditAdmissionStorageError
+from .types import (
+    AuditAdmissionStorageFailureReason as AuditAdmissionStorageFailureReason,
+)
+from .types import (
+    AuditAdmissionStorageHealthStatus as AuditAdmissionStorageHealthStatus,
+)
+from .types import AuditAdmissionStoreAuthority as AuditAdmissionStoreAuthority
+from .types import AuditAdmissionStoreHealth as AuditAdmissionStoreHealth
+from .types import AuditArtifactFieldOwnership as AuditArtifactFieldOwnership
+from .types import AuditArtifactFieldOwnershipDef as AuditArtifactFieldOwnershipDef
 from .types import AuditAssessment as AuditAssessment
 from .types import AuditAssessmentRow as AuditAssessmentRow
+from .types import AuditAttemptId as AuditAttemptId
+from .types import AuditAttemptLifecycle as AuditAttemptLifecycle
+from .types import AuditAttemptRecord as AuditAttemptRecord
+from .types import AuditAuthorityMaterializer as AuditAuthorityMaterializer
 from .types import AuditCycleAuthority as AuditCycleAuthority
 from .types import AuditCycleHead as AuditCycleHead
-from .types import AuditCycleHeadStore as AuditCycleHeadStore
+from .types import (
+    AuditDispositionCommitOutcome as AuditDispositionCommitOutcome,
+)
+from .types import (
+    AuditDispositionCommitRequest as AuditDispositionCommitRequest,
+)
+from .types import AuditFinalCommitOutcome as AuditFinalCommitOutcome
+from .types import AuditFinalCommitRequest as AuditFinalCommitRequest
+from .types import AuditIdentityReservation as AuditIdentityReservation
 from .types import AuditLog as AuditLog
+from .types import AuditMaterializationResult as AuditMaterializationResult
+from .types import AuditMaterializationStatus as AuditMaterializationStatus
+from .types import AuditOutcome as AuditOutcome
+from .types import AuditOutcomeStatus as AuditOutcomeStatus
+from .types import AuditPreflightProjection as AuditPreflightProjection
+from .types import AuditPreparedEffect as AuditPreparedEffect
+from .types import (
+    AuditPreparedEffectDeliveryStatus as AuditPreparedEffectDeliveryStatus,
+)
+from .types import AuditPrepareOutcome as AuditPrepareOutcome
+from .types import AuditPrepareRequest as AuditPrepareRequest
+from .types import AuditReferenceIdentityProfileDef as AuditReferenceIdentityProfileDef
+from .types import AuditReservationOutcome as AuditReservationOutcome
+from .types import AuditReservationRequest as AuditReservationRequest
+from .types import AuditResultOutcome as AuditResultOutcome
+from .types import AuditRound as AuditRound
+from .types import AuditSemanticResult as AuditSemanticResult
+from .types import AuditSlotId as AuditSlotId
+from .types import AuditSlotKey as AuditSlotKey
 from .types import AuditVerdict as AuditVerdict
 from .types import AuthoritySourceId as AuthoritySourceId
 from .types import AuthorityUnavailableEffect as AuthorityUnavailableEffect
@@ -505,6 +570,7 @@ from .types import CodexEventData as CodexEventData
 from .types import CodexEventType as CodexEventType
 from .types import CodexItemType as CodexItemType
 from .types import CodingAgentBackend as CodingAgentBackend
+from .types import CommittedDispositionResolver as CommittedDispositionResolver
 from .types import CompletionRequiredResolver as CompletionRequiredResolver
 from .types import ConflictRejectedEffect as ConflictRejectedEffect
 from .types import ContaminationOutcome as ContaminationOutcome
@@ -584,6 +650,7 @@ from .types import InputSpecType as InputSpecType
 from .types import InspectorCallback as InspectorCallback
 from .types import InspectorEvidence as InspectorEvidence
 from .types import InspectorVerdict as InspectorVerdict
+from .types import InstallationVersion as InstallationVersion
 from .types import InstalledRecipeExecution as InstalledRecipeExecution
 from .types import IntakeRuleDef as IntakeRuleDef
 from .types import InvariantDef as InvariantDef
@@ -666,6 +733,7 @@ from .types import RecipeDeliveryRequest as RecipeDeliveryRequest
 from .types import RecipeDeliverySurfaceDef as RecipeDeliverySurfaceDef
 from .types import RecipeExecutionCredential as RecipeExecutionCredential
 from .types import RecipeExecutionFactory as RecipeExecutionFactory
+from .types import RecipeExecutionId as RecipeExecutionId
 from .types import RecipeExecutionLock as RecipeExecutionLock
 from .types import RecipeExecutionSnapshot as RecipeExecutionSnapshot
 from .types import RecipeFlowEdge as RecipeFlowEdge
@@ -691,6 +759,7 @@ from .types import RepresentationBindingId as RepresentationBindingId
 from .types import RepresentationBindingWitness as RepresentationBindingWitness
 from .types import RepresentationRevision as RepresentationRevision
 from .types import RequestReconciliationEvent as RequestReconciliationEvent
+from .types import ReservationDecision as ReservationDecision
 from .types import ReservationInvalidatedEffect as ReservationInvalidatedEffect
 from .types import ReservationRecordedEffect as ReservationRecordedEffect
 from .types import ReservationReleasedEffect as ReservationReleasedEffect
@@ -755,6 +824,7 @@ from .types import SkillVisibilitySpec as SkillVisibilitySpec
 from .types import SpilledOutput as SpilledOutput
 from .types import SpillSpec as SpillSpec
 from .types import StageHistoryEvent as StageHistoryEvent
+from .types import StandaloneAuditEvidence as StandaloneAuditEvidence
 from .types import StartGenerationEvent as StartGenerationEvent
 from .types import StoredContextAdmissionEnvelope as StoredContextAdmissionEnvelope
 from .types import StoredSkillSessionContract as StoredSkillSessionContract
@@ -798,6 +868,11 @@ from .types import (
 )
 from .types import canonical_recipe_section_json as canonical_recipe_section_json
 from .types import closure_authority_spec_from_args as closure_authority_spec_from_args
+from .types import compute_audit_reference_identity as compute_audit_reference_identity
+from .types import compute_audit_slot_id as compute_audit_slot_id
+from .types import (
+    compute_audit_slot_intent_digest as compute_audit_slot_intent_digest,
+)
 from .types import compute_findings_digest as compute_findings_digest
 from .types import compute_invocation_template_digest as compute_invocation_template_digest
 from .types import (

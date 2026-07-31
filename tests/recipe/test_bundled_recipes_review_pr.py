@@ -510,7 +510,10 @@ _REVIEW_RECIPES = (
     "remediation",
     "merge-prs",
 )
-_LOOPED_REVIEW_RECIPES = _REVIEW_RECIPES[:3]
+_ONE_SHOT_REVIEW_RECIPES = frozenset({"merge-prs"})
+_LOOPED_REVIEW_RECIPES = tuple(
+    recipe_name for recipe_name in _REVIEW_RECIPES if recipe_name not in _ONE_SHOT_REVIEW_RECIPES
+)
 
 
 @pytest.mark.parametrize("recipe_name", _REVIEW_RECIPES)

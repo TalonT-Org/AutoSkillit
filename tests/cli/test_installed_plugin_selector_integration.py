@@ -235,10 +235,13 @@ def _run_session_launch(
     spawn_calls: list[tuple[tuple[object, ...], dict[str, object]]],
 ) -> None:
     (state.home / "project").mkdir(parents=True, exist_ok=True)
+    agent_path = state.home / "agent"
+    agent_path.write_text("#!/bin/sh\nexit 0\n")
+    agent_path.chmod(0o755)
 
     def resolve_agent(_binary: str, *, path: str | None = None) -> str:
         assert path is None
-        return "/usr/bin/agent"
+        return str(agent_path)
 
     monkeypatch.setattr(shutil, "which", resolve_agent)
 

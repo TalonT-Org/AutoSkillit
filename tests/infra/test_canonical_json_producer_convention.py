@@ -147,13 +147,13 @@ _CANONICAL_JSON_ARTIFACT_REGISTRY: dict[str, CanonicalArtifactDef] = {
         skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 339, 347),),
     ),
     "audit_semantic_result": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit_semantic_codec.py", 225),
+        consumer_site=("src/autoskillit/core/audit_semantic_codec.py", 229),
         producer_symbol="write_audit_semantic_result",
         producer_site=(_TYPED_PRODUCER_MODULE, 111),
         skill_md_refs=(("src/autoskillit/skills_extended/audit-impl/SKILL.md", 78, 88),),
     ),
     "standalone_audit_evidence": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit_semantic_codec.py", 269),
+        consumer_site=("src/autoskillit/core/audit_semantic_codec.py", 276),
         producer_symbol="write_standalone_audit_evidence",
         producer_site=(_TYPED_PRODUCER_MODULE, 144),
         skill_md_refs=(("src/autoskillit/skills_extended/audit-impl/SKILL.md", 88, 93),),

@@ -161,7 +161,8 @@ class TestCLIOrderCommand:
 
         mock_run.assert_called_once()
         cmd = mock_run.call_args[0][0]
-        assert cmd[0] == "claude"
+        assert Path(cmd[0]).is_absolute()
+        assert Path(cmd[0]).name == "claude"
         assert ClaudeFlags.PLUGIN_DIR in cmd
         plugin_dir_idx = cmd.index(ClaudeFlags.PLUGIN_DIR)
         plugin_dir_val = Path(cmd[plugin_dir_idx + 1])
@@ -494,8 +495,9 @@ class TestCLIOrderCommand:
         cmd = captured["cmd"]
         env = captured["env"]
 
-        assert cmd[0] == real_backend.binary_name(), (
-            f"Expected {real_backend.binary_name()!r}, got {cmd[0]!r}"
+        assert Path(cmd[0]).is_absolute()
+        assert Path(cmd[0]).name == real_backend.binary_name(), (
+            f"Expected {real_backend.binary_name()!r}, got {Path(cmd[0]).name!r}"
         )
 
         claude_flag_values = {str(f) for f in ClaudeFlags}

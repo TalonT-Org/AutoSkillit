@@ -33,6 +33,7 @@ from autoskillit.core import (
 from autoskillit.server._recipe_execution import DefaultInputPreflightResolver
 from autoskillit.server.tools.tools_audit_artifacts import (
     _build_semantic_result,
+    _SemanticInputError,
     _write_audit_disposition_bundle_sync,
     _write_semantic_result,
     write_audit_disposition_bundle,
@@ -310,7 +311,7 @@ def test_disposition_final_cas_rejects_prepared_artifact_toctou(
         lambda _tool_ctx: installed,
     )
 
-    with pytest.raises(Exception):
+    with pytest.raises(_SemanticInputError, match="changed while"):
         _write_audit_disposition_bundle_sync(
             tool_ctx=tool_ctx,
             authority_path=str(authority_path),

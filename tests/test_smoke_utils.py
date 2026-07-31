@@ -3048,7 +3048,7 @@ def test_annotate_pr_diff_int_pr_number(mock_run, tmp_path: Path) -> None:
 
 @patch("subprocess.run")
 def test_annotate_pr_diff_produces_valid_lines_artifact(mock_run, tmp_path: Path) -> None:
-    """annotate_pr_diff must write valid_lines_{pr}.json alongside ranges_{pr}.json."""
+    """annotate_pr_diff writes valid lines alongside the explicitly named hunk ranges."""
     import json
 
     from autoskillit.execution.diff_annotator import extract_valid_lines
@@ -3155,7 +3155,7 @@ def test_annotate_pr_diff_publishes_snapshot_manifest_last(
         assert artifact["sha256"] == hashlib.sha256(artifact_bytes).hexdigest()
     assert write_order == [
         "annotated_diff_92.txt",
-        "ranges_92.json",
+        "hunk_ranges_92.json",
         "valid_lines_92.json",
         "metrics_92.json",
     ]
@@ -3163,7 +3163,7 @@ def test_annotate_pr_diff_publishes_snapshot_manifest_last(
 
 @pytest.mark.parametrize(
     "failure_name",
-    ["annotated_diff_94.txt", "ranges_94.json", "valid_lines_94.json"],
+    ["annotated_diff_94.txt", "hunk_ranges_94.json", "valid_lines_94.json"],
 )
 @patch("subprocess.run")
 def test_annotate_pr_diff_never_publishes_manifest_after_sidecar_failure(

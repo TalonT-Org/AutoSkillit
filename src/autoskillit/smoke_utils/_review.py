@@ -43,7 +43,7 @@ def annotate_pr_diff(
     review_root = review_root.resolve()
     out.mkdir(parents=True, exist_ok=True)
     annotated_path = out / f"annotated_diff_{pr_number}.txt"
-    ranges_path = out / f"ranges_{pr_number}.json"
+    ranges_path = out / f"hunk_ranges_{pr_number}.json"
     valid_lines_path = out / f"valid_lines_{pr_number}.json"
     metrics_path = out / f"metrics_{pr_number}.json"
     metrics_path.unlink(missing_ok=True)

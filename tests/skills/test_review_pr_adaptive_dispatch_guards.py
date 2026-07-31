@@ -103,7 +103,7 @@ def _make_gate_case(tmp_path: Path, *, gate: bool = True) -> dict[str, Any]:
     output_dir = tmp_path / "review-output"
     output_dir.mkdir()
     annotated = output_dir / "annotated_diff_7.txt"
-    ranges = output_dir / "ranges_7.json"
+    ranges = output_dir / "hunk_ranges_7.json"
     valid_lines = output_dir / "valid_lines_7.json"
     metrics_path = output_dir / "metrics_7.json"
     annotated.write_text("metadata\n[L1]+old-generation\n")

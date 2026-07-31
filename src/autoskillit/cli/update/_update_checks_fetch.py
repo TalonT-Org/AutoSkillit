@@ -10,6 +10,7 @@ from typing import Any
 
 import httpx
 
+from autoskillit.cli._install_snapshot import _fetch_cache_path
 from autoskillit.core import AUTOSKILLIT_INSTALLED_VERSION, atomic_write, get_logger
 
 logger = get_logger(__name__)
@@ -18,7 +19,6 @@ logger = get_logger(__name__)
 # JSON dict (not ``write_versioned_json``) — it is a transient performance
 # cache, not a persisted schema artifact, so a stray pre-existing file at the
 # same path is safely ignored on a JSON parse failure.
-_FETCH_CACHE_FILE = "github_fetch_cache.json"
 _DEFAULT_FETCH_TTL_SECONDS = 30 * 60
 
 # connect=2s buffers for cold DNS (httpx's connect timeout does NOT cover the
@@ -34,10 +34,6 @@ _GITHUB_RELEASES_URL = "https://api.github.com/repos/TalonT-Org/AutoSkillit/rele
 _GITHUB_DEVELOP_PYPROJECT_URL = (
     "https://api.github.com/repos/TalonT-Org/AutoSkillit/contents/pyproject.toml?ref=develop"
 )
-
-
-def _fetch_cache_path(home: Path) -> Path:
-    return home / ".autoskillit" / _FETCH_CACHE_FILE
 
 
 def _read_fetch_cache(home: Path) -> dict[str, Any]:

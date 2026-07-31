@@ -21,9 +21,15 @@ from autoskillit.core import (
 
 logger = get_logger(__name__)
 
+_FETCH_CACHE_FILE = "github_fetch_cache.json"
+
 
 def _plugin_cache_dir() -> Path:
     return installed_plugin_cache_dir(Path.home(), "autoskillit")
+
+
+def _fetch_cache_path(home: Path) -> Path:
+    return home / ".autoskillit" / _FETCH_CACHE_FILE
 
 
 def _installed_plugin_root(version: str | None = None) -> Path:
@@ -48,8 +54,6 @@ class _InstallSnapshot:
         settings_path: Path | None = None,
         workspace_cwd: Path | None = None,
     ) -> None:
-        from autoskillit.cli.update._update_checks_fetch import _fetch_cache_path
-
         home = Path.home()
         self._target_root = target_root or _installed_plugin_root()
         self._artifact_manifest_path = installed_plugin_artifact_manifest_path(self._target_root)

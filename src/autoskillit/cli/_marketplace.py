@@ -28,6 +28,7 @@ from autoskillit.cli._install_contract import (
     InstallResult,
 )
 from autoskillit.cli._install_snapshot import (
+    _fetch_cache_path,
     _installed_plugin_root,
     _InstallSnapshot,
     _plugin_cache_dir,
@@ -639,9 +640,6 @@ def install(
                         print("Removed stale direct MCP entry from ~/.claude.json")
                     _hooks_mod._evict_stale_autoskillit_hooks(settings_path)
                     from autoskillit.cli.update._update_checks import invalidate_fetch_cache
-                    from autoskillit.cli.update._update_checks_fetch import (
-                        _fetch_cache_path,
-                    )
 
                     invalidate_fetch_cache(Path.home())
                     _verify_cleanup(settings_path, _fetch_cache_path(Path.home()))

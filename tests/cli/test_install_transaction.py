@@ -595,9 +595,11 @@ def test_failure_after_every_persistent_mutation_stage_restores_prestate(
     marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
     import autoskillit.workspace as workspace
     from autoskillit.cli import _plugin_artifact
-    from autoskillit.cli._install_snapshot import _installed_plugins_json_path
+    from autoskillit.cli._install_snapshot import (
+        _fetch_cache_path,
+        _installed_plugins_json_path,
+    )
     from autoskillit.cli.update import _update_checks
-    from autoskillit.cli.update._update_checks_fetch import _fetch_cache_path
 
     projection = tmp_path / ".autoskillit" / "marketplace"
     manifest = projection / ".claude-plugin" / "marketplace.json"

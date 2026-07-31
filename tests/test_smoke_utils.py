@@ -4724,6 +4724,7 @@ def test_smoke_utils_all_exports_complete() -> None:
     import autoskillit.smoke_utils as su
 
     expected = {
+        "EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY",
         "EXPERIMENTAL_REVIEW_AUDITORS",
         "aggregate_experimental_review_candidates",
         "aggregate_review_verdict",
@@ -4753,6 +4754,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "gate_backend_write",
         "init_counter",
         "LOCAL_ROUND_EXEMPT_VERDICTS",
+        "normalize_local_review_finding",
         "parse_agent_eval_manifests",
         "parse_eval_manifests",
         "patch_pr_token_summary",
@@ -4760,7 +4762,10 @@ def test_smoke_utils_all_exports_complete() -> None:
         "prepare_experimental_review_publication",
         "publish_experimental_review_artifacts",
         "render_review_finding_body",
+        "REVIEW_HANDOFF_IDENTITY_FIELDS",
         "REQUIRED_CRITERION_KEYS",
+        "review_handoff_pair_error",
+        "select_experimental_review_dispatch",
         "select_review_dimensions",
         "try_load_json",
         "validate_experimental_auditor_outputs",
@@ -4797,6 +4802,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "fetch_merge_queue_data",
         "gate_backend_write",
         "init_counter",
+        "normalize_local_review_finding",
         "parse_agent_eval_manifests",
         "parse_eval_manifests",
         "patch_pr_token_summary",
@@ -4804,6 +4810,8 @@ def test_smoke_utils_all_exports_complete() -> None:
         "prepare_experimental_review_publication",
         "publish_experimental_review_artifacts",
         "render_review_finding_body",
+        "review_handoff_pair_error",
+        "select_experimental_review_dispatch",
         "select_review_dimensions",
         "try_load_json",
         "validate_experimental_auditor_outputs",

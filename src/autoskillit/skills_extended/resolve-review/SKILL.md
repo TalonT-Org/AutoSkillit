@@ -216,8 +216,8 @@ Matches the regex `<!--\s*REVIEW-FLAG:\s*severity=(\w+)\s+dimension=(\w+)\s*>`.
   code change and return the existing human-escalation verdict.
 - Transform every local finding with
   `normalize_local_review_finding(entry)` from `autoskillit.smoke_utils`. The helper
-  copies the complete dictionary and adds the canonical `path` and rendered `body`
-  aliases without discarding proof or provenance fields.
+  must copy the complete entry dictionary and add the canonical `path` and rendered
+  `body` aliases without discarding proof or provenance fields.
 - Load `diff_context_{pr_number}.json` as normal (mode-independent — same handoff file written by review-pr)
 - Set `comment_id_to_thread_id = {}` (no thread IDs in local mode)
 - Set `already_replied_ids = set()` (no prior replies in local mode)

@@ -1648,6 +1648,32 @@ def test_experimental_validation_accepts_boundaries_and_negated_facets(tmp_path:
     assert result["state"] == "complete"
 
 
+def test_experimental_candidate_closed_key_error_lists_missing_and_extra(tmp_path: Path) -> None:
+    outputs = {}
+    for auditor, dimension in zip(
+        EXPERIMENTAL_REVIEW_AUDITORS,
+        ("overengineering_reachability", "overengineering_abstraction_surface"),
+        strict=True,
+    ):
+        candidate = _experimental_candidate(dimension)
+        del candidate["message"]
+        candidate["unexpected"] = True
+        outputs[auditor] = {"terminal_status": "success", "output": [candidate]}
+
+    result = validate_experimental_auditor_outputs(
+        outputs=outputs,
+        valid_diff_lines={"src/app.py": [42]},
+        snapshot={"head_sha": "head", "diff_sha256": "diff"},
+        review_root=str(tmp_path),
+    )
+
+    assert all(
+        envelope["errors"]
+        == ["candidate has invalid closed keys: missing=['message']; extra=['unexpected']"]
+        for envelope in result["malformed_envelopes"]
+    )
+
+
 @pytest.mark.parametrize(
     ("failure_kind", "expected_reason"),
     [
@@ -2387,6 +2413,31 @@ def test_standard_review_findings_degrade_atomically(
     assert result["state"] == "degraded"
     assert result["survivors"] == []
     assert result["validation_errors"]
+
+
+def test_standard_finding_closed_key_error_lists_missing_and_extra() -> None:
+    finding = {
+        "file": "src/app.py",
+        "line": 40,
+        "dimension": "bugs",
+        "severity": "warning",
+        "requires_decision": False,
+        "unexpected": True,
+    }
+
+    result = aggregate_experimental_review_candidates(
+        candidates=[],
+        dispositions=[],
+        prior_resolved_findings=[],
+        standard_findings=[finding],
+        valid_diff_lines={"src/app.py": [40]},
+        snapshot={"head_sha": "head", "base_sha": "base"},
+        review_root=str(Path.cwd()),
+    )
+
+    assert result["validation_errors"] == [
+        "standard[0]: finding has invalid closed keys: missing=['message']; extra=['unexpected']"
+    ]
 
 
 @pytest.mark.parametrize(

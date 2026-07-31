@@ -143,6 +143,22 @@ def _is_non_empty_string(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
+def _closed_key_set_error(
+    value: object,
+    *,
+    expected: set[str],
+    subject: str,
+) -> str | None:
+    if not isinstance(value, dict):
+        return f"{subject} must be an object"
+    actual = set(value)
+    missing = sorted(expected - actual)
+    extra = sorted(str(key) for key in actual - expected)
+    if missing or extra:
+        return f"{subject} has invalid closed keys: missing={missing}; extra={extra}"
+    return None
+
+
 def review_handoff_pair_error(
     first: object,
     second: object,
@@ -243,8 +259,14 @@ def _candidate_validation_error(
     valid_diff_lines: Mapping[str, Sequence[int]],
     review_root: Path,
 ) -> tuple[str, str] | None:
-    if not isinstance(candidate, dict) or set(candidate) != _EXPERIMENTAL_CANDIDATE_KEYS:
-        return ("schema_invalid", "candidate must have the exact closed key set")
+    key_error = _closed_key_set_error(
+        candidate,
+        expected=_EXPERIMENTAL_CANDIDATE_KEYS,
+        subject="candidate",
+    )
+    if key_error is not None:
+        return ("schema_invalid", key_error)
+    assert isinstance(candidate, dict)
     if candidate["dimension"] != _EXPERIMENTAL_DIMENSIONS[auditor_name]:
         return ("schema_invalid", "dimension does not match producer")
     if not isinstance(candidate["severity"], str) or candidate["severity"] not in {
@@ -351,8 +373,14 @@ def _standard_finding_validation_error(
     valid_line_ranges: Mapping[str, Sequence[Sequence[int]]],
     review_root: Path,
 ) -> str | None:
-    if not isinstance(finding, dict) or set(finding) != _STANDARD_FINDING_KEYS:
-        return "finding must have the exact standard closed key set"
+    key_error = _closed_key_set_error(
+        finding,
+        expected=_STANDARD_FINDING_KEYS,
+        subject="finding",
+    )
+    if key_error is not None:
+        return key_error
+    assert isinstance(finding, dict)
     expected_dimensions = (
         {"deletion_regression"} if deletion_only else set(_STANDARD_REVIEW_DIMENSIONS)
     )

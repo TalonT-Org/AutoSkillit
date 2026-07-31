@@ -101,7 +101,6 @@ class KitchenOpenState:
     operation_id: str
     context_id: str
     intent_fingerprint: str | None = None
-    mode: str | None = None
     effects: tuple[KitchenEffectRecord, ...] = ()
     cached_response: str | None = None
     initialization_id: str | None = None
@@ -241,7 +240,6 @@ def bind_kitchen_intent(
     state: KitchenOpenState,
     *,
     fingerprint: str,
-    mode: str,
 ) -> KitchenOpenState:
     """Atomically attach immutable request semantics to the infrastructure state."""
     if state.phase is KitchenOpenPhase.CLOSED:
@@ -253,7 +251,6 @@ def bind_kitchen_intent(
     bound = replace(
         state,
         intent_fingerprint=fingerprint,
-        mode=mode,
         retry_disposition=KitchenRetryDisposition.IN_PROGRESS,
     )
     bound = advance_kitchen_phase(bound, KitchenOpenPhase.REQUEST_BOUND)

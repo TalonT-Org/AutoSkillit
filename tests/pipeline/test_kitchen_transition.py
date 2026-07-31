@@ -47,7 +47,7 @@ def test_operation_identity_is_distinct_from_intent_fingerprint() -> None:
     state = _state()
     fingerprint = _fingerprint()
 
-    bound = bind_kitchen_intent(state, fingerprint=fingerprint, mode="recipe")
+    bound = bind_kitchen_intent(state, fingerprint=fingerprint)
 
     assert bound.operation_id == "operation-1"
     assert bound.kitchen_id == "kitchen-1"
@@ -72,20 +72,19 @@ def test_fingerprint_is_canonical_but_context_scoped() -> None:
 
 
 def test_same_operation_changed_intent_is_a_stable_conflict() -> None:
-    bound = bind_kitchen_intent(_state(), fingerprint=_fingerprint(), mode="recipe")
+    bound = bind_kitchen_intent(_state(), fingerprint=_fingerprint())
 
     with pytest.raises(KitchenIntentConflict) as exc_info:
         bind_kitchen_intent(
             bound,
             fingerprint=_fingerprint(overrides={"sprint_mode": "true"}),
-            mode="recipe",
         )
 
     assert exc_info.value.state == bound
 
 
 def test_started_unconfirmed_effect_requires_reconciliation() -> None:
-    state = bind_kitchen_intent(_state(), fingerprint=_fingerprint(), mode="recipe")
+    state = bind_kitchen_intent(_state(), fingerprint=_fingerprint())
     state = start_kitchen_effect(state, "recipe_serving")
 
     ambiguous = mark_kitchen_effect_ambiguous(
@@ -102,7 +101,7 @@ def test_started_unconfirmed_effect_requires_reconciliation() -> None:
 
 
 def test_started_effect_is_not_restarted() -> None:
-    state = bind_kitchen_intent(_state(), fingerprint=_fingerprint(), mode="recipe")
+    state = bind_kitchen_intent(_state(), fingerprint=_fingerprint())
     started = start_kitchen_effect(state, "recipe_serving")
 
     replayed = start_kitchen_effect(started, "recipe_serving")
@@ -112,7 +111,7 @@ def test_started_effect_is_not_restarted() -> None:
 
 
 def test_live_request_claim_is_exclusive_until_release() -> None:
-    state = bind_kitchen_intent(_state(), fingerprint=_fingerprint(), mode="recipe")
+    state = bind_kitchen_intent(_state(), fingerprint=_fingerprint())
 
     claimed, is_owner = claim_kitchen_request(state)
     in_progress, second_is_owner = claim_kitchen_request(claimed)
@@ -128,7 +127,7 @@ def test_live_request_claim_is_exclusive_until_release() -> None:
 
 
 def test_proven_predispatch_failure_restores_retry_safe_effect() -> None:
-    state = bind_kitchen_intent(_state(), fingerprint=_fingerprint(), mode="recipe")
+    state = bind_kitchen_intent(_state(), fingerprint=_fingerprint())
     started = start_kitchen_effect(state, "recipe_serving")
 
     aborted = abort_kitchen_effect(started, "recipe_serving")
@@ -143,7 +142,7 @@ def test_proven_predispatch_failure_restores_retry_safe_effect() -> None:
 
 
 def test_confirmed_progress_converges_to_cached_exact_response() -> None:
-    state = bind_kitchen_intent(_state(), fingerprint=_fingerprint(), mode="recipe")
+    state = bind_kitchen_intent(_state(), fingerprint=_fingerprint())
     state = start_kitchen_effect(state, "recipe_serving")
     state = confirm_kitchen_effect(
         state,

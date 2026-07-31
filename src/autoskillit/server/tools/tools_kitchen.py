@@ -307,7 +307,6 @@ def _bind_open_kitchen_transition(
                 tool_ctx.kitchen_open_state = bind_kitchen_intent(
                     tool_ctx.kitchen_open_state,
                     fingerprint=fingerprint,
-                    mode=mode,
                 )
                 state = tool_ctx.kitchen_open_state
         except KitchenIntentConflict as conflict:

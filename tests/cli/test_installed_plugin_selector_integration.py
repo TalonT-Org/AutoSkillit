@@ -316,8 +316,9 @@ def test_matching_claude_artifact_binds_through_real_selector(
     else:
         _run_session_launch(monkeypatch, state, backend, spawn_calls)
 
-    assert len(backend.build_calls) == 1
-    binding = cast(PluginLaunchBinding, backend.build_calls[0]["plugin_binding"])
+    expected_builds = 2 if consumer == "session-launch" else 1
+    assert len(backend.build_calls) == expected_builds
+    binding = cast(PluginLaunchBinding, backend.build_calls[-1]["plugin_binding"])
     assert binding.load_mode is PluginLoadMode.IMPLICIT_INSTALLED
     assert binding.plugin_dir is None
     assert binding.identity == state.identity
@@ -376,8 +377,8 @@ def test_codex_session_launch_ignores_claude_installed_artifacts(
 
     _run_session_launch(monkeypatch, state, backend, spawn_calls)
 
-    assert len(backend.build_calls) == 1
-    binding = cast(PluginLaunchBinding, backend.build_calls[0]["plugin_binding"])
+    assert len(backend.build_calls) == 2
+    binding = cast(PluginLaunchBinding, backend.build_calls[-1]["plugin_binding"])
     assert binding.load_mode is PluginLoadMode.PROJECTED_HOME
     assert binding.identity.managed_path != state.managed_root
     assert len(spawn_calls) == 1

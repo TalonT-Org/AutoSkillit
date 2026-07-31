@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import sys
 import textwrap
+from functools import partial
+from pathlib import Path
 
 import pytest
 
 from autoskillit.core.types import ChannelConfirmation, SubprocessResult, TerminationReason
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
-from autoskillit.execution.process import run_managed_async
+from autoskillit.execution.process import (
+    _process_race,
+    _session_log_monitor,
+    run_managed_async,
+)
 from tests.execution.conftest import WRITE_RESULT_THEN_HANG_SCRIPT
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -52,6 +58,19 @@ CHANNEL_B_THEN_A_CONFIRM_SCRIPT = textwrap.dedent("""\
     sys.stdout.flush()
     time.sleep(3600)
 """)
+
+
+def _coordinate_phase2_start(
+    monkeypatch: pytest.MonkeyPatch,
+    session_dir: Path,
+) -> None:
+    ready_path = session_dir / "phase2.ready"
+    monkeypatch.setattr(
+        _process_race,
+        "_session_log_monitor",
+        partial(_session_log_monitor, _on_poll=ready_path.touch),
+    )
+
 
 # Script that writes %%ORDER_UP%% to session JSONL but never writes type=result to stdout.
 # Simulates CLI hung post-completion — drain timeout should expire and kill anyway.
@@ -97,11 +116,11 @@ CHANNEL_B_THEN_A_EMPTY_RESULT_SCRIPT = textwrap.dedent("""\
                 "content": "working..."}}
         f.write(json.dumps(init) + "\\n")
         f.flush()
-    # Delay must exceed session_id_timeout + Phase 1 poll so Phase 2 initializes
-    # scan_pos from discovery boundary before the marker arrives.
-    # 3s margin handles xdist -n 4 event-loop saturation on WSL2 where coroutine
-    # scheduling jitter can delay Phase 1 discovery by >1s.
-    time.sleep(3.0)
+    # Wait for the monitor's first Phase 2 poll so its scan position is initialized
+    # before the marker arrives. The parent test creates this readiness file.
+    ready_path = os.path.join(session_dir, "phase2.ready")
+    while not os.path.exists(ready_path):
+        time.sleep(0.01)
     with open(jsonl_path, "a") as f:
         record = {"type": "assistant", "message": {"role": "assistant",
                   "content": "%%ORDER_UP%%"}}
@@ -337,7 +356,11 @@ class TestChannelBDrainWait:
 
     @pytest.mark.timeout(360)
     @pytest.mark.anyio
-    async def test_channel_b_then_a_empty_result_data_confirmed_is_false(self, tmp_path):
+    async def test_channel_b_then_a_empty_result_data_confirmed_is_false(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
         """Channel B fires (%%ORDER_UP%% in JSONL).
 
         Within the drain window, Claude CLI writes a type=result record with
@@ -346,18 +369,17 @@ class TestChannelBDrainWait:
 
         Sequence (fast poll params):
           t=0.00s  subprocess starts, writes type=system to stdout
-          t=0.10s  script creates session JSONL with initial content
-          t~0.11s  Phase 1 poll discovers file, Phase 2 initializes scan_pos
-          t=3.10s  script writes %%ORDER_UP%% to session JSONL (Channel B target)
-          t~3.15s  Phase 2 detects marker → Channel B fires → drain starts
-          t=3.25s  script writes type=result with result="" to stdout
-          t~3.30s  heartbeat sees empty result, does NOT confirm → drain continues
-          t~5.15s  drain timeout expires (2.0s), Channel B wins
+          child creates session JSONL with initial content and waits
+          Phase 1 discovers the file and Phase 2 initializes scan_pos
+          the first Phase 2 poll creates a readiness file
+          child writes %%ORDER_UP%% to session JSONL (Channel B target)
+          Phase 2 detects marker → Channel B fires → drain starts
+          child writes type=result with result="" to stdout
+          heartbeat sees empty result, does NOT confirm → drain continues
+          drain timeout expires (2.0s), Channel B wins
 
-        The 3.0s gap between file creation and marker write ensures Phase 1 discovers
-        the JSONL file and Phase 2 initializes scan_pos BEFORE the marker arrives —
-        preventing a race where Phase 2 sets scan_pos past the marker under xdist -n 4
-        event-loop saturation on WSL2.
+        The readiness-file handshake makes the Phase 2 discovery boundary
+        deterministic under xdist scheduling load.
 
         timeout=300: guards against the outer wall-clock expiring under xdist -n 4 load.
         _phase1_timeout=400: must exceed outer timeout (300s) so Phase 1 never fires
@@ -368,6 +390,7 @@ class TestChannelBDrainWait:
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
+        _coordinate_phase2_start(monkeypatch, session_dir)
         script = tmp_path / "channel_b_empty.py"
         script.write_text(CHANNEL_B_THEN_A_EMPTY_RESULT_SCRIPT)
 
@@ -396,16 +419,19 @@ class TestChannelBFullPipelineAdjudication:
     """Full end-to-end adjudication for Channel B drain-race scenarios."""
 
     @pytest.mark.anyio
-    async def test_channel_b_then_a_empty_result_produces_success(self, tmp_path):
+    async def test_channel_b_then_a_empty_result_produces_success(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
         """Full end-to-end: Channel B fires, CLI writes type=result with result="".
 
         With strengthened Channel A, data_confirmed=False, provenance bypass fires.
         Result: success=True, needs_retry=False (no wasteful retry of completed session).
 
         Timing notes:
-        - completion_drain_timeout=0.5s: the heartbeat has already seen the empty result
-          and failed to confirm by the time Channel B fires (~3s after task group start),
-          so 0.5s of additional drain time is more than sufficient semantically.
+        - A readiness-file handshake makes the Phase 2 discovery boundary deterministic
+          before the child writes the completion marker.
         - timeout=120s: subprocess wall-clock guard. Must be less than pytest.mark.timeout
           (180s on the class) so run_managed_async completes before pytest kills the test.
           _phase1_timeout=250 must exceed outer timeout so Phase 1 never fires STALE before
@@ -417,6 +443,7 @@ class TestChannelBFullPipelineAdjudication:
 
         session_dir = tmp_path / "session"
         session_dir.mkdir()
+        _coordinate_phase2_start(monkeypatch, session_dir)
         script = tmp_path / "channel_b_empty.py"
         script.write_text(CHANNEL_B_THEN_A_EMPTY_RESULT_SCRIPT)
 

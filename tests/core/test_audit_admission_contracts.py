@@ -245,13 +245,10 @@ def _prepared_effect(
             AuditAttemptLifecycle,
             {
                 "OPEN",
-                "SEMANTIC_ACCEPTED",
                 "SEMANTIC_REJECTED",
                 "PREPARED",
                 "PUBLISHED_PENDING_FINALIZATION",
                 "RESPONSE_COMMITTED",
-                "CONFLICT",
-                "QUARANTINED",
             },
         ),
         (
@@ -634,21 +631,17 @@ def test_internal_pending_status_cannot_escape_as_public_status() -> None:
         dataclasses.replace(standalone, verdict=AuditVerdict.GO)
 
 
-def test_semantic_terminal_attempts_require_semantic_digest() -> None:
-    for lifecycle in (
-        AuditAttemptLifecycle.SEMANTIC_ACCEPTED,
-        AuditAttemptLifecycle.SEMANTIC_REJECTED,
-    ):
-        with pytest.raises(ValueError, match="requires semantic_digest"):
-            AuditAttemptRecord(
-                slot_id=AuditSlotId("slot-1"),
-                attempt_id=AuditAttemptId("attempt-1"),
-                lifecycle=lifecycle,
-                semantic_digest=None,
-                correction_predecessor=None,
-                prepared_effects=(),
-                committed_outcome=None,
-            )
+def test_semantic_rejected_attempt_requires_semantic_digest() -> None:
+    with pytest.raises(ValueError, match="requires semantic_digest"):
+        AuditAttemptRecord(
+            slot_id=AuditSlotId("slot-1"),
+            attempt_id=AuditAttemptId("attempt-1"),
+            lifecycle=AuditAttemptLifecycle.SEMANTIC_REJECTED,
+            semantic_digest=None,
+            correction_predecessor=None,
+            prepared_effects=(),
+            committed_outcome=None,
+        )
 
 
 def test_runtime_protocols_accept_structural_implementations() -> None:

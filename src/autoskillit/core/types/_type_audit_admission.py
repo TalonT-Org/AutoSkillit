@@ -110,13 +110,10 @@ class ReservationDecision(StrEnum):
 
 class AuditAttemptLifecycle(StrEnum):
     OPEN = "OPEN"
-    SEMANTIC_ACCEPTED = "SEMANTIC_ACCEPTED"
     SEMANTIC_REJECTED = "SEMANTIC_REJECTED"
     PREPARED = "PREPARED"
     PUBLISHED_PENDING_FINALIZATION = "PUBLISHED_PENDING_FINALIZATION"
     RESPONSE_COMMITTED = "RESPONSE_COMMITTED"
-    CONFLICT = "CONFLICT"
-    QUARANTINED = "QUARANTINED"
 
 
 class AuditPreparedEffectDeliveryStatus(StrEnum):
@@ -940,22 +937,11 @@ class AuditAttemptRecord:
         ):
             raise ValueError("OPEN attempt cannot carry processed state")
         if (
-            self.lifecycle
-            in {
-                AuditAttemptLifecycle.SEMANTIC_ACCEPTED,
-                AuditAttemptLifecycle.SEMANTIC_REJECTED,
-            }
+            self.lifecycle is AuditAttemptLifecycle.SEMANTIC_REJECTED
             and self.semantic_digest is None
         ):
             raise ValueError(f"{self.lifecycle.value} attempt requires semantic_digest")
-        if (
-            self.lifecycle
-            in {
-                AuditAttemptLifecycle.SEMANTIC_ACCEPTED,
-                AuditAttemptLifecycle.SEMANTIC_REJECTED,
-            }
-            and effects
-        ):
+        if self.lifecycle is AuditAttemptLifecycle.SEMANTIC_REJECTED and effects:
             raise ValueError("semantic-stage attempt cannot carry prepared effects")
         if (
             self.lifecycle

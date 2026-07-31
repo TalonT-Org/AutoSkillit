@@ -177,12 +177,6 @@ _DATABASE_MODE = 0o600
 _DIRECTORY_MODE = 0o700
 _HEAD_KEY_DOMAIN = "autoskillit:audit-admission:head-key:v1:sha256"
 _HANDLE_DIGEST_DOMAIN = "autoskillit:audit-admission:reservation-handle:v1:sha256"
-_OPEN_ATTEMPT_LIFECYCLES = frozenset(
-    {
-        AuditAttemptLifecycle.OPEN,
-        AuditAttemptLifecycle.SEMANTIC_ACCEPTED,
-    }
-)
 _FINALIZATION_EFFECT_READ_LIFECYCLES = frozenset(
     {
         AuditAttemptLifecycle.PUBLISHED_PENDING_FINALIZATION,
@@ -635,11 +629,7 @@ class DefaultAuditAdmissionLedger:
                 attempts = tuple(
                     AuditAttemptId(row[0])
                     for row in connection.execute(
-                        "SELECT attempt_id FROM attempts WHERE lifecycle NOT IN (?, ?)",
-                        (
-                            AuditAttemptLifecycle.CONFLICT.value,
-                            AuditAttemptLifecycle.QUARANTINED.value,
-                        ),
+                        "SELECT attempt_id FROM attempts",
                     )
                 )
             except AuditAdmissionStorageError as exc:
@@ -907,7 +897,7 @@ class DefaultAuditAdmissionLedger:
                 reservation=reservation,
             )
 
-        if lifecycle in _OPEN_ATTEMPT_LIFECYCLES:
+        if lifecycle is AuditAttemptLifecycle.OPEN:
             return self._redispatch_open(
                 connection,
                 attempt_id=attempt_id,
@@ -1141,10 +1131,7 @@ class DefaultAuditAdmissionLedger:
                     "SELECT reservation_json, lifecycle FROM attempts WHERE handle_digest = ?",
                     (handle_digest,),
                 ).fetchone()
-                if row is None or row[1] not in {
-                    AuditAttemptLifecycle.OPEN.value,
-                    AuditAttemptLifecycle.SEMANTIC_ACCEPTED.value,
-                }:
+                if row is None or row[1] != AuditAttemptLifecycle.OPEN.value:
                     return None
                 return _reservation_from_dict(_json_loads(row[0]))
             finally:
@@ -1199,7 +1186,7 @@ class DefaultAuditAdmissionLedger:
                 attempt_id=request.attempt_id,
                 conflict_detail="installation_stale",
             )
-        if lifecycle in _OPEN_ATTEMPT_LIFECYCLES:
+        if lifecycle is AuditAttemptLifecycle.OPEN:
             if not request.accepted:
                 connection.execute(
                     "UPDATE attempts SET lifecycle = ?, semantic_digest = ? WHERE attempt_id = ?",

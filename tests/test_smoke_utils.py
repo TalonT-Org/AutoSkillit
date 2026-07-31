@@ -18,7 +18,7 @@ from autoskillit.smoke_utils import (
     EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY,
     EXPERIMENTAL_REVIEW_AUDITORS,
     REVIEW_HANDOFF_IDENTITY_FIELDS,
-    aggregate_experimental_review_candidates,
+    aggregate_combined_review_candidates,
     annotate_pr_diff,
     build_agent_eval_context,
     build_eval_context,
@@ -1783,10 +1783,8 @@ def test_experimental_aggregation_is_deterministic_and_retains_losers() -> None:
         "prior_resolved_findings": [{"file": "src/old.py", "line": 12}],
     }
 
-    forward = aggregate_experimental_review_candidates(candidates=candidates, **kwargs)
-    reverse = aggregate_experimental_review_candidates(
-        candidates=list(reversed(candidates)), **kwargs
-    )
+    forward = aggregate_combined_review_candidates(candidates=candidates, **kwargs)
+    reverse = aggregate_combined_review_candidates(candidates=list(reversed(candidates)), **kwargs)
 
     assert forward == reverse
     assert [candidate["candidate_id"] for candidate in forward["survivors"]] == [
@@ -1819,7 +1817,7 @@ def test_experimental_aggregation_rejects_accepted_disposition_without_identity(
         "requires_decision": False,
     }
 
-    result = aggregate_experimental_review_candidates(
+    result = aggregate_combined_review_candidates(
         candidates=[candidate],
         dispositions=[{"candidate_id": "candidate-1", "reason_code": "accepted"}],
         prior_resolved_findings=[],
@@ -1901,11 +1899,11 @@ def test_combined_review_aggregation_is_cross_source_and_completion_order_indepe
         "review_root": str(Path.cwd()),
     }
 
-    forward = aggregate_experimental_review_candidates(
+    forward = aggregate_combined_review_candidates(
         candidates=experimental,
         **kwargs,
     )
-    reverse = aggregate_experimental_review_candidates(
+    reverse = aggregate_combined_review_candidates(
         candidates=list(reversed(experimental)),
         **kwargs,
     )
@@ -2130,7 +2128,7 @@ def test_experimental_publication_preserves_provenance_and_suppresses_stale_effe
             "reason_code": "simpler_behavior_not_equivalent",
         },
     ]
-    aggregation = aggregate_experimental_review_candidates(
+    aggregation = aggregate_combined_review_candidates(
         candidates=validation["candidates"],
         dispositions=dispositions,
         prior_resolved_findings=[],
@@ -2363,7 +2361,7 @@ def _combined_review_survivors(gate_state: str) -> list[dict[str, object]]:
         }
         for finding in eligible_experimental
     ]
-    result = aggregate_experimental_review_candidates(
+    result = aggregate_combined_review_candidates(
         candidates=eligible_experimental,
         dispositions=dispositions,
         prior_resolved_findings=[],
@@ -2426,7 +2424,7 @@ def test_standard_review_findings_degrade_atomically(
         "message": "Valid sibling",
         "requires_decision": False,
     }
-    result = aggregate_experimental_review_candidates(
+    result = aggregate_combined_review_candidates(
         candidates=[],
         dispositions=[],
         prior_resolved_findings=[],
@@ -2450,7 +2448,7 @@ def test_standard_finding_closed_key_error_lists_missing_and_extra() -> None:
         "unexpected": True,
     }
 
-    result = aggregate_experimental_review_candidates(
+    result = aggregate_combined_review_candidates(
         candidates=[],
         dispositions=[],
         prior_resolved_findings=[],
@@ -2483,7 +2481,7 @@ def test_standard_review_findings_reject_unhashable_enum_values(
     }
     finding[field] = value
 
-    result = aggregate_experimental_review_candidates(
+    result = aggregate_combined_review_candidates(
         candidates=[],
         dispositions=[],
         prior_resolved_findings=[],
@@ -2508,7 +2506,7 @@ def test_standard_review_findings_accept_hunk_range_fallback() -> None:
         "requires_decision": False,
     }
 
-    result = aggregate_experimental_review_candidates(
+    result = aggregate_combined_review_candidates(
         candidates=[],
         dispositions=[],
         prior_resolved_findings=[],
@@ -2525,7 +2523,7 @@ def test_standard_review_findings_accept_hunk_range_fallback() -> None:
 
 
 def test_standard_review_findings_require_snapshot_authority() -> None:
-    result = aggregate_experimental_review_candidates(
+    result = aggregate_combined_review_candidates(
         candidates=[],
         dispositions=[],
         prior_resolved_findings=[],
@@ -4755,7 +4753,7 @@ def test_smoke_utils_all_exports_complete() -> None:
     expected = {
         "EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY",
         "EXPERIMENTAL_REVIEW_AUDITORS",
-        "aggregate_experimental_review_candidates",
+        "aggregate_combined_review_candidates",
         "aggregate_review_verdict",
         "annotate_pr_diff",
         "build_agent_eval_context",
@@ -4806,7 +4804,7 @@ def test_smoke_utils_all_exports_complete() -> None:
 @pytest.mark.parametrize(
     "name",
     [
-        "aggregate_experimental_review_candidates",
+        "aggregate_combined_review_candidates",
         "aggregate_review_verdict",
         "annotate_pr_diff",
         "build_agent_eval_context",

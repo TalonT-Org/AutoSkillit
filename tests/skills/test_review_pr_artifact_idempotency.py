@@ -107,7 +107,7 @@ def test_runtime_threads_validation_aggregation_and_publication_results() -> Non
 
     assert "VALIDATION_RESULT = validate_experimental_auditor_outputs(" in step4
     assert 'EXPERIMENTAL_CANDIDATES = VALIDATION_RESULT["candidates"]' in step4
-    assert "AGGREGATION_RESULT = aggregate_experimental_review_candidates(" in step4
+    assert "AGGREGATION_RESULT = aggregate_combined_review_candidates(" in step4
     assert 'for finding in AGGREGATION_RESULT["survivors"]' in step4
     assert "FINAL_REVIEW_FINDINGS" in step4
     assert "standard_findings=STANDARD_FINDINGS" in step4

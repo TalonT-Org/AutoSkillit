@@ -466,7 +466,7 @@ def validate_experimental_auditor_outputs(
     }
 
 
-def aggregate_experimental_review_candidates(
+def aggregate_combined_review_candidates(
     *,
     candidates: Sequence[Mapping[str, object]],
     dispositions: Sequence[Mapping[str, object]],

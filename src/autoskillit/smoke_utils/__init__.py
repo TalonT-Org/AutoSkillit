@@ -13,7 +13,7 @@ from autoskillit.smoke_utils._eval import (
     parse_eval_manifests,
 )
 from autoskillit.smoke_utils._experimental_review import (
-    aggregate_experimental_review_candidates,
+    aggregate_combined_review_candidates,
     build_malformed_review_envelope,
     deletion_regression_is_eligible,
     determine_experimental_review_verdict,
@@ -66,7 +66,7 @@ __all__ = [
     "REVIEW_HANDOFF_IDENTITY_FIELDS",
     "REQUIRED_CRITERION_KEYS",
     "VALID_CRITERION_TYPES",
-    "aggregate_experimental_review_candidates",
+    "aggregate_combined_review_candidates",
     "aggregate_review_verdict",
     "annotate_pr_diff",
     "build_agent_eval_context",

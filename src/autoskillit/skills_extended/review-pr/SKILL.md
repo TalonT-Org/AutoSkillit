@@ -905,7 +905,7 @@ output into an ordinary summary.
 Use the installed helpers
 `autoskillit.smoke_utils.validate_experimental_auditor_outputs`,
 `build_malformed_review_envelope`, and
-`aggregate_experimental_review_candidates` as the canonical executable semantics
+`aggregate_combined_review_candidates` as the canonical executable semantics
 for fixed-order all-or-nothing validation, bounded malformed envelopes, and
 accepted-only suppression-before-dedup. The aggregation call is the single combined
 standard/deletion/experimental aggregation boundary: pass the retained snapshot
@@ -926,7 +926,7 @@ the named review state; do not reimplement their behavior in prose:
 import json
 
 from autoskillit.smoke_utils import (
-    aggregate_experimental_review_candidates,
+    aggregate_combined_review_candidates,
     render_review_finding_body,
     validate_experimental_auditor_outputs,
 )
@@ -978,7 +978,7 @@ if STANDARD_VALIDATION_ERRORS:
         "validation_errors": STANDARD_VALIDATION_ERRORS,
     }
 else:
-    AGGREGATION_RESULT = aggregate_experimental_review_candidates(
+    AGGREGATION_RESULT = aggregate_combined_review_candidates(
         candidates=EXPERIMENTAL_CANDIDATES,
         dispositions=DISPOSITION_RECORDS,
         prior_resolved_findings=prior_resolved_findings,

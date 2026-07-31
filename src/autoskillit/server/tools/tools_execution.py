@@ -276,8 +276,6 @@ def _materialization_outcome_status(
     match result.status:
         case AuditMaterializationStatus.PUBLISHED_PENDING_FINALIZATION:
             return AuditOutcomeStatus.PUBLISHED
-        case AuditMaterializationStatus.EXACT_REPLAY:
-            return AuditOutcomeStatus.EXACT_REPLAY
         case AuditMaterializationStatus.SEMANTIC_REJECTED:
             return AuditOutcomeStatus.SEMANTIC_REJECTED
         case AuditMaterializationStatus.CONFLICT:
@@ -286,8 +284,6 @@ def _materialization_outcome_status(
             return AuditOutcomeStatus.STORAGE_FAILURE
         case AuditMaterializationStatus.QUARANTINED:
             return AuditOutcomeStatus.QUARANTINED
-        case AuditMaterializationStatus.NON_PUBLISHED_STANDALONE:
-            return AuditOutcomeStatus.NON_PUBLISHED_STANDALONE
 
 
 def _reject_missing_semantic_result(

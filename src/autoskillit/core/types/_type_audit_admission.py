@@ -81,12 +81,10 @@ class AuditMaterializationStatus(StrEnum):
     """Internal result status before caller-visible response commitment."""
 
     PUBLISHED_PENDING_FINALIZATION = "PUBLISHED_PENDING_FINALIZATION"
-    EXACT_REPLAY = "EXACT_REPLAY"
     SEMANTIC_REJECTED = "SEMANTIC_REJECTED"
     CONFLICT = "CONFLICT"
     STORAGE_FAILURE = "STORAGE_FAILURE"
     QUARANTINED = "QUARANTINED"
-    NON_PUBLISHED_STANDALONE = "NON_PUBLISHED_STANDALONE"
 
 
 class AuditOutcomeStatus(StrEnum):
@@ -853,21 +851,9 @@ class AuditMaterializationResult:
             raise ValueError("AuditMaterializationResult.status has the wrong type")
         if not isinstance(self.attempt_id, AuditAttemptId):
             raise ValueError("AuditMaterializationResult.attempt_id has the wrong type")
-        if self.status is AuditMaterializationStatus.NON_PUBLISHED_STANDALONE:
-            _validate_standalone_payload(
-                owner="AuditMaterializationResult",
-                verdict=self.verdict,
-                path=self.path,
-                error=self.error,
-            )
-            return
         _validate_result_payload(
             owner="AuditMaterializationResult",
-            successful=self.status
-            in {
-                AuditMaterializationStatus.PUBLISHED_PENDING_FINALIZATION,
-                AuditMaterializationStatus.EXACT_REPLAY,
-            },
+            successful=(self.status is AuditMaterializationStatus.PUBLISHED_PENDING_FINALIZATION),
             verdict=self.verdict,
             path=self.path,
             error=self.error,

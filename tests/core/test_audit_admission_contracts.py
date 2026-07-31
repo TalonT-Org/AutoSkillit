@@ -212,12 +212,10 @@ def _prepared_effect(
             AuditMaterializationStatus,
             {
                 "PUBLISHED_PENDING_FINALIZATION",
-                "EXACT_REPLAY",
                 "SEMANTIC_REJECTED",
                 "CONFLICT",
                 "STORAGE_FAILURE",
                 "QUARANTINED",
-                "NON_PUBLISHED_STANDALONE",
             },
         ),
         (

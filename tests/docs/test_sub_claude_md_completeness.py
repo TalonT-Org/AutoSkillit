@@ -75,6 +75,9 @@ def _lines_outside_fences(markdown: str) -> list[tuple[int, str]]:
                 active_fence = None
             continue
 
+        if line.startswith(("    ", "\t")):
+            continue
+
         match = _FENCE_START_RE.match(line)
         if match:
             fence = match.group("fence")
@@ -223,6 +226,13 @@ Architecture notes.
 | `example.py` | Fenced example |
 | `other.py` | Fenced example |
 ```
+""",
+        """\
+    ## Files
+    | File | Purpose |
+    |---|---|
+    | `example.py` | Indented example |
+    | `other.py` | Indented example |
 """,
     ],
 )

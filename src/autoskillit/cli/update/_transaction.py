@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any
+from typing import Any, assert_never
 
 from packaging.version import Version
 
@@ -217,22 +217,27 @@ def _map_install_result(
     extra_findings: tuple[str, ...] = (),
 ) -> UpdateTransactionResult | None:
     findings = install_result.findings + extra_findings
-    if install_result.outcome in {InstallOutcome.COMPLETED, InstallOutcome.NOT_REQUIRED}:
+    install_outcome = install_result.outcome
+    if install_outcome is InstallOutcome.COMPLETED:
         return None
-    if install_result.outcome is InstallOutcome.DECLINED:
+    if install_outcome is InstallOutcome.NOT_REQUIRED:
+        return None
+    if install_outcome is InstallOutcome.DECLINED:
         outcome = UpdateTransactionOutcome.DECLINED
-    elif install_result.outcome is InstallOutcome.DEFERRED:
+    elif install_outcome is InstallOutcome.DEFERRED:
         outcome = UpdateTransactionOutcome.DEFERRED
-    elif install_result.outcome is InstallOutcome.FAILED:
+    elif install_outcome is InstallOutcome.FAILED:
         outcome = (
             UpdateTransactionOutcome.FAILED_POSTCONDITION
             if install_result.failure_kind is InstallFailureKind.POSTCONDITION
             else UpdateTransactionOutcome.FAILED_INSTALL
         )
-    elif install_result.outcome is InstallOutcome.RECOVERY_REQUIRED:
+    elif install_outcome is InstallOutcome.RECOVERY_REQUIRED:
         outcome = UpdateTransactionOutcome.RECOVERY_REQUIRED
-    else:
+    elif install_outcome is InstallOutcome.INDETERMINATE:
         outcome = UpdateTransactionOutcome.INDETERMINATE
+    else:
+        assert_never(install_outcome)
     return progress.finish(
         outcome,
         expected_version=expected_version,

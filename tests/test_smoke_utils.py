@@ -3372,7 +3372,7 @@ def test_annotate_pr_diff_never_publishes_manifest_after_sidecar_failure(
 
 
 @patch("subprocess.run")
-def test_annotate_pr_diff_invalidates_old_marker_when_diff_fails(mock_run, tmp_path: Path) -> None:
+def test_annotate_pr_diff_preserves_stderr_bytes_when_diff_fails(mock_run, tmp_path: Path) -> None:
     metrics_path = tmp_path / "metrics_93.json"
     metrics_path.write_text('{"generation_id":"stale"}')
 
@@ -3381,12 +3381,13 @@ def test_annotate_pr_diff_invalidates_old_marker_when_diff_fails(mock_run, tmp_p
             payload = json.dumps({"headRefOid": _SHA, "baseRefOid": _BASE_SHA})
             return subprocess.CompletedProcess(args, 0, payload.encode(), b"")
         if args[:3] == ["gh", "pr", "diff"]:
-            return subprocess.CompletedProcess(args, 1, b"", b"diff failed")
+            return subprocess.CompletedProcess(args, 1, b"", b"diff failed: \xff")
         raise AssertionError(f"unexpected annotation command: {args}")
 
     mock_run.side_effect = fail_diff
-    with pytest.raises(RuntimeError, match="annotation command failed"):
+    with pytest.raises(RuntimeError, match="annotation command failed") as exc_info:
         annotate_pr_diff(pr_number="93", cwd=str(tmp_path), output_dir=str(tmp_path))
+    assert "diff failed: \\xff" in str(exc_info.value)
     assert not metrics_path.exists()
 
 

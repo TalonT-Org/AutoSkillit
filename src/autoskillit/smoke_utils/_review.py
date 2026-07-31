@@ -71,7 +71,7 @@ def annotate_pr_diff(
             timeout=timeout,
         )
         if result.returncode != 0:
-            detail = result.stderr.decode("utf-8", errors="replace").strip()
+            detail = result.stderr.decode("utf-8", errors="backslashreplace").strip()
             raise RuntimeError(f"annotation command failed ({' '.join(args)}): {detail}")
         return result
 

@@ -1579,6 +1579,76 @@ def test_experimental_validation_rejects_each_missing_behavior_facet(
 
 
 @pytest.mark.parametrize(
+    ("facet", "superstring"),
+    [
+        ("return_values", "returning"),
+        ("exceptions_errors", "exceptional"),
+        ("ordering", "reordering"),
+        ("persistence", "persistent"),
+        ("concurrency", "concurrency-safe"),
+        ("compatibility", "non-compatibility"),
+    ],
+)
+def test_experimental_validation_rejects_behavior_facet_superstrings(
+    tmp_path: Path,
+    facet: str,
+    superstring: str,
+) -> None:
+    phrases = {
+        "return_values": "return values",
+        "exceptions_errors": "exceptions and errors",
+        "ordering": "ordering",
+        "persistence": "persistence",
+        "concurrency": "concurrency",
+        "compatibility": "compatibility",
+    }
+    phrases[facet] = superstring
+    outputs = {}
+    for auditor, dimension in zip(
+        EXPERIMENTAL_REVIEW_AUDITORS,
+        ("overengineering_reachability", "overengineering_abstraction_surface"),
+        strict=True,
+    ):
+        candidate = _experimental_candidate(dimension)
+        candidate["simpler_behavior"] = ", ".join(phrases.values())
+        outputs[auditor] = {"terminal_status": "success", "output": [candidate]}
+
+    result = validate_experimental_auditor_outputs(
+        outputs=outputs,
+        valid_diff_lines={"src/app.py": [42]},
+        snapshot={"head_sha": "head", "diff_sha256": "diff"},
+        review_root=str(tmp_path),
+    )
+
+    assert result["state"] == "degraded"
+    assert all(facet in str(envelope["errors"]) for envelope in result["malformed_envelopes"])
+
+
+def test_experimental_validation_accepts_boundaries_and_negated_facets(tmp_path: Path) -> None:
+    outputs = {}
+    for auditor, dimension in zip(
+        EXPERIMENTAL_REVIEW_AUDITORS,
+        ("overengineering_reachability", "overengineering_abstraction_surface"),
+        strict=True,
+    ):
+        candidate = _experimental_candidate(dimension)
+        candidate["simpler_behavior"] = (
+            "Return values stay equivalent; no exceptions or errors; ordering is unchanged; "
+            "persistence is unchanged; no concurrency change; no compatibility break."
+        )
+        outputs[auditor] = {"terminal_status": "success", "output": [candidate]}
+
+    result = validate_experimental_auditor_outputs(
+        outputs=outputs,
+        valid_diff_lines={"src/app.py": [42]},
+        snapshot={"head_sha": "head", "diff_sha256": "diff"},
+        review_root=str(tmp_path),
+    )
+
+    assert result["state"] == "complete"
+
+
+@pytest.mark.parametrize(
     ("failure_kind", "expected_reason"),
     [
         ("tool_failure", "tool_failure"),

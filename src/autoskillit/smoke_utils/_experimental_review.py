@@ -63,7 +63,7 @@ _EXPERIMENTAL_BOUNDARY_STATUSES = {
 }
 _SIMPLER_BEHAVIOR_FACETS = {
     "return_values": ("return",),
-    "exceptions_errors": ("exception", "error"),
+    "exceptions_errors": ("exception", "exceptions", "error", "errors"),
     "ordering": ("ordering",),
     "persistence": ("persistence",),
     "concurrency": ("concurrency",),
@@ -223,10 +223,16 @@ def _missing_simpler_behavior_facets(value: object) -> list[str]:
     if not _is_non_empty_string(value):
         return list(_SIMPLER_BEHAVIOR_FACETS)
     normalized = str(value).casefold()
+    tokens = set(
+        "".join(
+            character if character.isalnum() or character in {"_", "-"} else " "
+            for character in normalized
+        ).split()
+    )
     return [
         facet
         for facet, accepted_terms in _SIMPLER_BEHAVIOR_FACETS.items()
-        if not any(term in normalized for term in accepted_terms)
+        if not any(term in tokens for term in accepted_terms)
     ]
 
 

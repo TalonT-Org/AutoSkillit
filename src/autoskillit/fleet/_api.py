@@ -429,6 +429,7 @@ def _build_success_short_circuit(
     provenance.confirm(
         DispatchEffectName.PRIOR_DISPATCH_BINDING,
         receipt="authoritative prior dispatch state reported success",
+        retry_relevant=False,
         identities={
             "dispatch_id": record.dispatch_id,
             "dispatched_session_id": record.dispatched_session_id,

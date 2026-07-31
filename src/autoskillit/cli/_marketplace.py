@@ -293,8 +293,6 @@ def _typed_result(
     verified_identity: str | None = None,
     findings: tuple[str, ...] = (),
 ) -> InstallResult:
-    for finding in findings:
-        print(finding)
     return InstallResult(
         outcome=outcome,
         failure_kind=failure_kind,

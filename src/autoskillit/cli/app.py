@@ -291,6 +291,9 @@ def install(
     else:
         result = _install(request=request)
 
+    for finding in result.findings:
+        print(finding)
+
     status = process_status_for_result(result)
     if status is not InstallProcessStatus.SUCCESS:
         raise SystemExit(int(status))

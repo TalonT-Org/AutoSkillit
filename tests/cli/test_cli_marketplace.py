@@ -88,7 +88,7 @@ def test_marketplace_module_still_importable():
 
 
 class TestInstallPluginInstallCapableGuard:
-    def test_rejects_when_plugin_install_not_capable(self, monkeypatch, capsys):
+    def test_rejects_when_plugin_install_not_capable(self, monkeypatch):
         """install() returns a typed decline when capability is false."""
         from unittest.mock import MagicMock
 
@@ -109,10 +109,9 @@ class TestInstallPluginInstallCapableGuard:
         result = install(request=_direct_request())
 
         assert result.outcome is InstallOutcome.DECLINED
-        captured = capsys.readouterr()
-        assert "plugin_install_capable" in captured.out
+        assert "plugin_install_capable" in result.findings[0]
 
-    def test_passes_guard_when_plugin_install_capable(self, monkeypatch, capsys):
+    def test_passes_guard_when_plugin_install_capable(self, monkeypatch):
         """install() reaches the typed session deferral when capability is true."""
         from unittest.mock import MagicMock
 
@@ -136,5 +135,4 @@ class TestInstallPluginInstallCapableGuard:
         result = install(request=_direct_request())
 
         assert result.outcome is InstallOutcome.DEFERRED
-        captured = capsys.readouterr()
-        assert "plugin_install_capable" not in captured.out
+        assert all("plugin_install_capable" not in finding for finding in result.findings)

@@ -75,7 +75,7 @@ def _successful_claude_run(home: Path):
 
 
 class TestCLIInstall:
-    def test_install_validates_scope(self, capsys: pytest.CaptureFixture) -> None:
+    def test_install_validates_scope(self) -> None:
         """install rejects invalid scope values."""
         from autoskillit.cli._install_contract import InstallFailureKind, InstallOutcome
         from autoskillit.cli._marketplace import install
@@ -83,13 +83,14 @@ class TestCLIInstall:
         result = install(request=_direct_request("invalid"))
         assert result.outcome is InstallOutcome.FAILED
         assert result.failure_kind is InstallFailureKind.PREFLIGHT
-        captured = capsys.readouterr()
-        assert "Invalid scope" in captured.out
+        assert "Invalid scope" in result.findings[0]
 
     def test_install_errors_without_claude(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """install prints manual instructions when claude is not on PATH."""
+        """install returns manual instructions when claude is not on PATH."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setattr(shutil, "which", lambda _cmd, *, path=None: None)
         monkeypatch.delenv("CLAUDECODE", raising=False)
@@ -103,9 +104,8 @@ class TestCLIInstall:
         result = install(request=_direct_request())
         assert result.outcome is InstallOutcome.FAILED
         assert result.failure_kind is InstallFailureKind.PREFLIGHT
-        captured = capsys.readouterr()
-        assert "claude plugin marketplace add" in captured.out
-        assert "claude plugin install" in captured.out
+        assert "claude plugin marketplace add" in result.findings[0]
+        assert "claude plugin install" in result.findings[0]
 
     def test_install_creates_marketplace_dir(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -331,7 +331,9 @@ class TestCLIInstall:
         assert (published / ".claude-plugin" / "plugin.json").is_file()
 
     def test_install_backend_guard_returns_declined_for_non_claude_code(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
     ) -> None:
         """install() returns a declined result when capability is false."""
         from unittest.mock import MagicMock
@@ -354,8 +356,7 @@ class TestCLIInstall:
         from autoskillit.cli._install_contract import InstallOutcome
 
         assert result.outcome is InstallOutcome.DECLINED
-        captured = capsys.readouterr()
-        assert "plugin_install_capable" in captured.out
+        assert "plugin_install_capable" in result.findings[0]
 
     def test_install_backend_guard_allows_claude_code(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture

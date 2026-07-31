@@ -427,7 +427,6 @@ def test_claude_lookup_uses_sealed_path_once_without_ambient_fallback(
 def test_optional_maintenance_obligation_returns_before_any_preflight(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
     from autoskillit.cli import _marketplace
 
@@ -438,7 +437,7 @@ def test_optional_maintenance_obligation_returns_before_any_preflight(
     )
     result = _marketplace.install(request=_maintenance_request(required=False))
     assert result.outcome is InstallOutcome.NOT_REQUIRED
-    assert "not required" in capsys.readouterr().out
+    assert "not required" in result.findings[0]
     assert not (tmp_path / ".autoskillit").exists()
 
 
@@ -515,7 +514,6 @@ def test_install_boundary_rejects_worktree_without_persistent_mutation(
 def test_success_path_holds_both_transaction_guards_through_commit(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
     marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
     import autoskillit.workspace as workspace
@@ -592,7 +590,6 @@ def test_success_path_holds_both_transaction_guards_through_commit(
     assert result.verified_identity == f"{_PLUGIN_REF}:{_VERSION}"
     success_message = f"Plugin installed: {_PLUGIN_REF} (scope: user)"
     assert result.findings == (success_message,)
-    assert capsys.readouterr().out == f"{success_message}\n"
     assert events == [
         "install_lock_acquired",
         "artifact_lease_acquired",
@@ -692,7 +689,6 @@ def test_failure_after_every_persistent_mutation_stage_restores_prestate(
     stage: str,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
     marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
     import autoskillit.workspace as workspace
@@ -896,7 +892,6 @@ def test_failure_after_every_persistent_mutation_stage_restores_prestate(
         assert retiring.read_text(encoding="utf-8") == "before-retirement"
     if stage == "exact_postcondition_verification":
         assert verification_events == ["verified"]
-    assert "Plugin installed:" not in capsys.readouterr().out
 
 
 def test_direct_install_failure_removes_transaction_created_workspace_temp(

@@ -594,12 +594,14 @@ def test_stale_snapshot_uses_bounded_review_loop_without_receipt_check(
 ) -> None:
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
     review_step = recipe.steps["review_pr"]
-    stale_route = next(
+    stale_routes = [
         condition
         for condition in review_step.on_result.conditions
         if "stale_snapshot" in str(condition.when)
-    )
+    ]
 
+    assert len(stale_routes) == 1
+    stale_route = stale_routes[0]
     assert stale_route.route == "check_review_loop"
     check_loop = recipe.steps["check_review_loop"]
     exhausted_stale_route = next(

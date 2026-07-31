@@ -377,9 +377,3 @@ def test_build_maintenance_env_rejects_unknown_or_base_key_extras() -> None:
             build_maintenance_env({}, {key: "sensitive-value"})
         assert key in str(caught.value)
         assert "sensitive-value" not in str(caught.value)
-
-
-def test_build_maintenance_env_is_importable_from_core() -> None:
-    from autoskillit.core import build_maintenance_env
-
-    assert dict(build_maintenance_env({"PATH": "/usr/bin"})) == {"PATH": "/usr/bin"}

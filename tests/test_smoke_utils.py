@@ -1366,14 +1366,18 @@ def test_experimental_dispatch_closes_on_ineligible_authority(
 
 def test_experimental_output_validation_is_atomic_and_fixed_order(tmp_path: Path) -> None:
     reachability, abstraction = EXPERIMENTAL_REVIEW_AUDITORS
+    input_candidates = {
+        abstraction: _experimental_candidate("overengineering_abstraction_surface"),
+        reachability: _experimental_candidate("overengineering_reachability"),
+    }
     valid_outputs = {
         abstraction: {
             "terminal_status": "success",
-            "output": [_experimental_candidate("overengineering_abstraction_surface")],
+            "output": [input_candidates[abstraction]],
         },
         reachability: {
             "terminal_status": "success",
-            "output": [_experimental_candidate("overengineering_reachability")],
+            "output": [input_candidates[reachability]],
         },
     }
     kwargs = {
@@ -1388,8 +1392,29 @@ def test_experimental_output_validation_is_atomic_and_fixed_order(tmp_path: Path
         EXPERIMENTAL_REVIEW_AUDITORS
     )
     assert [candidate["original_index"] for candidate in complete["candidates"]] == [0, 0]
-    assert all(candidate["candidate_id"] for candidate in complete["candidates"])
-    assert all(candidate["record_digest"] for candidate in complete["candidates"])
+    expected_identities = []
+    for auditor_name in EXPERIMENTAL_REVIEW_AUDITORS:
+        canonical = json.dumps(
+            input_candidates[auditor_name],
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        record_digest = hashlib.sha256(canonical.encode()).hexdigest()
+        identity = json.dumps(
+            {
+                "snapshot": kwargs["snapshot"],
+                "auditor_name": auditor_name,
+                "original_index": 0,
+                "record_digest": record_digest,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        expected_identities.append((record_digest, hashlib.sha256(identity.encode()).hexdigest()))
+    assert [
+        (candidate["record_digest"], candidate["candidate_id"])
+        for candidate in complete["candidates"]
+    ] == expected_identities
 
     malformed_outputs = json.loads(json.dumps(valid_outputs))
     malformed_outputs[abstraction]["output"][0]["message"] = ""

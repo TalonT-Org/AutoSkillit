@@ -97,11 +97,14 @@ def _two_column_cells(line: str) -> tuple[str, str] | None:
     return cells
 
 
-def _is_backticked_file_cell(cell: str) -> bool:
+def _is_file_cell(cell: str) -> bool:
     match = _BACKTICKED_CELL_RE.fullmatch(cell)
-    if match is None:
-        return False
-    value = match.group("value").strip()
+    if match is not None:
+        value = match.group("value").strip()
+    else:
+        if "`" in cell:
+            return False
+        value = cell.removeprefix("~~").removesuffix("~~").strip()
     if value.endswith("/"):
         return False
     basename = PurePosixPath(value).name
@@ -127,7 +130,7 @@ def _catalog_violations(markdown: str) -> list[str]:
             violations.append(f"catalog header at line {line_number}")
 
         cells = _two_column_cells(line)
-        if cells is not None and _is_backticked_file_cell(cells[0]):
+        if cells is not None and _is_file_cell(cells[0]):
             file_row_streak.append(line_number)
         else:
             flush_file_rows()
@@ -182,8 +185,14 @@ Architecture notes.
 | `alpha.py` | Alpha |
 | `nested/beta.py` | Beta |
 """
+    unquoted = """\
+Architecture notes.
+| alpha.py | Alpha |
+| nested/beta.py | Beta |
+"""
     assert _catalog_violations(renamed)
     assert _catalog_violations(headerless)
+    assert _catalog_violations(unquoted)
 
 
 @pytest.mark.parametrize(

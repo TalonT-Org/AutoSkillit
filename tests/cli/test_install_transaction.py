@@ -340,23 +340,22 @@ def _instrument_transaction_ownership(
 
     ownership = {"install_lock": False, "artifact_lease": False}
 
-    class ObservedInstallLock:
+    class ObservedInstallLock(core._InstallLock):
         def __enter__(self) -> ObservedInstallLock:
             assert not ownership["install_lock"]
+            acquired = super().__enter__()
+            assert acquired is self
             ownership["install_lock"] = True
             events.append("install_lock_acquired")
             return self
 
         def __exit__(self, *_args: object) -> None:
             assert ownership["install_lock"]
+            super().__exit__(*_args)
             events.append("install_lock_released")
             ownership["install_lock"] = False
 
-    class ObservedArtifactLease:
-        def __init__(self, lock_path: Path) -> None:
-            lock_path.parent.mkdir(parents=True, exist_ok=True)
-            self._fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
-
+    class ObservedArtifactLease(core.ArtifactLease):
         @classmethod
         def acquire_exclusive(
             cls,
@@ -369,23 +368,29 @@ def _instrument_transaction_ownership(
                 "exclusive artifact lease was acquired before the install lock"
             )
             assert not ownership["artifact_lease"]
+            lease = super().acquire_exclusive(lock_path, blocking=blocking)
+            assert isinstance(lease, cls)
             ownership["artifact_lease"] = True
             events.append("artifact_lease_acquired")
-            return cls(lock_path)
+            return lease
 
         def __enter__(self) -> ObservedArtifactLease:
             assert ownership["artifact_lease"]
+            acquired = super().__enter__()
+            assert acquired is self
             events.append("artifact_lease_entered")
             return self
 
-        def __exit__(self, *_args: object) -> None:
+        def __exit__(
+            self,
+            exc_type: object,
+            exc: object,
+            traceback: object,
+        ) -> None:
             assert ownership["artifact_lease"]
+            super().__exit__(exc_type, exc, traceback)
             events.append("artifact_lease_released")
             ownership["artifact_lease"] = False
-            os.close(self._fd)
-
-        def fileno(self) -> int:
-            return self._fd
 
     monkeypatch.setattr(core, "_InstallLock", ObservedInstallLock)
     monkeypatch.setattr(core, "ArtifactLease", ObservedArtifactLease)

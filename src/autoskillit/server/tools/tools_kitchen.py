@@ -62,10 +62,6 @@ from autoskillit.pipeline import (
     KitchenOpenPhase,
     KitchenRetryDisposition,
     ToolContext,
-    _transition_abort,
-    _transition_ambiguous,
-    _transition_confirm,
-    _transition_degraded,
     advance_kitchen_phase,
     bind_kitchen_intent,
     canonical_kitchen_intent_fingerprint,
@@ -79,6 +75,10 @@ from autoskillit.pipeline import (
     new_kitchen_open_state,
     release_kitchen_request,
     start_kitchen_effect,
+    transition_abort,
+    transition_ambiguous,
+    transition_confirm,
+    transition_degraded,
 )
 from autoskillit.server import mcp
 from autoskillit.server._guards import _backend_supports_quota, _require_orchestrator_exact
@@ -765,7 +765,7 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
     _ensure_kitchen_transition(ctx)
     if _transition_start(ctx, "gate_enablement"):
         ctx.gate.enable()
-        _transition_confirm(
+        transition_confirm(
             ctx,
             "gate_enablement",
             receipt="gate:enabled",
@@ -777,7 +777,7 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
         ctx.active_recipe_steps = {}
         ctx.active_recipe_ingredients = frozenset()
         clear_recipe_execution(ctx)
-        _transition_confirm(ctx, "active_recipe_reset", receipt="active_recipe:cleared")
+        transition_confirm(ctx, "active_recipe_reset", receipt="active_recipe:cleared")
     logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)
     _supports_quota = _backend_supports_quota(ctx)
 
@@ -786,20 +786,20 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
             _write_hook_config()
         except Exception as exc:
             ctx.gate.disable()
-            _transition_ambiguous(ctx, "hook_configuration", exc)
+            transition_ambiguous(ctx, "hook_configuration", exc)
             logger.warning("open_kitchen_failure", stage="write_hook_config", exc_info=True)
             return _kitchen_failure_envelope(exc, stage="write_hook_config")
-        _transition_confirm(ctx, "hook_configuration", receipt="hook_config:written")
+        transition_confirm(ctx, "hook_configuration", receipt="hook_config:written")
 
     if _transition_start(ctx, "quota_cache_prime"):
         try:
             await _prime_quota_cache(supports_quota_check=_supports_quota)
         except Exception as exc:
             ctx.gate.disable()
-            _transition_ambiguous(ctx, "quota_cache_prime", exc)
+            transition_ambiguous(ctx, "quota_cache_prime", exc)
             logger.warning("open_kitchen_failure", stage="prime_quota_cache", exc_info=True)
             return _kitchen_failure_envelope(exc, stage="prime_quota_cache")
-        _transition_confirm(ctx, "quota_cache_prime", receipt="quota_cache:primed")
+        transition_confirm(ctx, "quota_cache_prime", receipt="quota_cache:primed")
 
     if _transition_start(ctx, "quota_task_start"):
         if ctx.quota_refresh_task is not None:
@@ -814,10 +814,10 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
             )
         except Exception as exc:
             ctx.gate.disable()
-            _transition_ambiguous(ctx, "quota_task_start", exc)
+            transition_ambiguous(ctx, "quota_task_start", exc)
             logger.warning("open_kitchen_failure", stage="start_quota_refresh", exc_info=True)
             return _kitchen_failure_envelope(exc, stage="start_quota_refresh")
-        _transition_confirm(
+        transition_confirm(
             ctx,
             "quota_task_start",
             receipt="quota_task:owned",
@@ -828,19 +828,19 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
         try:
             clear_kitchens_for_pid(os.getpid())
         except Exception as exc:
-            _transition_degraded(ctx, "registry_prune", exc)
+            transition_degraded(ctx, "registry_prune", exc)
             logger.warning("open_kitchen_clear_pid_failed", exc_info=True)
         else:
-            _transition_confirm(ctx, "registry_prune", receipt="registry:pid_cleared")
+            transition_confirm(ctx, "registry_prune", receipt="registry:pid_cleared")
 
     if _transition_start(ctx, "registry_update"):
         try:
             _register_active_recipe_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
         except Exception as exc:
-            _transition_degraded(ctx, "registry_update", exc)
+            transition_degraded(ctx, "registry_update", exc)
             logger.warning("open_kitchen_registry_failed", exc_info=True)
         else:
-            _transition_confirm(
+            transition_confirm(
                 ctx,
                 "registry_update",
                 receipt="registry:kitchen_registered",
@@ -851,19 +851,19 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
         try:
             prune_stale_kitchen_state(ctx.project_dir, ctx.kitchen_id)
         except Exception as exc:
-            _transition_degraded(ctx, "tracker_prune", exc)
+            transition_degraded(ctx, "tracker_prune", exc)
             logger.warning("open_kitchen_prune_trackers_failed", exc_info=True)
         else:
-            _transition_confirm(ctx, "tracker_prune", receipt="trackers:pruned")
+            transition_confirm(ctx, "tracker_prune", receipt="trackers:pruned")
 
     if _transition_start(ctx, "marker_sweep"):
         try:
             sweep_stale_markers()
         except Exception as exc:
-            _transition_degraded(ctx, "marker_sweep", exc)
+            transition_degraded(ctx, "marker_sweep", exc)
             logger.warning("open_kitchen_sweep_markers_failed", exc_info=True)
         else:
-            _transition_confirm(ctx, "marker_sweep", receipt="markers:swept")
+            transition_confirm(ctx, "marker_sweep", receipt="markers:swept")
 
     if _transition_start(ctx, "stale_dispatch_reap"):
         try:
@@ -875,10 +875,10 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
                     heartbeat_grace_seconds=90.0,
                 )
         except Exception as exc:
-            _transition_degraded(ctx, "stale_dispatch_reap", exc)
+            transition_degraded(ctx, "stale_dispatch_reap", exc)
             logger.warning("open_kitchen_reap_failed", exc_info=True)
         else:
-            _transition_confirm(ctx, "stale_dispatch_reap", receipt="dispatches:reaped")
+            transition_confirm(ctx, "stale_dispatch_reap", receipt="dispatches:reaped")
 
     ctx.gate_infrastructure_ready = True
     return None
@@ -1309,7 +1309,7 @@ async def open_kitchen(
                 if _transition_start(tool_ctx, "client_visibility"):
                     mcp.enable(tags={"kitchen"})
                     mcp.enable(tags={"plan-review"})
-                    _transition_confirm(
+                    transition_confirm(
                         tool_ctx,
                         "client_visibility",
                         receipt="visibility:global_enabled",
@@ -1319,14 +1319,14 @@ async def open_kitchen(
                     try:
                         await ctx.send_notification(ToolListChangedNotification())
                     except Exception as exc:
-                        _transition_degraded(tool_ctx, "visibility_notification", exc)
+                        transition_degraded(tool_ctx, "visibility_notification", exc)
                         logger.warning(
                             "open_kitchen_notify_failed",
                             stage="send_notification",
                             exc_info=True,
                         )
                     else:
-                        _transition_confirm(
+                        transition_confirm(
                             tool_ctx,
                             "visibility_notification",
                             receipt="visibility:list_changed_sent",
@@ -1336,13 +1336,13 @@ async def open_kitchen(
                     try:
                         await ctx.enable_components(tags={"kitchen"})
                     except Exception as exc:
-                        _transition_ambiguous(tool_ctx, "client_visibility", exc)
+                        transition_ambiguous(tool_ctx, "client_visibility", exc)
                         logger.warning(
                             "open_kitchen_failure", stage="enable_components", exc_info=True
                         )
                         tool_ctx.gate_infrastructure_ready = False
                         return _kitchen_failure_envelope(exc, stage="enable_components")
-                    _transition_confirm(
+                    transition_confirm(
                         tool_ctx,
                         "client_visibility",
                         receipt="visibility:client_enabled",
@@ -1358,13 +1358,13 @@ async def open_kitchen(
                         experimental_enabled=_kctx.config.experimental_enabled,
                     )
                 except Exception as exc:
-                    _transition_ambiguous(tool_ctx, "subset_visibility", exc)
+                    transition_ambiguous(tool_ctx, "subset_visibility", exc)
                     logger.warning(
                         "open_kitchen_failure", stage="redisable_subsets", exc_info=True
                     )
                     tool_ctx.gate_infrastructure_ready = False
                     return _kitchen_failure_envelope(exc, stage="redisable_subsets")
-                _transition_confirm(
+                transition_confirm(
                     tool_ctx,
                     "subset_visibility",
                     receipt="visibility:subsets_reconciled",
@@ -1485,7 +1485,7 @@ async def open_kitchen(
                     return _kitchen_failure_envelope(exc, stage="load_and_validate")
                 if ingredients_only:
                     if not result.get("valid", False):
-                        _transition_abort(tool_ctx, "recipe_serving")
+                        transition_abort(tool_ctx, "recipe_serving")
                     return _render_ingredients_only_response(
                         result,
                         declared_ingredients=(
@@ -1528,12 +1528,12 @@ async def open_kitchen(
                         tool_ctx.active_recipe_ingredients = None
                 # Default to False for missing 'valid' so a absent key is treated as invalid
                 if not result.get("valid", False) or not result.get("content", ""):
-                    _transition_abort(tool_ctx, "recipe_serving")
+                    transition_abort(tool_ctx, "recipe_serving")
                     tool_ctx.gate.disable()
                     tool_ctx.gate_infrastructure_ready = False
                     return _recipe_validation_error_response(name, result)
                 if not result.get("dispatch_feasible", True):
-                    _transition_abort(tool_ctx, "recipe_serving")
+                    transition_abort(tool_ctx, "recipe_serving")
                     return await _dispatch_infeasible_response(
                         result,
                         tool_ctx.backend,
@@ -1556,7 +1556,7 @@ async def open_kitchen(
                         project_root=tool_ctx.project_dir,
                     )
                     if _preflight_err is not None:
-                        _transition_abort(tool_ctx, "recipe_serving")
+                        transition_abort(tool_ctx, "recipe_serving")
                         tool_ctx.gate.disable()
                         tool_ctx.gate_infrastructure_ready = False
                         await ctx.disable_components(tags={"kitchen"})
@@ -1642,7 +1642,7 @@ async def open_kitchen(
                 return _kitchen_failure_envelope(exc, stage="load_and_validate")
             if ingredients_only:
                 if not result.get("valid", False):
-                    _transition_abort(tool_ctx, "recipe_serving")
+                    transition_abort(tool_ctx, "recipe_serving")
                 return _render_ingredients_only_response(
                     result,
                     declared_ingredients=(
@@ -1703,13 +1703,13 @@ async def open_kitchen(
                 return _kitchen_failure_envelope(exc, stage="apply_triage_gate")
 
             if not result.get("valid", False) or not result.get("content", ""):
-                _transition_abort(tool_ctx, "recipe_serving")
+                transition_abort(tool_ctx, "recipe_serving")
                 tool_ctx.gate.disable()
                 tool_ctx.gate_infrastructure_ready = False
                 return _recipe_validation_error_response(name, result)
 
             if not result.get("dispatch_feasible", True):
-                _transition_abort(tool_ctx, "recipe_serving")
+                transition_abort(tool_ctx, "recipe_serving")
                 return await _dispatch_infeasible_response(
                     result,
                     tool_ctx.backend,
@@ -1737,7 +1737,7 @@ async def open_kitchen(
                     project_root=tool_ctx.project_dir,
                 )
                 if _preflight_err is not None:
-                    _transition_abort(tool_ctx, "recipe_serving")
+                    transition_abort(tool_ctx, "recipe_serving")
                     tool_ctx.gate.disable()
                     tool_ctx.gate_infrastructure_ready = False
                     await ctx.disable_components(tags={"kitchen"})

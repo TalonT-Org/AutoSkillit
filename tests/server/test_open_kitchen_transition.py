@@ -8,10 +8,9 @@ from typing import Any
 
 import pytest
 
-from autoskillit.pipeline import KitchenOpenPhase, ToolContext
+from autoskillit.pipeline import KitchenOpenPhase, ToolContext, transition_abort
 from autoskillit.server.tools.tools_kitchen import (
     _bind_open_kitchen_transition,
-    _transition_abort,
     _transition_start,
 )
 
@@ -108,7 +107,7 @@ async def test_proven_predispatch_failure_remains_retry_safe(
         nonlocal calls
         calls += 1
         assert _transition_start(tool_ctx, "recipe_serving") is True
-        _transition_abort(tool_ctx, "recipe_serving")
+        transition_abort(tool_ctx, "recipe_serving")
         return '{"success":false,"error":"recipe_not_found"}'
 
     handler = _transition_handler(implementation)

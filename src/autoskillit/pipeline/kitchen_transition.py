@@ -36,6 +36,10 @@ __all__ = [
     "prepare_kitchen_response",
     "release_kitchen_request",
     "start_kitchen_effect",
+    "transition_abort",
+    "transition_ambiguous",
+    "transition_confirm",
+    "transition_degraded",
 ]
 
 
@@ -467,7 +471,7 @@ def kitchen_state_payload(state: KitchenOpenState) -> dict[str, Any]:
     }
 
 
-def _transition_abort(tool_ctx: ToolContext, name: str) -> None:
+def transition_abort(tool_ctx: ToolContext, name: str) -> None:
     """Restore retry-safe state after a proven pre-dispatch application failure."""
     with tool_ctx.kitchen_transition_lock:
         tool_ctx.kitchen_open_state = abort_kitchen_effect(
@@ -476,7 +480,7 @@ def _transition_abort(tool_ctx: ToolContext, name: str) -> None:
         )
 
 
-def _transition_confirm(
+def transition_confirm(
     tool_ctx: ToolContext,
     name: str,
     *,
@@ -492,7 +496,7 @@ def _transition_confirm(
         )
 
 
-def _transition_degraded(
+def transition_degraded(
     tool_ctx: ToolContext,
     name: str,
     exc: BaseException,
@@ -506,7 +510,7 @@ def _transition_degraded(
         )
 
 
-def _transition_ambiguous(
+def transition_ambiguous(
     tool_ctx: ToolContext,
     name: str,
     exc: BaseException,

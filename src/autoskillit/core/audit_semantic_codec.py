@@ -139,12 +139,16 @@ def _require_scalar(value: object, *, path: str) -> None:
         )
 
 
-def _validate_exact_recursive_schema(raw: dict[str, Any]) -> None:
+def _validate_exact_recursive_schema(
+    raw: dict[str, Any],
+    *,
+    expected_schema_version: int,
+) -> None:
     top = _require_exact_mapping(raw, expected_keys=_TOP_LEVEL_KEYS, path="$")
     if (
         isinstance(top["schema_version"], bool)
         or not isinstance(top["schema_version"], int)
-        or top["schema_version"] != AUDIT_SEMANTIC_SCHEMA_VERSION
+        or top["schema_version"] != expected_schema_version
     ):
         raise AuditSemanticCodecError(
             "invalid_semantic_schema",
@@ -233,7 +237,10 @@ def load_audit_semantic_result(
             "audit semantic artifact is not strict canonical versioned JSON",
         )
 
-    _validate_exact_recursive_schema(raw)
+    _validate_exact_recursive_schema(
+        raw,
+        expected_schema_version=AUDIT_SEMANTIC_SCHEMA_VERSION,
+    )
     try:
         result = AuditSemanticResult.from_dict(raw)
     except (TypeError, ValueError) as exc:
@@ -282,7 +289,10 @@ def load_standalone_audit_evidence(
             "standalone audit artifact has an invalid kind",
         )
 
-    _validate_exact_recursive_schema({key: value for key, value in raw.items() if key != "kind"})
+    _validate_exact_recursive_schema(
+        {key: value for key, value in raw.items() if key != "kind"},
+        expected_schema_version=STANDALONE_AUDIT_EVIDENCE_SCHEMA_VERSION,
+    )
     try:
         result = StandaloneAuditEvidence.from_dict(raw)
     except (TypeError, ValueError) as exc:

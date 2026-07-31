@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+import autoskillit.core.audit_semantic_codec as audit_semantic_codec
 from autoskillit.core.audit_semantic_codec import (
     AuditSemanticCodecError,
     canonical_full_reference_records_match,
@@ -251,6 +252,7 @@ def test_full_reference_comparison_checks_order_and_non_digest_fields(
 
 def test_standalone_loader_requires_exact_kind_and_canonical_shape(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     semantic = _semantic_result(tmp_path)
     evidence = StandaloneAuditEvidence(
@@ -263,6 +265,7 @@ def test_standalone_loader_requires_exact_kind_and_canonical_shape(
     )
     path = tmp_path / "standalone.json"
     _write_payload(path, evidence.to_dict())
+    monkeypatch.setattr(audit_semantic_codec, "AUDIT_SEMANTIC_SCHEMA_VERSION", 2)
 
     loaded = load_standalone_audit_evidence(path, tmp_path)
 

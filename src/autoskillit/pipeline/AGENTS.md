@@ -2,25 +2,6 @@
 
 IL-1 pipeline state — per-tool-call state containers, gate logic, audit log, telemetry.
 
-## Files
-
-| File | Purpose |
-|------|---------|
-| `__init__.py` | Re-exports public protocol implementations |
-| `audit.py` | `FailureRecord`, `DefaultAuditLog` |
-| `background.py` | `DefaultBackgroundSupervisor` |
-| `_context_admission_storage.py` | Private-file identity, fsync, initialization-link recovery, and bounded SQLite reads |
-| `context.py` | `ToolContext` DI container |
-| `context_admission_ledger.py` | Crash-safe SQLite journal, recovery, and shadow projections for context admission |
-| `gate.py` | `DefaultGateState`, `gate_error_result` |
-| `github_api_log.py` | `DefaultGitHubApiLog` — session-scoped GitHub API request accumulator |
-| `mcp_response.py` | Per-tool response size tracking |
-| `recipe_initialization.py` | Pure typed reducer for named-recipe INITIALIZING/READY lifecycle state |
-| `telemetry_fmt.py` | Canonical token/timing display |
-| `timings.py` | `DefaultTimingLog` |
-| `tokens.py` | `DefaultTokenLog` |
-| `pr_gates.py` | `is_ci_passing`, `is_review_passing`, `partition_prs` |
-
 ## Architecture Notes
 
 `ToolContext` is the composition root injected into every MCP tool handler via

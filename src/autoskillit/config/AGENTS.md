@@ -2,16 +2,6 @@
 
 IL-1 configuration layer — `AutomationConfig`, Dynaconf loader, schema validation.
 
-## Files
-
-| File | Purpose |
-|------|---------|
-| `__init__.py` | Re-exports `AutomationConfig`, `load_config`, `ConfigSchemaError` |
-| `ingredient_defaults.py` | Per-recipe ingredient default resolution |
-| `settings.py` | `AutomationConfig` + schema validate/write API |
-| `_config_dataclasses.py` | 29 leaf dataclasses + `ProviderProfileDef` + `ConfigSchemaError` |
-| `_config_loader.py` | `_make_dynaconf` + `load_config` layer helpers |
-
 ## Architecture Notes
 
 `_config_dataclasses.py` defines the 29 leaf config dataclasses that form the schema tree

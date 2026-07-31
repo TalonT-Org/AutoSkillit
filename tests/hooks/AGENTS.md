@@ -2,62 +2,7 @@
 
 Hook script behavior, registration, and bridge tests.
 
-## Files
-
-| File | Purpose |
-|------|---------|
-| `__init__.py` | empty |
-| `conftest.py` | Per-test project-root CWD isolation for every hook test (autouse `_isolate_hook_cwd`) |
-| `test_fmt_status.py` | Tests for autoskillit.hooks.formatters._fmt_status |
-| `test_hook_dispatch.py` | Tests for the stable hook dispatcher (_dispatch.py) — resolution, retired mapping, graceful degrade |
-| `test_hook_config_bridge.py` | Regression tests for quota and output-budget policy serialization into the stdlib hook config bridge |
-| `test_hook_executability.py` | Tests for hook command executability — validates invocation path via subprocess |
-| `test_hook_registration_coverage.py` | Structural test: every hook script is registered in HOOK_REGISTRY |
-| `test_hook_lifecycle_contract.py` | Registry-level persistent-resource producer/owner contracts, including the single shell-capture authority resource |
-| `test_hook_registry.py` | Tests for hook_registry.py — L0 hook identity model |
-| `test_hook_settings.py` | Tests for the shared stdlib-only quota hook settings resolver |
-| `test_hook_sync.py` | Sync tests: verify parallel stdlib-only hook scripts stay aligned with server code |
-| `test_lint_after_edit_hook.py` | Tests for lint_after_edit_hook.py PostToolUse hook |
-| `test_hook_output_contract.py` | Contract tests: no PostToolUse hook forwards raw tool_response in output |
-| `test_quota_check.py` | Tests for the quota_check PreToolUse hook |
-| `test_quota_post_check.py` | Tests for the quota_post_check PostToolUse hook |
-| `test_recipe_write_advisor.py` | Tests for autoskillit.hooks.guards.recipe_write_advisor |
-| `test_review_gate_post_hook.py` | Tests for the review_gate_post_hook PostToolUse hook |
-| `test_review_loop_gate.py` | Tests for the review_loop_gate PreToolUse hook |
-| `test_session_start_hook.py` | Session-scope enforcement tests for session_start_hook.py |
-| `test_session_start_reminder.py` | Tests for the SessionStart hook — session_start_hook.py |
-| `test_skill_load_post_hook.py` | Tests for skill_load_post_hook.py PostToolUse hook |
-| `test_token_summary_appender.py` | Token summary hook script existence and source quality (2 tests); behavioral and unit tests live in tests/infra/ |
-| `test_write_guard.py` | Tests for write_guard.py PreToolUse hook |
-| `test_planner_result_naming_guard.py` | Tests for planner_result_naming_guard.py PreToolUse hook |
-| `test_codex_hooks.py` | Tests for cli/_hooks_codex.py — AST scan, hook generation, sync idempotency |
-| `test_codex_hooks_format_contract.py` | Contract tests: Codex hooks TOML format matches Codex serde expectations |
-| `test_hook_registry_codex_status.py` | Tests for HookDef.codex_status field and codex config filtering |
-| `test_recipe_contract_freshness.py` | Tests for the recipe-contract-freshness pre-commit hook |
-| `test_compose_pr_body_guard.py` | Tests for compose_pr_body_guard.py PreToolUse hook — body file Closes #N validation |
-| `test_command_classification.py` | Tests for the shared _command_classification.py command classification primitives |
-| `test_command_classification_git.py` | Tests for the git command classification primitives (is_git_command, extract_git_subcommand_and_flags) |
-| `test_shell_capture_hook.py` | Tests for shell_capture_hook.py PreToolUse input-rewrite hook — Codex scope, harness generation, fail-open |
-| `test_shell_capture_conformance.py` | Semantic conformance gate: wrapped vs raw execution agreement on exit codes and captured bytes |
-| `test_capture_artifacts.py` | Descriptor-anchored shell-capture authority, policy, collision, binding, and cleanup tests |
-| `test_capture_snapshot_authority.py` | Factory-only finalized snapshot, strict manifest codec, descriptor identity, digest, and preview authority tests |
-| `test_capture_verified_reader.py` | Opaque reference resolution, bounded descriptor reads, cleanup races, and producer-exclusive lease handoff tests |
-| `test_capture_contract.py` | Canonical V2 capture/failure transport rendering, parsing, field validation, and encoded-bound tests |
-| `test_capture_lifecycle.py` | Durable shell-capture state, cross-process carrier leases, bounded recovery, and quarantine deletion tests |
-| `test_capture_lifecycle_hook.py` | Cleanup-only SessionStart payload validation, scope, silence, and fail-open tests |
-| `test_pr_create_guard.py` | Tests for pr_create_guard.py interpreter bypass detection |
-| `test_planner_gh_discovery_guard.py` | Tests for planner_gh_discovery_guard.py interpreter bypass detection |
-| `test_ingredient_lock_guard.py` | Tests for ingredient_lock_guard.py PreToolUse hook: deny/allow, fail-open, pipeline scoping |
-| `test_remove_clone_guard_isolation.py` | Integration tests for remove_clone_guard _check_sync with clone-isolated origin topology |
-| `test_pipeline_step_post_hook.py` | Tests for pipeline_step_post_hook.py PostToolUse hook — step completion marking, progress banner, fail-open paths |
-| `test_pipeline_step_guard.py` | Tests for pipeline_step_guard.py PreToolUse advisory guard — dep-unmet warning, fail-open paths |
-| `test_test_runner_guard.py` | Tests for `test_runner_guard.py` — session scope, exempt skills, deny/allow patterns, fail-open |
-| `test_fleet_claim_guard.py` | Tests for fleet_claim_guard.py PreToolUse hook — blocks fresh dispatch on in-progress issues |
-| `test_resume_gate_post_hook.py` | Tests for resume_gate_post_hook.py PostToolUse hook — records resume attempts to state file under flock |
-| `test_reset_resume_gate.py` | Tests for reset_resume_gate.py PreToolUse guard — deny/allow, name→UUID resolution, REFUSED bypass, fail-open |
-| `test_recipe_confirmed_post_hook.py` | Tests for recipe_confirmed_post_hook.py PostToolUse hook — marker write, idempotency, fail-open |
-| `test_quota_guard_state_post_hook.py` | Tests for quota_guard_state_post_hook.py PostToolUse hook — per-session quota-disable marker write/clear, atomic-failure rewrite, session isolation |
-| `test_policy_event.py` | Tests for _policy_event.py typed policy-event formatter — provenance prefix rendering |
+An autouse fixture provides project-root CWD isolation for every hook test.
 
 ## Architecture Notes
 

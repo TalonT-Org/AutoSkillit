@@ -3,33 +3,7 @@
 Claude Code `PreToolUse`/`PostToolUse`/`SessionStart` scripts.
 Sub-packages: guards/ (see guards/AGENTS.md), formatters/ (see formatters/AGENTS.md).
 
-## Files
-
-| File | Purpose |
-|------|---------|
-| `__init__.py` | Package marker (no imports) |
-| `_dispatch.py` | Stable hook dispatcher — resolves logical hook names to scripts (stdlib-only, NEVER RENAME) |
-| `_hook_settings.py` | Shared stdlib-only settings bridge for quota and output-budget guard hooks |
-| `lint_after_edit_hook.py` | `PostToolUse`: runs ruff format+check on `.py` files after Edit/Write |
-| `quota_post_hook.py` | Appends quota warning to `run_skill` output |
-| `review_gate_post_hook.py` | `PostToolUse`: writes/clears `review_gate_state.json` |
-| `token_summary_hook.py` | Appends Token Usage Summary to PR body |
-| `session_start_hook.py` | Injects open-kitchen reminder on resume |
-| `skill_load_post_hook.py` | `PostToolUse`: writes skill-loaded flag for non-Anthropic provider guard |
-| ~~`pipeline_step_post_hook.py`~~ | **RETIRED** — step completion is now server-authoritative (written at `run_skill` adjudication point in `tools_execution.py`) |
-| `recipe_confirmed_post_hook.py` | `PostToolUse`: writes recipe-load-confirmed marker after first successful `run_skill` |
-| `resume_gate_post_hook.py` | `PostToolUse`: records resume attempts to `resume_gate_state.json` for the reset_dispatch resume gate |
-| `quota_guard_state_post_hook.py` | `PostToolUse`: writes / clears the per-session quota-disable marker after `disable_quota_guard` / `close_kitchen` |
-| `ingredient_lock_guard.py` | PreToolUse guard script (see guards/AGENTS.md) |
-| `_hook_utils.py` | Shared stdlib-only utilities for hook scripts (e.g., `find_project_root`, `STEP_SUFFIX_RE`) |
-| `_command_classification.py` | Shared stdlib-only command classification primitives for guard scripts (interpreter/wrapper detection, git command classification) |
-| `_capture_contract.py` | Canonical bounded V2 capture/failure codec, strict parser, and rendered-size APIs |
-| `_policy_event.py` | Typed policy-event formatter for hook provenance messages (stdlib-only) |
-| `_capture/` | Small stdlib-only authority and lifecycle primitive package shared by producer and cleanup owners |
-| `_capture_artifacts.py` | Stdlib-only pipe drain, descriptor verification, transactional publication/delivery orchestration, and command runner |
-| `_capture_lifecycle.py` | Stdlib-only root-bound FINAL, reference, delivery, reader, retention, and quarantine lifecycle store |
-| `capture_lifecycle_hook.py` | Cleanup-only `SessionStart`: dual-import-safe bounded lifecycle sweep for interactive and headless sessions |
-| `shell_capture_hook.py` | `PreToolUse`: input-rewrite hook for Codex shell capture — wraps commands in a lossless capture harness (#4286 / ADR-0006) |
+The package initializer remains import-free.
 
 ## Architecture Notes
 

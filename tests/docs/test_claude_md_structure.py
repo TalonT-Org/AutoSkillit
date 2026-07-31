@@ -139,22 +139,6 @@ def test_claude_md_def_spec_location_qualified() -> None:
     )
 
 
-def test_claude_md_mentions_write_guard() -> None:
-    main_content = CLAUDE_MD.read_text()
-    guards_agents = CLAUDE_MD.parent / "src" / "autoskillit" / "hooks" / "guards" / "AGENTS.md"
-    assert "write_guard" in main_content or (
-        guards_agents.exists() and "write_guard" in guards_agents.read_text()
-    )
-
-
-def test_claude_md_mentions_dispatch_food_truck() -> None:
-    main_content = CLAUDE_MD.read_text()
-    tools_agents = CLAUDE_MD.parent / "src" / "autoskillit" / "server" / "tools" / "AGENTS.md"
-    assert "dispatch_food_truck" in main_content or (
-        tools_agents.exists() and "dispatch_food_truck" in tools_agents.read_text()
-    )
-
-
 def test_agents_md_defines_channel_b() -> None:
     assert AGENTS_MD.exists(), f"AGENTS.md not found at {AGENTS_MD}"
     content = AGENTS_MD.read_text()

@@ -2,49 +2,8 @@
 
 MCP `@mcp.tool()` handlers registered on import (21 tool modules).
 
-## Files
-
-| File | Purpose |
-|------|---------|
-| `__init__.py` | Docstring-only — tools register via `@mcp.tool()` on import |
-| `_auto_overrides.py` | Shared `_build_auto_overrides()` factory for server-authoritative ingredient injection |
-| `_authority_feedback.py` | Authority-clobber warning builder and structured rejection envelope constructor for server-authoritative ingredient violations (single source of truth shared by open_kitchen, load_recipe, lock_ingredients) |
-| `_cancellation_shield.py` | `_cancellation_shield` decorator — legacy and typed request-state conversion of transport `asyncio.CancelledError` into structured MCP results |
-| `_backend_compat.py` | Shared target resolution and fail-closed backend compatibility gate for direct headless executor callers |
-| `_types.py` | TypedDict definitions for server tool JSON responses (RunSkillResult, RunCmdResult, ToolFailureEnvelope, etc.), failure envelope factory helpers, and `deny_envelope()` canonical pre-flight deny constructor |
-| `tools_kitchen.py` | `open_kitchen`, `close_kitchen` (gate lifecycle), `recipe://` MCP resource, `prune_stale_kitchen_state` (liveness-gated tracker pruning at open; uses `kitchen_entry_alive` from `core/_plugin_cache`) |
-| `tools_config.py` | `configure_fleet`, `configure_order` (session config overlay) |
-| `tools_agents.py` | `unlock_agent_pack` tool + `agent://` resource templates |
-| `tools_ci.py` | `set_commit_status`, `check_repo_merge_state` |
-| `tools_ci_watch.py` | `wait_for_ci`, `get_ci_status`, `_auto_trigger_ci` |
-| `tools_ci_merge_queue.py` | `toggle_auto_merge`, `enqueue_pr`, `wait_for_merge_queue` |
-| `tools_clone.py` | `clone_repo`, `remove_clone`, `push_to_remote`, `register_clone_status`, `batch_cleanup_clones`, `bootstrap_clone` |
-| `_claim_helpers.py` | `ClaimDecision`, `_try_claim_with_liveness`, `_get_campaign_state_paths` — shared claiming logic for `claim_issue` and `claim_and_resolve_issue` |
-| `_execution_helpers.py` | `_import_and_call`, `_coerce_scalar`, `maybe_promote_work_dir`, `validate_path_arg_anchoring`, `resolve_relative_path_args` — execution helpers for `run_python` (no MCP tools) |
-| `_pipeline_deps.py` | `_derive_phase_a_deps` — curated Phase A pipeline dependency derivation from a recipe's routing graph (`open_kitchen` auto-init) |
-| `_preflight.py` | `_check_dispatch_feasibility`, `_get_fix_required_hook_matchers`, `filter_steps_by_post_prune` — shared preflight for `open_kitchen` and `dispatch_food_truck` |
-| `_ordering_telemetry.py` | `detect_ordering_violations`, `read_session_index_records` — REVIEW_BEFORE_PLAN ordering-violation detection over `sessions.jsonl` records |
-| `_serve_helpers.py` | Shared serve-pipeline helpers: `_build_serve_override_stack()`, `_resolve_serve_defer_unresolved()`, `serve_recipe()` — the only legal call site for `load_and_validate` in `server/tools/` |
-| `tools_execution.py` | `run_cmd`, `run_python`, `run_skill` |
-| `tools_fleet_dispatch.py` | `dispatch_food_truck`, `record_gate_dispatch` |
-| `tools_fleet_reset.py` | `reset_dispatch` (full dispatch artifact cleanup) |
-| `tools_git.py` | `merge_worktree`, `classify_fix`, `create_unique_branch`, `create_and_publish_branch`, `check_pr_mergeable`, `commit_files` |
-| `tools_audit_cycle.py` | `write_audit_cycle_artifact` — server-side construction, digest computation, and canonical write for hash-bound audit-cycle artifacts (`authority`, `inventory`, `disposition_report`, `plan_association`) |
-| `tools_github.py` | `fetch_github_issue`, `get_issue_title`, `report_bug` |
-| `tools_issue_headless.py` | `prepare_issue`, `enrich_issues` (headless session tools) |
-| `tools_issue_labels.py` | `claim_issue`, `release_issue` (GitHub label management) |
-| `tools_issue_composite.py` | `claim_and_resolve_issue` |
-| `tools_pr_ops.py` | `get_pr_reviews`, `bulk_close_issues` |
-| `tools_recipe.py` | Recipe tools including schema-validated, versioned `get_recipe_section` request-state capture, recreation, pagination, and bounded failure routing |
-| `tools_status.py` | `kitchen_status`, `get_pipeline_report`, `get_token_summary`, `get_timing_summary`, `analyze_tool_sequences`, `get_quota_events`, `write_telemetry_files`, `read_db` |
-| `tools_pipeline_tracker.py` | `record_pipeline_step` (pipeline step tracker init/status/complete), `resolve_tracker_order_id` (shared 3-tier tracker resolver), `mark_step_complete` (adjudication-point marker) |
-| `tools_workspace.py` | `test_check`, `reset_test_dir`, `reset_workspace` |
-
-## Test Files
-
-| File | Purpose |
-|------|---------|
-| `test_tools_agents.py` | Tests for agent pack registry, MCP resources, and `unlock_agent_pack` |
+The package initializer is docstring-only; importing tool modules performs registration.
+`serve_recipe()` is the only legal caller of `load_and_validate` within `server/tools/`.
 
 ## Architecture Notes
 

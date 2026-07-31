@@ -2,42 +2,41 @@
 
 PreToolUse guard scripts — standalone Python processes enforcing tool-call policies.
 
-## Files
+The package initializer remains import-free.
 
-| File | Purpose |
-|------|---------|
-| `__init__.py` | Package marker (no imports) |
-| `ask_user_question_guard.py` | Blocks `AskUserQuestion` before kitchen is open |
-| `background_exec_guard.py` | Blocks `run_in_background=true` on Bash/Agent calls in headless skill sessions (ADR-0001) |
-| `branch_protection_guard.py` | Blocks merge/push targeting protected branches |
-| `compose_pr_body_guard.py` | PreToolUse guard: validates compose-pr body file contains required `Closes #N` reference before `gh pr create` executes |
-| `fleet_dispatch_guard.py` | Blocks `dispatch_food_truck` from headless sessions (prevents L3->L3 recursion) |
-| `fleet_claim_guard.py` | Blocks fresh `dispatch_food_truck` on issues with `in-progress` label; forces resume via `resume_session_id` |
-| `generated_file_write_guard.py` | Blocks Write/Edit to machine-generated files (`hooks.json`, `settings.json`) |
-| `grep_pattern_lint_guard.py` | Blocks Grep with BRE `\|` syntax; surfaces corrected ERE pattern |
-| `skill_orchestration_guard.py` | Blocks `run_skill`/`run_cmd`/`run_python` from L1 skill sessions |
-| `mcp_health_advisor.py` | Detects MCP server disconnection (dead PID); non-blocking advisory |
-| `open_kitchen_guard.py` | Blocks `open_kitchen` from headless sessions; writes kitchen marker |
-| `recipe_read_guard.py` | Blocks `run_cmd`/`Bash`/`run_python` from reading recipe/skill/agent files in headless sessions — defense-in-depth against Codex auto-compaction losing recipe content |
-| `pipeline_step_guard.py` | Advisory unmet-dependency warning for `run_skill`; server-side `_check_pipeline_deps` is primary enforcer |
-| `planner_result_naming_guard.py` | Blocks Write/Edit with non-canonical planner result filenames (e.g. `P1-A1-WP2a_result.json`); denies with correction hint |
-| `planner_gh_discovery_guard.py` | Blocks GitHub issue/PR listing in planner sessions |
-| `artifact_download_guard.py` | Blocks `gh run download` and `gh release download` without `--dir` flag |
-| `git_ops_guard.py` | Blocks destructive git operations (commit --amend, push --force, reset --hard, clean -f, checkout .) in headless skill sessions |
-| `test_runner_guard.py` | Blocks direct `pytest` / `python -m pytest` invocations in headless skill sessions; directs agents to `task test-check` |
-| `pr_create_guard.py` | Blocks `gh pr create` via `run_cmd` when kitchen is open |
-| `quota_guard.py` | Blocks `run_skill` when quota threshold exceeded; fails open on missing cache |
-| `ingredient_lock_guard.py` | Blocks `run_skill` for steps locked by `lock_ingredients`; supplemental to server-side enforcement |
-| `recipe_write_advisor.py` | Non-blocking advisory for recipe YAML writes |
-| `remove_clone_guard.py` | Blocks `remove_clone` if branch has unpushed commits |
-| `review_loop_gate.py` | Blocks `wait_for_ci`/`enqueue_pr` until `check_review_loop` is called |
-| `reset_resume_gate.py` | PreToolUse guard: denies `reset_dispatch` unless a resume was attempted on the dispatch (or `force=true`); resolves name→UUID via campaign state scan; bypasses REFUSED dispatches |
-| `resume_ownership_guard.py` | Validates `resume_session_id` ownership at resume time; blocks unowned or L3 session resume |
-| `skill_cmd_guard.py` | Validates `skill_command` path argument format |
-| `skill_command_guard.py` | Blocks `run_skill` with non-slash `skill_command` |
-| `unsafe_install_guard.py` | Blocks `pip install -e` targeting system Python |
-| `skill_load_guard.py` | Denies native tools until Skill tool is called in non-Anthropic headless skill sessions; bypasses when `AUTOSKILLIT_AGENT_BACKEND == 'codex'`, when `AUTOSKILLIT_APPLICABLE_GUARDS` does not contain the guard's filename stem, and for subagents (`agent_id`) |
-| `write_guard.py` | Blocks tool calls outside allowed prefix in write-scoped sessions; bypasses when `AUTOSKILLIT_AGENT_BACKEND == 'codex'` (codex uses workspace-write sandbox instead). Tool set driven by `AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES` env var (default: Write/Edit/Bash/apply_patch) |
+## Guard Capabilities
+
+- **Session and tool access:** user questions require an open kitchen; headless sessions
+  cannot open the kitchen, and headless skill sessions cannot request background Bash or
+  Agent execution. L1 skill sessions cannot call `run_skill`, `run_cmd`, or `run_python`.
+  Skill commands must use the canonical slash-command path form.
+- **Git and pull requests:** operations against protected branches are denied. With the
+  kitchen open, `gh pr create` through `run_cmd` is blocked, and PR bodies must carry the
+  required `Closes #N` reference. In headless skill sessions, git operations block
+  `commit --amend`, `push --force`, `reset --hard`, `clean -f`, and `checkout .`.
+- **Fleet lifecycle:** headless fleet dispatch is denied to prevent L3-to-L3 recursion.
+  A fresh dispatch cannot claim an issue already marked `in-progress`; it must resume via
+  `resume_session_id`. Reset requires an earlier resume attempt unless `force=true`, with
+  name-to-UUID state resolution and a REFUSED-dispatch exemption. Resume ownership denies
+  unowned and L3 sessions, and review-loop actions remain gated on `check_review_loop`.
+- **Files and commands:** generated writes to `hooks.json`, `settings.json`, and recipe
+  `contracts/` are blocked. Headless command tools cannot read recipe/skill/agent files
+  directly. Grep rejects BRE `\|` alternation and supplies the POSIX ERE
+  form. Artifact downloads require `--dir`; editable system-Python installs, direct
+  `pytest` or `python -m pytest`, and destructive git commands are denied.
+- **Pipeline and planner policy:** unmet pipeline dependencies produce an advisory while
+  the server remains the primary enforcer. Planner writes require canonical result names,
+  planner sessions cannot discover issues or PRs through GitHub listings, quota limits
+  block skill runs but fail open when their cache is missing, and ingredient locks are
+  enforced as a supplement to the server gate.
+- **Skill loading:** non-Anthropic headless skill sessions must load the skill before
+  native tools are used. The load gate exempts Codex, subagents carrying `agent_id`, and
+  sessions whose `AUTOSKILLIT_APPLICABLE_GUARDS` omits the guard stem.
+- **Advisories and cleanup:** recipe YAML writes and a disconnected MCP server produce
+  non-blocking advisories. Clone removal is denied when the branch has unpushed commits.
+- **Write scope:** write-scoped sessions may use configured write tools only within their
+  allowed prefix. Codex is exempt because its workspace-write sandbox provides this
+  boundary; other backends use `AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES`.
 
 ## Architecture Notes
 
@@ -48,7 +47,7 @@ Each guard is a standalone Python script executed as a subprocess (not imported 
 All guards fail-**open** for malformed/unparseable input (JSON decode failure = exit 0 = approve).
 This prevents a broken hook from blocking the entire tool chain.
 
-Three guards additionally fail-**closed** for valid input with unrecognized values, as a
+Four guards additionally fail-**closed** for valid input with unrecognized values, as a
 defense-in-depth measure against privilege escalation:
 
 | Guard | Fail-closed condition | Rationale |

@@ -1026,7 +1026,6 @@ def test_registered_install_boundary_reports_every_outcome_and_suppresses_next_s
     assert diagnostic in output
     assert bool(next_steps_called) is expect_next_steps
     if not expect_next_steps:
-        assert not next_steps_called
         assert "Plugin installed:" not in output
 
 

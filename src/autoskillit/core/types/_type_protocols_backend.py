@@ -217,7 +217,14 @@ class CodingAgentBackend(Protocol):
         *,
         session_dir: Path | None = None,
         executable: ExecutableLaunchBinding | None = None,
-    ) -> list[str]: ...
+    ) -> list[str]:
+        """Return backend-specific launch-readiness errors.
+
+        ``executable`` carries the shared exact launch binding. Backends whose
+        readiness policy seals or probes that binding validate it here; backends
+        with a different readiness boundary may intentionally ignore it.
+        """
+        ...
 
     def recover_cook_history(self) -> None: ...
 

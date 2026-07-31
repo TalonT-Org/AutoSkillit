@@ -72,6 +72,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "required_session_files": "OPTIONAL",
     "required_skill_fields": "REQUIRED",
     "cook_startup_observer_capable": "OPTIONAL",
+    "cook_parent_coordination_capable": "OPTIONAL",
     "session_dir_persistent": "OPTIONAL",
     "session_dir_symlinks": "OPTIONAL",
     "session_record_types": "REQUIRED",
@@ -121,6 +122,14 @@ class TestCodingAgentBackendConformance(BackendContractBase):
             self.backend.capabilities.claude_marketplace_tool_prefix_capable,
             bool,
         )
+
+    def test_cook_parent_coordination_capability_values(self) -> None:
+        """BackendCapabilities.cook_parent_coordination_capable selects cook-parent text."""
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        assert ClaudeCodeBackend().capabilities.cook_parent_coordination_capable is False
+        assert CodexBackend().capabilities.cook_parent_coordination_capable is True
 
     def test_capabilities_returns_backend_capabilities(self) -> None:
         """BackendCapabilities contract — exercises multiple fields.

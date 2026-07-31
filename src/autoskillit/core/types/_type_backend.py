@@ -182,6 +182,8 @@ class BackendCapabilities:
     session_dir_persistent: bool = False
     # True when interactive cook launches support the guarded startup observer.
     cook_startup_observer_capable: bool = False
+    # True when fresh cook parents receive the cook-only delegate coordination instruction.
+    cook_parent_coordination_capable: bool = False
     # True when backend honors the disable-model-invocation SKILL.md frontmatter
     # key. When False, tier-2 skills are structurally omitted from the session
     # directory rather than written with gating frontmatter that the backend
@@ -339,6 +341,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     skill_sigil="/",
     session_dir_persistent=False,
     cook_startup_observer_capable=False,
+    cook_parent_coordination_capable=False,
     supports_model_invocation_gating=True,
     unnegotiated_tool_result_token_limit=46_500,
     protected_recipe_delivery_capable=False,

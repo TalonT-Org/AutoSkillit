@@ -11,8 +11,10 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.cli.session._session_cook import COOK_PARENT_COORDINATION_INSTRUCTION
 from autoskillit.core import (
     CODEX_INTAKE_DISCIPLINE_DIGEST,
+    CODEX_INTAKE_RULES,
     SESSION_TYPE_ENV_VAR,
     SESSION_TYPE_FLEET,
     SESSION_TYPE_ORCHESTRATOR,
@@ -66,6 +68,10 @@ def _assert_headless_intake_digest(backend, spec) -> None:
         assert CODEX_INTAKE_DISCIPLINE_DIGEST in spec.cmd[-1]
 
 
+def _assert_cook_parent_coordination_absent(spec) -> None:
+    assert all(COOK_PARENT_COORDINATION_INSTRUCTION not in arg for arg in spec.cmd)
+
+
 class TestFleetInteractive:
     @pytest.mark.parametrize(
         "backend",
@@ -102,6 +108,7 @@ class TestFleetInteractive:
             env_extras={SESSION_TYPE_ENV_VAR: SESSION_TYPE_FLEET},
         )
         _assert_interactive_intake_digest(backend, spec)
+        _assert_cook_parent_coordination_absent(spec)
 
 
 class TestOrchestratorInteractive:
@@ -137,6 +144,7 @@ class TestOrchestratorInteractive:
             system_prompt="Orchestrator discipline prompt",
         )
         _assert_interactive_intake_digest(backend, spec)
+        _assert_cook_parent_coordination_absent(spec)
 
 
 class TestOrchestratorHeadless:
@@ -167,6 +175,7 @@ class TestOrchestratorHeadless:
     def test_intake_digest_delivery(self, backend) -> None:
         spec = _build_orchestrator_spec(backend)
         _assert_headless_intake_digest(backend, spec)
+        _assert_cook_parent_coordination_absent(spec)
 
 
 class TestSkillSession:
@@ -210,6 +219,7 @@ class TestResumeDelivery:
             prompt="CALLER PROMPT MARKER",
         )
         _assert_headless_intake_digest(backend, spec)
+        _assert_cook_parent_coordination_absent(spec)
 
     def test_intake_digest_is_prepended_before_the_caller_prompt_for_codex(self) -> None:
         backend = CodexBackend()
@@ -240,10 +250,16 @@ class TestAgentTomlDelivery:
         toml_files = sorted((tmp_path / "agents").glob("*.toml"))
         assert len(toml_files) == expected_count
         suffix = codex_discipline_suffix()
+        assert COOK_PARENT_COORDINATION_INSTRUCTION not in suffix
+        assert COOK_PARENT_COORDINATION_INSTRUCTION not in CODEX_INTAKE_DISCIPLINE_DIGEST
+        assert all(
+            COOK_PARENT_COORDINATION_INSTRUCTION not in rule.text for rule in CODEX_INTAKE_RULES
+        )
         for toml_path in toml_files:
             parsed = tomllib.loads(toml_path.read_text(encoding="utf-8"))
             # TOML keeps the trailing newline before the closing ''' delimiter.
             assert parsed["developer_instructions"].endswith(f"{suffix}\n")
+            assert COOK_PARENT_COORDINATION_INSTRUCTION not in parsed["developer_instructions"]
 
 
 class TestSousChefDelivery:
@@ -255,6 +271,7 @@ class TestSousChefDelivery:
         assert sous_chef, "_read_full_sous_chef must return non-empty content"
         prompt = _build_orchestrator_prompt("test-recipe", "mcp__autoskillit__")
         assert sous_chef[:80] in prompt
+        assert COOK_PARENT_COORDINATION_INSTRUCTION not in prompt
         assert "uses_capabilities:" not in sous_chef
         assert "execution_role:" not in sous_chef
         assert "activate_deps:" not in sous_chef

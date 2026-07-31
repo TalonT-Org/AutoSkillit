@@ -114,6 +114,15 @@ class _InstallSnapshot:
         else:
             path.unlink()
 
+    def quarantine_install_target(self) -> bool:
+        """Remove the snapshotted install target and verify it is unoccupied."""
+        self._remove(self._target_root)
+        return self._shape(self._target_root) == "missing"
+
+    def install_target_is_directory(self) -> bool:
+        """Return whether installation materialized the expected target shape."""
+        return self._shape(self._target_root) == "directory"
+
     @classmethod
     def _restore_workspace_temp_shape(cls, path: Path, shape: str) -> None:
         current_shape = cls._shape(path)

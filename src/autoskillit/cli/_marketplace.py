@@ -579,8 +579,7 @@ def install(
                             f"Failed to register marketplace: {result.stderr.strip()}",
                         )
 
-                    _InstallSnapshot._remove(target_root)
-                    if _InstallSnapshot._shape(target_root) != "missing":
+                    if not snapshot.quarantine_install_target():
                         raise _InstallFailed(
                             InstallFailureKind.POSTCONDITION,
                             "Could not quarantine the pre-existing expected-version "
@@ -610,7 +609,7 @@ def install(
                             InstallFailureKind.CHILD,
                             f"Failed to install plugin: {result.stderr.strip()}",
                         )
-                    if _InstallSnapshot._shape(target_root) != "directory":
+                    if not snapshot.install_target_is_directory():
                         raise _InstallFailed(
                             InstallFailureKind.POSTCONDITION,
                             "Claude plugin install did not freshly materialize the "

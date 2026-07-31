@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import asyncio as _asyncio
 import os
-import threading
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -62,8 +61,6 @@ from autoskillit.hook_registry import (
 )
 from autoskillit.pipeline import (
     KitchenOpenPhase,
-    KitchenOpenState,
-    closed_kitchen_open_state,
     confirm_kitchen_effect,
     create_background_task,
     new_kitchen_open_state,
@@ -379,10 +376,6 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
     from autoskillit.server._misc import _prime_quota_cache  # circular-break
     from autoskillit.server.tools.tools_kitchen import _write_hook_config  # circular-break
 
-    state = getattr(ctx, "kitchen_open_state", None)
-    if not isinstance(state, KitchenOpenState):
-        ctx.kitchen_transition_lock = threading.RLock()
-        ctx.kitchen_open_state = closed_kitchen_open_state()
     with ctx.kitchen_transition_lock:
         state = ctx.kitchen_open_state
         if state.phase is KitchenOpenPhase.CLOSED:

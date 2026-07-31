@@ -43,6 +43,8 @@ from autoskillit.execution import (
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from autoskillit.pipeline import (
     InitializingRecipe,
+    KitchenEffectPhase,
+    KitchenRetryDisposition,
     RecipeInitializationRequirement,
     new_kitchen_open_state,
     start_kitchen_effect,
@@ -268,6 +270,76 @@ def test_finalized_response_rejects_stale_kitchen_transition_owner(tool_ctx) -> 
         "success": False,
         "error": "kitchen_transition_ownership_mismatch",
     }
+
+
+def test_finalized_response_confirms_owned_kitchen_serving_effect(tool_ctx) -> None:
+    tool_ctx.kitchen_id = "transition-owner"
+    tool_ctx.kitchen_open_state = start_kitchen_effect(
+        new_kitchen_open_state(
+            kitchen_id=tool_ctx.kitchen_id,
+            context_id="context-1",
+            operation_id="operation-1",
+        ),
+        "recipe_serving",
+    )
+    finalized = replace(
+        _finalize_recipe_delivery(
+            _payload(),
+            surface="open_kitchen",
+            recipe_name="remediation",
+            tool_ctx=tool_ctx,
+            finalized_projection=_test_projection(),
+        ),
+        initialization_activating=False,
+    )
+    assert finalized.kitchen_transition_token is not None
+
+    completed = complete_finalized_recipe_response(finalized, finalized.rendered)
+
+    assert completed == finalized.rendered
+    serving = next(
+        effect for effect in tool_ctx.kitchen_open_state.effects if effect.name == "recipe_serving"
+    )
+    assert serving.phase is KitchenEffectPhase.CONFIRMED
+    assert serving.receipt == f"response:{serving.effect_id}"
+
+
+def test_finalized_response_marks_changed_kitchen_serving_effect_ambiguous(
+    tool_ctx,
+) -> None:
+    tool_ctx.kitchen_id = "transition-owner"
+    tool_ctx.kitchen_open_state = start_kitchen_effect(
+        new_kitchen_open_state(
+            kitchen_id=tool_ctx.kitchen_id,
+            context_id="context-1",
+            operation_id="operation-1",
+        ),
+        "recipe_serving",
+    )
+    finalized = replace(
+        _finalize_recipe_delivery(
+            _payload(),
+            surface="open_kitchen",
+            recipe_name="remediation",
+            tool_ctx=tool_ctx,
+            finalized_projection=_test_projection(),
+        ),
+        initialization_activating=False,
+    )
+
+    completed = complete_finalized_recipe_response(
+        finalized,
+        "bounded replacement",
+    )
+
+    assert completed == "bounded replacement"
+    serving = next(
+        effect for effect in tool_ctx.kitchen_open_state.effects if effect.name == "recipe_serving"
+    )
+    assert serving.phase is KitchenEffectPhase.AMBIGUOUS
+    assert tool_ctx.kitchen_open_state.retry_disposition is (
+        KitchenRetryDisposition.RECONCILE_REQUIRED
+    )
 
 
 def _persist(

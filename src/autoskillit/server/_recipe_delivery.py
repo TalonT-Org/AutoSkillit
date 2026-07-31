@@ -58,8 +58,11 @@ from autoskillit.execution import (
 )
 from autoskillit.pipeline import (
     InitializingRecipe,
+    KitchenEffectPhase,
     KitchenTransitionToken,
     RecipeInitializationRequirement,
+    confirm_kitchen_effect,
+    mark_kitchen_effect_ambiguous,
 )
 from autoskillit.server._recipe_execution import (
     install_recipe_execution,
@@ -1349,14 +1352,52 @@ def complete_finalized_recipe_response(
             )
         else:
             handle = None
-    if enforced == finalized.rendered:
-        return enforced
     if handle is not None and (ledger is None or not ledger.abort(handle)):
-        return json.dumps(
+        enforced = json.dumps(
             {"success": False, "error": "recipe_delivery_receipt_abort_failed"},
             separators=(",", ":"),
         )
+    _complete_kitchen_serving_transition(finalized, enforced)
     return enforced
+
+
+def _complete_kitchen_serving_transition(
+    finalized: FinalizedRecipeResponse,
+    enforced: Any,
+) -> None:
+    """Close the owned serving effect at the response-enforcement boundary."""
+    transition_token = finalized.kitchen_transition_token
+    tool_ctx = finalized.tool_ctx
+    if transition_token is None or tool_ctx is None:
+        return
+    with tool_ctx.kitchen_transition_lock:
+        state = tool_ctx.kitchen_open_state
+        if state.operation_id != transition_token.operation_id:
+            return
+        effect = next(
+            (
+                candidate
+                for candidate in state.effects
+                if candidate.name == "recipe_serving"
+                and candidate.effect_id == transition_token.effect_id
+            ),
+            None,
+        )
+        if effect is None or effect.phase is not KitchenEffectPhase.STARTED:
+            return
+        if enforced == finalized.rendered:
+            state = confirm_kitchen_effect(
+                state,
+                effect.name,
+                receipt=f"response:{effect.effect_id}",
+            )
+        else:
+            state = mark_kitchen_effect_ambiguous(
+                state,
+                effect.name,
+                evidence="finalized recipe response changed during enforcement",
+            )
+        tool_ctx.kitchen_open_state = state
 
 
 def enforce_recipe_resource_response(

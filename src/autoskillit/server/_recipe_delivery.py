@@ -57,7 +57,9 @@ from autoskillit.execution import (
     codex_recipe_delivery_calling_contract,
 )
 from autoskillit.pipeline import (
-    KITCHEN_EFFECT_RECIPE_SERVING,
+    KITCHEN_EFFECT_RECIPE_SERVING as _RECIPE_SERVING,
+)
+from autoskillit.pipeline import (
     InitializingRecipe,
     KitchenEffectPhase,
     KitchenTransitionToken,
@@ -65,10 +67,7 @@ from autoskillit.pipeline import (
     confirm_kitchen_effect,
     mark_kitchen_effect_ambiguous,
 )
-from autoskillit.server._recipe_execution import (
-    install_recipe_execution,
-    prepare_recipe_execution,
-)
+from autoskillit.server._recipe_execution import install_recipe_execution, prepare_recipe_execution
 from autoskillit.server._recipe_generation import (
     RecipeGenerationError,
     RecipeGenerationRecord,
@@ -1159,11 +1158,7 @@ def finalize_recipe_delivery(
         with tool_ctx.kitchen_transition_lock:
             state = tool_ctx.kitchen_open_state
             serving_effect = next(
-                (
-                    effect
-                    for effect in state.effects
-                    if effect.name == KITCHEN_EFFECT_RECIPE_SERVING
-                ),
+                (effect for effect in state.effects if effect.name == _RECIPE_SERVING),
                 None,
             )
             if serving_effect is not None:
@@ -1217,7 +1212,7 @@ def complete_finalized_recipe_response(
             with finalized.tool_ctx.kitchen_transition_lock:
                 state = finalized.tool_ctx.kitchen_open_state
                 transition_owned = state.operation_id == transition_token.operation_id and any(
-                    effect.name == KITCHEN_EFFECT_RECIPE_SERVING
+                    effect.name == _RECIPE_SERVING
                     and effect.effect_id == transition_token.effect_id
                     for effect in state.effects
                 )
@@ -1383,7 +1378,7 @@ def _complete_kitchen_serving_transition(
             (
                 candidate
                 for candidate in state.effects
-                if candidate.name == KITCHEN_EFFECT_RECIPE_SERVING
+                if candidate.name == _RECIPE_SERVING
                 and candidate.effect_id == transition_token.effect_id
             ),
             None,

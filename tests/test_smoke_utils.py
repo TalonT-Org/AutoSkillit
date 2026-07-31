@@ -1962,6 +1962,31 @@ def test_review_finding_renderer_is_shared_and_preserves_proof_provenance() -> N
     )
 
 
+def test_review_finding_renderer_bounds_utf8_body_and_reserves_provenance() -> None:
+    rendered = render_review_finding_body(
+        {
+            "severity": "warning",
+            "dimension": "overengineering_reachability",
+            "message": "π" * 100_000,
+            "evidence": [
+                {
+                    "path": "src/" + ("nested/" * 1000) + "app.py",
+                    "line": 42,
+                    "role": "anchor" * 1000,
+                    "claim": "claim" * 10_000,
+                }
+                for _index in range(20)
+            ],
+            "candidate_id": "candidate-1",
+            "disposition_id": "disposition-1",
+        }
+    )
+
+    assert len(rendered.encode("utf-8")) <= 60 * 1024
+    assert rendered.endswith("Provenance: candidate_id=candidate-1 disposition_id=disposition-1")
+    assert "π" * 100_000 not in rendered
+
+
 def test_local_review_normalization_preserves_proof_fields_and_adds_aliases() -> None:
     finding = {
         "file": "src/app.py",

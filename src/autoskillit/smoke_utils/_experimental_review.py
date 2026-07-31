@@ -77,6 +77,12 @@ _TERMINAL_FAILURE_REASONS = {
 }
 _MAX_ENVELOPE_ERRORS = 32
 _MAX_EXPERIMENTAL_OUTPUT_BYTES = 1024 * 1024
+_MAX_GITHUB_REVIEW_BODY_BYTES = 60 * 1024
+_MAX_REVIEW_MESSAGE_BYTES = 32 * 1024
+_MAX_REVIEW_PATH_BYTES = 2048
+_MAX_REVIEW_ROLE_BYTES = 256
+_MAX_REVIEW_CLAIM_BYTES = 4096
+_MAX_REVIEW_PROVENANCE_ID_BYTES = 1024
 _STANDARD_REVIEW_DIMENSIONS = (
     "arch",
     "tests",
@@ -769,14 +775,19 @@ def aggregate_experimental_review_candidates(
 
 def render_review_finding_body(finding: Mapping[str, object]) -> str:
     """Render one finding identically for primary and fallback GitHub effects."""
-    body = (
-        f"[{finding.get('severity', '')}] {finding.get('dimension', '')}: "
-        f"{finding.get('message', '')}"
-    )
+    severity = _bounded_utf8(str(finding.get("severity", "")), 128)
+    dimension = _bounded_utf8(str(finding.get("dimension", "")), 256)
+    message = _bounded_utf8(str(finding.get("message", "")), _MAX_REVIEW_MESSAGE_BYTES)
+    body = f"[{severity}] {dimension}: {message}"
     evidence = finding.get("evidence")
     if isinstance(evidence, list):
         rendered_evidence = [
-            f"{item.get('path')}:{item.get('line')} [{item.get('role')}] {item.get('claim')}"
+            (
+                f"{_bounded_utf8(str(item.get('path')), _MAX_REVIEW_PATH_BYTES)}:"
+                f"{item.get('line')} "
+                f"[{_bounded_utf8(str(item.get('role')), _MAX_REVIEW_ROLE_BYTES)}] "
+                f"{_bounded_utf8(str(item.get('claim')), _MAX_REVIEW_CLAIM_BYTES)}"
+            )
             for item in evidence
             if isinstance(item, Mapping)
         ]
@@ -784,9 +795,22 @@ def render_review_finding_body(finding: Mapping[str, object]) -> str:
             body += "\nEvidence: " + "; ".join(rendered_evidence)
     candidate_id = finding.get("candidate_id")
     disposition_id = finding.get("disposition_id")
+    provenance = ""
     if _is_non_empty_string(candidate_id) and _is_non_empty_string(disposition_id):
-        body += f"\nProvenance: candidate_id={candidate_id} disposition_id={disposition_id}"
-    return body
+        bounded_candidate_id = _bounded_utf8(
+            str(candidate_id),
+            _MAX_REVIEW_PROVENANCE_ID_BYTES,
+        )
+        bounded_disposition_id = _bounded_utf8(
+            str(disposition_id),
+            _MAX_REVIEW_PROVENANCE_ID_BYTES,
+        )
+        provenance = (
+            f"\nProvenance: candidate_id={bounded_candidate_id} "
+            f"disposition_id={bounded_disposition_id}"
+        )
+    body_budget = _MAX_GITHUB_REVIEW_BODY_BYTES - len(provenance.encode("utf-8"))
+    return _bounded_utf8(body, body_budget) + provenance
 
 
 def normalize_local_review_finding(finding: Mapping[str, object]) -> dict[str, object]:

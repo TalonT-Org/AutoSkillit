@@ -529,6 +529,7 @@ def test_toolcontext_raises_typeerror_when_audit_ledger_unset(tmp_path):
             temp_dir=tmp_path / ".autoskillit" / "temp",
             project_dir=tmp_path,
             skill_session_contract_store=FakeSkillSessionContractStore(),
+            managed_headless_session_lineage_store=(FakeManagedHeadlessSessionLineageStore()),
             context_admission_ledger=_ledger(tmp_path),
         )
 

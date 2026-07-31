@@ -1054,7 +1054,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "filter cascade",
     ),
     "fleet/_api.py": (
-        1550,
+        1575,
         "REQ-CNST-010-E6: fleet dispatch engine — evaluate_skip_when inlined here to avoid "
         "a 16th fleet/ module (sub-package file ceiling); keeps dispatch-related helpers "
         "co-located with the execution engine that calls them. Bumped to 1200 by the "
@@ -1062,7 +1062,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "closure-scoped _spawn_error, and _write_pid fail-closed contract add ~33 lines. "
         "Bumped to 1550 for #4417's per-effect dispatch provenance checkpoints and "
         "post-start crash persistence; those checkpoints must remain adjacent to the "
-        "side effects whose ambiguity they record.",
+        "side effects whose ambiguity they record. Bumped to 1575 so the managed native "
+        "shell lineage decision and provenance snapshot remain on the same dispatch "
+        "transaction boundary after conflict resolution.",
     ),
     "server/_recipe_delivery.py": (
         1460,
@@ -1173,7 +1175,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "run_skill launch denial paths before command construction (+139 net lines)",
     ),
     "execution/backends/codex.py": (
-        1800,
+        1825,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1206,7 +1208,16 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "(+39 net lines)"
         "; interactive Codex startup validation, explicit generated-home construction, "
         "profile probing, and durable cook-storage adapter integration remain co-located "
-        "with the backend whose command grammar they validate",
+        "with the backend whose command grammar they validate; managed native-shell "
+        "decision and lineage-reference injection remain adjacent to the Codex command "
+        "builders that own the protected environment boundary",
+    ),
+    "execution/backends/claude.py": (
+        1025,
+        "REQ-CNST-010-E19: Claude backend protocol parity keeps managed native-shell "
+        "decision/reference disposition beside executable launch-binding validation; "
+        "both are shared builder-interface obligations even though Claude deliberately "
+        "does not inject the Codex-only controls.",
     ),
     "execution/backends/_codex_session_storage.py": (
         1400,
@@ -1292,11 +1303,19 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "and fail-closed health invariants.",
     ),
     "server/tools/tools_execution.py": (
-        2300,
+        2325,
         "REQ-CNST-010-E18: #4419 keeps the attested reservation, dispatch, exhaustive "
         "materialization outcome routing, and durable response finalization at the existing "
         "run_skill transaction boundary. Splitting that control flow would separate success "
-        "bookkeeping from the ledger state it must atomically finalize.",
+        "bookkeeping from the ledger state it must atomically finalize. Managed native-shell "
+        "lineage preparation remains at that same attested launch boundary so runtime "
+        "binding and child construction cannot select different modes.",
+    ),
+    "server/tools/_execution_helpers.py": (
+        1025,
+        "REQ-CNST-010-E20: shared run-skill contract lifecycle and response-shaping helpers "
+        "remain one server-tool support authority; the managed session metadata additions "
+        "must stay beside contract rehydration and persistence to prevent resume drift.",
     ),
 }
 

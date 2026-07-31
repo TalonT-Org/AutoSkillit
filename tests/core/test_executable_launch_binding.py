@@ -11,7 +11,8 @@ from autoskillit.core import (
     CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR,
     CLAUDE_MCP_CONNECT_TIMEOUT_MS,
     CLAUDE_MCP_CONNECTION_NONBLOCKING,
-    ExecutableLaunchBinding,
+    executable_binding_matches_current_file,
+    resolve_executable_launch_binding,
 )
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
@@ -33,7 +34,7 @@ def test_binding_prefers_explicit_canonical_executable(tmp_path: Path) -> None:
         CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR: str(CLAUDE_MCP_CONNECT_TIMEOUT_MS),
     }
 
-    binding = ExecutableLaunchBinding.resolve(
+    binding = resolve_executable_launch_binding(
         binary_name=fallback.name,
         environment=environment,
         cwd=tmp_path,
@@ -49,7 +50,7 @@ def test_binding_prefers_explicit_canonical_executable(tmp_path: Path) -> None:
 def test_binding_uses_effective_path_when_no_explicit_path(tmp_path: Path) -> None:
     executable = _executable(tmp_path / "claude")
 
-    binding = ExecutableLaunchBinding.resolve(
+    binding = resolve_executable_launch_binding(
         binary_name="claude",
         environment={"PATH": str(tmp_path)},
         cwd=tmp_path,
@@ -60,7 +61,7 @@ def test_binding_uses_effective_path_when_no_explicit_path(tmp_path: Path) -> No
 
 def test_binding_detects_same_path_replacement(tmp_path: Path) -> None:
     executable = _executable(tmp_path / "claude")
-    binding = ExecutableLaunchBinding.resolve(
+    binding = resolve_executable_launch_binding(
         binary_name="claude",
         environment={"PATH": str(tmp_path)},
         cwd=tmp_path,
@@ -69,7 +70,7 @@ def test_binding_detects_same_path_replacement(tmp_path: Path) -> None:
     executable.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
     os.utime(executable, None)
 
-    assert not binding.matches_current_file()
+    assert not executable_binding_matches_current_file(binding)
 
 
 def test_binding_rejects_non_executable_explicit_path(tmp_path: Path) -> None:
@@ -77,7 +78,7 @@ def test_binding_rejects_non_executable_explicit_path(tmp_path: Path) -> None:
     candidate.write_text("not executable", encoding="utf-8")
 
     with pytest.raises(ValueError, match="not executable"):
-        ExecutableLaunchBinding.resolve(
+        resolve_executable_launch_binding(
             binary_name="claude",
             environment={
                 "PATH": str(tmp_path),

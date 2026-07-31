@@ -158,6 +158,12 @@ from .runtime._linux_proc import read_starttime_ticks as read_starttime_ticks
 from .runtime.artifact_lease import ArtifactLease as ArtifactLease
 from .runtime.artifact_lease import ArtifactLeaseContention as ArtifactLeaseContention
 from .runtime.artifact_lease import plugin_launch_binding_scope as plugin_launch_binding_scope
+from .runtime.executable_binding import (
+    executable_binding_matches_current_file as executable_binding_matches_current_file,
+)
+from .runtime.executable_binding import (
+    resolve_executable_launch_binding as resolve_executable_launch_binding,
+)
 from .runtime.kitchen_state import KitchenMarker as KitchenMarker
 from .runtime.kitchen_state import find_caller_session_id as find_caller_session_id
 from .runtime.kitchen_state import get_state_dir as get_state_dir

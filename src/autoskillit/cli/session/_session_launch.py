@@ -9,10 +9,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
-    ExecutableLaunchBinding,
     NamedResume,
     NoResume,
+    executable_binding_matches_current_file,
     plugin_launch_binding_scope,
+    resolve_executable_launch_binding,
 )
 
 if TYPE_CHECKING:
@@ -117,7 +118,7 @@ def _run_interactive_session(
             tools=tools_arg,
         )
         try:
-            executable = ExecutableLaunchBinding.resolve(
+            executable = resolve_executable_launch_binding(
                 binary_name=backend.binary_name(),
                 environment=candidate_spec.env,
                 cwd=_project_dir,
@@ -146,7 +147,7 @@ def _run_interactive_session(
             tools=tools_arg,
         )
         assert_interactive_ordering(spec=spec)
-        if not executable.matches_current_file():
+        if not executable_binding_matches_current_file(executable):
             print(
                 "ERROR: interactive executable changed after capability probing",
                 file=sys.stderr,

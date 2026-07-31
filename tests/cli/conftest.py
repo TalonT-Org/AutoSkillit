@@ -44,7 +44,7 @@ def _stub_detect_mcp_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def _stub_interactive_prelaunch(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep legacy CLI unit tests focused below the strict launch-probe boundary."""
-    from autoskillit.core import ExecutableLaunchBinding
+    import autoskillit.cli.session._session_launch as _session_launch
     from autoskillit.execution.backends.claude import ClaudeCodeBackend
     from autoskillit.execution.backends.codex import CodexBackend
 
@@ -62,10 +62,14 @@ def _stub_interactive_prelaunch(monkeypatch: pytest.MonkeyPatch) -> None:
             path=Path(binary_name),
             launch_environment=dict(environment),
             cwd=cwd.resolve(),
-            matches_current_file=lambda: True,
         )
 
-    monkeypatch.setattr(ExecutableLaunchBinding, "resolve", resolve_binding)
+    monkeypatch.setattr(_session_launch, "resolve_executable_launch_binding", resolve_binding)
+    monkeypatch.setattr(
+        _session_launch,
+        "executable_binding_matches_current_file",
+        lambda _binding: True,
+    )
     monkeypatch.setattr(
         ClaudeCodeBackend,
         "ensure_pre_launch",

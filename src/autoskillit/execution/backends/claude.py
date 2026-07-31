@@ -58,6 +58,7 @@ from autoskillit.core import (
     build_agent_env,
     claude_code_log_path,
     claude_code_project_dir,
+    executable_binding_matches_current_file,
     extract_skill_name,
     fast_loads,
     load_yaml,
@@ -918,7 +919,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         del session_dir
         if executable is None:
             return ["Claude Code launch requires an exact executable binding"]
-        if not executable.matches_current_file():
+        if not executable_binding_matches_current_file(executable):
             return ["Claude Code executable changed after capability probing"]
         environment = executable.launch_environment
         if environment.get("MCP_CONNECTION_NONBLOCKING") != CLAUDE_MCP_CONNECTION_NONBLOCKING:

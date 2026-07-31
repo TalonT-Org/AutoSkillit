@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autoskillit import cli
-from autoskillit.core import ClaudeFlags, ExecutableLaunchBinding
+from autoskillit.core import ClaudeFlags
 from tests.cli.conftest import _SCRIPT_YAML
 
 pytestmark = [
@@ -114,13 +114,6 @@ class TestCLIOrderCommand:
         scripts_dir.mkdir(parents=True)
         (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
-        monkeypatch.setattr(
-            ExecutableLaunchBinding,
-            "resolve",
-            lambda **_kwargs: (_ for _ in ()).throw(
-                ValueError("'claude' not found in the effective PATH")
-            ),
-        )
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
 
         with pytest.raises(SystemExit) as exc_info:

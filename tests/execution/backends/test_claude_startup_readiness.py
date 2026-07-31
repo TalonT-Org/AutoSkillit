@@ -12,6 +12,7 @@ from autoskillit.core import (
     CLAUDE_MCP_CONNECT_TIMEOUT_MS,
     CLAUDE_MCP_CONNECTION_NONBLOCKING,
     ExecutableLaunchBinding,
+    resolve_executable_launch_binding,
 )
 from autoskillit.execution.backends import ClaudeCodeBackend
 
@@ -22,7 +23,7 @@ def _binding(tmp_path: Path) -> ExecutableLaunchBinding:
     executable = tmp_path / "claude"
     executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     executable.chmod(0o755)
-    return ExecutableLaunchBinding.resolve(
+    return resolve_executable_launch_binding(
         binary_name="claude",
         environment={
             "PATH": str(tmp_path),
@@ -46,7 +47,7 @@ def test_interactive_cmd_uses_bound_path_and_sealed_readiness_values(tmp_path: P
     candidate = backend.build_interactive_cmd(
         env_extras=extras,
     )
-    binding = ExecutableLaunchBinding.resolve(
+    binding = resolve_executable_launch_binding(
         binary_name="claude",
         environment=candidate.env,
         cwd=tmp_path,

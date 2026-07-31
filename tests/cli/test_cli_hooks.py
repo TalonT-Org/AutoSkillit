@@ -145,6 +145,7 @@ def test_evict_stale_hooks_removes_legacy_formats(tmp_path):
     """install() must remove all legacy autoskillit hook formats before writing fresh ones."""
     from autoskillit.cli._hooks import (
         _evict_stale_autoskillit_hooks,
+        _find_autoskillit_hook_commands,
         sync_hooks_to_settings,
     )
 
@@ -190,6 +191,8 @@ def test_evict_stale_hooks_removes_legacy_formats(tmp_path):
         }
     }
     settings.write_text(json.dumps(legacy_data, indent=2))
+
+    assert len(_find_autoskillit_hook_commands(legacy_data)) == 3
 
     # Evict all autoskillit entries
     _evict_stale_autoskillit_hooks(settings)

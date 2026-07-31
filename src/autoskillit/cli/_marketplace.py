@@ -359,22 +359,11 @@ def _verify_cleanup(settings_path: Path, fetch_cache_path: Path) -> None:
         )
 
     settings = _read_json_object(settings_path, purpose="Claude hook eviction")
-    hooks = settings.get("hooks", {})
-    if isinstance(hooks, dict):
-        for entries in hooks.values():
-            if not isinstance(entries, list):
-                continue
-            for entry in entries:
-                if not isinstance(entry, dict):
-                    continue
-                for hook in entry.get("hooks", ()):
-                    if isinstance(hook, dict) and _hooks_mod._is_autoskillit_hook_command(
-                        str(hook.get("command", ""))
-                    ):
-                        raise _InstallFailed(
-                            InstallFailureKind.POSTCONDITION,
-                            f"Stale AutoSkillit hook remains in {settings_path}",
-                        )
+    if _hooks_mod._find_autoskillit_hook_commands(settings):
+        raise _InstallFailed(
+            InstallFailureKind.POSTCONDITION,
+            f"Stale AutoSkillit hook remains in {settings_path}",
+        )
     try:
         fetch_cache_path.lstat()
     except FileNotFoundError:

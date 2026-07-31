@@ -26,6 +26,33 @@ def _write_settings_data(settings_path: Path, data: dict) -> None:
     atomic_write(settings_path, json.dumps(data, indent=2))
 
 
+def _find_autoskillit_hook_commands(data: object) -> tuple[str, ...]:
+    """Return AutoSkillit hook commands from the canonical settings shape."""
+    if not isinstance(data, dict):
+        return ()
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        return ()
+
+    commands: list[str] = []
+    for entries in hooks.values():
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            entry_hooks = entry.get("hooks")
+            if not isinstance(entry_hooks, list):
+                continue
+            for hook in entry_hooks:
+                if not isinstance(hook, dict):
+                    continue
+                command = hook.get("command")
+                if isinstance(command, str) and _is_autoskillit_hook_command(command):
+                    commands.append(command)
+    return tuple(commands)
+
+
 def _evict_stale_autoskillit_hooks(settings_path: Path) -> None:
     """Remove all autoskillit-related hook entries from settings.json (all event types).
 
@@ -35,13 +62,26 @@ def _evict_stale_autoskillit_hooks(settings_path: Path) -> None:
     """
     data = _load_settings_data(settings_path)
     hooks = data.get("hooks", {})
+    if not isinstance(hooks, dict):
+        return
+    autoskillit_commands = set(_find_autoskillit_hook_commands(data))
     for event_type in list(hooks.keys()):
-        event_list: list[dict] = hooks.get(event_type, [])
-        cleaned = []
+        event_list = hooks.get(event_type, [])
+        if not isinstance(event_list, list):
+            continue
+        cleaned: list[object] = []
         for entry in event_list:
+            if not isinstance(entry, dict):
+                cleaned.append(entry)
+                continue
             entry_hooks = entry.get("hooks", [])
+            if not isinstance(entry_hooks, list):
+                cleaned.append(entry)
+                continue
             non_autoskillit = [
-                h for h in entry_hooks if not _is_autoskillit_hook_command(h.get("command", ""))
+                hook
+                for hook in entry_hooks
+                if not (isinstance(hook, dict) and hook.get("command") in autoskillit_commands)
             ]
             if non_autoskillit:
                 entry["hooks"] = non_autoskillit

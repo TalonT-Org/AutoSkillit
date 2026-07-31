@@ -163,7 +163,7 @@ def test_guide_adapter_sibling_contract() -> None:
 def test_non_root_adapters_are_exact_thin_shims() -> None:
     failures = []
     for adapter in sorted(NON_ROOT_ADAPTERS):
-        content = (REPO_ROOT / adapter).read_text()
+        content = (REPO_ROOT / adapter).read_text(encoding="utf-8")
         if content != "@AGENTS.md\n":
             failures.append(adapter)
     assert not failures, f"Non-root CLAUDE.md files must be exact @AGENTS.md shims: {failures}"
@@ -243,7 +243,7 @@ def test_catalog_detector_preserves_non_catalog_structures(markdown: str) -> Non
 def test_all_guides_are_catalog_free() -> None:
     failures = {}
     for guide in sorted(ALL_GUIDES):
-        violations = _catalog_violations((REPO_ROOT / guide).read_text())
+        violations = _catalog_violations((REPO_ROOT / guide).read_text(encoding="utf-8"))
         if violations:
             failures[guide] = violations
     assert not failures, f"Per-file AGENTS.md catalogs are forbidden: {failures}"
@@ -252,7 +252,7 @@ def test_all_guides_are_catalog_free() -> None:
 def test_channel_b_defined_in_process_agents_md() -> None:
     process_md = SRC_ROOT / "execution" / "process" / "AGENTS.md"
     assert process_md.is_file(), "execution/process/AGENTS.md does not exist"
-    content = process_md.read_text()
+    content = process_md.read_text(encoding="utf-8")
     for marker in (
         "session JSONL monitor",
         "`assistant`-type record",
@@ -266,7 +266,7 @@ def test_channel_b_defined_in_process_agents_md() -> None:
 def test_capture_guide_retains_isolated_import_contract() -> None:
     capture_guide = REPO_ROOT / _CAPTURE_GUIDE
     assert capture_guide.is_file()
-    content = capture_guide.read_text()
+    content = capture_guide.read_text(encoding="utf-8")
     for marker in ("stdlib-only", "hooks directory alone", "`sys.path`"):
         assert marker in content, f"_capture guide must retain {marker!r}"
 
@@ -345,7 +345,7 @@ def test_capture_guide_retains_isolated_import_contract() -> None:
     ],
 )
 def test_catalog_carried_behavior_is_preserved(guide: str, markers: tuple[str, ...]) -> None:
-    content = " ".join((REPO_ROOT / guide).read_text().split()).casefold()
+    content = " ".join((REPO_ROOT / guide).read_text(encoding="utf-8").split()).casefold()
     for marker in markers:
         assert marker.casefold() in content, f"{guide} must retain {marker!r}"
 
@@ -354,7 +354,7 @@ def test_sub_claude_md_no_main_claude_md_duplication() -> None:
     numbered_section_re = re.compile(r"^## \*{0,2}\d+\.", re.MULTILINE)
     failures = []
     for guide in sorted(NON_ROOT_GUIDES):
-        content = (REPO_ROOT / guide).read_text()
+        content = (REPO_ROOT / guide).read_text(encoding="utf-8")
         match = numbered_section_re.search(content)
         if match:
             failures.append(f"{guide}: contains '{match.group()}' (root AGENTS.md section)")

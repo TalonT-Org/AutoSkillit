@@ -57,6 +57,8 @@ from autoskillit.fleet import (
     reap_stale_dispatches_async,
 )
 from autoskillit.pipeline import (
+    KITCHEN_EFFECT_RECIPE_SERVING,
+    KITCHEN_EFFECT_RESPONSE_ENFORCEMENT,
     KitchenEffectPhase,
     KitchenIntentConflict,
     KitchenOpenPhase,
@@ -178,7 +180,7 @@ def _transition_start(tool_ctx: ToolContext, name: str) -> bool:
 
 def _transition_fields(tool_ctx: ToolContext, *, committed: bool = False) -> dict[str, Any]:
     if committed:
-        _transition_start(tool_ctx, "response_enforcement")
+        _transition_start(tool_ctx, KITCHEN_EFFECT_RESPONSE_ENFORCEMENT)
     with tool_ctx.kitchen_transition_lock:
         payload = kitchen_state_payload(tool_ctx.kitchen_open_state)
     if committed:
@@ -1455,7 +1457,7 @@ async def open_kitchen(
                     )
             if _is_deferred_recall:
                 try:
-                    _transition_start(tool_ctx, "recipe_serving")
+                    _transition_start(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
                     result = serve_recipe(
                         tool_ctx,
                         name,
@@ -1485,7 +1487,7 @@ async def open_kitchen(
                     return _kitchen_failure_envelope(exc, stage="load_and_validate")
                 if ingredients_only:
                     if not result.get("valid", False):
-                        transition_abort(tool_ctx, "recipe_serving")
+                        transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
                     return _render_ingredients_only_response(
                         result,
                         declared_ingredients=(
@@ -1528,12 +1530,12 @@ async def open_kitchen(
                         tool_ctx.active_recipe_ingredients = None
                 # Default to False for missing 'valid' so a absent key is treated as invalid
                 if not result.get("valid", False) or not result.get("content", ""):
-                    transition_abort(tool_ctx, "recipe_serving")
+                    transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
                     tool_ctx.gate.disable()
                     tool_ctx.gate_infrastructure_ready = False
                     return _recipe_validation_error_response(name, result)
                 if not result.get("dispatch_feasible", True):
-                    transition_abort(tool_ctx, "recipe_serving")
+                    transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
                     return await _dispatch_infeasible_response(
                         result,
                         tool_ctx.backend,
@@ -1556,7 +1558,7 @@ async def open_kitchen(
                         project_root=tool_ctx.project_dir,
                     )
                     if _preflight_err is not None:
-                        transition_abort(tool_ctx, "recipe_serving")
+                        transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
                         tool_ctx.gate.disable()
                         tool_ctx.gate_infrastructure_ready = False
                         await ctx.disable_components(tags={"kitchen"})
@@ -1616,7 +1618,7 @@ async def open_kitchen(
                     )
                 return render_served_response(result)
             try:
-                _transition_start(tool_ctx, "recipe_serving")
+                _transition_start(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
                 result = serve_recipe(
                     tool_ctx,
                     name,
@@ -1642,7 +1644,7 @@ async def open_kitchen(
                 return _kitchen_failure_envelope(exc, stage="load_and_validate")
             if ingredients_only:
                 if not result.get("valid", False):
-                    transition_abort(tool_ctx, "recipe_serving")
+                    transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
                 return _render_ingredients_only_response(
                     result,
                     declared_ingredients=(
@@ -1703,13 +1705,13 @@ async def open_kitchen(
                 return _kitchen_failure_envelope(exc, stage="apply_triage_gate")
 
             if not result.get("valid", False) or not result.get("content", ""):
-                transition_abort(tool_ctx, "recipe_serving")
+                transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
                 tool_ctx.gate.disable()
                 tool_ctx.gate_infrastructure_ready = False
                 return _recipe_validation_error_response(name, result)
 
             if not result.get("dispatch_feasible", True):
-                transition_abort(tool_ctx, "recipe_serving")
+                transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
                 return await _dispatch_infeasible_response(
                     result,
                     tool_ctx.backend,
@@ -1737,7 +1739,7 @@ async def open_kitchen(
                     project_root=tool_ctx.project_dir,
                 )
                 if _preflight_err is not None:
-                    transition_abort(tool_ctx, "recipe_serving")
+                    transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
                     tool_ctx.gate.disable()
                     tool_ctx.gate_infrastructure_ready = False
                     await ctx.disable_components(tags={"kitchen"})

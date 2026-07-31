@@ -32,6 +32,8 @@ from autoskillit.pipeline.gate import (
 )
 from autoskillit.pipeline.github_api_log import DefaultGitHubApiLog
 from autoskillit.pipeline.kitchen_transition import (
+    KITCHEN_EFFECT_RECIPE_SERVING,
+    KITCHEN_EFFECT_RESPONSE_ENFORCEMENT,
     KitchenEffectPhase,
     KitchenEffectRecord,
     KitchenIntentConflict,
@@ -117,6 +119,8 @@ __all__ = [
     "ToolContext",
     "DefaultContextAdmissionLedger",
     # kitchen transition
+    "KITCHEN_EFFECT_RECIPE_SERVING",
+    "KITCHEN_EFFECT_RESPONSE_ENFORCEMENT",
     "KitchenEffectPhase",
     "KitchenEffectRecord",
     "KitchenIntentConflict",

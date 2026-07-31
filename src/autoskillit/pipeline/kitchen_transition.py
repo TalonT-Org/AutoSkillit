@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
 
 __all__ = [
+    "KITCHEN_EFFECT_RECIPE_SERVING",
+    "KITCHEN_EFFECT_RESPONSE_ENFORCEMENT",
     "KitchenEffectPhase",
     "KitchenEffectRecord",
     "KitchenIntentConflict",
@@ -41,6 +43,9 @@ __all__ = [
     "transition_confirm",
     "transition_degraded",
 ]
+
+KITCHEN_EFFECT_RECIPE_SERVING = "recipe_serving"
+KITCHEN_EFFECT_RESPONSE_ENFORCEMENT = "response_enforcement"
 
 
 class KitchenOpenPhase(StrEnum):

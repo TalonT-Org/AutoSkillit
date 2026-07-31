@@ -20,6 +20,7 @@ from autoskillit.core import (
     resolve_general_output_token_limit,
 )
 from autoskillit.pipeline import (
+    KITCHEN_EFFECT_RESPONSE_ENFORCEMENT,
     confirm_kitchen_effect,
     start_kitchen_effect,
 )
@@ -206,7 +207,7 @@ def track_response_size(
                     with ctx.kitchen_transition_lock:
                         ctx.kitchen_open_state = start_kitchen_effect(
                             ctx.kitchen_open_state,
-                            "response_enforcement",
+                            KITCHEN_EFFECT_RESPONSE_ENFORCEMENT,
                         )
             try:
                 result = enforce_response_budget(
@@ -273,7 +274,7 @@ def track_response_size(
                     with ctx.kitchen_transition_lock:
                         ctx.kitchen_open_state = confirm_kitchen_effect(
                             ctx.kitchen_open_state,
-                            "response_enforcement",
+                            KITCHEN_EFFECT_RESPONSE_ENFORCEMENT,
                             receipt="response:enforced",
                         )
             return result

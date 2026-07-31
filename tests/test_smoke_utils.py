@@ -2851,6 +2851,7 @@ def test_experimental_publication_preserves_publication_and_rollback_failures(
         "injected publication failure",
         "injected rollback failure",
     ]
+    assert [path.read_text() for path in final_paths[1:]] == ["old-1", "old-2"]
 
 
 # ---------------------------------------------------------------------------

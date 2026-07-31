@@ -444,6 +444,27 @@ def test_rejects_wrong_supplied_mode_without_closing_caller_lease(home: Path) ->
         assert not lease.closed
 
 
+def test_rejects_shared_lease_for_exclusive_mode_without_closing_caller_lease(
+    home: Path,
+) -> None:
+    spec = _spec(home)
+    _publish_exact(spec)
+    _write_registry(home, spec.managed_root)
+    lease = ArtifactLease.acquire_existing_shared(spec.lease_path)
+    try:
+        result = verify_installed_plugin_artifact(
+            _spec(
+                home,
+                lease_mode=InstallStateLeaseMode.EXCLUSIVE,
+                supplied_lease=lease,
+            )
+        )
+        assert {finding.check for finding in result.findings} == {"installed_plugin_lease_invalid"}
+        assert not lease.closed
+    finally:
+        lease.close()
+
+
 def test_digest_failure_does_not_close_caller_owned_shared_lease(home: Path) -> None:
     spec = _spec(home)
     _publish_exact(spec)

@@ -128,6 +128,38 @@ class TestVerifyInstallState:
 
         assert lease.closed is True
 
+    def test_acquired_lease_closes_after_successful_findings_consumption(
+        self,
+        home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from autoskillit.workspace import _install_state
+
+        class TrackingLease:
+            closed = False
+
+            def close(self) -> None:
+                self.closed = True
+
+        lease = TrackingLease()
+
+        class Verification:
+            findings = ()
+
+            def __init__(self) -> None:
+                self.lease = lease
+
+        monkeypatch.setattr(_install_state, "_current_install_state_spec", object)
+        monkeypatch.setattr(
+            _install_state,
+            "verify_installed_plugin_artifact",
+            lambda _spec: Verification(),
+        )
+
+        _install_state.verify_install_state()
+
+        assert lease.closed is True
+
     @pytest.mark.parametrize("kind", PLUGIN_ARTIFACT_STATE_KINDS, ids=str)
     def test_complete_production_shaped_artifact_matrix(
         self,

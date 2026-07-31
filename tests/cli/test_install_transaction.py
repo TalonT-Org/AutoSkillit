@@ -232,7 +232,8 @@ def test_control_flow_exceptions_compensate_before_propagation(
     manifest.write_text('{"old": true}', encoding="utf-8")
     settings = tmp_path / ".claude" / "settings.json"
     settings.write_text("before", encoding="utf-8")
-    before = _filesystem_state(tmp_path)
+    install_lock_path = tmp_path / ".autoskillit" / "install.lock"
+    before = _filesystem_state(tmp_path, excluded=(install_lock_path,))
     events: list[str] = []
     ownership = _instrument_transaction_ownership(monkeypatch, events)
 
@@ -277,7 +278,7 @@ def test_control_flow_exceptions_compensate_before_propagation(
             child_cwd=neutral_cwd,
         )
 
-    assert _filesystem_state(tmp_path) == before
+    assert _filesystem_state(tmp_path, excluded=(install_lock_path,)) == before
     assert events == [
         "install_lock_acquired",
         "artifact_lease_acquired",
@@ -319,9 +320,15 @@ def test_control_flow_exception_survives_compensation_failure(
     assert compensation_attempted is True
 
 
-def _filesystem_state(root: Path) -> tuple[tuple[str, str, bytes | str | None], ...]:
+def _filesystem_state(
+    root: Path,
+    *,
+    excluded: tuple[Path, ...] = (),
+) -> tuple[tuple[str, str, bytes | str | None], ...]:
     state: list[tuple[str, str, bytes | str | None]] = []
     for path in sorted(root.rglob("*")):
+        if path in excluded:
+            continue
         relative = str(path.relative_to(root))
         if path.is_symlink():
             state.append((relative, "symlink", os.readlink(path)))

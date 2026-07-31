@@ -149,7 +149,6 @@ class TestVerifyInstallState:
             def __init__(self) -> None:
                 self.lease = lease
 
-        monkeypatch.setattr(_install_state, "_current_install_state_spec", object)
         monkeypatch.setattr(
             _install_state,
             "verify_installed_plugin_artifact",

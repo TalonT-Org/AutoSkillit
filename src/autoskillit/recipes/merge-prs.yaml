@@ -1557,7 +1557,10 @@ steps:
     on_failure: annotate_pr_diff
     note: 'Invalidates every previously captured annotation path before the
       one-shot integration review attempt, so annotation failure cannot reuse
-      an older authority.
+      an older authority. This one-shot recipe intentionally omits the looped
+      recipes'' review_mode capture and routes stale_snapshot directly to
+      register_clone_failure; looped review recipes retain review_mode and
+      route stale snapshots through check_review_loop before release cleanup.
 
       '
   annotate_pr_diff:

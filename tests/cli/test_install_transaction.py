@@ -217,6 +217,31 @@ def test_control_flow_exceptions_compensate_before_propagation(
     assert settings.read_text(encoding="utf-8") == "before"
 
 
+@pytest.mark.parametrize("control_flow", [KeyboardInterrupt, SystemExit])
+def test_control_flow_exception_survives_compensation_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    control_flow: type[BaseException],
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+
+    def interrupt_transaction(**_kwargs) -> tuple[()]:
+        raise control_flow("original control flow")
+
+    def fail_compensation(*_args, **_kwargs):
+        raise RuntimeError("secondary compensation failure")
+
+    monkeypatch.setattr(marketplace, "_clear_plugin_cache", interrupt_transaction)
+    monkeypatch.setattr(marketplace, "_compensated_result", fail_compensation)
+
+    with pytest.raises(control_flow, match="original control flow"):
+        marketplace.install(
+            request=_maintenance_request(),
+            child_env=_sealed_env(),
+            child_cwd=neutral_cwd,
+        )
+
+
 def _filesystem_state(root: Path) -> tuple[tuple[str, str, bytes | str | None], ...]:
     state: list[tuple[str, str, bytes | str | None]] = []
     for path in sorted(root.rglob("*")):

@@ -667,6 +667,23 @@ def install(
                         failure=str(exc),
                         exc_info=True,
                     )
+                    if not isinstance(exc, Exception):
+                        try:
+                            _compensated_result(
+                                snapshot,
+                                _InstallFailed(
+                                    InstallFailureKind.POSTCONDITION,
+                                    f"Install transaction failed: {exc}",
+                                ),
+                                owned_lease_fd=target_writer.fileno(),
+                            )
+                        except BaseException:
+                            logger.warning(
+                                "install_control_flow_compensation_failed",
+                                failure=str(exc),
+                                exc_info=True,
+                            )
+                        raise
                     compensated = _compensated_result(
                         snapshot,
                         _InstallFailed(
@@ -675,8 +692,6 @@ def install(
                         ),
                         owned_lease_fd=target_writer.fileno(),
                     )
-                    if not isinstance(exc, Exception):
-                        raise
                     return compensated
     except (OSError, RuntimeError, ValueError) as exc:
         return _typed_result(

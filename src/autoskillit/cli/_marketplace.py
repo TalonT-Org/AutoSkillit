@@ -464,7 +464,13 @@ def install(
                 ),
             )
         if not _claude_on_path(operation_env):
-            raise RuntimeError("'claude' command not found in the sealed PATH")
+            raise RuntimeError(
+                "'claude' command not found in the sealed PATH.\n"
+                "Install Claude Code, then run:\n"
+                f"  claude plugin marketplace add {marketplace_dir}\n"
+                f"  claude plugin install {plugin_ref} --scope {effective_scope}\n"
+                "Then run: autoskillit init (in your project directory)"
+            )
 
         target_root = _installed_plugin_root(expected_version)
         _validate_transaction_target(target_root, expected_version)

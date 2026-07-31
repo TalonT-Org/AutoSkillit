@@ -104,7 +104,8 @@ class TestCLIInstall:
         assert result.outcome is InstallOutcome.FAILED
         assert result.failure_kind is InstallFailureKind.PREFLIGHT
         captured = capsys.readouterr()
-        assert "claude" in captured.out
+        assert "claude plugin marketplace add" in captured.out
+        assert "claude plugin install" in captured.out
 
     def test_install_creates_marketplace_dir(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -952,8 +952,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
         "hooks": 20,  # +_capture_lifecycle state leaf and +capture_lifecycle_hook SessionStart owner  # noqa: E501
-        "pipeline": 15,  # +context/audit admission ledgers +recipe initialization
-        # +kitchen transition
+        "pipeline": 16,  # +context/audit admission ledgers +recipe initialization
+        # +kitchen transition authority
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
         "recipe/rules": 56,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing  # noqa: E501
         "server/tools": 33,  # +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
@@ -1064,7 +1064,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "side effects whose ambiguity they record.",
     ),
     "server/_recipe_delivery.py": (
-        1450,
+        1460,
         "REQ-CNST-010-E12: immutable recipe generation persistence, host-attested delivery "
         "selection, receipt reservation, and compiled-execution publication form one "
         "transactional authority boundary; the snapshot carrier keeps installation before "
@@ -1073,7 +1073,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "provenance, and activating/non-activating lifecycle staging remain in that same "
         "finalizer transaction so no second wire authority can drift; #4399's exemption-aware "
         "ordinary-inline override and success-shaped surface payload preserve complete bodies "
-        "for registered non-protected surfaces.",
+        "for registered non-protected surfaces; #4419's audit installation/finalization fence "
+        "and #4425's kitchen-effect transition remain co-located to preserve that single "
+        "delivery authority.",
     ),
     "tools_kitchen.py": (
         2260,

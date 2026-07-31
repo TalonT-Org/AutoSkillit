@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -301,10 +302,9 @@ def build_plugin_artifact_state(
     elif selected is PluginArtifactStateKind.DANGLING_REGISTRY:
         _write_registry(spec, spec.managed_root.parent / "missing")
     elif selected is PluginArtifactStateKind.DANGLING_MANAGED_ROOT:
-        spec.managed_root.parent.mkdir(parents=True, exist_ok=True)
+        identity = _publish_exact(spec)
+        shutil.rmtree(spec.managed_root)
         spec.managed_root.symlink_to(spec.managed_root.parent / "missing-root")
-        with ArtifactLease.acquire_exclusive(spec.lease_path, blocking=True):
-            pass
     elif selected is PluginArtifactStateKind.DANGLING_MANIFEST:
         metadata = spec.managed_root / ".claude-plugin" / "plugin.json"
         metadata.parent.mkdir(parents=True, exist_ok=True)
@@ -348,8 +348,8 @@ def build_plugin_artifact_state(
                     str(spec.managed_root.parent / "elsewhere"),
                 )
             elif selected is PluginArtifactStateKind.DIGEST_MISMATCH:
-                (spec.managed_root / ".claude-plugin" / "plugin.json").write_text(
-                    json.dumps({"name": "autoskillit", "version": "tampered"}),
+                (spec.managed_root / "tampered-content.txt").write_text(
+                    "content added after identity publication",
                     encoding="utf-8",
                 )
             elif selected is PluginArtifactStateKind.MISSING_LEASE:

@@ -68,7 +68,6 @@ class _RecordingBackend:
     def __init__(self, name: str) -> None:
         self.name = name
         self.build_calls: list[dict[str, object]] = []
-        self.context_calls: list[dict[str, object]] = []
         self.recover_count = 0
 
     @property
@@ -115,15 +114,7 @@ class _RecordingBackend:
         attempt: int,
         current_resume_spec: object,
     ):
-        self.context_calls.append(
-            {
-                "session_home": session_home,
-                "project_dir": project_dir,
-                "launch_id": launch_id,
-                "attempt": attempt,
-                "resume_spec": current_resume_spec,
-            }
-        )
+        del session_home, project_dir, current_resume_spec
         return nullcontext(
             CookSessionHandle(
                 view_id=f"{launch_id}-{attempt}",

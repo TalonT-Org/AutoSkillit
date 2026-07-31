@@ -120,9 +120,11 @@ def verify_install_state() -> tuple[InstallStateFinding, ...]:
     #    from the trusted home/plugin/version tuple.
     current_spec = _current_install_state_spec()
     exact = verify_installed_plugin_artifact(current_spec)
-    findings.extend(exact.findings)
-    if exact.lease is not None:
-        exact.lease.close()
+    try:
+        findings.extend(exact.findings)
+    finally:
+        if exact.lease is not None:
+            exact.lease.close()
 
     # 2. Retired artifact shapes still present on disk.
     for key, retired in sorted(RETIRED_INSTALL_ARTIFACT_SHAPES.items()):

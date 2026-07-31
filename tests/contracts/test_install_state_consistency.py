@@ -92,6 +92,42 @@ class TestVerifyInstallState:
 
         assert verify_install_state() == ()
 
+    def test_acquired_lease_closes_when_findings_consumption_fails(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from autoskillit.workspace import _install_state
+
+        class RaisingFindings:
+            def __iter__(self):
+                raise RuntimeError("findings consumption failed")
+
+        class TrackingLease:
+            closed = False
+
+            def close(self) -> None:
+                self.closed = True
+
+        lease = TrackingLease()
+
+        class Verification:
+            findings = RaisingFindings()
+
+            def __init__(self) -> None:
+                self.lease = lease
+
+        monkeypatch.setattr(_install_state, "_current_install_state_spec", object)
+        monkeypatch.setattr(
+            _install_state,
+            "verify_installed_plugin_artifact",
+            lambda _spec: Verification(),
+        )
+
+        with pytest.raises(RuntimeError, match="findings consumption failed"):
+            _install_state.verify_install_state()
+
+        assert lease.closed is True
+
     @pytest.mark.parametrize("kind", PLUGIN_ARTIFACT_STATE_KINDS, ids=str)
     def test_complete_production_shaped_artifact_matrix(
         self,

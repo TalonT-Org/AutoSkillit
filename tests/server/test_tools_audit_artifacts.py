@@ -119,6 +119,23 @@ def test_standalone_writer_is_deterministic_and_non_authoritative(
     assert evidence.verdict is AuditVerdict.NO_GO
 
 
+def test_standalone_writer_rejects_symlink_substitution(tmp_path: Path) -> None:
+    allowed_root = tmp_path / "allowed"
+    args = _semantic_args(tmp_path)
+    first = write_standalone_audit_evidence_sync(temp_root=allowed_root, **args)
+    evidence_path = Path(first["standalone_evidence_path"])
+    canonical = evidence_path.read_bytes()
+    evidence_path.unlink()
+    outside = tmp_path / "outside.json"
+    outside.write_bytes(canonical)
+    evidence_path.symlink_to(outside)
+
+    replay = write_standalone_audit_evidence_sync(temp_root=allowed_root, **args)
+
+    assert replay["success"] is False
+    assert "ContainmentError" in replay["error"]
+
+
 def test_standalone_writer_never_raises_for_malformed_semantics(
     tmp_path: Path,
 ) -> None:

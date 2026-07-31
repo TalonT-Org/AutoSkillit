@@ -187,7 +187,12 @@ def _write_or_verify_standalone_evidence(
     try:
         _write_standalone_evidence(path, evidence)
     except FileExistsError:
-        if path.read_bytes() != canonical:
+        resolved, existing = read_stable_contained_bytes(
+            path,
+            root,
+            max_size_bytes=max(1, len(canonical)),
+        )
+        if resolved != path or existing != canonical:
             raise _SemanticInputError(
                 "standalone audit evidence path contains different bytes"
             ) from None

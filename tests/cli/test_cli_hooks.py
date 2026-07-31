@@ -51,6 +51,13 @@ def test_claude_settings_path_project_scope(tmp_path, monkeypatch):
     assert p == tmp_path / ".claude" / "settings.json"
 
 
+def test_claude_settings_path_rejects_invalid_scope(tmp_path: Path) -> None:
+    from autoskillit.cli._hooks import _claude_settings_path
+
+    with pytest.raises(ValueError, match="invalid Claude settings scope"):
+        _claude_settings_path("invalid", cwd=tmp_path)
+
+
 # HK11
 def test_registered_hooks_use_absolute_paths(tmp_path):
     """Hook commands written to settings.json must use absolute paths, not python3 -m."""

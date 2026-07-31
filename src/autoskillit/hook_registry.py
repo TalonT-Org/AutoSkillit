@@ -818,7 +818,11 @@ def generate_hooks_json(
 
 
 def _claude_settings_path(scope: str, *, cwd: Path) -> Path:
-    """Return the Claude settings path for a scope and explicit project cwd."""
+    """Return the Claude settings path for a scope and explicit project cwd.
+
+    Raises:
+        ValueError: If ``scope`` is not ``user``, ``project``, or ``local``.
+    """
     if scope == "user":
         return Path.home() / ".claude" / "settings.json"
     project_dir = Path(cwd)

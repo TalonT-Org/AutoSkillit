@@ -205,10 +205,17 @@ class TestVerifyInstallState:
         import autoskillit.workspace._install_state as install_state
 
         fresh_version = "9.8.7-fresh"
+        real_version = install_state.importlib.metadata.version
+
+        def version_for_test(package: str) -> str:
+            if package == "autoskillit":
+                return fresh_version
+            return real_version(package)
+
         monkeypatch.setattr(
             install_state.importlib.metadata,
             "version",
-            lambda package: fresh_version if package == "autoskillit" else "",
+            version_for_test,
         )
 
         clean_spec = install_state._current_install_state_spec()

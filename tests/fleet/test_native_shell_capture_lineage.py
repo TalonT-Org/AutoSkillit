@@ -347,7 +347,7 @@ class TestFoodTruckManagedLineage:
         self, tool_ctx, monkeypatch, tmp_path: Path
     ) -> None:
         from autoskillit.core import FleetErrorCode
-        from autoskillit.fleet import DispatchRejected
+        from autoskillit.fleet import DispatchCompleted, DispatchStatus
 
         _setup_dispatch(tool_ctx, monkeypatch)
         tool_ctx.backend = _mock_backend_with_locator(project_log_dir=tmp_path)
@@ -369,9 +369,10 @@ class TestFoodTruckManagedLineage:
 
         result = await _execute(tool_ctx, mode=NativeShellCaptureMode.DIRECT)
 
-        assert isinstance(result.outcome, DispatchRejected)
-        assert result.outcome.error_code == FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH
-        assert result.outcome.message == "Food-truck dispatch initialization failed."
+        assert isinstance(result.outcome, DispatchCompleted)
+        assert result.outcome.dispatch_status is DispatchStatus.REFUSED
+        assert result.outcome.reason == FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH
+        assert result.outcome.diagnostic_message == ("Food-truck dispatch initialization failed.")
         assert "feedface" not in result.outcome.to_envelope()
         assert "deaddead" not in result.outcome.to_envelope()
         assert result.per_dispatch_state_path is not None

@@ -82,8 +82,13 @@ class _RecordingBackend:
     def binary_name(self) -> str:
         return "claude" if self.name == "claude-code" else "codex"
 
-    def ensure_pre_launch(self, *, session_dir: Path | None = None) -> list[str]:
-        del session_dir
+    def ensure_pre_launch(
+        self,
+        *,
+        session_dir: Path | None = None,
+        executable: object = None,
+    ) -> list[str]:
+        del session_dir, executable
         return []
 
     def recover_cook_history(self) -> None:

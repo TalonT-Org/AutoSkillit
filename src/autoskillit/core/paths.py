@@ -22,6 +22,29 @@ from pathlib import Path
 from typing import NamedTuple
 
 
+def github_review_ledger_path(
+    *,
+    home: Path | None = None,
+    environ: dict[str, str] | None = None,
+    platform: str | None = None,
+) -> Path:
+    """Return the platform state path for the global review-mutation ledger.
+
+    Resolution is pure: the directory and database are created lazily by the
+    ledger, never by this helper.
+    """
+
+    resolved_home = home if home is not None else Path.home()
+    resolved_environ = os.environ if environ is None else environ
+    resolved_platform = sys.platform if platform is None else platform
+    if resolved_platform == "darwin":
+        base = resolved_home / "Library" / "Application Support"
+    else:
+        configured = resolved_environ.get("XDG_STATE_HOME")
+        base = Path(configured) if configured else resolved_home / ".local" / "state"
+    return base / "autoskillit" / "github-review" / "ledger.sqlite3"
+
+
 def default_log_dir() -> Path:
     """Platform-default session diagnostics log directory (XDG-aware).
 

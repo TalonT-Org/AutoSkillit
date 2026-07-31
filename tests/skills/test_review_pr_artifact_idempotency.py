@@ -1,4 +1,4 @@
-"""Structural tests for review-pr/SKILL.md idempotent-write guidance (1b)."""
+"""Structural tests for review-pr artifact idempotency and receipt ownership."""
 
 from __future__ import annotations
 
@@ -29,6 +29,7 @@ _VULNERABLE_FILES = [
 ]
 
 _WINDOW = 600
+_RECEIPT_PREFIX = "batch_review_response_"
 
 
 def _all_surrounding_windows(text: str, target: str) -> list[str]:
@@ -137,3 +138,27 @@ def test_fixed_destinations_reject_direct_redirects() -> None:
         "local_findings_${pr_number}.json",
     ):
         assert f'> "${{REVIEW_OUTPUT_DIR}}{filename}"' not in text
+
+
+def test_post_pr_review_owns_the_idempotent_receipt_write() -> None:
+    """The prompt supplies one contained receipt path and never writes it itself."""
+    text = _SKILL_PATH.read_text()
+    assert text.count("post_pr_review") == 1
+
+    call_idx = text.find("post_pr_review")
+    section_start = text.rfind("\n### ", 0, call_idx)
+    section_end = text.find("\n### ", call_idx)
+    section = text[max(0, section_start) : section_end if section_end >= 0 else len(text)]
+
+    assert _RECEIPT_PREFIX in section
+    assert ".json" in section[section.find(_RECEIPT_PREFIX) :]
+    assert "pr_number" in section.lower() or "PR_NUMBER" in section
+    assert "REVIEW_OUTPUT_DIR" in section or "AUTOSKILLIT_TEMP" in section
+    assert "receipt_path" in section
+    assert "review_receipt_path" in text[call_idx:]
+
+    receipt_line = next(line for line in section.splitlines() if _RECEIPT_PREFIX in line)
+    assert not any(operator in receipt_line for operator in (">", "tee ", "jq -n")), (
+        "review-pr must pass the receipt path to post_pr_review; shell or jq writes "
+        "would bypass the tool's idempotent receipt semantics"
+    )

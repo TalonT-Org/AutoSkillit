@@ -1,5 +1,5 @@
 {
-  "_registry_hash": "3cf98aabcb0a1334c4ed08de5bbea684491af01b237ac86e10ffa789edef0ae6",
+  "_registry_hash": "93798b15b817cc30635aa4a706c0335d73e13d2ebda445e0e65ab15c5b99f3a4",
   "hooks": {
     "PostToolUse": [
       {
@@ -149,6 +149,11 @@
         "hooks": [
           {
             "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/unsafe_install_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/github_mutation_guard",
             "trusted_hash": "SANITIZED_FOR_DETERMINISM",
             "type": "command"
           },

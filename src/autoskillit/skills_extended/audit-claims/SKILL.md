@@ -1,7 +1,7 @@
 ---
 name: audit-claims
 categories: [research]
-uses_capabilities: [agent_model, github_api_write]
+uses_capabilities: [agent_model]
 description: >
   Parallel subagent-driven claim extraction and citation integrity audit for
   research PRs. Extracts claims by section, matches against available evidence,
@@ -269,140 +269,51 @@ else:
     verdict = "approved"
 ```
 
-### Step 6: Post Inline Review Comments
+### Step 6: Publish the Complete Citation Audit
 
-Build review comment bodies for each critical and warning finding. Use the `line` and
-`side` fields (modern GitHub Reviews API — not the deprecated `position` field).
+Resolve `repository` from the canonical caller-supplied `nameWithOwner`, require a positive
+caller-supplied `pr_number`, and validate the caller-supplied `pr_head_sha` against
+`^[0-9a-f]{40}$`. Require caller-supplied namespaced `logical_iteration` and the contained
+caller-supplied `receipt_path`. The logical iteration must start with `audit-claims:`.
+The receipt must be under `${AUTOSKILLIT_TEMP}` and use the exact
+`batch_review_response_${pr_number}.json` basename.
 
-```bash
-COMMENTS_JSON=$(jq -n --argjson findings "$FINDINGS" '
-  $findings
-  | map(select(.line != null and (.line | type) == "number" and .line > 0))
-  | map({
-    path: .file,
-    line: .line,
-    side: "RIGHT",
-    body: ("[" + .severity + "] " + .dimension + ": " + .message)
-  })
-')
+Prepare one complete `comments` array from `FINDINGS`, filtering to critical and warning
+entries with a repository-relative path and positive numeric line. Preserve `side: "RIGHT"`.
+Put findings without a valid line in the complete review `body`, not in `comments`.
 
-jq -n \
-  --arg body "AutoSkillit Citation Audit — Verdict: {verdict}" \
-  --arg event "{APPROVE|COMMENT|REQUEST_CHANGES}" \
-  --argjson comments "$COMMENTS_JSON" \
-  '{body: $body, event: $event, comments: $comments}' | \
-gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \
-  --method POST --input -
+Map `approved` to `APPROVE`, `needs_human` to `COMMENT`, and `changes_requested` to
+`REQUEST_CHANGES`. Call the structured publication tool once:
+
+```text
+post_pr_review(
+  cwd: "$worktree_path",
+  receipt_path: "$receipt_path",
+  repository: "$repository",
+  pr_number: "$pr_number",
+  head_sha: "$pr_head_sha",
+  logical_iteration: "$logical_iteration",
+  event: "$REVIEW_EVENT",
+  body: "$REVIEW_BODY",
+  comments: "$COMMENTS_JSON",
+  dry_run: false
+)
 ```
 
-Event mapping:
-- `approved` → `APPROVE`
-- `needs_human` → `COMMENT`
-- `changes_requested` → `REQUEST_CHANGES`
+Capture `review_operation_key`, `review_head_sha`, `review_post_state`, and
+`review_receipt_path`. Continue only for a confirmed or reconciled final-success state.
+Stop on ambiguous, throttled, terminal, prepared, posting, or verification-pending results.
+The complete summary is already in the publication body; make no additional review write.
 
-If the batch POST returns HTTP 200, treat the review as successfully posted regardless
-of response body content. Do NOT inspect the response body for a `comments` array —
-GitHub's review API does not echo back the submitted comments, so any length check
-would always read 0 and falsely trigger Tier 1 fallback.
+### Step 6.5: Confirm the Authoritative Receipt
 
-If the batch POST returns HTTP 422 and the error message mentions "review" or "author",
-the PR is self-authored. Retry the same request with event `COMMENT` instead of
-`REQUEST_CHANGES` or `APPROVE`.
+Confirm the receipt matches repository, PR, head SHA, and logical iteration; contains a
+positive review ID; and accounts for every original finding.
 
-**Fallback Tier 1 — Individual Comments (if batch POST fails):**
+### Step 7: Preserve Publication Identity
 
-Track success and failure counts across all individual post attempts:
-
-```bash
-COMMIT_ID=$(gh pr view {pr_number} --json headRefOid -q .headRefOid)
-tier1_success=0
-tier1_failed=0
-
-# For each finding:
-if gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
-  --method POST \
-  --field path="{finding.file}" \
-  --field line={finding.line} \
-  --field side="RIGHT" \
-  --field commit_id="$COMMIT_ID" \
-  --field body="[{finding.severity}] {finding.dimension}: {finding.message}"; then
-  tier1_success=$((tier1_success + 1))
-  sleep 1  # Rate-limit discipline: 1s between mutating calls
-else
-  # On HTTP 422 (invalid line number), retry as file-level comment
-  if gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
-    --method POST \
-    --field path="{finding.file}" \
-    --field subject_type="file" \
-    --field commit_id="$COMMIT_ID" \
-    --field body="[{finding.severity}] {finding.dimension}: {finding.message} (line {finding.line})"; then
-    tier1_success=$((tier1_success + 1))
-  else
-    tier1_failed=$((tier1_failed + 1))
-    echo "Warning: failed to post individual comment for {finding.file}:{finding.line}" >&2
-  fi
-fi
-
-echo "Fallback Tier 1: $tier1_success succeeded, $tier1_failed failed"
-```
-
-Proceed to Fallback Tier 2 only if `tier1_success == 0` (all individual posts failed).
-If at least one post succeeded, skip Tier 2.
-
-**Fallback Tier 2 — DEGRADED: Bullet-List Summary Dump (if all individual posts fail):**
-
-Before posting, state:
-
-> "FALLBACK: I was unable to post inline comments. Posting summary as review body instead. This is a DEGRADED review."
-
-```bash
-gh pr review {pr_number} --comment --body "{summary_markdown}"
-```
-
-**File-Level Comments for Critical Unpostable Findings:**
-
-After the batch review POST succeeds (or after Tier 1 individual posting completes),
-post file-level comments for each **critical-severity** finding in `UNPOSTABLE_FINDINGS`.
-These use the individual comments endpoint with `subject_type: "file"` — this parameter
-is NOT valid on the batch Reviews API `comments[]` array.
-
-```bash
-COMMIT_ID=$(gh pr view {pr_number} --json headRefOid -q .headRefOid)
-
-# For each CRITICAL finding in UNPOSTABLE_FINDINGS:
-gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
-  --method POST \
-  --field path="{finding.file}" \
-  --field subject_type="file" \
-  --field commit_id="$COMMIT_ID" \
-  --field body="[{finding.severity}] {finding.dimension} (L{finding.line} — outside diff hunk): {finding.message}"
-sleep 1  # Rate-limit discipline: 1s between mutating calls
-```
-
-Only critical-severity findings are posted as file-level comments to control API call volume.
-Warning and info unpostable findings appear in the Step 7 review body only.
-
-If a file-level POST fails, log the failure and continue — file-level comments are
-best-effort supplementary visibility. Do not fall through to Tier 1/Tier 2 for these.
-
-### Step 6.5: Post-Completion Confirmation
-
-After completing Step 6, you MUST state:
-
-> "I confirm that I posted N inline comments on the following files: [list files]. If I posted 0 inline comments and had findings, this review has FAILED its primary purpose."
-
-### Step 7: Submit Summary Review
-
-```bash
-# approved
-gh pr review {pr_number} --approve --body "AutoSkillit citation audit passed. No unsupported claims found."
-
-# changes_requested
-gh pr review {pr_number} --request-changes --body "AutoSkillit citation audit found {N} claims lacking evidence. See inline comments."
-
-# needs_human
-gh pr review {pr_number} --comment --body "AutoSkillit citation audit: uncertain citation requirements detected. Please review. See inline comments."
-```
+Carry the four structured publication fields unchanged into the final output block for the
+recipe effect gate.
 
 ### Step 8: Write Summary and Emit Verdict
 
@@ -417,6 +328,10 @@ Output the verdict as the final line:
 > code fences cause match failure.
 
 ```
+review_operation_key = {authoritative operation key}
+review_head_sha = {authoritative requested head}
+review_post_state = {SUCCEEDED|RECONCILED}
+review_receipt_path = {authoritative receipt path}
 verdict = {approved|changes_requested|needs_human}
 ```
 
@@ -436,6 +351,8 @@ Exit 1 only for unrecoverable tool-level errors.
 
 ## Output
 
+- `review_operation_key`, `review_head_sha`, `review_post_state`, and
+  `review_receipt_path` identify the authoritative publication receipt
 - `verdict=approved` — No unsupported claims; citation integrity is clear
 - `verdict=changes_requested` — Missing citations or unsupported claims found; recipe routes to resolve step
 - `verdict=needs_human` — Ambiguous citation requirements; human review requested

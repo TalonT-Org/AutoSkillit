@@ -240,13 +240,17 @@ class TestResearchRecipeStructure:
         assert "review_verdict" in step.capture
         assert "verdict" not in step.capture  # old key must be gone
 
-    def test_audit_claims_step_routes_to_route_review_resolve(self, recipe) -> None:
+    def test_audit_claims_step_routes_through_receipt_gate(self, recipe) -> None:
         step = recipe.steps["audit_claims"]
         assert step.tool == "run_skill"
         assert "audit_claims" in step.skip_when_false
-        # all on_result routes point to route_review_resolve
         routes = {c.route for c in step.on_result.conditions}
-        assert routes == {"route_review_resolve"}
+        assert routes == {"check_audit_review_posted"}
+        check = recipe.steps["check_audit_review_posted"]
+        assert {c.route for c in check.on_result.conditions} == {
+            "escalate_stop",
+            "route_review_resolve",
+        }
 
     def test_new_routing_steps_exist(self, recipe) -> None:
         assert "route_review_resolve" in recipe.steps

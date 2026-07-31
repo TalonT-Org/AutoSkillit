@@ -210,17 +210,17 @@ def test_github_api_write_pattern_detected() -> None:
         assert "github_api_write" not in _detect_capabilities(text, "test-skill")
 
 
-def test_review_pr_declares_github_api_write() -> None:
-    """review-pr must declare github_api_write in uses_capabilities."""
+def test_structured_review_posters_do_not_declare_github_api_write() -> None:
+    """Review posters delegate writes to the structured server-side tool."""
     from autoskillit.core import pkg_root
 
-    skill_md = pkg_root() / "skills_extended" / "review-pr" / "SKILL.md"
-    parsed = read_skill_frontmatter(skill_md)
-    assert parsed.data is not None
-    fm = parsed.data
-    assert "github_api_write" in set(fm.get("uses_capabilities", [])), (
-        "review-pr SKILL.md must declare uses_capabilities: [..., github_api_write, ...]"
-    )
+    for skill_name in ("review-pr", "review-research-pr", "audit-claims"):
+        skill_md = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
+        parsed = read_skill_frontmatter(skill_md)
+        assert parsed.data is not None
+        assert "github_api_write" not in set(parsed.data.get("uses_capabilities", [])), (
+            f"{skill_name} must delegate GitHub review writes to post_pr_review"
+        )
 
 
 def test_capability_routing_uses_registry_not_hardcoded_name() -> None:

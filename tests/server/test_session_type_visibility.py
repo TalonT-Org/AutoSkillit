@@ -173,6 +173,7 @@ class TestSessionTypeVisibility:
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         assert "test_check" in tool_names, "test_check should be visible for skill+headless"
+        assert "post_pr_review" in tool_names
         for name in GATED_TOOLS:
             assert name not in tool_names, f"{name} (kitchen) should be hidden for skill+headless"
 

@@ -190,6 +190,7 @@ def test_all_tool_sets_disjoint_and_complete():
     assert GATED_TOOLS.isdisjoint(UNGATED_TOOLS)
     assert GATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
     assert UNGATED_TOOLS.isdisjoint(HEADLESS_TOOLS)
+    assert "post_pr_review" in HEADLESS_TOOLS
 
 
 def test_worker_tools_removed_from_core():

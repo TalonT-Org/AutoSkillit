@@ -105,9 +105,10 @@ class TestReviewPrRecipeIntegration:
         else:
             assert "resolve_review" in routes
 
-    def test_review_pr_routes_to_check_repo_ci_event_on_failure(self, recipe: object) -> None:
-        """T_RP5: review_pr.on_failure routes to check_repo_ci_event (no review to resolve)."""
-        assert recipe.steps["review_pr"].on_failure == "check_repo_ci_event"  # type: ignore[attr-defined]
+    def test_review_pr_routes_to_release_issue_failure_on_failure(self, recipe: object) -> None:
+        """T_RP5: review_pr.on_failure stops without an authoritative receipt."""
+        steps = getattr(recipe, "steps")
+        assert getattr(steps["review_pr"], "on_failure") == "release_issue_failure"
 
     def test_resolve_review_only_reachable_via_verdict(self, recipe: object) -> None:
         """T_RP5b: resolve_review reachable via verdict, not on_failure."""
@@ -122,9 +123,9 @@ class TestReviewPrRecipeIntegration:
         assert len(verdict_routes) >= 1, "resolve_review must be reachable via on_result"
 
     def test_review_pr_failure_and_context_limit_converge(self, recipe: object) -> None:
-        """T_RP5c: on_failure and on_context_limit both route to check_repo_ci_event."""
+        """T_RP5c: failure and context exhaustion both stop publication fail-closed."""
         step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
-        assert step.on_failure == step.on_context_limit == "check_repo_ci_event"
+        assert step.on_failure == step.on_context_limit == "release_issue_failure"
 
     def test_resolve_review_has_retries(self, recipe: object) -> None:
         """T_RP6: resolve_review has retries=2 matching resolve_ci pattern."""

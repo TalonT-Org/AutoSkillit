@@ -162,7 +162,13 @@ The `github.default_repo` setting is used when a bare issue number (`#42`) is pr
 ```yaml
 github:
   default_repo: "owner/repo"
+  review_comment_cap: 50
 ```
+
+`github.review_comment_cap` is the project safety ceiling for inline comments
+in one structured `post_pr_review` request. It must be a positive integer;
+booleans, zero, and negative values are rejected. The default of 50 is an
+AutoSkillit safety policy, not a statement about a GitHub API limit.
 
 If you need a GitHub token for the AutoSkillit API (separate from `gh` CLI auth), place it in `.autoskillit/.secrets.yaml` (never commit).
 
@@ -305,7 +311,8 @@ report_bug:
 
 When set to `"1"`, marks the MCP server instance as a headless session. This activates several session-scoped behaviors:
 
-- **Headless-tool reveal**: only `test_check` (headless-tagged) is revealed at startup.
+- **Headless-tool reveal**: `test_check`, `unlock_agent_pack`, `commit_files`,
+  `write_audit_cycle_artifact`, and `post_pr_review` are revealed at startup.
   Kitchen-only tools (`run_skill`, `run_cmd`, `run_python`, `merge_worktree`, etc.) remain
   hidden — headless sessions do not orchestrate sub-sessions.
 - **Orchestration blocked**: `run_skill`, `run_cmd`, and `run_python` are denied (headless sessions execute tasks, they do not orchestrate sub-sessions)

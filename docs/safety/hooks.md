@@ -1,13 +1,13 @@
 # Hooks
 
-AutoSkillit registers 43 Claude Code hook scripts: 32 PreToolUse, 9 PostToolUse,
+AutoSkillit registers 44 Claude Code hook scripts: 33 PreToolUse, 9 PostToolUse,
 and 2 SessionStart. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry.py` via the
 `HOOK_REGISTRY` list of `HookDef` entries; `generate_hooks_json()` then
 materializes the canonical `hooks.json` that Claude Code reads.
 
-## PreToolUse hooks (32)
+## PreToolUse hooks (33)
 
 ### `branch_protection_guard.py`
 **Guarded tools:** `merge_worktree`, `push_to_remote`
@@ -64,6 +64,15 @@ skill workers use native Claude Code tools only.
 **Guarded tool:** `run_cmd`
 Denies `run_cmd` calls that perform editable installs without `--python
 .venv`. Prevents pollution of the global Python environment.
+
+### `github_mutation_guard.py`
+**Guarded tools:** `Bash`, `run_cmd`
+Denies raw pull-request review writes and any command containing multiple,
+looped, dynamic, or otherwise unresolved GitHub mutations. Literal
+`gh api --input FILE` payloads are inspected only from an absolute effective
+working directory and fail closed when the request or `comments[]` count
+cannot be proven. Review publication must use the typed `post_pr_review` tool;
+proven single non-review mutations retain their existing policy.
 
 ### `pr_create_guard.py`
 **Guarded tool:** `run_cmd`

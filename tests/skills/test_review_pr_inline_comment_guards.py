@@ -1,13 +1,11 @@
-"""Structural guards for review-pr/SKILL.md posting mechanics.
+"""Structural guards for canonical PR-review publication.
 
-Tests enforce orchestrator behavioral guardrails (echo-the-rule,
-post-confirmation, degraded labeling), subagent [LNNN] marker guidance,
-and a non-table tiered fallback. Each test makes it impossible to
-silently regress its guarded element.
+Review-producing skills hand one complete review to ``post_pr_review``.  The
+prompt must not reproduce GitHub mutation, retry, pacing, or fallback policy.
 """
 
-import json
-import os
+from __future__ import annotations
+
 import re
 import subprocess
 from pathlib import Path
@@ -18,1011 +16,303 @@ from autoskillit.smoke_utils import render_review_finding_body
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
-SKILL_PATH = (
-    Path(__file__).parent.parent.parent
-    / "src"
-    / "autoskillit"
-    / "skills_extended"
-    / "review-pr"
-    / "SKILL.md"
+_SKILLS_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "skills_extended"
+
+_WRITERS = (
+    pytest.param("review-pr", "review-pr", id="review-pr"),
+    pytest.param("review-research-pr", "review-research-pr", id="review-research-pr"),
+    pytest.param("audit-claims", "audit-claims", id="audit-claims"),
+    pytest.param("resolve-review", "resolve-review", id="resolve-review-deferred"),
 )
 
-SKILL_TEXT = SKILL_PATH.read_text()
-
-RESEARCH_SKILL_PATH = (
-    Path(__file__).parent.parent.parent
-    / "src"
-    / "autoskillit"
-    / "skills_extended"
-    / "review-research-pr"
-    / "SKILL.md"
+_CAPTURED_RECEIPT_FIELDS = (
+    "review_operation_key",
+    "review_head_sha",
+    "review_post_state",
+    "review_receipt_path",
 )
-RESEARCH_SKILL_TEXT = RESEARCH_SKILL_PATH.read_text()
 
-RESOLVE_SKILL_PATH = (
-    Path(__file__).parent.parent.parent
-    / "src"
-    / "autoskillit"
-    / "skills_extended"
-    / "resolve-review"
-    / "SKILL.md"
-)
-RESOLVE_SKILL_TEXT = RESOLVE_SKILL_PATH.read_text()
-
-RESOLVE_RESEARCH_SKILL_PATH = (
-    Path(__file__).parent.parent.parent
-    / "src"
-    / "autoskillit"
-    / "skills_extended"
-    / "resolve-research-review"
-    / "SKILL.md"
-)
-RESOLVE_RESEARCH_SKILL_TEXT = RESOLVE_RESEARCH_SKILL_PATH.read_text()
+_RAW_REVIEW_ENDPOINT_RE = re.compile(r"/pulls/(?:[^/\s]+|\{[^}]+\})/reviews(?!/)")
+_RAW_COMMENT_ENDPOINT_RE = re.compile(r"/pulls/(?:[^/\s]+|\{[^}]+\})/comments(?!/)")
+_POST_RE = re.compile(r"(?:--method\s+POST|-X\s+POST|\bPOST\b)", re.IGNORECASE)
+_FENCED_BLOCK_RE = re.compile(r"```[^\n]*\n(.*?)```", re.DOTALL)
 
 
-# --- Orchestrator behavioral guardrails ---
+def _skill_text(skill_name: str) -> str:
+    path = _SKILLS_ROOT / skill_name / "SKILL.md"
+    assert path.exists(), f"SKILL.md not found for canonical review writer {skill_name!r}"
+    return path.read_text()
 
 
-def test_skill_has_pre_posting_echo_the_rule():
-    """After receiving findings (Step 4), the orchestrator must echo its primary
-    obligation before attempting to post. This primes the model to treat inline
-    commenting as a hard requirement."""
-    text = SKILL_TEXT
-    assert "I must post inline comments" in text or "post inline comments" in text
-    assert "specific code lines" in text
+def _publication_section(text: str) -> str:
+    call_idx = text.find("post_pr_review")
+    assert call_idx >= 0, "canonical review writer must call post_pr_review"
+    section_start = text.rfind("\n### ", 0, call_idx)
+    section_end = text.find("\n### ", call_idx)
+    return text[max(0, section_start) : section_end if section_end >= 0 else len(text)]
 
 
-def test_skill_has_post_completion_confirmation():
-    """After Step 6, the orchestrator must confirm how many inline comments
-    it posted. If 0 and findings existed, it must state the review FAILED."""
-    text = SKILL_TEXT
-    assert "I posted" in text and "inline comments" in text
-    assert "FAILED" in text or "failed" in text
+def _parameter_is_present(section: str, name: str) -> bool:
+    return bool(
+        re.search(
+            rf"(?m)^\s*(?:[-*]\s*)?[`\"']?{re.escape(name)}[`\"']?\s*[:=]",
+            section,
+        )
+    )
+
+
+def _parameter_line(section: str, name: str) -> str:
+    pattern = re.compile(rf"[`\"']?{re.escape(name)}[`\"']?\s*[:=]")
+    return next(line for line in section.splitlines() if pattern.search(line))
+
+
+def _fenced_blocks(text: str) -> list[str]:
+    return _FENCED_BLOCK_RE.findall(text)
 
 
 def test_standard_findings_decode_degrades_on_parse_or_type_failure() -> None:
-    assert "except json.JSONDecodeError:" in SKILL_TEXT
-    assert "standard findings are not valid JSON" in SKILL_TEXT
-    assert "isinstance(STANDARD_FINDINGS_DECODED, list)" in SKILL_TEXT
-    assert "standard findings must be a JSON array" in SKILL_TEXT
-    assert "if STANDARD_VALIDATION_ERRORS:" in SKILL_TEXT
-    assert '"validation_errors": STANDARD_VALIDATION_ERRORS' in SKILL_TEXT
+    text = _skill_text("review-pr")
+    assert "except json.JSONDecodeError:" in text
+    assert "standard findings are not valid JSON" in text
+    assert "isinstance(STANDARD_FINDINGS_DECODED, list)" in text
+    assert "standard findings must be a JSON array" in text
+    assert "if STANDARD_VALIDATION_ERRORS:" in text
+    assert '"validation_errors": STANDARD_VALIDATION_ERRORS' in text
 
 
 def test_auditor_status_uses_one_authoritative_mapping() -> None:
-    assert 'AUDITOR_STATUS_BY_NAME.update(VALIDATION_RESULT["status_by_name"])' in SKILL_TEXT
-    assert "EXPERIMENTAL_AUDITOR_STATUS =" not in SKILL_TEXT
-    assert "`AUDITOR_STATUS_BY_NAME` terminal-status authority" in SKILL_TEXT
+    text = _skill_text("review-pr")
+    assert 'AUDITOR_STATUS_BY_NAME.update(VALIDATION_RESULT["status_by_name"])' in text
+    assert "EXPERIMENTAL_AUDITOR_STATUS =" not in text
+    assert "`AUDITOR_STATUS_BY_NAME` terminal-status authority" in text
 
 
-def test_skill_labels_tier2_as_degraded_failure():
-    """Tier 2 (body dump) must be explicitly labeled as a degraded failure mode,
-    not presented as an acceptable fallback."""
-    text = SKILL_TEXT
-    assert "DEGRADED" in text or "degraded" in text
-
-
-def test_subagent_prompt_references_lnnn_markers():
-    """Subagent prompt must instruct subagents to use [LNNN] markers for line numbers."""
-    text = SKILL_TEXT
-    prompt_marker = "Subagent prompt template"
-    prompt_start = text.find(prompt_marker)
-    assert prompt_start != -1, (
-        "review-pr/SKILL.md must contain a 'Subagent prompt template' section."
-    )
-    next_section = text.find("\n###", prompt_start + len(prompt_marker))
-    prompt_section = text[prompt_start:next_section] if next_section != -1 else text[prompt_start:]
-    assert "[LNNN]" in prompt_section, (
-        "review-pr/SKILL.md subagent prompt must instruct subagents to use [LNNN] "
-        "markers for line numbers — not compute line numbers themselves."
-    )
-
-
-def test_fallback_does_not_use_markdown_table():
-    """Fallback body must not use a markdown table (overflows for long messages)."""
-    text = SKILL_TEXT
-    assert "| Line | Severity | Dimension | Message |" not in text, (
-        "review-pr/SKILL.md fallback body must not use a 4-column markdown table. "
-        "Long message content causes horizontal overflow. Use a bullet-list format."
-    )
-
-
-def test_fallback_attempts_individual_comment_posting():
-    """Fallback must attempt individual per-finding comment posting before summary dump."""
-    text = SKILL_TEXT
-    assert any(
-        kw in text
-        for kw in [
-            "pulls/{pr_number}/comments",
-            "individual comment",
-            "per-finding",
-            "per finding",
-        ]
-    ), (
-        "review-pr/SKILL.md fallback must attempt individual /pulls/{n}/comments "
-        "POSTs before the summary dump. The summary dump creates a non-inline body "
-        "comment that resolve-review cannot find."
-    )
-
-
-# --- Step 6 posting flags (regression guards for currently-correct elements) ---
-
-
-def test_step6_uses_input_flag_not_field_for_comments():
-    """Step 6 must prescribe --input - for the reviews payload.
-
-    The --field approach creates one array entry per flag, not a proper JSON
-    array. This was the root cause of Issue #206. Guarded here to prevent
-    silent regression.
-
-    To verify this test is effective: temporarily remove '--input -' from
-    SKILL.md and confirm this test fails. Then restore it.
-    """
-    text = SKILL_TEXT
-    step6_start = text.find("### Step 6")
-    step65_start = text.find("### Step 6.5")
-    assert step6_start != -1
-    assert step65_start != -1
-    step6_section = text[step6_start:step65_start]
-    assert "--input -" in step6_section, (
-        "Step 6 must use '--input -' for the reviews POST payload. "
-        "This flag must appear within Step 6 specifically (not elsewhere in SKILL.md)."
-    )
-
-
-def test_step6_captures_http_status_and_publishes_receipt_only_on_200() -> None:
-    step6_start = SKILL_TEXT.index("### Step 6")
-    step65_start = SKILL_TEXT.index("### Step 6.5")
-    section = SKILL_TEXT[step6_start:step65_start]
-    assert "--include --input -" in section
-    assert 'HTTP_STATUS="$(' in section
-    assert "awk 'toupper($1) ~ /^HTTP\\//" in section
-    assert 'if [ "$HTTP_STATUS" = "200" ]; then' in section
-    assert "refresh_final_snapshot_state" in section
-    assert "RECEIPT_DOCUMENT=" in section
-    assert "http_status:200" in section
-    assert '--arg commit_id "$COMMIT_ID"' in section
-    assert '--arg review_generation_id "$REVIEW_GENERATION_ID"' in section
-    assert "must not write the fixed receipt" in section
-    assert "comments` array" in section
-    assert "POSTED_REVIEW_ID=" in section
-    assert '/reviews/"$POSTED_REVIEW_ID"/dismissals' in section
-    assert "--method PUT" in section
-    assert "sleep 1" in section
-    assert "STALE_REVIEW_COMPENSATION_FAILED=true" in section
-    assert section.count("verdict=stale_snapshot") >= 2
-
-
-@pytest.mark.parametrize(
-    ("http_status", "snapshot_rc", "expect_receipt"),
-    [("200", "0", True), ("201", "0", False), ("200", "1", False)],
-)
-def test_step6_receipt_effect_requires_http_200_and_fresh_authoritative_commit(
-    tmp_path: Path,
-    http_status: str,
-    snapshot_rc: str,
-    expect_receipt: bool,
+@pytest.mark.parametrize(("skill_name", "iteration_namespace"), _WRITERS)
+def test_canonical_writer_calls_post_pr_review_exactly_once(
+    skill_name: str,
+    iteration_namespace: str,
 ) -> None:
-    block_start = SKILL_TEXT.index('if [ "$HTTP_STATUS" = "200" ]; then')
-    block_end = SKILL_TEXT.index('rm -f -- "$BATCH_RESPONSE_TMP"', block_start)
-    receipt_block = SKILL_TEXT[block_start:block_end]
-    capture_path = tmp_path / "receipt-in-memory.json"
-    script = "\n".join(
-        [
-            'revalidate_retained_snapshot() { return "$SNAPSHOT_RC"; }',
-            (
-                "refresh_final_snapshot_state() { "
-                "if revalidate_retained_snapshot; then FINAL_SNAPSHOT_STATE=fresh; "
-                "else FINAL_SNAPSHOT_STATE=stale; fi; }"
-            ),
-            receipt_block,
-            'printf \'%s\' "$RECEIPT_DOCUMENT" > "$CAPTURE_PATH"',
-        ]
+    text = _skill_text(skill_name)
+    assert text.count("post_pr_review") == 1, (
+        f"{skill_name}/SKILL.md must contain exactly one post_pr_review call; "
+        "supplementary, summary-only, and fallback review submissions are forbidden"
     )
-    env = {
-        **os.environ,
-        "HTTP_STATUS": http_status,
-        "SNAPSHOT_RC": snapshot_rc,
-        "REVIEW_OUTPUT_DIR": f"{tmp_path}/",
-        "pr_number": "42",
-        "COMMIT_ID": "authoritative-head",
-        "REVIEW_GENERATION_ID": "review-generation",
-        "CAPTURE_PATH": str(capture_path),
-    }
-
-    result = subprocess.run(
-        ["bash", "-c", script],
-        cwd=tmp_path,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert not (tmp_path / "batch_review_response_42.json").exists()
-    serialized_receipt = capture_path.read_text()
-    assert bool(serialized_receipt) is expect_receipt
-    if expect_receipt:
-        receipt = json.loads(serialized_receipt)
-        assert receipt == {
-            "posted": True,
-            "http_status": 200,
-            "commit_id": "authoritative-head",
-            "review_generation_id": "review-generation",
-        }
+    assert iteration_namespace in _publication_section(text)
 
 
-@pytest.mark.parametrize(
-    ("dismiss_exit_code", "expected_compensation_failed"),
-    [(0, "false"), (1, "true")],
-)
-def test_step6_stale_snapshot_dismisses_posted_authoritative_review(
-    tmp_path: Path,
-    dismiss_exit_code: int,
-    expected_compensation_failed: str,
+@pytest.mark.parametrize(("skill_name", "iteration_namespace"), _WRITERS)
+def test_post_pr_review_receives_canonical_identity_and_head(
+    skill_name: str,
+    iteration_namespace: str,
 ) -> None:
-    block_start = SKILL_TEXT.index('if [ "$HTTP_STATUS" = "200" ]; then')
-    block_end = SKILL_TEXT.index('rm -f -- "$BATCH_RESPONSE_TMP"', block_start)
-    receipt_block = SKILL_TEXT[block_start:block_end]
-    fake_bin = tmp_path / "bin"
-    fake_bin.mkdir()
-    fake_gh = fake_bin / "gh"
-    fake_gh.write_text(
-        '#!/usr/bin/env bash\nprintf \'%s\\0\' "$@" > "$GH_ARGS_PATH"\nexit "$GH_EXIT_CODE"\n'
-    )
-    fake_gh.chmod(0o755)
-    gh_args_path = tmp_path / "gh-args.txt"
-    compensation_path = tmp_path / "compensation.txt"
-    script = "\n".join(
-        [
-            "refresh_final_snapshot_state() { FINAL_SNAPSHOT_STATE=stale; }",
-            "sleep() { :; }",
-            receipt_block,
-            ('printf \'%s\' "${STALE_REVIEW_COMPENSATION_FAILED:-false}" > "$COMPENSATION_PATH"'),
-        ]
-    )
-    env = {
-        **os.environ,
-        "PATH": f"{fake_bin}:{os.environ['PATH']}",
-        "HTTP_STATUS": "200",
-        "POSTED_REVIEW_ID": "987",
-        "REVIEW_EVENT": "REQUEST_CHANGES",
-        "GH_ARGS_PATH": str(gh_args_path),
-        "GH_EXIT_CODE": str(dismiss_exit_code),
-        "COMPENSATION_PATH": str(compensation_path),
-    }
+    text = _skill_text(skill_name)
+    section = _publication_section(text)
 
-    result = subprocess.run(
-        ["bash", "-c", script],
-        cwd=tmp_path,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stderr
-    gh_args = [item.decode() for item in gh_args_path.read_bytes().split(b"\0") if item]
-    assert gh_args == [
-        "api",
-        "/repos/{owner}/{repo}/pulls/{pr_number}/reviews/987/dismissals",
-        "--method",
-        "PUT",
-        "--field",
-        "message=Dismissed because the PR snapshot changed during review submission",
-    ]
-    assert compensation_path.read_text() == expected_compensation_failed
-
-
-def test_primary_and_every_fallback_reuse_the_canonical_rendered_body() -> None:
-    step6 = SKILL_TEXT[
-        SKILL_TEXT.index("### Step 6: Post Inline Review Comments") : SKILL_TEXT.index(
-            "### Step 6.5"
+    for parameter in (
+        "cwd",
+        "repository",
+        "pr_number",
+        "head_sha",
+        "logical_iteration",
+    ):
+        assert _parameter_is_present(section, parameter), (
+            f"{skill_name}/SKILL.md post_pr_review call must pass {parameter!r}"
         )
-    ]
-    assert "body: .rendered_body" in step6
-    assert step6.count('--field body="{finding.rendered_body}"') >= 2
-    assert "`finding.rendered_body` verbatim for every bullet" in step6
 
+    assert "nameWithOwner" in text, (
+        f"{skill_name}/SKILL.md must resolve the canonical nameWithOwner repository "
+        "rather than reconstructing owner/repo fragments"
+    )
+    assert (
+        "^[0-9a-f]{40}$" in text
+        or "40-character lowercase" in text.lower()
+        or "40 character lowercase" in text.lower()
+    ), f"{skill_name}/SKILL.md must validate a full, lowercase 40-hex head SHA before publication"
 
-def test_step15_resolve_review_uses_input_flag_not_field_for_comments():
-    """resolve-review Step 1.5 must prescribe --input - for the batch reviews POST.
-
-    Step 1.5 posts accumulated deferred observations via POST /reviews. Using
-    --field for the comments[] array serializes it as a string literal, causing
-    HTTP 422. Guarded here to prevent silent regression of Issue #3244.
-
-    To verify this test is effective: temporarily remove '--input -' from
-    resolve-review/SKILL.md Step 1.5 and confirm this test fails. Then restore it.
-    """
-    text = RESOLVE_SKILL_TEXT
-    step15_start = text.find("### Step 1.5")
-    step2_start = text.find("### Step 2")
-    assert step15_start != -1, "resolve-review/SKILL.md must contain '### Step 1.5'"
-    assert step2_start != -1, "resolve-review/SKILL.md must contain '### Step 2'"
-    step15_section = text[step15_start:step2_start]
-    assert "--input -" in step15_section, (
-        "resolve-review/SKILL.md Step 1.5 must use '--input -' for the batch reviews "
-        "POST payload. The --field approach serializes JSON arrays as string literals, "
-        "causing HTTP 422. This flag must appear within Step 1.5 specifically."
+    logical_idx = section.find("logical_iteration")
+    logical_context = section[max(0, logical_idx - 300) : logical_idx + 500]
+    assert iteration_namespace in logical_context, (
+        f"{skill_name}/SKILL.md logical_iteration must be namespaced with {iteration_namespace!r}"
     )
 
 
-def test_step6_does_not_prescribe_deprecated_position_field():
-    """Comments payload must not include a 'position' field.
+@pytest.mark.parametrize(("skill_name", "iteration_namespace"), _WRITERS)
+def test_post_pr_review_receives_complete_review_and_contained_receipt(
+    skill_name: str,
+    iteration_namespace: str,
+) -> None:
+    del iteration_namespace
+    section = _publication_section(_skill_text(skill_name))
 
-    GitHub deprecated the 'position' field in favour of 'line' + 'side'.
-    The SKILL.md explicitly prohibits 'position' in the comments payload.
-    Guarded here to prevent silent regression.
+    for parameter in ("event", "body", "comments", "receipt_path", "dry_run"):
+        assert _parameter_is_present(section, parameter), (
+            f"{skill_name}/SKILL.md post_pr_review call must pass the complete {parameter!r} value"
+        )
 
-    To verify: add '"position":' to the Step 6 jq block in SKILL.md and
-    confirm this test fails. Then restore it.
-    """
-    text = SKILL_TEXT
-    step6_start = text.find("### Step 6")
-    step7_start = text.find("### Step 7")
-    assert step6_start != -1, "SKILL.md must contain a '### Step 6' heading"
-    assert step7_start != -1, "SKILL.md must contain a '### Step 7' heading"
-    step6_section = text[step6_start:step7_start]
-    # 'position' as a JSON key in the payload (e.g. "position": or position: )
-    assert not re.search(r'"position"\s*:', step6_section), (
-        "review-pr/SKILL.md Step 6 comments payload must not include a 'position' "
-        "field. Use 'line' + 'side: RIGHT' (the modern Reviews API)."
+    assert re.search(r"batch_review_response_[^\s`\"']*pr[^\s`\"']*\.json", section, re.I), (
+        f"{skill_name}/SKILL.md receipt_path must use batch_review_response_<pr>.json"
+    )
+    assert "AUTOSKILLIT_TEMP" in section or "OUTPUT_DIR" in section, (
+        f"{skill_name}/SKILL.md receipt_path must be contained by its declared "
+        "AutoSkillit output directory"
+    )
+    assert "/tmp/" not in section
+
+    for parameter in ("event", "body", "comments"):
+        parameter_line = _parameter_line(section, parameter)
+        assert not re.search(
+            rf"[`\"']?{parameter}[`\"']?\s*[:=]\s*(?:\[\s*\]|[\"']{{2}}|null|None)"
+            r"\s*[,)]?\s*$",
+            parameter_line,
+        ), (
+            f"{skill_name}/SKILL.md must pass the prepared {parameter} value, not an "
+            "empty or placeholder value"
+        )
+
+    dry_run_line = _parameter_line(section, "dry_run")
+    assert re.search(
+        r"[`\"']?dry_run[`\"']?\s*[:=]\s*(?:false|False)\b",
+        dry_run_line,
+    ), f"{skill_name}/SKILL.md publication must pass dry_run=false"
+
+
+@pytest.mark.parametrize(("skill_name", "iteration_namespace"), _WRITERS)
+def test_writer_captures_receipt_state_before_preserving_verdict(
+    skill_name: str,
+    iteration_namespace: str,
+) -> None:
+    del iteration_namespace
+    text = _skill_text(skill_name)
+    call_idx = text.find("post_pr_review")
+    tail = text[call_idx:]
+
+    for field in _CAPTURED_RECEIPT_FIELDS:
+        assert field in tail, (
+            f"{skill_name}/SKILL.md must capture post_pr_review output field {field!r}"
+        )
+    assert "verdict=" in tail, (
+        f"{skill_name}/SKILL.md must preserve its verdict output after publication"
     )
 
 
-def test_step6_payload_includes_side_right():
-    """Each comment in the reviews payload must include side: 'RIGHT'.
+@pytest.mark.parametrize(("skill_name", "iteration_namespace"), _WRITERS)
+def test_writer_contains_no_raw_or_fallback_review_mutations(
+    skill_name: str,
+    iteration_namespace: str,
+) -> None:
+    del iteration_namespace
+    text = _skill_text(skill_name)
+    publication_section = _publication_section(text)
 
-    Omitting 'side' may cause GitHub to default to an unspecified diff side.
-    Guarded here to prevent silent regression.
+    for block in _fenced_blocks(text):
+        if "gh api" not in block or not _POST_RE.search(block):
+            continue
+        assert not _RAW_REVIEW_ENDPOINT_RE.search(block), (
+            f"{skill_name}/SKILL.md must not issue a raw Reviews API mutation"
+        )
+        assert not _RAW_COMMENT_ENDPOINT_RE.search(block), (
+            f"{skill_name}/SKILL.md must not issue individual review-comment mutations"
+        )
 
-    To verify: remove 'side' from the jq block in SKILL.md and confirm this
-    test fails. Then restore it.
-    """
-    text = SKILL_TEXT
-    assert re.search(r"side.*RIGHT", text), (
-        "review-pr/SKILL.md Step 6 comment objects must include side: 'RIGHT' "
-        "to anchor comments to the new-file side of the diff."
+    forbidden_fallbacks = (
+        "tier 1 fallback",
+        "tier 2 fallback",
+        "split the batch",
+        "split review",
+        "split comments",
+        "file-level fallback",
+        "file level fallback",
+        "individual comment posting",
+        "per-finding post",
+        "supplementary review",
+        "second review",
+        "second summary",
+        "second summary review",
+        "summary-only review",
+    )
+    lower = text.lower()
+    for phrase in forbidden_fallbacks:
+        assert phrase not in lower, (
+            f"{skill_name}/SKILL.md must delegate mutation policy to post_pr_review; "
+            f"found forbidden prompt fallback {phrase!r}"
+        )
+
+    assert "subject_type" not in publication_section, (
+        f"{skill_name}/SKILL.md must not synthesize file-level fallback comments"
+    )
+    assert not re.search(r"\bself[- ]review\b", publication_section, re.IGNORECASE), (
+        f"{skill_name}/SKILL.md must not perform prompt-level self-review transformation"
+    )
+    assert not re.search(
+        r"\b(?:transform|rewrite|repair)\s+(?:the\s+)?review\b",
+        publication_section,
+        re.IGNORECASE,
+    ), f"{skill_name}/SKILL.md must pass the already-complete review payload unchanged"
+    assert not re.search(r"\bsleep(?:\s+\d+|\s*\()", publication_section, re.IGNORECASE), (
+        f"{skill_name}/SKILL.md must not pace post_pr_review mutations in the prompt"
     )
 
 
-def test_step6_documents_event_mapping():
-    """Step 6 must document the verdict-to-event mapping.
+@pytest.mark.parametrize(
+    "skill_name",
+    ("review-pr", "review-research-pr"),
+)
+def test_review_writer_preserves_line_anchor_and_severity_filtering(skill_name: str) -> None:
+    text = _skill_text(skill_name)
+    assert "[LNNN]" in text
+    assert "VALID_DIFF_LINES" in text
 
-    approved → APPROVE, needs_human → COMMENT, changes_requested → REQUEST_CHANGES.
-    Guarded here to prevent accidental mapping errors in future edits.
-    """
-    text = SKILL_TEXT
-    assert "APPROVE" in text and "REQUEST_CHANGES" in text, (
-        "review-pr/SKILL.md Step 6 must document the verdict-to-event mapping: "
-        "approved → APPROVE, changes_requested → REQUEST_CHANGES."
+    section = _publication_section(text)
+    assert "severity" in section.lower(), (
+        f"{skill_name}/SKILL.md must filter the final comments payload by severity"
     )
 
 
-# --- Section-scoped regression guards ---
-
-
-def test_step6_builds_comments_from_jq_argjson():
-    """Step 6 must contain the jq -n --argjson pattern for building COMMENTS_JSON."""
-    text = SKILL_TEXT
-    step6_start = text.find("### Step 6")
-    step65_start = text.find("### Step 6.5")
-    assert step6_start != -1
-    assert step65_start != -1
-    step6_section = text[step6_start:step65_start]
-    assert "jq -n --argjson findings" in step6_section, (
-        "Step 6 must contain 'jq -n --argjson findings' for building COMMENTS_JSON "
-        "from FILTERED_FINDINGS. Without this, inline comment construction is unguided."
-    )
-
-
-def test_step6_uses_filtered_findings_as_comment_source():
-    """Step 6 must build COMMENTS_JSON from FILTERED_FINDINGS, not all findings."""
-    text = SKILL_TEXT
-    step6_start = text.find("### Step 6")
-    step65_start = text.find("### Step 6.5")
-    assert step6_start != -1
-    assert step65_start != -1
-    step6_section = text[step6_start:step65_start]
-    assert "FILTERED_FINDINGS" in step6_section, (
-        "Step 6 must reference FILTERED_FINDINGS as the source for inline comments. "
-        "Using all findings bypasses hunk-range validation from Step 4."
-    )
-
-
-def test_step6_rendering_preserves_accepted_evidence_and_disposition_provenance():
-    """The concrete jq payload must carry accepted proof evidence through GitHub."""
-    step6_start = SKILL_TEXT.index("### Step 6")
-    step65_start = SKILL_TEXT.index("### Step 6.5", step6_start)
-    step6_section = SKILL_TEXT[step6_start:step65_start]
-    prefix = 'COMMENTS_JSON=$(jq -n --argjson findings "$FILTERED_FINDINGS" \''
-    program_start = step6_section.index(prefix) + len(prefix)
-    program_end = step6_section.index("\n')", program_start)
-    jq_program = step6_section[program_start:program_end]
-    finding = {
-        "file": "src/app.py",
-        "line": 42,
-        "severity": "warning",
-        "dimension": "overengineering_reachability",
-        "message": "Unreachable state machinery",
-        "candidate_id": "candidate-1",
-        "disposition_id": "disposition-1",
-        "evidence": [
-            {
-                "path": "src/app.py",
-                "line": 42,
-                "role": "anchor",
-                "claim": "State is declared here",
-            },
-            {
-                "path": "src/caller.py",
-                "line": 7,
-                "role": "caller",
-                "claim": "Only caller excludes the state",
-            },
-        ],
-    }
-    findings = [{**finding, "rendered_body": render_review_finding_body(finding)}]
-
-    result = subprocess.run(
-        ["jq", "-n", "--argjson", "findings", json.dumps(findings), jq_program],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    comments = json.loads(result.stdout)
-
-    assert len(comments) == 1
-    body = comments[0]["body"]
-    assert "src/app.py:42 [anchor] State is declared here" in body
-    assert "src/caller.py:7 [caller] Only caller excludes the state" in body
-    assert "candidate_id=candidate-1" in body
-    assert "disposition_id=disposition-1" in body
-
-
-def test_step65_positioned_between_step6_and_step7():
-    """Step 6.5 (Post-Completion Confirmation) must exist between Step 6 and Step 7."""
-    text = SKILL_TEXT
-    step6_idx = text.find("### Step 6:")
-    if step6_idx == -1:
-        step6_idx = text.find("### Step 6")
-    step65_idx = text.find("### Step 6.5")
-    step7_idx = text.find("### Step 7")
-    assert step6_idx != -1, "SKILL.md must contain Step 6"
-    assert step65_idx != -1, "SKILL.md must contain Step 6.5"
-    assert step7_idx != -1, "SKILL.md must contain Step 7"
-    assert step6_idx < step65_idx < step7_idx, (
-        f"Step 6.5 must be positioned between Step 6 and Step 7. "
-        f"Found: Step 6 at {step6_idx}, Step 6.5 at {step65_idx}, Step 7 at {step7_idx}"
-    )
-
-
-def test_step65_contains_do_not_proceed_gate():
-    """Step 6.5 must contain 'Do not proceed to Step 7' to prevent bypassing confirmation."""
-    text = SKILL_TEXT
-    step65_start = text.find("### Step 6.5")
-    step7_start = text.find("### Step 7")
-    assert step65_start != -1
-    assert step7_start != -1
-    step65_section = text[step65_start:step7_start]
-    assert "do not proceed to step 7" in step65_section.lower(), (
-        "Step 6.5 must contain 'Do not proceed to Step 7' as a hard gate. "
-        "Without this, a model that posted 0 inline comments can skip to verdict."
-    )
-
-
-def test_skill_prohibits_local_file_paths_in_review_body():
-    """SKILL.md must explicitly prohibit referencing local file paths in review body."""
-    text = SKILL_TEXT.lower()
+def test_review_pr_preserves_local_mode_without_publication() -> None:
+    text = _skill_text("review-pr")
+    local_idx = text.lower().find("mode=local")
+    assert local_idx >= 0
+    local_section = text[local_idx : local_idx + 2500]
+    assert "local_findings" in local_section
     assert any(
-        phrase in text
-        for phrase in [
-            "never reference local file path",
-            "do not reference local file path",
-            "do not include local file path",
-            "never include local file path",
-            "must not reference local",
-            "must not include local",
-        ]
-    ), (
-        "SKILL.md must explicitly prohibit referencing local file paths "
-        "(e.g., .autoskillit/temp/...) in the review body or inline comments. "
-        "GitHub readers cannot access local filesystem paths."
+        phrase in local_section.lower()
+        for phrase in (
+            "do not post",
+            "skip github",
+            "no github api",
+            "skip publication",
+        )
     )
 
 
-def test_step8_ordering_enforcement():
-    """Step 8 must contain ordering enforcement — it must execute after Steps 6 and 7."""
-    text = SKILL_TEXT
-    step8_start = text.find("### Step 8")
-    assert step8_start != -1
-    step8_section = text[step8_start:]
-    step8_lower = step8_section.lower()
-    assert any(
-        phrase in step8_lower
-        for phrase in [
-            "after step",
-            "after steps 6 and 7",
-            "after posting",
-            "must execute after",
-        ]
-    ), (
-        "Step 8 must contain explicit ordering enforcement stating it runs "
-        "after Steps 6 and 7. Writing the summary file before posting inline "
-        "comments anchors the model to treating the file as primary output."
-    )
+def test_resolve_review_deferred_payload_keeps_review_flag_filtering() -> None:
+    text = _skill_text("resolve-review")
+    section = _publication_section(text)
+    assert "deferred_observations" in section
+    assert "REVIEW-FLAG" in section
+    assert "severity" in section.lower()
+    assert "dimension" in section.lower()
+    assert "info" in section.lower()
+    assert any(word in section.lower() for word in ("skip", "exclude", "filter"))
 
 
-def test_mandatory_echo_positioned_between_step4_and_step5():
-    """The mandatory 'I have N findings' echo must appear between Step 4 and Step 5."""
-    text = SKILL_TEXT
-    step4_idx = text.find("### Step 4")
-    step5_idx = text.find("### Step 5")
-    assert step4_idx != -1
-    assert step5_idx != -1
-    between = text[step4_idx:step5_idx]
-    assert "my primary job is to post inline comments" in between.lower(), (
-        "The mandatory echo ('My primary job is to post inline comments') must "
-        "appear between Step 4 and Step 5. This forces the model to acknowledge "
-        "its inline comment obligation before proceeding to verdict determination."
-    )
-    assert "do not proceed to step 5" in between.lower(), (
-        "The 'Do not proceed to Step 5' gate must appear between Step 4 and Step 5."
-    )
-
-
-def test_review_pr_http200_success_signal():
-    """HTTP 200 must be treated as review-post success; response body must not be inspected."""
-    skill_md = SKILL_TEXT
-    lower = skill_md.lower()
-    assert "http 200" in lower, "Skill must reference HTTP 200 as the success signal"
-    idx = lower.find("http 200")
-    # Require the body-inspection prohibition appears in proximity to the HTTP 200
-    # success signal instruction (not just anywhere in the document).
-    window = lower[max(0, idx - 100) : idx + 500]
-    assert "regardless of response body" in window, (
-        "The 'regardless of response body' prohibition must appear in proximity to "
-        "the HTTP 200 success signal instruction"
-    )
-
-
-def test_review_pr_tier1_fallback_has_delay():
-    """Tier 1 fallback loop must include sleep 1 between individual POSTs."""
-    skill_md = SKILL_TEXT
-    tier1_idx = skill_md.find("Fallback Tier 1")
-    assert tier1_idx >= 0, "Tier 1 fallback section not found in skill"
-    tier2_idx = skill_md.find("Tier 2", tier1_idx)
-    tier1_section = skill_md[tier1_idx:tier2_idx] if tier2_idx >= 0 else skill_md[tier1_idx:]
-    assert "sleep 1" in tier1_section or "sleep(1)" in tier1_section, (
-        "Tier 1 fallback loop must include sleep 1 between individual POST calls"
-    )
-
-
-# --- Unpostable findings surfacing guards ---
-
-
-def test_step7_body_includes_outside_diff_range_section():
-    """Step 7 review body must include an 'Outside Diff Range' section for UNPOSTABLE_FINDINGS."""
-    text = SKILL_TEXT
-    step7_start = text.find("### Step 7")
-    step8_start = text.find("### Step 8")
-    assert step7_start != -1
-    assert step8_start != -1
-    step7_section = text[step7_start:step8_start]
-    assert "UNPOSTABLE_FINDINGS" in step7_section, (
-        "Step 7 must reference UNPOSTABLE_FINDINGS to surface out-of-hunk findings "
-        "in the review body."
-    )
-    assert "Outside Diff Range" in step7_section, (
-        "Step 7 must include an 'Outside Diff Range' section in the review body "
-        "for findings that could not be posted as inline comments."
-    )
-
-
-def test_step6_posts_file_level_comments_for_critical_unpostable():
-    """Step 6 must post file-level comments for critical-severity unpostable findings."""
-    text = SKILL_TEXT
-    step6_start = text.find("### Step 6")
-    step65_start = text.find("### Step 6.5")
-    assert step6_start != -1
-    assert step65_start != -1
-    step6_section = text[step6_start:step65_start]
-    assert "subject_type" in step6_section, (
-        "Step 6 must contain 'subject_type' for file-level comment posting."
-    )
-    assert 'subject_type: "file"' in step6_section or 'subject_type="file"' in step6_section, (
-        "Step 6 must use subject_type: 'file' for file-level comments."
-    )
-
-
-def test_step6_file_level_uses_individual_endpoint_not_batch():
-    """File-level comments must use the individual comments endpoint, not the batch reviews API."""
-    text = SKILL_TEXT
-    step6_start = text.find("### Step 6")
-    step65_start = text.find("### Step 6.5")
-    assert step6_start != -1
-    assert step65_start != -1
-    step6_section = text[step6_start:step65_start]
-    file_level_start = step6_section.find("File-Level Comments")
-    assert file_level_start != -1, "Step 6 must contain a 'File-Level Comments' section"
-    file_level_section = step6_section[file_level_start:]
-    assert "pulls/{pr_number}/comments" in file_level_section, (
-        "File-level comments must use the individual /pulls/{N}/comments endpoint. "
-        "subject_type: 'file' is NOT valid on the batch Reviews API."
-    )
-
-
-def test_step6_file_level_has_rate_limit_delay():
-    """File-level comment posting must include sleep 1 for API rate-limit discipline."""
-    text = SKILL_TEXT
-    step6_start = text.find("### Step 6")
-    step65_start = text.find("### Step 6.5")
-    assert step6_start != -1
-    assert step65_start != -1
-    step6_section = text[step6_start:step65_start]
-    subject_idx = step6_section.find("subject_type")
-    assert subject_idx != -1
-    file_level_section = step6_section[subject_idx:]
-    assert "sleep 1" in file_level_section, (
-        "File-level comment posting must include 'sleep 1' between mutating API calls."
-    )
-
-
-def test_step1_5_skips_null_line_threads():
-    """Step 1.5 must skip threads with null line and originalLine."""
-    text = SKILL_TEXT
-    step15_start = text.find("### Step 1.5")
+def test_resolve_review_handles_null_line_file_level_threads() -> None:
+    text = _skill_text("resolve-review")
     step2_start = text.find("### Step 2")
-    assert step15_start != -1
+    step3_start = text.find("### Step 3")
     assert step2_start != -1
-    step15_section = text[step15_start:step2_start]
-    lower = step15_section.lower()
-    assert "null" in lower and "skip" in lower, (
-        "Step 1.5 must contain guidance to skip threads with null line "
-        "(file-level comment threads from prior reviews)."
-    )
+    assert step3_start != -1
+    step2_section = text[step2_start:step3_start].lower()
+    assert "null" in step2_section
+    assert "file-level" in step2_section or "file level" in step2_section
 
 
-def test_step4_documents_unpostable_feeds_step6_and_step7():
-    """Step 4 must document that UNPOSTABLE_FINDINGS feeds into both Step 6 and Step 7."""
-    text = SKILL_TEXT
-    step4_start = text.find("### Step 4")
-    step45_start = text.find("### Step 4.5")
-    assert step4_start != -1
-    assert step45_start != -1
-    step4_section = text[step4_start:step45_start]
-    assert "UNPOSTABLE_FINDINGS" in step4_section, "Step 4 must reference UNPOSTABLE_FINDINGS."
-    assert "Step 6" in step4_section and "Step 7" in step4_section, (
-        "Step 4 must document that UNPOSTABLE_FINDINGS feeds into both "
-        "Step 6 (file-level comments) and Step 7 (review body)."
-    )
-
-
-def test_review_research_pr_step6_posts_file_level_comments():
-    """review-research-pr Step 6 must post file-level comments for critical unpostable findings."""
-    text = RESEARCH_SKILL_TEXT
-    step6_start = text.find("### Step 6")
-    step65_start = text.find("### Step 6.5")
-    assert step6_start != -1
-    assert step65_start != -1
-    step6_section = text[step6_start:step65_start]
-    assert "subject_type" in step6_section, (
-        "review-research-pr Step 6 must contain 'subject_type' for file-level comment posting."
-    )
-    assert 'subject_type: "file"' in step6_section or 'subject_type="file"' in step6_section, (
-        "review-research-pr Step 6 must use subject_type: 'file' for file-level comments."
-    )
-
-
-def test_review_research_pr_step6_uses_individual_endpoint():
-    """review-research-pr file-level comments must use the individual comments endpoint."""
-    text = RESEARCH_SKILL_TEXT
-    step6_start = text.find("### Step 6")
-    step65_start = text.find("### Step 6.5")
-    assert step6_start != -1
-    assert step65_start != -1
-    step6_section = text[step6_start:step65_start]
-    file_level_start = step6_section.find("File-Level Comments")
-    assert file_level_start != -1, (
-        "review-research-pr Step 6 must contain a 'File-Level Comments' section"
-    )
-    file_level_section = step6_section[file_level_start:]
-    assert "pulls/{pr_number}/comments" in file_level_section, (
-        "review-research-pr file-level comments must use the individual "
-        "/pulls/{N}/comments endpoint."
-    )
-
-
-def test_review_research_pr_step6_has_rate_limit_delay():
-    """review-research-pr file-level comment posting must include sleep 1."""
-    text = RESEARCH_SKILL_TEXT
-    step6_start = text.find("### Step 6")
-    step65_start = text.find("### Step 6.5")
-    assert step6_start != -1
-    assert step65_start != -1
-    step6_section = text[step6_start:step65_start]
-    file_level_start = step6_section.find("File-Level Comments")
-    assert file_level_start != -1
-    file_level_section = step6_section[file_level_start:]
-    assert "sleep 1" in file_level_section, (
-        "review-research-pr file-level comment posting must include 'sleep 1' "
-        "between mutating API calls."
-    )
-
-
-def test_review_research_pr_step6_critical_only():
-    """review-research-pr file-level comments must be limited to critical-severity findings."""
-    text = RESEARCH_SKILL_TEXT
-    step6_start = text.find("### Step 6")
-    step65_start = text.find("### Step 6.5")
-    assert step6_start != -1
-    assert step65_start != -1
-    step6_section = text[step6_start:step65_start]
-    file_level_start = step6_section.find("File-Level Comments")
-    assert file_level_start != -1
-    file_level_section = step6_section[file_level_start:]
-    lower = file_level_section.lower()
-    assert "critical" in lower, (
-        "review-research-pr file-level comments must be limited to "
-        "critical-severity findings only."
-    )
-
-
-def test_review_research_pr_step7_includes_outside_diff_range():
-    """review-research-pr Step 7 must include 'Outside Diff Range' section."""
-    text = RESEARCH_SKILL_TEXT
-    step7_start = text.find("### Step 7")
-    step8_start = text.find("### Step 8")
-    assert step7_start != -1
-    assert step8_start != -1
-    step7_section = text[step7_start:step8_start]
-    assert "UNPOSTABLE_FINDINGS" in step7_section, (
-        "review-research-pr Step 7 must reference UNPOSTABLE_FINDINGS."
-    )
-    assert "Outside Diff Range" in step7_section, (
-        "review-research-pr Step 7 must include an 'Outside Diff Range' section."
-    )
-
-
-def test_resolve_review_handles_null_line_file_level_threads():
-    """resolve-review must handle null-line file-level comment threads gracefully."""
-    text = RESOLVE_SKILL_TEXT
+def test_resolve_research_review_handles_null_line_file_level_threads() -> None:
+    text = _skill_text("resolve-research-review")
     step3_start = text.find("### Step 3")
     step4_start = text.find("### Step 4")
     assert step3_start != -1
     assert step4_start != -1
-    step3_section = text[step3_start:step4_start]
-    lower = step3_section.lower()
-    assert "null" in lower and ("file-level" in lower or "file level" in lower), (
-        "resolve-review Step 3 must handle null-line file-level comment threads "
-        "by skipping them — they have no code anchor."
-    )
-
-
-def test_step6_jq_includes_severity_filter():
-    """Step 6 jq expression must filter to critical/warning before building comment objects.
-
-    The jq expression maps FILTERED_FINDINGS but must not pass info-severity findings
-    to the GitHub API. A severity select filter (select(.severity == "critical" or
-    .severity == "warning")) must be applied before the map.
-    """
-    step6_start = SKILL_TEXT.find("### Step 6")
-    step65_start = SKILL_TEXT.find("### Step 6.5")
-    assert step6_start != -1
-    assert step65_start != -1
-    step6_section = SKILL_TEXT[step6_start:step65_start]
-    # Must have a jq select that filters on severity
-    assert "select(.severity" in step6_section, (
-        "Step 6 jq expression must include a select filter on severity "
-        "to exclude info-severity findings before building comment objects"
-    )
-    # Must filter to critical/warning (positive allowlist)
-    assert "critical" in step6_section.lower() and "warning" in step6_section.lower(), (
-        "Step 6 jq severity filter must restrict to critical and warning"
-    )
-
-
-def test_research_pr_step6_jq_includes_severity_filter():
-    """review-research-pr Step 6 jq expression must filter to critical/warning.
-
-    Same severity filter requirement as review-pr Step 6. Info-severity findings
-    must not be posted as GitHub comments.
-    """
-    step6_start = RESEARCH_SKILL_TEXT.find("### Step 6")
-    step65_start = RESEARCH_SKILL_TEXT.find("### Step 6.5")
-    assert step6_start != -1
-    assert step65_start != -1
-    step6_section = RESEARCH_SKILL_TEXT[step6_start:step65_start]
-    assert "select(.severity" in step6_section, (
-        "review-research-pr Step 6 jq expression must include a select filter on severity"
-    )
-    assert "critical" in step6_section.lower() and "warning" in step6_section.lower(), (
-        "review-research-pr Step 6 jq severity filter must restrict to critical and warning"
-    )
-
-
-def test_tier1_fallback_includes_severity_filter():
-    """Tier 1 fallback must iterate only critical/warning findings, skipping info.
-
-    When the batch POST fails and individual POSTs are attempted, the iteration
-    must not process info-severity findings — they do not warrant individual
-    GitHub comments.
-    """
-    tier1_idx = SKILL_TEXT.find("Fallback Tier 1")
-    assert tier1_idx >= 0, "Tier 1 fallback section not found in review-pr SKILL.md"
-    tier2_idx = SKILL_TEXT.find("Tier 2", tier1_idx)
-    tier1_section = SKILL_TEXT[tier1_idx:tier2_idx] if tier2_idx >= 0 else SKILL_TEXT[tier1_idx:]
-    # Must have an explicit instruction to skip/filter info-severity.
-    # A bare mention of "severity" (from {finding.severity}) is not sufficient.
-    has_severity_gate = (
-        "info" in tier1_section.lower()
-        and any(kw in tier1_section.lower() for kw in ["skip", "exclud", "filter"])
-    ) or (
-        "critical" in tier1_section.lower()
-        and "warning" in tier1_section.lower()
-        and any(kw in tier1_section.lower() for kw in ["only", "limit", "restrict"])
-    )
-    assert has_severity_gate, (
-        "Tier 1 fallback must include instructions to skip info-severity findings "
-        "when iterating for individual comment POSTs. "
-        "The section must explicitly say to only process critical/warning findings."
-    )
-
-
-AUDIT_CLAIMS_SKILL_PATH = (
-    Path(__file__).parent.parent.parent
-    / "src"
-    / "autoskillit"
-    / "skills_extended"
-    / "audit-claims"
-    / "SKILL.md"
-)
-AUDIT_CLAIMS_SKILL_TEXT = AUDIT_CLAIMS_SKILL_PATH.read_text()
-
-
-def test_review_pr_tier1_has_422_recovery():
-    """Tier 1 fallback must handle HTTP 422 with file-level retry."""
-    tier1_idx = SKILL_TEXT.find("Fallback Tier 1")
-    assert tier1_idx >= 0
-    tier2_idx = SKILL_TEXT.find("Tier 2", tier1_idx)
-    tier1_section = SKILL_TEXT[tier1_idx:tier2_idx] if tier2_idx >= 0 else SKILL_TEXT[tier1_idx:]
-    assert "subject_type" in tier1_section
-    assert "file" in tier1_section
-
-
-def test_review_research_pr_tier1_has_422_recovery():
-    """review-research-pr Tier 1 fallback must handle HTTP 422 with file-level retry."""
-    tier1_idx = RESEARCH_SKILL_TEXT.find("Fallback Tier 1")
-    assert tier1_idx >= 0
-    tier2_idx = RESEARCH_SKILL_TEXT.find("Tier 2", tier1_idx)
-    tier1_section = (
-        RESEARCH_SKILL_TEXT[tier1_idx:tier2_idx]
-        if tier2_idx >= 0
-        else RESEARCH_SKILL_TEXT[tier1_idx:]
-    )
-    assert "subject_type" in tier1_section
-    assert "file" in tier1_section
-
-
-def test_audit_claims_tier1_has_422_recovery():
-    """audit-claims Tier 1 fallback must handle HTTP 422 with file-level retry."""
-    tier1_idx = AUDIT_CLAIMS_SKILL_TEXT.find("Fallback Tier 1")
-    assert tier1_idx >= 0
-    tier2_idx = AUDIT_CLAIMS_SKILL_TEXT.find("Tier 2", tier1_idx)
-    tier1_section = (
-        AUDIT_CLAIMS_SKILL_TEXT[tier1_idx:tier2_idx]
-        if tier2_idx >= 0
-        else AUDIT_CLAIMS_SKILL_TEXT[tier1_idx:]
-    )
-    assert "subject_type" in tier1_section
-    assert "file" in tier1_section
-
-
-def test_review_pr_valid_lines_loaded():
-    """review-pr Step 2.7 must reference valid_lines_path or VALID_DIFF_LINES."""
-    step27_start = SKILL_TEXT.find("### Step 2.7")
-    step25_start = SKILL_TEXT.find("### Step 2.5")
-    assert step27_start != -1
-    assert step25_start != -1
-    step27_section = SKILL_TEXT[step27_start:step25_start]
-    assert "valid_lines_path" in step27_section or "VALID_DIFF_LINES" in step27_section
-
-
-def test_review_pr_step4_uses_valid_diff_lines():
-    """review-pr Step 4 partition must reference VALID_DIFF_LINES."""
-    step4_start = SKILL_TEXT.find("### Step 4")
-    step45_start = SKILL_TEXT.find("### Step 4.5")
-    assert step4_start != -1
-    assert step45_start != -1
-    step4_section = SKILL_TEXT[step4_start:step45_start]
-    assert "VALID_DIFF_LINES" in step4_section
-
-
-def test_review_research_pr_step4_uses_valid_diff_lines():
-    """review-research-pr Step 4 partition must reference VALID_DIFF_LINES."""
-    step4_start = RESEARCH_SKILL_TEXT.find("### Step 4")
-    step45_start = RESEARCH_SKILL_TEXT.find("### Step 4.5")
-    assert step4_start != -1
-    assert step45_start != -1
-    step4_section = RESEARCH_SKILL_TEXT[step4_start:step45_start]
-    assert "VALID_DIFF_LINES" in step4_section
-
-
-def test_resolve_review_batch_payload_excludes_subject_type():
-    """resolve-review batch reviews POST must NOT include subject_type.
-
-    The batch Reviews API (POST /repos/{owner}/{repo}/pulls/{N}/reviews)
-    does not accept subject_type in the comments array. Including it
-    causes HTTP 422.
-    """
-    text = RESOLVE_SKILL_TEXT
-    step15_start = text.find("### Step 1.5")
-    step2_start = text.find("### Step 2")
-    assert step15_start != -1, "resolve-review must have Step 1.5"
-    assert step2_start != -1, "resolve-review must have Step 2"
-    step15_section = text[step15_start:step2_start]
-    assert "subject_type" not in step15_section, (
-        "resolve-review Step 1.5 batch reviews POST must NOT include 'subject_type'. "
-        "The batch Reviews API does not accept this field — it causes HTTP 422."
-    )
-
-
-def test_resolve_research_review_handles_null_line_file_level_threads():
-    """resolve-research-review must handle null-line file-level comment threads gracefully."""
-    text = RESOLVE_RESEARCH_SKILL_TEXT
-    step3_start = text.find("### Step 3")
-    step4_start = text.find("### Step 4")
-    assert step3_start != -1
-    assert step4_start != -1
-    step3_section = text[step3_start:step4_start]
-    lower = step3_section.lower()
-    assert "null" in lower and ("file-level" in lower or "file level" in lower), (
-        "resolve-research-review Step 3 must handle null-line file-level comment "
-        "threads by skipping them — they have no code anchor."
-    )
-
-
-def test_review_pr_effects_use_authoritative_commit_after_freshness_guard() -> None:
-    step6_start = SKILL_TEXT.index("### Step 6: Post Inline Review Comments")
-    step7_start = SKILL_TEXT.index("### Step 7: Submit Summary Review")
-    step6 = SKILL_TEXT[step6_start:step7_start]
-
-    stale_guard = step6.index("stale_snapshot")
-    commit_binding = step6.index('COMMIT_ID="$METRICS_HEAD_SHA"')
-    first_mutation = step6.index("gh api ")
-
-    assert stale_guard < commit_binding < first_mutation
-    assert "Never replace it with a later HEAD query" in step6
-    assert "--arg commit_id" in step6
-
-
-def test_review_pr_batch_success_and_mutation_delay_contract() -> None:
-    step7 = SKILL_TEXT[
-        SKILL_TEXT.index("### Step 7: Submit Summary Review") : SKILL_TEXT.index(
-            "### Step 8: Write Summary and Emit Verdict"
-        )
-    ]
-
-    normalized_step7 = " ".join(step7.split())
-    assert "Treat HTTP 200 as success" in normalized_step7
-    assert "without inspecting a returned `comments` array" in normalized_step7
-    assert "one-second delay" in normalized_step7
-
-
-def test_rejected_experimental_candidates_never_reach_comment_payloads() -> None:
-    step4 = SKILL_TEXT[
-        SKILL_TEXT.index("### Step 4: Aggregate and Deduplicate Findings") : SKILL_TEXT.index(
-            "### Step 4.5: Echo Primary Obligation"
-        )
-    ]
-    step6 = SKILL_TEXT[
-        SKILL_TEXT.index("### Step 6: Post Inline Review Comments") : SKILL_TEXT.index(
-            "### Step 7: Submit Summary Review"
-        )
-    ]
-
-    assert "Feed only parent-accepted experimental findings" in step4
-    assert "FILTERED_FINDINGS only" in step6
-    assert "not `UNPOSTABLE_FINDINGS`" in step6
+    step3_section = text[step3_start:step4_start].lower()
+    assert "null" in step3_section
+    assert "file-level" in step3_section or "file level" in step3_section

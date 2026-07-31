@@ -142,16 +142,19 @@ def test_review_pr_local_mode_still_writes_raw_findings():
     )
 
 
-def test_review_pr_local_mode_skips_step6_and_step7():
-    """Assert SKILL.md mode=local skips Step 6 (GitHub posting) and Step 7 (review submission)."""
+def test_review_pr_local_mode_skips_guarded_publication():
+    """Assert mode=local preserves findings and bypasses the one publication call."""
     text = _skill_text()
     local_mode_idx = text.lower().find("mode=local")
     assert local_mode_idx >= 0
     after_local = text[local_mode_idx : local_mode_idx + 2000]
-    # Should skip to Step 8 after writing local file
-    assert "step 8" in after_local.lower() or "skip" in after_local.lower(), (
-        "review-pr/SKILL.md mode=local must skip to Step 8 (verdict emission) "
-        "after writing local_findings.json, bypassing Step 6 GitHub posting and Step 7 submission"
+    assert "local_findings" in after_local
+    assert any(
+        phrase in after_local.lower()
+        for phrase in ("skip publication", "do not post", "skip github", "no github api")
+    ), (
+        "review-pr/SKILL.md mode=local must bypass post_pr_review after writing "
+        "local_findings while preserving normal verdict emission"
     )
 
 
@@ -172,14 +175,17 @@ def test_review_pr_local_mode_json_format():
 
 
 def test_review_pr_step6_mode_branching_header():
-    """Assert Step 6 begins with MODE BRANCHING header that separates local vs github paths."""
+    """Step 6 must branch local findings from the single guarded GitHub write."""
     text = _skill_text()
     step6_idx = text.find("### Step 6")
     assert step6_idx >= 0, "SKILL.md must contain Step 6"
-    step6_section = text[step6_idx : step6_idx + 200]
+    step7_idx = text.find("### Step 7", step6_idx)
+    assert step7_idx > step6_idx, "Step 7 must follow Step 6"
+    step6_section = text[step6_idx:step7_idx]
     assert "MODE" in step6_section or "mode" in step6_section, (
         "Step 6 must begin with mode branching to separate local vs github behavior"
     )
+    assert step6_section.count("post_pr_review") == 1
 
 
 def test_local_gate_validates_head_base_and_merge_base_authority() -> None:

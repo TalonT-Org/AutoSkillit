@@ -100,6 +100,8 @@ def test_make_context_service_fields_are_typed_instances(tmp_path):
     assert isinstance(ctx.db_reader, DefaultDatabaseReader)
     assert isinstance(ctx.workspace_mgr, DefaultWorkspaceManager)
     assert isinstance(ctx.context_admission_ledger, DefaultContextAdmissionLedger)
+    assert ctx.github_review_poster is not None
+    assert type(ctx.github_review_poster).__name__ == "DefaultGitHubReviewPoster"
 
 
 def test_make_context_creates_isolated_context_admission_ledgers(tmp_path) -> None:

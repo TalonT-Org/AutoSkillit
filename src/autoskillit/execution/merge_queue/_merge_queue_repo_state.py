@@ -15,6 +15,7 @@ from typing import Any, Literal
 import httpx
 
 from autoskillit.core import YAMLError, get_logger, load_yaml
+from autoskillit.execution._github_http import is_secondary_rate_limit
 from autoskillit.execution.github import github_headers
 
 logger = get_logger(__name__)
@@ -174,20 +175,16 @@ def _has_pull_request_trigger_for_base(text: str, base_branch: str) -> bool:
 
 
 def _is_secondary_rate_limit(resp: httpx.Response) -> bool:
-    """Return True when a 403 response is a GitHub secondary rate limit.
-
-    GitHub returns HTTP 403 (not 429) for secondary rate limits.
-    The response body contains the phrase "secondary rate limit".
-    Primary rate limits use HTTP 429 or include x-ratelimit-remaining: 0.
-    """
-    if resp.status_code != 403:
-        return False
+    """Return whether the response is a definitive GitHub secondary limit."""
     try:
-        text = resp.text.lower()
+        data: Any = resp.json()
     except Exception:
-        logger.warning("Failed to read response body for rate-limit check", exc_info=True)
-        return False
-    return _RATE_LIMIT_SECONDARY_MARKER in text
+        try:
+            data = {"message": resp.text}
+        except Exception:
+            logger.warning("Failed to read response body for rate-limit check", exc_info=True)
+            data = None
+    return is_secondary_rate_limit(status_code=resp.status_code, data=data, headers=resp.headers)
 
 
 def _retry_after_seconds(attempt: int, resp: httpx.Response) -> float:

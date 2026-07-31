@@ -400,10 +400,13 @@ def test_pmp_wait_for_mergeability_captures_review_pr_number(recipe) -> None:
     assert "review_pr_number" in step.capture
 
 
-def test_pmp_wait_for_mergeability_routes_to_check_mergeability(recipe) -> None:
-    """B4: wait_for_review_pr_mergeability.on_success must route to check_mergeability."""
+def test_pmp_wait_for_mergeability_routes_through_repository_capture(recipe) -> None:
+    """B4: capture canonical repository identity before mergeability/review checks."""
     step = recipe.steps["wait_for_review_pr_mergeability"]
-    assert step.on_success == "check_mergeability"
+    assert step.on_success == "capture_review_repository"
+    capture = recipe.steps["capture_review_repository"]
+    assert capture.capture["review_repository"].from_ == "${{ result.stdout | trim }}"
+    assert capture.on_success == "check_mergeability"
 
 
 def test_pmp_has_check_mergeability_step(recipe) -> None:

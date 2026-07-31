@@ -40,6 +40,7 @@ github.default_repo
 github.fail_label
 github.in_progress_label
 github.queued_label
+github.review_comment_cap
 github.staged_label
 github.token
 implement_gate.allowed_plan_dirs

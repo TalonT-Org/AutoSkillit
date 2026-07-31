@@ -1,7 +1,7 @@
 ---
 name: review-research-pr
 categories: [research]
-uses_capabilities: [agent_model, github_api_write]
+uses_capabilities: [agent_model]
 description: Automated diff-scoped research PR review using parallel audit subagents aligned to research quality dimensions. Posts inline GitHub review comments and submits a summary verdict. Use after a research PR is opened to gate on review approval.
 hooks:
   PreToolUse:
@@ -286,175 +286,54 @@ else:
     verdict = "approved"
 ```
 
-### Step 6: Post Inline Review Comments
+### Step 6: Publish the Complete Research Review
 
-Build review comment bodies for each critical and warning finding. Use the `line` and `side`
-fields (modern GitHub Reviews API — not the deprecated `position` field) so that file line
-numbers from audit findings map directly without diff-position counting.
+Resolve `repository` from the canonical caller-supplied `nameWithOwner`, require a positive
+caller-supplied `pr_number`, and validate the caller-supplied `pr_head_sha` against
+`^[0-9a-f]{40}$`. Require caller-supplied namespaced `logical_iteration` and the contained
+caller-supplied `receipt_path`. The logical iteration must start with
+`review-research-pr:`. The receipt must be under `${AUTOSKILLIT_TEMP}` and use the exact
+`batch_review_response_${pr_number}.json` basename.
 
-For each finding, `line` is the finding's `line` value (the line number in the new file) and
-`side` is always `RIGHT` (referring to the right-hand side of the diff — additions and context
-in the updated file).
+Prepare one complete `comments` array from `FILTERED_FINDINGS`, filtering at the publication
+boundary to `severity == "critical"` or `severity == "warning"`. Preserve every validated
+`[LNNN]` anchor from `VALID_DIFF_LINES` as repository-relative `path`, positive `line`, and
+`side: "RIGHT"`. Put findings outside the diff in the complete review `body`, not in
+`comments`.
 
-Build a proper JSON payload where each comment is a complete object, then post via `--input -`.
+Map `approved` to `APPROVE`, `needs_human` to `COMMENT`, and `changes_requested` to
+`REQUEST_CHANGES`. Then call the structured publication tool once:
 
-```bash
-# Build comments JSON array from findings (critical/warning only)
-COMMENTS_JSON=$(jq -n --argjson findings "$FILTERED_FINDINGS" '
-  $findings | map(select(.severity == "critical" or .severity == "warning")) | map({
-    path: .file,
-    line: .line,
-    side: "RIGHT",
-    body: ("[" + .severity + "] " + .dimension + ": " + .message)
-  })
-')
-
-# Build and post the full review payload via stdin
-jq -n \
-  --arg body "AutoSkillit Research PR Review — Verdict: {verdict}" \
-  --arg event "{APPROVE|COMMENT|REQUEST_CHANGES}" \
-  --argjson comments "$COMMENTS_JSON" \
-  '{body: $body, event: $event, comments: $comments}' | \
-gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \
-  --method POST --input -
+```text
+post_pr_review(
+  cwd: "$PWD",
+  receipt_path: "$receipt_path",
+  repository: "$repository",
+  pr_number: "$pr_number",
+  head_sha: "$pr_head_sha",
+  logical_iteration: "$logical_iteration",
+  event: "$REVIEW_EVENT",
+  body: "$REVIEW_BODY",
+  comments: "$COMMENTS_JSON",
+  dry_run: false
+)
 ```
 
-Event mapping:
-- `approved` → `APPROVE`
-- `needs_human` → `COMMENT`
-- `changes_requested` → `REQUEST_CHANGES`
-
-If the batch POST returns HTTP 200, treat the review as successfully posted regardless
-of response body content. Do NOT inspect the response body for a `comments` array —
-GitHub's review API does not echo back the submitted comments, so any length check
-would always read 0 and falsely trigger Tier 1 fallback.
-
-If the batch POST returns HTTP 422 and the error message mentions "review" or "author",
-the PR is self-authored. Retry the same request with event `COMMENT` instead of
-`REQUEST_CHANGES` or `APPROVE`.
-
-**Fallback Tier 1 — Individual Comments (if batch POST fails):**
-
-Attempt to post each finding individually via:
-
-```bash
-COMMIT_ID=$(gh pr view {pr_number} --json headRefOid -q .headRefOid)
-
-# For each finding:
-gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
-  --method POST \
-  --field path="{finding.file}" \
-  --field line={finding.line} \
-  --field side="RIGHT" \
-  --field commit_id="$COMMIT_ID" \
-  --field body="[{finding.severity}] {finding.dimension}: {finding.message}"
-sleep 1  # Rate-limit discipline: 1s between mutating calls
-```
-
-Individual POSTs are not atomic — one failure does not block others.
-When an individual POST returns HTTP 422 (typically an invalid line number), retry that
-specific comment as a file-level comment using `subject_type: "file"` (no `line` field)
-on the `/repos/{owner}/{repo}/pulls/{pr_number}/comments` endpoint. If the file-level
-retry also fails, log the failure and continue to the next finding.
-If at least one per-finding comment succeeds (inline or file-level), proceed to Step 7.
-
-**File-Level Comments for Critical Unpostable Findings:**
-
-After the batch review POST succeeds (or after Tier 1 individual posting completes),
-post file-level comments for each **critical-severity** finding in `UNPOSTABLE_FINDINGS`.
-These use the individual comments endpoint with `subject_type: "file"` — this parameter
-is NOT valid on the batch Reviews API `comments[]` array.
-
-```bash
-COMMIT_ID=$(gh pr view {pr_number} --json headRefOid -q .headRefOid)
-
-# For each CRITICAL finding in UNPOSTABLE_FINDINGS:
-# NOTE: Do NOT include a `line` field — `line` must be omitted (not set to null)
-# for subject_type: "file". The `gh api --field` syntax naturally omits unspecified
-# fields, so simply not including `--field line=...` is correct.
-gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
-  --method POST \
-  --field path="{finding.file}" \
-  --field subject_type="file" \
-  --field commit_id="$COMMIT_ID" \
-  --field body="[{finding.severity}] {finding.dimension} (L{finding.line} — outside diff hunk): {finding.message}"
-sleep 1  # Rate-limit discipline: 1s between mutating calls
-```
-
-Only critical-severity findings are posted as file-level comments to control API call volume.
-Warning and info unpostable findings appear in the Step 7 review body only.
-
-If a file-level POST fails, log the failure and continue — file-level comments are
-best-effort supplementary visibility. Do not fall through to Tier 1/Tier 2 for these.
-
-**Fallback Tier 2 — DEGRADED: Bullet-List Summary Dump (if all individual posts fail):**
-
-WARNING: If you reach Tier 2 fallback, the review has FAILED its primary purpose.
-Before posting the body dump, you MUST state:
-
-> "FALLBACK: I was unable to post inline comments. Posting summary as review body instead. This is a DEGRADED review."
-
-Post ALL findings via:
-
-```bash
-gh pr review {pr_number} --comment --body "{summary_markdown}"
-```
-
-Format each file's findings as a bullet list:
-
-```
-## AutoSkillit Research Review Findings
-
-**Verdict:** {verdict}
-
-### path/to/file.py
-- **L{line}** [{severity}/{dimension}]: {message, truncated to 120 chars}
-```
+Capture `review_operation_key`, `review_head_sha`, `review_post_state`, and
+`review_receipt_path`. Continue only for a confirmed or reconciled final-success state.
+Stop on ambiguous, throttled, terminal, prepared, posting, or verification-pending results.
+The server owns identity, response classification, reconciliation, receipts, safe validation
+handling, and cross-session pacing.
 
 ### Step 6.5: Post-Completion Confirmation
 
-After completing Step 6, you MUST state:
-
-> "I confirm that I posted N inline comments on the following files: [list files]. If I posted 0 inline comments and had findings, this review has FAILED its primary purpose."
+Confirm the authoritative receipt matches the requested repository, PR, head SHA, and
+logical iteration, contains a positive review ID, and accounts for every original finding.
 
 ### Step 7: Submit Summary Review
 
-```bash
-# approved
-gh pr review {pr_number} --approve --body "AutoSkillit research review passed. No blocking issues found."
-
-# changes_requested / needs_human (with UNPOSTABLE_FINDINGS)
-# When UNPOSTABLE_FINDINGS is non-empty, append the "Outside Diff Range" section
-# to the verdict body. Build the body string dynamically.
-# Then post with the appropriate event flag:
-gh pr review {pr_number} --comment|--request-changes --body "$BODY"
-```
-
-**Building the Outside Diff Range body section:**
-
-When `UNPOSTABLE_FINDINGS` is non-empty, construct the body by appending the following
-section after the verdict one-liner. Group unpostable findings by file, format as a
-bullet list reusing the Tier 2 format (120-char message truncation).
-
-**TRUNCATION GUARD:** Cap the Outside Diff Range section at ~40,000 characters.
-The GitHub review body has a hard 65,536-char limit (HTTP 422 on overflow,
-no graceful degradation). Reserve headroom for the verdict line and formatting.
-If truncated, append: "...and N more findings. See file-level comments for
-critical items."
-
-Template for the appended section:
-
-```
-### ⚠️ Outside Diff Range
-
-These findings target lines not in the diff and could not be posted as inline comments:
-
-**path/to/file.py**
-- **L42** [critical/arch]: Finding message truncated to 120 chars
-
-**path/to/other.py**
-- **L99** [warning/security]: Finding message truncated to 120 chars
-```
+The complete summary was included in the Step 6 body. Preserve the structured publication
+fields for the recipe effect gate and make no additional GitHub review write.
 
 ### Step 8: Write Summary and Emit Verdict
 
@@ -469,6 +348,10 @@ Output the verdict as the final line:
 > code fences cause match failure.
 
 ```
+review_operation_key = {authoritative operation key}
+review_head_sha = {authoritative requested head}
+review_post_state = {SUCCEEDED|RECONCILED}
+review_receipt_path = {authoritative receipt path}
 verdict = {approved|changes_requested|needs_human}
 ```
 
@@ -477,6 +360,8 @@ Exit 1 only for unrecoverable tool-level errors.
 
 ## Output
 
+- `review_operation_key`, `review_head_sha`, `review_post_state`, and
+  `review_receipt_path` identify the authoritative publication receipt
 - `verdict=approved` — No blocking issues; research PR is clear for human review
 - `verdict=changes_requested` — Blocking issues found; recipe routes to next step
 - `verdict=needs_human` — Uncertain trade-offs; human review requested via the authenticated GitHub user mention (derived at runtime)

@@ -31,6 +31,7 @@ from autoskillit.core import (
     GateState,
     GitHubApiLog,
     GitHubFetcher,
+    GitHubReviewPosterProtocol,
     HeadlessExecutor,
     InputContractResolver,
     KitchenTransitionLock,
@@ -110,6 +111,7 @@ class ToolContext:
     workspace_mgr:        WorkspaceManager — manages workspace directory teardown
     clone_mgr:            CloneManager — clone-based pipeline run isolation
     github_client:        GitHubFetcher — fetches GitHub issue content
+    github_review_poster: GitHubReviewPosterProtocol — authoritative PR review writer
     ci_watcher:           CIWatcher — watches GitHub Actions CI runs
     merge_queue_watcher:  MergeQueueWatcher — polls GitHub merge queue for a PR
     github_api_log:       GitHubApiLog — session-scoped GitHub API request accumulator.
@@ -199,6 +201,7 @@ class ToolContext:
     workspace_mgr: WorkspaceManager | None = field(default=None)
     clone_mgr: CloneManager | None = field(default=None)
     github_client: GitHubFetcher | None = field(default=None)
+    github_review_poster: GitHubReviewPosterProtocol | None = field(default=None)
     ci_watcher: CIWatcher | None = field(default=None)
     merge_queue_watcher: MergeQueueWatcher | None = field(default=None)
     github_api_log: GitHubApiLog | None = field(default=None)

@@ -60,6 +60,7 @@ TOOL_CLASS_PAYLOADS: dict[str, dict] = {
             "command": (
                 "pip install -e . && pytest tests/ "
                 "&& gh pr create && gh run download "
+                "&& gh pr review 7 --comment --body probe "
                 "&& git commit --amend"
             ),
             "run_in_background": True,
@@ -103,8 +104,16 @@ TOOL_CLASS_PAYLOADS: dict[str, dict] = {
             "command": (
                 "pip install -e . && pytest tests/ "
                 "&& gh pr create && gh run download "
+                "&& gh pr review 7 --comment --body probe "
                 "&& git commit --amend"
             ),
+            "cmd": (
+                "pip install -e . && pytest tests/ "
+                "&& gh pr create && gh run download "
+                "&& gh pr review 7 --comment --body probe "
+                "&& git commit --amend"
+            ),
+            "cwd": "/worktree",
             "run_in_background": True,
         },
     },

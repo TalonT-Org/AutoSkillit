@@ -174,6 +174,26 @@ skills:
     - name: mode
       type: string
       required: false
+    - name: repository
+      type: string
+      required: false
+      recommended: true
+    - name: pr_number
+      type: integer
+      required: false
+      recommended: true
+    - name: pr_head_sha
+      type: string
+      required: false
+      recommended: true
+    - name: logical_iteration
+      type: string
+      required: false
+      recommended: true
+    - name: receipt_path
+      type: file_path
+      required: false
+      recommended: true
     outputs:
     - name: verdict
       type: string
@@ -195,6 +215,19 @@ skills:
     - name: reject_patterns_path
       type: string
       description: "Written in local mode (accumulating across rounds without timestamp) or github mode (timestamped, one-shot)."
+      required: false
+    - name: review_operation_key
+      type: string
+      required: false
+    - name: review_head_sha
+      type: string
+      required: false
+    - name: review_post_state
+      type: string
+      allowed_values: [SUCCEEDED, RECONCILED]
+      required: false
+    - name: review_receipt_path
+      type: string
       required: false
     write_behavior: conditional
     write_expected_when:
@@ -748,9 +781,21 @@ skills:
     - name: mode
       type: string
       required: false
+    - name: repository
+      type: string
+      required: true
+    - name: pr_number
+      type: integer
+      required: true
     - name: pr_head_sha
       type: string
-      required: false
+      required: true
+    - name: logical_iteration
+      type: string
+      required: true
+    - name: receipt_path
+      type: file_path
+      required: true
     outputs:
     - name: verdict
       type: string
@@ -763,17 +808,31 @@ skills:
     - name: local_findings_path
       type: string
       description: "Written when mode=local. Path to local_findings_{pr_number}.json output."
+    - name: review_operation_key
+      type: string
+    - name: review_head_sha
+      type: string
+    - name: review_post_state
+      type: string
+      allowed_values: [SUCCEEDED, RECONCILED, LOCAL, STALE_SNAPSHOT]
+    - name: review_receipt_path
+      type: string
     expected_output_patterns:
+    - "review_operation_key[ \\t]*=[ \\t]*[A-Za-z0-9:._-]+"
+    - "review_head_sha[ \\t]*=[ \\t]*[0-9a-f]{40}"
+    - "review_post_state[ \\t]*=[ \\t]*(SUCCEEDED|RECONCILED|LOCAL|STALE_SNAPSHOT)"
+    - "review_receipt_path[ \\t]*=[ \\t]*(?:/.+|none)"
     - "verdict[ \\t]*=[ \\t]*(approved|approved_with_comments|changes_requested|needs_human|stale_snapshot)"
     - "(?:%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%|verdict[ \\t]*=[ \\t]*(approved_with_comments|stale_snapshot))"
     pattern_examples:
-    - "verdict = approved\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
-    - "verdict = approved_with_comments\n%%ORDER_UP%%"
-    - "verdict = changes_requested\n%%REVIEW_GATE::LOOP_REQUIRED%%\n%%ORDER_UP%%"
-    - "verdict = needs_human\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
-    - "verdict = stale_snapshot\n%%ORDER_UP%%"
+    - "review_operation_key = review-v1:approved\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = approved\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
+    - "review_operation_key = review-v1:comments\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = RECONCILED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = approved_with_comments\n%%ORDER_UP%%"
+    - "review_operation_key = review-v1:changes\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = changes_requested\n%%REVIEW_GATE::LOOP_REQUIRED%%\n%%ORDER_UP%%"
+    - "review_operation_key = review-v1:human\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = needs_human\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
+    - "review_operation_key = local\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = LOCAL\nreview_receipt_path = none\nverdict = approved\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
+    - "review_operation_key = none\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = STALE_SNAPSHOT\nreview_receipt_path = none\nverdict = stale_snapshot\n%%ORDER_UP%%"
     negative_examples:
-    - "verdict = approved\n%%ORDER_UP%%"
+    - "review_operation_key = review-v1:approved\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = approved\n%%ORDER_UP%%"
 
   arch-lens-c4-container:
     inputs:
@@ -1965,8 +2024,26 @@ skills:
     - name: base_branch
       type: string
       required: true
+    - name: mode
+      type: string
+      required: false
     - name: pr_url
       type: string
+      required: true
+    - name: repository
+      type: string
+      required: true
+    - name: pr_number
+      type: integer
+      required: true
+    - name: pr_head_sha
+      type: string
+      required: true
+    - name: logical_iteration
+      type: string
+      required: true
+    - name: receipt_path
+      type: file_path
       required: true
     - name: annotated_diff_path
       type: string
@@ -1984,12 +2061,25 @@ skills:
     - name: verdict
       type: string
       allowed_values: [approved, changes_requested, needs_human]
+    - name: review_operation_key
+      type: string
+    - name: review_head_sha
+      type: string
+    - name: review_post_state
+      type: string
+      allowed_values: [SUCCEEDED, RECONCILED]
+    - name: review_receipt_path
+      type: file_path
     expected_output_patterns:
+    - "review_operation_key[ \\t]*=[ \\t]*\\S+"
+    - "review_head_sha[ \\t]*=[ \\t]*[0-9a-f]{40}"
+    - "review_post_state[ \\t]*=[ \\t]*(SUCCEEDED|RECONCILED)"
+    - "review_receipt_path[ \\t]*=[ \\t]*/.+"
     - "verdict[ \\t]*=[ \\t]*(approved|changes_requested|needs_human)"
     pattern_examples:
-    - "verdict = approved\n%%ORDER_UP%%"
-    - "verdict = changes_requested\n%%ORDER_UP%%"
-    - "verdict = needs_human\n%%ORDER_UP%%"
+    - "review_operation_key = research-review-v1:approved\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = approved\n%%ORDER_UP%%"
+    - "review_operation_key = research-review-v1:changes\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = RECONCILED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = changes_requested\n%%ORDER_UP%%"
+    - "review_operation_key = research-review-v1:human\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = needs_human\n%%ORDER_UP%%"
 
   audit-claims:
     inputs:
@@ -2002,16 +2092,44 @@ skills:
     - name: pr_url
       type: string
       required: true
+    - name: repository
+      type: string
+      required: true
+    - name: pr_number
+      type: integer
+      required: true
+    - name: pr_head_sha
+      type: string
+      required: true
+    - name: logical_iteration
+      type: string
+      required: true
+    - name: receipt_path
+      type: file_path
+      required: true
     outputs:
     - name: verdict
       type: string
       allowed_values: [approved, changes_requested, needs_human]
+    - name: review_operation_key
+      type: string
+    - name: review_head_sha
+      type: string
+    - name: review_post_state
+      type: string
+      allowed_values: [SUCCEEDED, RECONCILED]
+    - name: review_receipt_path
+      type: file_path
     expected_output_patterns:
+    - "review_operation_key[ \\t]*=[ \\t]*\\S+"
+    - "review_head_sha[ \\t]*=[ \\t]*[0-9a-f]{40}"
+    - "review_post_state[ \\t]*=[ \\t]*(SUCCEEDED|RECONCILED)"
+    - "review_receipt_path[ \\t]*=[ \\t]*/.+"
     - "verdict[ \\t]*=[ \\t]*(approved|changes_requested|needs_human)"
     pattern_examples:
-    - "verdict = approved\n%%ORDER_UP%%"
-    - "verdict = changes_requested\n%%ORDER_UP%%"
-    - "verdict = needs_human\n%%ORDER_UP%%"
+    - "review_operation_key = audit-claims-v1:approved\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = approved\n%%ORDER_UP%%"
+    - "review_operation_key = audit-claims-v1:changes\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = RECONCILED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = changes_requested\n%%ORDER_UP%%"
+    - "review_operation_key = audit-claims-v1:human\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = needs_human\n%%ORDER_UP%%"
 
   resolve-claims-review:
     inputs:
@@ -2797,14 +2915,13 @@ callable_contracts:
       type: str
   autoskillit.smoke_utils.check_review_posted:
     description: >
-      Verifies that batch_review_response_{pr_number}.json exists in output_dir
-      (github mode) or always passes (local mode). No subprocess calls.
-      output_dir must be an absolute path.
+      Validates a bounded, contained, identity-matched authoritative review
+      receipt in github mode, or explicitly passes local mode. No subprocess calls.
     inputs:
-    - name: pr_number
-      type: int
+    - name: cwd
+      type: str
       required: true
-    - name: output_dir
+    - name: receipt_path
       type: str
       required: true
     - name: mode
@@ -2813,6 +2930,24 @@ callable_contracts:
       allowed_values:
       - local
       - github
+    - name: repository
+      type: str
+      required: true
+    - name: pr_number
+      type: int
+      required: true
+    - name: head_sha
+      type: str
+      required: true
+    - name: logical_iteration
+      type: str
+      required: true
+    - name: operation_key
+      type: str
+      required: true
+    - name: post_state
+      type: str
+      required: true
     outputs:
     - name: reviews_posted
       type: str
@@ -2821,9 +2956,6 @@ callable_contracts:
       - "false"
     - name: sentinel
       type: str
-      allowed_values:
-      - no_reviews_posted
-      - ""
   autoskillit.smoke_utils.check_bug_report_non_empty:
     inputs:
     - name: workspace

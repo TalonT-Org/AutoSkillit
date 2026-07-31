@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from autoskillit.hooks._command_classification import (
+    GitHubMutationAnalysis,
+    GitHubMutationKind,
+    GitHubMutationRecord,
+    GitHubMutationStatus,
+    analyze_github_mutations,
     command_verb,
     extract_interpreter_write_paths,
     extract_redirect_targets,
@@ -860,3 +868,291 @@ def test_strip_heredoc_bodies(command: str, expected_stripped: str) -> None:
     from autoskillit.hooks._command_classification import strip_heredoc_bodies
 
     assert strip_heredoc_bodies(command) == expected_stripped
+
+
+class TestAnalyzeGitHubMutations:
+    def test_read_only_command_has_exact_empty_analysis(self) -> None:
+        assert analyze_github_mutations("gh api /repos/o/r/pulls/7/reviews") == (
+            GitHubMutationAnalysis(
+                status=GitHubMutationStatus.NONE,
+                mutations=(),
+                request_count=0,
+                review_comment_count=None,
+                reason="",
+            )
+        )
+
+    def test_simple_rest_review_has_exact_record(self) -> None:
+        analysis = analyze_github_mutations(
+            "gh api --method POST /repos/o/r/pulls/7/reviews -f event=COMMENT"
+        )
+
+        assert analysis == GitHubMutationAnalysis(
+            status=GitHubMutationStatus.SINGLE_RESOLVED,
+            mutations=(
+                GitHubMutationRecord(
+                    method="POST",
+                    route="/repos/o/r/pulls/7/reviews",
+                    kind=GitHubMutationKind.PULL_REVIEW,
+                    request_count=1,
+                    review_comment_count=None,
+                ),
+            ),
+            request_count=1,
+            review_comment_count=None,
+            reason="",
+        )
+
+    def test_simple_non_review_mutation_has_exact_record(self) -> None:
+        analysis = analyze_github_mutations(
+            "gh api --method PATCH /repos/o/r/issues/7 -f title=updated"
+        )
+
+        assert analysis == GitHubMutationAnalysis(
+            status=GitHubMutationStatus.SINGLE_RESOLVED,
+            mutations=(
+                GitHubMutationRecord(
+                    method="PATCH",
+                    route="/repos/o/r/issues/7",
+                    kind=GitHubMutationKind.OTHER,
+                    request_count=1,
+                    review_comment_count=None,
+                ),
+            ),
+            request_count=1,
+            review_comment_count=None,
+            reason="",
+        )
+
+    @pytest.mark.parametrize(
+        "command,kind",
+        [
+            (
+                "gh api --method POST /repos/o/r/pulls/7/comments -f body=x",
+                GitHubMutationKind.PULL_REVIEW_COMMENT,
+            ),
+            (
+                "gh api --method POST /repos/o/r/pulls/7/comments/99/replies -f body=x",
+                GitHubMutationKind.PULL_REVIEW_REPLY,
+            ),
+            (
+                "gh pr review 7 --comment --body x",
+                GitHubMutationKind.PULL_REVIEW,
+            ),
+            (
+                "/usr/bin/curl -X POST https://api.github.com/repos/o/r/pulls/7/reviews -d '{}'",
+                GitHubMutationKind.PULL_REVIEW,
+            ),
+        ],
+        ids=["review-comment", "review-reply", "gh-pr-review", "absolute-curl"],
+    )
+    def test_review_mutation_kinds_are_closed(
+        self,
+        command: str,
+        kind: GitHubMutationKind,
+    ) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.mutations[0].kind is kind
+        assert analysis.request_count == 1
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            (
+                "gh api --method PATCH /repos/o/r/issues/7 -f title=x && "
+                "gh api --method DELETE /repos/o/r/issues/8"
+            ),
+            (
+                "gh api --method PATCH /repos/o/r/issues/7 -f title=x\n"
+                "gh api --method DELETE /repos/o/r/issues/8"
+            ),
+            ("for n in 1 2; do gh api --method PATCH /repos/o/r/issues/7 -f title=x; done"),
+            ("post() { gh api --method PATCH /repos/o/r/issues/7 -f title=x; }; post"),
+        ],
+        ids=["and-chain", "newlines", "loop", "function"],
+    )
+    def test_multiple_or_repeatable_mutations_are_not_single(
+        self,
+        command: str,
+    ) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status in {
+            GitHubMutationStatus.MULTIPLE,
+            GitHubMutationStatus.UNRESOLVED,
+        }
+        assert analysis.status is not GitHubMutationStatus.SINGLE_RESOLVED
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            'gh api --method "$METHOD" /repos/o/r/issues/7 -f title=x',
+            'gh api --method POST "$ROUTE" -f title=x',
+            "curl -X \"$METHOD\" https://api.github.com/repos/o/r/issues/7 -d '{}'",
+            "eval 'gh api --method PATCH /repos/o/r/issues/7 -f title=x'",
+            ("printf '%s\\n' /repos/o/r/issues/7 | xargs -n1 gh api --method PATCH"),
+        ],
+        ids=["dynamic-method", "dynamic-route", "curl-dynamic-method", "eval", "xargs"],
+    )
+    def test_unresolved_mutations_report_reason(self, command: str) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.request_count is None
+        assert analysis.reason
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            ("bash -c 'gh api --method POST /repos/o/r/pulls/7/reviews -f event=COMMENT'"),
+            (
+                'python3 -c "import subprocess; subprocess.run('
+                "['gh','api','--method','POST','/repos/o/r/pulls/7/reviews'])\""
+            ),
+            (
+                'python3 -c "import os; os.system('
+                "'curl -X POST https://api.github.com/repos/o/r/pulls/7/reviews')\""
+            ),
+        ],
+        ids=["nested-shell", "python-subprocess", "python-system"],
+    )
+    def test_literal_wrappers_preserve_review_classification(self, command: str) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.mutations[0].kind is GitHubMutationKind.PULL_REVIEW
+
+    @pytest.mark.parametrize(
+        "mutation_name",
+        [
+            "addPullRequestReview",
+            "submitPullRequestReview",
+            "addPullRequestReviewComment",
+            "resolveReviewThread",
+            "unresolveReviewThread",
+        ],
+    )
+    def test_graphql_review_mutation_is_classified(
+        self,
+        mutation_name: str,
+    ) -> None:
+        document = (
+            f'mutation {{ {mutation_name}(input:{{clientMutationId:"x"}}) '
+            "{ clientMutationId } }"
+        )
+        analysis = analyze_github_mutations(f"gh api graphql -f query={json.dumps(document)}")
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.mutations == (
+            GitHubMutationRecord(
+                method="POST",
+                route="/graphql",
+                kind=GitHubMutationKind.GRAPHQL_REVIEW,
+                request_count=1,
+                review_comment_count=None,
+            ),
+        )
+
+    def test_non_review_graphql_mutation_remains_other(self) -> None:
+        document = 'mutation { addComment(input:{subjectId:"I",body:"x"}) { clientMutationId } }'
+
+        analysis = analyze_github_mutations(f"gh api graphql -f query={json.dumps(document)}")
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.mutations[0].kind is GitHubMutationKind.OTHER
+
+    def test_review_input_file_counts_comments_exactly(self, tmp_path: Path) -> None:
+        payload = tmp_path / "review.json"
+        payload.write_text(
+            json.dumps(
+                {
+                    "event": "COMMENT",
+                    "comments": [
+                        {"path": "a.py", "line": 1, "body": "a"},
+                        {"path": "b.py", "line": 2, "body": "b"},
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        analysis = analyze_github_mutations(
+            "gh api --method POST /repos/o/r/pulls/7/reviews --input review.json",
+            cwd=str(tmp_path),
+        )
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.request_count == 1
+        assert analysis.review_comment_count == 2
+        assert analysis.mutations[0].review_comment_count == 2
+
+    @pytest.mark.parametrize(
+        "payload_kind",
+        ["stdin", "malformed", "missing", "oversized", "symlink", "non-object"],
+    )
+    def test_untrusted_input_file_is_unresolved(
+        self,
+        payload_kind: str,
+        tmp_path: Path,
+    ) -> None:
+        input_arg = "-"
+        if payload_kind == "malformed":
+            (tmp_path / "payload.json").write_text("{bad", encoding="utf-8")
+            input_arg = "payload.json"
+        elif payload_kind == "missing":
+            input_arg = "missing.json"
+        elif payload_kind == "oversized":
+            (tmp_path / "payload.json").write_bytes(b"x" * (1024 * 1024 + 1))
+            input_arg = "payload.json"
+        elif payload_kind == "symlink":
+            target = tmp_path / "target.json"
+            target.write_text("{}", encoding="utf-8")
+            (tmp_path / "payload.json").symlink_to(target)
+            input_arg = "payload.json"
+        elif payload_kind == "non-object":
+            (tmp_path / "payload.json").write_text("[]", encoding="utf-8")
+            input_arg = "payload.json"
+
+        analysis = analyze_github_mutations(
+            f"gh api --method POST /repos/o/r/issues/7/comments --input {input_arg}",
+            cwd=str(tmp_path),
+        )
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.request_count is None
+        assert analysis.reason
+
+    def test_relative_input_without_cwd_is_unresolved(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "payload.json").write_text("{}", encoding="utf-8")
+
+        analysis = analyze_github_mutations(
+            "gh api --method POST /repos/o/r/issues/7/comments --input payload.json"
+        )
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "echo 'gh api --method POST /repos/o/r/pulls/7/reviews'",
+            "printf '%s\\n' 'curl -X POST https://api.github.com/repos/o/r/pulls/7/reviews'",
+            "gh api /repos/o/r/pulls/7/reviews",
+            "curl https://api.github.com/repos/o/r/pulls/7/reviews",
+            "curl -X POST https://example.com/repos/o/r/pulls/7/reviews -d '{}'",
+        ],
+        ids=["echo", "printf", "gh-get", "curl-get", "non-github-curl"],
+    )
+    def test_inert_or_out_of_subset_commands_are_none(self, command: str) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.NONE
+        assert analysis.request_count == 0
+        assert analysis.mutations == ()

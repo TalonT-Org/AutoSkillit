@@ -1468,7 +1468,7 @@ steps:
       poll_interval: '15'
     capture:
       review_pr_number: ${{ result.pr_number }}
-    on_success: check_mergeability
+    on_success: capture_review_repository
     on_failure: register_clone_failure
     note: 'Extracts the review PR number from context.pr_url and polls GitHub until
       the mergeable field is no longer UNKNOWN (GitHub computes this asynchronously
@@ -1476,6 +1476,16 @@ steps:
       maximum). Captures review_pr_number for use by check_mergeability and check_mergeability_post_rebase.
 
       '
+  capture_review_repository:
+    tool: run_cmd
+    with:
+      cmd: gh repo view --json nameWithOwner -q .nameWithOwner
+      cwd: ${{ context.work_dir }}
+      step_name: capture_review_repository
+    capture:
+      review_repository: ${{ result.stdout | trim }}
+    on_success: check_mergeability
+    on_failure: register_clone_failure
   check_mergeability:
     tool: check_pr_mergeable
     with:
@@ -1589,7 +1599,7 @@ steps:
       callable: autoskillit.smoke_utils.annotate_pr_diff
       pr_number: ${{ context.review_pr_number }}
       cwd: ${{ context.work_dir }}
-      output_dir: '{{AUTOSKILLIT_TEMP}}/review-pr/integration_${{ context.review_pr_number }}'
+      output_dir: '{{AUTOSKILLIT_TEMP}}/review-pr/iter_0'
       local_review_rounds: '0'
       work_dir: ${{ context.work_dir }}
     capture:
@@ -1597,9 +1607,10 @@ steps:
       hunk_ranges_path: ${{ result.hunk_ranges_path }}
       valid_lines_path: ${{ result.valid_lines_path }}
       diff_metrics_path: ${{ result.diff_metrics_path }}
-      pr_head_sha: ${{ result.head_sha }}
+      review_mode: ${{ result.review_mode }}
+      pr_head_sha: ${{ result.pr_head_sha }}
     on_success: review_pr_integration
-    on_failure: review_pr_integration
+    on_failure: register_clone_failure
     note: 'Pre-computes annotated diff and hunk ranges for review-pr server-side (where
       autoskillit is always installed). Writes both files to disk. On failure, falls
       through to review_pr_integration which uses empty VALID_LINE_RANGES fallback.
@@ -1618,12 +1629,22 @@ steps:
         hunk_ranges_path: "${{ context.hunk_ranges_path }}"
         valid_lines_path: "${{ context.valid_lines_path }}"
         diff_metrics_path: "${{ context.diff_metrics_path }}"
+        mode: "${{ context.review_mode }}"
+        repository: "${{ context.review_repository }}"
+        pr_number: "${{ context.review_pr_number }}"
         pr_head_sha: "${{ context.pr_head_sha }}"
+        logical_iteration: "merge-prs:integration"
+        receipt_path: "{{AUTOSKILLIT_TEMP}}/review-pr/iter_0/batch_review_response_${{ context.review_pr_number }}.json"
       cwd: ${{ context.work_dir }}
       step_name: review_pr_integration
-      output_dir: '{{AUTOSKILLIT_TEMP}}/review-pr/integration_${{ context.review_pr_number }}'
+      output_dir: '{{AUTOSKILLIT_TEMP}}/review-pr/iter_0'
     capture:
       review_verdict: ${{ result.verdict }}
+      review_operation_key: ${{ result.review_operation_key }}
+      review_head_sha: ${{ result.review_head_sha }}
+      review_post_state: ${{ result.review_post_state }}
+      review_receipt_path: ${{ result.review_receipt_path }}
+    pass_through: [review_post_state]
     on_result:
     - when: ${{ result.verdict }} == stale_snapshot
       route: register_clone_failure
@@ -1637,8 +1658,9 @@ steps:
       route: check_review_posted
     - when: 'true'
       route: check_review_posted
-    on_failure: resolve_review_integration
-    on_rate_limit: resolve_review_integration
+    on_failure: register_clone_failure
+    on_context_limit: register_clone_failure
+    on_rate_limit: register_clone_failure
     note: 'Automated review of the integration PR (REQ-REVIEW-001). Invokes review-pr
       against context.batch_branch. All four verdicts have explicit routes: changes_requested
       → resolve_review_integration, approved_with_comments → resolve_review_integration,
@@ -1652,10 +1674,17 @@ steps:
     tool: run_python
     with:
       callable: autoskillit.smoke_utils.check_review_posted
-      pr_number: ${{ context.review_pr_number }}
-      output_dir: '{{AUTOSKILLIT_TEMP}}/review-pr/integration_${{ context.review_pr_number }}'
-      mode: github
       work_dir: ${{ context.work_dir }}
+      args:
+        cwd: ${{ context.work_dir }}
+        receipt_path: ${{ context.review_receipt_path }}
+        mode: github
+        repository: ${{ context.review_repository }}
+        pr_number: ${{ context.review_pr_number }}
+        head_sha: ${{ context.review_head_sha }}
+        logical_iteration: merge-prs:integration
+        operation_key: ${{ context.review_operation_key }}
+        post_state: ${{ context.review_post_state }}
     on_result:
     - when: ${{ result.reviews_posted }} == 'false'
       route: register_clone_failure
@@ -1671,12 +1700,23 @@ steps:
       skill_inputs:
         base_branch: "${{ inputs.base_branch }}"
         feature_branch: "${{ context.batch_branch }}"
+        mode: github
+        repository: "${{ context.review_repository }}"
+        pr_number: "${{ context.review_pr_number }}"
+        pr_head_sha: "${{ context.pr_head_sha }}"
+        logical_iteration: "resolve-review:integration"
+        receipt_path: "{{AUTOSKILLIT_TEMP}}/resolve-review/iter_0/batch_review_response_${{ context.review_pr_number }}.json"
       cwd: ${{ context.work_dir }}
       output_dir: '{{AUTOSKILLIT_TEMP}}/review-pr/integration_${{ context.review_pr_number }}'
       step_name: resolve_review_integration
     capture:
       verdict: ${{ result.verdict }}
       fixes_applied: ${{ result.fixes_applied }}
+      resolve_review_operation_key: ${{ result.review_operation_key }}
+      resolve_review_head_sha: ${{ result.review_head_sha }}
+      resolve_review_post_state: ${{ result.review_post_state }}
+      resolve_review_receipt_path: ${{ result.review_receipt_path }}
+    pass_through: [review_post_state]
     retries: 2
     on_exhausted: register_clone_failure
     on_context_limit: pre_review_rebase_integration

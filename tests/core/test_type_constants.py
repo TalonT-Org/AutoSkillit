@@ -451,6 +451,7 @@ def test_headless_tools_contains_expected_names():
         "test_check",
         "unlock_agent_pack",
         "commit_files",
+        "post_pr_review",
         "write_audit_semantic_result",
         "write_standalone_audit_evidence",
         "write_audit_disposition_bundle",

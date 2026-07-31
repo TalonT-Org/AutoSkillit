@@ -4,12 +4,30 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import stat
 from datetime import UTC
 from pathlib import Path
+from typing import Any, TypeGuard
+
+import regex as re
 
 from autoskillit.core import get_logger
 
 logger = get_logger(__name__)
+
+_FULL_LOWER_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_CANONICAL_REPOSITORY_RE = re.compile(
+    r"^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?/"
+    r"[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$"
+)
+_LOGICAL_ITERATION_RE = re.compile(
+    r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?:[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
+)
+_REVIEW_RECEIPT_MAX_BYTES = 1_048_576
+_FINAL_REVIEW_STATES = frozenset({"SUCCEEDED", "RECONCILED"})
+_FINAL_RECONCILIATION_RESULTS = frozenset({"NOT_NEEDED", "MATCHED", "ENRICHED"})
+_REMOTE_FINDING_KINDS = frozenset({"POSTED", "ALREADY_PRESENT"})
 
 
 def annotate_pr_diff(
@@ -252,6 +270,7 @@ def annotate_pr_diff(
 
     return {
         "head_sha": head_sha,
+        "pr_head_sha": head_sha,
         "review_mode": review_mode,
         "annotated_diff_path": str(annotated_path),
         "hunk_ranges_path": str(ranges_path),
@@ -333,27 +352,213 @@ def check_review_loop(
     }
 
 
+def _review_check_failed(sentinel: str) -> dict[str, str]:
+    return {"reviews_posted": "false", "sentinel": sentinel}
+
+
+def _load_unique_json_object(raw: bytes) -> dict[str, Any] | None:
+    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate JSON key: {key}")
+            result[key] = value
+        return result
+
+    try:
+        decoded = raw.decode("utf-8")
+        value = json.loads(decoded, object_pairs_hook=reject_duplicate_keys)
+    except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _read_stable_private_receipt(path: Path) -> bytes | None:
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        before = path.lstat()
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_nlink != 1
+            or before.st_size > _REVIEW_RECEIPT_MAX_BYTES
+        ):
+            return None
+        descriptor = os.open(path, flags)
+    except OSError:
+        return None
+    try:
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_nlink != 1
+            or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+        ):
+            return None
+        raw = os.read(descriptor, _REVIEW_RECEIPT_MAX_BYTES + 1)
+        after = os.fstat(descriptor)
+        if len(raw) > _REVIEW_RECEIPT_MAX_BYTES or (
+            opened.st_dev,
+            opened.st_ino,
+            opened.st_size,
+            opened.st_mtime_ns,
+        ) != (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+        ):
+            return None
+        return raw
+    except OSError:
+        return None
+    finally:
+        os.close(descriptor)
+
+
+def _is_positive_int(value: object) -> TypeGuard[int]:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _valid_finding_partition(
+    payload: dict[str, Any],
+    *,
+    comment_ids: list[int],
+) -> bool:
+    count = payload.get("canonical_finding_count")
+    dispositions = payload.get("finding_dispositions")
+    if (
+        not isinstance(count, int)
+        or isinstance(count, bool)
+        or count < 0
+        or not isinstance(dispositions, list)
+        or len(dispositions) != count
+    ):
+        return False
+
+    indexes: set[int] = set()
+    disposition_remote_ids: set[int] = set()
+    for disposition in dispositions:
+        if not isinstance(disposition, dict):
+            return False
+        original_index = disposition.get("original_index")
+        kind = disposition.get("kind")
+        if (
+            not isinstance(original_index, int)
+            or isinstance(original_index, bool)
+            or original_index < 0
+            or original_index >= count
+            or original_index in indexes
+            or kind not in _REMOTE_FINDING_KINDS | {"OMITTED_INVALID"}
+        ):
+            return False
+        indexes.add(original_index)
+        remote_comment_id = disposition.get("remote_comment_id")
+        if kind in _REMOTE_FINDING_KINDS:
+            if (
+                not _is_positive_int(remote_comment_id)
+                or remote_comment_id in disposition_remote_ids
+            ):
+                return False
+            disposition_remote_ids.add(remote_comment_id)
+        elif (
+            remote_comment_id is not None
+            or not isinstance(disposition.get("reason"), str)
+            or not disposition["reason"].strip()
+        ):
+            return False
+
+    return indexes == set(range(count)) and disposition_remote_ids == set(comment_ids)
+
+
 def check_review_posted(
-    pr_number: int,
-    output_dir: str,
+    *,
+    cwd: str,
+    receipt_path: str,
     mode: str,
+    repository: str,
+    pr_number: int,
+    head_sha: str,
+    logical_iteration: str,
+    operation_key: str,
+    post_state: str,
 ) -> dict[str, str]:
-    """Verify that batch_review_response_{pr_number}.json exists in output_dir.
-
-    In github mode, returns reviews_posted="false" with sentinel="no_reviews_posted"
-    when the receipt file is absent, indicating the review POST did not complete.
-    In local mode, always returns reviews_posted="true" (no API calls made).
-
-    output_dir must be an absolute path.
-    """
-    if not Path(output_dir).is_absolute():
-        raise ValueError(f"output_dir must be an absolute path, got: {output_dir!r}")
+    """Validate an authoritative, identity-bound PR-review receipt."""
     if mode == "local":
         return {"reviews_posted": "true", "sentinel": ""}
-    receipt = Path(output_dir) / f"batch_review_response_{pr_number}.json"
-    if receipt.exists():
-        return {"reviews_posted": "true", "sentinel": ""}
-    return {"reviews_posted": "false", "sentinel": "no_reviews_posted"}
+    if mode != "github":
+        return _review_check_failed("invalid_review_mode")
+    if (
+        not _CANONICAL_REPOSITORY_RE.fullmatch(repository)
+        or not _is_positive_int(pr_number)
+        or not _FULL_LOWER_SHA_RE.fullmatch(head_sha)
+        or not _LOGICAL_ITERATION_RE.fullmatch(logical_iteration)
+        or not operation_key
+        or post_state not in _FINAL_REVIEW_STATES
+    ):
+        return _review_check_failed("invalid_expected_identity")
+
+    cwd_path = Path(cwd)
+    receipt = Path(receipt_path)
+    if not cwd_path.is_absolute() or not receipt.is_absolute():
+        return _review_check_failed("invalid_receipt_path")
+    if receipt.name != f"batch_review_response_{pr_number}.json":
+        return _review_check_failed("invalid_receipt_basename")
+    try:
+        root = cwd_path.resolve(strict=True)
+        managed_temp = (root / ".autoskillit" / "temp").resolve(strict=True)
+        resolved_receipt = receipt.resolve(strict=True)
+        resolved_receipt.relative_to(managed_temp)
+    except (OSError, ValueError):
+        return _review_check_failed("receipt_outside_managed_temp")
+    if resolved_receipt != receipt:
+        return _review_check_failed("receipt_symlink")
+
+    raw = _read_stable_private_receipt(receipt)
+    payload = _load_unique_json_object(raw) if raw is not None else None
+    if payload is None:
+        return _review_check_failed("invalid_receipt")
+
+    required_fields = {
+        "schema_version",
+        "operation_key",
+        "repository",
+        "pr_number",
+        "head_sha",
+        "logical_iteration",
+        "state",
+        "review_id",
+        "comment_ids",
+        "canonical_finding_count",
+        "finding_dispositions",
+        "reconciliation_result",
+    }
+    if not required_fields.issubset(payload):
+        return _review_check_failed("incomplete_receipt")
+    if (
+        payload.get("schema_version") != 1
+        or isinstance(payload.get("schema_version"), bool)
+        or payload.get("operation_key") != operation_key
+        or payload.get("repository") != repository
+        or payload.get("pr_number") != pr_number
+        or payload.get("head_sha") != head_sha
+        or payload.get("logical_iteration") != logical_iteration
+        or payload.get("state") != post_state
+        or payload.get("state") not in _FINAL_REVIEW_STATES
+        or payload.get("reconciliation_result") not in _FINAL_RECONCILIATION_RESULTS
+        or payload.get("dry_run", False) is not False
+        or not _is_positive_int(payload.get("review_id"))
+    ):
+        return _review_check_failed("receipt_identity_mismatch")
+
+    comment_ids = payload.get("comment_ids")
+    if (
+        not isinstance(comment_ids, list)
+        or any(not _is_positive_int(value) for value in comment_ids)
+        or len(set(comment_ids)) != len(comment_ids)
+        or not _valid_finding_partition(payload, comment_ids=comment_ids)
+    ):
+        return _review_check_failed("incomplete_finding_accounting")
+    return {"reviews_posted": "true", "sentinel": ""}
 
 
 def check_loop_iteration(

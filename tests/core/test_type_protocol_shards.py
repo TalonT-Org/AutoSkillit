@@ -77,7 +77,12 @@ def test_headless_skill_dispatch_preparation_finalize_contract():
 def test_github_shard_all():
     from autoskillit.core.types._type_protocols_github import __all__
 
-    assert set(__all__) == {"GitHubFetcher", "CIWatcher", "MergeQueueWatcher"}
+    assert set(__all__) == {
+        "GitHubFetcher",
+        "GitHubReviewPosterProtocol",
+        "CIWatcher",
+        "MergeQueueWatcher",
+    }
 
 
 def test_workspace_shard_all():

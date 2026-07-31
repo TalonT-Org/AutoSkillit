@@ -80,6 +80,14 @@ from autoskillit.execution.github import (
     github_headers,
     parse_merge_queue_response,
 )
+from autoskillit.execution.github_review import (
+    DefaultGitHubReviewGateway,
+    DefaultGitHubReviewPoster,
+    GitHubReviewLedger,
+    GitHubReviewMutationCoordinator,
+    canonicalize_review_request,
+    compute_review_operation_key,
+)
 from autoskillit.execution.headless import (
     DefaultHeadlessExecutor,
     assert_interactive_ordering,
@@ -251,6 +259,13 @@ __all__ = [
     "DefaultGitHubFetcher",
     "github_headers",
     "parse_merge_queue_response",
+    # github_review
+    "DefaultGitHubReviewGateway",
+    "DefaultGitHubReviewPoster",
+    "GitHubReviewLedger",
+    "GitHubReviewMutationCoordinator",
+    "canonicalize_review_request",
+    "compute_review_operation_key",
     # linux_tracing
     "LINUX_TRACING_AVAILABLE",
     "LinuxTracingHandle",

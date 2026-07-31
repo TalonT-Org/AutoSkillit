@@ -103,6 +103,18 @@ def test_registry_preserves_typed_handler_wire_contracts() -> None:
         },
         "open_kitchen": {"ingredients_only": ToolWireType.BOOLEAN},
         "load_recipe": {"ingredients_only": ToolWireType.BOOLEAN},
+        "post_pr_review": {
+            "cwd": ToolWireType.STRING,
+            "receipt_path": ToolWireType.STRING,
+            "repository": ToolWireType.STRING,
+            "pr_number": ToolWireType.INTEGER,
+            "head_sha": ToolWireType.STRING,
+            "logical_iteration": ToolWireType.STRING,
+            "event": ToolWireType.STRING,
+            "body": ToolWireType.STRING,
+            "comments": ToolWireType.ARRAY,
+            "dry_run": ToolWireType.BOOLEAN,
+        },
     }
 
     for tool_name, wire_types in expected.items():
@@ -214,6 +226,7 @@ def test_every_tool_has_an_explicit_initialization_operation() -> None:
             "merge_worktree",
             "migrate_recipe",
             "prepare_issue",
+            "post_pr_review",
             "push_to_remote",
             "record_gate_dispatch",
             "record_pipeline_step",

@@ -97,13 +97,15 @@ def test_needs_human_prose_describes_genuine_ambiguity():
     )
 
 
-def test_review_pr_own_pr_comment_retry():
-    """SKILL.md must handle own-PR REQUEST_CHANGES 422 by retrying with COMMENT event."""
+def test_review_pr_delegates_own_pr_event_transformation():
+    """The server poster, not prompt logic, owns the one allowed self-review transform."""
     skill_md = _skill_text()
-    assert re.search(r"422.{0,300}COMMENT|COMMENT.{0,300}422", skill_md, re.DOTALL), (
-        "SKILL.md must describe retrying with COMMENT event when batch POST returns "
-        "HTTP 422 due to own-PR restriction"
-    )
+    assert "post_pr_review" in skill_md
+    assert not re.search(
+        r"(?:retry|re-?post).{0,300}COMMENT|COMMENT.{0,300}(?:retry|re-?post)",
+        skill_md,
+        re.DOTALL | re.IGNORECASE,
+    ), "review-pr must not implement the REQUEST_CHANGES-to-COMMENT retry in prompt logic"
 
 
 def test_experimental_degradation_blocks_approval() -> None:

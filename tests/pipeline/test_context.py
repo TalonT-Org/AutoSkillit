@@ -16,6 +16,7 @@ from autoskillit.core import (
     CommittedDispositionResolver,
     ContextAdmissionStoreAuthority,
     GitHubFetcher,
+    GitHubReviewPosterProtocol,
 )
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
 from autoskillit.pipeline.audit_admission_ledger import DefaultAuditAdmissionLedger
@@ -191,6 +192,7 @@ def test_toolcontext_new_optional_fields_default_none(tmp_path):
     assert ctx.workspace_mgr is None
     assert ctx.clone_mgr is None
     assert ctx.github_client is None
+    assert ctx.github_review_poster is None
     assert ctx.backend is None
     assert ctx.input_contract_resolver is None
 
@@ -312,6 +314,22 @@ def test_toolcontext_github_client_annotated_with_protocol():
     """github_client annotation must reference GitHubFetcher protocol."""
     hints = get_type_hints(ToolContext)
     assert GitHubFetcher in get_args(hints["github_client"])
+
+
+def test_toolcontext_github_review_poster_is_injectable_and_protocol_typed(tmp_path):
+    """The authoritative review poster is an optional, replaceable L0 protocol."""
+
+    class _Poster:
+        async def post(self, request):
+            raise AssertionError(f"unexpected review publication: {request!r}")
+
+    poster = _Poster()
+    ctx = dataclasses.replace(_make_ctx(tmp_path), github_review_poster=poster)
+    hints = get_type_hints(ToolContext)
+
+    assert ctx.github_review_poster is poster
+    assert GitHubReviewPosterProtocol in get_args(hints["github_review_poster"])
+    assert isinstance(ctx.github_review_poster, GitHubReviewPosterProtocol)
 
 
 def test_toolcontext_response_log_annotated_with_mcp_response_store_protocol() -> None:

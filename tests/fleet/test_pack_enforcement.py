@@ -51,6 +51,10 @@ CLONE_PACK_TOOLS = TOOLS_BY_PACK["clone"]
 TELEMETRY_PACK_TOOLS = TOOLS_BY_PACK["telemetry"]
 
 
+def test_post_pr_review_belongs_to_github_pack() -> None:
+    assert "post_pr_review" in GITHUB_PACK_TOOLS
+
+
 def _simulate_food_truck(monkeypatch: pytest.MonkeyPatch, packs: str) -> None:
     """Set env vars to simulate a food truck session, then apply visibility."""
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")

@@ -79,8 +79,8 @@ class TestResearchReviewRecipe:
 
     # --- Steps ---
     def test_step_count(self, recipe) -> None:
-        # 24 active steps + 3 terminal stops = 27
-        assert len(recipe.steps) == 27
+        # 27 active steps + 3 terminal stops = 30
+        assert len(recipe.steps) == 30
 
     def test_active_step_names(self, recipe) -> None:
         expected = {

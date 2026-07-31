@@ -123,6 +123,38 @@ class TestCrashPathDiagnosticPersistence:
         assert result.per_dispatch_state_path is None
 
     @pytest.mark.anyio
+    async def test_rejection_does_not_return_state_path_when_persistence_fails(
+        self, tool_ctx, monkeypatch
+    ) -> None:
+        """A failed rejection write must not expose an untrustworthy state path."""
+        from autoskillit.fleet import state
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        def failing_append(*args, **kwargs) -> None:
+            raise OSError("state disk unavailable")
+
+        monkeypatch.setattr(state, "append_dispatch_record", failing_append)
+
+        from autoskillit.fleet._api import execute_dispatch
+
+        result = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="do something",
+            ingredients={"unknown_ingredient_key": "value"},
+            dispatch_name="dispatch-a",
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+
+        envelope = json.loads(result.outcome.to_envelope())
+        assert envelope["error"] == "fleet_unknown_ingredient"
+        assert result.per_dispatch_state_path is None
+
+    @pytest.mark.anyio
     async def test_crash_logs_structured_fields(self, tool_ctx, monkeypatch) -> None:
         """WARNING log must include exc_type and dispatch_name."""
         import structlog

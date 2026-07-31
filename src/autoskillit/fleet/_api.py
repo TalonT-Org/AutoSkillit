@@ -821,6 +821,7 @@ async def _run_dispatch(
                 "_complete_failure_with_state: per-dispatch state write failed",
                 exc_info=True,
             )
+            return DispatchResult(completed, per_dispatch_state_path=None)
         return DispatchResult(completed, per_dispatch_state_path=state_path)
 
     if effective_ingredients:

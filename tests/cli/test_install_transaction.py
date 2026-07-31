@@ -212,15 +212,63 @@ def test_control_flow_exceptions_compensate_before_propagation(
     control_flow: type[BaseException],
 ) -> None:
     marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
-    settings = tmp_path / ".claude" / "settings.json"
-    settings.parent.mkdir(parents=True)
-    settings.write_text("before", encoding="utf-8")
+    from autoskillit.cli import _plugin_artifact
+    from autoskillit.cli._install_snapshot import _installed_plugins_json_path
 
-    def interrupt_after_mutation(**_kwargs) -> tuple[()]:
+    projection = tmp_path / ".autoskillit" / "marketplace"
+    projection.mkdir(parents=True)
+    (projection / "old.txt").write_text("old projection", encoding="utf-8")
+    known = tmp_path / ".claude" / "plugins" / "known_marketplaces.json"
+    known.parent.mkdir(parents=True)
+    known.write_text('{"old": true}', encoding="utf-8")
+    installed = _installed_plugins_json_path()
+    installed.write_text('{"version": 2, "plugins": {"old": {}}}', encoding="utf-8")
+    retiring = tmp_path / ".autoskillit" / "retiring_cache.json"
+    retiring.write_text('{"schema_version": 2, "records": []}', encoding="utf-8")
+    target = marketplace._installed_plugin_root(_VERSION)
+    target.mkdir(parents=True)
+    (target / "old.txt").write_text("old target", encoding="utf-8")
+    manifest = _plugin_artifact.installed_artifact_manifest_path(target)
+    manifest.write_text('{"old": true}', encoding="utf-8")
+    settings = tmp_path / ".claude" / "settings.json"
+    settings.write_text("before", encoding="utf-8")
+    before = _filesystem_state(tmp_path)
+    events: list[str] = []
+    ownership = _instrument_transaction_ownership(monkeypatch, events)
+
+    def mutate_projection(**_kwargs) -> Path:
+        (projection / "old.txt").unlink()
+        (projection / "new.txt").write_text("new projection", encoding="utf-8")
+        return projection
+
+    def mutate_settings(**_kwargs) -> tuple[()]:
         settings.write_text("mutated", encoding="utf-8")
+        return ()
+
+    def interrupt_after_mutation(_argv, **_kwargs):
+        known.write_text('{"new": true}', encoding="utf-8")
+        installed.write_text('{"version": 2, "plugins": {"new": {}}}', encoding="utf-8")
+        retiring.write_text(
+            '{"schema_version": 2, "records": [{"new": true}]}',
+            encoding="utf-8",
+        )
+        (target / "old.txt").write_text("new target", encoding="utf-8")
+        manifest.write_text('{"new": true}', encoding="utf-8")
         raise control_flow("stop")
 
-    monkeypatch.setattr(marketplace, "_clear_plugin_cache", interrupt_after_mutation)
+    original_rollback = marketplace._InstallSnapshot.rollback
+
+    def rollback(snapshot, *, owned_lease_fd: int | None = None) -> tuple[str, ...]:
+        assert ownership == {"install_lock": True, "artifact_lease": True}
+        assert owned_lease_fd is not None
+        os.fstat(owned_lease_fd)
+        events.append("rollback")
+        return original_rollback(snapshot, owned_lease_fd=owned_lease_fd)
+
+    monkeypatch.setattr(marketplace, "_ensure_marketplace", mutate_projection)
+    monkeypatch.setattr(marketplace, "_clear_plugin_cache", mutate_settings)
+    monkeypatch.setattr(marketplace, "_run_claude_admin", interrupt_after_mutation)
+    monkeypatch.setattr(marketplace._InstallSnapshot, "rollback", rollback)
 
     with pytest.raises(control_flow, match="stop"):
         marketplace.install(
@@ -229,7 +277,16 @@ def test_control_flow_exceptions_compensate_before_propagation(
             child_cwd=neutral_cwd,
         )
 
-    assert settings.read_text(encoding="utf-8") == "before"
+    assert _filesystem_state(tmp_path) == before
+    assert events == [
+        "install_lock_acquired",
+        "artifact_lease_acquired",
+        "artifact_lease_entered",
+        "rollback",
+        "artifact_lease_released",
+        "install_lock_released",
+    ]
+    assert ownership == {"install_lock": False, "artifact_lease": False}
 
 
 @pytest.mark.parametrize("control_flow", [KeyboardInterrupt, SystemExit])

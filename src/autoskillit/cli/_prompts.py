@@ -35,11 +35,6 @@ _POST_RECEIPT_SCOPE = "post_receipt"
 class _McpStartupRecoveryClause:
     clause_id: str
     scope: str
-    actor: str
-    modality: str
-    polarity: str
-    action: str
-    object: str
     text: str
 
     def render(self) -> str:
@@ -63,14 +58,6 @@ class _McpStartupRecoverySpec:
         for clause in self.clauses:
             if clause.scope not in {_PRE_DISPATCH_SCOPE, _POST_RECEIPT_SCOPE}:
                 raise ValueError("MCP startup clause has an unknown scope")
-            if clause.actor != "orchestrator":
-                raise ValueError("MCP startup clause has an unknown actor")
-            if clause.modality != "must":
-                raise ValueError("MCP startup clause must use mandatory modality")
-            if clause.polarity not in {"positive", "negative"}:
-                raise ValueError("MCP startup clause has an unknown polarity")
-            if not clause.action.strip() or not clause.object.strip():
-                raise ValueError("MCP startup clause action and object must not be empty")
             if not clause.text.strip():
                 raise ValueError("MCP startup clause text must not be empty")
 
@@ -100,11 +87,6 @@ _MCP_STARTUP_RECOVERY_SPEC = _McpStartupRecoverySpec(
         _McpStartupRecoveryClause(
             clause_id="MCP-PRE-UNIVERSAL-RETRY",
             scope=_PRE_DISPATCH_SCOPE,
-            actor="orchestrator",
-            modality="must",
-            polarity="positive",
-            action="retry",
-            object="open_kitchen",
             text=(
                 "For every failure before a CallToolResult exists, retry open_kitchen "
                 "directly before classifying the failure shape."
@@ -113,51 +95,26 @@ _MCP_STARTUP_RECOVERY_SPEC = _McpStartupRecoverySpec(
         _McpStartupRecoveryClause(
             clause_id="MCP-PRE-NO-EXPLANATION",
             scope=_PRE_DISPATCH_SCOPE,
-            actor="orchestrator",
-            modality="must",
-            polarity="negative",
-            action="explain",
-            object="startup failure",
             text="During bounded retry, do not explain the startup failure to the user.",
         ),
         _McpStartupRecoveryClause(
             clause_id="MCP-PRE-NO-TROUBLESHOOTING",
             scope=_PRE_DISPATCH_SCOPE,
-            actor="orchestrator",
-            modality="must",
-            polarity="negative",
-            action="troubleshoot",
-            object="startup failure",
             text="During bounded retry, do not troubleshoot the startup failure.",
         ),
         _McpStartupRecoveryClause(
             clause_id="MCP-PRE-NO-FREE-TEXT-QUESTION",
             scope=_PRE_DISPATCH_SCOPE,
-            actor="orchestrator",
-            modality="must",
-            polarity="negative",
-            action="output",
-            object="free-text question",
             text="During bounded retry, do not output a free-text question.",
         ),
         _McpStartupRecoveryClause(
             clause_id="MCP-PRE-NO-ASK-USER",
             scope=_PRE_DISPATCH_SCOPE,
-            actor="orchestrator",
-            modality="must",
-            polarity="negative",
-            action="call",
-            object="AskUserQuestion",
             text="During bounded retry, do not call AskUserQuestion.",
         ),
         _McpStartupRecoveryClause(
             clause_id="MCP-POST-BOUNDARY",
             scope=_POST_RECEIPT_SCOPE,
-            actor="orchestrator",
-            modality="must",
-            polarity="positive",
-            action="end",
-            object="pre-dispatch recovery",
             text=(
                 "Receiving any CallToolResult ends PRE-DISPATCH recovery. Do not return "
                 "to discovery or start a fresh operation."
@@ -166,11 +123,6 @@ _MCP_STARTUP_RECOVERY_SPEC = _McpStartupRecoverySpec(
         _McpStartupRecoveryClause(
             clause_id="MCP-POST-TOOL-ERROR",
             scope=_POST_RECEIPT_SCOPE,
-            actor="orchestrator",
-            modality="must",
-            polarity="positive",
-            action="route",
-            object="tool error result",
             text=(
                 "An isError:true CallToolResult is a received tool error. Preserve its "
                 "operation identity and follow its declared retry disposition."
@@ -179,11 +131,6 @@ _MCP_STARTUP_RECOVERY_SPEC = _McpStartupRecoverySpec(
         _McpStartupRecoveryClause(
             clause_id="MCP-POST-APPLICATION",
             scope=_POST_RECEIPT_SCOPE,
-            actor="orchestrator",
-            modality="must",
-            polarity="positive",
-            action="parse",
-            object="application result",
             text=(
                 "An isError:false MCP response is a structured application result, "
                 "including when its JSON contains success:false. Parse it before "
@@ -193,11 +140,6 @@ _MCP_STARTUP_RECOVERY_SPEC = _McpStartupRecoverySpec(
         _McpStartupRecoveryClause(
             clause_id="MCP-POST-RECOVERY-MANIFEST",
             scope=_POST_RECEIPT_SCOPE,
-            actor="orchestrator",
-            modality="must",
-            polarity="positive",
-            action="complete",
-            object="recipe initialization",
             text=(
                 "If the application result contains a recovery manifest, process it "
                 "before any generic success:false branch: preserve recipe_pull, "
@@ -223,11 +165,6 @@ _MCP_STARTUP_RECOVERY_SPEC = _McpStartupRecoverySpec(
         _McpStartupRecoveryClause(
             clause_id="MCP-POST-TERMINAL",
             scope=_POST_RECEIPT_SCOPE,
-            actor="orchestrator",
-            modality="must",
-            polarity="positive",
-            action="terminate",
-            object="nonrecoverable application error",
             text=(
                 "Only a structured, nonrecoverable application error is terminal. "
                 "Print its user_visible_message verbatim (or the raw application result "

@@ -48,10 +48,17 @@ _CLAUDE_INSTALLED_INVALID_STATES = tuple(
     for kind in INVALID_PLUGIN_ARTIFACT_STATE_KINDS
     if kind
     not in {
+        # These lexical-evidence states intentionally do not require registry
+        # publication, so they exercise verifier behavior after selection
+        # rather than the "fail before child spawn" registration contract.
         PluginArtifactStateKind.DANGLING_MANAGED_ROOT,
         PluginArtifactStateKind.DANGLING_MANIFEST,
         PluginArtifactStateKind.DANGLING_LEASE,
     }
+)
+_CODEX_IGNORED_CLAUDE_ARTIFACT_STATES = (
+    *INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
+    PluginArtifactStateKind.VALID_CURRENT,
 )
 
 
@@ -320,7 +327,7 @@ def test_matching_claude_artifact_binds_through_real_selector(
 
 @pytest.mark.parametrize(
     "kind",
-    INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
+    _CODEX_IGNORED_CLAUDE_ARTIFACT_STATES,
     ids=lambda kind: kind.value,
 )
 def test_codex_cook_remains_generated_home_and_ignores_claude_artifacts(
@@ -353,7 +360,7 @@ def test_codex_cook_remains_generated_home_and_ignores_claude_artifacts(
 
 @pytest.mark.parametrize(
     "kind",
-    INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
+    _CODEX_IGNORED_CLAUDE_ARTIFACT_STATES,
     ids=lambda kind: kind.value,
 )
 def test_codex_session_launch_ignores_claude_installed_artifacts(

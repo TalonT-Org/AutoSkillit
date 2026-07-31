@@ -855,7 +855,7 @@ def test_install_claudecode_guard_returns_deferred_result(
     assert result.outcome is InstallOutcome.DEFERRED
 
 
-def test_install_claudecode_guard_exits_deferred_without_next_steps(
+def test_app_install_deferred_result_exits_without_next_steps(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """app.install() preserves the typed deferred outcome at the process boundary."""
@@ -898,6 +898,7 @@ def test_app_install_constructs_direct_request_and_prints_only_after_completion(
 
     real_request = _contract_mod.InstallRequest
     requests: list[_contract_mod.InstallRequest] = []
+    installed_requests: list[_contract_mod.InstallRequest] = []
     next_steps_called: list[dict] = []
 
     def capture_request(**kwargs):
@@ -905,12 +906,12 @@ def test_app_install_constructs_direct_request_and_prints_only_after_completion(
         requests.append(request)
         return request
 
+    def capture_install(**kwargs):
+        installed_requests.append(kwargs["request"])
+        return _contract_mod.InstallResult(outcome=_contract_mod.InstallOutcome.COMPLETED)
+
     monkeypatch.setattr(_contract_mod, "InstallRequest", capture_request)
-    monkeypatch.setattr(
-        _mkt_mod,
-        "install",
-        lambda **kw: _contract_mod.InstallResult(outcome=_contract_mod.InstallOutcome.COMPLETED),
-    )
+    monkeypatch.setattr(_mkt_mod, "install", capture_install)
     monkeypatch.setattr(
         _init_helpers_mod, "_print_next_steps", lambda **kw: next_steps_called.append(kw)
     )
@@ -919,15 +920,42 @@ def test_app_install_constructs_direct_request_and_prints_only_after_completion(
 
     app_install(scope="project")
 
-    assert requests == [
-        real_request(
-            scope="project",
-            mode=_contract_mod.InstallMode.DIRECT,
-            require_registered_plugin=True,
-            expected_version=__version__,
-        )
-    ]
+    expected_request = real_request(
+        scope="project",
+        mode=_contract_mod.InstallMode.DIRECT,
+        require_registered_plugin=True,
+        expected_version=__version__,
+    )
+    assert requests == [expected_request]
+    assert installed_requests == [expected_request]
     assert next_steps_called == [{"context": "install"}]
+
+
+def test_app_install_rejects_maintenance_update_without_expected_version() -> None:
+    from autoskillit.cli.app import install as app_install
+
+    with pytest.raises(ValueError, match="--maintenance-update requires --expected-version"):
+        app_install(maintenance_update=True)
+
+
+@pytest.mark.parametrize(
+    "maintenance_only_kwargs",
+    [
+        {"require_registered_plugin": True},
+        {"expected_version": "1.2.3"},
+    ],
+    ids=["require-registered-plugin", "expected-version"],
+)
+def test_app_install_rejects_maintenance_only_fields_in_direct_mode(
+    maintenance_only_kwargs: dict[str, object],
+) -> None:
+    from autoskillit.cli.app import install as app_install
+
+    with pytest.raises(
+        ValueError,
+        match="--require-registered-plugin and --expected-version require --maintenance-update",
+    ):
+        app_install(**maintenance_only_kwargs)
 
 
 def test_app_install_not_required_succeeds_without_next_steps(

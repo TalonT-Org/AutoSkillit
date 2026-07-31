@@ -239,11 +239,14 @@ def test_control_flow_exception_survives_compensation_failure(
     control_flow: type[BaseException],
 ) -> None:
     marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    compensation_attempted = False
 
     def interrupt_transaction(**_kwargs) -> tuple[()]:
         raise control_flow("original control flow")
 
     def fail_compensation(*_args, **_kwargs):
+        nonlocal compensation_attempted
+        compensation_attempted = True
         raise RuntimeError("secondary compensation failure")
 
     monkeypatch.setattr(marketplace, "_clear_plugin_cache", interrupt_transaction)
@@ -255,6 +258,8 @@ def test_control_flow_exception_survives_compensation_failure(
             child_env=_sealed_env(),
             child_cwd=neutral_cwd,
         )
+
+    assert compensation_attempted is True
 
 
 def _filesystem_state(root: Path) -> tuple[tuple[str, str, bytes | str | None], ...]:

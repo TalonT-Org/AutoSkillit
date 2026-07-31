@@ -10,6 +10,7 @@ import pytest
 
 from autoskillit.fleet import (
     FLEET_STATE_SCHEMA_VERSION,
+    DispatchEffectProvenance,
     DispatchRecord,
     DispatchStatus,
     DispatchTokenUsage,
@@ -799,6 +800,7 @@ class TestDispatchCompletedEnvelopeCoverage:
             reason="",
             token_usage={"input": 100, "output": 50, "cache_read": 10, "cache_creation": 5},
             elapsed_seconds=42.5,
+            effect_provenance=DispatchEffectProvenance(operation_id="test-dispatch-id"),
         )
         envelope = json.loads(completed.to_envelope())
 

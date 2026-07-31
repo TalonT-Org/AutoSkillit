@@ -13,6 +13,7 @@ from autoskillit.fleet import (
     DispatchCompleted,
     DispatchEffectName,
     DispatchEffectPhase,
+    DispatchEffectProvenance,
     DispatchProvenanceTracker,
     DispatchRecord,
     DispatchRejected,
@@ -164,6 +165,7 @@ def test_failed_completion_preserves_domain_reason_in_error_field() -> None:
         dispatch_id="dispatch-domain-failure",
         dispatched_session_id="session-domain-failure",
         reason="domain_validation_failed",
+        effect_provenance=DispatchEffectProvenance(operation_id="operation-domain-failure"),
     )
 
     envelope = json.loads(completed.to_envelope())
@@ -172,15 +174,21 @@ def test_failed_completion_preserves_domain_reason_in_error_field() -> None:
     assert envelope["user_visible_message"] == "domain_validation_failed"
 
 
-def test_legacy_constructor_provenance_fails_closed() -> None:
-    rejected = DispatchRejected(
-        error_code=FleetErrorCode.FLEET_ACQUIRE_TIMEOUT,
-        message="busy",
-    )
+def test_outcome_constructors_require_provenance() -> None:
+    with pytest.raises(TypeError, match="effect_provenance"):
+        DispatchRejected(
+            error_code=FleetErrorCode.FLEET_ACQUIRE_TIMEOUT,
+            message="busy",
+        )
 
-    assert (
-        rejected.effect_provenance.retry_disposition is DispatchRetryDisposition.RECONCILE_REQUIRED
-    )
+    with pytest.raises(TypeError, match="effect_provenance"):
+        DispatchCompleted(
+            success=False,
+            dispatch_status=DispatchStatus.FAILURE,
+            dispatch_id="dispatch-missing-provenance",
+            dispatched_session_id="",
+            reason="failed",
+        )
 
 
 def test_dispatch_record_persists_provenance_in_schema_v9() -> None:

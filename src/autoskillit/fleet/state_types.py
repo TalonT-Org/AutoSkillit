@@ -300,21 +300,6 @@ class DispatchProvenanceTracker:
             )
 
 
-def _untracked_dispatch_provenance() -> DispatchEffectProvenance:
-    """Fail-closed provenance for legacy constructors outside the request path."""
-    return DispatchEffectProvenance(
-        operation_id="untracked",
-        effects=(
-            DispatchEffectRecord(
-                name=DispatchEffectName.DISPATCH_ALLOCATION,
-                phase=DispatchEffectPhase.STARTED,
-                effect_id="untracked:dispatch_allocation",
-                ambiguity="effect provenance was not supplied by the producer",
-            ),
-        ),
-    )
-
-
 _ERROR_CODE_CATEGORIES: dict[str, ErrorCodeCategory] = {
     FleetErrorCode.FLEET_L3_TIMEOUT: ErrorCodeCategory.INFRASTRUCTURE,
     FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK: ErrorCodeCategory.INFRASTRUCTURE,
@@ -652,9 +637,7 @@ class DispatchRejected:
 
     error_code: FleetErrorCode
     message: str
-    effect_provenance: DispatchEffectProvenance = field(
-        default_factory=_untracked_dispatch_provenance
-    )
+    effect_provenance: DispatchEffectProvenance = field(kw_only=True)
     details: dict[str, Any] | None = None
     dispatch_id: str = ""
 
@@ -682,9 +665,7 @@ class DispatchCompleted:
     dispatched_session_id: str
     reason: str
     diagnostic_message: str = ""
-    effect_provenance: DispatchEffectProvenance = field(
-        default_factory=_untracked_dispatch_provenance
-    )
+    effect_provenance: DispatchEffectProvenance = field(kw_only=True)
     token_usage: dict[str, Any] = field(default_factory=dict)
     l3_payload: dict[str, Any] | None = None
     l3_parse_source: str = ""

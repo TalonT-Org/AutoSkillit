@@ -9,6 +9,7 @@ import pytest
 
 from autoskillit.fleet import (
     DispatchCompleted,
+    DispatchEffectProvenance,
     DispatchRecord,
     DispatchResult,
     DispatchStatus,
@@ -160,6 +161,7 @@ class TestDispatchFoodTruckCampaignState:
                     dispatched_session_id="s1",
                     reason="",
                     token_usage={},
+                    effect_provenance=DispatchEffectProvenance(operation_id="d1"),
                 ),
                 per_dispatch_state_path=None,
             )
@@ -193,6 +195,7 @@ class TestDispatchFoodTruckCampaignState:
                     dispatched_session_id="s1",
                     reason="l2_crashed",
                     token_usage={},
+                    effect_provenance=DispatchEffectProvenance(operation_id="d1"),
                 ),
                 per_dispatch_state_path=None,
             )
@@ -225,6 +228,7 @@ class TestDispatchFoodTruckCampaignState:
                     dispatched_session_id="s1",
                     reason="",
                     token_usage={},
+                    effect_provenance=DispatchEffectProvenance(operation_id="d1"),
                 ),
                 per_dispatch_state_path=None,
             )
@@ -260,6 +264,7 @@ class TestDispatchFoodTruckCampaignState:
                     dispatched_session_id="s1",
                     reason="",
                     token_usage={},
+                    effect_provenance=DispatchEffectProvenance(operation_id="d1"),
                 ),
                 per_dispatch_state_path=None,
             )
@@ -337,6 +342,7 @@ class TestCampaignStateFieldCompleteness:
                         "cache_creation": 5,
                     },
                     elapsed_seconds=7.25,
+                    effect_provenance=DispatchEffectProvenance(operation_id="d-timing"),
                 ),
                 per_dispatch_state_path=per_dispatch_sp,
             )
@@ -405,6 +411,7 @@ class TestCampaignStateFieldCompleteness:
                         "cache_read": 10,
                         "cache_creation": 5,
                     },
+                    effect_provenance=DispatchEffectProvenance(operation_id="d-token"),
                 ),
                 per_dispatch_state_path=per_dispatch_sp,
             )
@@ -475,6 +482,7 @@ class TestCampaignStateFieldCompleteness:
                         "cache_creation": 10,
                     },
                     elapsed_seconds=15.0,
+                    effect_provenance=DispatchEffectProvenance(operation_id="d-field"),
                 ),
                 per_dispatch_state_path=per_dispatch_sp,
             )
@@ -513,6 +521,7 @@ class TestCampaignStateFieldCompleteness:
                     dispatched_session_id="s-fallback",
                     reason="completed",
                     token_usage={"input": 50, "output": 25, "cache_read": 0, "cache_creation": 0},
+                    effect_provenance=DispatchEffectProvenance(operation_id="d-fallback"),
                 ),
                 per_dispatch_state_path=None,
             )
@@ -759,6 +768,7 @@ class TestValidationFailureCampaignState:
                     dispatched_session_id="s1",
                     reason="fleet_missing_ingredient",
                     token_usage={},
+                    effect_provenance=DispatchEffectProvenance(operation_id="d1"),
                 ),
                 per_dispatch_state_path=None,
             )

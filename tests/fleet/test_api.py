@@ -10,6 +10,7 @@ import anyio
 import pytest
 
 from autoskillit.fleet import (
+    DispatchEffectProvenance,
     DispatchRecord,
     _write_pid,
     write_initial_state,
@@ -664,6 +665,7 @@ class TestWriteDispatchToCampaignStateRefusal:
             DispatchRejected(
                 error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
                 message="RuntimeError: database connection lost",
+                effect_provenance=DispatchEffectProvenance(operation_id="test"),
             ),
         )
 
@@ -700,6 +702,7 @@ class TestWriteDispatchToCampaignStateRefusal:
             DispatchRejected(
                 error_code=FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
                 message="",
+                effect_provenance=DispatchEffectProvenance(operation_id="test"),
             ),
         )
 

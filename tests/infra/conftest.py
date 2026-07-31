@@ -47,14 +47,21 @@ def _dispatch_food_truck_json_producer() -> dict:
     import json
 
     from autoskillit.core import FleetErrorCode, fleet_error
-    from autoskillit.fleet.state_types import DispatchCompleted, DispatchRejected, DispatchStatus
+    from autoskillit.fleet.state_types import (
+        DispatchCompleted,
+        DispatchEffectProvenance,
+        DispatchRejected,
+        DispatchStatus,
+    )
 
+    provenance = DispatchEffectProvenance(operation_id="formatter-coverage")
     base = DispatchCompleted(
         success=True,
         dispatch_status=DispatchStatus.SUCCESS,
         dispatch_id="d1",
         dispatched_session_id="s1",
         reason="ok",
+        effect_provenance=provenance,
     )
     with_optionals = dataclasses.replace(
         base,
@@ -69,12 +76,14 @@ def _dispatch_food_truck_json_producer() -> dict:
         dispatch_id="d3",
         dispatched_session_id="s3",
         reason="fleet_l3_no_result_block",
+        effect_provenance=provenance,
     )
     rejected = DispatchRejected(
         error_code=FleetErrorCode.FLEET_QUOTA_EXHAUSTED,
         message="quota limit hit",
         details={"limit": 10},
         dispatch_id="d2",
+        effect_provenance=provenance,
     )
     error_str = fleet_error(FleetErrorCode.FLEET_ACQUIRE_TIMEOUT, "could not acquire lock")
     partial_bail_envelope = {

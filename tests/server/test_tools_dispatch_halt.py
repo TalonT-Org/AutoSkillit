@@ -139,7 +139,11 @@ class TestDispatchFoodTruckHaltEnforcement:
 
         write_initial_state(state_path, "cid", "camp", "/m.yaml", [])
 
-        from autoskillit.fleet import DispatchCompleted, DispatchResult
+        from autoskillit.fleet import (
+            DispatchCompleted,
+            DispatchEffectProvenance,
+            DispatchResult,
+        )
         from autoskillit.fleet import DispatchStatus as _DS
 
         monkeypatch.setattr(
@@ -152,6 +156,9 @@ class TestDispatchFoodTruckHaltEnforcement:
                         dispatch_id="test-dispatch-id",
                         dispatched_session_id="sess-abc",
                         reason="fleet_l3_no_result_block",
+                        effect_provenance=DispatchEffectProvenance(
+                            operation_id="test-dispatch-id"
+                        ),
                         token_usage={},
                         l3_parse_source="stdout",
                         lifespan_started=True,

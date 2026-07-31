@@ -25,7 +25,7 @@ AutoSkillit uses a three-tier tool visibility model:
 - **Headless tools (2 tools)**: Revealed in headless sessions via `mcp.enable({'headless'})` — `test_check`, `unlock_agent_pack`
 - **Kitchen-tagged tools (45 tools total)**: Gated behind `open_kitchen` — `run_skill`,
   `run_cmd`, `run_python`, `merge_worktree`, `clone_repo`, `push_to_remote`, and 40 more.
-  Seven kitchen tools also carry the `headless` tag and are
+  Six kitchen tools also carry the `headless` tag and are
   additionally pre-enabled in headless sessions.
 
 When you call `open_kitchen` (automatically done by `order`), all 45 kitchen-tagged tools become

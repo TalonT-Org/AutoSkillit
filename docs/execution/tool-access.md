@@ -12,7 +12,7 @@ session types can see each tool.
 │  reload_session                                         │
 │  Always visible — no gating, no headless restriction    │
 ├─────────────────────────────────────────────────────────┤
-│  HEADLESS-TAGGED  (7 tools)                             │
+│  HEADLESS-TAGGED  (6 tools)                             │
 │  test/check, commit, and audit artifact worker tools    │
 │  Revealed in headless sessions via mcp.enable(headless) │
 │  Also carries the kitchen tag; hidden in plain sessions │
@@ -68,7 +68,7 @@ Server startup sequence:
 
 3. If AUTOSKILLIT_HEADLESS=1:
    mcp.enable(tags={"headless"})
-   → reveals the seven HEADLESS_TOOLS entries
+   → reveals the six HEADLESS_TOOLS entries
 
 4. When open_kitchen is called:
    ctx.enable_components(tags={"kitchen"})   → reveals kitchen-tagged tools (not fleet)

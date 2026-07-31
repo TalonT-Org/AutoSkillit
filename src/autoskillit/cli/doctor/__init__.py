@@ -63,6 +63,7 @@ from ._doctor_mcp import (
     _check_stale_mcp_servers,
 )
 from ._doctor_runtime import (
+    _check_backend_version,
     _check_claude_binary,
     _check_claude_process_state_breakdown,
     _check_cli_conformance_probes,
@@ -70,7 +71,6 @@ from ._doctor_runtime import (
     _check_codex_limits_verified,
     _check_codex_model_alias_staleness,
     _check_codex_ndjson_drift,
-    _check_codex_version,
     _check_quota_cache_schema,
     _check_script_binary,
 )
@@ -204,7 +204,7 @@ def run_doctor(*, output_json: bool = False) -> None:
         results.append(_check_fleet_state_schema())
 
     # Check 30: Codex CLI version gate
-    results.append(_check_codex_version(backend=_backend))
+    results.append(_check_backend_version(backend=_backend))
 
     # Check 31: script(1) PTY binary availability
     results.append(_check_script_binary())

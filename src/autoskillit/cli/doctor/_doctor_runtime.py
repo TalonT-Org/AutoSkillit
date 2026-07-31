@@ -76,7 +76,7 @@ def _parse_codex_version(
     return CodexVersionResult(parsed=None, skip_reason="codex --version output unparseable")
 
 
-def _check_codex_version(*, backend: CodingAgentBackend | None = None) -> DoctorResult:
+def _check_backend_version(*, backend: CodingAgentBackend | None = None) -> DoctorResult:
     check_name = "codex_version"
     ver = _parse_codex_version(backend=backend)
     if ver.skip_reason is not None:
@@ -300,7 +300,7 @@ def _check_codex_graduation(
     log_root = log_dir or default_log_dir()
 
     # Criterion 1: version check
-    version_result = _check_codex_version(backend=backend)
+    version_result = _check_backend_version(backend=backend)
     version_status = "pass" if version_result.severity == Severity.OK else "fail"
 
     # Criterion 2: probe-harness cache

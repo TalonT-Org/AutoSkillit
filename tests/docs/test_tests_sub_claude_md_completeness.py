@@ -32,6 +32,11 @@ EXPECTED_SUB_CLAUDE_MDS = [
 ]
 
 
+def test_expected_sub_guidance_paths_match_tree():
+    actual = {path.relative_to(TESTS_ROOT).as_posix() for path in TESTS_ROOT.glob("*/AGENTS.md")}
+    assert set(EXPECTED_SUB_CLAUDE_MDS) == actual
+
+
 def test_all_tests_sub_claude_md_files_exist():
     """Every test subdirectory has a CLAUDE.md file."""
     missing = [p for p in EXPECTED_SUB_CLAUDE_MDS if not (TESTS_ROOT / p).is_file()]

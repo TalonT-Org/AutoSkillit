@@ -147,6 +147,7 @@ def test_tracked_guidance_families_and_counts() -> None:
     )
     assert frozenset().union(*families) == TRACKED_GUIDANCE_PATHS
     assert sum(len(family) for family in families) == len(TRACKED_GUIDANCE_PATHS)
+    # Intentional ratchets: guidance additions and removals require an explicit inventory update.
     assert tuple(len(family) for family in families) == (2, 2, 81, 40)
     assert len(ALL_GUIDES) == 63
     assert len(ALL_ADAPTERS) == 62

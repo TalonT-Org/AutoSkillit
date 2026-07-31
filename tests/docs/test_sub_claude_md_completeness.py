@@ -307,7 +307,23 @@ def test_capture_guide_retains_isolated_import_contract() -> None:
         ),
         (
             "src/autoskillit/server/AGENTS.md",
-            ("`make_context()`", "sole legal instantiation point"),
+            ("`make_context()`", "sole legal instantiation point", "dispatch_food_truck"),
+        ),
+        (
+            "src/autoskillit/hooks/guards/AGENTS.md",
+            (
+                "write-scoped sessions",
+                "allowed prefix",
+                "L3-to-L3 recursion",
+                "commit --amend",
+                "push --force",
+                "reset --hard",
+                "clean -f",
+                "checkout .",
+                "hooks.json",
+                "settings.json",
+                "contracts/",
+            ),
         ),
         (
             "src/autoskillit/server/tools/AGENTS.md",

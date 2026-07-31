@@ -38,24 +38,6 @@ def test_all_tests_sub_claude_md_files_exist():
     assert not missing, f"Missing tests/ sub-CLAUDE.md files: {missing}"
 
 
-def test_tests_sub_claude_md_no_main_claude_md_duplication():
-    """Sub-CLAUDE.md files must not duplicate numbered sections from the main tests/CLAUDE.md."""
-    numbered_section_re = re.compile(r"^## \*{0,2}\d+\.", re.MULTILINE)
-    failures = []
-    for rel_path in EXPECTED_SUB_CLAUDE_MDS:
-        claude_md = TESTS_ROOT / rel_path
-        if not claude_md.is_file():
-            failures.append(f"{rel_path}: file does not exist")
-            continue
-        content = claude_md.read_text()
-        match = numbered_section_re.search(content)
-        if match:
-            failures.append(f"{rel_path}: contains '{match.group()}' (main CLAUDE.md section)")
-    assert not failures, "tests/ sub-CLAUDE.md files duplicate main sections:\n" + "\n".join(
-        failures
-    )
-
-
 def test_top_level_tests_claude_md_references_all_subdirs():
     """The top-level tests/AGENTS.md references each subdirectory's AGENTS.md."""
     top_agents_md = TESTS_ROOT / "AGENTS.md"

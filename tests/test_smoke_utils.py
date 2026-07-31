@@ -33,6 +33,7 @@ from autoskillit.smoke_utils import (
     extract_investigation,
     gate_backend_write,
     init_counter,
+    normalize_local_review_finding,
     parse_agent_eval_manifests,
     parse_eval_manifests,
     patch_pr_token_summary,
@@ -1806,6 +1807,30 @@ def test_review_finding_renderer_is_shared_and_preserves_proof_provenance() -> N
         )
         == "[critical] bugs: Standard finding"
     )
+
+
+def test_local_review_normalization_preserves_proof_fields_and_adds_aliases() -> None:
+    finding = {
+        "file": "src/app.py",
+        "line": 42,
+        "severity": "warning",
+        "dimension": "overengineering_reachability",
+        "message": "No consumer is reachable",
+        "evidence": [{"path": "src/app.py", "line": 42, "role": "anchor", "claim": "declaration"}],
+        "trace": [{"path": "src/app.py", "line": 42}],
+        "boundary_checks": [{"boundary": "public_api", "status": "checked_absent"}],
+        "confidence": 0.9,
+        "simpler_behavior": "Equivalent return values and errors",
+        "candidate_id": "candidate-1",
+        "disposition_id": "disposition-1",
+        "snapshot": {"head_sha": "head"},
+    }
+
+    normalized = normalize_local_review_finding(finding)
+
+    assert {key: normalized[key] for key in finding} == finding
+    assert normalized["path"] == finding["file"]
+    assert normalized["body"] == render_review_finding_body(finding)
 
 
 @pytest.mark.parametrize(

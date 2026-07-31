@@ -214,11 +214,10 @@ Matches the regex `<!--\s*REVIEW-FLAG:\s*severity=(\w+)\s+dimension=(\w+)\s*>`.
   `autoskillit.smoke_utils`. The helper owns the ordered identity fields and requires
   matching non-empty values. Any returned error is a stale/mixed handoff: make no
   code change and return the existing human-escalation verdict.
-- Transform the local findings format into the same internal structure used by the
-  GitHub-sourced flow: copy the complete entry dictionary, normalize `file` to
-  `path`, and construct the existing `body` alias without discarding
-  `evidence`, `trace`, `boundary_checks`, `confidence`, `simpler_behavior`,
-  `candidate_id`, `disposition_id`, or `snapshot`
+- Transform every local finding with
+  `normalize_local_review_finding(entry)` from `autoskillit.smoke_utils`. The helper
+  copies the complete dictionary and adds the canonical `path` and rendered `body`
+  aliases without discarding proof or provenance fields.
 - Load `diff_context_{pr_number}.json` as normal (mode-independent — same handoff file written by review-pr)
 - Set `comment_id_to_thread_id = {}` (no thread IDs in local mode)
 - Set `already_replied_ids = set()` (no prior replies in local mode)

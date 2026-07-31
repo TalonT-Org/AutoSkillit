@@ -713,6 +713,15 @@ def render_review_finding_body(finding: Mapping[str, object]) -> str:
     return body
 
 
+def normalize_local_review_finding(finding: Mapping[str, object]) -> dict[str, object]:
+    """Copy a local review finding and add the canonical path/body aliases."""
+    normalized = dict(finding)
+    if "file" in normalized:
+        normalized["path"] = normalized["file"]
+    normalized["body"] = render_review_finding_body(normalized)
+    return normalized
+
+
 def determine_experimental_review_verdict(
     *,
     retained_snapshot_was_valid: bool,

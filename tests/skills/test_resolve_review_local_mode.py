@@ -334,19 +334,8 @@ def test_local_normalization_preserves_experimental_finding_fields() -> None:
     github_start = text.index("**When `mode=github`:**", local_start)
     local_mode = text[local_start:github_start]
 
-    assert "copy the complete entry dictionary" in local_mode
-    assert "normalize `file` to" in local_mode
-    for field in (
-        "evidence",
-        "trace",
-        "boundary_checks",
-        "confidence",
-        "simpler_behavior",
-        "candidate_id",
-        "disposition_id",
-        "snapshot",
-    ):
-        assert f"`{field}`" in local_mode
+    assert "normalize_local_review_finding(entry)" in local_mode
+    assert "from `autoskillit.smoke_utils`" in local_mode
 
 
 def test_mode_specific_handoff_pairs_use_executable_identity_validator() -> None:

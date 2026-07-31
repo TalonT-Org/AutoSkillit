@@ -401,13 +401,18 @@ def test_overlapping_sidecar_replacement_never_reaches_effect_revalidation(tmp_p
     )
     wrapper.chmod(0o755)
     case["env"]["PATH"] = f"{fake_bin}:{case['env']['PATH']}"
-    case["env"]["MUTATION_SENTINEL"] = str(case["output_dir"] / "mutated")
+    mutation_sentinel = case["output_dir"] / "mutated"
+    case["env"]["MUTATION_SENTINEL"] = str(mutation_sentinel)
     case["env"]["MUTATE_SIDECAR_PATH"] = str(case["annotated"])
     case["env"]["REAL_SHA256SUM"] = real_sha256sum
 
     result, annotated_sha = _run_gate(case)
     assert result == "valid_true|none|pending|1"
     assert annotated_sha == expected_sha
+    assert mutation_sentinel.exists()
+    replaced_body = case["annotated"].read_text()
+    assert "[L1]+new-generation" in replaced_body
+    assert hashlib.sha256(replaced_body.encode()).hexdigest() != annotated_sha
 
 
 def test_standard_and_experimental_dispatch_are_separate() -> None:

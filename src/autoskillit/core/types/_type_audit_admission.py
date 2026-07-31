@@ -9,18 +9,17 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from ..closure_hashing import canonical_json_bytes, compute_bytes_hash, compute_canonical_hash
+from ..closure_hashing import (
+    HASH_RE,
+    canonical_json_bytes,
+    compute_bytes_hash,
+    compute_canonical_hash,
+)
 from ._type_audit_cycle import (
     ArtifactRef,
     AuditAssessmentRow,
     AuditCycleHead,
     AuditVerdict,
-)
-from ._type_audit_validation import (
-    _require_absolute_path,
-    _require_digest,
-    _require_nonempty,
-    _require_optional_digest,
 )
 from ._type_enums import KillReason
 
@@ -125,6 +124,30 @@ class AuditAttemptLifecycle(StrEnum):
 class AuditPreparedEffectDeliveryStatus(StrEnum):
     PENDING = "PENDING"
     DELIVERED = "DELIVERED"
+
+
+def _require_nonempty(name: str, value: object) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} must be a non-empty string")
+    return value
+
+
+def _require_digest(name: str, value: object) -> str:
+    if not isinstance(value, str) or HASH_RE.fullmatch(value) is None:
+        raise ValueError(f"{name} must be an algorithm-qualified sha256 digest")
+    return value
+
+
+def _require_optional_digest(name: str, value: object) -> str | None:
+    if value is None:
+        return None
+    return _require_digest(name, value)
+
+
+def _require_absolute_path(name: str, value: object) -> Path:
+    if not isinstance(value, Path) or not value.is_absolute() or ".." in value.parts:
+        raise ValueError(f"{name} must be an absolute non-traversing Path")
+    return value
 
 
 def _typed_tuple(name: str, value: object, item_type: type[Any]) -> tuple[Any, ...]:

@@ -24,14 +24,12 @@ from ._type_audit_admission import (
     InstallationVersion,
     RecipeExecutionId,
     ReservationDecision,
-)
-from ._type_audit_cycle import ArtifactRef, AuditCycleHead
-from ._type_audit_validation import (
     _require_absolute_path,
     _require_digest,
     _require_nonempty,
     _require_optional_digest,
 )
+from ._type_audit_cycle import ArtifactRef, AuditCycleHead
 
 __all__ = [
     "AuditAdmissionLedger",

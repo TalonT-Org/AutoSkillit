@@ -224,9 +224,13 @@ class DispatchProvenanceTracker:
     ) -> None:
         with self._lock:
             existing = self._effects.get(name)
-            merged_identities = dict(
-                existing.known_downstream_identities if existing is not None else ()
-            )
+            if existing is None:
+                raise ValueError(f"dispatch effect {name.value!r} was not started")
+            if existing.retry_relevant is not retry_relevant:
+                raise ValueError(
+                    f"dispatch effect {name.value!r} changed retry relevance after start"
+                )
+            merged_identities = dict(existing.known_downstream_identities)
             if identities:
                 merged_identities.update(
                     {key: str(value) for key, value in identities.items() if value != ""}
@@ -234,10 +238,8 @@ class DispatchProvenanceTracker:
             self._effects[name] = DispatchEffectRecord(
                 name=name,
                 phase=DispatchEffectPhase.CONFIRMED,
-                effect_id=existing.effect_id if existing is not None else self._effect_id(name),
-                retry_relevant=(
-                    existing.retry_relevant if existing is not None else retry_relevant
-                ),
+                effect_id=existing.effect_id,
+                retry_relevant=existing.retry_relevant,
                 confirmation_receipt=receipt,
                 known_downstream_identities=self._identities(merged_identities),
             )

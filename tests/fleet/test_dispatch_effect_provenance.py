@@ -73,8 +73,22 @@ def test_repeated_start_preserves_original_journal_entry() -> None:
     assert dict(effect.known_downstream_identities) == {"dispatch_id": "dispatch-1"}
 
 
+def test_confirm_requires_started_effect() -> None:
+    tracker = DispatchProvenanceTracker(operation_id="operation-missing-start")
+
+    with pytest.raises(ValueError, match="was not started"):
+        tracker.confirm(
+            DispatchEffectName.PROCESS_SPAWN,
+            receipt="executor callback",
+        )
+
+
 def test_local_cleanup_does_not_erase_confirmed_spawn() -> None:
     tracker = DispatchProvenanceTracker(operation_id="operation-4")
+    tracker.start(
+        DispatchEffectName.PROCESS_SPAWN,
+        identities={"dispatch_id": "dispatch-3"},
+    )
     tracker.confirm(
         DispatchEffectName.PROCESS_SPAWN,
         receipt="executor callback",
@@ -98,9 +112,17 @@ def test_local_cleanup_does_not_erase_confirmed_spawn() -> None:
 
 def test_commit_dominates_confirmed_effect_history() -> None:
     tracker = DispatchProvenanceTracker(operation_id="operation-5")
+    tracker.start(
+        DispatchEffectName.PROCESS_SPAWN,
+        identities={"dispatch_id": "dispatch-4"},
+    )
     tracker.confirm(
         DispatchEffectName.PROCESS_SPAWN,
         receipt="executor callback",
+        identities={"dispatch_id": "dispatch-4"},
+    )
+    tracker.start(
+        DispatchEffectName.COMMIT,
         identities={"dispatch_id": "dispatch-4"},
     )
     tracker.confirm(
@@ -163,6 +185,10 @@ def test_legacy_constructor_provenance_fails_closed() -> None:
 
 def test_dispatch_record_persists_provenance_in_schema_v9() -> None:
     tracker = DispatchProvenanceTracker(operation_id="operation-7")
+    tracker.start(
+        DispatchEffectName.DISPATCH_ALLOCATION,
+        identities={"dispatch_id": "dispatch-7"},
+    )
     tracker.confirm(
         DispatchEffectName.DISPATCH_ALLOCATION,
         receipt="state identity",

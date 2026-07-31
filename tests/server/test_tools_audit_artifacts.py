@@ -19,6 +19,7 @@ from autoskillit.core import (
     AuditAssessment,
     AuditAssessmentRow,
     AuditCycleAuthority,
+    AuditCycleVerificationError,
     AuditDispositionCommitOutcome,
     AuditPreflightProjection,
     AuditVerdict,
@@ -275,13 +276,20 @@ class _TamperAtFinalCas:
 
 
 @pytest.mark.parametrize(
-    "target",
-    ("authority", "plan", "report", "association"),
+    ("target", "expected_exception", "expected_match"),
+    (
+        ("authority", AuditCycleVerificationError, "not strict canonical"),
+        ("plan", _SemanticInputError, "changed while"),
+        ("report", AuditCycleVerificationError, "not strict canonical"),
+        ("association", _SemanticInputError, "changed while"),
+    ),
 )
 def test_disposition_final_cas_rejects_prepared_artifact_toctou(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     target: str,
+    expected_exception: type[Exception],
+    expected_match: str,
 ) -> None:
     authority_path, new_plan, authority = _write_disposition_authority(tmp_path)
     temp_dir = tmp_path / ".autoskillit" / "temp"
@@ -311,7 +319,7 @@ def test_disposition_final_cas_rejects_prepared_artifact_toctou(
         lambda _tool_ctx: installed,
     )
 
-    with pytest.raises(_SemanticInputError, match="changed while"):
+    with pytest.raises(expected_exception, match=expected_match):
         _write_audit_disposition_bundle_sync(
             tool_ctx=tool_ctx,
             authority_path=str(authority_path),

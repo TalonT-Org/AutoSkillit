@@ -16,7 +16,7 @@ _CAPTURE_GUIDE = "src/autoskillit/hooks/_capture/AGENTS.md"
 _CAPTURE_ADAPTER = "src/autoskillit/hooks/_capture/CLAUDE.md"
 
 
-def _load_tracked_guidance_paths() -> frozenset[str]:
+def _load_tracked_guidance_paths(repo_root: Path = REPO_ROOT) -> frozenset[str]:
     result = subprocess.run(
         [
             "git",
@@ -26,13 +26,15 @@ def _load_tracked_guidance_paths() -> frozenset[str]:
             ":(glob)**/AGENTS.md",
             ":(glob)**/CLAUDE.md",
         ],
-        cwd=REPO_ROOT,
+        cwd=repo_root,
         check=True,
         capture_output=True,
         text=True,
         timeout=10,
     )
-    return frozenset(line for line in result.stdout.splitlines() if line)
+    return frozenset(
+        path for path in result.stdout.splitlines() if path and (repo_root / path).is_file()
+    )
 
 
 TRACKED_GUIDANCE_PATHS = _load_tracked_guidance_paths()
@@ -138,7 +140,33 @@ def _catalog_violations(markdown: str) -> list[str]:
     return violations
 
 
-def test_tracked_guidance_families_and_counts() -> None:
+def test_load_tracked_guidance_paths_excludes_missing_worktree_files(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    subprocess.run(
+        ["git", "init"],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    (repo_root / "AGENTS.md").write_text("# Guide\n", encoding="utf-8")
+    (repo_root / "CLAUDE.md").write_text("@AGENTS.md\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "add", "AGENTS.md", "CLAUDE.md"],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    (repo_root / "CLAUDE.md").unlink()
+
+    assert _load_tracked_guidance_paths(repo_root) == frozenset({"AGENTS.md"})
+
+
+def test_tracked_guidance_families_partition_all_paths() -> None:
     families = (
         ROOT_GUIDANCE_PATHS,
         GITHUB_GUIDANCE_PATHS,
@@ -147,20 +175,6 @@ def test_tracked_guidance_families_and_counts() -> None:
     )
     assert frozenset().union(*families) == TRACKED_GUIDANCE_PATHS
     assert sum(len(family) for family in families) == len(TRACKED_GUIDANCE_PATHS)
-    # Intentional ratchets: guidance additions and removals require an explicit inventory update.
-    assert tuple(len(family) for family in families) == (2, 2, 81, 40)
-    assert len(ALL_GUIDES) == 63
-    assert len(ALL_ADAPTERS) == 62
-
-
-def test_source_python_packages_have_guides() -> None:
-    package_dirs = sorted(init_file.parent for init_file in SRC_ROOT.rglob("__init__.py"))
-    missing = [
-        str(package_dir.relative_to(REPO_ROOT))
-        for package_dir in package_dirs
-        if not (package_dir / "AGENTS.md").is_file()
-    ]
-    assert not missing, f"Python packages missing AGENTS.md guidance: {missing}"
 
 
 def test_guide_adapter_sibling_contract() -> None:

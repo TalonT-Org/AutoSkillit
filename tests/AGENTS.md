@@ -182,12 +182,12 @@ to directory-level cascade — no error is raised. Refresh cadence:
 ```
 tests/
 ├── arch/                                # AST enforcement + sub-package layer contracts (see arch/AGENTS.md)
-├── assets/                              # Vendored asset integrity tests (see assets/AGENTS.md)
+├── assets/                              # Vendored asset integrity tests
 ├── cli/                                 # CLI command tests (see cli/AGENTS.md)
-├── config/                              # Config loading tests (see config/AGENTS.md)
+├── config/                              # Config loading tests
 ├── contracts/                           # Protocol satisfaction + package gateway contracts (see contracts/AGENTS.md)
 ├── core/                                # Core layer tests (see core/AGENTS.md)
-├── docs/                                # Documentation integrity tests (see docs/AGENTS.md)
+├── docs/                                # Documentation integrity tests
 ├── execution/                           # Subprocess integration + session tests (see execution/AGENTS.md)
 ├── fleet/                               # Fleet campaign + dispatch tests (see fleet/AGENTS.md)
 ├── hooks/                               # Hook script tests (see hooks/AGENTS.md)
@@ -195,14 +195,14 @@ tests/
 ├── integration/                         # Cross-layer integration tests
 ├── fixtures/
 │   └── context_admission_journals/      # Versioned content-free golden journal vectors
-├── migration/                           # Migration engine and store tests (see migration/AGENTS.md)
-├── pipeline/                            # Audit log, gate, fidelity, and PR-gate tests (see pipeline/AGENTS.md)
+├── migration/                           # Migration engine and store tests
+├── pipeline/                            # Audit log, gate, fidelity, and PR-gate tests
 ├── planner/                             # Planner manifest, validation, and compilation tests (see planner/AGENTS.md)
 ├── recipe/                              # Recipe I/O, validation, schema tests (see recipe/AGENTS.md)
 │   └── fixtures/                        # YAML test data: sample recipes, expected diagram output
 ├── server/                              # Server unit tests — tool handlers (see server/AGENTS.md)
 ├── skills/                              # Skill contract and compliance tests (see skills/AGENTS.md)
-├── skills_extended/                     # Extended skill tests (see skills_extended/AGENTS.md)
+├── skills_extended/                     # Extended skill tests
 └── workspace/                           # Workspace and clone tests (see workspace/AGENTS.md)
 
 temp/                        # Temporary/working files (gitignored)

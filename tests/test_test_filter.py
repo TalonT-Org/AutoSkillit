@@ -864,15 +864,22 @@ class TestApplyManifest:
         result = apply_manifest({"docs/developer/SETUP.md"}, manifest)
         assert result == {"docs"}
 
-    def test_apply_manifest_tests_claude_md_empty_cascade(self) -> None:
-        manifest = {"tests/**/CLAUDE.md": []}
-        result = apply_manifest({"tests/core/CLAUDE.md"}, manifest)
-        assert result == set()
-
-    def test_apply_manifest_tests_nested_claude_md(self) -> None:
-        manifest = {"tests/**/CLAUDE.md": []}
-        result = apply_manifest({"tests/execution/CLAUDE.md"}, manifest)
-        assert result == set()
+    def test_production_manifest_guidance_routes_are_root_scoped(self) -> None:
+        manifest = manifest_load_manifest(MANIFEST_PATH)
+        nested_paths = tuple(
+            f"{root}/{name}"
+            for root in ("src/autoskillit/core", "tests/core")
+            for name in ("AGENTS.md", "CLAUDE.md")
+        )
+        cases = {
+            ("AGENTS.md", "CLAUDE.md"): {"infra/", "contracts/", "docs/"},
+            (".github/AGENTS.md",): {"infra/"},
+            nested_paths: set(),
+        }
+        for paths, expected in cases.items():
+            for path in paths:
+                assert apply_manifest({path}, manifest) == expected
+                assert manifest_apply_manifest([path], manifest) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -881,12 +888,7 @@ class TestApplyManifest:
 
 
 class TestApplyManifestEquivalence:
-    """Cross-validates conftest apply_manifest against production manifest_apply_manifest.
-
-    Both modules must agree on matched outputs. When a file matches patterns in one,
-    it must match the same patterns in the other. The two implementations are allowed
-    to differ only in how they handle the unmatched case (both must return None there too).
-    """
+    """Cross-validates the test and production manifest implementations."""
 
     MANIFEST = {
         "src/autoskillit/recipes/*.yaml": ["recipe", "contracts"],

@@ -1,6 +1,8 @@
 # rules/
 
-Semantic validation rule modules for recipe analysis (53 flat rule files + 4 subdirectories).
+Semantic validation rule modules for recipe analysis, split between flat rules and four
+thematic subdirectories. Package initializers are docstring-only; importing rule modules
+registers them through the `@semantic_rule` decorator.
 
 ## Subdirectories
 
@@ -12,66 +14,6 @@ Semantic validation rule modules for recipe analysis (53 flat rule files + 4 sub
 | `graph/` | 5 rules | Graph cycles, output, review, routes, summary-vs-graph divergence |
 
 See each subdirectory's AGENTS.md for details.
-
-## Flat Files
-
-| File | Purpose |
-|------|---------|
-| `__init__.py` | Docstring-only — rules register via `@semantic_rule` decorator on import |
-| `rules_actions.py` | Semantic rules for `stop`/`route`/`confirm` action-type steps |
-| `rules_backend_compat.py` | Backend-skill compatibility: flags `run_skill` steps whose `backend_requirements` exclude the target backend |
-| `rules_blocks.py` | Block-level budget rules; loads `block_budgets.yaml` at import |
-| `rules_bypass.py` | Rules for `skip_when_false` bypass routing contracts and `hidden-input-ref-in-template` detection |
-| `rules_callable_scope.py` | Enforces scoped directory args for file-discovering callables |
-| `rules_clone.py` | Clone/push dataflow rules: missing remote URL, local-strategy capture |
-| `rules_cmd.py` | `run_cmd` echo-capture alignment; git remote command detection; bare git rebase without conflict routing detection; path-typed capture non-empty file guard detection; single-quoted shell expansion suppression detection |
-| `rules_commit_guard_regression_route.py` | `commit_guard` steps with non-empty `base_branch` must declare an `on_result` predicate that routes `regression_detected` to an escalation step |
-| `rules_contract_recovery.py` | contract-recovery-requires-salvage-route (WARNING, staged for ERROR): run_skill steps invoking a skill whose contract can trigger retry_reason=contract_recovery must declare a distinct on_context_limit salvage route |
-| `rules_contracts.py` | Skill contract completeness rules |
-| `rules_criterion_schema_drift.py` | criterion-schema-drift: bundled manifests must use structured {text, type} detection_criteria |
-| `rules_failure_verdict_bypass.py` | Detects bypass routes from verdict-gated steps reaching success stop terminals |
-| `rules_features.py` | Feature-gated tool/skill reference validation |
-| `rules_flake_loop.py` | Flake-suspected unwinnable loop detection for merge gate cycles |
-| `rules_food_truck.py` | Food-truck recipe validation: sentinel stop step requirement |
-| `rules_fixing.py` | Conditional-write skill must gate on declared verdict output |
-| `rules_gitignored_deliverable.py` | gitignored-deliverable-in-plan: flags plan deliverable paths that match .gitignore patterns in the source repository |
-| `rules_ingredient_step_name.py` | 1:1 gating ingredient ↔ step name asymmetry detection |
-| `rules_inline_script.py` | Detects inline shell scripts in `run_cmd` cmd fields |
-| `rules_inputs.py` | Input/ingredient validation; version compatibility checks |
-| `rules_inventory_gate_bilateral.py` | inventory-gate-not-bilateral semantic rule: audit authority and disposition producers must connect to compiled dry-walkthrough inputs |
-| `rules_isolation.py` | Workspace isolation rules (prevents operating on source repo) |
-| `rules_issue_scope_threading.py` | issue-scope-not-threaded-to-walkthrough semantic rule: ensures dry-walkthrough receives issue context through its compiled child inputs |
-| `rules_merge.py` | `merge_worktree` routing completeness |
-| `rules_model.py` | Model field adequacy: flags context-intensive steps with empty model (dispatch_items users) |
-| `rules_merge_context.py` | Merge gate test output context forwarding enforcement |
-| `rules_merge_queue.py` | Merge queue push routing: `queued_branch` error route enforcement |
-| `rules_optional_capture.py` | Optional capture guard enforcement |
-| `rules_packs.py` | Pack validation (names must exist in `PACK_REGISTRY`) |
-| `rules_phoropter_adjacency.py` | Phoropter phase-order and step-interleaving adjacency rules; canonical phase predicate `_canonical_phase_for_step`; family-prefix loader backed by phoropter-registry.yaml |
-| `rules_pseudocode_sync.py` | SKILL.md pseudocode constant-reference divergence from run_python callables |
-| `rules_reachability.py` | Symbolic BFS reachability; capture-inversion detection |
-| `rules_audit_impl_topology.py` | audit-impl-diff-topology-mismatch semantic rule |
-| `rules_audit_impl_plan_scope.py` | audit-impl-plan-scope-mismatch semantic rule: ensures audit-impl uses context.all_plan_paths in recipes with remediation loops |
-| `rules_remediation.py` | audit-impl remediation_path capture routing rules |
-| `rules_recipe.py` | Sub-recipe reference validity and `with_args` hygiene |
-| `rules_route_gate.py` | Route gate shared-stop detection; fallback and primary path convergence |
-| `rules_loop_artifact_scope.py` | Loop artifact isolation: run_skill steps in cycles must use iteration-scoped output_dir |
-| `rules_loop_counter.py` | Loop counter scope isolation: cross-path sharing, guard-before-verify, and cross-cycle reset enforcement |
-| `rules_loop_progress.py` | Loop progress tracking: run_skill steps in cycles must capture declared outputs |
-| `rules_skill_content.py` | SKILL.md content validation: undefined bash placeholders, source-attribution directives, output formatting, issue comment prohibition, inline-content-in-subagent-prompt detection, POSIX character class detection |
-| `rules_skill_write_path_alignment.py` | Cross-layer validation: SKILL.md declared write scope must align with recipe step output_dir; fires ERROR when iteration-scoped output_dir is narrower than SKILL.md NEVER block path and the skill doesn't use a dynamic write variable |
-| `rules_skills.py` | `skill_command` resolvability rules |
-| `rules_stamp_ownership.py` | Exclusive stamp ownership enforcement across skills |
-| `rules_stop_sentinel_direction.py` | Stop terminals must emit the correct success direction based on their graph position |
-| `rules_step_naming.py` | Step-key vs invoked-skill collision detection |
-| `rules_skip_inviting_notes.py` | Flags note: fields with skip-inviting phrases on optional steps |
-| `rules_temp_path.py` | Rejects bare `{{AUTOSKILLIT_TEMP}}/` without scope prefix |
-| `rules_terminal_convergence.py` | Success-stop reason uniqueness; detects convergent success paths with shared reasons |
-| `rules_tools.py` | MCP tool name validity (must be in known tool sets) |
-| `rules_verdict.py` | Skill verdict routing completeness and cross-step consistency |
-| `rules_verdict_context.py` | Verdict-context precondition: CI-dependent verdicts require CI context in skill invocation args |
-| `rules_verdict_degradation.py` | verdict-ungated-degradation: errors when degradation path emits a verdict used by nominal success path |
-| `rules_worktree.py` | Worktree and retry validation rules |
 
 ## Architecture Notes
 

@@ -53,13 +53,6 @@ repos:
         files: ^src/autoskillit/server/tools_
         pass_filenames: false
 
-      - id: check-sub-agents-md
-        name: Check sub-AGENTS.md file table completeness
-        language: system
-        entry: python scripts/check_sub_agents_md.py
-        files: ^(tests/|src/autoskillit/).*(\.py|AGENTS\.md)$
-        pass_filenames: false
-
       - id: check-contract-freshness
         name: Check contract card freshness
         language: system

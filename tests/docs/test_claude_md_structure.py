@@ -139,20 +139,24 @@ def test_claude_md_def_spec_location_qualified() -> None:
     )
 
 
-def test_claude_md_mentions_write_guard() -> None:
-    main_content = CLAUDE_MD.read_text()
+def test_guard_guide_retains_safety_contracts() -> None:
     guards_agents = CLAUDE_MD.parent / "src" / "autoskillit" / "hooks" / "guards" / "AGENTS.md"
-    assert "write_guard" in main_content or (
-        guards_agents.exists() and "write_guard" in guards_agents.read_text()
-    )
-
-
-def test_claude_md_mentions_dispatch_food_truck() -> None:
-    main_content = CLAUDE_MD.read_text()
-    tools_agents = CLAUDE_MD.parent / "src" / "autoskillit" / "server" / "tools" / "AGENTS.md"
-    assert "dispatch_food_truck" in main_content or (
-        tools_agents.exists() and "dispatch_food_truck" in tools_agents.read_text()
-    )
+    assert guards_agents.is_file()
+    content = guards_agents.read_text()
+    for marker in (
+        "write-scoped sessions",
+        "allowed prefix",
+        "L3-to-L3 recursion",
+        "commit --amend",
+        "push --force",
+        "reset --hard",
+        "clean -f",
+        "checkout .",
+        "hooks.json",
+        "settings.json",
+        "contracts/",
+    ):
+        assert marker in content, f"Guard guide must retain {marker!r}"
 
 
 def test_agents_md_defines_channel_b() -> None:

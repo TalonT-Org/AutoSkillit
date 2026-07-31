@@ -3,31 +3,8 @@
 IL-3 FastMCP server — MCP tools, kitchen gating, session-type dispatch.
 Sub-package: tools/ (see tools/AGENTS.md).
 
-## Files
-
-| File | Purpose |
-|------|---------|
-| `__init__.py` | Re-exports `mcp`, `ToolContext`, `make_context`; disables all `ALL_VISIBILITY_TAGS` at import |
-| `_editable_guard.py` | Pre-deletion editable install guard for `perform_merge()` — scans site-packages for PEP 610 direct_url.json links into the worktree |
-| `_factory.py` | Composition root — `make_context()` is the sole legal instantiation point for all 25 service contracts |
-| `_guards.py` | Orchestration-level gate functions for MCP tool access control |
-| `_lifespan.py` | FastMCP lifespan context manager — deferred startup (recovery, audit loading, stale cleanup, drift check) |
-| `_misc.py` | Quota, hook-config, triage, and miscellaneous server utilities; re-exports selected execution/workspace symbols for tools |
-| `_notify.py` | MCP notification dispatch and response-size tracking |
-| `_response_budget.py` | Lossless response spill, exact canonical projection finalization, measured exemptions, and privacy-safe budget telemetry |
-| `_response_conformance.py` | Post-FastMCP-conversion conformance gate for registered string tool responses |
-| `_recipe_delivery.py` | Unified recipe finalization, content-addressed generations, pull integrity, and receipt completion |
-| `_recipe_generation.py` | Bounded kitchen-scoped LRU for canonical compile generations and exact artifact replay |
-| `_recipe_initialization.py` | Post-enforcement recipe page and completion transactions for INITIALIZING/READY lifecycle state |
-| `_recipe_execution.py` | Compiled execution snapshot lifecycle, trusted audit-head ledger, runtime binding, and input preflight |
-| `_recipe_section_pagination.py` | Typed recipe-section selection, deterministic byte-bounded page planning, rendering, and verified-plan caching |
-| `recipe_section/__init__.py` | Package marker for focused recipe-section planning support |
-| `recipe_section/_verification.py` | Post-digest descriptor, reconstruction, ordering, and rendered-bound invariant proof |
-| `_session_type.py` | Session-type tag visibility dispatcher — controls which tools are visible per session type |
-| `_state.py` | Mutable singleton state and context accessor functions (`_ctx` sentinel, `get_ctx`, `set_ctx`) |
-| `_subprocess.py` | Subprocess execution helpers for MCP tools |
-| `_wire_compat.py` | Wire-format compatibility middleware — strips `outputSchema`/`title` fields to work around Claude Code bug #25081 |
-| `git.py` | Git merge workflow for `merge_worktree` — path validation, branch detection, test gate, fetch, rebase, merge, cleanup |
+The composition root `make_context()` is the sole legal instantiation point for all
+service contracts.
 
 ## readOnlyHint: All MCP tools MUST have `readOnlyHint: True`
 

@@ -2,18 +2,6 @@
 
 Subprocess lifecycle management — spawn, monitor, race, kill.
 
-## Files
-
-| File | Purpose |
-|------|---------|
-| `__init__.py` | Main module: `run_managed_async()`, `run_managed_sync()`, `DefaultSubprocessRunner` |
-| `_process_io.py` | `create_temp_io()` context manager for temp file stdin/stdout/stderr |
-| `_process_jsonl.py` | JSONL parsing: `_jsonl_contains_marker`, `_jsonl_has_record_type` |
-| `_process_kill.py` | `kill_process_tree()` (sync) and `async_kill_process_tree()` (async): SIGTERM -> wait -> SIGKILL |
-| `_process_monitor.py` | Async monitor coroutines: `_heartbeat()` (Channel A), `_session_log_monitor()` (Channel B) |
-| `_process_pty.py` | `pty_wrap_command()` — wraps command with `script(1)` for PTY allocation |
-| `_process_race.py` | `RaceAccumulator`, `RaceSignals`, watcher coroutines, `resolve_termination()` |
-
 ## Architecture Notes
 
 **Two-channel completion detection:**

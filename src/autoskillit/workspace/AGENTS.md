@@ -2,26 +2,6 @@
 
 IL-1 workspace management — clone lifecycle, worktrees, skill resolution.
 
-## Files
-
-| File | Purpose |
-|------|---------|
-| `__init__.py` | Re-exports `DefaultCloneManager`, `SkillResolver`, `DefaultSessionSkillManager` |
-| `cleanup.py` | `CleanupResult`, preserve list |
-| `clone.py` | `clone_repo` + `push_to_remote` + `DefaultCloneManager` |
-| `_clone_detect.py` | `detect_*` helpers + `RUNS_DIR` + `classify_remote_url` |
-| `_clone_remote.py` | `CloneSourceResolution` + probe/isolate remotes |
-| `session_skills.py` | Per-session ephemeral skill dirs; subset filtering |
-| `skill_capabilities.py` | Semantic classification, bounded process-local evidence memoization, and capability validation |
-| `skill_format.py` | SKILL.md frontmatter validation per agentskills.io spec |
-| `skill_projection.py` | Agent-safe projections of typed skill machine contracts |
-| `_projected_artifact/` | Projected plugin publication, validation, and launch-lease lifecycle |
-| `_projection_cache.py` | Projection asset inventory, cache-key record, and orphan sweep |
-| `_install_state.py` | `verify_install_state()` + retired-artifact-shape reconciler |
-| `clone_registry.py` | Shared file-based coordination for deferred cleanup |
-| `skills.py` | `SkillResolver` — bundled skill listing |
-| `worktree.py` | Git worktree creation and teardown helpers |
-
 ## Architecture Notes
 
 **Plugin authorities are derived from `pkg_root()` and bind projections per launch.**

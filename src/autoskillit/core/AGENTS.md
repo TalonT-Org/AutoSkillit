@@ -3,40 +3,6 @@
 IL-0 foundation layer — zero autoskillit imports; safe for import from hook subprocesses.
 Sub-packages: types/ (see types/AGENTS.md) and runtime/ (see runtime/AGENTS.md).
 
-## Files
-
-| File | Purpose |
-|------|---------|
-| `__init__.py` | Re-exports public surface |
-| `io.py` | `atomic_write`, `ensure_project_temp`, YAML helpers |
-| `_cmd_runner.py` | `CmdRunner` protocol, `default_cmd_runner`, `run_git`, `run_gh` — sync subprocess for git/gh CLI |
-| `_json.py` | Fast JSON via orjson (with stdlib fallback) — `fast_loads`, `fast_dumps` |
-| `logging.py` | Logging configuration plus canonical plugin-artifact lifecycle event and release wrapper |
-| `paths.py` | `pkg_root()`, `is_git_worktree()`, `is_git_main_checkout()`, `is_in_git_repo()` |
-| `_claude_env.py` | IDE-scrubbing canonical env builder for agent subprocesses |
-| `_delivery_bounds.py` | General-output limit accessor plus typed recipe-delivery decision resolver |
-| `_terminal_table.py` | IL-0 color-agnostic terminal table primitive |
-| `_version_snapshot.py` | Process-scoped version snapshot for session telemetry (`lru_cache`'d) |
-| `branch_guard.py` | Branch protection helpers |
-| `claude_conventions.py` | Skill discovery directory layout constants |
-| `git_remote.py` | `resolve_clone_remote_name_sync`, `REMOTE_PRECEDENCE` — IL-0 canonical remote precedence |
-| `github_url.py` | `parse_github_repo` |
-| `_plugin_cache.py` | Plugin cache lifecycle: shared retirement engine, retiring cache, install locking, kitchen registry |
-| `_plugin_artifact_identity.py` | Installed-plugin manifest serialization and exact identity validation |
-| `_plugin_ids.py` | `DIRECT_PREFIX`, `MARKETPLACE_PREFIX`, `detect_autoskillit_mcp_prefix` (stdlib-only) |
-| `_install_detect.py` | `is_dev_install()` — editable-install detection for config resolution |
-| `_execution_marker.py` | `execution_marker` async context manager — unified write/heartbeat/cleanup for stale-detector suppression markers |
-| `_step_context.py` | `current_step_name`, `current_order_id` ContextVars for pipeline step attribution |
-| `feature_flags.py` | `is_feature_enabled()` — IL-0 feature gate resolution primitive |
-| `tool_sequence_analysis.py` | Cross-session tool call sequence DFG analysis (stdlib-only) |
-| `bash_write_targets.py` | Bash command write-target extraction (stdlib-only, IL-0) |
-| `closure_hashing.py` | Canonical hash utilities for closure-mode verdict verification (stdlib-only, IL-0) |
-| `path_containment.py` | Path containment guards — symlink/hardlink check, TOCTOU guard (stdlib-only, IL-0) |
-| `closure_verifier.py` | Independent verifier for closure-mode reports (stdlib-only, IL-0) |
-| `context_admission.py` | Pure protocol-v1 cumulative context-admission reducer, replay, and coverage resolution |
-| `audit_cycle_verifier.py` | Bounded verifier and pure evaluator for provenance-bound audit-cycle inventory admission |
-| `tool_registry.py` | Canonical stdlib-only MCP tool and parameter definitions shared by recipe compilation and server parity guards |
-
 ## Architecture Notes
 
 All modules are importable without any `autoskillit` package imports (IL-0 hard constraint).

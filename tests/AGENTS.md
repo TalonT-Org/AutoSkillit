@@ -181,37 +181,6 @@ to directory-level cascade — no error is raised. Refresh cadence:
 
 ```
 tests/
-├── AGENTS.md                            # Universal test guidelines (this file)
-├── __init__.py
-├── _arch_constraint_discovery.py        # Discover arch constraint tests by docstring convention for catalog staleness guards
-├── _helpers.py
-├── _subprocess_ready.py
-├── _test_filter.py                      # Test filter manifest: glob-to-test-directory mapping
-├── conftest.py                          # Shared fixtures: minimal_ctx, tool_ctx, _make_result, _make_timeout_result
-├── fakes.py                             # Protocol-based test fakes: InMemory*, MockSubprocessRunner
-├── test_backend_gating_root.py
-├── test_conftest.py                     # Tests for conftest fixtures
-├── test_fakes_conformance.py
-├── test_helpers_strip.py                # Unit tests for strip_markdown_code_regions (production IL-0, re-exported via tests/_helpers.py)
-├── test_llm_triage.py
-├── test_no_orchestration_tier_language.py
-├── test_smoke_utils.py
-├── test_test_filter.py
-├── test_test_filter_cascade.py
-├── test_test_filter_config_cascade.py
-├── test_test_filter_content_aware.py
-├── test_test_filter_core_cascade.py
-├── test_test_filter_core_completeness.py
-├── test_test_filter_coverage_map.py
-├── test_test_filter_execution_cascade.py
-├── test_test_filter_pipeline_cascade.py   # Focused ledger/ToolContext/server-recovery routes
-├── test_test_filter_local_diff.py
-├── test_test_filter_plugin.py
-├── test_test_filter_scope_extras.py
-├── test_test_filter_script_manifest.py
-├── test_test_filter_step7.py
-├── test_test_filter_tiered_always_run.py
-├── test_version.py                      # Version health tests
 ├── arch/                                # AST enforcement + sub-package layer contracts (see arch/AGENTS.md)
 ├── assets/                              # Vendored asset integrity tests (see assets/AGENTS.md)
 ├── cli/                                 # CLI command tests (see cli/AGENTS.md)
@@ -225,7 +194,6 @@ tests/
 ├── infra/                               # CI/CD and security configuration tests (see infra/AGENTS.md)
 ├── integration/                         # Cross-layer integration tests
 ├── fixtures/
-│   ├── context_admission.py             # Pure deterministic context-admission builders
 │   └── context_admission_journals/      # Versioned content-free golden journal vectors
 ├── migration/                           # Migration engine and store tests (see migration/AGENTS.md)
 ├── pipeline/                            # Audit log, gate, fidelity, and PR-gate tests (see pipeline/AGENTS.md)

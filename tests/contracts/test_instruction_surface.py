@@ -784,40 +784,6 @@ class TestContextLimitBehaviorContract:
         )
 
 
-def test_claude_md_documents_all_source_modules() -> None:
-    """Every .py file in src/autoskillit/ must appear by name in CLAUDE.md or AGENTS.md.
-
-    For __init__.py files, the containing package directory name must appear.
-    For all other files, the filename must appear in CLAUDE.md, AGENTS.md, or the
-    package's own sub-CLAUDE.md (for collapsed subdirectory listings).
-    """
-    claude_path = Path(__file__).parent.parent.parent / "CLAUDE.md"
-    agents_path = claude_path.parent / "AGENTS.md"
-    assert agents_path.exists(), f"AGENTS.md not found at {agents_path}"
-    content = claude_path.read_text() + "\n" + agents_path.read_text()
-    src_root = Path(__file__).parent.parent.parent / "src" / "autoskillit"
-
-    missing = []
-    for py_file in sorted(src_root.rglob("*.py")):
-        if "__pycache__" in py_file.parts:
-            continue
-        rel = py_file.relative_to(src_root)
-        if py_file.name == "__init__.py":
-            parent = rel.parent
-            if parent != Path(".") and (parent.name + "/") not in content:
-                missing.append(str(rel))
-        else:
-            if py_file.name not in content:
-                pkg_agents = py_file.parent / "AGENTS.md"
-                if not (pkg_agents.exists() and py_file.name in pkg_agents.read_text()):
-                    missing.append(str(rel))
-
-    assert not missing, (
-        f"Modules not documented in CLAUDE.md or AGENTS.md: {', '.join(missing)}. "
-        "Update the Architecture section in AGENTS.md or the package's sub-CLAUDE.md."
-    )
-
-
 @pytest.mark.parametrize("mcp_prefix", [DIRECT_PREFIX, MARKETPLACE_PREFIX])
 def test_orchestrator_tool_name_matches_open_kitchen_hook_matcher(mcp_prefix: str) -> None:
     """The fully-qualified tool name in the prompt must satisfy the hook registry matcher."""

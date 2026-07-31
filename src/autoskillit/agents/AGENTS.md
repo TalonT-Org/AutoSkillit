@@ -4,21 +4,6 @@ Bundled agent definition markdown files that serve as both **plugin agents**
 (discovered natively by Claude Code at session start) and **MCP resources**
 (available via `unlock_agent_pack`).
 
-## Files
-
-| File | Purpose |
-|------|---------|
-| `plan-foundation-auditor.md` | Adversarial agent: control-flow auditor — traces branch scope, return placement, guard coverage |
-| `plan-interface-mapper.md` | Adversarial agent: variable/data-flow tracer — builds SET/READ tables for wrong-variable detection |
-| `plan-registry-tracer.md` | Adversarial agent: registry/artifact auditor — LSP + tree-sitter + grep symbol tracing |
-| `wp-elaborator.md` | Pipeline agent: work-package elaboration — codebase analysis and structured JSON output |
-| `pipeline-health-scanner.md` | Pipeline agent: session log scanner — reads session data, investigates anomalies, reports with adversarial validation |
-| `pr-review-auditor-baseline.md` | PR review agent: baseline control variant for agent-eval |
-| `pr-review-auditor-v1-precision.md` | PR review agent: precision-focused with 5-step verification checklist |
-| `pr-review-auditor-v2-contrastive.md` | PR review agent: junior/senior contrastive framing |
-| `pr-review-auditor-v3-simulation.md` | PR review agent: simulation-first with inconclusive fallback |
-| `audit-impl-deviation-evaluator.md` | Pipeline agent: deviation evaluator — checks honesty, intent preservation, evidence quality for plan deviations |
-
 ## Layout
 
 Each `.md` file defines one agent with YAML frontmatter (`name`, `description`,

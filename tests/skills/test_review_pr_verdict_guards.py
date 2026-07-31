@@ -106,6 +106,62 @@ def test_review_pr_own_pr_comment_retry():
     )
 
 
+def test_experimental_degradation_blocks_approval() -> None:
+    text = _skill_text()
+    step5 = text[text.index("### Step 5") : text.index("### Step 6")]
+    assert "determine_experimental_review_verdict" in step5
+    assert "gate_state=GATE_STATE" in step5
+    assert "experimental_audit_state=EXPERIMENTAL_AUDIT_STATE" in step5
+    assert "retained_snapshot_was_valid=RETAINED_SNAPSHOT_WAS_VALID" in step5
+    assert step5.index("stale_snapshot") < step5.index("changes_requested")
+
+
+def test_initial_gate_degradation_is_not_classified_as_snapshot_movement() -> None:
+    text = _skill_text()
+    step2 = text[text.index("### Step 2.7") : text.index("### Step 2.5")]
+    assert "refresh_final_snapshot_state()" in step2
+    assert "FINAL_SNAPSHOT_STATE=authority_degraded" in step2
+    assert "Missing/malformed authority is degradation" in step2
+    assert "needs_human, never stale_snapshot" in step2
+
+
+def test_experimental_result_failures_are_distinct_from_empty_array() -> None:
+    text = _skill_text()
+    step3 = text[text.index("### Step 3") : text.index("### Step 4")]
+    for failure in (
+        "tool failure",
+        "refusal",
+        "interruption",
+        "truncation",
+        "missing result",
+        "malformed JSON",
+        "non-array",
+        "schema-invalid",
+    ):
+        assert failure in step3
+    assert "valid `[]`" in step3
+    assert "no partial experimental findings" in step3
+
+
+def test_closed_experimental_reason_codes_are_documented() -> None:
+    text = _skill_text()
+    for reason in (
+        "accepted",
+        "schema_invalid",
+        "path_escape",
+        "not_changed_line",
+        "stale_snapshot",
+        "insufficient_evidence",
+        "boundary_unchecked",
+        "reachable_counterexample",
+        "simpler_behavior_not_equivalent",
+        "suppressed_prior_thread",
+        "duplicate_candidate",
+        "publication_failed",
+    ):
+        assert f"`{reason}`" in text
+
+
 REVIEW_RESEARCH_PR_SKILL_PATH = (
     Path(__file__).parent.parent.parent
     / "src"

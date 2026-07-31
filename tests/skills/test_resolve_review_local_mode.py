@@ -326,3 +326,27 @@ def test_resolve_review_local_mode_reject_patterns_no_timestamp():
         "resolve-review/SKILL.md Step 6.6 local mode must use stable "
         "reject_patterns_{pr_number}.json filename (no timestamp)"
     )
+
+
+def test_local_normalization_preserves_experimental_finding_fields() -> None:
+    text = _skill_text()
+    local_start = text.index("**When `mode=local`:**")
+    github_start = text.index("**When `mode=github`:**", local_start)
+    local_mode = text[local_start:github_start]
+
+    assert "normalize_local_review_finding(entry)" in local_mode
+    assert "from `autoskillit.smoke_utils`" in local_mode
+
+
+def test_mode_specific_handoff_pairs_use_executable_identity_validator() -> None:
+    text = _skill_text()
+
+    assert "review_handoff_pair_error(diff_context, local_findings)" in text
+    assert "review_handoff_pair_error(diff_context, batch_review_response)" in text
+
+
+def test_local_mode_recognizes_overengineering_dimensions() -> None:
+    text = _skill_text()
+
+    assert "overengineering_reachability" in text
+    assert "overengineering_abstraction_surface" in text

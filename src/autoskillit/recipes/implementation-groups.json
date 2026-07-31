@@ -1210,11 +1210,28 @@
       "capture": {
         "review_loop_count": "${{ result.value }}"
       },
-      "on_success": "annotate_pr_diff",
-      "on_failure": "annotate_pr_diff",
+      "on_success": "clear_review_annotation_context",
+      "on_failure": "clear_review_annotation_context",
       "optional_context_refs": [
         "review_loop_count"
       ]
+    },
+    "clear_review_annotation_context": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.clear_review_annotation_context"
+      },
+      "capture": {
+        "annotated_diff_path": "${{ result.annotated_diff_path }}",
+        "hunk_ranges_path": "${{ result.hunk_ranges_path }}",
+        "valid_lines_path": "${{ result.valid_lines_path }}",
+        "diff_metrics_path": "${{ result.diff_metrics_path }}",
+        "review_mode": "${{ result.review_mode }}",
+        "pr_head_sha": "${{ result.pr_head_sha }}"
+      },
+      "on_success": "annotate_pr_diff",
+      "on_failure": "annotate_pr_diff",
+      "note": "Invalidates every previously captured annotation path before the next publication attempt, so a failed retry cannot reuse an older authority.\n"
     },
     "annotate_pr_diff": {
       "tool": "run_python",
@@ -1268,6 +1285,10 @@
         "review_verdict": "${{ result.verdict }}"
       },
       "on_result": [
+        {
+          "when": "${{ result.verdict }} == stale_snapshot",
+          "route": "check_review_loop"
+        },
         {
           "when": "${{ result.verdict }} == changes_requested",
           "route": "resolve_review"
@@ -1457,6 +1478,10 @@
       },
       "on_result": [
         {
+          "when": "${{ context.review_verdict }} == stale_snapshot and ${{ result.max_exceeded }} == true",
+          "route": "release_issue_failure"
+        },
+        {
           "when": "${{ result.had_blocking }} == true and ${{ result.max_exceeded }} == false",
           "route": "pre_review_cleanup"
         },
@@ -1478,8 +1503,8 @@
         "output_dir": "{{AUTOSKILLIT_TEMP}}/review-pr/iter_${{ context.review_loop_count }}",
         "work_dir": "${{ context.work_dir }}"
       },
-      "on_success": "annotate_pr_diff",
-      "on_failure": "annotate_pr_diff",
+      "on_success": "clear_review_annotation_context",
+      "on_failure": "clear_review_annotation_context",
       "optional_context_refs": [
         "review_loop_count"
       ]

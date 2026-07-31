@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.schema import StepResultCondition
 from autoskillit.smoke_utils import check_review_loop
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -33,16 +34,20 @@ def test_review_loop_routes_to_pre_review_cleanup_after_resolve_cycle(recipe_nam
     step = recipe.steps["check_review_loop"]
     assert step.on_result is not None
     conditions = step.on_result.conditions
+    _assert_review_condition_order(conditions)
+    retry_condition = next(
+        condition for condition in conditions if condition.route == "pre_review_cleanup"
+    )
 
     # Simulate template interpolation
-    when_expr = conditions[0].when
+    when_expr = retry_condition.when
     for key, value in result.items():
         when_expr = when_expr.replace(f"${{{{ result.{key} }}}}", value)
 
     # The first condition (route to pre_review_cleanup) must be satisfiable
     # when_expr becomes "true == true and false == false" — evaluate compound
     assert _eval_compound_condition(when_expr)
-    assert conditions[0].route == "pre_review_cleanup"
+    assert retry_condition.route == "pre_review_cleanup"
 
 
 @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
@@ -59,16 +64,21 @@ def test_review_loop_routes_to_ci_watch_at_max_iterations(recipe_name: str) -> N
     step = recipe.steps["check_review_loop"]
     assert step.on_result is not None
     conditions = step.on_result.conditions
+    _assert_review_condition_order(conditions)
+    retry_condition = next(
+        condition for condition in conditions if condition.route == "pre_review_cleanup"
+    )
+    default_condition = next(condition for condition in conditions if condition.when is None)
 
-    # Simulate template interpolation on the first (review_pr) condition
-    when_expr = conditions[0].when
+    # Simulate template interpolation on the blocking-retry condition.
+    when_expr = retry_condition.when
     for key, value in result.items():
         when_expr = when_expr.replace(f"${{{{ result.{key} }}}}", value)
 
-    # The first condition must NOT be satisfied — falls through to default check_repo_ci_event
+    # The retry condition must NOT be satisfied — routing falls through to the default.
     # when_expr becomes "true == true and true == false" — second clause is False
     assert not _eval_compound_condition(when_expr)
-    assert conditions[1].route == "check_repo_ci_event"
+    assert default_condition.route == "check_repo_ci_event"
 
 
 @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
@@ -98,6 +108,15 @@ def _eval_compound_condition(when_expr: str) -> bool:
         lhs, rhs = [s.strip() for s in part.split("==", 1)]
         results.append(lhs == rhs)
     return all(results)
+
+
+def _assert_review_condition_order(conditions: list[StepResultCondition]) -> None:
+    assert [condition.route for condition in conditions] == [
+        "release_issue_failure",
+        "pre_review_cleanup",
+        "check_repo_ci_event",
+    ]
+    assert conditions[-1].when is None
 
 
 @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)

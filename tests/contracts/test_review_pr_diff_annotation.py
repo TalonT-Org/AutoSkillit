@@ -249,3 +249,63 @@ def test_review_skill_command_passes_diff_annotation_paths(
             f"{recipe_name}.yaml step '{step_name}' must bind valid_lines_path "
             "to context.valid_lines_path"
         )
+
+
+def _heading_slice(text: str, start: str, end: str) -> str:
+    start_index = text.index(start)
+    end_index = text.index(end, start_index + len(start))
+    return text[start_index:end_index]
+
+
+def test_review_pr_gate_consumption_follows_manifest_and_marker_freshness() -> None:
+    step_2_7 = _heading_slice(
+        _SKILL_MD.read_text(),
+        "### Step 2.7: Deterministic Diff Annotation",
+        "### Step 2.5: Deletion Context Pre-Computation",
+    )
+
+    first_marker = step_2_7.index('cp -- "$diff_metrics_path" "$METRICS_MARKER_BEFORE"')
+    manifest_validation = step_2_7.index("artifact_digest_mismatch", first_marker)
+    second_marker = step_2_7.index('cp -- "$diff_metrics_path" "$METRICS_MARKER_AFTER"')
+    marker_comparison = step_2_7.index('cmp -s "$METRICS_MARKER_BEFORE" "$METRICS_MARKER_AFTER"')
+    gate_type_check = step_2_7.index('.run_overengineering_audits | type == "boolean"')
+
+    assert first_marker < manifest_validation < second_marker < marker_comparison < gate_type_check
+    assert 'cat "$HUNK_RANGES_SNAPSHOT_PATH"' in step_2_7
+    assert 'cat "$VALID_LINES_SNAPSHOT_PATH"' in step_2_7
+    assert "GATE_STATE=valid_true" in step_2_7
+    assert "GATE_STATE=valid_false" in step_2_7
+    assert "GATE_STATE=degraded" in step_2_7
+
+
+def test_review_pr_experimental_dispatch_is_separate_and_exact() -> None:
+    skill_text = _SKILL_MD.read_text()
+    step_2_9 = _heading_slice(
+        skill_text,
+        "### Step 2.9: Diff-Size Adaptive Agent Selection",
+        "### Step 3: Run Parallel Audit Subagents",
+    )
+    step_3 = _heading_slice(
+        skill_text,
+        "### Step 3: Run Parallel Audit Subagents",
+        "### Step 4: Aggregate and Deduplicate Findings",
+    )
+
+    assert "STANDARD_DISPATCH_AGENTS" in step_2_9
+    assert "EXPERIMENTAL_DISPATCH_AGENTS" in step_2_9
+    assert "select_experimental_review_dispatch" in step_2_9
+    assert "standard_agent_names=STANDARD_AGENT_ALLOWLIST.split" in step_2_9
+    assert "comm -12" not in step_2_9
+    assert "EXPERIMENTAL_AGENT_ALLOWLIST" not in step_2_9
+    for agent_name in (
+        "pr-review-auditor-reachability",
+        "pr-review-auditor-abstraction-surface",
+    ):
+        registered_call = f'Agent(subagent_type="autoskillit:{agent_name}", model="sonnet")'
+        assert step_3.count(registered_call) == 1
+        assert (
+            agent_name
+            not in step_2_9.split('STANDARD_AGENT_ALLOWLIST="', maxsplit=1)[1].split(
+                '"', maxsplit=1
+            )[0]
+        )

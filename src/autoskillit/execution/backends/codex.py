@@ -822,6 +822,9 @@ def _validate_inert_rollout_paths(
     return errors, tuple(fingerprint)
 
 
+_READ_ONLY_AGENT_TOOLS = frozenset({"Read", "Grep", "Glob"})
+
+
 def _generate_agent_tomls(session_dir: Path) -> int:
     agents_src = pkg_root() / "agents"
     out_dir = session_dir / "agents"
@@ -857,10 +860,19 @@ def _generate_agent_tomls(session_dir: Path) -> int:
         if not desc:
             logger.warning("agent_toml_skip_missing_description", path=str(md_path))
             continue
+        declared_tools = meta.get("tools")
+        sandbox_mode = "workspace-write"
+        if (
+            isinstance(declared_tools, list)
+            and declared_tools
+            and all(isinstance(tool, str) for tool in declared_tools)
+            and set(declared_tools) <= _READ_ONLY_AGENT_TOOLS
+        ):
+            sandbox_mode = "read-only"
         lines = [
             f"name = {_format_toml_value(name)}",
             f"description = {_format_toml_value(desc)}",
-            'sandbox_mode = "workspace-write"',
+            f"sandbox_mode = {_format_toml_value(sandbox_mode)}",
         ]
         model_key = meta.get("model")
         if model_key and model_key in CODEX_MODEL_ALIASES:

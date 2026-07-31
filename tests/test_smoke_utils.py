@@ -2,36 +2,62 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import os
 import re
 import subprocess
+import threading
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from autoskillit.smoke_utils import (
+    EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY,
+    EXPERIMENTAL_REVIEW_AUDITORS,
+    REVIEW_HANDOFF_IDENTITY_FIELDS,
+    aggregate_combined_review_candidates,
     annotate_pr_diff,
     build_agent_eval_context,
     build_eval_context,
+    build_malformed_review_envelope,
     check_bug_report_non_empty,
     check_loop_iteration,
     check_loop_with_progress,
     check_review_loop,
     compile_eval_scorecard,
     consolidate_health_reports,
+    determine_experimental_review_verdict,
     enrich_diff_context,
     extract_investigation,
     gate_backend_write,
     init_counter,
+    normalize_local_review_finding,
     parse_agent_eval_manifests,
     parse_eval_manifests,
     patch_pr_token_summary,
+    prepare_experimental_review_publication,
+    publish_experimental_review_artifacts,
+    render_review_finding_body,
+    review_handoff_pair_error,
+    select_experimental_review_dispatch,
+    validate_experimental_auditor_outputs,
 )
 from tests.infra._token_summary_helpers import _resolve_session_label
 
 pytestmark = [pytest.mark.medium]
+
+_EXPERIMENTAL_BOUNDARIES = (
+    "reflection_decorators",
+    "dependency_injection",
+    "plugin_registry",
+    "cli_entrypoint",
+    "serialization",
+    "generated_code",
+    "public_api",
+)
 
 
 @pytest.fixture(autouse=True)
@@ -1189,7 +1215,1699 @@ def test_pts_uses_injected_token_log(
 
 
 # ---------------------------------------------------------------------------
-# T_EDC1–T_EDC3: enrich_diff_context tests
+# Experimental review validation and aggregation
+# ---------------------------------------------------------------------------
+
+
+def _experimental_candidate(dimension: str, *, file: str = "src/app.py", line: int = 42) -> dict:
+    return {
+        "file": file,
+        "line": line,
+        "dimension": dimension,
+        "severity": "warning",
+        "message": "The abstraction has no reachable consumer",
+        "requires_decision": False,
+        "evidence": [
+            {"path": file, "line": line, "role": "anchor", "claim": "Declaration"},
+            {"path": file, "line": line + 1, "role": "consumer", "claim": "Only consumer"},
+        ],
+        "trace": [{"path": file, "line": line + 1, "relation": "calls"}],
+        "boundary_checks": [
+            {
+                "boundary": boundary,
+                "status": "checked_no_reachable_path",
+                "claim": f"{boundary} has no reachable path",
+            }
+            for boundary in _EXPERIMENTAL_BOUNDARIES
+        ],
+        "confidence": 0.9,
+        "simpler_behavior": (
+            "Equivalent return values, exceptions, ordering, persistence, "
+            "concurrency, and compatibility"
+        ),
+    }
+
+
+def test_malformed_review_envelope_bounds_untrusted_output() -> None:
+    raw = "π" * 5000
+
+    envelope = build_malformed_review_envelope(
+        producer=EXPERIMENTAL_REVIEW_AUDITORS[0],
+        terminal_status="success",
+        raw_output=raw,
+        errors=[f"{index}-{'x' * 2000}" for index in range(1000)],
+        rejection_reason="schema_invalid",
+    )
+
+    raw_bytes = raw.encode()
+    assert envelope["received_byte_length"] == len(raw_bytes)
+    assert envelope["received_sha256"] == hashlib.sha256(raw_bytes).hexdigest()
+    assert envelope["excerpt_byte_length"] <= 4096
+    assert len(str(envelope["excerpt"]).encode()) <= 4096
+    assert envelope["excerpt"] != raw
+    assert "raw_output" not in envelope
+    assert len(envelope["errors"]) == 32
+    assert all(len(str(error).encode()) <= 1024 for error in envelope["errors"])
+
+
+def test_review_handoff_pair_requires_one_ordered_identity_contract() -> None:
+    identity = {
+        "_head_sha": "head",
+        "annotation_generation_id": "annotation",
+        "review_generation_id": "review",
+    }
+
+    assert REVIEW_HANDOFF_IDENTITY_FIELDS == tuple(identity)
+    assert review_handoff_pair_error(identity, dict(identity)) is None
+
+
+@pytest.mark.parametrize(
+    ("field", "second_value", "expected_error"),
+    [
+        ("_head_sha", "", "require non-empty _head_sha"),
+        (
+            "annotation_generation_id",
+            "different",
+            "mismatched annotation_generation_id",
+        ),
+        ("review_generation_id", None, "require non-empty review_generation_id"),
+    ],
+)
+def test_review_handoff_pair_rejects_missing_or_mixed_generations(
+    field: str,
+    second_value: object,
+    expected_error: str,
+) -> None:
+    first = {
+        "_head_sha": "head",
+        "annotation_generation_id": "annotation",
+        "review_generation_id": "review",
+    }
+    second = dict(first)
+    second[field] = second_value
+
+    assert expected_error in str(review_handoff_pair_error(first, second))
+
+
+def test_experimental_dispatch_is_derived_from_ordered_registry() -> None:
+    result = select_experimental_review_dispatch(
+        gate_state="valid_true",
+        annotated_diff="[L1] changed",
+        valid_diff_lines={"src/app.py": [1]},
+        standard_agent_names=["arch", "tests"],
+    )
+
+    expected = [
+        {"agent_name": agent_name, "dimension": dimension}
+        for agent_name, dimension in EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY
+    ]
+    assert EXPERIMENTAL_REVIEW_AUDITORS == tuple(item["agent_name"] for item in expected)
+    assert result == {
+        "audit_state": "pending",
+        "dispatch_agents": expected,
+        "auditors": expected,
+        "reason": "",
+    }
+
+
+@pytest.mark.parametrize(
+    ("gate_state", "annotated_diff", "valid_diff_lines", "standard_agents", "state"),
+    [
+        ("valid_false", "[L1] changed", {"src/app.py": [1]}, ["arch"], "not_required"),
+        ("degraded", "[L1] changed", {"src/app.py": [1]}, ["arch"], "degraded"),
+        ("valid_true", "", {"src/app.py": [1]}, ["arch"], "degraded"),
+        ("valid_true", "[L1] changed", [], ["arch"], "degraded"),
+        (
+            "valid_true",
+            "[L1] changed",
+            {"src/app.py": [1]},
+            [EXPERIMENTAL_REVIEW_AUDITORS[0]],
+            "degraded",
+        ),
+    ],
+)
+def test_experimental_dispatch_closes_on_ineligible_authority(
+    gate_state: str,
+    annotated_diff: object,
+    valid_diff_lines: object,
+    standard_agents: list[str],
+    state: str,
+) -> None:
+    result = select_experimental_review_dispatch(
+        gate_state=gate_state,
+        annotated_diff=annotated_diff,
+        valid_diff_lines=valid_diff_lines,
+        standard_agent_names=standard_agents,
+    )
+
+    assert result["audit_state"] == state
+    assert result["dispatch_agents"] == []
+
+
+def test_experimental_output_validation_is_atomic_and_fixed_order(tmp_path: Path) -> None:
+    reachability, abstraction = EXPERIMENTAL_REVIEW_AUDITORS
+    input_candidates = {
+        abstraction: _experimental_candidate("overengineering_abstraction_surface"),
+        reachability: _experimental_candidate("overengineering_reachability"),
+    }
+    valid_outputs = {
+        abstraction: {
+            "terminal_status": "success",
+            "output": [input_candidates[abstraction]],
+        },
+        reachability: {
+            "terminal_status": "success",
+            "output": [input_candidates[reachability]],
+        },
+    }
+    kwargs = {
+        "valid_diff_lines": {"src/app.py": [42]},
+        "snapshot": {"head_sha": "head", "diff_sha256": "diff"},
+        "review_root": str(tmp_path),
+    }
+
+    complete = validate_experimental_auditor_outputs(outputs=valid_outputs, **kwargs)
+    assert complete["state"] == "complete"
+    assert [candidate["auditor_name"] for candidate in complete["candidates"]] == list(
+        EXPERIMENTAL_REVIEW_AUDITORS
+    )
+    assert [candidate["original_index"] for candidate in complete["candidates"]] == [0, 0]
+    expected_identities = []
+    for auditor_name in EXPERIMENTAL_REVIEW_AUDITORS:
+        canonical = json.dumps(
+            input_candidates[auditor_name],
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        record_digest = hashlib.sha256(canonical.encode()).hexdigest()
+        identity = json.dumps(
+            {
+                "snapshot": kwargs["snapshot"],
+                "auditor_name": auditor_name,
+                "original_index": 0,
+                "record_digest": record_digest,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        expected_identities.append((record_digest, hashlib.sha256(identity.encode()).hexdigest()))
+    assert [
+        (candidate["record_digest"], candidate["candidate_id"])
+        for candidate in complete["candidates"]
+    ] == expected_identities
+
+    malformed_outputs = json.loads(json.dumps(valid_outputs))
+    malformed_outputs[abstraction]["output"][0]["message"] = ""
+    degraded = validate_experimental_auditor_outputs(outputs=malformed_outputs, **kwargs)
+    assert degraded["state"] == "degraded"
+    assert degraded["candidates"] == []
+    assert degraded["status_by_name"][reachability]["status"] == "success"
+    assert degraded["status_by_name"][abstraction]["reason_code"] == "schema_invalid"
+    assert len(degraded["malformed_envelopes"]) == 1
+
+    wrong_enum_type = json.loads(json.dumps(valid_outputs))
+    wrong_enum_type[abstraction]["output"][0]["severity"] = []
+    degraded = validate_experimental_auditor_outputs(outputs=wrong_enum_type, **kwargs)
+    assert degraded["state"] == "degraded"
+    assert degraded["candidates"] == []
+    assert degraded["status_by_name"][abstraction]["reason_code"] == "schema_invalid"
+
+    empty = validate_experimental_auditor_outputs(
+        outputs={
+            auditor: {"terminal_status": "success", "output": []}
+            for auditor in EXPERIMENTAL_REVIEW_AUDITORS
+        },
+        **kwargs,
+    )
+    assert empty["state"] == "complete"
+    assert empty["candidates"] == []
+
+
+@pytest.mark.parametrize(
+    "confidence",
+    [
+        10**1000,
+        -(10**1000),
+        math.inf,
+        -math.inf,
+        math.nan,
+        "0.9",
+        None,
+    ],
+)
+def test_experimental_validation_degrades_extreme_confidence_without_raising(
+    tmp_path: Path, confidence: object
+) -> None:
+    reachability, abstraction = EXPERIMENTAL_REVIEW_AUDITORS
+    invalid_candidate = _experimental_candidate("overengineering_abstraction_surface")
+    invalid_candidate["confidence"] = confidence
+    outputs = {
+        reachability: {
+            "terminal_status": "success",
+            "output": [_experimental_candidate("overengineering_reachability")],
+        },
+        abstraction: {
+            "terminal_status": "success",
+            "output": [invalid_candidate],
+        },
+    }
+
+    result = validate_experimental_auditor_outputs(
+        outputs=outputs,
+        valid_diff_lines={"src/app.py": [42]},
+        snapshot={"head_sha": "head", "diff_sha256": "diff"},
+        review_root=str(tmp_path),
+    )
+
+    assert result["state"] == "degraded"
+    assert result["candidates"] == []
+    assert result["status_by_name"][reachability]["status"] == "success"
+    assert result["status_by_name"][abstraction]["reason_code"] == "schema_invalid"
+    assert len(result["malformed_envelopes"]) == 1
+    assert len(json.dumps(result["malformed_envelopes"]).encode()) < 40_000
+
+
+def test_experimental_validation_bounds_oversized_payload_and_rejects_mixed_batch(
+    tmp_path: Path,
+) -> None:
+    reachability, abstraction = EXPERIMENTAL_REVIEW_AUDITORS
+    oversized = _experimental_candidate("overengineering_abstraction_surface")
+    oversized["message"] = "x" * (1024 * 1024 + 1)
+    result = validate_experimental_auditor_outputs(
+        outputs={
+            reachability: {
+                "terminal_status": "success",
+                "output": [_experimental_candidate("overengineering_reachability")],
+            },
+            abstraction: {"terminal_status": "success", "output": [oversized]},
+        },
+        valid_diff_lines={"src/app.py": [42]},
+        snapshot={"head_sha": "head", "diff_sha256": "diff"},
+        review_root=str(tmp_path),
+    )
+
+    assert result["state"] == "degraded"
+    assert result["candidates"] == []
+    envelope = result["malformed_envelopes"][0]
+    assert envelope["received_byte_length"] > 1024 * 1024
+    assert envelope["excerpt_byte_length"] <= 4096
+    assert len(envelope["errors"]) == 1
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_reason"),
+    [
+        ("file", "../outside.py", "path_escape"),
+        ("line", 99, "not_changed_line"),
+    ],
+)
+def test_experimental_validation_preserves_specific_reason_codes(
+    tmp_path: Path,
+    field: str,
+    value: object,
+    expected_reason: str,
+) -> None:
+    outputs = {}
+    for auditor, dimension in zip(
+        EXPERIMENTAL_REVIEW_AUDITORS,
+        ("overengineering_reachability", "overengineering_abstraction_surface"),
+        strict=True,
+    ):
+        candidate = _experimental_candidate(dimension)
+        candidate[field] = value
+        outputs[auditor] = {"terminal_status": "success", "output": [candidate]}
+
+    result = validate_experimental_auditor_outputs(
+        outputs=outputs,
+        valid_diff_lines={"src/app.py": [42]},
+        snapshot={"head_sha": "head", "diff_sha256": "diff"},
+        review_root=str(tmp_path),
+    )
+
+    assert result["state"] == "degraded"
+    assert result["candidates"] == []
+    assert all(
+        status["reason_code"] == expected_reason for status in result["status_by_name"].values()
+    )
+    assert all(
+        envelope["rejection_reason"] == expected_reason
+        for envelope in result["malformed_envelopes"]
+    )
+
+
+@pytest.mark.parametrize(
+    "missing_facet",
+    [
+        "return_values",
+        "exceptions_errors",
+        "ordering",
+        "persistence",
+        "concurrency",
+        "compatibility",
+    ],
+)
+def test_experimental_validation_rejects_each_missing_behavior_facet(
+    tmp_path: Path, missing_facet: str
+) -> None:
+    phrases = {
+        "return_values": "return values",
+        "exceptions_errors": "exceptions and errors",
+        "ordering": "ordering",
+        "persistence": "persistence",
+        "concurrency": "concurrency",
+        "compatibility": "compatibility",
+    }
+    outputs = {}
+    for auditor, dimension in zip(
+        EXPERIMENTAL_REVIEW_AUDITORS,
+        ("overengineering_reachability", "overengineering_abstraction_surface"),
+        strict=True,
+    ):
+        candidate = _experimental_candidate(dimension)
+        candidate["simpler_behavior"] = ", ".join(
+            phrase for facet, phrase in phrases.items() if facet != missing_facet
+        )
+        outputs[auditor] = {"terminal_status": "success", "output": [candidate]}
+
+    result = validate_experimental_auditor_outputs(
+        outputs=outputs,
+        valid_diff_lines={"src/app.py": [42]},
+        snapshot={"head_sha": "head", "diff_sha256": "diff"},
+        review_root=str(tmp_path),
+    )
+
+    assert result["state"] == "degraded"
+    assert result["candidates"] == []
+    assert all(
+        status["reason_code"] == "schema_invalid" for status in result["status_by_name"].values()
+    )
+
+
+@pytest.mark.parametrize(
+    ("facet", "superstring"),
+    [
+        ("return_values", "returning"),
+        ("exceptions_errors", "exceptional"),
+        ("ordering", "reordering"),
+        ("persistence", "persistent"),
+        ("concurrency", "concurrency-safe"),
+        ("compatibility", "non-compatibility"),
+    ],
+)
+def test_experimental_validation_rejects_behavior_facet_superstrings(
+    tmp_path: Path,
+    facet: str,
+    superstring: str,
+) -> None:
+    phrases = {
+        "return_values": "return values",
+        "exceptions_errors": "exceptions and errors",
+        "ordering": "ordering",
+        "persistence": "persistence",
+        "concurrency": "concurrency",
+        "compatibility": "compatibility",
+    }
+    phrases[facet] = superstring
+    outputs = {}
+    for auditor, dimension in zip(
+        EXPERIMENTAL_REVIEW_AUDITORS,
+        ("overengineering_reachability", "overengineering_abstraction_surface"),
+        strict=True,
+    ):
+        candidate = _experimental_candidate(dimension)
+        candidate["simpler_behavior"] = ", ".join(phrases.values())
+        outputs[auditor] = {"terminal_status": "success", "output": [candidate]}
+
+    result = validate_experimental_auditor_outputs(
+        outputs=outputs,
+        valid_diff_lines={"src/app.py": [42]},
+        snapshot={"head_sha": "head", "diff_sha256": "diff"},
+        review_root=str(tmp_path),
+    )
+
+    assert result["state"] == "degraded"
+    assert all(facet in str(envelope["errors"]) for envelope in result["malformed_envelopes"])
+
+
+def test_experimental_validation_accepts_boundaries_and_negated_facets(tmp_path: Path) -> None:
+    outputs = {}
+    for auditor, dimension in zip(
+        EXPERIMENTAL_REVIEW_AUDITORS,
+        ("overengineering_reachability", "overengineering_abstraction_surface"),
+        strict=True,
+    ):
+        candidate = _experimental_candidate(dimension)
+        candidate["simpler_behavior"] = (
+            "Return values stay equivalent; no exceptions or errors; ordering is unchanged; "
+            "persistence is unchanged; no concurrency change; no compatibility break."
+        )
+        outputs[auditor] = {"terminal_status": "success", "output": [candidate]}
+
+    result = validate_experimental_auditor_outputs(
+        outputs=outputs,
+        valid_diff_lines={"src/app.py": [42]},
+        snapshot={"head_sha": "head", "diff_sha256": "diff"},
+        review_root=str(tmp_path),
+    )
+
+    assert result["state"] == "complete"
+
+
+def test_experimental_candidate_closed_key_error_lists_missing_and_extra(tmp_path: Path) -> None:
+    outputs = {}
+    for auditor, dimension in zip(
+        EXPERIMENTAL_REVIEW_AUDITORS,
+        ("overengineering_reachability", "overengineering_abstraction_surface"),
+        strict=True,
+    ):
+        candidate = _experimental_candidate(dimension)
+        del candidate["message"]
+        candidate["unexpected"] = True
+        outputs[auditor] = {"terminal_status": "success", "output": [candidate]}
+
+    result = validate_experimental_auditor_outputs(
+        outputs=outputs,
+        valid_diff_lines={"src/app.py": [42]},
+        snapshot={"head_sha": "head", "diff_sha256": "diff"},
+        review_root=str(tmp_path),
+    )
+
+    assert all(
+        envelope["errors"]
+        == ["candidate has invalid closed keys: missing=['message']; extra=['unexpected']"]
+        for envelope in result["malformed_envelopes"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("failure_kind", "expected_reason"),
+    [
+        ("tool_failure", "tool_failure"),
+        ("refusal", "refusal"),
+        ("interruption", "interruption"),
+        ("truncation", "truncation"),
+        ("missing_result", "missing_result"),
+        ("malformed_json", "malformed_json"),
+        ("non_array", "non_array"),
+        ("schema_invalid", "schema_invalid"),
+    ],
+)
+def test_experimental_failure_matrix_degrades_without_partial_candidates(
+    tmp_path: Path, failure_kind: str, expected_reason: str
+) -> None:
+    reachability, abstraction = EXPERIMENTAL_REVIEW_AUDITORS
+    outputs: dict[str, dict[str, object]] = {
+        reachability: {
+            "terminal_status": "success",
+            "output": [_experimental_candidate("overengineering_reachability")],
+        }
+    }
+    if failure_kind in {"tool_failure", "refusal", "interruption", "truncation"}:
+        outputs[abstraction] = {"terminal_status": failure_kind, "output": "[]"}
+    elif failure_kind == "malformed_json":
+        outputs[abstraction] = {"terminal_status": "success", "output": "["}
+    elif failure_kind == "non_array":
+        outputs[abstraction] = {"terminal_status": "success", "output": "{}"}
+    elif failure_kind == "schema_invalid":
+        candidate = _experimental_candidate("overengineering_abstraction_surface")
+        candidate["message"] = ""
+        outputs[abstraction] = {"terminal_status": "success", "output": [candidate]}
+
+    result = validate_experimental_auditor_outputs(
+        outputs=outputs,
+        valid_diff_lines={"src/app.py": [42]},
+        snapshot={"head_sha": "head", "diff_sha256": "diff"},
+        review_root=str(tmp_path),
+    )
+
+    assert result["state"] == "degraded"
+    assert result["candidates"] == []
+    assert result["status_by_name"][reachability]["status"] == "success"
+    assert result["status_by_name"][abstraction]["reason_code"] == expected_reason
+    envelope = result["malformed_envelopes"][0]
+    assert envelope["producer"] == abstraction
+    assert envelope["rejection_reason"] == expected_reason
+
+
+def test_experimental_aggregation_is_deterministic_and_retains_losers() -> None:
+    reachability, abstraction = EXPERIMENTAL_REVIEW_AUDITORS
+    candidates = [
+        {
+            "candidate_id": "suppressed",
+            "auditor_name": reachability,
+            "original_index": 0,
+            "file": "src/old.py",
+            "line": 10,
+            "severity": "critical",
+            "requires_decision": False,
+        },
+        {
+            "candidate_id": "fixed-rank-winner",
+            "auditor_name": reachability,
+            "original_index": 2,
+            "file": "src/app.py",
+            "line": 42,
+            "severity": "warning",
+            "requires_decision": False,
+        },
+        {
+            "candidate_id": "dedup-loser",
+            "auditor_name": abstraction,
+            "original_index": 0,
+            "file": "src/app.py",
+            "line": 42,
+            "severity": "warning",
+            "requires_decision": False,
+        },
+        {
+            "candidate_id": "rejected",
+            "auditor_name": reachability,
+            "original_index": 1,
+            "file": "src/other.py",
+            "line": 7,
+            "severity": "critical",
+            "requires_decision": False,
+        },
+    ]
+    dispositions = [
+        {
+            "candidate_id": candidate_id,
+            "disposition_id": f"disposition-{candidate_id}",
+            "reason_code": "accepted",
+        }
+        for candidate_id in ("suppressed", "fixed-rank-winner", "dedup-loser")
+    ] + [
+        {
+            "candidate_id": "rejected",
+            "disposition_id": "disposition-rejected",
+            "reason_code": "insufficient_evidence",
+        }
+    ]
+    kwargs = {
+        "dispositions": dispositions,
+        "prior_resolved_findings": [{"file": "src/old.py", "line": 12}],
+    }
+
+    forward = aggregate_combined_review_candidates(candidates=candidates, **kwargs)
+    reverse = aggregate_combined_review_candidates(candidates=list(reversed(candidates)), **kwargs)
+
+    assert forward == reverse
+    assert [candidate["candidate_id"] for candidate in forward["survivors"]] == [
+        "fixed-rank-winner"
+    ]
+    records = forward["aggregation_records"]
+    assert any(
+        record
+        == {
+            "candidate_id": "suppressed",
+            "reason_code": "suppressed_prior_thread",
+        }
+        for record in records
+    )
+    loser = next(record for record in records if record["candidate_id"] == "dedup-loser")
+    assert loser["reason_code"] == "duplicate_candidate"
+    assert loser["winner_candidate_id"] == "fixed-rank-winner"
+    assert loser["member_ids"] == ["fixed-rank-winner", "dedup-loser"]
+    assert "rejected" not in {str(record["candidate_id"]) for record in records}
+
+
+def test_experimental_aggregation_rejects_accepted_disposition_without_identity() -> None:
+    candidate = {
+        "candidate_id": "candidate-1",
+        "auditor_name": EXPERIMENTAL_REVIEW_AUDITORS[0],
+        "original_index": 0,
+        "file": "src/app.py",
+        "line": 42,
+        "severity": "critical",
+        "requires_decision": False,
+    }
+
+    result = aggregate_combined_review_candidates(
+        candidates=[candidate],
+        dispositions=[{"candidate_id": "candidate-1", "reason_code": "accepted"}],
+        prior_resolved_findings=[],
+    )
+
+    assert result == {
+        "state": "complete",
+        "survivors": [],
+        "aggregation_records": [],
+        "validation_errors": [],
+    }
+
+
+def test_combined_review_aggregation_is_cross_source_and_completion_order_independent() -> None:
+    reachability, abstraction = EXPERIMENTAL_REVIEW_AUDITORS
+    standard = [
+        {
+            "file": "src/app.py",
+            "line": 42,
+            "dimension": "arch",
+            "severity": "warning",
+            "message": "Standard finding wins the collision",
+            "requires_decision": False,
+        }
+    ]
+    deletion = [
+        {
+            "file": "src/deleted.py",
+            "line": 8,
+            "dimension": "deletion_regression",
+            "severity": "critical",
+            "message": "Deleted behavior was restored",
+            "requires_decision": False,
+        }
+    ]
+    experimental = [
+        {
+            "candidate_id": "experimental-collision",
+            "auditor_name": reachability,
+            "original_index": 0,
+            "file": "src/app.py",
+            "line": 42,
+            "dimension": "overengineering_reachability",
+            "severity": "warning",
+            "message": "No consumer is reachable",
+            "requires_decision": False,
+        },
+        {
+            "candidate_id": "experimental-abstraction",
+            "auditor_name": abstraction,
+            "original_index": 0,
+            "file": "src/other.py",
+            "line": 19,
+            "dimension": "overengineering_abstraction_surface",
+            "severity": "warning",
+            "message": "The abstraction surface is unused",
+            "requires_decision": False,
+        },
+    ]
+    dispositions = [
+        {
+            "candidate_id": item["candidate_id"],
+            "disposition_id": f"disposition-{item['candidate_id']}",
+            "reason_code": "accepted",
+        }
+        for item in experimental
+    ]
+    kwargs = {
+        "dispositions": dispositions,
+        "prior_resolved_findings": [],
+        "standard_findings": standard,
+        "deletion_findings": deletion,
+        "valid_diff_lines": {
+            "src/app.py": [42],
+            "src/deleted.py": [8],
+            "src/other.py": [19],
+        },
+        "snapshot": {"head_sha": "head", "base_sha": "base"},
+        "review_root": str(Path.cwd()),
+    }
+
+    forward = aggregate_combined_review_candidates(
+        candidates=experimental,
+        **kwargs,
+    )
+    reverse = aggregate_combined_review_candidates(
+        candidates=list(reversed(experimental)),
+        **kwargs,
+    )
+
+    assert forward == reverse
+    assert [item["dimension"] for item in forward["survivors"]] == [
+        "arch",
+        "deletion_regression",
+        "overengineering_abstraction_surface",
+    ]
+    standard_winner_id = str(forward["survivors"][0]["candidate_id"])
+    loser = next(
+        record
+        for record in forward["aggregation_records"]
+        if record["candidate_id"] == "experimental-collision"
+    )
+    assert loser["winner_candidate_id"] == standard_winner_id
+    assert loser["member_ids"] == [standard_winner_id, "experimental-collision"]
+    assert loser["dedup_group_id"]
+    assert "fixed source rank" in loser["rationale"]
+
+
+def test_review_finding_renderer_is_shared_and_preserves_proof_provenance() -> None:
+    experimental = {
+        "severity": "warning",
+        "dimension": "overengineering_reachability",
+        "message": "No consumer is reachable",
+        "evidence": [
+            {
+                "path": "src/app.py",
+                "line": 42,
+                "role": "anchor",
+                "claim": "Declaration",
+            }
+        ],
+        "candidate_id": "candidate-1",
+        "disposition_id": "disposition-1",
+    }
+
+    rendered = render_review_finding_body(experimental)
+
+    assert rendered.startswith("[warning] overengineering_reachability: No consumer is reachable")
+    assert "src/app.py:42 [anchor] Declaration" in rendered
+    assert "candidate_id=candidate-1 disposition_id=disposition-1" in rendered
+    assert (
+        render_review_finding_body(
+            {
+                "severity": "critical",
+                "dimension": "bugs",
+                "message": "Standard finding",
+            }
+        )
+        == "[critical] bugs: Standard finding"
+    )
+
+
+def test_review_finding_renderer_bounds_utf8_body_and_reserves_provenance() -> None:
+    rendered = render_review_finding_body(
+        {
+            "severity": "warning",
+            "dimension": "overengineering_reachability",
+            "message": "π" * 100_000,
+            "evidence": [
+                {
+                    "path": "src/" + ("nested/" * 1000) + "app.py",
+                    "line": 42,
+                    "role": "anchor" * 1000,
+                    "claim": "claim" * 10_000,
+                }
+                for _index in range(20)
+            ],
+            "candidate_id": "candidate-1",
+            "disposition_id": "disposition-1",
+        }
+    )
+
+    assert len(rendered.encode("utf-8")) <= 60 * 1024
+    assert rendered.endswith("Provenance: candidate_id=candidate-1 disposition_id=disposition-1")
+    assert "π" * 100_000 not in rendered
+
+
+def test_local_review_normalization_preserves_proof_fields_and_adds_aliases() -> None:
+    finding = {
+        "file": "src/app.py",
+        "line": 42,
+        "severity": "warning",
+        "dimension": "overengineering_reachability",
+        "message": "No consumer is reachable",
+        "evidence": [{"path": "src/app.py", "line": 42, "role": "anchor", "claim": "declaration"}],
+        "trace": [{"path": "src/app.py", "line": 42}],
+        "boundary_checks": [{"boundary": "public_api", "status": "checked_absent"}],
+        "confidence": 0.9,
+        "simpler_behavior": "Equivalent return values and errors",
+        "candidate_id": "candidate-1",
+        "disposition_id": "disposition-1",
+        "snapshot": {"head_sha": "head"},
+    }
+
+    normalized = normalize_local_review_finding(finding)
+
+    assert {key: normalized[key] for key in finding} == finding
+    assert normalized["path"] == finding["file"]
+    assert normalized["body"] == render_review_finding_body(finding)
+
+
+@pytest.mark.parametrize(
+    (
+        "retained_snapshot_was_valid",
+        "final_snapshot_is_fresh",
+        "gate_state",
+        "experimental_audit_state",
+        "findings",
+        "expected",
+    ),
+    [
+        (True, False, "valid_true", "complete", [], "stale_snapshot"),
+        (
+            True,
+            True,
+            "degraded",
+            "degraded",
+            [{"severity": "critical", "requires_decision": False}],
+            "changes_requested",
+        ),
+        (False, False, "degraded", "not_eligible", [], "needs_human"),
+        (True, True, "valid_true", "degraded", [], "needs_human"),
+        (
+            True,
+            True,
+            "valid_true",
+            "complete",
+            [
+                {"severity": "warning", "requires_decision": False},
+                {"severity": "info", "requires_decision": True},
+            ],
+            "approved_with_comments",
+        ),
+        (
+            True,
+            True,
+            "valid_true",
+            "complete",
+            [{"severity": "info", "requires_decision": True}],
+            "needs_human",
+        ),
+        (True, True, "valid_false", "not_required", [], "approved"),
+    ],
+)
+def test_experimental_review_verdict_branches_and_precedence(
+    retained_snapshot_was_valid: bool,
+    final_snapshot_is_fresh: bool,
+    gate_state: str,
+    experimental_audit_state: str,
+    findings: list[dict[str, object]],
+    expected: str,
+) -> None:
+    assert (
+        determine_experimental_review_verdict(
+            retained_snapshot_was_valid=retained_snapshot_was_valid,
+            final_snapshot_is_fresh=final_snapshot_is_fresh,
+            gate_state=gate_state,
+            experimental_audit_state=experimental_audit_state,
+            findings=findings,
+        )
+        == expected
+    )
+
+
+def test_valid_retained_snapshot_movement_is_stale() -> None:
+    assert (
+        determine_experimental_review_verdict(
+            retained_snapshot_was_valid=True,
+            final_snapshot_is_fresh=False,
+            gate_state="valid_true",
+            experimental_audit_state="complete",
+            findings=[],
+        )
+        == "stale_snapshot"
+    )
+
+
+def test_experimental_publication_preserves_provenance_and_suppresses_stale_effects(
+    tmp_path: Path,
+) -> None:
+    reachability, abstraction = EXPERIMENTAL_REVIEW_AUDITORS
+    snapshot = {
+        "head_sha": "head",
+        "base_sha": "base",
+        "merge_base_sha": "merge-base",
+        "diff_sha256": "diff",
+    }
+    validation = validate_experimental_auditor_outputs(
+        outputs={
+            reachability: {
+                "terminal_status": "success",
+                "output": [_experimental_candidate("overengineering_reachability")],
+            },
+            abstraction: {
+                "terminal_status": "success",
+                "output": [
+                    _experimental_candidate(
+                        "overengineering_abstraction_surface",
+                        line=43,
+                    )
+                ],
+            },
+        },
+        valid_diff_lines={"src/app.py": [42, 43]},
+        snapshot=snapshot,
+        review_root=str(tmp_path),
+    )
+    accepted, rejected = validation["candidates"]
+    dispositions = [
+        {
+            "candidate_id": accepted["candidate_id"],
+            "disposition_id": "accepted-disposition",
+            "reason_code": "accepted",
+        },
+        {
+            "candidate_id": rejected["candidate_id"],
+            "disposition_id": "rejected-disposition",
+            "reason_code": "simpler_behavior_not_equivalent",
+        },
+    ]
+    aggregation = aggregate_combined_review_candidates(
+        candidates=validation["candidates"],
+        dispositions=dispositions,
+        prior_resolved_findings=[],
+    )
+    assert [item["candidate_id"] for item in aggregation["survivors"]] == [
+        accepted["candidate_id"]
+    ]
+    survivor = aggregation["survivors"][0]
+    assert survivor["disposition_id"] == "accepted-disposition"
+
+    ledger = {
+        "candidates": validation["candidates"],
+        "disposition_records": dispositions,
+        "aggregation_records": aggregation["aggregation_records"],
+    }
+    publication = prepare_experimental_review_publication(
+        raw_ledger=ledger,
+        survivors=aggregation["survivors"],
+        snapshot=snapshot,
+        annotation_generation_id="annotation-generation",
+        mode="local",
+        snapshot_is_fresh=True,
+    )
+
+    assert publication["artifact_order"] == [
+        "raw_findings",
+        "diff_context",
+        "local_findings",
+    ]
+    assert "effect_artifacts" not in publication
+    artifacts = publication["artifacts"]
+    identity_keys = {
+        "_head_sha",
+        "_base_sha",
+        "_merge_base_sha",
+        "annotation_generation_id",
+        "review_generation_id",
+    }
+    identities = [{key: artifact[key] for key in identity_keys} for artifact in artifacts.values()]
+    assert identities[1:] == identities[:-1]
+    for artifact_name, field in (
+        ("diff_context", "context_entries"),
+        ("local_findings", "findings"),
+    ):
+        finding = artifacts[artifact_name][field][0]
+        assert {key: finding[key] for key in survivor} == survivor
+        assert finding["path"] == survivor["file"]
+        assert finding["side"] == "RIGHT"
+        assert finding["code_region"] == ""
+        assert finding["body"] == render_review_finding_body(survivor)
+        assert finding["candidate_id"] == accepted["candidate_id"]
+        assert finding["disposition_id"] == "accepted-disposition"
+        assert finding["evidence"] == accepted["evidence"]
+        assert finding["trace"] == accepted["trace"]
+        assert finding["boundary_checks"] == accepted["boundary_checks"]
+        assert rejected["candidate_id"] not in {
+            item["candidate_id"] for item in artifacts[artifact_name][field]
+        }
+
+    stale = prepare_experimental_review_publication(
+        raw_ledger=ledger,
+        survivors=aggregation["survivors"],
+        snapshot=snapshot,
+        annotation_generation_id="annotation-generation",
+        mode="local",
+        snapshot_is_fresh=False,
+    )
+    assert stale["state"] == "stale_snapshot"
+    assert stale["artifact_order"] == ["raw_findings"]
+    assert set(stale["artifacts"]) == {"raw_findings"}
+    assert "effect_artifacts" not in stale
+    assert stale["artifacts"]["raw_findings"]["survivors"] == []
+    assert (
+        stale["artifacts"]["raw_findings"]["review_generation_id"]
+        != publication["artifacts"]["raw_findings"]["review_generation_id"]
+    )
+
+    no_survivors = prepare_experimental_review_publication(
+        raw_ledger=ledger,
+        survivors=[],
+        snapshot=snapshot,
+        annotation_generation_id="annotation-generation",
+        mode="local",
+        snapshot_is_fresh=True,
+    )
+    assert (
+        no_survivors["artifacts"]["raw_findings"]["review_generation_id"]
+        != publication["artifacts"]["raw_findings"]["review_generation_id"]
+    )
+
+
+def _prepared_local_experimental_publication() -> dict[str, object]:
+    return prepare_experimental_review_publication(
+        raw_ledger={"candidate_records": [{"candidate_id": "candidate-1"}]},
+        survivors=[
+            {
+                "candidate_id": "candidate-1",
+                "disposition_id": "disposition-1",
+                "file": "src/app.py",
+                "line": 42,
+            }
+        ],
+        snapshot={
+            "head_sha": "head",
+            "base_sha": "base",
+            "merge_base_sha": "merge",
+            "diff_sha256": "diff",
+        },
+        annotation_generation_id="annotation-generation",
+        mode="local",
+        snapshot_is_fresh=True,
+    )
+
+
+def test_experimental_publication_retires_obsolete_artifacts(tmp_path: Path) -> None:
+    output_dir = tmp_path / "review-output"
+    base_arguments = {
+        "raw_ledger": {"candidate_records": [{"candidate_id": "candidate-1"}]},
+        "survivors": [{"file": "src/app.py", "line": 42}],
+        "snapshot": {"head_sha": "head", "base_sha": "base"},
+        "annotation_generation_id": "annotation-generation",
+    }
+
+    local = prepare_experimental_review_publication(
+        **base_arguments,
+        mode="local",
+        snapshot_is_fresh=True,
+    )
+    publish_experimental_review_artifacts(
+        publication=local,
+        output_dir=str(output_dir),
+        pr_number="18",
+    )
+    assert {path.name for path in output_dir.iterdir()} == {
+        "raw_findings_18.json",
+        "diff_context_18.json",
+        "local_findings_18.json",
+    }
+
+    github_with_receipt = prepare_experimental_review_publication(
+        **base_arguments,
+        mode="github",
+        snapshot_is_fresh=True,
+        receipt={"posted": True, "http_status": 200},
+    )
+    publish_experimental_review_artifacts(
+        publication=github_with_receipt,
+        output_dir=str(output_dir),
+        pr_number="18",
+    )
+    assert {path.name for path in output_dir.iterdir()} == {
+        "raw_findings_18.json",
+        "diff_context_18.json",
+        "batch_review_response_18.json",
+    }
+
+    github_without_receipt = prepare_experimental_review_publication(
+        **base_arguments,
+        mode="github",
+        snapshot_is_fresh=True,
+    )
+    publish_experimental_review_artifacts(
+        publication=github_without_receipt,
+        output_dir=str(output_dir),
+        pr_number="18",
+    )
+    assert {path.name for path in output_dir.iterdir()} == {
+        "raw_findings_18.json",
+        "diff_context_18.json",
+    }
+
+    stale = prepare_experimental_review_publication(
+        **base_arguments,
+        mode="github",
+        snapshot_is_fresh=False,
+    )
+    publish_experimental_review_artifacts(
+        publication=stale,
+        output_dir=str(output_dir),
+        pr_number="18",
+    )
+    assert {path.name for path in output_dir.iterdir()} == {"raw_findings_18.json"}
+
+
+def _combined_review_survivors(gate_state: str) -> list[dict[str, object]]:
+    reachability, abstraction = EXPERIMENTAL_REVIEW_AUDITORS
+    standard = [
+        {
+            "file": "src/app.py",
+            "line": 40,
+            "dimension": "bugs",
+            "severity": "critical",
+            "message": "Standard behavior regressed",
+            "requires_decision": False,
+        }
+    ]
+    deletion = [
+        {
+            "file": "src/deleted.py",
+            "line": 7,
+            "dimension": "deletion_regression",
+            "severity": "critical",
+            "message": "Deleted symbol was restored",
+            "requires_decision": False,
+        }
+    ]
+    experimental = [
+        {
+            "candidate_id": "reachability",
+            "auditor_name": reachability,
+            "original_index": 0,
+            **_experimental_candidate("overengineering_reachability", line=42),
+        },
+        {
+            "candidate_id": "abstraction",
+            "auditor_name": abstraction,
+            "original_index": 0,
+            **_experimental_candidate(
+                "overengineering_abstraction_surface",
+                line=43,
+            ),
+        },
+    ]
+    eligible_experimental = experimental if gate_state == "valid_true" else []
+    dispositions = [
+        {
+            "candidate_id": finding["candidate_id"],
+            "disposition_id": f"disposition-{finding['candidate_id']}",
+            "reason_code": "accepted",
+        }
+        for finding in eligible_experimental
+    ]
+    result = aggregate_combined_review_candidates(
+        candidates=eligible_experimental,
+        dispositions=dispositions,
+        prior_resolved_findings=[],
+        standard_findings=standard,
+        deletion_findings=deletion,
+        valid_diff_lines={"src/app.py": [40], "src/deleted.py": [7]},
+        snapshot={"head_sha": "head", "base_sha": "base"},
+        review_root=str(Path.cwd()),
+    )
+    assert result["state"] == "complete"
+    return [dict(finding) for finding in result["survivors"]]
+
+
+@pytest.mark.parametrize(
+    "invalid_finding",
+    [
+        {
+            "file": "src/app.py",
+            "line": "40",
+            "dimension": "bugs",
+            "severity": "critical",
+            "message": "Malformed line",
+            "requires_decision": False,
+        },
+        {
+            "file": "../escape.py",
+            "line": 40,
+            "dimension": "bugs",
+            "severity": "critical",
+            "message": "Escaping path",
+            "requires_decision": False,
+        },
+        {
+            "file": "src/app.py",
+            "line": 41,
+            "dimension": "bugs",
+            "severity": "critical",
+            "message": "Unchanged line",
+            "requires_decision": False,
+        },
+        {
+            "file": "src/app.py",
+            "line": 40,
+            "dimension": "bugs",
+            "severity": "critical",
+            "message": "Unexpected field",
+            "requires_decision": False,
+            "opaque": True,
+        },
+    ],
+)
+def test_standard_review_findings_degrade_atomically(
+    invalid_finding: dict[str, object],
+) -> None:
+    valid_finding = {
+        "file": "src/valid.py",
+        "line": 7,
+        "dimension": "tests",
+        "severity": "warning",
+        "message": "Valid sibling",
+        "requires_decision": False,
+    }
+    result = aggregate_combined_review_candidates(
+        candidates=[],
+        dispositions=[],
+        prior_resolved_findings=[],
+        standard_findings=[valid_finding, invalid_finding],
+        valid_diff_lines={"src/valid.py": [7], "src/app.py": [40]},
+        snapshot={"head_sha": "head", "base_sha": "base"},
+        review_root=str(Path.cwd()),
+    )
+    assert result["state"] == "degraded"
+    assert result["survivors"] == []
+    assert result["validation_errors"]
+
+
+def test_standard_finding_closed_key_error_lists_missing_and_extra() -> None:
+    finding = {
+        "file": "src/app.py",
+        "line": 40,
+        "dimension": "bugs",
+        "severity": "warning",
+        "requires_decision": False,
+        "unexpected": True,
+    }
+
+    result = aggregate_combined_review_candidates(
+        candidates=[],
+        dispositions=[],
+        prior_resolved_findings=[],
+        standard_findings=[finding],
+        valid_diff_lines={"src/app.py": [40]},
+        snapshot={"head_sha": "head", "base_sha": "base"},
+        review_root=str(Path.cwd()),
+    )
+
+    assert result["validation_errors"] == [
+        "standard[0]: finding has invalid closed keys: missing=['message']; extra=['unexpected']"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("dimension", []), ("severity", {})],
+)
+def test_standard_review_findings_reject_unhashable_enum_values(
+    field: str,
+    value: object,
+) -> None:
+    finding = {
+        "file": "src/app.py",
+        "line": 40,
+        "dimension": "bugs",
+        "severity": "critical",
+        "message": "Malformed enum value",
+        "requires_decision": False,
+    }
+    finding[field] = value
+
+    result = aggregate_combined_review_candidates(
+        candidates=[],
+        dispositions=[],
+        prior_resolved_findings=[],
+        standard_findings=[finding],
+        valid_diff_lines={"src/app.py": [40]},
+        snapshot={"head_sha": "head", "base_sha": "base"},
+        review_root=str(Path.cwd()),
+    )
+
+    assert result["state"] == "degraded"
+    assert result["survivors"] == []
+    assert result["validation_errors"] == [f"standard[0]: {field} must be a non-empty string"]
+
+
+def test_standard_review_findings_accept_hunk_range_fallback() -> None:
+    finding = {
+        "file": "src/app.py",
+        "line": 40,
+        "dimension": "bugs",
+        "severity": "warning",
+        "message": "Valid hunk-range finding",
+        "requires_decision": False,
+    }
+
+    result = aggregate_combined_review_candidates(
+        candidates=[],
+        dispositions=[],
+        prior_resolved_findings=[],
+        standard_findings=[finding],
+        valid_diff_lines={},
+        valid_line_ranges={"src/app.py": [[38, 42]]},
+        snapshot={"head_sha": "head", "base_sha": "base"},
+        review_root=str(Path.cwd()),
+    )
+
+    assert result["state"] == "complete"
+    assert [item["line"] for item in result["survivors"]] == [40]
+    assert result["validation_errors"] == []
+
+
+def test_standard_review_findings_require_snapshot_authority() -> None:
+    result = aggregate_combined_review_candidates(
+        candidates=[],
+        dispositions=[],
+        prior_resolved_findings=[],
+        standard_findings=[
+            {
+                "file": "src/app.py",
+                "line": 40,
+                "dimension": "bugs",
+                "severity": "critical",
+                "message": "Missing snapshot",
+                "requires_decision": False,
+            }
+        ],
+        valid_diff_lines={"src/app.py": [40]},
+        review_root=str(Path.cwd()),
+    )
+    assert result["state"] == "degraded"
+    assert result["survivors"] == []
+    assert result["validation_errors"] == ["snapshot head/base authority must be non-empty"]
+
+
+@pytest.mark.parametrize(
+    ("gate_state", "expected_dimensions"),
+    [
+        (
+            "valid_true",
+            {
+                "bugs",
+                "deletion_regression",
+                "overengineering_reachability",
+                "overengineering_abstraction_surface",
+            },
+        ),
+        ("valid_false", {"bugs", "deletion_regression"}),
+        ("degraded", {"bugs", "deletion_regression"}),
+    ],
+)
+def test_combined_findings_survive_local_publication_for_every_gate_state(
+    tmp_path: Path,
+    gate_state: str,
+    expected_dimensions: set[str],
+) -> None:
+    survivors = _combined_review_survivors(gate_state)
+    publication = prepare_experimental_review_publication(
+        raw_ledger={
+            "candidate_records": survivors,
+            "verdict_use_records": [
+                {"candidate_id": item["candidate_id"], "used": True} for item in survivors
+            ],
+        },
+        survivors=survivors,
+        snapshot={"head_sha": "head", "base_sha": "base", "merge_base_sha": "merge"},
+        annotation_generation_id="annotation",
+        mode="local",
+        snapshot_is_fresh=True,
+        handoff_metadata={
+            "summary": "AutoSkillit review",
+            "verdict": "changes_requested",
+            "pr_number": 17,
+            "iteration": 2,
+            "schema_version": 1,
+        },
+    )
+    result = publish_experimental_review_artifacts(
+        publication=publication,
+        output_dir=str(tmp_path / gate_state),
+        pr_number="17",
+    )
+
+    local_document = json.loads(Path(result["published_paths"]["local_findings"]).read_text())
+    findings = local_document["findings"]
+    assert {finding["dimension"] for finding in findings} == expected_dimensions
+    assert all(finding["path"] == finding["file"] for finding in findings)
+    assert all(finding["body"] == render_review_finding_body(finding) for finding in findings)
+    assert local_document["iteration"] == 2
+    assert local_document["verdict"] == "changes_requested"
+    standard_finding = next(finding for finding in findings if finding["dimension"] == "bugs")
+    assert standard_finding["record_digest"]
+    assert standard_finding["snapshot"] == {"head_sha": "head", "base_sha": "base"}
+
+
+def test_github_receipt_shares_prederived_generation_and_is_published_last(
+    tmp_path: Path,
+) -> None:
+    survivors = _combined_review_survivors("valid_true")
+    ledger = {
+        "candidate_records": survivors,
+        "verdict_use_records": [
+            {"candidate_id": item["candidate_id"], "verdict": "changes_requested"}
+            for item in survivors
+        ],
+    }
+    metadata = {"pr_number": 23, "schema_version": 1}
+    snapshot = {"head_sha": "head", "base_sha": "base", "merge_base_sha": "merge"}
+    seed = prepare_experimental_review_publication(
+        raw_ledger=ledger,
+        survivors=survivors,
+        snapshot=snapshot,
+        annotation_generation_id="annotation",
+        mode="github",
+        snapshot_is_fresh=True,
+        handoff_metadata=metadata,
+    )
+    generation_id = seed["artifacts"]["raw_findings"]["review_generation_id"]
+    publication = prepare_experimental_review_publication(
+        raw_ledger=ledger,
+        survivors=survivors,
+        snapshot=snapshot,
+        annotation_generation_id="annotation",
+        mode="github",
+        snapshot_is_fresh=True,
+        handoff_metadata=metadata,
+        receipt={
+            "posted": True,
+            "http_status": 200,
+            "commit_id": "head",
+            "review_generation_id": "must-be-overridden",
+        },
+    )
+
+    assert publication["artifact_order"] == [
+        "raw_findings",
+        "diff_context",
+        "review_receipt",
+    ]
+    assert publication["artifacts"]["review_receipt"]["review_generation_id"] == generation_id
+    result = publish_experimental_review_artifacts(
+        publication=publication,
+        output_dir=str(tmp_path / "github"),
+        pr_number="23",
+    )
+
+    assert [Path(record["path"]).name for record in result["publication_records"]] == [
+        "raw_findings_23.json",
+        "diff_context_23.json",
+        "batch_review_response_23.json",
+    ]
+    documents = {
+        name: json.loads(Path(path).read_text())
+        for name, path in result["published_paths"].items()
+    }
+    assert {document["review_generation_id"] for document in documents.values()} == {generation_id}
+    consumer_index = {
+        (entry["path"], entry["line"]): entry
+        for entry in documents["diff_context"]["context_entries"]
+    }
+    assert ("src/app.py", 42) in consumer_index
+    assert ("src/app.py", 43) in consumer_index
+    assert {consumer_index[("src/app.py", line)]["dimension"] for line in (42, 43)} == {
+        "overengineering_reachability",
+        "overengineering_abstraction_surface",
+    }
+    assert consumer_index[("src/app.py", 42)]["disposition_id"] == ("disposition-reachability")
+    assert documents["review_receipt"]["commit_id"] == "head"
+
+
+def test_write_temp_bytes_closes_descriptor_when_fdopen_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import autoskillit.smoke_utils._experimental_review as experimental_review
+
+    real_close = os.close
+    opened_fd = -1
+    closed_fds: list[int] = []
+
+    def failing_fdopen(fd: int, mode: str) -> None:
+        nonlocal opened_fd
+        opened_fd = fd
+        raise OSError("injected fdopen failure")
+
+    def recording_close(fd: int) -> None:
+        closed_fds.append(fd)
+        real_close(fd)
+
+    monkeypatch.setattr(experimental_review.os, "fdopen", failing_fdopen)
+    monkeypatch.setattr(experimental_review.os, "close", recording_close)
+
+    with pytest.raises(OSError, match="injected fdopen failure"):
+        experimental_review._write_temp_bytes(tmp_path, "artifact.json", b"payload")
+
+    assert closed_fds == [opened_fd]
+    assert not list(tmp_path.iterdir())
+
+
+def test_experimental_publication_executes_same_directory_marker_last_renames(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import autoskillit.smoke_utils._experimental_review as experimental_review
+
+    publication = _prepared_local_experimental_publication()
+    output_dir = tmp_path / "review-output"
+    real_replace = os.replace
+    rename_calls: list[tuple[Path, Path]] = []
+
+    def recording_replace(source: str | os.PathLike[str], destination: str | os.PathLike[str]):
+        rename_calls.append((Path(source), Path(destination)))
+        real_replace(source, destination)
+
+    monkeypatch.setattr(experimental_review.os, "replace", recording_replace)
+    result = publish_experimental_review_artifacts(
+        publication=publication,
+        output_dir=str(output_dir),
+        pr_number="17",
+    )
+
+    expected_names = [
+        "raw_findings_17.json",
+        "diff_context_17.json",
+        "local_findings_17.json",
+    ]
+    assert [destination.name for _, destination in rename_calls] == expected_names
+    assert all(
+        source.parent == destination.parent == output_dir for source, destination in rename_calls
+    )
+    assert all(source.name.endswith(".tmp") for source, _ in rename_calls)
+    assert list(result["published_paths"]) == [
+        "raw_findings",
+        "diff_context",
+        "local_findings",
+    ]
+    for artifact_name, path in result["published_paths"].items():
+        assert json.loads(Path(path).read_text()) == publication["artifacts"][artifact_name]
+    assert result["publication_records"][-1]["artifact"] == "local_findings"
+    assert not list(output_dir.glob(".*.tmp"))
+
+
+@pytest.mark.parametrize("failure_index", [0, 1, 2])
+def test_experimental_publication_rolls_back_each_write_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    failure_index: int,
+) -> None:
+    import autoskillit.smoke_utils._experimental_review as experimental_review
+
+    publication = _prepared_local_experimental_publication()
+    output_dir = tmp_path / "review-output"
+    output_dir.mkdir()
+    final_paths = [
+        output_dir / "raw_findings_18.json",
+        output_dir / "diff_context_18.json",
+        output_dir / "local_findings_18.json",
+    ]
+    for index, path in enumerate(final_paths):
+        path.write_text(f"old-{index}")
+    original_write = experimental_review._write_temp_bytes
+    write_index = 0
+
+    def failing_write(directory: Path, final_name: str, content: bytes) -> Path:
+        nonlocal write_index
+        current_index = write_index
+        write_index += 1
+        if current_index == failure_index:
+            raise OSError("injected write failure")
+        return original_write(directory, final_name, content)
+
+    monkeypatch.setattr(experimental_review, "_write_temp_bytes", failing_write)
+    with pytest.raises(RuntimeError, match="publication failed"):
+        publish_experimental_review_artifacts(
+            publication=publication,
+            output_dir=str(output_dir),
+            pr_number="18",
+        )
+
+    assert [path.read_text() for path in final_paths] == ["old-0", "old-1", "old-2"]
+    assert not list(output_dir.glob(".*.tmp"))
+
+
+@pytest.mark.parametrize("failure_index", [0, 1, 2])
+def test_experimental_publication_rolls_back_each_rename_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    failure_index: int,
+) -> None:
+    import autoskillit.smoke_utils._experimental_review as experimental_review
+
+    publication = _prepared_local_experimental_publication()
+    output_dir = tmp_path / "review-output"
+    output_dir.mkdir()
+    final_paths = [
+        output_dir / "raw_findings_19.json",
+        output_dir / "diff_context_19.json",
+        output_dir / "local_findings_19.json",
+    ]
+    for index, path in enumerate(final_paths):
+        path.write_text(f"old-{index}")
+    real_replace = os.replace
+    rename_index = 0
+    failure_injected = False
+
+    def failing_replace(source: str | os.PathLike[str], destination: str | os.PathLike[str]):
+        nonlocal failure_injected, rename_index
+        if not failure_injected:
+            current_index = rename_index
+            rename_index += 1
+            if current_index == failure_index:
+                failure_injected = True
+                raise OSError("injected rename failure")
+        real_replace(source, destination)
+
+    monkeypatch.setattr(experimental_review.os, "replace", failing_replace)
+    with pytest.raises(RuntimeError, match="publication failed"):
+        publish_experimental_review_artifacts(
+            publication=publication,
+            output_dir=str(output_dir),
+            pr_number="19",
+        )
+
+    assert [path.read_text() for path in final_paths] == ["old-0", "old-1", "old-2"]
+    assert not list(output_dir.glob(".*.tmp"))
+
+
+def test_experimental_publication_preserves_publication_and_rollback_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import autoskillit.smoke_utils._experimental_review as experimental_review
+
+    publication = _prepared_local_experimental_publication()
+    output_dir = tmp_path / "review-output"
+    output_dir.mkdir()
+    final_paths = [
+        output_dir / "raw_findings_20.json",
+        output_dir / "diff_context_20.json",
+        output_dir / "local_findings_20.json",
+    ]
+    for index, path in enumerate(final_paths):
+        path.write_text(f"old-{index}")
+    real_replace = os.replace
+    replace_count = 0
+
+    def failing_replace(source: str | os.PathLike[str], destination: str | os.PathLike[str]):
+        nonlocal replace_count
+        replace_count += 1
+        if replace_count == 2:
+            raise OSError("injected publication failure")
+        if replace_count == 3:
+            raise OSError("injected rollback failure")
+        real_replace(source, destination)
+
+    monkeypatch.setattr(experimental_review.os, "replace", failing_replace)
+    with pytest.raises(ExceptionGroup) as exc_info:
+        publish_experimental_review_artifacts(
+            publication=publication,
+            output_dir=str(output_dir),
+            pr_number="20",
+        )
+
+    errors = exc_info.value.exceptions
+    assert [str(error) for error in errors] == [
+        "injected publication failure",
+        "injected rollback failure",
+    ]
+    assert [path.read_text() for path in final_paths[1:]] == ["old-1", "old-2"]
+
+
+# ---------------------------------------------------------------------------
+# T_EDC1–T_EDC4: enrich_diff_context tests
 # ---------------------------------------------------------------------------
 
 _ANNOTATED_DIFF_CONTENT = (
@@ -1264,6 +2982,60 @@ def test_enrich_diff_context_preserves_existing_code_regions(tmp_path: Path) -> 
 
 
 # T_EDC3
+def test_enrich_diff_context_preserves_experimental_provenance(tmp_path: Path) -> None:
+    """Enrichment changes only code_region on an experimental context entry."""
+    review_dir = tmp_path / ".autoskillit" / "temp" / "review-pr"
+    review_dir.mkdir(parents=True)
+    entry = {
+        "path": "src/app.py",
+        "line": 42,
+        "severity": "warning",
+        "message": "Unreachable abstraction",
+        "code_region": "",
+        "evidence": [
+            {"path": "src/app.py", "line": 42, "role": "anchor", "claim": "Declaration"},
+            {"path": "src/app.py", "line": 44, "role": "consumer", "claim": "Only consumer"},
+        ],
+        "trace": [{"path": "src/app.py", "line": 44, "relation": "calls"}],
+        "boundary_checks": [
+            {
+                "boundary": "public_api",
+                "status": "checked_no_reachable_path",
+                "claim": "No public entry point",
+            }
+        ],
+        "confidence": 0.9,
+        "simpler_behavior": "Equivalent across all semantic categories",
+        "candidate_id": "candidate-1",
+        "disposition_id": "disposition-1",
+        "snapshot": {"head_sha": "head", "diff_sha256": "diff"},
+        "opaque_future_field": {"preserve": True},
+    }
+    handoff = {
+        "schema_version": 2,
+        "_head_sha": "head",
+        "_base_sha": "base",
+        "_merge_base_sha": "merge-base",
+        "annotation_generation_id": "generation-1",
+        "review_generation_id": "review-1",
+        "context_entries": [entry],
+    }
+    (review_dir / "diff_context_123.json").write_text(json.dumps(handoff))
+    (review_dir / "annotated_diff_123.txt").write_text(_ANNOTATED_DIFF_CONTENT)
+
+    result = enrich_diff_context(
+        pr_number="123", project_dir=str(tmp_path), output_dir=str(review_dir)
+    )
+
+    assert result["enriched"] == "true"
+    enriched = json.loads((review_dir / "diff_context_123.json").read_text())
+    expected = json.loads(json.dumps(handoff))
+    expected["context_entries"][0]["code_region"] = enriched["context_entries"][0]["code_region"]
+    assert "[L42]" in enriched["context_entries"][0]["code_region"]
+    assert enriched == expected
+
+
+# T_EDC4
 def test_enrich_diff_context_missing_handoff_file(tmp_path: Path) -> None:
     """enrich_diff_context returns gracefully when handoff file does not exist."""
     result = enrich_diff_context(
@@ -1278,12 +3050,53 @@ def test_enrich_diff_context_missing_handoff_file(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 _DIFF_OUTPUT = "+++ b/src/app.py\n@@ -1,3 +1,4 @@\n line1\n+added\n"
+_SHA = "abc1234567890"
+_BASE_SHA = "def1234567890"
+_MERGE_BASE_SHA = "0123456789abc"
+
+
+def _annotation_run_side_effect(
+    diff_output: str = _DIFF_OUTPUT,
+    *,
+    head_sha: str = _SHA,
+    base_sha: str = _BASE_SHA,
+    live_base_sha: str | None = None,
+    merge_base_sha: str = _MERGE_BASE_SHA,
+):
+    def _run(args, **_kwargs):
+        if args[:2] == ["gh", "api"]:
+            assert len(args) == 5
+            assert re.fullmatch(r"repos/\{owner\}/\{repo\}/pulls/\d+", args[2])
+            assert args[3:] == [
+                "--jq",
+                "{headRefOid: .head.sha, baseRefOid: .base.sha}",
+            ]
+            payload = json.dumps(
+                {
+                    "headRefOid": head_sha,
+                    "baseRefOid": live_base_sha or base_sha,
+                }
+            )
+            return subprocess.CompletedProcess(args, 0, payload.encode(), b"")
+        if args[:3] == ["gh", "pr", "diff"]:
+            return subprocess.CompletedProcess(args, 0, diff_output.encode(), b"")
+        if args[:3] == ["git", "rev-parse", "HEAD"]:
+            return subprocess.CompletedProcess(args, 0, head_sha.encode(), b"")
+        if args[:2] == ["git", "rev-parse"]:
+            return subprocess.CompletedProcess(args, 0, base_sha.encode(), b"")
+        if args[:2] == ["git", "merge-base"]:
+            return subprocess.CompletedProcess(args, 0, merge_base_sha.encode(), b"")
+        if args[:2] == ["git", "diff"]:
+            return subprocess.CompletedProcess(args, 0, diff_output.encode(), b"")
+        raise AssertionError(f"unexpected annotation command: {args}")
+
+    return _run
 
 
 @patch("subprocess.run")
 def test_annotate_pr_diff_returns_review_mode_local(mock_run, tmp_path: Path) -> None:
     """T3.1: iteration < local_rounds → review_mode=local."""
-    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    mock_run.side_effect = _annotation_run_side_effect()
     result = annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -1298,7 +3111,7 @@ def test_annotate_pr_diff_returns_review_mode_local(mock_run, tmp_path: Path) ->
 @patch("subprocess.run")
 def test_annotate_pr_diff_returns_review_mode_github(mock_run, tmp_path: Path) -> None:
     """T3.2: iteration >= local_rounds → review_mode=github."""
-    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    mock_run.side_effect = _annotation_run_side_effect()
     result = annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -1311,8 +3124,8 @@ def test_annotate_pr_diff_returns_review_mode_github(mock_run, tmp_path: Path) -
 
 @patch("subprocess.run")
 def test_annotate_pr_diff_local_mode_uses_git_diff(mock_run, tmp_path: Path) -> None:
-    """T3.3: local mode calls git diff with base...HEAD."""
-    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    """T3.3: local mode resolves refs before a pinned git diff."""
+    mock_run.side_effect = _annotation_run_side_effect()
     annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -1321,15 +3134,16 @@ def test_annotate_pr_diff_local_mode_uses_git_diff(mock_run, tmp_path: Path) -> 
         current_iteration="0",
         base_branch="main",
     )
-    args = mock_run.call_args_list[0][0][0]
-    assert args[:3] == ["git", "diff", "main...HEAD"]
-    assert mock_run.call_count == 2
+    commands = [call[0][0] for call in mock_run.call_args_list]
+    diff_command = next(command for command in commands if command[:2] == ["git", "diff"])
+    assert diff_command[-2:] == [_MERGE_BASE_SHA, _SHA]
+    assert commands.index(diff_command) > commands.index(["git", "merge-base", _BASE_SHA, _SHA])
 
 
 @patch("subprocess.run")
 def test_annotate_pr_diff_github_mode_uses_gh_pr_diff(mock_run, tmp_path: Path) -> None:
     """T3.4: github mode calls gh pr diff."""
-    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    mock_run.side_effect = _annotation_run_side_effect()
     annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -1338,15 +3152,18 @@ def test_annotate_pr_diff_github_mode_uses_gh_pr_diff(mock_run, tmp_path: Path) 
         current_iteration="2",
         base_branch="",
     )
-    assert mock_run.call_count == 2
-    args = mock_run.call_args_list[0][0][0]
-    assert args[:3] == ["gh", "pr", "diff"]
+    commands = [call[0][0] for call in mock_run.call_args_list]
+    diff_index = next(
+        index for index, command in enumerate(commands) if command[:3] == ["gh", "pr", "diff"]
+    )
+    assert commands[diff_index - 1][:2] == ["gh", "api"]
+    assert commands[diff_index + 1][:2] == ["gh", "api"]
 
 
 @patch("subprocess.run")
 def test_annotate_pr_diff_zero_local_rounds_always_github(mock_run, tmp_path: Path) -> None:
     """T3.5: local_review_rounds=0 → always github."""
-    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    mock_run.side_effect = _annotation_run_side_effect()
     result = annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -1360,7 +3177,7 @@ def test_annotate_pr_diff_zero_local_rounds_always_github(mock_run, tmp_path: Pa
 @patch("subprocess.run")
 def test_annotate_pr_diff_missing_iteration_defaults_zero(mock_run, tmp_path: Path) -> None:
     """T3.6: empty current_iteration defaults to 0 → local mode when local_rounds > 0."""
-    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    mock_run.side_effect = _annotation_run_side_effect()
     result = annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -1377,7 +3194,7 @@ def test_annotate_pr_diff_local_mode_empty_base_branch_falls_back_to_github(
     mock_run, tmp_path: Path
 ) -> None:
     """T3.8: local mode with empty base_branch falls back to gh pr diff and returns github."""
-    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    mock_run.side_effect = _annotation_run_side_effect()
     result = annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -1387,14 +3204,14 @@ def test_annotate_pr_diff_local_mode_empty_base_branch_falls_back_to_github(
         base_branch="",
     )
     assert result["review_mode"] == "github"
-    args = mock_run.call_args_list[0][0][0]
-    assert args[:3] == ["gh", "pr", "diff"]
+    commands = [call[0][0] for call in mock_run.call_args_list]
+    assert any(command[:3] == ["gh", "pr", "diff"] for command in commands)
 
 
 @patch("subprocess.run")
 def test_annotate_pr_diff_backward_compat_no_new_params(mock_run, tmp_path: Path) -> None:
     """T3.7: old 3-arg call works and defaults review_mode=github."""
-    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    mock_run.side_effect = _annotation_run_side_effect()
     result = annotate_pr_diff(
         pr_number="123",
         cwd=str(tmp_path),
@@ -1415,28 +3232,27 @@ def test_annotate_pr_diff_int_pr_number(mock_run, tmp_path: Path) -> None:
     TypeError: argument of type 'int' is not iterable when constructing
     the gh subprocess command list.
     """
-    mock_run.return_value = subprocess.CompletedProcess(
-        args=[], returncode=0, stdout="+ diff content", stderr=""
-    )
+    mock_run.side_effect = _annotation_run_side_effect("+diff content\n")
     output_dir = tmp_path / "output"
     output_dir.mkdir()
     result = annotate_pr_diff(pr_number=42, cwd=str(tmp_path), output_dir=str(output_dir))  # type: ignore[arg-type]
     assert result["annotated_diff_path"]
 
     # Verify the subprocess call received str "42", not int 42
-    gh_diff_call = mock_run.call_args_list[0]
-    cmd_list = gh_diff_call[0][0]
+    cmd_list = next(
+        call[0][0] for call in mock_run.call_args_list if call[0][0][:3] == ["gh", "pr", "diff"]
+    )
     assert "42" in cmd_list, f"Expected '42' in command, got {cmd_list}"
 
 
 @patch("subprocess.run")
 def test_annotate_pr_diff_produces_valid_lines_artifact(mock_run, tmp_path: Path) -> None:
-    """annotate_pr_diff must write valid_lines_{pr}.json alongside ranges_{pr}.json."""
+    """annotate_pr_diff writes valid lines alongside the explicitly named hunk ranges."""
     import json
 
     from autoskillit.execution.diff_annotator import extract_valid_lines
 
-    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    mock_run.side_effect = _annotation_run_side_effect()
     output_dir = tmp_path / "output"
     output_dir.mkdir()
     result = annotate_pr_diff(
@@ -1452,18 +3268,260 @@ def test_annotate_pr_diff_produces_valid_lines_artifact(mock_run, tmp_path: Path
     assert content == expected
 
 
-# ─── SHA embedding tests (T_SHA_1–T_SHA_4) ──────────────────────────────────
+def _churn_diff(*, additions: int, removals: int) -> str:
+    return (
+        "diff --git a/f.py b/f.py\n"
+        "--- a/f.py\n"
+        "+++ b/f.py\n"
+        f"@@ -1,{removals} +1,{additions} @@\n"
+        + "".join(f"-old_{index}\n" for index in range(removals))
+        + "".join(f"+new_{index}\n" for index in range(additions))
+    )
 
-_SHA = "abc1234567890"
+
+@pytest.mark.parametrize(
+    ("additions", "removals", "expected"),
+    [
+        (2000, 0, False),
+        (2001, 0, True),
+        (1000, 1001, True),
+        (0, 2001, True),
+    ],
+)
+@patch("subprocess.run")
+def test_annotate_pr_diff_writes_native_overengineering_gate(
+    mock_run,
+    tmp_path: Path,
+    additions: int,
+    removals: int,
+    expected: bool,
+) -> None:
+    mock_run.side_effect = _annotation_run_side_effect(
+        _churn_diff(additions=additions, removals=removals)
+    )
+    annotate_pr_diff(pr_number="91", cwd=str(tmp_path), output_dir=str(tmp_path))
+    gate = json.loads((tmp_path / "metrics_91.json").read_text())["run_overengineering_audits"]
+    assert type(gate) is bool
+    assert gate is expected
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_publishes_snapshot_manifest_last(
+    mock_run,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import hashlib
+
+    import autoskillit.core as core
+
+    diff = _churn_diff(additions=2, removals=1)
+    mock_run.side_effect = _annotation_run_side_effect(diff)
+    original_atomic_write = core.atomic_write
+    write_order: list[str] = []
+
+    def recording_atomic_write(path: Path, content: str) -> None:
+        write_order.append(path.name)
+        original_atomic_write(path, content)
+
+    monkeypatch.setattr(core, "atomic_write", recording_atomic_write)
+    annotate_pr_diff(
+        pr_number="92",
+        cwd=str(tmp_path),
+        output_dir=str(tmp_path),
+        local_review_rounds="1",
+        current_iteration="0",
+        base_branch="main",
+    )
+    metrics = json.loads((tmp_path / "metrics_92.json").read_text())
+    assert metrics["_head_sha"] == _SHA
+    assert metrics["_base_sha"] == _BASE_SHA
+    assert metrics["_merge_base_sha"] == _MERGE_BASE_SHA
+    assert metrics["diff_sha256"] == hashlib.sha256(diff.encode()).hexdigest()
+    assert metrics["diff_byte_length"] == len(diff.encode())
+    assert set(metrics["diff_source"]) == {
+        "kind",
+        "comparison",
+        "context_lines",
+        "rename_detection",
+        "external_diff",
+        "text_conversion",
+        "profile_id",
+    }
+    for artifact in metrics["artifacts"].values():
+        artifact_bytes = (tmp_path / artifact["basename"]).read_bytes()
+        assert artifact["byte_length"] == len(artifact_bytes)
+        assert artifact["sha256"] == hashlib.sha256(artifact_bytes).hexdigest()
+    assert write_order == [
+        "annotated_diff_92.txt",
+        "hunk_ranges_92.json",
+        "valid_lines_92.json",
+        "metrics_92.json",
+    ]
+
+
+@pytest.mark.parametrize(
+    "failure_name",
+    ["annotated_diff_94.txt", "hunk_ranges_94.json", "valid_lines_94.json"],
+)
+@patch("subprocess.run")
+def test_annotate_pr_diff_never_publishes_manifest_after_sidecar_failure(
+    mock_run,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_name: str,
+) -> None:
+    import autoskillit.core as core
+
+    mock_run.side_effect = _annotation_run_side_effect(_churn_diff(additions=2, removals=1))
+    original_atomic_write = core.atomic_write
+    write_order: list[str] = []
+
+    def failing_atomic_write(path: Path, content: str) -> None:
+        write_order.append(path.name)
+        if path.name == failure_name:
+            raise OSError("injected sidecar write failure")
+        original_atomic_write(path, content)
+
+    monkeypatch.setattr(core, "atomic_write", failing_atomic_write)
+    with pytest.raises(OSError, match="injected sidecar write failure"):
+        annotate_pr_diff(
+            pr_number="94",
+            cwd=str(tmp_path),
+            output_dir=str(tmp_path),
+            base_branch="main",
+        )
+
+    assert "metrics_94.json" not in write_order
+    assert not (tmp_path / "metrics_94.json").exists()
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_preserves_stderr_bytes_when_diff_fails(mock_run, tmp_path: Path) -> None:
+    metrics_path = tmp_path / "metrics_93.json"
+    metrics_path.write_text('{"generation_id":"stale"}')
+
+    def fail_diff(args, **_kwargs):
+        if args[:2] == ["gh", "api"]:
+            payload = json.dumps({"headRefOid": _SHA, "baseRefOid": _BASE_SHA})
+            return subprocess.CompletedProcess(args, 0, payload.encode(), b"")
+        if args[:3] == ["gh", "pr", "diff"]:
+            return subprocess.CompletedProcess(args, 1, b"", b"diff failed: \xff")
+        raise AssertionError(f"unexpected annotation command: {args}")
+
+    mock_run.side_effect = fail_diff
+    with pytest.raises(RuntimeError, match="annotation command failed") as exc_info:
+        annotate_pr_diff(pr_number="93", cwd=str(tmp_path), output_dir=str(tmp_path))
+    assert "diff failed: \\xff" in str(exc_info.value)
+    assert not metrics_path.exists()
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_failed_ref_lookup_publishes_no_authority(
+    mock_run, tmp_path: Path
+) -> None:
+    metrics_path = tmp_path / "metrics_96.json"
+    metrics_path.write_text('{"generation_id":"stale"}')
+
+    def fail_ref_lookup(args, **_kwargs):
+        if args[:2] == ["gh", "api"]:
+            return subprocess.CompletedProcess(args, 1, b"", b"ref lookup failed")
+        raise AssertionError(f"unexpected annotation command: {args}")
+
+    mock_run.side_effect = fail_ref_lookup
+    with pytest.raises(RuntimeError, match="unable to resolve live PR head/base refs"):
+        annotate_pr_diff(pr_number="96", cwd=str(tmp_path), output_dir=str(tmp_path))
+    assert not metrics_path.exists()
+
+
+@patch("subprocess.run")
+def test_annotation_marker_protocol_detects_overlapping_publication(
+    mock_run, tmp_path: Path
+) -> None:
+    first_diff = _churn_diff(additions=2, removals=1)
+    mock_run.side_effect = _annotation_run_side_effect(first_diff)
+    annotate_pr_diff(pr_number="97", cwd=str(tmp_path), output_dir=str(tmp_path))
+
+    marker_path = tmp_path / "metrics_97.json"
+    marker_retained = threading.Event()
+    publisher_finished = threading.Event()
+    consumer_result: dict[str, bool] = {}
+
+    def consume_generation(*, overlap: bool) -> bool:
+        retained_marker_bytes = marker_path.read_bytes()
+        retained_marker = json.loads(retained_marker_bytes)
+        if overlap:
+            marker_retained.set()
+            assert publisher_finished.wait(timeout=10)
+        sidecars_match = all(
+            artifact["byte_length"] == len((tmp_path / artifact["basename"]).read_bytes())
+            and artifact["sha256"]
+            == hashlib.sha256((tmp_path / artifact["basename"]).read_bytes()).hexdigest()
+            for artifact in retained_marker["artifacts"].values()
+        )
+        return sidecars_match and retained_marker_bytes == marker_path.read_bytes()
+
+    def overlapping_consumer() -> None:
+        consumer_result["accepted"] = consume_generation(overlap=True)
+
+    consumer = threading.Thread(target=overlapping_consumer)
+    consumer.start()
+    assert marker_retained.wait(timeout=10)
+
+    second_diff = _churn_diff(additions=3, removals=2)
+    mock_run.side_effect = _annotation_run_side_effect(second_diff)
+    annotate_pr_diff(pr_number="97", cwd=str(tmp_path), output_dir=str(tmp_path))
+    publisher_finished.set()
+    consumer.join(timeout=10)
+
+    assert not consumer.is_alive()
+    assert consumer_result == {"accepted": False}
+    assert consume_generation(overlap=False)
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_rejects_moving_github_refs(mock_run, tmp_path: Path) -> None:
+    ref_reads = 0
+
+    def moving_refs(args, **_kwargs):
+        nonlocal ref_reads
+        if args[:2] == ["gh", "api"]:
+            ref_reads += 1
+            head = _SHA if ref_reads == 1 else f"{_SHA}moved"
+            payload = json.dumps({"headRefOid": head, "baseRefOid": _BASE_SHA})
+            return subprocess.CompletedProcess(args, 0, payload.encode(), b"")
+        if args[:3] == ["gh", "pr", "diff"]:
+            return subprocess.CompletedProcess(args, 0, _DIFF_OUTPUT.encode(), b"")
+        raise AssertionError(f"unexpected annotation command: {args}")
+
+    mock_run.side_effect = moving_refs
+    with pytest.raises(RuntimeError, match="moved during diff acquisition"):
+        annotate_pr_diff(pr_number="94", cwd=str(tmp_path), output_dir=str(tmp_path))
+    assert not (tmp_path / "metrics_94.json").exists()
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_rejects_local_base_disagreement(mock_run, tmp_path: Path) -> None:
+    mock_run.side_effect = _annotation_run_side_effect(live_base_sha="live-base")
+    with pytest.raises(RuntimeError, match="local base ref does not match"):
+        annotate_pr_diff(
+            pr_number="95",
+            cwd=str(tmp_path),
+            output_dir=str(tmp_path),
+            local_review_rounds="1",
+            current_iteration="0",
+            base_branch="main",
+        )
+    assert not (tmp_path / "metrics_95.json").exists()
+
+
+# ─── SHA embedding tests (T_SHA_1–T_SHA_4) ──────────────────────────────────
 
 
 @patch("subprocess.run")
 def test_annotate_pr_diff_embeds_head_sha_in_metrics(mock_run, tmp_path: Path) -> None:
     """T_SHA_1: metrics_{pr}.json must include _head_sha field."""
-    mock_run.side_effect = [
-        subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, ""),
-        subprocess.CompletedProcess([], 0, _SHA, ""),
-    ]
+    mock_run.side_effect = _annotation_run_side_effect()
     annotate_pr_diff(pr_number="999", cwd=str(tmp_path), output_dir=str(tmp_path))
     metrics = json.loads((tmp_path / "metrics_999.json").read_text())
     assert "_head_sha" in metrics
@@ -1473,10 +3531,7 @@ def test_annotate_pr_diff_embeds_head_sha_in_metrics(mock_run, tmp_path: Path) -
 @patch("subprocess.run")
 def test_annotate_pr_diff_embeds_sha_header_in_diff_text(mock_run, tmp_path: Path) -> None:
     """T_SHA_2: annotated_diff_{pr}.txt first line must be # sha: {sha}."""
-    mock_run.side_effect = [
-        subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, ""),
-        subprocess.CompletedProcess([], 0, _SHA, ""),
-    ]
+    mock_run.side_effect = _annotation_run_side_effect()
     annotate_pr_diff(pr_number="999", cwd=str(tmp_path), output_dir=str(tmp_path))
     first_line = (tmp_path / "annotated_diff_999.txt").read_text().split("\n")[0]
     assert first_line.startswith("# sha:")
@@ -1485,10 +3540,7 @@ def test_annotate_pr_diff_embeds_sha_header_in_diff_text(mock_run, tmp_path: Pat
 @patch("subprocess.run")
 def test_annotate_pr_diff_returns_head_sha(mock_run, tmp_path: Path) -> None:
     """T_SHA_3: Return dict must include head_sha for downstream capture."""
-    mock_run.side_effect = [
-        subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, ""),
-        subprocess.CompletedProcess([], 0, _SHA, ""),
-    ]
+    mock_run.side_effect = _annotation_run_side_effect()
     result = annotate_pr_diff(pr_number="999", cwd=str(tmp_path), output_dir=str(tmp_path))
     assert "head_sha" in result
     assert len(result["head_sha"]) >= 7
@@ -1497,10 +3549,7 @@ def test_annotate_pr_diff_returns_head_sha(mock_run, tmp_path: Path) -> None:
 @patch("subprocess.run")
 def test_annotate_pr_diff_valid_lines_flat_schema(mock_run, tmp_path: Path) -> None:
     """T_SHA_4: valid_lines_{pr}.json must be a flat {filepath: [lines]} dict, not wrapped."""
-    mock_run.side_effect = [
-        subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, ""),
-        subprocess.CompletedProcess([], 0, _SHA, ""),
-    ]
+    mock_run.side_effect = _annotation_run_side_effect()
     annotate_pr_diff(pr_number="999", cwd=str(tmp_path), output_dir=str(tmp_path))
     data = json.loads((tmp_path / "valid_lines_999.json").read_text())
     assert "_head_sha" not in data, (
@@ -2724,14 +4773,18 @@ def test_diagnose_merge_gate_rejects_empty_output_dir() -> None:
 
 
 def test_smoke_utils_all_exports_complete() -> None:
-    """smoke_utils.__all__ must list all 30 public names."""
+    """smoke_utils.__all__ must list every public name."""
     import autoskillit.smoke_utils as su
 
     expected = {
+        "EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY",
+        "EXPERIMENTAL_REVIEW_AUDITORS",
+        "aggregate_combined_review_candidates",
         "aggregate_review_verdict",
         "annotate_pr_diff",
         "build_agent_eval_context",
         "build_eval_context",
+        "build_malformed_review_envelope",
         "check_bug_report_non_empty",
         "check_commits_ahead",
         "check_loop_iteration",
@@ -2739,11 +4792,14 @@ def test_smoke_utils_all_exports_complete() -> None:
         "check_ref_state",
         "check_review_loop",
         "check_review_posted",
+        "clear_review_annotation_context",
         "close_issue_already_done",
         "compile_eval_scorecard",
         "consolidate_health_reports",
         "compute_domain_partitions",
         "detect_zero_changes",
+        "deletion_regression_is_eligible",
+        "determine_experimental_review_verdict",
         "diagnose_merge_gate",
         "enrich_diff_context",
         "extract_investigation",
@@ -2751,13 +4807,21 @@ def test_smoke_utils_all_exports_complete() -> None:
         "gate_backend_write",
         "init_counter",
         "LOCAL_ROUND_EXEMPT_VERDICTS",
+        "normalize_local_review_finding",
         "parse_agent_eval_manifests",
         "parse_eval_manifests",
         "patch_pr_token_summary",
         "pre_iteration_cleanup",
+        "prepare_experimental_review_publication",
+        "publish_experimental_review_artifacts",
+        "render_review_finding_body",
+        "REVIEW_HANDOFF_IDENTITY_FIELDS",
         "REQUIRED_CRITERION_KEYS",
+        "review_handoff_pair_error",
+        "select_experimental_review_dispatch",
         "select_review_dimensions",
         "try_load_json",
+        "validate_experimental_auditor_outputs",
         "VALID_CRITERION_TYPES",
     }
     assert set(su.__all__) == expected
@@ -2766,32 +4830,44 @@ def test_smoke_utils_all_exports_complete() -> None:
 @pytest.mark.parametrize(
     "name",
     [
+        "aggregate_combined_review_candidates",
         "aggregate_review_verdict",
         "annotate_pr_diff",
         "build_agent_eval_context",
         "build_eval_context",
+        "build_malformed_review_envelope",
         "check_bug_report_non_empty",
         "check_commits_ahead",
         "check_loop_iteration",
         "check_loop_with_progress",
         "check_review_loop",
+        "clear_review_annotation_context",
         "close_issue_already_done",
         "compile_eval_scorecard",
         "consolidate_health_reports",
         "compute_domain_partitions",
         "detect_zero_changes",
+        "deletion_regression_is_eligible",
+        "determine_experimental_review_verdict",
         "diagnose_merge_gate",
         "enrich_diff_context",
         "extract_investigation",
         "fetch_merge_queue_data",
         "gate_backend_write",
         "init_counter",
+        "normalize_local_review_finding",
         "parse_agent_eval_manifests",
         "parse_eval_manifests",
         "patch_pr_token_summary",
         "pre_iteration_cleanup",
+        "prepare_experimental_review_publication",
+        "publish_experimental_review_artifacts",
+        "render_review_finding_body",
+        "review_handoff_pair_error",
+        "select_experimental_review_dispatch",
         "select_review_dimensions",
         "try_load_json",
+        "validate_experimental_auditor_outputs",
     ],
 )
 def test_smoke_utils_callable_resolvable_via_importlib(name: str) -> None:

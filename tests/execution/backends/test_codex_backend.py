@@ -1625,9 +1625,32 @@ class TestCodexBackendSetupSessionDir:
                 .rstrip()
                 .endswith(codex_discipline_suffix().rstrip())
             )
-            assert data["sandbox_mode"] == "workspace-write", (
+            expected_sandbox = (
+                "read-only"
+                if toml_path.stem
+                in {
+                    "pr-review-auditor-reachability",
+                    "pr-review-auditor-abstraction-surface",
+                }
+                else "workspace-write"
+            )
+            assert data["sandbox_mode"] == expected_sandbox, (
                 f"{toml_path.name}: wrong sandbox_mode"
             )
+
+    def test_read_only_agent_tools_project_to_read_only_sandbox(self) -> None:
+        import tomllib
+
+        self._write_all_source_files()
+        CodexBackend().setup_session_dir(self.session_dir)
+        for name in (
+            "pr-review-auditor-reachability",
+            "pr-review-auditor-abstraction-surface",
+        ):
+            data = tomllib.loads(
+                (self.session_dir / "agents" / f"{name}.toml").read_text(encoding="utf-8")
+            )
+            assert data["sandbox_mode"] == "read-only"
 
     def test_generated_agents_are_registered_in_session_config(self) -> None:
         import tomllib

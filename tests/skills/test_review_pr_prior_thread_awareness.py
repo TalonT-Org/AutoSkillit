@@ -119,3 +119,36 @@ def test_prior_resolved_matched_by_file_and_line_proximity() -> None:
         "line proximity (±N lines) to handle line drift from fix commits — not exact "
         "line equality."
     )
+
+
+def test_parent_acceptance_precedes_prior_thread_suppression() -> None:
+    text = _skill_text()
+    step_4 = text[
+        text.index("### Step 4: Aggregate and Deduplicate Findings") : text.index(
+            "### Step 4.5: Echo Primary Obligation"
+        )
+    ]
+
+    validation = step_4.index("validate both arrays completely")
+    disposition = step_4.index("separate immutable disposition record")
+    accepted_only = step_4.index(
+        "Feed only parent-accepted experimental findings into normal aggregation"
+    )
+    suppression = step_4.index("1. Suppression pass")
+    deduplication = step_4.index("2. Deduplicate")
+
+    assert validation < disposition < accepted_only < suppression < deduplication
+
+
+def test_experimental_suppression_preserves_linked_provenance() -> None:
+    text = _skill_text()
+    step_4 = text[
+        text.index("### Step 4: Aggregate and Deduplicate Findings") : text.index(
+            "### Step 4.5: Echo Primary Obligation"
+        )
+    ]
+
+    assert "reason `suppressed_prior_thread`" in step_4
+    assert "do not mutate the candidate or disposition" in step_4
+    assert "retain every member" in step_4
+    assert "`candidate_id`" in step_4

@@ -1,8 +1,14 @@
 """Guards: resolve-review loads and uses diff_context handoff file from review-pr."""
 
+import json
 from pathlib import Path
 
 import pytest
+
+from autoskillit.smoke_utils import (
+    prepare_experimental_review_publication,
+    publish_experimental_review_artifacts,
+)
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
@@ -54,6 +60,16 @@ def test_step2_loads_diff_context_map():
     """Step 2 must build a diff_context_map lookup structure."""
     section = _step2_section()
     assert "diff_context_map" in section
+
+
+def test_step2_uses_mode_appropriate_generation_pair() -> None:
+    section = _step2_section()
+    normalized = " ".join(section.split())
+
+    assert "In `mode=local`, read `local_findings_{pr_number}.json`" in normalized
+    assert "In `mode=github`, pair `diff_context_{pr_number}.json`" in normalized
+    assert "`batch_review_response_{pr_number}.json` receipt" in normalized
+    assert "Do not require a local-findings artifact in GitHub mode" in normalized
 
 
 def test_step2_fallback_when_file_absent():
@@ -115,3 +131,106 @@ def test_step35_accesses_code_region_from_dict():
     """Step 3.5 must access code_region via .get('code_region') on the dict value."""
     section = _step35_section()
     assert '.get("code_region"' in section or ".get('code_region'" in section
+
+
+def test_enriched_context_fields_remain_opaque_dict_values() -> None:
+    section = _step2_section()
+    assert "copy the complete entry dictionary" in section
+    for field in (
+        "evidence",
+        "trace",
+        "boundary_checks",
+        "confidence",
+        "simpler_behavior",
+        "candidate_id",
+        "disposition_id",
+        "snapshot",
+    ):
+        assert field in section
+
+
+@pytest.mark.parametrize("mode", ["local", "github"])
+def test_actual_publisher_output_matches_resolve_review_path_line_boundary(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    findings = [
+        {
+            "file": "src/reach.py",
+            "line": 11,
+            "severity": "warning",
+            "dimension": "overengineering_reachability",
+            "message": "No reachable consumer",
+            "requires_decision": False,
+            "candidate_id": "reach",
+            "disposition_id": "disposition-reach",
+            "evidence": [{"opaque": "preserved"}],
+            "code_region": "[L11]+unused",
+        },
+        {
+            "file": "src/surface.py",
+            "line": 22,
+            "severity": "warning",
+            "dimension": "overengineering_abstraction_surface",
+            "message": "Unused abstraction surface",
+            "requires_decision": False,
+            "candidate_id": "surface",
+            "disposition_id": "disposition-surface",
+            "custom_proof": {"kept": True},
+        },
+        {
+            "file": "src/standard.py",
+            "line": 33,
+            "severity": "critical",
+            "dimension": "bugs",
+            "message": "Standard finding",
+            "requires_decision": False,
+            "candidate_id": "standard",
+        },
+        {
+            "file": "src/deleted.py",
+            "line": 44,
+            "severity": "critical",
+            "dimension": "deletion_regression",
+            "message": "Deletion regression",
+            "requires_decision": False,
+            "candidate_id": "deletion",
+        },
+    ]
+    publication = prepare_experimental_review_publication(
+        raw_ledger={"candidate_records": findings},
+        survivors=findings,
+        snapshot={"head_sha": "head", "base_sha": "base", "merge_base_sha": "merge"},
+        annotation_generation_id="annotation",
+        mode=mode,
+        snapshot_is_fresh=True,
+        handoff_metadata={"pr_number": 51, "iteration": 3},
+        receipt=(
+            {"posted": True, "http_status": 200, "commit_id": "head"} if mode == "github" else None
+        ),
+    )
+    published = publish_experimental_review_artifacts(
+        publication=publication,
+        output_dir=str(tmp_path / mode),
+        pr_number="51",
+    )
+
+    diff_context = json.loads(Path(published["published_paths"]["diff_context"]).read_text())
+    resolve_review_map = {
+        (entry["path"], entry["line"]): dict(entry) for entry in diff_context["context_entries"]
+    }
+    assert set(resolve_review_map) == {
+        ("src/reach.py", 11),
+        ("src/surface.py", 22),
+        ("src/standard.py", 33),
+        ("src/deleted.py", 44),
+    }
+    assert resolve_review_map[("src/reach.py", 11)]["code_region"] == "[L11]+unused"
+    assert resolve_review_map[("src/reach.py", 11)]["evidence"] == [{"opaque": "preserved"}]
+    assert resolve_review_map[("src/surface.py", 22)]["custom_proof"] == {"kept": True}
+    assert {resolve_review_map[key]["dimension"] for key in resolve_review_map} >= {
+        "overengineering_reachability",
+        "overengineering_abstraction_surface",
+        "bugs",
+        "deletion_regression",
+    }

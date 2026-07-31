@@ -57,4 +57,5 @@ agent definitions are readable via `ReadMcpResourceTool` at `agent://{pack}/{nam
 `agent://{pack}/{name}` resource path and can be skipped for packless agents.
 Current packless agents: `wp-elaborator`, `pipeline-health-scanner`, `audit-impl-slice-auditor`,
 `pr-review-auditor-baseline`, `pr-review-auditor-v1-precision`, `pr-review-auditor-v2-contrastive`,
-`pr-review-auditor-v3-simulation`, `audit-impl-deviation-evaluator`.
+`pr-review-auditor-v3-simulation`, `pr-review-auditor-reachability`,
+`pr-review-auditor-abstraction-surface`, `audit-impl-deviation-evaluator`.

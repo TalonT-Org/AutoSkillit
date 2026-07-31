@@ -6,10 +6,15 @@ and a non-table tiered fallback. Each test makes it impossible to
 silently regress its guarded element.
 """
 
+import json
+import os
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
+
+from autoskillit.smoke_utils import render_review_finding_body
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
@@ -73,6 +78,21 @@ def test_skill_has_post_completion_confirmation():
     text = SKILL_TEXT
     assert "I posted" in text and "inline comments" in text
     assert "FAILED" in text or "failed" in text
+
+
+def test_standard_findings_decode_degrades_on_parse_or_type_failure() -> None:
+    assert "except json.JSONDecodeError:" in SKILL_TEXT
+    assert "standard findings are not valid JSON" in SKILL_TEXT
+    assert "isinstance(STANDARD_FINDINGS_DECODED, list)" in SKILL_TEXT
+    assert "standard findings must be a JSON array" in SKILL_TEXT
+    assert "if STANDARD_VALIDATION_ERRORS:" in SKILL_TEXT
+    assert '"validation_errors": STANDARD_VALIDATION_ERRORS' in SKILL_TEXT
+
+
+def test_auditor_status_uses_one_authoritative_mapping() -> None:
+    assert 'AUDITOR_STATUS_BY_NAME.update(VALIDATION_RESULT["status_by_name"])' in SKILL_TEXT
+    assert "EXPERIMENTAL_AUDITOR_STATUS =" not in SKILL_TEXT
+    assert "`AUDITOR_STATUS_BY_NAME` terminal-status authority" in SKILL_TEXT
 
 
 def test_skill_labels_tier2_as_degraded_failure():
@@ -148,6 +168,162 @@ def test_step6_uses_input_flag_not_field_for_comments():
         "Step 6 must use '--input -' for the reviews POST payload. "
         "This flag must appear within Step 6 specifically (not elsewhere in SKILL.md)."
     )
+
+
+def test_step6_captures_http_status_and_publishes_receipt_only_on_200() -> None:
+    step6_start = SKILL_TEXT.index("### Step 6")
+    step65_start = SKILL_TEXT.index("### Step 6.5")
+    section = SKILL_TEXT[step6_start:step65_start]
+    assert "--include --input -" in section
+    assert 'HTTP_STATUS="$(' in section
+    assert "awk 'toupper($1) ~ /^HTTP\\//" in section
+    assert 'if [ "$HTTP_STATUS" = "200" ]; then' in section
+    assert "refresh_final_snapshot_state" in section
+    assert "RECEIPT_DOCUMENT=" in section
+    assert "http_status:200" in section
+    assert '--arg commit_id "$COMMIT_ID"' in section
+    assert '--arg review_generation_id "$REVIEW_GENERATION_ID"' in section
+    assert "must not write the fixed receipt" in section
+    assert "comments` array" in section
+    assert "POSTED_REVIEW_ID=" in section
+    assert '/reviews/"$POSTED_REVIEW_ID"/dismissals' in section
+    assert "--method PUT" in section
+    assert "sleep 1" in section
+    assert "STALE_REVIEW_COMPENSATION_FAILED=true" in section
+    assert section.count("verdict=stale_snapshot") >= 2
+
+
+@pytest.mark.parametrize(
+    ("http_status", "snapshot_rc", "expect_receipt"),
+    [("200", "0", True), ("201", "0", False), ("200", "1", False)],
+)
+def test_step6_receipt_effect_requires_http_200_and_fresh_authoritative_commit(
+    tmp_path: Path,
+    http_status: str,
+    snapshot_rc: str,
+    expect_receipt: bool,
+) -> None:
+    block_start = SKILL_TEXT.index('if [ "$HTTP_STATUS" = "200" ]; then')
+    block_end = SKILL_TEXT.index('rm -f -- "$BATCH_RESPONSE_TMP"', block_start)
+    receipt_block = SKILL_TEXT[block_start:block_end]
+    capture_path = tmp_path / "receipt-in-memory.json"
+    script = "\n".join(
+        [
+            'revalidate_retained_snapshot() { return "$SNAPSHOT_RC"; }',
+            (
+                "refresh_final_snapshot_state() { "
+                "if revalidate_retained_snapshot; then FINAL_SNAPSHOT_STATE=fresh; "
+                "else FINAL_SNAPSHOT_STATE=stale; fi; }"
+            ),
+            receipt_block,
+            'printf \'%s\' "$RECEIPT_DOCUMENT" > "$CAPTURE_PATH"',
+        ]
+    )
+    env = {
+        **os.environ,
+        "HTTP_STATUS": http_status,
+        "SNAPSHOT_RC": snapshot_rc,
+        "REVIEW_OUTPUT_DIR": f"{tmp_path}/",
+        "pr_number": "42",
+        "COMMIT_ID": "authoritative-head",
+        "REVIEW_GENERATION_ID": "review-generation",
+        "CAPTURE_PATH": str(capture_path),
+    }
+
+    result = subprocess.run(
+        ["bash", "-c", script],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not (tmp_path / "batch_review_response_42.json").exists()
+    serialized_receipt = capture_path.read_text()
+    assert bool(serialized_receipt) is expect_receipt
+    if expect_receipt:
+        receipt = json.loads(serialized_receipt)
+        assert receipt == {
+            "posted": True,
+            "http_status": 200,
+            "commit_id": "authoritative-head",
+            "review_generation_id": "review-generation",
+        }
+
+
+@pytest.mark.parametrize(
+    ("dismiss_exit_code", "expected_compensation_failed"),
+    [(0, "false"), (1, "true")],
+)
+def test_step6_stale_snapshot_dismisses_posted_authoritative_review(
+    tmp_path: Path,
+    dismiss_exit_code: int,
+    expected_compensation_failed: str,
+) -> None:
+    block_start = SKILL_TEXT.index('if [ "$HTTP_STATUS" = "200" ]; then')
+    block_end = SKILL_TEXT.index('rm -f -- "$BATCH_RESPONSE_TMP"', block_start)
+    receipt_block = SKILL_TEXT[block_start:block_end]
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        '#!/usr/bin/env bash\nprintf \'%s\\0\' "$@" > "$GH_ARGS_PATH"\nexit "$GH_EXIT_CODE"\n'
+    )
+    fake_gh.chmod(0o755)
+    gh_args_path = tmp_path / "gh-args.txt"
+    compensation_path = tmp_path / "compensation.txt"
+    script = "\n".join(
+        [
+            "refresh_final_snapshot_state() { FINAL_SNAPSHOT_STATE=stale; }",
+            "sleep() { :; }",
+            receipt_block,
+            ('printf \'%s\' "${STALE_REVIEW_COMPENSATION_FAILED:-false}" > "$COMPENSATION_PATH"'),
+        ]
+    )
+    env = {
+        **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "HTTP_STATUS": "200",
+        "POSTED_REVIEW_ID": "987",
+        "REVIEW_EVENT": "REQUEST_CHANGES",
+        "GH_ARGS_PATH": str(gh_args_path),
+        "GH_EXIT_CODE": str(dismiss_exit_code),
+        "COMPENSATION_PATH": str(compensation_path),
+    }
+
+    result = subprocess.run(
+        ["bash", "-c", script],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    gh_args = [item.decode() for item in gh_args_path.read_bytes().split(b"\0") if item]
+    assert gh_args == [
+        "api",
+        "/repos/{owner}/{repo}/pulls/{pr_number}/reviews/987/dismissals",
+        "--method",
+        "PUT",
+        "--field",
+        "message=Dismissed because the PR snapshot changed during review submission",
+    ]
+    assert compensation_path.read_text() == expected_compensation_failed
+
+
+def test_primary_and_every_fallback_reuse_the_canonical_rendered_body() -> None:
+    step6 = SKILL_TEXT[
+        SKILL_TEXT.index("### Step 6: Post Inline Review Comments") : SKILL_TEXT.index(
+            "### Step 6.5"
+        )
+    ]
+    assert "body: .rendered_body" in step6
+    assert step6.count('--field body="{finding.rendered_body}"') >= 2
+    assert "`finding.rendered_body` verbatim for every bullet" in step6
 
 
 def test_step15_resolve_review_uses_input_flag_not_field_for_comments():
@@ -254,6 +430,56 @@ def test_step6_uses_filtered_findings_as_comment_source():
         "Step 6 must reference FILTERED_FINDINGS as the source for inline comments. "
         "Using all findings bypasses hunk-range validation from Step 4."
     )
+
+
+def test_step6_rendering_preserves_accepted_evidence_and_disposition_provenance():
+    """The concrete jq payload must carry accepted proof evidence through GitHub."""
+    step6_start = SKILL_TEXT.index("### Step 6")
+    step65_start = SKILL_TEXT.index("### Step 6.5", step6_start)
+    step6_section = SKILL_TEXT[step6_start:step65_start]
+    prefix = 'COMMENTS_JSON=$(jq -n --argjson findings "$FILTERED_FINDINGS" \''
+    program_start = step6_section.index(prefix) + len(prefix)
+    program_end = step6_section.index("\n')", program_start)
+    jq_program = step6_section[program_start:program_end]
+    finding = {
+        "file": "src/app.py",
+        "line": 42,
+        "severity": "warning",
+        "dimension": "overengineering_reachability",
+        "message": "Unreachable state machinery",
+        "candidate_id": "candidate-1",
+        "disposition_id": "disposition-1",
+        "evidence": [
+            {
+                "path": "src/app.py",
+                "line": 42,
+                "role": "anchor",
+                "claim": "State is declared here",
+            },
+            {
+                "path": "src/caller.py",
+                "line": 7,
+                "role": "caller",
+                "claim": "Only caller excludes the state",
+            },
+        ],
+    }
+    findings = [{**finding, "rendered_body": render_review_finding_body(finding)}]
+
+    result = subprocess.run(
+        ["jq", "-n", "--argjson", "findings", json.dumps(findings), jq_program],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    comments = json.loads(result.stdout)
+
+    assert len(comments) == 1
+    body = comments[0]["body"]
+    assert "src/app.py:42 [anchor] State is declared here" in body
+    assert "src/caller.py:7 [caller] Only caller excludes the state" in body
+    assert "candidate_id=candidate-1" in body
+    assert "disposition_id=disposition-1" in body
 
 
 def test_step65_positioned_between_step6_and_step7():
@@ -756,3 +982,47 @@ def test_resolve_research_review_handles_null_line_file_level_threads():
         "resolve-research-review Step 3 must handle null-line file-level comment "
         "threads by skipping them — they have no code anchor."
     )
+
+
+def test_review_pr_effects_use_authoritative_commit_after_freshness_guard() -> None:
+    step6_start = SKILL_TEXT.index("### Step 6: Post Inline Review Comments")
+    step7_start = SKILL_TEXT.index("### Step 7: Submit Summary Review")
+    step6 = SKILL_TEXT[step6_start:step7_start]
+
+    stale_guard = step6.index("stale_snapshot")
+    commit_binding = step6.index('COMMIT_ID="$METRICS_HEAD_SHA"')
+    first_mutation = step6.index("gh api ")
+
+    assert stale_guard < commit_binding < first_mutation
+    assert "Never replace it with a later HEAD query" in step6
+    assert "--arg commit_id" in step6
+
+
+def test_review_pr_batch_success_and_mutation_delay_contract() -> None:
+    step7 = SKILL_TEXT[
+        SKILL_TEXT.index("### Step 7: Submit Summary Review") : SKILL_TEXT.index(
+            "### Step 8: Write Summary and Emit Verdict"
+        )
+    ]
+
+    normalized_step7 = " ".join(step7.split())
+    assert "Treat HTTP 200 as success" in normalized_step7
+    assert "without inspecting a returned `comments` array" in normalized_step7
+    assert "one-second delay" in normalized_step7
+
+
+def test_rejected_experimental_candidates_never_reach_comment_payloads() -> None:
+    step4 = SKILL_TEXT[
+        SKILL_TEXT.index("### Step 4: Aggregate and Deduplicate Findings") : SKILL_TEXT.index(
+            "### Step 4.5: Echo Primary Obligation"
+        )
+    ]
+    step6 = SKILL_TEXT[
+        SKILL_TEXT.index("### Step 6: Post Inline Review Comments") : SKILL_TEXT.index(
+            "### Step 7: Submit Summary Review"
+        )
+    ]
+
+    assert "Feed only parent-accepted experimental findings" in step4
+    assert "FILTERED_FINDINGS only" in step6
+    assert "not `UNPOSTABLE_FINDINGS`" in step6

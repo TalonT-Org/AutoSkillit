@@ -1,7 +1,7 @@
 ---
 name: review-pr
 categories: [github]
-uses_capabilities: [agent_model, github_api_write]
+uses_capabilities: [agent_model, agent_subagent, github_api_write]
 description: Automated diff-scoped PR code review using parallel audit subagents. Posts inline GitHub review comments and submits a summary verdict. Use after a PR is opened to gate CI on review approval.
 hooks:
   PreToolUse:
@@ -45,12 +45,19 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - Create files outside `{{AUTOSKILLIT_TEMP}}/review-pr/`
 - Approve a PR that has `changes_requested` findings
 - Post review comments when `gh` is unavailable — output `verdict=needs_human` and exit 0
-- Review files outside the PR diff — scope all audit to diff content only
+- Let standard or deletion agents read outside the supplied PR diff content
 - Modify any source code
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
-- Specify `subagent_type` when spawning audit subagents — these are ephemeral agents, not registered agent definitions. Use `Agent(model="sonnet")` exactly as shown, with no `subagent_type` parameter.
-- Embed diff content inline in subagent prompts — always pass by path and instruct subagents to Read
+- Specify `subagent_type` for standard or deletion audit agents. The only permitted
+  registered calls are the exact reachability and abstraction-surface calls in Step 3.
+- Give standard or deletion agents repository-read access. Only the two registered
+  proof-only auditors may use `Read`, `Grep`, and `Glob`, and only under
+  `REVIEW_CHECKOUT_ROOT`.
+- Embed diff content inline in standard or deletion subagent prompts; those ephemeral
+  agents continue to consume the annotated artifact path.
+- Pass an experimental auditor only artifact paths or a narrative. Both registered calls
+  must receive the actual annotated `[LNNN]` content and exact valid-line authority.
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not from a pre-captured URL)
@@ -59,9 +66,16 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - Exit non-zero only for unrecoverable errors (e.g., gh CLI truly unavailable after graceful degradation has already output verdict=needs_human)
 - Tag the authenticated GitHub user (`gh api user -q .login`) in escalation comments (`needs_human` verdict) — omit the mention silently if username derivation fails
 - Spawn all subagents via `Agent(model="sonnet")`
+- Bind the checkout root, refs, exact diff, manifest generation, agent working directory,
+  parent evidence reads, and every effect to the same metrics authority
+- Revalidate checkout/live refs and the byte-identical metrics marker immediately before
+  verdict, artifact handoff, or GitHub mutation
 - Deduplicate findings by (file, line) pairs before posting
 - Issue all Task calls in a single message to maximize parallelism
-- Use the Write tool or bash redirects (`> path`) for all file writes — never `open(path, 'w')` or `.write_text()` inside a `python3` heredoc or `python3 -c` invocation, as these are blocked by the write guard
+- Publish every fixed-name file through a same-directory `mktemp` path and atomic
+  `mv`; a redirect may target only that temporary path, never the fixed destination.
+  Never `open(path, 'w')` or `.write_text()` inside a `python3` heredoc or
+  `python3 -c` invocation, as these are blocked by the write guard
 
 ## Workflow
 
@@ -199,7 +213,11 @@ else:
 
 Save to: `${REVIEW_OUTPUT_DIR}prior_threads_{pr_number}.json`
 
-Use `jq -n` or the Write tool to create this file. If the file already exists from a prior review loop iteration, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`). Do not use inline Python one-liners or heredoc scripts with `open()` — these are blocked by the sandbox.
+Render with `jq -n` into a same-directory `mktemp` path, then atomically `mv` that
+temporary over the fixed destination. If using the Write tool, write the temporary
+path first and rename it. Never redirect directly to the fixed destination. Do not
+use inline Python one-liners or heredoc scripts with `open()` — these are blocked by
+the sandbox.
 
 If the GraphQL call fails (token scope, network): set both lists to `[]` and log a warning.
 Prior-thread context is best-effort — failure must not abort the review.
@@ -218,40 +236,306 @@ Save the diff to `${REVIEW_OUTPUT_DIR}diff_{pr_number}.txt`. (relative to the cu
 
 ### Step 2.7: Deterministic Diff Annotation
 
-Read pre-computed annotated diff and hunk ranges from disk when available, but only if the
-cached metadata is fresh (i.e., the embedded `_head_sha` matches the PR's current HEAD commit).
-Stale metadata from a previous loop iteration is discarded to prevent posting inline comments
-with wrong line numbers after a force-push.
+Treat `metrics_{pr_number}.json` as the commit marker for one immutable annotation
+generation. The gate has three states: `valid_true`, `valid_false`, or `degraded`.
+Freshness and the complete artifact manifest MUST validate before consuming the
+gate boolean. The review LLM never counts lines or infers eligibility.
 
 ```bash
+REVIEW_CHECKOUT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+METRICS_HEAD_SHA=""
+METRICS_BASE_SHA=""
+METRICS_MERGE_BASE_SHA=""
+CHECKOUT_HEAD_SHA=""
+CHECKOUT_BASE_SHA=""
+CHECKOUT_MERGE_BASE_SHA=""
+LIVE_REFS=""
+LIVE_HEAD_SHA=""
+LIVE_BASE_SHA=""
+DIFF_SHA256=""
+PROFILE_ID=""
+ANNOTATION_GENERATION_ID=""
+METRICS_MARKER_BEFORE=""
+METRICS_MARKER_AFTER=""
+ARTIFACT_SNAPSHOT_DIR=""
+ANNOTATED_DIFF_SNAPSHOT_PATH=""
+HUNK_RANGES_SNAPSHOT_PATH=""
+VALID_LINES_SNAPSHOT_PATH=""
 ANNOTATED_DIFF=""
 VALID_LINE_RANGES="{}"
 VALID_DIFF_LINES=""
-if [ -n "${diff_metrics_path:-}" ] && [ -f "$diff_metrics_path" ]; then
-    cached_sha=$(python3 -c "import json; d=json.load(open('$diff_metrics_path')); print(d.get('_head_sha',''))" 2>/dev/null || echo "")
-    live_sha=$(gh pr view "${pr_number}" --json headRefOid -q .headRefOid 2>/dev/null || echo "")
+GATE_STATE=degraded
+GATE_REASON_CODE=metrics_missing
+GATE_FAILED=false
+GATE_AUTHORITY='{"state":"degraded","reason_code":"metrics_missing","snapshot":{},"annotation_generation_id":""}'
+STANDARD_RAW_FINDINGS='[]'
+EXPERIMENTAL_CANDIDATES='[]'
+EXPERIMENTAL_AUDIT_STATE=not_eligible
+AUDITOR_STATUS_BY_NAME='{"pr-review-auditor-reachability":{"status":"not_started","reason_code":"not_eligible"},"pr-review-auditor-abstraction-surface":{"status":"not_started","reason_code":"not_eligible"}}'
+FINAL_SNAPSHOT_STATE=authority_degraded
+COMMIT_ID=""
+HTTP_STATUS=""
+BATCH_RESPONSE_TMP=""
+POSTED_REVIEW_ID=""
+RECEIPT_DOCUMENT=""
+STALE_REVIEW_COMPENSATION_FAILED=false
 
-    if [ -n "$cached_sha" ] && [ -n "$live_sha" ] && [ "$cached_sha" = "$live_sha" ]; then
-        if [ -n "${annotated_diff_path:-}" ] && [ -f "$annotated_diff_path" ]; then
-            ANNOTATED_DIFF="$(tail -n +2 "$annotated_diff_path")"
+# Closed degraded reason codes:
+# metrics_missing, metrics_invalid_json, manifest_missing, manifest_invalid,
+# profile_invalid, ref_missing, snapshot_mismatch, artifact_missing,
+# artifact_name_mismatch, artifact_length_mismatch, artifact_digest_mismatch,
+# marker_changed, gate_missing, gate_not_boolean.
+degrade_gate() {
+    if [ "$GATE_FAILED" = false ]; then
+        GATE_STATE=degraded
+        GATE_REASON_CODE="$1"
+        GATE_FAILED=true
+    fi
+    ANNOTATED_DIFF=""
+    VALID_LINE_RANGES="{}"
+    VALID_DIFF_LINES=""
+}
+
+if [ -z "$REVIEW_CHECKOUT_ROOT" ] || [ ! -d "$REVIEW_CHECKOUT_ROOT" ]; then
+    degrade_gate ref_missing
+elif [ -z "${diff_metrics_path:-}" ] || [ ! -f "$diff_metrics_path" ]; then
+    degrade_gate metrics_missing
+else
+    # Retain one candidate generation in invocation-scoped files. Each cp reads
+    # through one open descriptor, so atomic publisher replacement can select an
+    # old or new complete file but cannot create mixed bytes within a retained file.
+    ARTIFACT_SNAPSHOT_DIR="$(mktemp -d "${REVIEW_OUTPUT_DIR%/}/gate_snapshot.XXXXXX")" ||
+        degrade_gate artifact_missing
+    METRICS_MARKER_BEFORE="${ARTIFACT_SNAPSHOT_DIR}/metrics.before"
+    METRICS_MARKER_AFTER="${ARTIFACT_SNAPSHOT_DIR}/metrics.after"
+    if [ "$GATE_FAILED" = false ] &&
+       ! cp -- "$diff_metrics_path" "$METRICS_MARKER_BEFORE"; then
+        degrade_gate metrics_missing
+    fi
+
+    if [ "$GATE_FAILED" = false ] &&
+       ! jq -e 'type == "object"' < "$METRICS_MARKER_BEFORE" >/dev/null; then
+        degrade_gate metrics_invalid_json
+    elif [ "$GATE_FAILED" = false ] &&
+         ! jq -e '
+        has("_head_sha") and
+        has("_base_sha") and
+        has("generation_id") and
+        has("diff_sha256") and
+        has("diff_byte_length") and
+        has("diff_source") and
+        has("artifacts") and
+        (.artifacts | has("annotated_diff") and has("hunk_ranges") and has("valid_lines"))
+    ' < "$METRICS_MARKER_BEFORE" >/dev/null; then
+        degrade_gate manifest_missing
+    elif [ "$GATE_FAILED" = false ] &&
+         ! jq -e '
+        (._head_sha | type == "string" and length > 0) and
+        (._base_sha | type == "string" and length > 0) and
+        (.generation_id | type == "string" and length > 0) and
+        (.diff_sha256 | type == "string" and length == 64) and
+        (.diff_byte_length | type == "number" and . >= 0 and floor == .) and
+        (.diff_source | type == "object") and
+        (.artifacts | type == "object") and
+        (.artifacts.annotated_diff | type == "object") and
+        (.artifacts.hunk_ranges | type == "object") and
+        (.artifacts.valid_lines | type == "object")
+    ' < "$METRICS_MARKER_BEFORE" >/dev/null; then
+        degrade_gate manifest_invalid
+    fi
+
+    if [ "$GATE_FAILED" = false ]; then
+        METRICS_HEAD_SHA="$(jq -r '._head_sha' < "$METRICS_MARKER_BEFORE")"
+        METRICS_BASE_SHA="$(jq -r '._base_sha' < "$METRICS_MARKER_BEFORE")"
+        METRICS_MERGE_BASE_SHA="$(jq -r '._merge_base_sha // ""' < "$METRICS_MARKER_BEFORE")"
+        ANNOTATION_GENERATION_ID="$(jq -r '.generation_id' < "$METRICS_MARKER_BEFORE")"
+        DIFF_SHA256="$(jq -r '.diff_sha256' < "$METRICS_MARKER_BEFORE")"
+        PROFILE_ID="$(jq -r '.diff_source.profile_id // ""' < "$METRICS_MARKER_BEFORE")"
+
+        # Validate the closed source/profile object before any gate read.
+        if [ "$MODE" = "local" ]; then
+            jq -e '
+              .review_mode == "local" and .diff_source == {
+                "comparison":"merge_base_to_head","context_lines":3,
+                "external_diff":false,"kind":"local_git",
+                "profile_id":"local_git_pinned_v1","rename_detection":"50%",
+                "text_conversion":false
+              }' < "$METRICS_MARKER_BEFORE" >/dev/null || degrade_gate profile_invalid
+        else
+            jq -e '
+              .review_mode == "github" and .diff_source == {
+                "comparison":"pull_request","context_lines":3,
+                "external_diff":false,"kind":"github_pr",
+                "profile_id":"github_pr_diff_v1","rename_detection":"provider_default",
+                "text_conversion":false
+              }' < "$METRICS_MARKER_BEFORE" >/dev/null || degrade_gate profile_invalid
         fi
-        if [ -n "${hunk_ranges_path:-}" ] && [ -f "$hunk_ranges_path" ]; then
-            VALID_LINE_RANGES="$(cat "$hunk_ranges_path")"
+
+        CHECKOUT_HEAD_SHA="$(git -C "$REVIEW_CHECKOUT_ROOT" rev-parse HEAD 2>/dev/null || true)"
+        if [ -z "$CHECKOUT_HEAD_SHA" ] || [ "$CHECKOUT_HEAD_SHA" != "$METRICS_HEAD_SHA" ]; then
+            degrade_gate snapshot_mismatch
+        elif [ "$MODE" = "local" ]; then
+            CHECKOUT_BASE_SHA="$(git -C "$REVIEW_CHECKOUT_ROOT" rev-parse "${base_branch}" 2>/dev/null || true)"
+            CHECKOUT_MERGE_BASE_SHA="$(git -C "$REVIEW_CHECKOUT_ROOT" merge-base "$CHECKOUT_BASE_SHA" "$CHECKOUT_HEAD_SHA" 2>/dev/null || true)"
+            if [ -z "$CHECKOUT_BASE_SHA" ] || [ -z "$CHECKOUT_MERGE_BASE_SHA" ]; then
+                degrade_gate ref_missing
+            elif [ "$CHECKOUT_BASE_SHA" != "$METRICS_BASE_SHA" ] ||
+                 [ "$CHECKOUT_MERGE_BASE_SHA" != "$METRICS_MERGE_BASE_SHA" ]; then
+                degrade_gate snapshot_mismatch
+            fi
+        else
+            LIVE_REFS="$(
+              gh api "repos/{owner}/{repo}/pulls/${pr_number}" \
+                --jq '{headRefOid:.head.sha,baseRefOid:.base.sha}' 2>/dev/null || true
+            )"
+            LIVE_HEAD_SHA="$(printf '%s' "$LIVE_REFS" | jq -r '.headRefOid // ""' 2>/dev/null)"
+            LIVE_BASE_SHA="$(printf '%s' "$LIVE_REFS" | jq -r '.baseRefOid // ""' 2>/dev/null)"
+            if [ -z "$LIVE_HEAD_SHA" ] || [ -z "$LIVE_BASE_SHA" ]; then
+                degrade_gate ref_missing
+            elif [ "$LIVE_HEAD_SHA" != "$METRICS_HEAD_SHA" ] ||
+                 [ "$LIVE_BASE_SHA" != "$METRICS_BASE_SHA" ]; then
+                degrade_gate snapshot_mismatch
+            fi
         fi
-        if [ -n "${valid_lines_path:-}" ] && [ -f "$valid_lines_path" ]; then
-            VALID_DIFF_LINES="$(cat "$valid_lines_path")"
+
+        # Verify fixed path names, byte lengths, and SHA-256 digests.
+        for artifact_key in annotated_diff hunk_ranges valid_lines; do
+            case "$artifact_key" in
+              annotated_diff)
+                artifact_path="${annotated_diff_path:-}"
+                retained_path="${ARTIFACT_SNAPSHOT_DIR}/annotated_diff"
+                ANNOTATED_DIFF_SNAPSHOT_PATH="$retained_path"
+                ;;
+              hunk_ranges)
+                artifact_path="${hunk_ranges_path:-}"
+                retained_path="${ARTIFACT_SNAPSHOT_DIR}/hunk_ranges"
+                HUNK_RANGES_SNAPSHOT_PATH="$retained_path"
+                ;;
+              valid_lines)
+                artifact_path="${valid_lines_path:-}"
+                retained_path="${ARTIFACT_SNAPSHOT_DIR}/valid_lines"
+                VALID_LINES_SNAPSHOT_PATH="$retained_path"
+                ;;
+            esac
+            expected_name="$(jq -r ".artifacts.${artifact_key}.basename // \"\"" < "$METRICS_MARKER_BEFORE")"
+            expected_length="$(jq -r ".artifacts.${artifact_key}.byte_length // \"\"" < "$METRICS_MARKER_BEFORE")"
+            expected_digest="$(jq -r ".artifacts.${artifact_key}.sha256 // \"\"" < "$METRICS_MARKER_BEFORE")"
+            if [ -z "$artifact_path" ] || [ ! -f "$artifact_path" ]; then
+                degrade_gate artifact_missing
+            elif [ "$(basename "$artifact_path")" != "$expected_name" ]; then
+                degrade_gate artifact_name_mismatch
+            elif ! cp -- "$artifact_path" "$retained_path"; then
+                degrade_gate artifact_missing
+            elif [ "$(wc -c < "$retained_path" | tr -d ' ')" != "$expected_length" ]; then
+                degrade_gate artifact_length_mismatch
+            elif [ "$(sha256sum "$retained_path" | cut -d' ' -f1)" != "$expected_digest" ]; then
+                degrade_gate artifact_digest_mismatch
+            fi
+        done
+
+        if ! cp -- "$diff_metrics_path" "$METRICS_MARKER_AFTER" ||
+           ! cmp -s "$METRICS_MARKER_BEFORE" "$METRICS_MARKER_AFTER"; then
+            degrade_gate marker_changed
+        elif ! jq -e 'has("run_overengineering_audits")' < "$METRICS_MARKER_BEFORE" >/dev/null; then
+            degrade_gate gate_missing
+        elif ! jq -e '.run_overengineering_audits | type == "boolean"' < "$METRICS_MARKER_BEFORE" >/dev/null; then
+            degrade_gate gate_not_boolean
+        elif [ "$GATE_FAILED" = true ]; then
+            : # Retain the first deterministic validation failure.
+        elif [ "$(jq -r '.run_overengineering_audits' < "$METRICS_MARKER_BEFORE")" = true ]; then
+            GATE_STATE=valid_true
+            GATE_REASON_CODE=none
+            EXPERIMENTAL_AUDIT_STATE=pending
+        else
+            GATE_STATE=valid_false
+            GATE_REASON_CODE=none
+            EXPERIMENTAL_AUDIT_STATE=not_required
         fi
-    else
-        unset annotated_diff_path hunk_ranges_path valid_lines_path diff_metrics_path
+
+        if [ "$GATE_STATE" = valid_true ] || [ "$GATE_STATE" = valid_false ]; then
+            # Consume only the retained, digest-validated sidecars. Keep these files
+            # for final pre-effect revalidation; never reread the publisher paths.
+            ANNOTATED_DIFF="$(tail -n +2 "$ANNOTATED_DIFF_SNAPSHOT_PATH")"
+            VALID_LINE_RANGES="$(cat "$HUNK_RANGES_SNAPSHOT_PATH")"
+            VALID_DIFF_LINES="$(cat "$VALID_LINES_SNAPSHOT_PATH")"
+        fi
     fi
 fi
+
+GATE_AUTHORITY="$(jq -cn \
+  --arg state "$GATE_STATE" \
+  --arg reason_code "$GATE_REASON_CODE" \
+  --arg head_sha "$METRICS_HEAD_SHA" \
+  --arg base_sha "$METRICS_BASE_SHA" \
+  --arg merge_base_sha "$METRICS_MERGE_BASE_SHA" \
+  --arg diff_sha256 "${DIFF_SHA256:-}" \
+  --arg profile_id "${PROFILE_ID:-}" \
+  --arg annotation_generation_id "${ANNOTATION_GENERATION_ID:-}" \
+  '{state:$state,reason_code:$reason_code,snapshot:{
+    head_sha:$head_sha,base_sha:$base_sha,merge_base_sha:$merge_base_sha,
+    diff_sha256:$diff_sha256,profile_id:$profile_id
+  },annotation_generation_id:$annotation_generation_id}')"
+
+revalidate_retained_snapshot() {
+    local current_marker="" current_head="" current_base="" current_merge_base=""
+    local current_live_refs="" current_live_head="" current_live_base=""
+    [ "$GATE_STATE" = valid_true ] || [ "$GATE_STATE" = valid_false ] || return 1
+    current_marker="$(mktemp "${REVIEW_OUTPUT_DIR%/}/metrics_recheck.XXXXXX")" || return 1
+    if ! cp -- "$diff_metrics_path" "$current_marker" ||
+       ! cmp -s "$METRICS_MARKER_BEFORE" "$current_marker" ||
+       ! cmp -s "$annotated_diff_path" "$ANNOTATED_DIFF_SNAPSHOT_PATH" ||
+       ! cmp -s "$hunk_ranges_path" "$HUNK_RANGES_SNAPSHOT_PATH" ||
+       ! cmp -s "$valid_lines_path" "$VALID_LINES_SNAPSHOT_PATH"; then
+        rm -f -- "$current_marker"
+        return 1
+    fi
+    rm -f -- "$current_marker"
+
+    current_head="$(git -C "$REVIEW_CHECKOUT_ROOT" rev-parse HEAD 2>/dev/null || true)"
+    [ "$current_head" = "$METRICS_HEAD_SHA" ] || return 1
+    if [ "$MODE" = "local" ]; then
+        current_base="$(git -C "$REVIEW_CHECKOUT_ROOT" rev-parse "$base_branch" 2>/dev/null || true)"
+        current_merge_base="$(git -C "$REVIEW_CHECKOUT_ROOT" merge-base "$current_base" "$current_head" 2>/dev/null || true)"
+        [ "$current_base" = "$METRICS_BASE_SHA" ] &&
+            [ "$current_merge_base" = "$METRICS_MERGE_BASE_SHA" ]
+    else
+        current_live_refs="$(
+          gh api "repos/{owner}/{repo}/pulls/${pr_number}" \
+            --jq '{headRefOid:.head.sha,baseRefOid:.base.sha}' 2>/dev/null || true
+        )"
+        current_live_head="$(printf '%s' "$current_live_refs" | jq -r '.headRefOid // ""' 2>/dev/null)"
+        current_live_base="$(printf '%s' "$current_live_refs" | jq -r '.baseRefOid // ""' 2>/dev/null)"
+        [ "$current_live_head" = "$METRICS_HEAD_SHA" ] &&
+            [ "$current_live_base" = "$METRICS_BASE_SHA" ]
+    fi
+}
+
+refresh_final_snapshot_state() {
+    if [ "$GATE_STATE" = valid_true ] || [ "$GATE_STATE" = valid_false ]; then
+        if revalidate_retained_snapshot; then
+            FINAL_SNAPSHOT_STATE=fresh
+        else
+            FINAL_SNAPSHOT_STATE=stale
+        fi
+    else
+        # Missing/malformed authority is degradation, not movement of a retained
+        # valid snapshot. It must resolve to needs_human, never stale_snapshot.
+        FINAL_SNAPSHOT_STATE=authority_degraded
+    fi
+}
 ```
 
-`VALID_DIFF_LINES` is a JSON mapping `{filepath: [line_numbers]}` containing the exact set of
-new-file line numbers present in the diff. When available, Step 4 uses set-membership for
-validation instead of hunk-span interval checking. `VALID_LINE_RANGES` is a JSON mapping file
-paths to valid hunk line ranges used as fallback. If all paths are absent or the SHA check
-fails, leave variables empty (no filtering).
+`VALID_DIFF_LINES` is the exact right-side changed-line authority. An eligible
+experimental run may never fall back to `VALID_LINE_RANGES`. Standard findings retain
+the existing exact-line-first, hunk-range-fallback behavior. Every Git command, agent
+working directory, containment check, and parent evidence read uses
+`REVIEW_CHECKOUT_ROOT`.
+Call `refresh_final_snapshot_state` immediately before evidence reads, verdict
+computation, every GitHub mutation, and the single handoff publication. Only a
+previously valid retained authority that later fails byte/ref revalidation sets
+`FINAL_SNAPSHOT_STATE=stale`. Missing or malformed initial gate authority remains
+`authority_degraded` and resolves to `needs_human`; it is not a stale snapshot.
+Neither branch triggers a fresh sidecar read or adopts a newer generation.
 
 ### Step 2.5: Deletion Context Pre-Computation
 
@@ -309,51 +593,94 @@ deletion_context = {
 
 If `MERGE_BASE` is empty or any git command fails, set `deletion_context = null`.
 The parallel deletion regression audit is skipped when `deletion_context` is null.
+Resolve the dispatch decision with the installed production helper; it accepts no
+overengineering gate input, so the two authorities cannot become coupled:
+
+```python
+from autoskillit.smoke_utils import deletion_regression_is_eligible
+
+DELETION_DISPATCH_REQUIRED = deletion_regression_is_eligible(deletion_context)
+```
 
 ### Step 2.9: Diff-Size Adaptive Agent Selection
 
-Read the pre-computed diff metrics when available:
+Keep standard adaptive selection, experimental eligibility, and deletion
+eligibility as separate authorities:
 
 ```bash
-DISPATCH_AGENTS=""
-if [ -n "${diff_metrics_path:-}" ] && [ -f "$diff_metrics_path" ]; then
-    DISPATCH_AGENTS=$(cat "$diff_metrics_path" | python3 -c "import sys,json; print(','.join(json.load(sys.stdin).get('dispatch_agents',[])))" 2>/dev/null || echo "")
+STANDARD_AGENT_ALLOWLIST="arch,tests,defense,bugs,cohesion,slop"
+STANDARD_DISPATCH_AGENTS=""
+
+if [ -n "$METRICS_MARKER_BEFORE" ]; then
+    STANDARD_DISPATCH_AGENTS="$(
+      jq -r 'if (.dispatch_agents | type) == "array"
+             then .dispatch_agents | join(",") else "" end' \
+        < "$METRICS_MARKER_BEFORE" 2>/dev/null || true
+    )"
+fi
+
+if [ -z "$STANDARD_DISPATCH_AGENTS" ]; then
+    STANDARD_DISPATCH_AGENTS="$STANDARD_AGENT_ALLOWLIST"
 fi
 ```
 
-`DISPATCH_AGENTS` is a comma-separated list of audit dimension names to spawn in Step 3
-(e.g., `"tests,cohesion"` for a small diff, or `"arch,tests,defense,bugs,cohesion,slop"`
-for a medium/large diff).
+Resolve experimental dispatch from the installed ordered registry and keep its
+agent/dimension relationship structured:
 
-When `DISPATCH_AGENTS` is empty (metrics file absent or unparseable), dispatch all 6
-standard agents — this is the graceful-degradation fallback that preserves current behavior.
+```python
+from autoskillit.smoke_utils import select_experimental_review_dispatch
+
+EXPERIMENTAL_DISPATCH = select_experimental_review_dispatch(
+    gate_state=GATE_STATE,
+    annotated_diff=ANNOTATED_DIFF,
+    valid_diff_lines=VALID_DIFF_LINES,
+    standard_agent_names=STANDARD_AGENT_ALLOWLIST.split(","),
+)
+EXPERIMENTAL_DISPATCH_AGENTS = EXPERIMENTAL_DISPATCH["dispatch_agents"]
+EXPERIMENTAL_AUDIT_STATE = EXPERIMENTAL_DISPATCH["audit_state"]
+```
+
+Do not rebuild the registry as a shell comma-string or print Python values back
+through a shell bridge. The helper checks that the standard allowlist intersection is
+empty and returns `degraded` with no proof-only dispatch if it is not.
+
+`GATE_STATE=valid_false` dispatches neither proof-only auditor and leaves
+`EXPERIMENTAL_AUDIT_STATE=not_required`; by itself it does not block approval.
+`GATE_STATE=degraded` dispatches neither and blocks normal approval. Never derive the
+gate from churn counts, truthiness, hooks, environment variables, transcripts,
+sidecars, or model reasoning.
 
 **Agent selection tiers:**
 - **Small diff** (<200 added LoC and <5 changed files): `tests`, `cohesion`, and optionally `arch` if structural files changed (e.g., `__init__.py`, `pyproject.toml`).
 - **Medium/large diff** (>= 200 added LoC or >= 5 changed files): All 6 standard agents (`arch`, `tests`, `defense`, `bugs`, `cohesion`, `slop`).
 
-Note: Dimension 7 (the deletion regression audit) is NOT part of the dispatch plan — it remains
-unconditionally gated on `deletion_context` being non-null (unchanged from current behavior).
+Experimental degradation never clears, cancels, replaces, or dynamically subtracts
+standard calls. `deletion_context` remains independently gated. Missing or malformed
+adaptive selection falls back to all six standard agents and never adds a proof-only
+auditor to that fallback.
 
 ### Step 3: Run Parallel Audit Subagents (SINGLE MESSAGE)
 
-Parse `DISPATCH_AGENTS` (comma-separated string) into a list. If `DISPATCH_AGENTS` is
-non-empty, use ONLY the dimensions it lists. If empty, use all 6 standard dimensions (1-6).
+Parse `STANDARD_DISPATCH_AGENTS` and iterate the structured
+`EXPERIMENTAL_DISPATCH_AGENTS` records independently.
+Add deletion work only when `DELETION_DISPATCH_REQUIRED` is true, independently of
+`GATE_STATE`, and only while constructing the existing single foreground parallel batch.
 
 **Issue ALL Task tool calls in a single message — one per dimension — so they execute
 in parallel. Do NOT iterate through dimensions across multiple turns.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Each subagent via `Agent(model="sonnet")` receives only the PR diff content (not the full codebase) and
-returns findings in JSON format:
+Standard and deletion subagents use ephemeral `Agent(model="sonnet")` calls and receive
+only PR diff content. The two experimental agents use the exact registered calls below
+and run with cwd `REVIEW_CHECKOUT_ROOT`.
 
 ```json
 [
   {
     "file": "path/to/file.py",
     "line": 42,
-    "dimension": "arch|tests|defense|bugs|cohesion|slop|deletion_regression",
+    "dimension": "arch|tests|defense|bugs|cohesion|slop|deletion_regression|overengineering_reachability|overengineering_abstraction_surface",
     "severity": "critical|warning|info",
     "message": "Description of the finding",
     "requires_decision": false
@@ -386,6 +713,38 @@ returns findings in JSON format:
    `deletion_context` (deleted files and symbols computed in Step 2.5) to detect code
    that was intentionally removed from the base branch but re-added by this PR.
    Only spawned when `deletion_context` is non-null.
+
+8. **overengineering_reachability** — Packless, proof-only, repository-reading
+   reachability audit. It is eligible only for `GATE_STATE=valid_true`.
+
+9. **overengineering_abstraction_surface** — Packless, proof-only,
+   repository-reading abstraction-surface audit. It is eligible only for
+   `GATE_STATE=valid_true`.
+
+When eligible, issue these calls exactly once in the same foreground parallel message
+as the standard and deletion calls:
+
+- `Agent(subagent_type="autoskillit:pr-review-auditor-reachability", model="sonnet")`
+- `Agent(subagent_type="autoskillit:pr-review-auditor-abstraction-surface", model="sonnet")`
+
+For both registered calls, inline the actual `ANNOTATED_DIFF` string, the exact
+`VALID_DIFF_LINES` JSON authority, `REVIEW_CHECKOUT_ROOT`, `METRICS_HEAD_SHA`,
+`METRICS_BASE_SHA`, `METRICS_MERGE_BASE_SHA`, `DIFF_SHA256`, and
+`ANNOTATION_GENERATION_ID` in the prompt. A path, placeholder, or description is
+insufficient. Reads are restricted to the current checkout root; modifications and
+network access are forbidden.
+
+Await both outcomes and retain them in fixed configured agent order, never completion
+order. A parent cancellation cancels the whole foreground group. A proof-only auditor
+completes only after a successful terminal status and a top-level JSON array whose
+every item passes the closed schema. A valid `[]` is a successful empty result.
+
+Any tool failure, refusal, interruption, truncation, missing result, malformed JSON,
+non-array result, or schema-invalid item sets `EXPERIMENTAL_AUDIT_STATE=degraded`.
+Record the producer and deterministic reason in `AUDITOR_STATUS_BY_NAME`; do not add a
+replacement to standard fallback. One success plus one failure produces
+no partial experimental findings. Populate `EXPERIMENTAL_CANDIDATES` only after both complete
+and all items validate, preserving auditor order and original array index.
 
 Subagent prompt template (dimensions 1–6):
 
@@ -480,16 +839,184 @@ Subagent prompt template (dimension 7 — deletion_regression, only when `deleti
 
 ### Step 4: Aggregate and Deduplicate Findings
 
-1. Collect all subagent JSON responses
-2. Suppression pass — filter out prior_resolved_findings matches: after collecting raw
-   findings and before deduplication, remove any finding that matches a
-   `prior_resolved_findings` entry by same `file` path AND `line` within ±5 of the
-   resolved finding's `line`. This handles line drift caused by fix commits shifting
-   context. Log each suppressed finding:
+Keep `STANDARD_RAW_FINDINGS` separate from `EXPERIMENTAL_CANDIDATES`. Append
+standard and deletion responses only to `STANDARD_RAW_FINDINGS`.
+
+Before accepting any experimental item, validate both arrays completely. The exact
+candidate key set is `file`, `line`, `dimension`, `severity`, `message`,
+`requires_decision`, `evidence`, `trace`, `boundary_checks`, `confidence`, and
+`simpler_behavior`; reject missing or extra keys. Enforce:
+
+- dimension is exactly `overengineering_reachability` or
+  `overengineering_abstraction_surface`; severity is `critical`, `warning`, or
+  `info`; `requires_decision` is an exact boolean;
+- `file`, `message`, and `simpler_behavior` are non-empty strings after trimming;
+- primary, evidence, and trace lines are positive integers excluding booleans;
+- the primary `(file, line)` occurs in exact `VALID_DIFF_LINES`, never only a hunk
+  range;
+- evidence items have exactly `{path,line,role,claim}`, contain at least two
+  distinct repository-relative `path:line` locations, and use only `anchor`,
+  `caller`, `consumer`, `registration`, `invariant`, or
+  `counterevidence_checked`; every `path`, `role`, and `claim` is a non-empty
+  string after trimming;
+- trace items have exactly `{path,line,relation}` and form a non-empty ordered
+  chain; every `path` and `relation` is a non-empty string after trimming;
+- boundary checks contain exactly one `{boundary,status,claim}` row for each
+  `reflection_decorators`, `dependency_injection`, `plugin_registry`,
+  `cli_entrypoint`, `serialization`, `generated_code`, and `public_api`, with
+  status `checked_absent`, `checked_no_reachable_path`, or `not_applicable`;
+  every boundary `claim` is a non-empty string after trimming;
+- paths are relative, contain no `..`, and canonically remain under
+  `REVIEW_CHECKOUT_ROOT`;
+- `type(confidence)` is exactly integer or float, never boolean, is finite, and
+  lies in `[0,1]`;
+- `simpler_behavior` is non-empty and covers return values, exceptions, ordering,
+  persistence, concurrency, and compatibility.
+
+For each structurally valid item, generate `record_digest` from canonical JSON and
+generate `candidate_id` from the snapshot identity, auditor name, original array
+index, and digest. These are parent-owned fields. Any structural, containment,
+changed-line, or authority failure degrades the whole experimental run and prevents
+every sibling from entering normal aggregation.
+
+Before repository evidence reads, revalidate checkout head/base/merge-base, the
+mode-appropriate live refs, the byte-identical metrics marker, diff identity/profile,
+and all artifact digests. Quote and read each cited location under
+`REVIEW_CHECKOUT_ROOT`. Write a separate immutable disposition record with a
+parent-generated `disposition_id` referencing `candidate_id`. Confidence never
+implies acceptance. The parent must verify every role-labelled evidence claim,
+every one of the seven boundary claims, every hop in the complete ordered trace
+as a reachable chain, and the proposed simpler behavior's semantic equivalence
+for return values, exceptions, ordering, persistence, concurrency, and
+compatibility. Missing, contradictory, or unverified claims reject the candidate;
+the parent may not accept a sampled subset. The closed disposition/rejection
+reason codes are:
+`accepted`, `schema_invalid`, `path_escape`, `not_changed_line`,
+`stale_snapshot`, `insufficient_evidence`, `boundary_unchecked`,
+`reachable_counterexample`, `simpler_behavior_not_equivalent`,
+`suppressed_prior_thread`, `duplicate_candidate`, and `publication_failed`.
+Bound free-text explanation to 1 KiB UTF-8.
+
+Malformed output is stored only as a bounded envelope: producer, terminal status,
+received byte length and SHA-256, at most a 4 KiB excerpt or iteration-scoped raw
+reference, parse/schema errors, and rejection reason. Never copy unbounded model
+output into an ordinary summary.
+
+Use the installed helpers
+`autoskillit.smoke_utils.validate_experimental_auditor_outputs`,
+`build_malformed_review_envelope`, and
+`aggregate_combined_review_candidates` as the canonical executable semantics
+for fixed-order all-or-nothing validation, bounded malformed envelopes, and
+accepted-only suppression-before-dedup. The aggregation call is the single combined
+standard/deletion/experimental aggregation boundary: pass the retained snapshot
+identity, exact changed-line and hunk-range authority, all standard/deletion findings, parent
+dispositions, and prior resolved findings.
+Use `prepare_experimental_review_publication` as the canonical executable semantics
+for common generation identity, local-findings-last ordering, and stale effect
+suppression. Use `publish_experimental_review_artifacts` for same-directory temporary
+writes, marker-last atomic renames, cleanup, and rollback. Validation, aggregation,
+and preparation perform no repository reads or writes; publication writes only the
+already-prepared documents. Parent evidence adjudication and every snapshot
+revalidation remain mandatory here.
+
+Invoke validation and aggregation directly and thread their returned records into
+the named review state; do not reimplement their behavior in prose:
+
+```python
+import json
+
+from autoskillit.smoke_utils import (
+    aggregate_combined_review_candidates,
+    render_review_finding_body,
+    validate_experimental_auditor_outputs,
+)
+
+STANDARD_VALIDATION_ERRORS = []
+try:
+    STANDARD_FINDINGS_DECODED = json.loads(STANDARD_RAW_FINDINGS)
+except json.JSONDecodeError:
+    STANDARD_FINDINGS = []
+    STANDARD_VALIDATION_ERRORS.append("standard findings are not valid JSON")
+else:
+    if isinstance(STANDARD_FINDINGS_DECODED, list):
+        STANDARD_FINDINGS = STANDARD_FINDINGS_DECODED
+    else:
+        STANDARD_FINDINGS = []
+        STANDARD_VALIDATION_ERRORS.append("standard findings must be a JSON array")
+if GATE_STATE == "valid_true":
+    VALIDATION_RESULT = validate_experimental_auditor_outputs(
+        outputs=EXPERIMENTAL_OUTCOMES_BY_NAME,
+        valid_diff_lines=VALID_DIFF_LINES,
+        snapshot=GATE_AUTHORITY["snapshot"],
+        review_root=REVIEW_CHECKOUT_ROOT,
+    )
+elif GATE_STATE == "valid_false":
+    VALIDATION_RESULT = {
+        "state": "not_required",
+        "candidates": [],
+        "status_by_name": {},
+        "malformed_envelopes": [],
+    }
+else:
+    VALIDATION_RESULT = {
+        "state": "degraded",
+        "candidates": [],
+        "status_by_name": {},
+        "malformed_envelopes": [],
+    }
+EXPERIMENTAL_AUDIT_STATE = VALIDATION_RESULT["state"]
+EXPERIMENTAL_CANDIDATES = VALIDATION_RESULT["candidates"]
+AUDITOR_STATUS_BY_NAME.update(VALIDATION_RESULT["status_by_name"])
+MALFORMED_ENVELOPES = VALIDATION_RESULT["malformed_envelopes"]
+
+# Construct DISPOSITION_RECORDS only after the mandatory parent evidence reads.
+if STANDARD_VALIDATION_ERRORS:
+    AGGREGATION_RESULT = {
+        "state": "degraded",
+        "survivors": [],
+        "aggregation_records": [],
+        "validation_errors": STANDARD_VALIDATION_ERRORS,
+    }
+else:
+    AGGREGATION_RESULT = aggregate_combined_review_candidates(
+        candidates=EXPERIMENTAL_CANDIDATES,
+        dispositions=DISPOSITION_RECORDS,
+        prior_resolved_findings=prior_resolved_findings,
+        standard_findings=STANDARD_FINDINGS,
+        valid_diff_lines=VALID_DIFF_LINES,
+        valid_line_ranges=VALID_LINE_RANGES,
+        snapshot=GATE_AUTHORITY["snapshot"],
+        review_root=REVIEW_CHECKOUT_ROOT,
+    )
+if AGGREGATION_RESULT["state"] == "degraded":
+    EXPERIMENTAL_AUDIT_STATE = "degraded"
+FINAL_REVIEW_FINDINGS = [
+    {**finding, "rendered_body": render_review_finding_body(finding)}
+    for finding in AGGREGATION_RESULT["survivors"]
+]
+all_findings = FINAL_REVIEW_FINDINGS
+AGGREGATION_RECORDS = AGGREGATION_RESULT["aggregation_records"]
+```
+
+Feed only parent-accepted experimental findings into normal aggregation. The helper
+is that single normal-aggregation boundary; standard and deletion findings enter
+without experimental dispositions. It normalizes every source in fixed order: the
+standard dimension allowlist, deletion regression, reachability, then
+abstraction-surface, preserving original array index. Suppress and deduplicate
+exactly once across that combined sequence; do not append a second
+standard/deletion list afterward.
+
+1. Suppression pass — before deduplication, remove a finding matching
+   `prior_resolved_findings` by the same file and a line within ±5. Log
    `"Suppressing finding at {file}:{line} — matches prior resolved thread"`.
-   The remaining findings proceed through deduplication and verdict logic unchanged.
-3. Deduplicate by `(file, line)` pairs — keep highest severity for each pair
-4. Partition findings using exact line validation when available:
+   For experimental candidates create a linked immutable aggregation record with
+   reason `suppressed_prior_thread`; do not mutate the candidate or disposition.
+2. Deduplicate by `(file, line)` after suppression. Rank collisions by severity,
+   then prefer `requires_decision=false`, then fixed source rank and original array
+   index. Create a deterministic `dedup_group_id`; retain every member
+   `candidate_id`, the winner, and rationale. Losers receive linked
+   `duplicate_candidate` aggregation records.
+3. Partition findings using exact line validation when available:
    - When `VALID_DIFF_LINES` is non-empty (loaded in Step 2.7), use **set-membership**:
      a finding is postable if its `line` exists in `VALID_DIFF_LINES[file]`. This is
      strictly more accurate than hunk-span interval checking.
@@ -505,12 +1032,29 @@ Subagent prompt template (dimension 7 — deletion_regression, only when `deleti
      - Step 7: All unpostable findings appear in the "Outside Diff Range" section of the
        review body.
    - If both `VALID_DIFF_LINES` and `VALID_LINE_RANGES` are empty, all findings are `FILTERED_FINDINGS`.
-5. Apply verdict logic (Step 5) to ALL findings (`FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS`
+4. Apply verdict logic (Step 5) to ALL findings (`FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS`
    combined), so unpostable findings still contribute to the `changes_requested` verdict.
-6. Bucket by actionability (applied to combined findings):
+5. Bucket by actionability (applied to combined findings):
    - `actionable_findings` — requires_decision=false AND severity in ("critical", "warning")
    - `decision_findings` — requires_decision=true (any severity)
    - `info_findings` — severity == "info" AND requires_decision=false
+
+Preserve accepted experimental evidence, trace, boundary checks, confidence,
+simpler behavior, `candidate_id`, `disposition_id`, and snapshot on the dedup winner,
+diff context, local handoff, GitHub rendering, and summary. Represent validation,
+disposition, aggregation, verdict use, and publication as separate immutable linked
+records.
+
+Immediately before verdict computation and again before any artifact handoff or GitHub
+effect, call `refresh_final_snapshot_state`. If an initially valid retained snapshot
+is now unavailable or differs, discard survivor sets from effect-producing consumers,
+permit only diagnostic raw/summary envelopes with empty survivors, and emit
+`stale_snapshot`. In that movement branch the refresh helper sets
+`FINAL_SNAPSHOT_STATE=stale` before any consumer is selected. Initial gate
+degradation remains `authority_degraded` and emits
+`needs_human`. Do not publish diff context, local findings, receipts, comments,
+reviews, or approvals from either state. On freshness, set
+`COMMIT_ID="$METRICS_HEAD_SHA"` once and never query a later head to replace it.
 
 ### Step 4.5: Echo Primary Obligation
 
@@ -522,44 +1066,79 @@ This is not optional. Do not proceed to Step 5 without stating this.
 
 ### Step 5: Determine Verdict
 
-- Any `blocking_findings` (critical severity, non-decision) present → `verdict = "changes_requested"` (clear fix exists, automated resolver handles it)
-- No blocking findings, but `warning_findings` (warning severity, non-decision) present → `verdict = "approved_with_comments"` (recipe routes to `resolve_review` but does not require a re-review cycle)
-- No blocking or warning findings, but `decision_findings` present → `verdict = "needs_human"` (`needs_human` fires only when one or more findings have `requires_decision=true` — meaning the correct path forward requires a human decision that the automated reviewer cannot make)
-- No findings of any kind → `verdict = "approved"`
+Verdict precedence is authoritative:
+
+1. Final ref, marker, diff, profile, or artifact mismatch/unavailability produces
+   `stale_snapshot` and no finding-derived external effects.
+2. On a fresh snapshot, any accepted critical non-decision finding produces
+   `changes_requested`.
+3. Otherwise `GATE_STATE=degraded` or
+   `EXPERIMENTAL_AUDIT_STATE=degraded` produces `needs_human`.
+4. Otherwise preserve warning, decision, and approval behavior.
+
+No degraded gate, eligible audit, or stale snapshot may emit `approved`,
+`approved_with_comments`, or a GitHub approval event.
 
 **Verdict logic:**
 ```python
-decision_findings = [f for f in all_findings if f.get("requires_decision")]
-blocking_findings = [
-    f for f in all_findings
-    if not f.get("requires_decision") and f["severity"] == "critical"
-]
-warning_findings = [
-    f for f in all_findings
-    if not f.get("requires_decision") and f["severity"] == "warning"
-]
+from autoskillit.smoke_utils import determine_experimental_review_verdict
 
-if blocking_findings:
-    verdict = "changes_requested"
-elif warning_findings:
-    verdict = "approved_with_comments"
-elif decision_findings:
-    verdict = "needs_human"
+refresh_final_snapshot_state()
+RETAINED_SNAPSHOT_WAS_VALID = GATE_STATE in {"valid_true", "valid_false"}
+SNAPSHOT_IS_FRESH = FINAL_SNAPSHOT_STATE == "fresh"
+verdict = determine_experimental_review_verdict(
+    retained_snapshot_was_valid=RETAINED_SNAPSHOT_WAS_VALID,
+    final_snapshot_is_fresh=SNAPSHOT_IS_FRESH,
+    gate_state=GATE_STATE,
+    experimental_audit_state=EXPERIMENTAL_AUDIT_STATE,
+    findings=all_findings,
+)
+```
+
+Before Step 6, finish `RAW_LEDGER` and `HANDOFF_METADATA` in memory. The metadata
+contains the existing `summary`, `verdict`, `pr_number`, `iteration`,
+`schema_version`, and `written_at` fields. Derive the generation ID before any
+GitHub effect from the same final combined findings and ledger that Step 8 will
+publish:
+
+```python
+from autoskillit.smoke_utils import prepare_experimental_review_publication
+
+if SNAPSHOT_IS_FRESH:
+    PUBLICATION_SEED = prepare_experimental_review_publication(
+        raw_ledger=RAW_LEDGER,
+        survivors=FINAL_REVIEW_FINDINGS,
+        snapshot=GATE_AUTHORITY["snapshot"],
+        annotation_generation_id=ANNOTATION_GENERATION_ID,
+        mode=MODE,
+        snapshot_is_fresh=True,
+        handoff_metadata=HANDOFF_METADATA,
+    )
+    REVIEW_GENERATION_ID = PUBLICATION_SEED["artifacts"]["raw_findings"][
+        "review_generation_id"
+    ]
 else:
-    verdict = "approved"
+    PUBLICATION_SEED = None
+    REVIEW_GENERATION_ID = ""
 ```
 
 ### Step 6: Post Inline Review Comments
 
 **MODE BRANCHING:**
 
+Run the final freshness guard before entering this step. If it yields
+`stale_snapshot`, skip Steps 6-7 completely. Every GitHub mutation below uses the
+authoritative `COMMIT_ID="$METRICS_HEAD_SHA"` and the same checkout/annotation
+generation. Never replace it with a later HEAD query.
+
 **When `mode=local`:**
 - Skip ALL GitHub API calls for posting comments (no batch review POST, no individual comment POSTs, no file-level comments, no summary review POST)
-- Instead, write findings to `${REVIEW_OUTPUT_DIR}local_findings_{pr_number}.json`
+- Build the local findings payload in memory; Step 8 atomically publishes
+  `${REVIEW_OUTPUT_DIR}local_findings_{pr_number}.json` last
 
 **Iteration tracking:** Before writing, check if `local_findings_{pr_number}.json` already exists. If so, read its `iteration` field and set the new value to `iteration + 1`. If the file does not exist, set `iteration` to `0`.
 
-Write the local findings JSON:
+Prepare the local findings JSON:
 ```json
 {
   "findings": [
@@ -569,19 +1148,35 @@ Write the local findings JSON:
       "body": "[critical] arch: finding text",
       "severity": "critical",
       "dimension": "arch",
-      "side": "RIGHT"
+      "side": "RIGHT",
+      "evidence": [],
+      "trace": [],
+      "boundary_checks": [],
+      "confidence": 0.98,
+      "simpler_behavior": "...",
+      "candidate_id": "...",
+      "disposition_id": "...",
+      "snapshot": {}
     }
   ],
   "summary": "AutoSkillit PR Review — Verdict: {verdict}",
   "verdict": "{verdict}",
   "pr_number": "{pr_number}",
-  "iteration": {iteration_number}
+  "iteration": {iteration_number},
+  "_head_sha": "{METRICS_HEAD_SHA}",
+  "_base_sha": "{METRICS_BASE_SHA}",
+  "_merge_base_sha": "{METRICS_MERGE_BASE_SHA}",
+  "annotation_generation_id": "{ANNOTATION_GENERATION_ID}",
+  "review_generation_id": "{REVIEW_GENERATION_ID}"
 }
 ```
 
 For `iteration_number`: read from existing file (`iteration + 1`) or start at `0`.
 
-Include all findings from `FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS` (same as what would have been posted to GitHub). Use `path` as the field name (not `file`) in the JSON output for consistency with resolve-review's expected format.
+Include all findings from `FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS` (same as what
+would have been posted to GitHub). Copy the complete finding dictionary, normalize
+`file` to `path`, and add the existing `body`, `side`, and `iteration` aliases without
+discarding opaque evidence or provenance fields.
 
 **Still write mode-independent files:**
 - `${REVIEW_OUTPUT_DIR}diff_context_{pr_number}.json` (Step 8)
@@ -617,25 +1212,74 @@ COMMENTS_JSON=$(jq -n --argjson findings "$FILTERED_FINDINGS" '
     path: .file,
     line: .line,
     side: "RIGHT",
-    body: ("[" + .severity + "] " + .dimension + ": " + .message)
+    body: .rendered_body
   })
 ')
 
-# Build and post the full review payload via stdin
-jq -n \
-  --arg body "AutoSkillit PR Review — Verdict: {verdict}" \
-  --arg event "{APPROVE|COMMENT|REQUEST_CHANGES}" \
-  --argjson comments "$COMMENTS_JSON" \
-  '{body: $body, event: $event, comments: $comments}' | \
-gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \
-  --method POST --input -
-
-# Write receipt file on success — checked by check_review_posted gate in the recipe
-if [ $? -eq 0 ]; then
-  printf '{"posted":true}' \
-    > "${REVIEW_OUTPUT_DIR}batch_review_response_${pr_number}.json"
+# Build and post the full review payload via stdin. --include makes the HTTP
+# status authoritative without relying on response-body shape.
+refresh_final_snapshot_state
+if [ "$FINAL_SNAPSHOT_STATE" != fresh ]; then
+  verdict=stale_snapshot
+  SNAPSHOT_IS_FRESH=false
+  RECEIPT_DOCUMENT=""
 fi
+if [ "$FINAL_SNAPSHOT_STATE" = fresh ]; then
+  REVIEW_EVENT="{APPROVE|COMMENT|REQUEST_CHANGES}"
+  if BATCH_RESPONSE_TMP="$(mktemp "${REVIEW_OUTPUT_DIR%/}/batch_review_response.XXXXXX")"; then
+    jq -n \
+      --arg body "AutoSkillit PR Review — Verdict: {verdict}" \
+      --arg event "$REVIEW_EVENT" \
+      --arg commit_id "$COMMIT_ID" \
+      --argjson comments "$COMMENTS_JSON" \
+      '{body: $body, event: $event, commit_id: $commit_id, comments: $comments}' | \
+    gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \
+      --method POST --include --input - > "$BATCH_RESPONSE_TMP"
+    HTTP_STATUS="$(
+      awk 'toupper($1) ~ /^HTTP\// {status=$2} END {print status}' "$BATCH_RESPONSE_TMP"
+    )"
+    POSTED_REVIEW_ID="$(
+      awk 'body || index($0, "{") == 1 {body=1; print}' "$BATCH_RESPONSE_TMP" |
+        jq -r '.id // empty' 2>/dev/null || true
+    )"
+  fi
+fi
+if [ "$HTTP_STATUS" = "200" ]; then
+  refresh_final_snapshot_state
+  if [ "$FINAL_SNAPSHOT_STATE" = fresh ]; then
+    RECEIPT_DOCUMENT="$(jq -cn \
+      --arg commit_id "$COMMIT_ID" \
+      --arg review_generation_id "$REVIEW_GENERATION_ID" \
+      '{posted:true,http_status:200,commit_id:$commit_id,
+        review_generation_id:$review_generation_id}')"
+  else
+    verdict=stale_snapshot
+    SNAPSHOT_IS_FRESH=false
+    RECEIPT_DOCUMENT=""
+    if [ -n "$POSTED_REVIEW_ID" ] && [ "$REVIEW_EVENT" != COMMENT ]; then
+      sleep 1
+      if ! gh api \
+        /repos/{owner}/{repo}/pulls/{pr_number}/reviews/"$POSTED_REVIEW_ID"/dismissals \
+        --method PUT \
+        --field message="Dismissed because the PR snapshot changed during review submission" \
+        >/dev/null
+      then
+        STALE_REVIEW_COMPENSATION_FAILED=true
+      fi
+    fi
+  fi
+fi
+rm -f -- "$BATCH_RESPONSE_TMP"
 ```
+
+Step 6 constructs the receipt in memory only. It must not write the fixed receipt
+path. Step 8 passes the parsed `RECEIPT_DOCUMENT` to the sole atomic publisher, so
+raw findings and diff context are renamed before the receipt becomes visible.
+The post-submit refresh is part of the effect boundary. A moved snapshot immediately
+replaces the prior verdict with `stale_snapshot`, suppresses the receipt, and dismisses
+an authoritative approval or changes-requested review. Report
+`STALE_REVIEW_COMPENSATION_FAILED=true` as a needs-human operational failure while
+retaining the `stale_snapshot` verdict and diagnostic-only artifacts.
 
 Event mapping:
 - `approved` → `APPROVE`
@@ -661,7 +1305,7 @@ These use the individual comments endpoint with `subject_type: "file"` — this 
 is NOT valid on the batch Reviews API `comments[]` array.
 
 ```bash
-COMMIT_ID=$(gh pr view {pr_number} --json headRefOid -q .headRefOid)
+COMMIT_ID="$METRICS_HEAD_SHA"
 
 # For each CRITICAL finding in UNPOSTABLE_FINDINGS:
 # NOTE: Do NOT include a `line` field — `line` must be omitted (not set to null)
@@ -672,7 +1316,7 @@ gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
   --field path="{finding.file}" \
   --field subject_type="file" \
   --field commit_id="$COMMIT_ID" \
-  --field body="[{finding.severity}] {finding.dimension} (L{finding.line} — outside diff hunk): {finding.message}"
+  --field body="{finding.rendered_body}"
 sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
@@ -689,7 +1333,7 @@ Iterate only critical and warning findings from `FILTERED_FINDINGS`. Skip info-s
 Attempt to post each critical/warning finding individually via:
 
 ```bash
-COMMIT_ID=$(gh pr view {pr_number} --json headRefOid -q .headRefOid)
+COMMIT_ID="$METRICS_HEAD_SHA"
 
 # For each critical/warning finding in FILTERED_FINDINGS:
 gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
@@ -698,7 +1342,7 @@ gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
   --field line={finding.line} \
   --field side="RIGHT" \
   --field commit_id="$COMMIT_ID" \
-  --field body="[{finding.severity}] {finding.dimension}: {finding.message}"
+  --field body="{finding.rendered_body}"
 sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
@@ -721,10 +1365,17 @@ Tier 2 is a failure mode with a workaround, not an acceptable alternative to inl
 Post ALL findings (`FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS`) via:
 
 ```bash
-gh pr review {pr_number} --comment --body "{summary_markdown}"
+jq -n \
+  --arg body "{summary_markdown}" \
+  --arg commit_id "$COMMIT_ID" \
+  '{body:$body,event:"COMMENT",commit_id:$commit_id}' | \
+gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \
+  --method POST --input -
 ```
 
-Format each file's findings as a bullet list (not a markdown table):
+Format each file's findings as a bullet list (not a markdown table). Reuse
+`finding.rendered_body` verbatim for every bullet; it is the same compact renderer
+used by the primary batch, file-level comments, and Tier 1:
 
 ```
 ## AutoSkillit Review Findings
@@ -732,10 +1383,10 @@ Format each file's findings as a bullet list (not a markdown table):
 **Verdict:** {verdict}
 
 ### path/to/file.py
-- **L{line}** [{severity}/{dimension}]: {message, truncated to 120 chars}
+- **L{line}** {finding.rendered_body}
 
 ### path/to/other.py
-- **L{line}** [{severity}/{dimension}]: {message, truncated to 120 chars}
+- **L{line}** {finding.rendered_body}
 ```
 
 This bullet-list format avoids horizontal overflow from long message content.
@@ -757,24 +1408,26 @@ Never reference local file paths (e.g., `{{AUTOSKILLIT_TEMP}}/...`, `summary_*.m
 ### Step 7: Submit Summary Review
 
 ```bash
-# approved
-gh pr review {pr_number} --approve --body "AutoSkillit review passed. No blocking issues found."
-
-# approved_with_comments (no UNPOSTABLE_FINDINGS)
-gh pr review {pr_number} --comment --body "AutoSkillit review: warning-only findings detected. See inline comments — no blocking changes required."
-
-# approved_with_comments / changes_requested / needs_human (with UNPOSTABLE_FINDINGS)
-# When UNPOSTABLE_FINDINGS is non-empty, append the "Outside Diff Range" section
-# to the verdict body. Build the body string dynamically.
-# Then post with the appropriate event flag:
-gh pr review {pr_number} --approve|--comment|--request-changes --body "$BODY"
+# Build the summary review against the same authoritative commit.
+jq -n \
+  --arg body "$BODY" \
+  --arg event "{APPROVE|COMMENT|REQUEST_CHANGES}" \
+  --arg commit_id "$COMMIT_ID" \
+  '{body:$body,event:$event,commit_id:$commit_id}' | \
+gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \
+  --method POST --input -
 ```
+
+Use `APPROVE` for approved, `COMMENT` for approved-with-comments or needs-human,
+and `REQUEST_CHANGES` for changes-requested. Treat HTTP 200 as success without
+inspecting a returned `comments` array. Retain the one-second delay between every
+pair of consecutive POST/PATCH/PUT/DELETE calls.
 
 **Building the Outside Diff Range body section:**
 
 When `UNPOSTABLE_FINDINGS` is non-empty, construct the body by appending the following
 section after the verdict one-liner. Group unpostable findings by file, format as a
-bullet list reusing the Tier 2 format (120-char message truncation).
+bullet list reusing the Tier 2 `finding.rendered_body` format.
 
 **TRUNCATION GUARD:** Cap the Outside Diff Range section at ~40,000 characters.
 The GitHub review body has a hard 65,536-char limit (HTTP 422 on overflow,
@@ -790,17 +1443,130 @@ Template for the appended section:
 These findings target lines not in the diff and could not be posted as inline comments:
 
 **path/to/file.py**
-- **L42** [critical/arch]: Finding message truncated to 120 chars
+- **L42** {finding.rendered_body}
 
 **path/to/other.py**
-- **L99** [warning/security]: Finding message truncated to 120 chars
+- **L99** {finding.rendered_body}
 ```
 
 ### Step 8: Write Summary and Emit Verdict
 
 **CRITICAL — Ordering:** Step 8 must execute after Steps 6 and 7. Do not write the summary file before posting inline comments and submitting the review verdict to GitHub. Writing the file first anchors you to treating it as the primary output rather than a local audit artifact.
 
+Re-run the final freshness guard before every `diff_context` handoff publication. Derive
+`review_generation_id` from the snapshot authority and canonical normalized raw
+ledger. Every artifact in a successful invocation carries the same
+`review_generation_id`, `_head_sha`, `_base_sha`, optional `_merge_base_sha`, and
+`annotation_generation_id`.
+
+Publish every fixed-name artifact through a same-directory temporary file followed
+by atomic rename. Clean partial temporary files on failure. Never redirect directly
+to a fixed destination. Publish effect-bearing artifacts in this order:
+
+1. diagnostic/raw ledger;
+2. diff context;
+3. GitHub receipt/publication records when applicable;
+4. `local_findings_{pr_number}.json last` in local mode as the local generation
+   commit marker.
+
+On `stale_snapshot`, publish only bounded diagnostic raw and summary envelopes with
+empty survivor sets. Do not publish diff context, local findings, receipts, comments,
+reviews, or approvals.
+
+The raw ledger contains immutable linked arrays named `candidate_records`,
+`validation_records`, `disposition_records`, `aggregation_records`,
+`verdict_use_records`, and `publication_records`. Every candidate has
+`candidate_id` and `record_digest`; later records reference that ID rather than
+mutating the candidate. Dedup records include `dedup_group_id`, all member IDs,
+winner ID, and rationale. Include `GATE_AUTHORITY`, the fixed-order
+`AUDITOR_STATUS_BY_NAME` terminal-status authority, review mode, snapshot,
+generations, accepted/rejected counts, and bounded
+malformed envelopes.
+
 Save findings summary to `${REVIEW_OUTPUT_DIR}summary_{pr_number}_{timestamp}.md`. (relative to the current working directory)
+
+Prepare and publish the structured artifacts with the installed executable
+helpers. The final freshness check selects a complete or diagnostic-only
+publication; the publisher stages every document before renaming and rolls back
+any completed rename if a later boundary fails. Execute
+`refresh_final_snapshot_state` immediately before this block and assign
+`FINAL_SNAPSHOT_STATE == "fresh"` to the Python boolean `SNAPSHOT_IS_FRESH`.
+Parse `RECEIPT_DOCUMENT` only when it is non-empty:
+
+```python
+import json
+
+from autoskillit.smoke_utils import (
+    prepare_experimental_review_publication,
+    publish_experimental_review_artifacts,
+)
+
+SNAPSHOT_IS_FRESH = FINAL_SNAPSHOT_STATE == "fresh"
+if not SNAPSHOT_IS_FRESH:
+    if FINAL_SNAPSHOT_STATE == "stale":
+        verdict = "stale_snapshot"
+        FINAL_REVIEW_FINDINGS = []
+        HANDOFF_METADATA = {**HANDOFF_METADATA, "verdict": verdict}
+        RAW_LEDGER = {**RAW_LEDGER, "verdict": verdict}
+    elif FINAL_SNAPSHOT_STATE == "authority_degraded":
+        verdict = "needs_human"
+        FINAL_REVIEW_FINDINGS = []
+        HANDOFF_METADATA = {**HANDOFF_METADATA, "verdict": verdict}
+        RAW_LEDGER = {**RAW_LEDGER, "verdict": verdict}
+
+if FINAL_SNAPSHOT_STATE == "authority_degraded":
+    # No retained snapshot or annotation generation exists, so fixed-name
+    # publication cannot satisfy its identity contract. Keep the bounded
+    # diagnostics in the timestamped summary and emit needs_human instead.
+    PUBLICATION = None
+    PUBLICATION_RESULT = {
+        "state": "authority_degraded",
+        "publication_records": [],
+    }
+else:
+    PUBLICATION = prepare_experimental_review_publication(
+        raw_ledger=RAW_LEDGER,
+        survivors=FINAL_REVIEW_FINDINGS,
+        snapshot=GATE_AUTHORITY["snapshot"],
+        annotation_generation_id=ANNOTATION_GENERATION_ID,
+        mode=MODE,
+        snapshot_is_fresh=SNAPSHOT_IS_FRESH,
+        handoff_metadata=HANDOFF_METADATA,
+        receipt=(
+            json.loads(RECEIPT_DOCUMENT)
+            if MODE == "github" and RECEIPT_DOCUMENT
+            else None
+        ),
+    )
+    if SNAPSHOT_IS_FRESH:
+        publication_generation_id = PUBLICATION["artifacts"]["raw_findings"][
+            "review_generation_id"
+        ]
+        if publication_generation_id != REVIEW_GENERATION_ID:
+            raise RuntimeError("publication generation changed after external effects")
+    PUBLICATION_RESULT = publish_experimental_review_artifacts(
+        publication=PUBLICATION,
+        output_dir=REVIEW_OUTPUT_DIR,
+        pr_number=str(pr_number),
+    )
+```
+
+This publisher is the only writer of the fixed raw-findings, diff-context,
+GitHub-receipt, and local-findings paths. Its executable order is raw findings,
+diff context, then the GitHub receipt; local mode instead publishes local findings
+last. Every downstream finding is copied from `FINAL_REVIEW_FINDINGS`, retains
+opaque fields, and carries both `file` and the normalized `path` alias plus
+`body`, `side`, and `code_region`.
+
+**Write Raw Findings JSON (first):**
+
+As the first publication, build the complete raw ledger in memory using the schema
+specified below. The sole publisher renders it into a same-directory temporary path
+and atomically renames it to
+`${REVIEW_OUTPUT_DIR}raw_findings_{pr_number}.json`. Do not begin diff-context,
+receipt, or local-findings publication until this rename succeeds. On
+`stale_snapshot`, the raw ledger is a bounded diagnostic envelope with empty
+survivor and publication sets.
 
 **Write Diff-Scoped Context Handoff (before emitting verdict):**
 
@@ -822,7 +1588,8 @@ Do not output prose between iterations. For each finding in `FILTERED_FINDINGS` 
   raw annotated-diff lines as-is. If ANNOTATED_DIFF is empty or the file section is
   not found, set `code_region` to `""`.
 
-Write to `${REVIEW_OUTPUT_DIR}diff_context_{pr_number}.json`:
+Write to `${REVIEW_OUTPUT_DIR}diff_context_{pr_number}.json`. If it already exists,
+replace it through the Step 8 same-directory temporary file and atomic rename:
 
 ```json
 {
@@ -836,9 +1603,22 @@ Write to `${REVIEW_OUTPUT_DIR}diff_context_{pr_number}.json`:
       "severity": "critical",
       "dimension": "arch",
       "message": "...",
-      "code_region": "[L40] ...\n[L41] ...\n[L42] ..."
+      "code_region": "[L40] ...\n[L41] ...\n[L42] ...",
+      "evidence": [],
+      "trace": [],
+      "boundary_checks": [],
+      "confidence": 0.98,
+      "simpler_behavior": "...",
+      "candidate_id": "...",
+      "disposition_id": "...",
+      "snapshot": {}
     }
-  ]
+  ],
+  "_head_sha": "{METRICS_HEAD_SHA}",
+  "_base_sha": "{METRICS_BASE_SHA}",
+  "_merge_base_sha": "{METRICS_MERGE_BASE_SHA}",
+  "annotation_generation_id": "{ANNOTATION_GENERATION_ID}",
+  "review_generation_id": "{REVIEW_GENERATION_ID}"
 }
 ```
 
@@ -846,35 +1626,55 @@ Log: `"Wrote diff-scoped context handoff: N entries → {path}"`. If the write f
 (e.g., temp dir unavailable), log a warning and continue — the handoff file is
 best-effort and its absence is handled gracefully by resolve-review.
 
-Use `jq -n` or the Write tool to create this file. If the file already exists from a prior review loop iteration, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`). Do not use inline Python one-liners or heredoc scripts with `open()` — these are blocked by the sandbox.
+Do not independently render or rename this fixed path: the helper invocation above
+normalizes and publishes it in the same transaction as raw findings and the final
+receipt/local marker.
 
-**Write Raw Findings JSON (after diff-context handoff):**
+**Raw Findings JSON schema (published first):**
 
-After writing the diff-context handoff file, also write the raw findings list for
-downstream enrichment. This is a separate file from the handoff — it captures only
-the finding dicts as produced by the subagents, without code_region extraction.
+The raw findings source ledger preserves
+standard findings, experimental candidates, validation, disposition, aggregation,
+verdict-use, publication, rejected-candidate, and malformed-envelope records.
 
 Write to `${REVIEW_OUTPUT_DIR}raw_findings_{pr_number}.json`:
 
 ```json
 {
   "pr_number": 1234,
-  "findings": [
+  "candidate_records": [
     {
       "file": "src/autoskillit/execution/headless.py",
       "line": 42,
       "severity": "critical",
       "dimension": "arch",
-      "message": "..."
+      "message": "...",
+      "candidate_id": "...",
+      "record_digest": "..."
     }
-  ]
+  ],
+  "validation_records": [],
+  "disposition_records": [],
+  "aggregation_records": [],
+  "verdict_use_records": [],
+  "publication_records": []
 }
 ```
 
-Include all findings from `FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS` where severity
-is `"critical"` or `"warning"`. Log: `"Wrote raw findings: N entries → {path}"`.
+Include all standard findings and every experimental candidate/disposition, while
+keeping rejected candidates out of effect-bearing survivor sets. Each publication
+record captures candidate ID, intended body digest, remote identifier/status,
+authoritative commit ID, and retry outcome. Log:
+`"Wrote raw findings: N entries → {path}"`.
 
-Use `jq -n` or the Write tool to create this file. If the file already exists from a prior review loop iteration, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`). Do not use inline Python one-liners or heredoc scripts with `open()` — these are blocked by the sandbox.
+The summary records accepted/rejected counts and closed reasons, evidence that
+affected the verdict, and any gate/audit/snapshot degradation. GitHub rendering
+contains compact repository-relative evidence and accepted experimental dimensions
+only.
+
+Use the first-publication transaction above; this schema section does not authorize
+a second write. Never redirect directly to the fixed destination. Do not use inline
+Python one-liners or heredoc scripts with `open()` — these are blocked by the
+sandbox.
 
 Output the verdict as the final line:
 
@@ -885,7 +1685,7 @@ Output the verdict as the final line:
 > code fences cause match failure.
 
 ```
-verdict = {approved|approved_with_comments|changes_requested|needs_human}
+verdict = {approved|approved_with_comments|changes_requested|needs_human|stale_snapshot}
 ```
 
 Immediately after the verdict line, emit the review gate tag on a new line:
@@ -893,8 +1693,11 @@ Immediately after the verdict line, emit the review gate tag on a new line:
 - If `verdict = changes_requested`: emit `%%REVIEW_GATE::LOOP_REQUIRED%%`
 - If `verdict = approved` or `verdict = needs_human`: emit `%%REVIEW_GATE::CLEAR%%`
 - If `verdict = approved_with_comments`: do NOT emit a gate tag
+- If `verdict = stale_snapshot`: emit no review gate tag; the recipe routes directly
+  through its bounded annotation-refresh waypoint
 
-Exit 0 in all normal cases (approved, needs_human, changes_requested).
+Exit 0 in all normal cases (approved, approved_with_comments, needs_human,
+changes_requested, stale_snapshot).
 Exit 1 only for unrecoverable tool-level errors.
 
 **Network Failure Degradation (Codex sandbox):**
@@ -917,6 +1720,8 @@ The `needs_human` verdict is in `_SAFE_DEGRADATION_VERDICTS`, so the
 - `verdict=approved_with_comments` — no gate tag — Warning-only findings; recipe routes to `resolve_review` but does not require a re-review cycle
 - `verdict=changes_requested` → `%%REVIEW_GATE::LOOP_REQUIRED%%` — Blocking issues found; recipe routes to `resolve_review`
 - `verdict=needs_human` → `%%REVIEW_GATE::CLEAR%%` — Uncertain trade-offs; human review requested via the authenticated GitHub user mention (derived at runtime)
+- `verdict=stale_snapshot` — no gate tag or effect-bearing artifact; recipe refreshes
+  annotation within its existing bounded recovery path
 
 Summary written to: `${REVIEW_OUTPUT_DIR}summary_{pr_number}_{timestamp}.md`
 

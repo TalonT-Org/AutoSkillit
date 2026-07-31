@@ -208,7 +208,16 @@ Matches the regex `<!--\s*REVIEW-FLAG:\s*severity=(\w+)\s+dimension=(\w+)\s*>`.
 **When `mode=local`:**
 - Skip ALL GitHub API calls for fetching comments (no `gh api repos/.../pulls/{N}/comments`, no `gh api repos/.../pulls/{N}/reviews`, no GraphQL `reviewThreads` query)
 - Instead, read findings from the review-pr output directory (derive path via `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX}` if set, otherwise check for the latest `iter_*` subdirectory under `{{AUTOSKILLIT_TEMP}}/review-pr/`, falling back to the flat directory): `local_findings_{pr_number}.json`
-- Transform the local findings format into the same internal structure used by the GitHub-sourced flow: each finding maps to `path`, `line`, `body`, `severity`, `dimension`
+- Derive `local_findings_{pr_number}.json` and `diff_context_{pr_number}.json`
+  from the same `REVIEW_PR_OUTPUT` root. Validate the pair with
+  `review_handoff_pair_error(diff_context, local_findings)` from
+  `autoskillit.smoke_utils`. The helper owns the ordered identity fields and requires
+  matching non-empty values. Any returned error is a stale/mixed handoff: make no
+  code change and return the existing human-escalation verdict.
+- Transform every local finding with
+  `normalize_local_review_finding(entry)` from `autoskillit.smoke_utils`. The helper
+  must copy the complete entry dictionary and add the canonical `path` and rendered
+  `body` aliases without discarding proof or provenance fields.
 - Load `diff_context_{pr_number}.json` as normal (mode-independent — same handoff file written by review-pr)
 - Set `comment_id_to_thread_id = {}` (no thread IDs in local mode)
 - Set `already_replied_ids = set()` (no prior replies in local mode)
@@ -304,7 +313,19 @@ DIFF_CONTEXT_PATH="${REVIEW_PR_OUTPUT}/diff_context_${PR_NUMBER}.json"
 If the file exists:
 - Parse it as JSON
 - Build `diff_context_map: dict[tuple[str, int], dict]` where key is `(entry.path, entry.line)`
-  and value is the full context entry dict (with fields: `path`, `line`, `severity`, `dimension`, `message`, `code_region`)
+  and value is the full context entry dict. Copy the complete entry dictionary,
+  including `path`, `line`, `severity`, `dimension`, `message`, `code_region`,
+  `evidence`, `trace`, `boundary_checks`, `confidence`, `simpler_behavior`,
+  `candidate_id`, `disposition_id`, and `snapshot`.
+- In `mode=local`, read `local_findings_{pr_number}.json` and
+  `diff_context_{pr_number}.json` from the same `REVIEW_PR_OUTPUT`, then call
+  `review_handoff_pair_error(diff_context, local_findings)`.
+- In `mode=github`, pair `diff_context_{pr_number}.json` with the published
+  `batch_review_response_{pr_number}.json` receipt from the same
+  `REVIEW_PR_OUTPUT`, then call
+  `review_handoff_pair_error(diff_context, batch_review_response)`. Do not require
+  a local-findings artifact in GitHub mode. A helper error for either
+  mode-appropriate pair rejects the handoff and uses the existing fallback path.
 - Log: `"Loaded pre-built context for N findings from review-pr handoff (schema_version: {v})"`
 
 If the file is absent or cannot be parsed:
@@ -527,7 +548,9 @@ the error message, domain group name, and affected comment IDs.
 
 Each entry must also carry two additional fields populated at merge time (not delegated to sub-agents):
 - `severity` — `diff_context_map.get((path, line), {}).get("severity", locally_classified_severity)` where `locally_classified_severity` is the severity computed in Step 3 (`critical`/`warning`/`info` from keyword matching). This ensures a meaningful value even when no review-pr handoff entry exists for this `(path, line)`.
-- `dimension` — `diff_context_map.get((path, line), {}).get("dimension", "unknown")` (`arch|tests|bugs|defense|cohesion|slop|deletion_regression|unknown`). `"unknown"` is the correct sentinel when `diff_context_map` has no entry.
+- `dimension` — `diff_context_map.get((path, line), {}).get("dimension", "unknown")`
+  (`arch|tests|bugs|defense|cohesion|slop|deletion_regression|overengineering_reachability|overengineering_abstraction_surface|unknown`).
+  `"unknown"` is the correct sentinel when `diff_context_map` has no entry.
 
 For INFO-verdict findings (classified in Step 3, not validated by sub-agents): add them to `classification_map` with `verdict="INFO"`, `severity="info"`, and `dimension=diff_context_map.get((path, line), {}).get("dimension", "unknown")`.
 

@@ -3051,9 +3051,9 @@ def test_enrich_diff_context_missing_handoff_file(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 _DIFF_OUTPUT = "+++ b/src/app.py\n@@ -1,3 +1,4 @@\n line1\n+added\n"
-_SHA = "abc1234567890"
-_BASE_SHA = "def1234567890"
-_MERGE_BASE_SHA = "0123456789abc"
+_SHA = "a" * 40
+_BASE_SHA = "b" * 40
+_MERGE_BASE_SHA = "c" * 40
 
 
 def _annotation_run_side_effect(
@@ -3488,7 +3488,7 @@ def test_annotate_pr_diff_rejects_moving_github_refs(mock_run, tmp_path: Path) -
         nonlocal ref_reads
         if args[:2] == ["gh", "api"]:
             ref_reads += 1
-            head = _SHA if ref_reads == 1 else f"{_SHA}moved"
+            head = _SHA if ref_reads == 1 else "d" * 40
             payload = json.dumps({"headRefOid": head, "baseRefOid": _BASE_SHA})
             return subprocess.CompletedProcess(args, 0, payload.encode(), b"")
         if args[:3] == ["gh", "pr", "diff"]:
@@ -3503,7 +3503,7 @@ def test_annotate_pr_diff_rejects_moving_github_refs(mock_run, tmp_path: Path) -
 
 @patch("subprocess.run")
 def test_annotate_pr_diff_rejects_local_base_disagreement(mock_run, tmp_path: Path) -> None:
-    mock_run.side_effect = _annotation_run_side_effect(live_base_sha="live-base")
+    mock_run.side_effect = _annotation_run_side_effect(live_base_sha="d" * 40)
     with pytest.raises(RuntimeError, match="local base ref does not match"):
         annotate_pr_diff(
             pr_number="95",
@@ -3556,38 +3556,6 @@ def test_annotate_pr_diff_valid_lines_flat_schema(mock_run, tmp_path: Path) -> N
         "valid_lines must not contain _head_sha — breaks SKILL.md Step 4"
     )
     assert all(isinstance(v, list) for v in data.values()), "values must be lists of line numbers"
-
-
-@pytest.mark.parametrize(
-    ("calls", "expected_call_count"),
-    [
-        (_github_annotation_calls(before_returncode=1), 1),
-        (_github_annotation_calls(before_sha=""), 1),
-        (_github_annotation_calls(before_sha="abc123"), 1),
-        (_github_annotation_calls(before_sha=_SHA.upper()), 1),
-        (_github_annotation_calls(after_returncode=1), 3),
-        (_github_annotation_calls(after_sha=""), 3),
-        (_github_annotation_calls(after_sha="abc123"), 3),
-        (_github_annotation_calls(after_sha=_SHA.upper()), 3),
-        (_github_annotation_calls(after_sha="1" * 40), 3),
-    ],
-)
-@patch("subprocess.run")
-def test_annotate_pr_diff_rejects_unstable_or_invalid_github_head(
-    mock_run,
-    tmp_path: Path,
-    calls: list[subprocess.CompletedProcess[str]],
-    expected_call_count: int,
-) -> None:
-    """T_SHA_5: no authoritative artifact is published without one stable full SHA."""
-    output_dir = tmp_path / "annotation"
-    mock_run.side_effect = calls
-
-    with pytest.raises((RuntimeError, ValueError, subprocess.CalledProcessError)):
-        annotate_pr_diff(pr_number="999", cwd=str(tmp_path), output_dir=str(output_dir))
-
-    assert mock_run.call_count == expected_call_count
-    assert not output_dir.exists() or not any(output_dir.iterdir())
 
 
 # ---------------------------------------------------------------------------

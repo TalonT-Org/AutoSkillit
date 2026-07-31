@@ -1,7 +1,7 @@
 ---
 name: review-pr
 categories: [github]
-uses_capabilities: [agent_model, agent_subagent, github_api_write]
+uses_capabilities: [agent_model, agent_subagent]
 description: Automated diff-scoped PR code review using parallel audit subagents. Posts inline GitHub review comments and submits a summary verdict. Use after a PR is opened to gate CI on review approval.
 hooks:
   PreToolUse:
@@ -1479,7 +1479,7 @@ Python one-liners or heredoc scripts with `open()` — these are blocked by the
 sandbox.
 
 When the final freshness guard yields `stale_snapshot`, emit publication sentinels
-without calling `post_pr_review`: use `review_operation_key = none`,
+without calling the structured publication tool: use `review_operation_key = none`,
 `review_head_sha = ${METRICS_HEAD_SHA}`, `review_post_state = STALE_SNAPSHOT`, and
 `review_receipt_path = none`.
 

@@ -95,7 +95,7 @@ def annotate_pr_diff(
 
     def _required_scalar(args: list[str], *, timeout: int) -> str:
         value = _stdout_bytes(_run(args, timeout=timeout)).decode("utf-8", errors="strict").strip()
-        if not value or any(character.isspace() for character in value):
+        if not _FULL_LOWER_SHA_RE.fullmatch(value):
             raise RuntimeError(f"annotation command returned an invalid ref ({' '.join(args)})")
         return value
 
@@ -126,9 +126,9 @@ def annotate_pr_diff(
             raise RuntimeError("live PR head/base refs were malformed")
         head_sha = payload.get("headRefOid")
         base_sha = payload.get("baseRefOid")
-        if not isinstance(head_sha, str) or not head_sha.strip():
+        if not isinstance(head_sha, str) or not _FULL_LOWER_SHA_RE.fullmatch(head_sha.strip()):
             raise RuntimeError("live PR head ref was missing")
-        if not isinstance(base_sha, str) or not base_sha.strip():
+        if not isinstance(base_sha, str) or not _FULL_LOWER_SHA_RE.fullmatch(base_sha.strip()):
             raise RuntimeError("live PR base ref was missing")
         return head_sha.strip(), base_sha.strip()
 

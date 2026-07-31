@@ -7,12 +7,9 @@ prompt must not reproduce GitHub mutation, retry, pacing, or fallback policy.
 from __future__ import annotations
 
 import re
-import subprocess
 from pathlib import Path
 
 import pytest
-
-from autoskillit.smoke_utils import render_review_finding_body
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 

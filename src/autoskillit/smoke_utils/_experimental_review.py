@@ -14,6 +14,7 @@ from autoskillit.smoke_utils._review_contracts import (
     EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY,
     EXPERIMENTAL_REVIEW_AUDITORS,
     _closed_key_set_error,
+    _is_non_empty_string,
 )
 
 _EXPERIMENTAL_DIMENSIONS = dict(EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY)
@@ -134,10 +135,6 @@ def build_malformed_review_envelope(
         ],
         "rejection_reason": _bounded_utf8(rejection_reason, 1024),
     }
-
-
-def _is_non_empty_string(value: object) -> bool:
-    return isinstance(value, str) and bool(value.strip())
 
 
 def _is_positive_int(value: object) -> bool:

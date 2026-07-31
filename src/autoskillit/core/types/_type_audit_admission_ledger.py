@@ -62,7 +62,6 @@ class AuditAdmissionStorageHealthStatus(StrEnum):
 class AuditAdmissionStorageFailureReason(StrEnum):
     """Bounded reasons for sticky audit-admission storage failure."""
 
-    CONFIGURATION = "CONFIGURATION"
     IO = "IO"
     SECURITY_IDENTITY = "SECURITY_IDENTITY"
     INTEGRITY = "INTEGRITY"

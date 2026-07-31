@@ -150,6 +150,16 @@ class TestAuditAdmissionStoreAuthority:
         assert authority.expected_owner_id == 0
 
 
+def test_storage_failure_reasons_are_closed() -> None:
+    assert set(AuditAdmissionStorageFailureReason) == {
+        AuditAdmissionStorageFailureReason.IO,
+        AuditAdmissionStorageFailureReason.SECURITY_IDENTITY,
+        AuditAdmissionStorageFailureReason.INTEGRITY,
+        AuditAdmissionStorageFailureReason.UNSUPPORTED_SCHEMA,
+        AuditAdmissionStorageFailureReason.REPLAY_MISMATCH,
+    }
+
+
 class TestAuditAdmissionStoreHealth:
     def test_healthy_cannot_carry_failure_reason(self) -> None:
         with pytest.raises(ValueError, match="only FAIL_CLOSED"):

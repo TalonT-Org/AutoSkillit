@@ -14,6 +14,11 @@ EXPERIMENTAL_REVIEW_AUDITORS = (
     "pr-review-auditor-reachability",
     "pr-review-auditor-abstraction-surface",
 )
+REVIEW_HANDOFF_IDENTITY_FIELDS = (
+    "_head_sha",
+    "annotation_generation_id",
+    "review_generation_id",
+)
 _EXPERIMENTAL_DIMENSIONS = {
     "pr-review-auditor-reachability": "overengineering_reachability",
     "pr-review-auditor-abstraction-surface": "overengineering_abstraction_surface",
@@ -133,6 +138,23 @@ def build_malformed_review_envelope(
 
 def _is_non_empty_string(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
+
+
+def review_handoff_pair_error(
+    first: object,
+    second: object,
+) -> str | None:
+    """Return a deterministic error when paired review artifacts have mixed identities."""
+    if not isinstance(first, Mapping) or not isinstance(second, Mapping):
+        return "paired review artifacts must both be objects"
+    for field in REVIEW_HANDOFF_IDENTITY_FIELDS:
+        first_value = first.get(field)
+        second_value = second.get(field)
+        if not _is_non_empty_string(first_value) or not _is_non_empty_string(second_value):
+            return f"paired review artifacts require non-empty {field}"
+        if first_value != second_value:
+            return f"paired review artifacts have mismatched {field}"
+    return None
 
 
 def _is_positive_int(value: object) -> bool:

@@ -14,6 +14,7 @@ from autoskillit.smoke_utils._eval import (
 )
 from autoskillit.smoke_utils._experimental_review import (
     EXPERIMENTAL_REVIEW_AUDITORS,
+    REVIEW_HANDOFF_IDENTITY_FIELDS,
     aggregate_experimental_review_candidates,
     build_malformed_review_envelope,
     deletion_regression_is_eligible,
@@ -21,6 +22,7 @@ from autoskillit.smoke_utils._experimental_review import (
     prepare_experimental_review_publication,
     publish_experimental_review_artifacts,
     render_review_finding_body,
+    review_handoff_pair_error,
     validate_experimental_auditor_outputs,
 )
 from autoskillit.smoke_utils._git import (
@@ -55,6 +57,7 @@ from autoskillit.smoke_utils._telemetry import consolidate_health_reports, patch
 __all__ = [
     "EXPERIMENTAL_REVIEW_AUDITORS",
     "LOCAL_ROUND_EXEMPT_VERDICTS",
+    "REVIEW_HANDOFF_IDENTITY_FIELDS",
     "REQUIRED_CRITERION_KEYS",
     "VALID_CRITERION_TYPES",
     "aggregate_experimental_review_candidates",
@@ -91,6 +94,7 @@ __all__ = [
     "prepare_experimental_review_publication",
     "publish_experimental_review_artifacts",
     "render_review_finding_body",
+    "review_handoff_pair_error",
     "select_review_dimensions",
     "try_load_json",
     "validate_experimental_auditor_outputs",

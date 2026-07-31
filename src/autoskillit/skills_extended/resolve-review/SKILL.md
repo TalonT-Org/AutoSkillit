@@ -209,11 +209,11 @@ Matches the regex `<!--\s*REVIEW-FLAG:\s*severity=(\w+)\s+dimension=(\w+)\s*>`.
 - Skip ALL GitHub API calls for fetching comments (no `gh api repos/.../pulls/{N}/comments`, no `gh api repos/.../pulls/{N}/reviews`, no GraphQL `reviewThreads` query)
 - Instead, read findings from the review-pr output directory (derive path via `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX}` if set, otherwise check for the latest `iter_*` subdirectory under `{{AUTOSKILLIT_TEMP}}/review-pr/`, falling back to the flat directory): `local_findings_{pr_number}.json`
 - Derive `local_findings_{pr_number}.json` and `diff_context_{pr_number}.json`
-  from the same `REVIEW_PR_OUTPUT` root. Before trusting any entry, require both
-  top-level objects to have identical non-empty `_head_sha`,
-  `annotation_generation_id`, and `review_generation_id` values. A missing or
-  mismatched value is a stale/mixed handoff: make no code change and return the
-  existing human-escalation verdict.
+  from the same `REVIEW_PR_OUTPUT` root. Validate the pair with
+  `review_handoff_pair_error(diff_context, local_findings)` from
+  `autoskillit.smoke_utils`. The helper owns the ordered identity fields and requires
+  matching non-empty values. Any returned error is a stale/mixed handoff: make no
+  code change and return the existing human-escalation verdict.
 - Transform the local findings format into the same internal structure used by the
   GitHub-sourced flow: copy the complete entry dictionary, normalize `file` to
   `path`, and construct the existing `body` alias without discarding
@@ -319,15 +319,14 @@ If the file exists:
   `evidence`, `trace`, `boundary_checks`, `confidence`, `simpler_behavior`,
   `candidate_id`, `disposition_id`, and `snapshot`.
 - In `mode=local`, read `local_findings_{pr_number}.json` and
-  `diff_context_{pr_number}.json` from the same `REVIEW_PR_OUTPUT`. Require
-  matching top-level `_head_sha`, `annotation_generation_id`, and
-  `review_generation_id` before trusting either enriched artifact.
+  `diff_context_{pr_number}.json` from the same `REVIEW_PR_OUTPUT`, then call
+  `review_handoff_pair_error(diff_context, local_findings)`.
 - In `mode=github`, pair `diff_context_{pr_number}.json` with the published
   `batch_review_response_{pr_number}.json` receipt from the same
-  `REVIEW_PR_OUTPUT`, and require the same three generation fields to match.
-  Do not require a local-findings artifact in GitHub mode. A missing or
-  mismatched mode-appropriate pair rejects the handoff and uses the existing
-  fallback path.
+  `REVIEW_PR_OUTPUT`, then call
+  `review_handoff_pair_error(diff_context, batch_review_response)`. Do not require
+  a local-findings artifact in GitHub mode. A helper error for either
+  mode-appropriate pair rejects the handoff and uses the existing fallback path.
 - Log: `"Loaded pre-built context for N findings from review-pr handoff (schema_version: {v})"`
 
 If the file is absent or cannot be parsed:

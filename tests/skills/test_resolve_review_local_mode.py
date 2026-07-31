@@ -349,15 +349,11 @@ def test_local_normalization_preserves_experimental_finding_fields() -> None:
         assert f"`{field}`" in local_mode
 
 
-def test_local_artifacts_require_matching_generation_metadata() -> None:
+def test_mode_specific_handoff_pairs_use_executable_identity_validator() -> None:
     text = _skill_text()
-    normalized_text = " ".join(text.split())
 
-    assert "from the same `REVIEW_PR_OUTPUT` root" in normalized_text
-    assert "identical non-empty `_head_sha`" in normalized_text
-    assert "`annotation_generation_id`" in normalized_text
-    assert "`review_generation_id`" in normalized_text
-    assert "A missing or mismatched value is a stale/mixed handoff" in normalized_text
+    assert "review_handoff_pair_error(diff_context, local_findings)" in text
+    assert "review_handoff_pair_error(diff_context, batch_review_response)" in text
 
 
 def test_local_mode_recognizes_overengineering_dimensions() -> None:

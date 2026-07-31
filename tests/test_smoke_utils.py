@@ -16,6 +16,7 @@ import pytest
 
 from autoskillit.smoke_utils import (
     EXPERIMENTAL_REVIEW_AUDITORS,
+    REVIEW_HANDOFF_IDENTITY_FIELDS,
     aggregate_experimental_review_candidates,
     annotate_pr_diff,
     build_agent_eval_context,
@@ -38,6 +39,7 @@ from autoskillit.smoke_utils import (
     prepare_experimental_review_publication,
     publish_experimental_review_artifacts,
     render_review_finding_body,
+    review_handoff_pair_error,
     validate_experimental_auditor_outputs,
 )
 from tests.infra._token_summary_helpers import _resolve_session_label
@@ -1263,6 +1265,45 @@ def test_malformed_review_envelope_bounds_untrusted_output() -> None:
     assert "raw_output" not in envelope
     assert len(envelope["errors"]) == 32
     assert all(len(str(error).encode()) <= 1024 for error in envelope["errors"])
+
+
+def test_review_handoff_pair_requires_one_ordered_identity_contract() -> None:
+    identity = {
+        "_head_sha": "head",
+        "annotation_generation_id": "annotation",
+        "review_generation_id": "review",
+    }
+
+    assert REVIEW_HANDOFF_IDENTITY_FIELDS == tuple(identity)
+    assert review_handoff_pair_error(identity, dict(identity)) is None
+
+
+@pytest.mark.parametrize(
+    ("field", "second_value", "expected_error"),
+    [
+        ("_head_sha", "", "require non-empty _head_sha"),
+        (
+            "annotation_generation_id",
+            "different",
+            "mismatched annotation_generation_id",
+        ),
+        ("review_generation_id", None, "require non-empty review_generation_id"),
+    ],
+)
+def test_review_handoff_pair_rejects_missing_or_mixed_generations(
+    field: str,
+    second_value: object,
+    expected_error: str,
+) -> None:
+    first = {
+        "_head_sha": "head",
+        "annotation_generation_id": "annotation",
+        "review_generation_id": "review",
+    }
+    second = dict(first)
+    second[field] = second_value
+
+    assert expected_error in str(review_handoff_pair_error(first, second))
 
 
 def test_experimental_output_validation_is_atomic_and_fixed_order(tmp_path: Path) -> None:

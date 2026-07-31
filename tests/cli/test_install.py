@@ -12,9 +12,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from autoskillit import cli
+from autoskillit import __version__, cli
+from autoskillit.cli._install_contract import InstallMode, InstallRequest
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+
+
+def _direct_request(scope: str = "user") -> InstallRequest:
+    return InstallRequest(
+        scope=scope,
+        mode=InstallMode.DIRECT,
+        require_registered_plugin=True,
+        expected_version=__version__,
+    )
 
 
 def _seed_current_installed_plugin(home: Path) -> Path:
@@ -41,41 +51,61 @@ def _successful_claude_run(home: Path):
     def run(cmd, *_args, **_kwargs):
         normalized = tuple(str(part) for part in cmd)
         if normalized[:3] == ("claude", "plugin", "install"):
-            _seed_current_installed_plugin(home)
+            root = _seed_current_installed_plugin(home)
+            registry_path = home / ".claude" / "plugins" / "installed_plugins.json"
+            registry_path.parent.mkdir(parents=True, exist_ok=True)
+            registry_path.write_text(
+                json.dumps(
+                    {
+                        "version": 2,
+                        "plugins": {
+                            "autoskillit@autoskillit-local": [
+                                {
+                                    "installPath": str(root),
+                                    "scope": "user",
+                                }
+                            ]
+                        },
+                    }
+                )
+            )
         return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
 
     return run
 
 
 class TestCLIInstall:
-    def test_install_validates_scope(self, capsys: pytest.CaptureFixture) -> None:
+    def test_install_validates_scope(self) -> None:
         """install rejects invalid scope values."""
+        from autoskillit.cli._install_contract import InstallFailureKind, InstallOutcome
         from autoskillit.cli._marketplace import install
 
-        with pytest.raises(SystemExit) as exc_info:
-            install(scope="invalid")
-        assert exc_info.value.code == 1
-        captured = capsys.readouterr()
-        assert "Invalid scope" in captured.out
+        result = install(request=_direct_request("invalid"))
+        assert result.outcome is InstallOutcome.FAILED
+        assert result.failure_kind is InstallFailureKind.PREFLIGHT
+        assert "Invalid scope" in result.findings[0]
 
     def test_install_errors_without_claude(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """install prints manual instructions when claude is not on PATH."""
+        """install returns manual instructions when claude is not on PATH."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(shutil, "which", lambda cmd: None)
+        monkeypatch.setattr(shutil, "which", lambda _cmd, *, path=None: None)
         monkeypatch.delenv("CLAUDECODE", raising=False)
         import importlib as _importlib
 
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
+        from autoskillit.cli._install_contract import InstallFailureKind, InstallOutcome
         from autoskillit.cli._marketplace import install
 
-        with pytest.raises(SystemExit) as exc_info:
-            install()
-        assert exc_info.value.code == 1
-        captured = capsys.readouterr()
-        assert "claude plugin marketplace add" in captured.out
+        result = install(request=_direct_request())
+        assert result.outcome is InstallOutcome.FAILED
+        assert result.failure_kind is InstallFailureKind.PREFLIGHT
+        assert "claude plugin marketplace add" in result.findings[0]
+        assert "claude plugin install" in result.findings[0]
 
     def test_install_creates_marketplace_dir(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -219,7 +249,7 @@ class TestCLIInstall:
     ) -> None:
         """install calls claude plugin marketplace add + claude plugin install."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr(shutil, "which", lambda _cmd, *, path=None: "/usr/bin/claude")
         monkeypatch.delenv("CLAUDECODE", raising=False)
         import importlib as _importlib
 
@@ -228,7 +258,7 @@ class TestCLIInstall:
         mock_run.side_effect = _successful_claude_run(tmp_path)
         from autoskillit.cli._marketplace import install
 
-        install(scope="user")
+        install(request=_direct_request())
 
         assert mock_run.call_count == 2
         marketplace_call = mock_run.call_args_list[0]
@@ -241,17 +271,17 @@ class TestCLIInstall:
         assert "user" in install_call[0][0]
         from autoskillit.cli._plugin_artifact import (
             current_installed_plugin_root,
-            installed_artifact_manifest_path,
+            installed_plugin_artifact_manifest_path,
         )
 
         installed_root = current_installed_plugin_root()
         artifact_manifest = json.loads(
-            installed_artifact_manifest_path(installed_root).read_text()
+            installed_plugin_artifact_manifest_path(installed_root).read_text()
         )
         assert artifact_manifest["artifact_kind"] == "installed_plugin"
         assert artifact_manifest["managed_path"] == str(installed_root)
         assert artifact_manifest["manifest_path"] == str(
-            installed_artifact_manifest_path(installed_root)
+            installed_plugin_artifact_manifest_path(installed_root)
         )
 
     @patch("autoskillit.cli._marketplace.subprocess.run")
@@ -264,13 +294,13 @@ class TestCLIInstall:
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr(shutil, "which", lambda _cmd, *, path=None: "/usr/bin/claude")
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         mock_run.side_effect = _successful_claude_run(tmp_path)
         from autoskillit.cli._marketplace import install
 
-        install(scope="project")
+        install(request=_direct_request("project"))
 
         install_call = mock_run.call_args_list[1][0][0]
         scope_idx = install_call.index("--scope")
@@ -286,24 +316,26 @@ class TestCLIInstall:
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr(shutil, "which", lambda _cmd, *, path=None: "/usr/bin/claude")
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         mock_run.side_effect = _successful_claude_run(tmp_path)
         from autoskillit.cli._marketplace import install
 
-        install()
-        install()  # second run should not fail
+        install(request=_direct_request())
+        install(request=_direct_request())  # second run should not fail
 
         published = tmp_path / ".autoskillit" / "marketplace" / "plugins" / "autoskillit"
         assert published.is_dir()
         assert not published.is_symlink()
         assert (published / ".claude-plugin" / "plugin.json").is_file()
 
-    def test_install_backend_guard_returns_false_for_non_claude_code(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+    def test_install_backend_guard_returns_declined_for_non_claude_code(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
     ) -> None:
-        """install() returns False with message when capability is False."""
+        """install() returns a declined result when capability is false."""
         from unittest.mock import MagicMock
 
         from autoskillit.config import AgentBackendConfig, AutomationConfig
@@ -319,11 +351,12 @@ class TestCLIInstall:
 
         from autoskillit.cli._marketplace import install
 
-        result = install(scope="user")
+        result = install(request=_direct_request())
 
-        assert result is False
-        captured = capsys.readouterr()
-        assert "plugin_install_capable" in captured.out
+        from autoskillit.cli._install_contract import InstallOutcome
+
+        assert result.outcome is InstallOutcome.DECLINED
+        assert "plugin_install_capable" in result.findings[0]
 
     def test_install_backend_guard_allows_claude_code(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
@@ -336,7 +369,7 @@ class TestCLIInstall:
         monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
         monkeypatch.setattr(Path, "cwd", staticmethod(lambda: tmp_path))
         monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/claude")
+        monkeypatch.setattr("shutil.which", lambda _cmd, *, path=None: "/usr/bin/claude")
 
         _app_mod = importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
@@ -355,9 +388,11 @@ class TestCLIInstall:
         monkeypatch.setattr(_app_mod, "atomic_write", lambda *a, **kw: None)
         from autoskillit.cli._marketplace import install
 
-        result = install(scope="user")
+        result = install(request=_direct_request())
 
-        assert result is True
+        from autoskillit.cli._install_contract import InstallOutcome
+
+        assert result.outcome is InstallOutcome.COMPLETED
         assert len(called) >= 1  # subprocess was invoked (past the guard)
 
     def test_install_backend_guard_no_new_module_level_imports(self) -> None:
@@ -402,13 +437,13 @@ class TestCLIInstall:
             )
         )
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/claude")
+        monkeypatch.setattr(shutil, "which", lambda _cmd, *, path=None: "/usr/bin/claude")
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         mock_run.side_effect = _successful_claude_run(tmp_path)
         from autoskillit.cli._marketplace import install
 
-        install(scope="user")
+        install(request=_direct_request())
 
         data = json.loads(claude_json.read_text())
         assert "autoskillit" not in data.get("mcpServers", {})
@@ -560,7 +595,7 @@ class TestInstallCommand:
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: True)
         from autoskillit.cli._marketplace import _assert_not_worktree
 
-        with pytest.raises(SystemExit, match="worktree"):
+        with pytest.raises(RuntimeError, match="worktree"):
             _assert_not_worktree()
 
     def test_ensure_marketplace_succeeds_in_main_checkout(
@@ -802,10 +837,10 @@ def test_clear_plugin_cache_noop_when_entry_absent(
     assert data == {"version": 2, "plugins": {}}
 
 
-def test_install_claudecode_guard_returns_false(
+def test_install_claudecode_guard_returns_deferred_result(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """install() must return False when CLAUDECODE guard fires, not None-as-success."""
+    """install() returns a deferred result when the CLAUDECODE guard fires."""
     import importlib as _importlib
 
     from autoskillit.cli._marketplace import install as _install
@@ -814,31 +849,213 @@ def test_install_claudecode_guard_returns_false(
     monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
     monkeypatch.setenv("CLAUDECODE", "1")
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    result = _install(scope="user")
-    assert result is False, f"Expected False, got {result!r}"
+    from autoskillit.cli._install_contract import InstallOutcome
+
+    result = _install(request=_direct_request())
+    assert result.outcome is InstallOutcome.DEFERRED
 
 
-def test_install_claudecode_guard_does_not_print_next_steps(
+def test_app_install_deferred_result_exits_without_next_steps(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """app.install() must not print Next Steps when CLAUDECODE guard fires."""
+    """app.install() preserves the typed deferred outcome at the process boundary."""
 
     import autoskillit.cli._init_helpers as _init_helpers_mod
     import autoskillit.cli._marketplace as _mkt_mod
+    from autoskillit.cli._install_contract import (
+        InstallOutcome,
+        InstallProcessStatus,
+        InstallResult,
+    )
 
     next_steps_called: list[dict] = []
     monkeypatch.setattr(
         _init_helpers_mod, "_print_next_steps", lambda **kw: next_steps_called.append(kw)
     )
-    monkeypatch.setattr(_mkt_mod, "install", lambda **kw: False)
+    monkeypatch.setattr(
+        _mkt_mod,
+        "install",
+        lambda **kw: InstallResult(outcome=InstallOutcome.DEFERRED),
+    )
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     from autoskillit.cli.app import install as app_install
 
-    app_install(scope="user")
-    assert not next_steps_called, (
-        "_print_next_steps must not be called when install() returns False"
+    with pytest.raises(SystemExit) as exc_info:
+        app_install(scope="user")
+    assert exc_info.value.code == InstallProcessStatus.DEFERRED
+    assert not next_steps_called, "_print_next_steps must not be called for deferred installs"
+
+
+def test_app_install_constructs_direct_request_and_prints_only_after_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The direct command records its obligation and consumes typed completion."""
+    import autoskillit.cli._init_helpers as _init_helpers_mod
+    import autoskillit.cli._install_contract as _contract_mod
+    import autoskillit.cli._marketplace as _mkt_mod
+    from autoskillit import __version__
+
+    real_request = _contract_mod.InstallRequest
+    requests: list[_contract_mod.InstallRequest] = []
+    installed_requests: list[_contract_mod.InstallRequest] = []
+    next_steps_called: list[dict] = []
+
+    def capture_request(**kwargs):
+        request = real_request(**kwargs)
+        requests.append(request)
+        return request
+
+    def capture_install(**kwargs):
+        installed_requests.append(kwargs["request"])
+        return _contract_mod.InstallResult(outcome=_contract_mod.InstallOutcome.COMPLETED)
+
+    monkeypatch.setattr(_contract_mod, "InstallRequest", capture_request)
+    monkeypatch.setattr(_mkt_mod, "install", capture_install)
+    monkeypatch.setattr(
+        _init_helpers_mod, "_print_next_steps", lambda **kw: next_steps_called.append(kw)
     )
+
+    from autoskillit.cli.app import install as app_install
+
+    app_install(scope="project")
+
+    expected_request = real_request(
+        scope="project",
+        mode=_contract_mod.InstallMode.DIRECT,
+        require_registered_plugin=True,
+        expected_version=__version__,
+    )
+    assert requests == [expected_request]
+    assert installed_requests == [expected_request]
+    assert next_steps_called == [{"context": "install"}]
+
+
+def test_app_install_rejects_maintenance_update_without_expected_version() -> None:
+    from autoskillit.cli.app import install as app_install
+
+    with pytest.raises(ValueError, match="--maintenance-update requires --expected-version"):
+        app_install(maintenance_update=True)
+
+
+@pytest.mark.parametrize(
+    "maintenance_only_kwargs",
+    [
+        {"require_registered_plugin": True},
+        {"expected_version": "1.2.3"},
+    ],
+    ids=["require-registered-plugin", "expected-version"],
+)
+def test_app_install_rejects_maintenance_only_fields_in_direct_mode(
+    maintenance_only_kwargs: dict[str, object],
+) -> None:
+    from autoskillit.cli.app import install as app_install
+
+    with pytest.raises(
+        ValueError,
+        match="--require-registered-plugin and --expected-version require --maintenance-update",
+    ):
+        app_install(**maintenance_only_kwargs)
+
+
+def test_app_install_not_required_succeeds_without_next_steps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A typed no-op result remains successful but does not claim completion."""
+    import autoskillit.cli._init_helpers as _init_helpers_mod
+    import autoskillit.cli._marketplace as _mkt_mod
+    from autoskillit.cli._install_contract import InstallOutcome, InstallResult
+
+    next_steps_called: list[dict] = []
+    monkeypatch.setattr(
+        _init_helpers_mod, "_print_next_steps", lambda **kw: next_steps_called.append(kw)
+    )
+    monkeypatch.setattr(
+        _mkt_mod,
+        "install",
+        lambda **kw: InstallResult(outcome=InstallOutcome.NOT_REQUIRED),
+    )
+
+    from autoskillit.cli.app import install as app_install
+
+    app_install(scope="user")
+    assert not next_steps_called
+
+
+@pytest.mark.parametrize(
+    (
+        "outcome_name",
+        "failure_name",
+        "expected_status",
+        "diagnostic",
+        "expect_next_steps",
+    ),
+    [
+        ("COMPLETED", None, 0, "completed diagnostic", True),
+        ("NOT_REQUIRED", None, 0, "not-required diagnostic", False),
+        ("DECLINED", None, 10, "declined diagnostic", False),
+        ("DEFERRED", None, 11, "deferred diagnostic", False),
+        ("FAILED", "PREFLIGHT", 20, "preflight diagnostic", False),
+        ("FAILED", "CHILD", 21, "child diagnostic", False),
+        ("FAILED", "POSTCONDITION", 22, "postcondition diagnostic", False),
+        (
+            "RECOVERY_REQUIRED",
+            "ROLLBACK",
+            23,
+            "recovery-required diagnostic",
+            False,
+        ),
+        ("INDETERMINATE", None, 24, "indeterminate diagnostic", False),
+    ],
+)
+def test_registered_install_boundary_reports_every_outcome_and_suppresses_next_steps(
+    outcome_name: str,
+    failure_name: str | None,
+    expected_status: int,
+    diagnostic: str,
+    expect_next_steps: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Every typed outcome crosses the registered process boundary truthfully."""
+    import autoskillit.cli._init_helpers as _init_helpers_mod
+    import autoskillit.cli._marketplace as _mkt_mod
+    from autoskillit.cli._install_contract import (
+        InstallFailureKind,
+        InstallOutcome,
+    )
+
+    outcome = InstallOutcome[outcome_name]
+    failure_kind = InstallFailureKind[failure_name] if failure_name is not None else None
+    next_steps_called: list[dict] = []
+    monkeypatch.setattr(
+        _init_helpers_mod, "_print_next_steps", lambda **kw: next_steps_called.append(kw)
+    )
+
+    def typed_result(**_kwargs):
+        return _mkt_mod._typed_result(
+            outcome,
+            failure_kind=failure_kind,
+            findings=(diagnostic,),
+        )
+
+    monkeypatch.setattr(
+        _mkt_mod,
+        "install",
+        typed_result,
+    )
+
+    from autoskillit.cli.app import app
+
+    with pytest.raises(SystemExit) as exc_info:
+        app(["install"])
+
+    assert exc_info.value.code == expected_status
+    output = capsys.readouterr().out
+    assert diagnostic in output
+    assert bool(next_steps_called) is expect_next_steps
+    if not expect_next_steps:
+        assert "Plugin installed:" not in output
 
 
 def test_install_sweeps_all_scopes_for_orphans(
@@ -900,7 +1117,7 @@ def test_install_creates_autoskillit_gitignore(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
     monkeypatch.delenv("CLAUDECODE", raising=False)
-    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/claude")
+    monkeypatch.setattr("shutil.which", lambda _cmd, *, path=None: "/usr/bin/claude")
     monkeypatch.setattr(
         "subprocess.run",
         _successful_claude_run(tmp_path),
@@ -910,7 +1127,7 @@ def test_install_creates_autoskillit_gitignore(
     monkeypatch.setattr("autoskillit.cli._marketplace.generate_hooks_json", lambda: {})
     monkeypatch.setattr("autoskillit.cli._marketplace.atomic_write", lambda *a, **kw: None)
     (tmp_path / ".autoskillit").mkdir()
-    _install(scope="user")
+    _install(request=_direct_request())
 
     assert (tmp_path / ".autoskillit" / ".gitignore").exists(), (
         ".autoskillit/.gitignore must be created by install(), not just by init()"
@@ -930,7 +1147,7 @@ def test_install_calls_upgrade_when_scripts_dir_exists(
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
     monkeypatch.delenv("CLAUDECODE", raising=False)
-    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/claude")
+    monkeypatch.setattr("shutil.which", lambda _cmd, *, path=None: "/usr/bin/claude")
     monkeypatch.setattr(
         "subprocess.run",
         _successful_claude_run(tmp_path),
@@ -942,7 +1159,7 @@ def test_install_calls_upgrade_when_scripts_dir_exists(
     scripts_dir = tmp_path / ".autoskillit" / "scripts"
     scripts_dir.mkdir(parents=True)
 
-    _install(scope="user")
+    _install(request=_direct_request())
 
     assert (tmp_path / ".autoskillit" / "recipes").exists(), (
         "install() must migrate scripts/ to recipes/ when scripts/ exists"

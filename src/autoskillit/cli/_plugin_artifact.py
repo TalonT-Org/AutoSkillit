@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
-    DIRECT_INSTALL_CACHE_SUBDIR,
     INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     ArtifactLease,
     PluginArtifactIdentity,
@@ -26,11 +25,14 @@ from autoskillit.core import (
     RetiringArtifactRecord,
     RetiringCacheReadResult,
     RetiringCacheState,
-    destination_location,
     directory_tree_digest,
     due_retiring_records,
     get_logger,
+    installed_plugin_artifact_lease_path,
+    installed_plugin_artifact_manifest_path,
     installed_plugin_artifact_manifest_payload,
+    installed_plugin_artifact_root,
+    installed_plugin_semantic_key,
     log_plugin_artifact_lifecycle,
     migrate_retiring_cache_v1,
     new_plugin_artifact_incarnation_id,
@@ -46,74 +48,11 @@ if TYPE_CHECKING:
     from autoskillit.workspace import EffectiveSkillCatalog
 
 
-def installed_artifact_manifest_path(root: Path) -> Path:
-    """Return the stable external sibling manifest for an installed root."""
-    root = Path(root)
-    return root.parent / f".{root.name}.autoskillit-artifact.json"
-
-
-def installed_artifact_lock_path(root: Path) -> Path:
-    """Return the stable lease sidecar, which is never retired with the root."""
-    manifest_path = installed_artifact_manifest_path(root)
-    return manifest_path.with_suffix(manifest_path.suffix + ".lock")
-
-
-def installed_plugin_semantic_key(plugin_ref: str, version: str) -> str:
-    """Bind the installed artifact to the exact plugin/version transaction."""
-    if not plugin_ref or not version:
-        raise ValueError("installed plugin reference and version must not be empty")
-    return f"{plugin_ref}:{version}"
-
-
 def current_installed_plugin_root() -> Path:
     """Return the lexical cache root created by the current install transaction."""
     from autoskillit import __version__
 
-    return (
-        Path.home()
-        / ".claude"
-        / "plugins"
-        / "cache"
-        / DIRECT_INSTALL_CACHE_SUBDIR
-        / "autoskillit"
-        / __version__
-    )
-
-
-def _validate_installed_plugin_destination(root: Path) -> None:
-    """Reject a target whose lexical location cannot be mutated safely."""
-    supplied = Path(root)
-    expected = current_installed_plugin_root()
-    if supplied != expected or not supplied.is_absolute():
-        raise PluginArtifactValidationError(
-            f"installed plugin target is outside the current managed cache: {supplied}"
-        )
-    if supplied.is_symlink():
-        raise PluginArtifactValidationError(
-            f"installed plugin target must not be a symlink: {supplied}"
-        )
-    if supplied.exists() and not supplied.is_dir():
-        raise PluginArtifactValidationError(
-            f"installed plugin target must be a directory: {supplied}"
-        )
-    expected_parent = (
-        Path.home().resolve(strict=False)
-        / ".claude"
-        / "plugins"
-        / "cache"
-        / DIRECT_INSTALL_CACHE_SUBDIR
-        / "autoskillit"
-    )
-    try:
-        location = destination_location(supplied)
-    except (OSError, ValueError) as exc:
-        raise PluginArtifactValidationError(
-            f"installed plugin target cannot be located safely: {supplied}"
-        ) from exc
-    if location.parent != expected_parent:
-        raise PluginArtifactValidationError(
-            f"installed plugin target escapes the managed cache: {supplied}"
-        )
+    return installed_plugin_artifact_root(Path.home(), "autoskillit", __version__)
 
 
 def current_installed_plugin_authority() -> InstalledPluginArtifactAuthority:
@@ -172,13 +111,13 @@ def publish_installed_plugin_artifact(
     """Persist a new exact identity after a successful plugin installation."""
     try:
         managed_path = _canonical_installed_root(root)
-        manifest_path = installed_artifact_manifest_path(managed_path)
+        manifest_path = installed_plugin_artifact_manifest_path(managed_path)
         if not manifest_path.is_absolute():
             raise PluginArtifactPublicationError(
                 f"installed plugin manifest path is not absolute: {manifest_path}"
             )
         if _owned_exclusive_lease is not None:
-            expected_lock = installed_artifact_lock_path(managed_path)
+            expected_lock = installed_plugin_artifact_lease_path(managed_path)
             if (
                 _owned_exclusive_lease.closed
                 or _owned_exclusive_lease.shared
@@ -192,7 +131,7 @@ def publish_installed_plugin_artifact(
                 semantic_key=semantic_key,
             )
         with ArtifactLease.acquire_exclusive(
-            installed_artifact_lock_path(managed_path),
+            installed_plugin_artifact_lease_path(managed_path),
             blocking=True,
         ):
             return _publish_installed_plugin_artifact_locked(
@@ -214,7 +153,7 @@ def _publish_installed_plugin_artifact_locked(
 ) -> PluginArtifactIdentity:
     """Publish identity while the caller owns the stable exclusive sidecar."""
     managed_path = _canonical_installed_root(managed_path)
-    manifest_path = installed_artifact_manifest_path(managed_path)
+    manifest_path = installed_plugin_artifact_manifest_path(managed_path)
     identity = PluginArtifactIdentity(
         semantic_key=semantic_key,
         incarnation_id=new_plugin_artifact_incarnation_id(),
@@ -259,25 +198,35 @@ class InstalledPluginArtifactAuthority:
             raise PluginArtifactValidationError(
                 "installed plugin authority requires implicit_installed load mode"
             )
+        from autoskillit.workspace import (
+            InstallStateLeaseMode,
+            InstallStateSpec,
+            verify_installed_plugin_artifact,
+        )
+
         try:
-            managed_path = _canonical_installed_root(self._root)
-        except Exception as exc:
-            raise PluginArtifactValidationError(
-                f"installed plugin root is invalid: {self._root}"
-            ) from exc
-        try:
-            lease = ArtifactLease.acquire_shared(installed_artifact_lock_path(managed_path))
-        except Exception as exc:
-            raise PluginArtifactPublicationError(
-                f"installed plugin reader lease acquisition failed: {self._semantic_key}"
-            ) from exc
-        try:
-            identity = _read_and_validate_identity(
-                managed_path,
-                expected_semantic_key=self._semantic_key,
+            spec = InstallStateSpec.from_managed_root(
+                self._root,
+                self._semantic_key,
+                require_registered_plugin=True,
+                lease_mode=InstallStateLeaseMode.SHARED,
             )
+        except ValueError as exc:
+            raise PluginArtifactValidationError(str(exc)) from exc
+
+        verification = verify_installed_plugin_artifact(spec)
+        lease = verification.lease
+        if verification.findings or verification.identity is None or lease is None:
+            if lease is not None:
+                lease.close()
+            detail = "; ".join(finding.message for finding in verification.findings)
+            raise PluginArtifactValidationError(
+                detail or f"installed plugin identity is unavailable: {self._semantic_key}"
+            )
+        try:
+            identity = verification.identity
             InstalledPluginArtifactRetirementOwner(
-                managed_path.parent
+                identity.managed_path.parent
             ).cancel_obsolete_retirements(identity)
             log_plugin_artifact_lifecycle(
                 logger,
@@ -323,8 +272,8 @@ class InstalledPluginArtifactRetirementOwner:
         self._retirement = PluginArtifactRetirementEngine(
             managed_root=managed_root,
             artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
-            manifest_path=installed_artifact_manifest_path,
-            lease_path=installed_artifact_lock_path,
+            manifest_path=installed_plugin_artifact_manifest_path,
+            lease_path=installed_plugin_artifact_lease_path,
             current_identity=self._current_identity,
             logger=logger,
         )
@@ -444,7 +393,7 @@ def _read_and_validate_identity(
     return read_installed_plugin_artifact_identity(
         managed_path,
         expected_semantic_key=expected_semantic_key,
-        manifest_path=installed_artifact_manifest_path(managed_path),
+        manifest_path=installed_plugin_artifact_manifest_path(managed_path),
     )
 
 
@@ -452,7 +401,7 @@ def _read_installed_plugin_identity(managed_path: Path) -> PluginArtifactIdentit
     """Validate an installed identity whose semantic key is persisted on disk."""
     return read_installed_plugin_artifact_identity(
         managed_path,
-        manifest_path=installed_artifact_manifest_path(managed_path),
+        manifest_path=installed_plugin_artifact_manifest_path(managed_path),
     )
 
 
@@ -486,8 +435,8 @@ __all__ = [
     "current_installed_plugin_authority",
     "current_installed_plugin_root",
     "default_plugin_retirement_coordinator",
-    "installed_artifact_lock_path",
-    "installed_artifact_manifest_path",
+    "installed_plugin_artifact_lease_path",
+    "installed_plugin_artifact_manifest_path",
     "installed_plugin_semantic_key",
     "interactive_plugin_authority",
     "publish_installed_plugin_artifact",

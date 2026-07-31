@@ -1,0 +1,387 @@
+"""Real-selector integration coverage for interactive plugin launch consumers."""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+from collections.abc import Iterator
+from contextlib import contextmanager, nullcontext
+from dataclasses import replace
+from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
+
+import pytest
+
+from autoskillit import cli
+from autoskillit.cli._plugin_artifact import interactive_plugin_authority
+from autoskillit.cli.session._session_launch import _run_interactive_session
+from autoskillit.core import (
+    CLAUDE_CODE_CAPABILITIES,
+    BackendConventions,
+    CmdSpec,
+    CookSessionHandle,
+    EffectiveSkillCatalogAuthority,
+    ManagedSessionHome,
+    PluginArtifactValidationError,
+    PluginLaunchBinding,
+    PluginLoadMode,
+    SkillProjectionContextAuthority,
+    ValidatedAddDir,
+)
+from autoskillit.core._plugin_ids import (
+    detect_autoskillit_mcp_prefix as _production_mcp_prefix,
+)
+from autoskillit.execution.backends.codex import CodexBackend
+from tests.fixtures.plugin_artifact_state import (
+    INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
+    PluginArtifactState,
+    PluginArtifactStateKind,
+    build_plugin_artifact_state,
+)
+
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
+
+
+_CLAUDE_INSTALLED_INVALID_STATES = tuple(
+    kind
+    for kind in INVALID_PLUGIN_ARTIFACT_STATE_KINDS
+    if kind
+    not in {
+        # These lexical-evidence states intentionally do not require registry
+        # publication, so they exercise verifier behavior after selection
+        # rather than the "fail before child spawn" registration contract.
+        PluginArtifactStateKind.DANGLING_MANAGED_ROOT,
+        PluginArtifactStateKind.DANGLING_MANIFEST,
+        PluginArtifactStateKind.DANGLING_LEASE,
+    }
+)
+_CODEX_IGNORED_CLAUDE_ARTIFACT_STATES = (
+    *INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
+    PluginArtifactStateKind.VALID_CURRENT,
+)
+
+
+class _RecordingBackend:
+    conventions = BackendConventions()
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.build_calls: list[dict[str, object]] = []
+        self.recover_count = 0
+
+    @property
+    def capabilities(self):
+        if self.name == "claude-code":
+            return CLAUDE_CODE_CAPABILITIES
+        return replace(
+            CodexBackend().capabilities,
+            session_dir_persistent=False,
+        )
+
+    def binary_name(self) -> str:
+        return "claude" if self.name == "claude-code" else "codex"
+
+    def ensure_pre_launch(
+        self,
+        *,
+        session_dir: Path | None = None,
+        executable: object = None,
+    ) -> list[str]:
+        del session_dir, executable
+        return []
+
+    def recover_cook_history(self) -> None:
+        self.recover_count += 1
+
+    def session_locator(self) -> object:
+        return SimpleNamespace()
+
+    def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
+        self.build_calls.append(kwargs)
+        binding = kwargs.get("plugin_binding")
+        return CmdSpec(
+            cmd=(self.binary_name(),),
+            env={},
+            inherited_fds=getattr(binding, "inherited_fds", ()),
+        )
+
+    def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
+        del spec
+        return []
+
+    def cook_session_context(
+        self,
+        *,
+        session_home: Path,
+        project_dir: Path,
+        launch_id: str,
+        attempt: int,
+        current_resume_spec: object,
+    ):
+        del session_home, project_dir, current_resume_spec
+        return nullcontext(
+            CookSessionHandle(
+                view_id=f"{launch_id}-{attempt}",
+                pass_fds=(),
+                _record_spawn=lambda _pid, _pgid: None,
+                _record_reaped=lambda _pid, _pgid: None,
+            )
+        )
+
+
+class _CookSessionManager:
+    def __init__(self, generated_home: Path, events: list[tuple[object, ...]]) -> None:
+        self._generated_home = generated_home
+        self._events = events
+
+    def cleanup_stale(self) -> None:
+        return None
+
+    @contextmanager
+    def managed_session(
+        self,
+        launch_id: str,
+        catalog: EffectiveSkillCatalogAuthority,
+        projection_context: SkillProjectionContextAuthority,
+    ) -> Iterator[ManagedSessionHome]:
+        self._events.append(("managed-enter", launch_id))
+        assert projection_context.catalog == catalog
+        skills_dir = self._generated_home / "skills"
+        skills_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            yield ManagedSessionHome(
+                launch_id=launch_id,
+                generated_home=self._generated_home,
+                skills_dir=ValidatedAddDir(str(skills_dir)),
+                pass_fds=(),
+            )
+        finally:
+            self._events.append(("managed-exit", launch_id))
+
+
+def _install_cook_harness(
+    monkeypatch: pytest.MonkeyPatch,
+    project_dir: Path,
+) -> dict[str, object]:
+    generated_home = project_dir / "managed-home"
+    events: list[tuple[object, ...]] = []
+    captured: dict[str, object] = {
+        "events": events,
+        "generated_home": generated_home,
+    }
+    manager = _CookSessionManager(generated_home, events)
+
+    def run_attempt(spec: CmdSpec, **kwargs: object) -> object:
+        captured["spec"] = spec
+        events.append(("run",))
+        on_spawn = cast(object, kwargs["on_spawn"])
+        on_reaped = cast(object, kwargs["on_reaped"])
+        trace = kwargs["trace"]
+        on_spawn(101, 101)  # type: ignore[operator]
+        trace.record_spawn()  # type: ignore[attr-defined]
+        on_reaped(101, 101)  # type: ignore[operator]
+        return SimpleNamespace(pid=101, pgid=101, returncode=0)
+
+    generated_home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(project_dir)
+    monkeypatch.setattr(shutil, "which", lambda _binary: "/usr/bin/agent")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(
+        "autoskillit.workspace.DefaultSessionSkillManager",
+        lambda *args, **kwargs: manager,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli._onboarding.is_first_run",
+        lambda _project_dir: False,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.ui._timed_input.timed_prompt",
+        lambda *args, **kwargs: "",
+    )
+    monkeypatch.setattr(
+        "autoskillit.core.write_registry_entry",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_process.run_cook_attempt",
+        run_attempt,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+        lambda _project_dir: None,
+    )
+    return captured
+
+
+def _activate_production_selector(
+    monkeypatch: pytest.MonkeyPatch,
+    state: PluginArtifactState,
+) -> None:
+    """Undo the CLI test directory's direct-prefix stub for this integration."""
+    _production_mcp_prefix.cache_clear()
+    monkeypatch.setattr(
+        "autoskillit.core.detect_autoskillit_mcp_prefix",
+        _production_mcp_prefix,
+    )
+    monkeypatch.setattr(Path, "home", lambda: state.home)
+    monkeypatch.setenv("HOME", str(state.home))
+
+
+def _run_session_launch(
+    monkeypatch: pytest.MonkeyPatch,
+    state: PluginArtifactState,
+    backend: _RecordingBackend,
+    spawn_calls: list[tuple[tuple[object, ...], dict[str, object]]],
+) -> None:
+    (state.home / "project").mkdir(parents=True, exist_ok=True)
+    agent_path = state.home / "agent"
+    agent_path.write_text("#!/bin/sh\nexit 0\n")
+    agent_path.chmod(0o755)
+
+    def resolve_agent(_binary: str, *, path: str | None = None) -> str:
+        assert path is None
+        return str(agent_path)
+
+    monkeypatch.setattr(shutil, "which", resolve_agent)
+
+    def record_spawn(*args: object, **kwargs: object) -> object:
+        spawn_calls.append((args, kwargs))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", record_spawn)
+    _run_interactive_session(
+        system_prompt="selector integration",
+        project_dir=state.home / "project",
+        backend=backend,
+    )
+
+
+@pytest.mark.parametrize(
+    "kind",
+    _CLAUDE_INSTALLED_INVALID_STATES,
+    ids=lambda kind: kind.value,
+)
+@pytest.mark.parametrize("consumer", ("cook", "session-launch"))
+def test_invalid_claude_artifact_fails_before_interactive_child_spawn(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    kind: PluginArtifactStateKind,
+    consumer: str,
+) -> None:
+    state = build_plugin_artifact_state(tmp_path / "home", kind)
+    _activate_production_selector(monkeypatch, state)
+    backend = _RecordingBackend("claude-code")
+    spawn_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    cook_capture: dict[str, object] | None = None
+    authority, load_mode = interactive_plugin_authority(
+        backend=backend,
+        project_dir=state.home / "project",
+        default_base_branch="main",
+        skill_catalog=None,
+        generated_home=None,
+    )
+    assert authority is not None
+    assert load_mode is PluginLoadMode.IMPLICIT_INSTALLED
+
+    with pytest.raises(PluginArtifactValidationError):
+        if consumer == "cook":
+            cook_capture = _install_cook_harness(monkeypatch, state.home / "project")
+            cli.cook(backend=backend)
+            pytest.fail(f"Cook unexpectedly completed: {cook_capture}")
+        else:
+            _run_session_launch(monkeypatch, state, backend, spawn_calls)
+
+    assert backend.build_calls == []
+    assert spawn_calls == []
+    if cook_capture is not None:
+        events = cast(list[tuple[object, ...]], cook_capture["events"])
+        assert ("run",) not in events
+
+
+@pytest.mark.parametrize("consumer", ("cook", "session-launch"))
+def test_matching_claude_artifact_binds_through_real_selector(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    consumer: str,
+) -> None:
+    state = build_plugin_artifact_state(
+        tmp_path / "home",
+        PluginArtifactStateKind.VALID_CURRENT,
+    )
+    _activate_production_selector(monkeypatch, state)
+    backend = _RecordingBackend("claude-code")
+    spawn_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    if consumer == "cook":
+        _install_cook_harness(monkeypatch, state.home / "project")
+        cli.cook(backend=backend)
+    else:
+        _run_session_launch(monkeypatch, state, backend, spawn_calls)
+
+    expected_builds = 2 if consumer == "session-launch" else 1
+    assert len(backend.build_calls) == expected_builds
+    binding = cast(PluginLaunchBinding, backend.build_calls[-1]["plugin_binding"])
+    assert binding.load_mode is PluginLoadMode.IMPLICIT_INSTALLED
+    assert binding.plugin_dir is None
+    assert binding.identity == state.identity
+    assert binding.closed
+    if consumer == "session-launch":
+        assert len(spawn_calls) == 1
+
+
+@pytest.mark.parametrize(
+    "kind",
+    _CODEX_IGNORED_CLAUDE_ARTIFACT_STATES,
+    ids=lambda kind: kind.value,
+)
+def test_codex_cook_remains_generated_home_and_ignores_claude_artifacts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    kind: PluginArtifactStateKind,
+) -> None:
+    state = build_plugin_artifact_state(tmp_path / "home", kind)
+    _activate_production_selector(monkeypatch, state)
+    backend = _RecordingBackend("codex")
+    captured = _install_cook_harness(monkeypatch, state.home / "project")
+    generated_home = captured["generated_home"]
+
+    authority, load_mode = interactive_plugin_authority(
+        backend=backend,
+        project_dir=state.home / "project",
+        default_base_branch="main",
+        skill_catalog=None,
+        generated_home=generated_home,
+    )
+    assert authority is None
+    assert load_mode is PluginLoadMode.GENERATED_HOME
+
+    cli.cook(backend=backend)
+
+    assert len(backend.build_calls) == 1
+    assert backend.build_calls[0]["plugin_binding"] is None
+    assert backend.build_calls[0]["generated_home"] == generated_home
+
+
+@pytest.mark.parametrize(
+    "kind",
+    _CODEX_IGNORED_CLAUDE_ARTIFACT_STATES,
+    ids=lambda kind: kind.value,
+)
+def test_codex_session_launch_ignores_claude_installed_artifacts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    kind: PluginArtifactStateKind,
+) -> None:
+    state = build_plugin_artifact_state(tmp_path / "home", kind)
+    _activate_production_selector(monkeypatch, state)
+    backend = _RecordingBackend("codex")
+    spawn_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    _run_session_launch(monkeypatch, state, backend, spawn_calls)
+
+    assert len(backend.build_calls) == 2
+    binding = cast(PluginLaunchBinding, backend.build_calls[-1]["plugin_binding"])
+    assert binding.load_mode is PluginLoadMode.PROJECTED_HOME
+    assert binding.identity.managed_path != state.managed_root
+    assert len(spawn_calls) == 1

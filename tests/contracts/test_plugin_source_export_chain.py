@@ -95,8 +95,11 @@ def test_workspace_gateway_exports_the_install_state_authority() -> None:
 
     for name in (
         "verify_install_state",
+        "verify_installed_plugin_artifact",
         "reconcile_install_artifacts",
+        "InstalledArtifactVerification",
         "InstallStateFinding",
+        "InstallStateSpec",
         "ProjectionCacheKey",
         "PROJECTION_CACHE_KEY_EXCLUSIONS",
         "public_plugin_asset_digest",

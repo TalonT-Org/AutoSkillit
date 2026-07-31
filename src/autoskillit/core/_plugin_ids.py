@@ -27,12 +27,28 @@ DIRECT_PREFIX = "mcp__autoskillit__"
 MARKETPLACE_PREFIX = "mcp__plugin_autoskillit_autoskillit__"
 
 
-def _installed_plugins_path() -> Path:
+def _installed_plugins_path(home: Path | None = None) -> Path:
     """Return the path to Claude Code's installed plugins registry."""
-    return Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+    base = Path.home() if home is None else Path(home)
+    return base / ".claude" / "plugins" / "installed_plugins.json"
 
 
-def registered_install_paths() -> tuple[Path, ...]:
+def installed_plugin_semantic_key(plugin_ref: str, version: str) -> str:
+    """Bind an installed artifact to one exact plugin/version transaction."""
+    if not plugin_ref or not version:
+        raise ValueError("installed plugin reference and version must not be empty")
+    return f"{plugin_ref}:{version}"
+
+
+def parse_installed_plugin_semantic_key(semantic_key: str) -> tuple[str, str]:
+    """Return the plugin reference and version encoded in a semantic key."""
+    plugin_ref, separator, version = semantic_key.rpartition(":")
+    if not separator or not plugin_ref or not version:
+        raise ValueError(f"invalid installed plugin semantic key: {semantic_key!r}")
+    return plugin_ref, version
+
+
+def registered_install_paths(home: Path | None = None) -> tuple[Path, ...]:
     """Return every ``installPath`` recorded for autoskillit, for diagnostics only.
 
     This is a *reporting* primitive, not a resolution one: no execution path may
@@ -49,7 +65,7 @@ def registered_install_paths() -> tuple[Path, ...]:
     Never raises: an absent, unreadable, or malformed file yields ``()``.
     """
     try:
-        data = json.loads(_installed_plugins_path().read_text())
+        data = json.loads(_installed_plugins_path(home).read_text())
     except (OSError, json.JSONDecodeError):
         return ()
     if not isinstance(data, dict):

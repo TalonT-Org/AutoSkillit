@@ -10,8 +10,34 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autoskillit import cli
+from tests.fixtures.plugin_artifact_state import (
+    INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
+    PLUGIN_ARTIFACT_STATE_EXPECTATIONS,
+    PLUGIN_ARTIFACT_STATE_KINDS,
+    PluginArtifactStateKind,
+    build_plugin_artifact_state,
+)
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+
+
+def _filesystem_snapshot(path: Path) -> tuple[object, ...]:
+    if path.is_symlink():
+        return ("symlink", str(path.readlink()))
+    if not path.exists():
+        return ("missing",)
+    if path.is_file():
+        return ("file", path.read_bytes())
+    entries: list[tuple[str, str, object]] = []
+    for entry in sorted(path.rglob("*"), key=str):
+        relative = str(entry.relative_to(path))
+        if entry.is_symlink():
+            entries.append((relative, "symlink", str(entry.readlink())))
+        elif entry.is_file():
+            entries.append((relative, "file", entry.read_bytes()))
+        else:
+            entries.append((relative, "directory", ""))
+    return ("directory", tuple(entries))
 
 
 @pytest.mark.parametrize(
@@ -123,16 +149,11 @@ class TestCLIDoctor:
         (tmp_path / ".pre-commit-config.yaml").write_text(
             "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
         )
-        # Create plugin cache directory for Check 2c + version_consistency plugin.json
-        import importlib.metadata
-
+        # Create the plugin cache directory for Check 2c.
         _cache_dir = (
             tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
         )
         _cache_dir.mkdir(parents=True, exist_ok=True)
-        _plugin_json = _cache_dir / ".claude-plugin" / "plugin.json"
-        _plugin_json.parent.mkdir(parents=True, exist_ok=True)
-        _plugin_json.write_text(json.dumps({"version": importlib.metadata.version("autoskillit")}))
         # Create installed_plugins.json for Check 2d
         (tmp_path / ".claude" / "plugins" / "installed_plugins.json").write_text(
             json.dumps({"version": 2, "plugins": {"autoskillit@autoskillit-local": {}}})
@@ -239,35 +260,21 @@ class TestCLIDoctor:
         assert Severity.ERROR not in _NON_PROBLEM, "ERROR must not be in _NON_PROBLEM"
         assert Severity.WARNING not in _NON_PROBLEM, "WARNING must not be in _NON_PROBLEM"
 
-    def test_doctor_passes_when_versions_match(
+    def test_doctor_does_not_run_duplicate_cache_version_check(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture,
-        request: pytest.FixtureRequest,
     ) -> None:
-        """doctor reports ok when cached plugin.json version matches package."""
-        import importlib.metadata
-
-        pkg_version = importlib.metadata.version("autoskillit")
-        cache_dir = (
-            tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
-        )
-        plugin_json = cache_dir / ".claude-plugin" / "plugin.json"
-        plugin_json.parent.mkdir(parents=True)
-        plugin_json.write_text(json.dumps({"version": pkg_version}))
+        """Version drift is reported only through the shared install-state authority."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
-        from autoskillit.version import version_info as _vi
-
-        _vi.cache_clear()
-        request.addfinalizer(_vi.cache_clear)
         cli.doctor_cmd(output_json=True)
         captured = capsys.readouterr()
         data = json.loads(captured.out)
-        version_checks = [r for r in data["results"] if r["check"] == "version_consistency"]
-        assert len(version_checks) == 1
-        assert version_checks[0]["severity"] == "ok"
+        check_names = {result["check"] for result in data["results"]}
+        assert "version_consistency" not in check_names
+        assert "install_state_consistency" in check_names
 
     def test_doctor_json_output_includes_all_checks(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
@@ -287,7 +294,6 @@ class TestCLIDoctor:
             "mcp_server_registered",
             "autoskillit_on_path",
             "project_config",
-            "version_consistency",
             "hook_health",
             "hook_registration",
             "hook_registry_drift",
@@ -298,7 +304,7 @@ class TestCLIDoctor:
             "stale_entry_points",  # ★ new
             "dual_mcp_registration",  # ★ new
             "plugin_cache_exists",
-            "installed_plugins_entry",
+            "install_state_consistency",
             "ambient_session_type_skill",
             "ambient_session_type_orchestrator",
             "ambient_session_type_fleet",
@@ -477,6 +483,66 @@ def test_doctor_does_not_modify_plugin_state(tmp_path, monkeypatch, capsys):
     )
 
 
+@pytest.mark.parametrize("kind", PLUGIN_ARTIFACT_STATE_KINDS, ids=str)
+def test_actual_doctor_artifact_matrix_is_read_only(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    kind: PluginArtifactStateKind,
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    state = build_plugin_artifact_state(tmp_path, kind)
+    expected = PLUGIN_ARTIFACT_STATE_EXPECTATIONS[kind]
+    tracked_paths = (
+        state.home / ".claude" / "plugins",
+        state.home / ".autoskillit" / "marketplace",
+        state.managed_root,
+        state.manifest_path,
+        state.lease_path,
+        state.registry_path,
+        state.marketplace_manifest_path,
+        state.marketplace_plugin_root,
+        *(() if state.older_root is None else (state.older_root,)),
+    )
+    before = {path: _filesystem_snapshot(path) for path in tracked_paths}
+
+    cli.doctor_cmd(output_json=True)
+
+    data = json.loads(capsys.readouterr().out)
+    after = {path: _filesystem_snapshot(path) for path in tracked_paths}
+    assert after == before
+    consistency = [
+        result
+        for result in data["results"]
+        if result["check"] == "install_state_consistency"
+        or result["check"].startswith("install_state:installed_plugin")
+    ]
+    assert consistency
+    if not expected.checks:
+        assert consistency == [
+            {
+                "severity": "ok",
+                "check": "install_state_consistency",
+                "message": "Install artifacts, registry, and versions agree",
+            }
+        ]
+        return
+
+    assert kind in INVALID_PLUGIN_ARTIFACT_STATE_KINDS
+    exact_errors = [
+        result
+        for result in consistency
+        if result["severity"] == "error"
+        and result["check"].startswith("install_state:installed_plugin")
+    ]
+    assert {result["check"] for result in exact_errors} == {
+        f"install_state:{check}" for check in expected.checks
+    }
+    assert any(str(state.managed_root) in result["message"] for result in exact_errors)
+    assert all("autoskillit install" in result["message"] for result in exact_errors)
+
+
 def test_doctor_checks_plugin_cache_exists(tmp_path, monkeypatch, capsys):
     """Doctor must report when the plugin cache directory is missing."""
     from autoskillit.cli._install_info import InstallInfo, InstallType
@@ -502,20 +568,23 @@ def test_doctor_checks_plugin_cache_exists(tmp_path, monkeypatch, capsys):
     assert checks[0]["severity"] == "warning"
 
 
-def test_doctor_checks_installed_plugins_entry(tmp_path, monkeypatch, capsys):
-    """Doctor must report when installed_plugins.json is missing the autoskillit entry."""
+def test_doctor_does_not_run_a_duplicate_installed_plugins_check(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    """Registry state is reported only through the shared install-state authority."""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.chdir(tmp_path)
-    # Create installed_plugins.json without the autoskillit entry
     plugins_dir = tmp_path / ".claude" / "plugins"
     plugins_dir.mkdir(parents=True)
     (plugins_dir / "installed_plugins.json").write_text("{}")
     cli.doctor_cmd(output_json=True)
     captured = capsys.readouterr()
     data = json.loads(captured.out)
-    checks = [r for r in data["results"] if r["check"] == "installed_plugins_entry"]
-    assert len(checks) == 1, "Expected an installed_plugins_entry check"
-    assert checks[0]["severity"] == "warning"
+    checks = {result["check"]: result for result in data["results"]}
+    assert "installed_plugins_entry" not in checks
+    assert checks["install_state_consistency"]["severity"] == "ok"
 
 
 def test_stale_gate_check_absent_from_doctor_output(tmp_path, monkeypatch, capsys):
@@ -1379,85 +1448,6 @@ def test_doctor_plugin_cache_integrity_ok_when_valid(tmp_path: Path) -> None:
     (version_dir / "hooks.json").write_text(_json.dumps(valid_hooks))
 
     result = _check_plugin_cache_integrity(cache_dir=fake_cache)
-
-    assert result.severity == Severity.OK
-
-
-# T-CACHE-VERSION-1: _check_cache_version_mismatch returns ERROR when kitchen open + mismatch
-def test_doctor_cache_version_mismatch_with_kitchen_open(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """_check_cache_version_mismatch must return ERROR when kitchen is open and versions differ."""
-    import autoskillit.version as _ver
-    from autoskillit.cli.doctor._doctor_mcp import _check_cache_version_mismatch
-    from autoskillit.core import Severity
-
-    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: True)
-    monkeypatch.setattr(
-        _ver,
-        "version_info",
-        lambda **kw: {
-            "match": False,
-            "plugin_json_version": "0.9.347",
-            "package_version": "0.9.351",
-        },
-    )
-
-    result = _check_cache_version_mismatch()
-
-    assert result.severity == Severity.ERROR, (
-        "_check_cache_version_mismatch must return ERROR when kitchen open and version mismatch"
-    )
-    assert "0.9.347" in result.message
-    assert "0.9.351" in result.message
-
-
-# T-CACHE-VERSION-2: _check_cache_version_mismatch returns WARNING when kitchen closed + mismatch
-def test_doctor_cache_version_mismatch_without_kitchen(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """_check_cache_version_mismatch must return WARNING (not ERROR) when kitchen is closed."""
-    import autoskillit.version as _ver
-    from autoskillit.cli.doctor._doctor_mcp import _check_cache_version_mismatch
-    from autoskillit.core import Severity
-
-    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: False)
-    monkeypatch.setattr(
-        _ver,
-        "version_info",
-        lambda **kw: {
-            "match": False,
-            "plugin_json_version": "0.9.347",
-            "package_version": "0.9.351",
-        },
-    )
-
-    result = _check_cache_version_mismatch()
-
-    assert result.severity == Severity.WARNING
-
-
-# T-CACHE-VERSION-3: _check_cache_version_mismatch returns OK when versions match
-def test_doctor_cache_version_mismatch_ok_when_matching(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """_check_cache_version_mismatch must return OK when versions match."""
-    import autoskillit.version as _ver
-    from autoskillit.cli.doctor._doctor_mcp import _check_cache_version_mismatch
-    from autoskillit.core import Severity
-
-    monkeypatch.setattr("autoskillit.core.any_kitchen_open", lambda **kw: False)
-    monkeypatch.setattr(
-        _ver,
-        "version_info",
-        lambda **kw: {
-            "match": True,
-            "plugin_json_version": "0.9.351",
-            "package_version": "0.9.351",
-        },
-    )
-
-    result = _check_cache_version_mismatch()
 
     assert result.severity == Severity.OK
 

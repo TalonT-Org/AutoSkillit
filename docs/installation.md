@@ -67,7 +67,10 @@ projects need.
 
     autoskillit doctor
 
-Doctor runs 41 checks (23 numbered + 7 lettered sub-checks: `2b`, `2c`, `2d`, `2e`, `4b`, `7b`, `7c` + 11 backend runtime probes, checks 30–39 including `31b`); up to 47 with the fleet feature enabled.
+Doctor runs 41 ungated checks: 22 numbered base checks (1–23, excluding 5),
+7 lettered sub-checks (`2b`, `2c`, `2d`, `2e`, `4b`, `7b`, `7c`), and
+12 backend/runtime checks (30–40, including `31b`). Enabling the fleet feature
+adds checks 24–29, for 47 total.
 Enumerated by `run_doctor` in `src/autoskillit/cli/doctor/__init__.py`:
 
 | # | Check | What it verifies |
@@ -76,14 +79,15 @@ Enumerated by `run_doctor` in `src/autoskillit/cli/doctor/__init__.py`:
 | 2 | MCP server registered | AutoSkillit MCP server is registered (direct entry or via plugin) |
 | 2b | Dual MCP registration | No duplicate direct + marketplace registration |
 | 2c | Plugin cache exists | `~/.claude/plugins/cache/autoskillit-local/` directory exists |
-| 2d | installed_plugins.json | AutoSkillit entry present in installed_plugins.json |
+| 2d | Plugin cache integrity | Cached `hooks.json` paths resolve to real files |
+| 2e | Install state consistency | Exact install artifacts, registry entries, retired shapes, and derived versions agree |
 | 3 | `autoskillit` on PATH | The CLI command is reachable |
 | 4 | Config exists | `.autoskillit/config.yaml` is present |
 | 4b | Config secrets placement | Secrets live in `.autoskillit/.secrets.yaml`, never in `config.yaml` |
-| 5 | Version consistency | Cached plugin.json version matches installed package version |
 | 6 | Hook executability | Deployed hook scripts exist and are executable for every event type |
 | 7 | Hook registration | Hooks are registered in `settings.json` |
 | 7b | Hook registry drift | Structural diff against `generate_hooks_json()` from `hook_registry.py` |
+| 7c | Dual hook registration | Plugin-active installs do not also register hooks in `settings.json` |
 | 8 | Script version health | Project recipes carry the current `autoskillit_version` |
 | 9 | gitignore completeness | `.gitignore` covers `.autoskillit/temp/` and other generated paths |
 | 10 | Secret scanning hook | `gitleaks` (or equivalent) is installed as a pre-commit hook |
@@ -104,9 +108,16 @@ Enumerated by `run_doctor` in `src/autoskillit/cli/doctor/__init__.py`:
 | 29 | Fleet state schema | Fleet state schema version drift (fleet feature only) |
 | 30 | Codex version | Codex CLI version meets minimum requirement |
 | 31 | script(1) binary | PTY binary availability with -qefc support |
+| 31b | Claude binary | Claude CLI availability for capability-driven rerouting |
 | 32 | MCP timeouts | Codex MCP tool_timeout_sec coherence |
 | 33 | Codex graduation | Multi-criteria graduation readiness (version, probe, matrix, smoke) |
 | 34 | CLI conformance | Backend CLI accepts minimal TOML config probe |
+| 35 | Codex NDJSON drift | Codex event vocabulary matches the supported parser contract |
+| 36 | Codex model aliases | Configured Codex model aliases are current |
+| 37 | Standing backend pins | Standing backend model pins are feasible |
+| 38 | Local recipe validity | Local recipes satisfy the current recipe contract |
+| 39 | Codex limits pin | Codex limits version pin is current |
+| 40 | Skill capability authenticity | Bundled skill capabilities match authentic source evidence |
 
 See **[Hooks](safety/hooks.md)** for what each PreToolUse / PostToolUse /
 SessionStart hook actually enforces.
@@ -134,11 +145,14 @@ If you installed via `uv tool install`, ensure `~/.local/bin` is on your PATH:
 Install Claude Code following [Anthropic's guide](https://docs.anthropic.com/en/docs/claude-code/overview).
 Then re-run `autoskillit install`.
 
-### Doctor reports "version_consistency: WARNING"
+### Doctor reports an `install_state:*` finding
 
-Your installed package version doesn't match the plugin manifest. Re-run:
+The shared `install_state_consistency` diagnostic names the exact artifact or
+invariant whose installed state disagrees with the registry, a retired shape, or
+the running package version. Rebuild and reconcile the install, then verify it:
 
     autoskillit install
+    autoskillit doctor
 
 ### Doctor reports "hook_health: ERROR"
 

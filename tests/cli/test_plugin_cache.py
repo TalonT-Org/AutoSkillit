@@ -31,12 +31,20 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 def _installed_identity(tmp_path: Path, version: str = "1.0.0"):
     from autoskillit.cli._plugin_artifact import publish_installed_plugin_artifact
 
-    root = (tmp_path / ".claude" / "plugins" / "cache" / "market" / version).absolute()
+    root = (
+        tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit" / version
+    ).absolute()
     root.mkdir(parents=True)
     (root / "plugin.json").write_text('{"name":"autoskillit"}', encoding="utf-8")
+    metadata = root / ".claude-plugin" / "plugin.json"
+    metadata.parent.mkdir(parents=True)
+    metadata.write_text(
+        json.dumps({"name": "autoskillit", "version": version}),
+        encoding="utf-8",
+    )
     return publish_installed_plugin_artifact(
         root,
-        semantic_key=f"autoskillit@market:{version}",
+        semantic_key=f"autoskillit@autoskillit-local:{version}",
     )
 
 
@@ -98,7 +106,7 @@ def test_installed_reclaim_defers_until_final_reader_closes(
 ) -> None:
     from autoskillit.cli._plugin_artifact import (
         InstalledPluginArtifactRetirementOwner,
-        installed_artifact_lock_path,
+        installed_plugin_artifact_lease_path,
     )
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -111,7 +119,9 @@ def test_installed_reclaim_defers_until_final_reader_closes(
         for record in read_retiring_cache().records
         if record.record_id == append_result.record_id
     )
-    reader = ArtifactLease.acquire_shared(installed_artifact_lock_path(identity.managed_path))
+    reader = ArtifactLease.acquire_shared(
+        installed_plugin_artifact_lease_path(identity.managed_path)
+    )
     try:
         assert (
             owner.try_reclaim(record, deadline + timedelta(seconds=1))
@@ -258,6 +268,20 @@ def test_installed_lifecycle_events_use_the_shared_schema(
     try:
         with structlog.testing.capture_logs() as logs:
             identity = _installed_identity(tmp_path)
+            registry = tmp_path / ".claude" / "plugins" / "installed_plugins.json"
+            registry.write_text(
+                json.dumps(
+                    {
+                        "version": 2,
+                        "plugins": {
+                            "autoskillit@autoskillit-local": {
+                                "installPath": str(identity.managed_path)
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
             binding = InstalledPluginArtifactAuthority(
                 identity.managed_path,
                 semantic_key=identity.semantic_key,

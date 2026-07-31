@@ -29,9 +29,9 @@ the stdlib reader that exists precisely so any layer can ask this question.
 
 from __future__ import annotations
 
+import importlib.metadata
 import json
 import shutil
-from dataclasses import dataclass
 from pathlib import Path
 
 from autoskillit.core import (  # IL-005: core only — never cli.InstalledPluginsFile
@@ -39,14 +39,19 @@ from autoskillit.core import (  # IL-005: core only — never cli.InstalledPlugi
     RETIRED_INSTALL_ARTIFACT_SHAPES,
     PluginArtifactKind,
     PluginArtifactUnavailableError,
-    PluginArtifactValidationError,
     RetiringArtifactRecord,
     RetiringCacheState,
     Severity,
     get_logger,
-    read_installed_plugin_artifact_identity,
     read_retiring_cache,
     registered_install_paths,
+)
+from autoskillit.workspace._installed_artifact import (
+    _INSTALLED_PLUGIN_ARTIFACT_UNREADABLE_CHECK,
+    InstallStateFinding,
+    InstallStateLeaseMode,
+    InstallStateSpec,
+    verify_installed_plugin_artifact,
 )
 
 __all__ = [
@@ -57,15 +62,6 @@ __all__ = [
 ]
 
 logger = get_logger(__name__)
-
-
-@dataclass(frozen=True, slots=True)
-class InstallStateFinding:
-    """One violated install-state invariant, named precisely enough to act on."""
-
-    severity: Severity
-    check: str
-    message: str
 
 
 def _home() -> Path:
@@ -101,24 +97,34 @@ def _read_json_version(path: Path, *, key: str) -> str | None:
     return version if isinstance(version, str) else None
 
 
+def _current_install_state_spec() -> InstallStateSpec:
+    """Build the diagnostic spec from current metadata and registry evidence."""
+    from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY
+
+    home = _home()
+    return InstallStateSpec(
+        home=home,
+        plugin_ref=_AUTOSKILLIT_PLUGIN_KEY,
+        expected_version=importlib.metadata.version("autoskillit"),
+        require_registered_plugin=bool(registered_install_paths(home)),
+        lease_mode=InstallStateLeaseMode.SHARED,
+    )
+
+
 def verify_install_state() -> tuple[InstallStateFinding, ...]:
     """Return every violated install-state invariant, most actionable first."""
-    from autoskillit import __version__
-
     findings: list[InstallStateFinding] = []
 
-    # 1. Registry / filesystem agreement. A dangling installPath is what turned a
-    #    background sweep two hours after a failed install into a hard crash.
-    for install_path in registered_install_paths():
-        if not install_path.is_dir():
-            findings.append(
-                InstallStateFinding(
-                    Severity.ERROR,
-                    "installed_plugins_install_path",
-                    f"installed_plugins.json names a directory that does not exist: "
-                    f"{install_path}. Run `autoskillit install` to reinstall the plugin.",
-                )
-            )
+    # 1. Registry obligation and exact current-artifact identity. Registry paths
+    #    are evidence only; the shared authority derives the sole managed root
+    #    from the trusted home/plugin/version tuple.
+    current_spec = _current_install_state_spec()
+    exact = verify_installed_plugin_artifact(current_spec)
+    try:
+        findings.extend(exact.findings)
+    finally:
+        if exact.lease is not None:
+            exact.lease.close()
 
     # 2. Retired artifact shapes still present on disk.
     for key, retired in sorted(RETIRED_INSTALL_ARTIFACT_SHAPES.items()):
@@ -137,7 +143,7 @@ def verify_install_state() -> tuple[InstallStateFinding, ...]:
     # 3. Legacy evidence is visible but never deletion authority. Exact v2
     #    records are errors only when the registered path still validates as
     #    the same incarnation.
-    registered = frozenset(registered_install_paths())
+    registered = frozenset(registered_install_paths(_home()))
     retirement = read_retiring_cache()
     if retirement.state is RetiringCacheState.CORRUPT:
         detail = retirement.error or "unknown parse failure"
@@ -199,7 +205,7 @@ def verify_install_state() -> tuple[InstallStateFinding, ...]:
                 )
 
     # 4. Version agreement, one finding per derived file (see module docstring).
-    findings.extend(_derived_version_findings(__version__))
+    findings.extend(_derived_version_findings(current_spec.expected_version))
 
     return tuple(findings)
 
@@ -207,15 +213,35 @@ def verify_install_state() -> tuple[InstallStateFinding, ...]:
 def _record_matches_current_installed_artifact(
     record: RetiringArtifactRecord,
 ) -> bool:
+    from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY
+
     try:
-        identity = read_installed_plugin_artifact_identity(
+        spec = InstallStateSpec.from_managed_root(
             record.managed_path,
-            expected_semantic_key=record.semantic_key,
-            manifest_path=record.manifest_path,
+            record.semantic_key,
+            require_registered_plugin=False,
+            lease_mode=InstallStateLeaseMode.SHARED,
         )
-    except PluginArtifactValidationError:
+    except ValueError:
         return False
-    return identity == record.identity
+    if spec.plugin_ref != _AUTOSKILLIT_PLUGIN_KEY:
+        return False
+    verification = verify_installed_plugin_artifact(spec)
+    try:
+        unreadable = next(
+            (
+                finding
+                for finding in verification.findings
+                if finding.check == _INSTALLED_PLUGIN_ARTIFACT_UNREADABLE_CHECK
+            ),
+            None,
+        )
+        if unreadable is not None:
+            raise PluginArtifactUnavailableError(unreadable.message)
+        return not verification.findings and verification.identity == record.identity
+    finally:
+        if verification.lease is not None:
+            verification.lease.close()
 
 
 def _has_retired_shape(artifact: Path, shape: str) -> bool:

@@ -246,13 +246,58 @@ def init(
 def install(
     *,
     scope: Annotated[str, Parameter(help="Registration scope: user, project, or local")] = "user",
-):
+    maintenance_update: Annotated[bool, Parameter(show=False)] = False,
+    require_registered_plugin: Annotated[bool, Parameter(show=False)] = False,
+    expected_version: Annotated[str | None, Parameter(show=False)] = None,
+) -> None:
     """Install the plugin for Claude Code and refresh the cache."""
+    from autoskillit import __version__
     from autoskillit.cli._init_helpers import _print_next_steps
+    from autoskillit.cli._install_contract import (
+        InstallMode,
+        InstallOutcome,
+        InstallProcessStatus,
+        InstallRequest,
+        process_status_for_result,
+    )
     from autoskillit.cli._marketplace import install as _install
 
-    completed = _install(scope=scope)
-    if completed:
+    if maintenance_update:
+        if expected_version is None:
+            raise ValueError("--maintenance-update requires --expected-version")
+        request = InstallRequest(
+            scope=scope,
+            mode=InstallMode.MAINTENANCE_UPDATE,
+            require_registered_plugin=require_registered_plugin,
+            expected_version=expected_version,
+        )
+    else:
+        if require_registered_plugin or expected_version is not None:
+            raise ValueError(
+                "--require-registered-plugin and --expected-version require --maintenance-update"
+            )
+        request = InstallRequest(
+            scope=scope,
+            mode=InstallMode.DIRECT,
+            require_registered_plugin=True,
+            expected_version=__version__,
+        )
+    if maintenance_update:
+        result = _install(
+            request=request,
+            child_env=os.environ,
+            child_cwd=Path.cwd(),
+        )
+    else:
+        result = _install(request=request)
+
+    for finding in result.findings:
+        print(finding)
+
+    status = process_status_for_result(result)
+    if status is not InstallProcessStatus.SUCCESS:
+        raise SystemExit(int(status))
+    if result.outcome is InstallOutcome.COMPLETED:
         _print_next_steps(context="install")
 
 

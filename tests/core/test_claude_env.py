@@ -7,7 +7,8 @@ from types import MappingProxyType
 
 import pytest
 
-from autoskillit.core import build_agent_env
+import autoskillit.core._claude_env as claude_env
+from autoskillit.core import build_agent_env, build_maintenance_env
 from autoskillit.core._claude_env import (
     IDE_ENV_ALWAYS_EXTRAS,
     IDE_ENV_DENYLIST,
@@ -233,3 +234,146 @@ def test_build_agent_env_rejects_invalid_session_type() -> None:
             base={},
             extras={"AUTOSKILLIT_SESSION_TYPE": "order"},
         )
+
+
+@pytest.mark.parametrize(
+    "protected_key",
+    [
+        "AUTOSKILLIT_AGENT_BACKEND",
+        "AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "AUTOSKILLIT_SESSION_TYPE",
+        "AUTOSKILLIT_CAMPAIGN_ID",
+        "AUTOSKILLIT_ORDER_ID",
+    ],
+)
+def test_build_maintenance_env_preserves_only_named_base_values(
+    monkeypatch: pytest.MonkeyPatch,
+    protected_key: str,
+) -> None:
+    monkeypatch.setattr(claude_env.os, "name", "posix")
+    allowed = {
+        "HOME": "/home/user",
+        "PATH": "/usr/bin",
+        "XDG_CONFIG_HOME": "/config",
+        "XDG_CACHE_HOME": "/cache",
+        "XDG_DATA_HOME": "/data",
+        "XDG_STATE_HOME": "/state",
+        "XDG_RUNTIME_DIR": "/runtime",
+        "USER": "user",
+        "LOGNAME": "user",
+        "SHELL": "/bin/sh",
+        "TERM": "xterm",
+        "TMPDIR": "/tmpdir",
+        "TEMP": "/temp",
+        "TMP": "/tmp",
+        "HTTP_PROXY": "http://upper-proxy",
+        "HTTPS_PROXY": "https://upper-proxy",
+        "ALL_PROXY": "socks://upper-proxy",
+        "NO_PROXY": "localhost",
+        "http_proxy": "http://lower-proxy",
+        "https_proxy": "https://lower-proxy",
+        "all_proxy": "socks://lower-proxy",
+        "no_proxy": "127.0.0.1",
+        "SSL_CERT_FILE": "/cert.pem",
+        "SSL_CERT_DIR": "/certs",
+        "REQUESTS_CA_BUNDLE": "/requests.pem",
+        "CURL_CA_BUNDLE": "/curl.pem",
+        "PIP_CERT": "/pip.pem",
+        "PIP_INDEX_URL": "https://pip.example/simple",
+        "PIP_EXTRA_INDEX_URL": "https://pip-extra.example/simple",
+        "PIP_TRUSTED_HOST": "pip.example",
+        "UV_INDEX_URL": "https://uv.example/simple",
+        "UV_EXTRA_INDEX_URL": "https://uv-extra.example/simple",
+        "UV_DEFAULT_INDEX": "https://uv-default.example/simple",
+    }
+    maintenance_flags = {
+        "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
+        "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
+    }
+    base = {
+        **allowed,
+        "SYSTEMROOT": r"C:\Windows",
+        protected_key: f"sensitive-{protected_key.lower()}",
+        "PYTHONPATH": "/host/python",
+        "SECRET_TOKEN": "must-not-cross-boundary",
+    }
+
+    result = build_maintenance_env(base, maintenance_flags)
+
+    assert dict(result) == {**allowed, **maintenance_flags}
+    assert isinstance(result, MappingProxyType)
+
+
+def test_build_maintenance_env_adds_windows_process_values_only_on_windows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base = {
+        "SYSTEMROOT": r"C:\Windows",
+        "WINDIR": r"C:\Windows",
+        "COMSPEC": r"C:\Windows\System32\cmd.exe",
+        "PATHEXT": ".COM;.EXE;.BAT",
+    }
+    monkeypatch.setattr(claude_env.os, "name", "posix")
+    assert dict(build_maintenance_env(base)) == {}
+
+    monkeypatch.setattr(claude_env.os, "name", "nt")
+    assert dict(build_maintenance_env(base)) == base
+
+
+def test_build_maintenance_env_accepts_only_declared_skip_flags() -> None:
+    result = build_maintenance_env(
+        {
+            "AUTOSKILLIT_SKIP_STALE_CHECK": "from-parent",
+            "AUTOSKILLIT_SKIP_UPDATE_CHECK": "from-parent",
+        },
+        {
+            "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
+            "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
+        },
+    )
+
+    assert dict(result) == {
+        "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
+        "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
+    }
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "CLAUDECODE",
+        "CODEX_HOME",
+        "AUTOSKILLIT_AGENT_BACKEND",
+        "AUTOSKILLIT_AGENT_BACKEND__BACKEND",
+        "AUTOSKILLIT_SESSION_TYPE",
+        "AUTOSKILLIT_CAMPAIGN_ID",
+        "AUTOSKILLIT_ORDER_ID",
+        "PYTHONPATH",
+        "LD_PRELOAD",
+        "DYLD_INSERT_LIBRARIES",
+        "VIRTUAL_ENV",
+        "CONDA_PREFIX",
+        "PIP_INDEX_URL",
+        "UV_PROJECT_ENVIRONMENT",
+    ],
+)
+def test_build_maintenance_env_rejects_protected_extras_without_value(
+    key: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    secret_value = "sensitive-value-must-not-be-reported"
+
+    with pytest.raises(ValueError, match="Protected maintenance env extras") as caught:
+        build_maintenance_env({}, {key: secret_value})
+
+    assert key in str(caught.value)
+    assert secret_value not in str(caught.value)
+    assert caplog.records == []
+
+
+def test_build_maintenance_env_rejects_unknown_or_base_key_extras() -> None:
+    for key in ("UNDECLARED_MAINTENANCE_FLAG", "PATH"):
+        with pytest.raises(ValueError, match="Unsupported maintenance env extras") as caught:
+            build_maintenance_env({}, {key: "sensitive-value"})
+        assert key in str(caught.value)
+        assert "sensitive-value" not in str(caught.value)

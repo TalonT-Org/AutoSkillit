@@ -1,681 +1,1386 @@
-"""A failed install must leave the machine exactly as it found it.
-
-F3: `install()` retired the live plugin cache *before* securing its replacement
-and never rolled back. Four windows could exit between those two points. A later
-startup sweep then created a dangling registry pointer, which is how the
-reporting machine reached the state that crashed `cook`.
-
-Both halves are covered: the preflight ordering (nothing mutates before every
-decline path has run) and the rollback (every failure after that restores the
-manifest, the registry, and the retiring queue).
-"""
+"""Typed install transaction, compensation, and sealed-context tests."""
 
 from __future__ import annotations
 
-import json
+import importlib
 import os
 import subprocess
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
+from autoskillit.cli._install_contract import (
+    InstallFailureKind,
+    InstallMode,
+    InstallOutcome,
+    InstallRequest,
+)
+
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
-_PLUGIN_KEY = "autoskillit@autoskillit-local"
+_PLUGIN_REF = "autoskillit@autoskillit-local"
+_VERSION = "1.2.3"
 
 
-def _seed_installed_state(home: Path, version: str) -> Path:
-    """A machine with a working install of *version* already in place."""
-    cache = home / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit" / version
-    cache.mkdir(parents=True)
-    (cache / ".claude-plugin").mkdir()
-    (cache / ".claude-plugin" / "plugin.json").write_text(
-        json.dumps({"name": "autoskillit", "version": version})
+def _maintenance_request(*, required: bool = True) -> InstallRequest:
+    return InstallRequest(
+        scope="user",
+        mode=InstallMode.MAINTENANCE_UPDATE,
+        require_registered_plugin=required,
+        expected_version=_VERSION,
     )
 
-    registry = home / ".claude" / "plugins" / "installed_plugins.json"
-    registry.parent.mkdir(parents=True, exist_ok=True)
-    registry.write_text(
-        json.dumps({"version": 2, "plugins": {_PLUGIN_KEY: {"installPath": str(cache)}}})
+
+def _direct_request(*, scope: str = "user") -> InstallRequest:
+    from autoskillit import __version__
+
+    return InstallRequest(
+        scope=scope,
+        mode=InstallMode.DIRECT,
+        require_registered_plugin=True,
+        expected_version=__version__,
     )
 
-    manifest = home / ".autoskillit" / "marketplace" / ".claude-plugin" / "marketplace.json"
-    manifest.parent.mkdir(parents=True, exist_ok=True)
-    manifest.write_text(
-        json.dumps({"name": "autoskillit-local", "plugins": [{"version": version}]})
+
+@pytest.mark.parametrize(
+    ("scope", "relative_path"),
+    [
+        ("user", Path(".claude/settings.json")),
+        ("project", Path("project/.claude/settings.json")),
+        ("local", Path("project/.claude/settings.local.json")),
+    ],
+)
+def test_settings_path_preserves_claude_scope_distinctions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    scope: str,
+    relative_path: Path,
+) -> None:
+    from autoskillit.cli import _hooks
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    assert _hooks._claude_settings_path(
+        scope,
+        cwd=tmp_path / "project",
+    ) == (tmp_path / relative_path)
+
+
+def _configure_transaction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[ModuleType, Path]:
+    import autoskillit.workspace as workspace
+    from autoskillit.cli import _marketplace, _plugin_artifact
+
+    update_checks = importlib.import_module("autoskillit.cli.update._update_checks")
+    neutral_cwd = tmp_path / "neutral"
+    neutral_cwd.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(_marketplace, "is_git_worktree", lambda _path: False)
+    monkeypatch.setattr(
+        _marketplace.importlib.metadata,
+        "version",
+        lambda _name: _VERSION,
     )
-    return cache
+    monkeypatch.setattr(
+        _marketplace.shutil,
+        "which",
+        lambda _cmd, *, path=None: "/usr/bin/claude",
+    )
+    monkeypatch.setattr(workspace, "reconcile_install_artifacts", lambda: ())
+    monkeypatch.setattr(
+        _marketplace,
+        "_ensure_marketplace",
+        lambda **_kwargs: tmp_path / ".autoskillit" / "marketplace",
+    )
+    monkeypatch.setattr(_marketplace, "_clear_plugin_cache", lambda **_kwargs: ())
+    monkeypatch.setattr(
+        _plugin_artifact,
+        "publish_installed_plugin_artifact",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(_marketplace, "evict_direct_mcp_entry", lambda _path: False)
+    monkeypatch.setattr(
+        _marketplace._hooks_mod,
+        "_evict_stale_autoskillit_hooks",
+        lambda _path: None,
+    )
+
+    def successful_claude_admin(argv, **_kwargs):
+        if tuple(argv)[:3] == ("claude", "plugin", "install"):
+            target = _marketplace._installed_plugin_root(_VERSION)
+            assert _marketplace._InstallSnapshot._shape(target) == "missing"
+            target.mkdir(parents=True)
+            (target / "fresh.txt").write_text("fresh", encoding="utf-8")
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            stdout="",
+            stderr="",
+        )
+
+    monkeypatch.setattr(
+        _marketplace,
+        "_run_claude_admin",
+        successful_claude_admin,
+    )
+    monkeypatch.setattr(update_checks, "invalidate_fetch_cache", lambda _home: None)
+    identity = SimpleNamespace(
+        incarnation_id="0" * 32,
+        semantic_key=f"{_PLUGIN_REF}:{_VERSION}",
+    )
+    monkeypatch.setattr(
+        workspace,
+        "verify_installed_plugin_artifact",
+        lambda _spec: SimpleNamespace(identity=identity, findings=()),
+    )
+    return _marketplace, neutral_cwd
 
 
-def _read_json(path: Path) -> dict:
-    return json.loads(path.read_text())
+def _sealed_env() -> dict[str, str]:
+    return {"PATH": "/usr/bin", "SEALED": "yes"}
 
 
-def _retiring_paths(home: Path) -> set[str]:
-    retiring = home / ".autoskillit" / "retiring_cache.json"
-    if not retiring.is_file():
-        return set()
-    data = _read_json(retiring)
-    if data.get("schema_version") == 2:
-        return {str(entry.get("managed_path", "")) for entry in data.get("records", [])}
-    return {str(entry.get("path", "")) for entry in data.get("retiring", [])}
+@pytest.mark.parametrize(
+    ("unsafe_kind", "expected_reason"),
+    [
+        ("relative", "must be absolute"),
+        ("symlink", "must not be a symlink"),
+        ("non_directory", "must be a directory"),
+        ("escape", "does not match expected version target"),
+    ],
+)
+def test_unsafe_install_targets_are_rejected_before_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    unsafe_kind: str,
+    expected_reason: str,
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    target = marketplace._installed_plugin_root(_VERSION)
+    external = tmp_path / "external-sentinel"
+    external.mkdir()
+    sentinel = external / "keep.txt"
+    sentinel.write_text("untouched", encoding="utf-8")
+
+    if unsafe_kind == "relative":
+        monkeypatch.setattr(
+            marketplace,
+            "_installed_plugin_root",
+            lambda _version: Path(_VERSION),
+        )
+    elif unsafe_kind == "symlink":
+        target.parent.mkdir(parents=True)
+        target.symlink_to(external, target_is_directory=True)
+    elif unsafe_kind == "non_directory":
+        target.parent.mkdir(parents=True)
+        target.write_text("not a directory", encoding="utf-8")
+    else:
+        monkeypatch.setattr(
+            marketplace,
+            "_installed_plugin_root",
+            lambda _version: external,
+        )
+
+    child_calls: list[tuple[str, ...]] = []
+
+    def record_child(argv, **_kwargs):
+        child_calls.append(tuple(argv))
+        raise AssertionError("unsafe target reached a mutating child command")
+
+    monkeypatch.setattr(marketplace, "_run_claude_admin", record_child)
+
+    result = marketplace.install(
+        request=_maintenance_request(),
+        child_env=_sealed_env(),
+        child_cwd=neutral_cwd,
+    )
+
+    assert result.outcome is InstallOutcome.FAILED
+    assert result.failure_kind is InstallFailureKind.PREFLIGHT
+    assert expected_reason in result.findings[0]
+    assert child_calls == []
+    assert sentinel.read_text(encoding="utf-8") == "untouched"
 
 
-class TestRollbackOnFailure:
-    @pytest.mark.parametrize("failing_step", ["marketplace add", "plugin install"])
-    def test_failed_install_restores_pre_attempt_state(
-        self, failing_step: str, tmp_path: Path, monkeypatch, capsys
-    ) -> None:
-        """Neither `claude` subcommand failing may leave a dangling pointer."""
-        from autoskillit.cli import _marketplace
+@pytest.mark.parametrize("control_flow", [KeyboardInterrupt, SystemExit])
+def test_control_flow_exceptions_compensate_before_propagation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    control_flow: type[BaseException],
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    from autoskillit.cli import _plugin_artifact
+    from autoskillit.cli._install_snapshot import _installed_plugins_json_path
 
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.setattr(_marketplace, "is_git_worktree", lambda path: False)
-        monkeypatch.setattr(_marketplace.shutil, "which", lambda _cmd: "/usr/bin/claude")
+    projection = tmp_path / ".autoskillit" / "marketplace"
+    projection.mkdir(parents=True)
+    (projection / "old.txt").write_text("old projection", encoding="utf-8")
+    known = tmp_path / ".claude" / "plugins" / "known_marketplaces.json"
+    known.parent.mkdir(parents=True)
+    known.write_text('{"old": true}', encoding="utf-8")
+    installed = _installed_plugins_json_path()
+    installed.write_text('{"version": 2, "plugins": {"old": {}}}', encoding="utf-8")
+    retiring = tmp_path / ".autoskillit" / "retiring_cache.json"
+    retiring.write_text('{"schema_version": 2, "records": []}', encoding="utf-8")
+    target = marketplace._installed_plugin_root(_VERSION)
+    target.mkdir(parents=True)
+    (target / "old.txt").write_text("old target", encoding="utf-8")
+    manifest = _plugin_artifact.installed_plugin_artifact_manifest_path(target)
+    manifest.write_text('{"old": true}', encoding="utf-8")
+    settings = tmp_path / ".claude" / "settings.json"
+    settings.write_text("before", encoding="utf-8")
+    install_lock_path = tmp_path / ".autoskillit" / "install.lock"
+    before = _filesystem_state(tmp_path, excluded=(install_lock_path,))
+    events: list[str] = []
+    ownership = _instrument_transaction_ownership(monkeypatch, events)
 
-        old_cache = _seed_installed_state(tmp_path, "0.0.1-old")
-        manifest_path = _marketplace._marketplace_manifest_path()
-        registry_path = _marketplace._installed_plugins_json_path()
-        manifest_before = manifest_path.read_text()
-        registry_before = registry_path.read_text()
-        retiring_before = _retiring_paths(tmp_path)
+    def mutate_projection(**_kwargs) -> Path:
+        (projection / "old.txt").unlink()
+        (projection / "new.txt").write_text("new projection", encoding="utf-8")
+        return projection
 
-        def fake_run(cmd, **_kw):
-            joined = " ".join(str(c) for c in cmd)
-            failed = failing_step in joined
-            return subprocess.CompletedProcess(
-                cmd, 1 if failed else 0, stdout="", stderr="boom" if failed else ""
+    def mutate_settings(**_kwargs) -> tuple[()]:
+        settings.write_text("mutated", encoding="utf-8")
+        return ()
+
+    def interrupt_after_mutation(_argv, **_kwargs):
+        known.write_text('{"new": true}', encoding="utf-8")
+        installed.write_text('{"version": 2, "plugins": {"new": {}}}', encoding="utf-8")
+        retiring.write_text(
+            '{"schema_version": 2, "records": [{"new": true}]}',
+            encoding="utf-8",
+        )
+        (target / "old.txt").write_text("new target", encoding="utf-8")
+        manifest.write_text('{"new": true}', encoding="utf-8")
+        raise control_flow("stop")
+
+    original_rollback = marketplace._InstallSnapshot.rollback
+
+    def rollback(snapshot, *, owned_lease_fd: int | None = None) -> tuple[str, ...]:
+        assert ownership == {"install_lock": True, "artifact_lease": True}
+        assert owned_lease_fd is not None
+        os.fstat(owned_lease_fd)
+        events.append("rollback")
+        return original_rollback(snapshot, owned_lease_fd=owned_lease_fd)
+
+    monkeypatch.setattr(marketplace, "_ensure_marketplace", mutate_projection)
+    monkeypatch.setattr(marketplace, "_clear_plugin_cache", mutate_settings)
+    monkeypatch.setattr(marketplace, "_run_claude_admin", interrupt_after_mutation)
+    monkeypatch.setattr(marketplace._InstallSnapshot, "rollback", rollback)
+
+    with pytest.raises(control_flow, match="stop"):
+        marketplace.install(
+            request=_maintenance_request(),
+            child_env=_sealed_env(),
+            child_cwd=neutral_cwd,
+        )
+
+    assert _filesystem_state(tmp_path, excluded=(install_lock_path,)) == before
+    assert events == [
+        "install_lock_acquired",
+        "artifact_lease_acquired",
+        "artifact_lease_entered",
+        "rollback",
+        "artifact_lease_released",
+        "install_lock_released",
+    ]
+    assert ownership == {"install_lock": False, "artifact_lease": False}
+
+
+@pytest.mark.parametrize("control_flow", [KeyboardInterrupt, SystemExit])
+def test_control_flow_exception_survives_compensation_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    control_flow: type[BaseException],
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    compensation_attempted = False
+
+    def interrupt_transaction(**_kwargs) -> tuple[()]:
+        raise control_flow("original control flow")
+
+    def fail_compensation(*_args, **_kwargs):
+        nonlocal compensation_attempted
+        compensation_attempted = True
+        raise RuntimeError("secondary compensation failure")
+
+    monkeypatch.setattr(marketplace, "_clear_plugin_cache", interrupt_transaction)
+    monkeypatch.setattr(marketplace, "_compensated_result", fail_compensation)
+
+    with pytest.raises(control_flow, match="original control flow"):
+        marketplace.install(
+            request=_maintenance_request(),
+            child_env=_sealed_env(),
+            child_cwd=neutral_cwd,
+        )
+
+    assert compensation_attempted is True
+
+
+def _filesystem_state(
+    root: Path,
+    *,
+    excluded: tuple[Path, ...] = (),
+) -> tuple[tuple[str, str, bytes | str | None], ...]:
+    state: list[tuple[str, str, bytes | str | None]] = []
+    for path in sorted(root.rglob("*")):
+        if path in excluded:
+            continue
+        relative = str(path.relative_to(root))
+        if path.is_symlink():
+            state.append((relative, "symlink", os.readlink(path)))
+        elif path.is_dir():
+            state.append((relative, "directory", None))
+        else:
+            state.append((relative, "file", path.read_bytes()))
+    return tuple(state)
+
+
+def _instrument_transaction_ownership(
+    monkeypatch: pytest.MonkeyPatch,
+    events: list[str],
+) -> dict[str, bool]:
+    import autoskillit.core as core
+
+    ownership = {"install_lock": False, "artifact_lease": False}
+
+    class ObservedInstallLock(core._InstallLock):
+        def __enter__(self) -> ObservedInstallLock:
+            assert not ownership["install_lock"]
+            acquired = super().__enter__()
+            assert acquired is self
+            ownership["install_lock"] = True
+            events.append("install_lock_acquired")
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            assert ownership["install_lock"]
+            super().__exit__(*_args)
+            events.append("install_lock_released")
+            ownership["install_lock"] = False
+
+    class ObservedArtifactLease(core.ArtifactLease):
+        @classmethod
+        def acquire_exclusive(
+            cls,
+            lock_path: Path,
+            *,
+            blocking: bool = False,
+        ) -> ObservedArtifactLease:
+            assert not blocking
+            assert ownership["install_lock"], (
+                "exclusive artifact lease was acquired before the install lock"
             )
+            assert not ownership["artifact_lease"]
+            lease = super().acquire_exclusive(lock_path, blocking=blocking)
+            assert isinstance(lease, cls)
+            ownership["artifact_lease"] = True
+            events.append("artifact_lease_acquired")
+            return lease
 
-        monkeypatch.setattr(_marketplace.subprocess, "run", fake_run)
+        def __enter__(self) -> ObservedArtifactLease:
+            assert ownership["artifact_lease"]
+            acquired = super().__enter__()
+            assert acquired is self
+            events.append("artifact_lease_entered")
+            return self
 
-        with pytest.raises(SystemExit):
-            _marketplace.install(scope="user")
-        capsys.readouterr()
+        def __exit__(
+            self,
+            exc_type: object,
+            exc: object,
+            traceback: object,
+        ) -> None:
+            assert ownership["artifact_lease"]
+            super().__exit__(exc_type, exc, traceback)
+            events.append("artifact_lease_released")
+            ownership["artifact_lease"] = False
 
-        assert manifest_path.read_text() == manifest_before, (
-            "marketplace.json was left at the new version after a failed install"
+    monkeypatch.setattr(core, "_InstallLock", ObservedInstallLock)
+    monkeypatch.setattr(core, "ArtifactLease", ObservedArtifactLease)
+    return ownership
+
+
+def _configure_direct_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = SimpleNamespace(
+        capabilities=SimpleNamespace(plugin_install_capable=True),
+    )
+    config = SimpleNamespace(
+        agent_backend=SimpleNamespace(backend="claude-code"),
+    )
+    monkeypatch.setattr("autoskillit.config.load_config", lambda _path: config)
+    monkeypatch.setattr("autoskillit.execution.get_backend", lambda _name: backend)
+
+
+def test_claude_lookup_uses_sealed_path_once_without_ambient_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli import _marketplace
+
+    calls: list[tuple[str, str | None]] = []
+
+    def which(_cmd: str, *, path: str | None = None) -> str | None:
+        calls.append((_cmd, path))
+        if path is not None:
+            raise TypeError("sealed lookup failure")
+        return "/ambient/bin/claude"
+
+    monkeypatch.setattr(_marketplace.shutil, "which", which)
+
+    with pytest.raises(TypeError, match="sealed lookup failure"):
+        _marketplace._claude_on_path({"PATH": "/sealed/bin"})
+
+    assert calls == [("claude", "/sealed/bin")]
+
+
+def test_optional_maintenance_obligation_returns_before_any_preflight(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli import _marketplace
+
+    monkeypatch.setattr(
+        _marketplace,
+        "_assert_not_worktree",
+        lambda: pytest.fail("no-obligation maintenance reached preflight"),
+    )
+    result = _marketplace.install(request=_maintenance_request(required=False))
+    assert result.outcome is InstallOutcome.NOT_REQUIRED
+    assert "not required" in result.findings[0]
+    assert not (tmp_path / ".autoskillit").exists()
+
+
+def test_maintenance_distribution_mismatch_is_preflight_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        marketplace.importlib.metadata,
+        "version",
+        lambda _name: "9.9.9",
+    )
+
+    result = marketplace.install(
+        request=_maintenance_request(),
+        child_env=_sealed_env(),
+        child_cwd=neutral_cwd,
+    )
+
+    assert result.outcome is InstallOutcome.FAILED
+    assert result.failure_kind is InstallFailureKind.PREFLIGHT
+    assert "expected distribution version" in result.findings[0]
+    assert not (tmp_path / ".autoskillit" / "marketplace").exists()
+
+
+def test_install_boundary_rejects_worktree_without_persistent_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli import _marketplace
+
+    home = tmp_path / "home"
+    child_cwd = tmp_path / "neutral"
+    unsafe_worktree = tmp_path / "unsafe-worktree"
+    child_cwd.mkdir()
+    unsafe_worktree.mkdir()
+    marketplace_marker = home / ".autoskillit" / "marketplace" / "state.txt"
+    registry_marker = home / ".claude" / "plugins" / "installed_plugins.json"
+    marketplace_marker.parent.mkdir(parents=True)
+    registry_marker.parent.mkdir(parents=True)
+    marketplace_marker.write_text("published-prestate", encoding="utf-8")
+    registry_marker.write_text('{"version": 2, "plugins": {}}', encoding="utf-8")
+
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setattr(_marketplace, "pkg_root", lambda: unsafe_worktree)
+    monkeypatch.setattr(
+        _marketplace,
+        "is_git_worktree",
+        lambda path: path == unsafe_worktree,
+    )
+    monkeypatch.setattr(
+        _marketplace.importlib.metadata,
+        "version",
+        lambda _name: _VERSION,
+    )
+    before = _filesystem_state(tmp_path)
+
+    result = _marketplace.install(
+        request=_maintenance_request(),
+        child_env=_sealed_env(),
+        child_cwd=child_cwd,
+    )
+
+    assert result.outcome is InstallOutcome.FAILED
+    assert result.failure_kind is InstallFailureKind.PREFLIGHT
+    diagnostic = result.findings[0]
+    assert "git worktree" in diagnostic
+    assert f"Detected worktree path: {unsafe_worktree}" in diagnostic
+    assert "run 'autoskillit install' from the main project checkout" in diagnostic
+    assert _filesystem_state(tmp_path) == before
+
+
+def test_success_path_holds_both_transaction_guards_through_commit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    import autoskillit.workspace as workspace
+    from autoskillit.cli.update import _update_checks
+
+    events: list[str] = []
+    ownership = _instrument_transaction_ownership(monkeypatch, events)
+
+    def record_owned(event: str) -> None:
+        assert ownership == {"install_lock": True, "artifact_lease": True}, (
+            f"{event} ran outside the install lock or exclusive artifact lease"
         )
-        assert registry_path.read_text() == registry_before, (
-            "installed_plugins.json was not restored after a failed install"
-        )
+        events.append(event)
 
-        registered = {
-            e["installPath"] for e in [_read_json(registry_path)["plugins"][_PLUGIN_KEY]]
-        }
-        assert not (registered & _retiring_paths(tmp_path)), (
-            "a directory still named by installed_plugins.json is queued for deletion — "
-            "this is the dangling-pointer state F3 produced"
-        )
-        assert _retiring_paths(tmp_path) == retiring_before
-        assert old_cache.is_dir(), "the live cache was destroyed by a failed install"
+    def reconcile() -> tuple[()]:
+        record_owned("reconciliation")
+        return ()
 
-    def test_partial_backup_cleanup_cannot_rearm_root_rollback(
-        self,
-        tmp_path: Path,
-        monkeypatch,
-    ) -> None:
-        from autoskillit.cli import _marketplace
+    def clear_cache(**_kwargs) -> tuple[()]:
+        record_owned("registry_cleanup")
+        return ()
 
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        target = _marketplace._installed_plugin_root()
-        target.mkdir(parents=True)
-        (target / "old").write_text("old")
-        snapshot = _marketplace._InstallSnapshot()
-        snapshot.stage_target_root()
-        backup = snapshot._target_backup
-        assert backup is not None
-        target.mkdir()
-        new_marker = target / "new"
-        new_marker.write_text("new")
+    def evict_direct(_path: Path) -> bool:
+        record_owned("direct_registration_cleanup")
+        return False
 
-        def partially_remove_then_fail(path: Path) -> None:
-            assert path == backup
-            (path / "old").unlink()
-            raise PermissionError("injected partial backup cleanup")
+    def evict_hooks(_path: Path) -> None:
+        record_owned("settings_hook_cleanup")
 
-        monkeypatch.setattr(_marketplace.shutil, "rmtree", partially_remove_then_fail)
-
-        snapshot.commit()
-        snapshot.rollback()
-
-        assert new_marker.read_text() == "new"
-        assert snapshot._target_backup is None
-        assert snapshot._target_mutation_owned is False
-
-    def test_persisted_retirement_is_tracked_when_parent_fsync_fails(
-        self,
-        tmp_path: Path,
-        monkeypatch,
-    ) -> None:
-        from autoskillit.cli import _marketplace, _plugin_artifact
-        from autoskillit.core import read_retiring_cache
-
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        old_cache = _seed_installed_state(tmp_path, "0.0.1-old")
-        _plugin_artifact.publish_installed_plugin_artifact(
-            old_cache,
-            semantic_key="autoskillit@autoskillit-local:0.0.1-old",
-        )
-        snapshot = _marketplace._InstallSnapshot()
-        real_fsync = os.fsync
-        calls = 0
-
-        def fail_retiring_parent_fsync(fd: int) -> None:
-            nonlocal calls
-            calls += 1
-            if calls == 2:
-                raise OSError("injected retirement parent fsync failure")
-            real_fsync(fd)
-
-        monkeypatch.setattr(os, "fsync", fail_retiring_parent_fsync)
-
-        with pytest.raises(OSError, match="parent fsync failure"):
-            _marketplace._clear_plugin_cache(
-                on_retirement_created=snapshot.track_retirement,
-            )
-
-        assert len(read_retiring_cache().records) == 1
-        snapshot.rollback()
-        assert read_retiring_cache().records == ()
-
-    def test_target_lease_contention_does_not_mutate_the_live_root(
-        self,
-        tmp_path: Path,
-        monkeypatch,
-        capsys,
-    ) -> None:
-        from autoskillit import __version__
-        from autoskillit.cli import _marketplace, _plugin_artifact
-        from autoskillit.core import ArtifactLease
-
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.setattr(_marketplace, "is_git_worktree", lambda path: False)
-        monkeypatch.setattr(_marketplace.shutil, "which", lambda _cmd: "/usr/bin/claude")
-        monkeypatch.setattr(
-            _marketplace,
-            "_ensure_marketplace",
-            lambda: pytest.fail("marketplace mutation started before target lease ownership"),
-        )
-        monkeypatch.setattr(
-            _marketplace,
-            "_ensure_workspace_ready",
-            lambda: pytest.fail("workspace mutation started before target lease ownership"),
-        )
-        monkeypatch.setattr(
-            _marketplace._InstallSnapshot,
-            "rollback",
-            lambda _snapshot: pytest.fail("contention rolled back unowned shared state"),
-        )
-        target = _seed_installed_state(tmp_path, __version__)
-        marker = target / "must-survive"
-        marker.write_text("leased live tree")
-        reader = ArtifactLease.acquire_shared(
-            _plugin_artifact.installed_artifact_lock_path(target)
-        )
-        try:
-            with pytest.raises(SystemExit):
-                _marketplace.install(scope="user")
-        finally:
-            reader.close()
-
-        assert "Installed plugin is in use" in capsys.readouterr().out
-        assert marker.read_text() == "leased live tree"
-
-    def test_cache_clear_migrates_legacy_retirements_without_candidates(
-        self,
-        tmp_path: Path,
-        monkeypatch,
-    ) -> None:
-        from datetime import UTC, datetime
-
-        from autoskillit import __version__
-        from autoskillit.cli import _marketplace
-        from autoskillit.core import (
-            PluginArtifactKind,
-            RetiringCacheState,
-            read_retiring_cache,
-        )
-
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        _seed_installed_state(tmp_path, __version__)
-        legacy_path = tmp_path / ".autoskillit" / "plugin-projections" / "old"
-        cache = tmp_path / ".autoskillit" / "retiring_cache.json"
-        cache.parent.mkdir(parents=True, exist_ok=True)
-        cache.write_text(
-            json.dumps(
-                {
-                    "schema_version": 1,
-                    "retiring": [
-                        {
-                            "version": "old",
-                            "path": str(legacy_path),
-                            "retired_at": datetime.now(UTC).isoformat(),
-                        }
-                    ],
-                }
-            )
-        )
-
-        assert _marketplace._clear_plugin_cache() == ()
-
-        state = read_retiring_cache()
-        assert state.state is RetiringCacheState.EXACT_V2
-        assert len(state.legacy_evidence) == 1
-        assert state.legacy_evidence[0].recognized_kind is PluginArtifactKind.PROJECTION
-
-    def test_partial_cache_clear_registers_retirement_before_later_failure(
-        self,
-        tmp_path: Path,
-        monkeypatch,
-    ) -> None:
-        from autoskillit.cli import _marketplace, _plugin_artifact
-        from autoskillit.cli._installed_plugins import InstalledPluginsFile
-
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.setattr(_marketplace, "is_git_worktree", lambda path: False)
-        monkeypatch.setattr(_marketplace.shutil, "which", lambda _cmd: "/usr/bin/claude")
-        monkeypatch.setattr(
-            _marketplace,
-            "_ensure_marketplace",
-            lambda: tmp_path / ".autoskillit" / "marketplace",
-        )
-        monkeypatch.setattr(_marketplace, "_ensure_workspace_ready", lambda: None)
-        old_cache = _seed_installed_state(tmp_path, "0.0.1-old")
-        _plugin_artifact.publish_installed_plugin_artifact(
-            old_cache,
-            semantic_key="autoskillit@autoskillit-local:0.0.1-old",
-        )
-        retiring_before = _retiring_paths(tmp_path)
-
-        def fail_remove(self, plugin_key):
-            raise OSError(f"injected removal failure for {plugin_key}")
-
-        monkeypatch.setattr(InstalledPluginsFile, "remove", fail_remove)
-
-        with pytest.raises(OSError, match="injected removal failure"):
-            _marketplace.install(scope="user")
-
-        assert old_cache.is_dir()
-        assert _retiring_paths(tmp_path) == retiring_before
-
-    def test_publication_failure_rolls_back_while_target_lease_is_held(
-        self, tmp_path: Path, monkeypatch, capsys
-    ) -> None:
-        from autoskillit.cli import _marketplace, _plugin_artifact
-        from autoskillit.core import (
-            ArtifactLease,
-            ArtifactLeaseContention,
-            PluginArtifactPublicationError,
-        )
-
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.setattr(_marketplace, "is_git_worktree", lambda path: False)
-        monkeypatch.setattr(_marketplace.shutil, "which", lambda _cmd: "/usr/bin/claude")
-
-        old_cache = _seed_installed_state(tmp_path, "0.0.1-old")
-        target_root = _marketplace._installed_plugin_root()
-        _plugin_artifact.publish_installed_plugin_artifact(
-            old_cache,
-            semantic_key="autoskillit@autoskillit-local:0.0.1-old",
-        )
-        artifact_manifest = _plugin_artifact.installed_artifact_manifest_path(old_cache)
-        manifest_path = _marketplace._marketplace_manifest_path()
-        registry_path = _marketplace._installed_plugins_json_path()
-        artifact_manifest_before = artifact_manifest.read_text()
-        manifest_before = manifest_path.read_text()
-        registry_before = registry_path.read_text()
-        retiring_before = _retiring_paths(tmp_path)
-
-        monkeypatch.setattr(
-            _marketplace.subprocess,
-            "run",
-            lambda cmd, **_kw: subprocess.CompletedProcess(
-                cmd,
-                0,
-                stdout="",
-                stderr="",
+    def verify_exact(_spec):
+        record_owned("exact_verification")
+        return SimpleNamespace(
+            identity=SimpleNamespace(
+                incarnation_id="0" * 32,
+                semantic_key=f"{_PLUGIN_REF}:{_VERSION}",
             ),
+            findings=(),
         )
 
-        def fail_publication(*_args, **_kwargs):
-            raise PluginArtifactPublicationError("injected publication failure")
+    original_commit = marketplace._InstallSnapshot.commit
+
+    def commit(snapshot) -> None:
+        record_owned("commit")
+        original_commit(snapshot)
+
+    monkeypatch.setattr(workspace, "reconcile_install_artifacts", reconcile)
+    monkeypatch.setattr(marketplace, "_clear_plugin_cache", clear_cache)
+    monkeypatch.setattr(marketplace, "evict_direct_mcp_entry", evict_direct)
+    monkeypatch.setattr(
+        marketplace._hooks_mod,
+        "_evict_stale_autoskillit_hooks",
+        evict_hooks,
+    )
+    monkeypatch.setattr(
+        _update_checks,
+        "invalidate_fetch_cache",
+        lambda _home: record_owned("fetch_cache_invalidation"),
+    )
+    monkeypatch.setattr(
+        marketplace,
+        "_verify_cleanup",
+        lambda _settings, _fetch_cache: record_owned("cleanup_verification"),
+    )
+    monkeypatch.setattr(workspace, "verify_installed_plugin_artifact", verify_exact)
+    monkeypatch.setattr(marketplace._InstallSnapshot, "commit", commit)
+
+    result = marketplace.install(
+        request=_maintenance_request(),
+        child_env=_sealed_env(),
+        child_cwd=neutral_cwd,
+    )
+
+    assert result.outcome is InstallOutcome.COMPLETED
+    assert result.verified_identity == f"{_PLUGIN_REF}:{_VERSION}"
+    success_message = f"Plugin installed: {_PLUGIN_REF} (scope: user)"
+    assert result.findings == (success_message,)
+    assert events == [
+        "install_lock_acquired",
+        "artifact_lease_acquired",
+        "artifact_lease_entered",
+        "reconciliation",
+        "registry_cleanup",
+        "direct_registration_cleanup",
+        "settings_hook_cleanup",
+        "fetch_cache_invalidation",
+        "cleanup_verification",
+        "exact_verification",
+        "commit",
+        "artifact_lease_released",
+        "install_lock_released",
+    ]
+    assert ownership == {"install_lock": False, "artifact_lease": False}
+
+
+def test_failure_path_holds_both_transaction_guards_through_rollback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    import autoskillit.workspace as workspace
+
+    events: list[str] = []
+    ownership = _instrument_transaction_ownership(monkeypatch, events)
+
+    def assert_owned(event: str) -> None:
+        assert ownership == {"install_lock": True, "artifact_lease": True}, (
+            f"{event} ran outside the install lock or exclusive artifact lease"
+        )
+        events.append(event)
+
+    def fail_reconciliation() -> tuple[()]:
+        assert_owned("reconciliation")
+        raise marketplace._InstallFailed(
+            InstallFailureKind.POSTCONDITION,
+            "injected reconciliation failure",
+        )
+
+    original_rollback = marketplace._InstallSnapshot.rollback
+
+    def rollback(snapshot, *, owned_lease_fd: int | None = None) -> tuple[str, ...]:
+        assert_owned("rollback")
+        assert owned_lease_fd is not None
+        os.fstat(owned_lease_fd)
+        return original_rollback(snapshot, owned_lease_fd=owned_lease_fd)
+
+    monkeypatch.setattr(
+        workspace,
+        "reconcile_install_artifacts",
+        fail_reconciliation,
+    )
+    monkeypatch.setattr(marketplace._InstallSnapshot, "rollback", rollback)
+
+    result = marketplace.install(
+        request=_maintenance_request(),
+        child_env=_sealed_env(),
+        child_cwd=neutral_cwd,
+    )
+
+    assert result.outcome is InstallOutcome.FAILED
+    assert result.failure_kind is InstallFailureKind.POSTCONDITION
+    assert result.findings[-1] == "compensation completed"
+    assert events == [
+        "install_lock_acquired",
+        "artifact_lease_acquired",
+        "artifact_lease_entered",
+        "reconciliation",
+        "rollback",
+        "artifact_lease_released",
+        "install_lock_released",
+    ]
+    assert ownership == {"install_lock": False, "artifact_lease": False}
+
+
+@pytest.mark.parametrize(
+    "stage",
+    [
+        "reconciliation",
+        "public_marketplace_projection",
+        "marketplace_manifest",
+        "known_marketplaces_registration_state",
+        "registry_cache_mutation",
+        "claude_marketplace_registration",
+        "claude_plugin_installation",
+        "identity_and_retirement_publication",
+        "settings_hook_cleanup",
+        "direct_registration_cleanup",
+        "workspace_mutation",
+        "fetch_cache_invalidation",
+        "exact_postcondition_verification",
+    ],
+)
+def test_failure_after_every_persistent_mutation_stage_restores_prestate(
+    stage: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    import autoskillit.workspace as workspace
+    from autoskillit.cli import _plugin_artifact
+    from autoskillit.cli._install_snapshot import (
+        _fetch_cache_path,
+        _installed_plugins_json_path,
+    )
+    from autoskillit.cli.update import _update_checks
+
+    projection = tmp_path / ".autoskillit" / "marketplace"
+    manifest = projection / ".claude-plugin" / "marketplace.json"
+    known = tmp_path / ".claude" / "plugins" / "known_marketplaces.json"
+    installed = _installed_plugins_json_path()
+    target = marketplace._installed_plugin_root(_VERSION)
+    identity = _plugin_artifact.installed_plugin_artifact_manifest_path(target)
+    retiring = tmp_path / ".autoskillit" / "retiring_cache.json"
+    settings = tmp_path / ".claude" / "settings.json"
+    direct_registration = marketplace._user_claude_json_path()
+    workspace_marker = neutral_cwd / ".autoskillit" / ".gitignore"
+    fetch_cache = _fetch_cache_path(tmp_path)
+
+    surfaces = {
+        "reconciliation": retiring,
+        "public_marketplace_projection": projection / "plugins" / "autoskillit" / "state.txt",
+        "marketplace_manifest": manifest,
+        "known_marketplaces_registration_state": known,
+        "registry_cache_mutation": installed,
+        "claude_marketplace_registration": known,
+        "claude_plugin_installation": target / "plugin-state.txt",
+        "identity_and_retirement_publication": identity,
+        "settings_hook_cleanup": settings,
+        "direct_registration_cleanup": direct_registration,
+        "workspace_mutation": workspace_marker,
+        "fetch_cache_invalidation": fetch_cache,
+        "exact_postcondition_verification": target / "verified-state.txt",
+    }
+    surface = surfaces[stage]
+    surface.parent.mkdir(parents=True, exist_ok=True)
+    surface.write_text("before", encoding="utf-8")
+    if stage == "identity_and_retirement_publication":
+        retiring.parent.mkdir(parents=True, exist_ok=True)
+        retiring.write_text("before-retirement", encoding="utf-8")
+
+    reached: list[str] = []
+    verification_events: list[str] = []
+
+    def mutate_surface() -> None:
+        surface.parent.mkdir(parents=True, exist_ok=True)
+        surface.write_text("after", encoding="utf-8")
+
+    def raise_after_stage() -> None:
+        reached.append(stage)
+        raise marketplace._InstallFailed(
+            InstallFailureKind.POSTCONDITION,
+            f"injected after {stage}",
+        )
+
+    def mutate_then_raise() -> None:
+        mutate_surface()
+        raise_after_stage()
+
+    if stage == "reconciliation":
+        monkeypatch.setattr(workspace, "reconcile_install_artifacts", mutate_then_raise)
+    elif stage in {"public_marketplace_projection", "marketplace_manifest"}:
+        monkeypatch.setattr(
+            marketplace,
+            "_ensure_marketplace",
+            lambda **_kwargs: mutate_then_raise(),
+        )
+    elif stage == "known_marketplaces_registration_state":
+
+        def fail_marketplace_child(argv, **_kwargs):
+            mutate_surface()
+            reached.append(stage)
+            return subprocess.CompletedProcess(
+                argv,
+                7,
+                stdout="",
+                stderr="injected registration failure",
+            )
+
+        monkeypatch.setattr(marketplace, "_run_claude_admin", fail_marketplace_child)
+    elif stage == "registry_cache_mutation":
+        monkeypatch.setattr(
+            marketplace,
+            "_clear_plugin_cache",
+            lambda **_kwargs: mutate_then_raise(),
+        )
+    elif stage == "claude_marketplace_registration":
+        child_calls = 0
+
+        def fail_after_marketplace_child(argv, **_kwargs):
+            nonlocal child_calls
+            child_calls += 1
+            if child_calls == 1:
+                mutate_surface()
+                return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+            raise_after_stage()
+
+        monkeypatch.setattr(marketplace, "_run_claude_admin", fail_after_marketplace_child)
+    elif stage == "claude_plugin_installation":
+        child_calls = 0
+
+        def install_then_continue(argv, **_kwargs):
+            nonlocal child_calls
+            child_calls += 1
+            if child_calls == 2:
+                mutate_surface()
+            return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(marketplace, "_run_claude_admin", install_then_continue)
+        monkeypatch.setattr(
+            _plugin_artifact,
+            "publish_installed_plugin_artifact",
+            lambda *_args, **_kwargs: raise_after_stage(),
+        )
+    elif stage == "identity_and_retirement_publication":
+
+        def fail_identity_publication(*_args, **_kwargs):
+            mutate_surface()
+            retiring.write_text("after-retirement", encoding="utf-8")
+            raise_after_stage()
 
         monkeypatch.setattr(
             _plugin_artifact,
             "publish_installed_plugin_artifact",
-            fail_publication,
+            fail_identity_publication,
+        )
+    elif stage == "settings_hook_cleanup":
+        monkeypatch.setattr(
+            marketplace._hooks_mod,
+            "_evict_stale_autoskillit_hooks",
+            lambda _path: mutate_then_raise(),
+        )
+    elif stage == "direct_registration_cleanup":
+        monkeypatch.setattr(
+            marketplace,
+            "evict_direct_mcp_entry",
+            lambda _path: mutate_then_raise(),
+        )
+    elif stage == "workspace_mutation":
+        monkeypatch.setattr(
+            marketplace,
+            "_ensure_workspace_ready",
+            lambda **_kwargs: mutate_then_raise(),
+        )
+        _configure_direct_backend(monkeypatch)
+    elif stage == "fetch_cache_invalidation":
+        monkeypatch.setattr(
+            _update_checks,
+            "invalidate_fetch_cache",
+            lambda _home: mutate_then_raise(),
+        )
+    else:
+        verified_identity = SimpleNamespace(
+            incarnation_id="0" * 32,
+            semantic_key=f"{_PLUGIN_REF}:{_VERSION}",
         )
 
-        original_rollback = _marketplace._InstallSnapshot.rollback
+        def record_verification(_spec):
+            verification_events.append("verified")
+            return SimpleNamespace(identity=verified_identity, findings=())
 
-        def assert_lease_then_rollback(snapshot) -> None:
-            with pytest.raises(ArtifactLeaseContention):
-                ArtifactLease.acquire_exclusive(
-                    _plugin_artifact.installed_artifact_lock_path(target_root),
-                    blocking=False,
-                )
-            original_rollback(snapshot)
+        def fail_final_commit(_snapshot):
+            assert verification_events == ["verified"]
+            mutate_then_raise()
 
         monkeypatch.setattr(
-            _marketplace._InstallSnapshot,
-            "rollback",
-            assert_lease_then_rollback,
+            workspace,
+            "verify_installed_plugin_artifact",
+            record_verification,
         )
-
-        with pytest.raises(SystemExit):
-            _marketplace.install(scope="user")
-        capsys.readouterr()
-
-        assert old_cache.is_dir()
-        assert artifact_manifest.read_text() == artifact_manifest_before
-        assert manifest_path.read_text() == manifest_before
-        assert registry_path.read_text() == registry_before
-        assert _retiring_paths(tmp_path) == retiring_before
-
-
-class TestPreflightOrdering:
-    def test_worktree_guard_precedes_the_claudecode_deferral(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
-        """A worktree install inside a Claude Code session must name the worktree.
-
-        If CLAUDECODE were checked first, the user would be told to "run these
-        commands in a regular terminal" — advice that cannot work, because the
-        real problem is that the source is a transient worktree.
-        """
-        from autoskillit.cli import _marketplace
-
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("CLAUDECODE", "1")
-        monkeypatch.setattr(_marketplace, "is_git_worktree", lambda path: True)
-
-        with pytest.raises(SystemExit, match="worktree"):
-            _marketplace.install(scope="user")
-
-    def test_declining_under_claudecode_mutates_nothing(
-        self, tmp_path: Path, monkeypatch, capsys
-    ) -> None:
-        """The CLAUDECODE deferral used to fire *after* _ensure_marketplace()."""
-        from autoskillit.cli import _marketplace
-
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("CLAUDECODE", "1")
-        monkeypatch.setattr(_marketplace, "is_git_worktree", lambda path: False)
-
-        assert _marketplace.install(scope="user") is False
-        capsys.readouterr()
-        assert not (tmp_path / ".autoskillit" / "marketplace").exists(), (
-            "install() mutated the marketplace before deciding to defer"
-        )
-
-    def test_missing_claude_binary_mutates_nothing(
-        self, tmp_path: Path, monkeypatch, capsys
-    ) -> None:
-        from autoskillit.cli import _marketplace
-
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.setattr(_marketplace, "is_git_worktree", lambda path: False)
-        monkeypatch.setattr(_marketplace.shutil, "which", lambda _cmd: None)
-
-        with pytest.raises(SystemExit):
-            _marketplace.install(scope="user")
-        capsys.readouterr()
-        assert not (tmp_path / ".autoskillit" / "marketplace").exists()
-
-
-class TestInstallTargetSafety:
-    def test_symlinked_version_target_is_rejected_without_following_it(
-        self,
-        tmp_path: Path,
-        monkeypatch,
-        capsys,
-    ) -> None:
-        from autoskillit.cli import _marketplace
-
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.setattr(_marketplace, "is_git_worktree", lambda path: False)
-        monkeypatch.setattr(_marketplace.shutil, "which", lambda _cmd: "/usr/bin/claude")
         monkeypatch.setattr(
-            _marketplace,
-            "_ensure_marketplace",
-            lambda: pytest.fail("unsafe target reached marketplace mutation"),
+            marketplace._InstallSnapshot,
+            "commit",
+            fail_final_commit,
         )
-        outside = tmp_path / "outside-managed-cache"
-        outside.mkdir()
-        marker = outside / "must-survive"
-        marker.write_text("owned elsewhere")
-        target = _marketplace._installed_plugin_root()
-        target.parent.mkdir(parents=True)
-        target.symlink_to(outside, target_is_directory=True)
 
-        with pytest.raises(SystemExit):
-            _marketplace.install(scope="user")
+    if stage == "workspace_mutation":
+        request = InstallRequest(
+            scope="user",
+            mode=InstallMode.DIRECT,
+            require_registered_plugin=True,
+            expected_version=_VERSION,
+        )
+    else:
+        request = _maintenance_request()
 
-        assert "Unsafe installed plugin target" in capsys.readouterr().out
-        assert target.is_symlink()
-        assert marker.read_text() == "owned elsewhere"
-
-
-class TestRecordOwnedRetirementDeadline:
-    @pytest.mark.parametrize(
-        "cache_bytes",
-        [
-            b"{not-json",
-            b'{"schema_version":999,"records":[]}',
-        ],
-        ids=["corrupt", "unsupported-future"],
+    result = marketplace.install(
+        request=request,
+        child_env=_sealed_env(),
+        child_cwd=neutral_cwd,
     )
-    def test_coordinator_preserves_unsafe_cache_without_dispatch(
-        self,
-        cache_bytes: bytes,
-        tmp_path: Path,
-        monkeypatch,
-    ) -> None:
-        from datetime import UTC, datetime
 
-        from autoskillit.cli._plugin_artifact import DefaultPluginRetirementCoordinator
-        from autoskillit.core import PluginArtifactKind
+    assert reached == [stage]
+    assert result.outcome is InstallOutcome.FAILED
+    assert result.findings[-1] == "compensation completed"
+    assert surface.read_text(encoding="utf-8") == "before"
+    if stage == "identity_and_retirement_publication":
+        assert retiring.read_text(encoding="utf-8") == "before-retirement"
+    if stage == "exact_postcondition_verification":
+        assert verification_events == ["verified"]
 
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        cache = tmp_path / ".autoskillit" / "retiring_cache.json"
-        cache.parent.mkdir(parents=True)
-        cache.write_bytes(cache_bytes)
 
-        class NoDispatchOwner:
-            def __init__(
-                self,
-                *,
-                artifact_kind: PluginArtifactKind,
-                managed_root: Path,
-            ) -> None:
-                self.artifact_kind = artifact_kind
-                self.managed_root = managed_root
+def test_direct_install_failure_removes_transaction_created_workspace_temp(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, project_cwd = _configure_transaction(tmp_path, monkeypatch)
+    _configure_direct_backend(monkeypatch)
+    project_state = project_cwd / ".autoskillit"
+    project_state.mkdir()
+    project_gitignore = project_state / ".gitignore"
+    project_gitignore.write_text("preexisting\n", encoding="utf-8")
+    project_temp = project_state / "temp"
+    assert not project_temp.exists()
+    workspace_prepared = False
 
-            def try_reclaim(self, _record, _sweep_now):
-                pytest.fail("unsafe retirement cache must not dispatch an owner")
-
-        coordinator = DefaultPluginRetirementCoordinator(
-            projection_owner=NoDispatchOwner(
-                artifact_kind=PluginArtifactKind.PROJECTION,
-                managed_root=tmp_path / "projections",
-            ),
-            installed_owner=NoDispatchOwner(
-                artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
-                managed_root=tmp_path / "cache",
-            ),
+    def fail_child_after_workspace_preparation(argv, **_kwargs):
+        nonlocal workspace_prepared
+        workspace_prepared = True
+        assert project_temp.is_dir()
+        assert (project_temp / ".gitignore").is_file()
+        assert project_gitignore.read_text(encoding="utf-8") != "preexisting\n"
+        return subprocess.CompletedProcess(
+            argv,
+            7,
+            stdout="",
+            stderr="injected child failure",
         )
 
-        with pytest.warns(RuntimeWarning, match="sweep skipped unsafe state"):
-            assert coordinator.sweep_due(datetime.now(UTC)) == ()
-        assert cache.read_bytes() == cache_bytes
+    monkeypatch.setattr(
+        marketplace,
+        "_run_claude_admin",
+        fail_child_after_workspace_preparation,
+    )
 
-    def test_coordinator_dispatches_only_due_exact_records(
-        self,
-        tmp_path: Path,
-        monkeypatch,
-    ) -> None:
-        from datetime import UTC, datetime, timedelta
+    result = marketplace.install(
+        request=InstallRequest(
+            scope="user",
+            mode=InstallMode.DIRECT,
+            require_registered_plugin=True,
+            expected_version=_VERSION,
+        ),
+        child_env=_sealed_env(),
+        child_cwd=project_cwd,
+    )
 
-        from autoskillit.cli._plugin_artifact import DefaultPluginRetirementCoordinator
-        from autoskillit.core import (
-            PluginArtifactKind,
-            RetirementOutcome,
-            RetiringArtifactRecord,
-            append_retiring_record,
+    assert workspace_prepared
+    assert result.outcome is InstallOutcome.FAILED
+    assert result.failure_kind is InstallFailureKind.CHILD
+    assert result.findings[-1] == "compensation completed"
+    assert project_gitignore.read_text(encoding="utf-8") == "preexisting\n"
+    assert not project_temp.exists()
+
+
+def test_direct_install_temp_shape_restore_failure_requires_recovery(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, project_cwd = _configure_transaction(tmp_path, monkeypatch)
+    _configure_direct_backend(monkeypatch)
+    project_state = project_cwd / ".autoskillit"
+    project_state.mkdir()
+    project_gitignore = project_state / ".gitignore"
+    project_gitignore.write_text("preexisting\n", encoding="utf-8")
+    project_temp = project_state / "temp"
+    assert not project_temp.exists()
+    residual = project_temp / "uncovered-residual.txt"
+
+    def fail_child_with_uncovered_workspace_residual(argv, **_kwargs):
+        assert (project_temp / ".gitignore").is_file()
+        residual.write_text("preserve for recovery", encoding="utf-8")
+        return subprocess.CompletedProcess(
+            argv,
+            7,
+            stdout="",
+            stderr="injected child failure",
         )
 
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        now = datetime.now(UTC)
-        installed = RetiringArtifactRecord(
-            record_id="installed-due",
-            artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
-            semantic_key="plugin:installed",
-            managed_path=(tmp_path / "cache" / "installed").absolute(),
-            manifest_path=(tmp_path / "cache" / ".installed.json").absolute(),
-            incarnation_id="00000000000040008000000000000001",
-            manifest_schema_version=1,
-            artifact_digest="a" * 64,
-            retired_at=now - timedelta(hours=2),
-            not_before=now,
+    monkeypatch.setattr(
+        marketplace,
+        "_run_claude_admin",
+        fail_child_with_uncovered_workspace_residual,
+    )
+
+    result = marketplace.install(
+        request=InstallRequest(
+            scope="user",
+            mode=InstallMode.DIRECT,
+            require_registered_plugin=True,
+            expected_version=_VERSION,
+        ),
+        child_env=_sealed_env(),
+        child_cwd=project_cwd,
+    )
+
+    assert result.outcome is InstallOutcome.RECOVERY_REQUIRED
+    assert result.failure_kind is InstallFailureKind.ROLLBACK
+    assert any(
+        finding.startswith(f"rollback failed for {project_temp}:") for finding in result.findings
+    )
+    evidence_finding = next(
+        finding
+        for finding in result.findings
+        if finding.startswith("recovery evidence preserved at ")
+    )
+    evidence_dir = Path(evidence_finding.removeprefix("recovery evidence preserved at "))
+    assert evidence_dir.is_dir()
+    assert residual.read_text(encoding="utf-8") == "preserve for recovery"
+    assert project_gitignore.read_text(encoding="utf-8") == "preexisting\n"
+
+
+def test_child_failure_restores_every_staged_shared_surface(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    from autoskillit.cli import _plugin_artifact
+    from autoskillit.cli._install_snapshot import _installed_plugins_json_path
+
+    projection = tmp_path / ".autoskillit" / "marketplace"
+    projection.mkdir(parents=True)
+    (projection / "old.txt").write_text("old projection")
+    known = tmp_path / ".claude" / "plugins" / "known_marketplaces.json"
+    known.parent.mkdir(parents=True)
+    known.write_text('{"old": true}')
+    installed = _installed_plugins_json_path()
+    installed.write_text('{"version": 2, "plugins": {"old": {}}}')
+    retiring = tmp_path / ".autoskillit" / "retiring_cache.json"
+    retiring.write_text('{"schema_version": 2, "records": []}')
+    target = marketplace._installed_plugin_root(_VERSION)
+    target.mkdir(parents=True)
+    (target / "old.txt").write_text("old target")
+    manifest = _plugin_artifact.installed_plugin_artifact_manifest_path(target)
+    manifest.write_text('{"old": true}')
+    before = {
+        projection / "old.txt": "old projection",
+        known: '{"old": true}',
+        installed: '{"version": 2, "plugins": {"old": {}}}',
+        retiring: '{"schema_version": 2, "records": []}',
+        target / "old.txt": "old target",
+        manifest: '{"old": true}',
+    }
+
+    def mutate_projection(**_kwargs) -> Path:
+        (projection / "old.txt").unlink()
+        (projection / "new.txt").write_text("new projection")
+        return projection
+
+    def fail_child(argv, **_kwargs):
+        known.write_text('{"new": true}')
+        installed.write_text('{"version": 2, "plugins": {"new": {}}}')
+        retiring.write_text('{"schema_version": 2, "records": [{"new": true}]}')
+        (target / "old.txt").write_text("new target")
+        manifest.write_text('{"new": true}')
+        return subprocess.CompletedProcess(argv, 7, stdout="", stderr="boom")
+
+    monkeypatch.setattr(marketplace, "_ensure_marketplace", mutate_projection)
+    monkeypatch.setattr(marketplace, "_run_claude_admin", fail_child)
+
+    result = marketplace.install(
+        request=_maintenance_request(),
+        child_env=_sealed_env(),
+        child_cwd=neutral_cwd,
+    )
+
+    assert result.outcome is InstallOutcome.FAILED
+    assert result.failure_kind is InstallFailureKind.CHILD
+    assert result.findings[-1] == "compensation completed"
+    assert not (projection / "new.txt").exists()
+    for path, content in before.items():
+        assert path.read_text() == content
+
+
+def test_same_version_target_is_quarantined_and_restored_after_child_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    target = marketplace._installed_plugin_root(_VERSION)
+    target.mkdir(parents=True)
+    (target / "stale.txt").write_text("staged prestate", encoding="utf-8")
+    saw_fresh_install_surface = False
+
+    def fail_plugin_install(argv, **_kwargs):
+        nonlocal saw_fresh_install_surface
+        if tuple(argv)[:3] == ("claude", "plugin", "install"):
+            assert marketplace._InstallSnapshot._shape(target) == "missing"
+            saw_fresh_install_surface = True
+            target.mkdir(parents=True)
+            (target / "fresh.txt").write_text("failed install", encoding="utf-8")
+            return subprocess.CompletedProcess(argv, 7, stdout="", stderr="boom")
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(marketplace, "_run_claude_admin", fail_plugin_install)
+
+    result = marketplace.install(
+        request=_maintenance_request(),
+        child_env=_sealed_env(),
+        child_cwd=neutral_cwd,
+    )
+
+    assert saw_fresh_install_surface
+    assert result.outcome is InstallOutcome.FAILED
+    assert result.failure_kind is InstallFailureKind.CHILD
+    assert result.findings[-1] == "compensation completed"
+    assert (target / "stale.txt").read_text(encoding="utf-8") == "staged prestate"
+    assert {entry.name for entry in target.iterdir()} == {"stale.txt"}
+
+
+def test_failed_first_install_removes_new_lease_sidecar(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    from autoskillit.cli import _plugin_artifact
+
+    target = marketplace._installed_plugin_root(_VERSION)
+    lease_path = _plugin_artifact.installed_plugin_artifact_lease_path(target)
+    assert marketplace._InstallSnapshot._shape(lease_path) == "missing"
+
+    def fail_first_child(argv, **_kwargs):
+        assert lease_path.is_file()
+        return subprocess.CompletedProcess(argv, 7, stdout="", stderr="boom")
+
+    monkeypatch.setattr(marketplace, "_run_claude_admin", fail_first_child)
+
+    result = marketplace.install(
+        request=_maintenance_request(),
+        child_env=_sealed_env(),
+        child_cwd=neutral_cwd,
+    )
+
+    assert result.outcome is InstallOutcome.FAILED
+    assert result.failure_kind is InstallFailureKind.CHILD
+    assert result.findings[-1] == "compensation completed"
+    assert marketplace._InstallSnapshot._shape(lease_path) == "missing"
+
+
+def test_failed_install_restores_existing_lease_sidecar_in_place(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    from autoskillit.cli import _plugin_artifact
+
+    target = marketplace._installed_plugin_root(_VERSION)
+    lease_path = _plugin_artifact.installed_plugin_artifact_lease_path(target)
+    lease_path.parent.mkdir(parents=True)
+    lease_path.write_text("staged lease prestate", encoding="utf-8")
+    lease_path.chmod(0o640)
+    staged_inode = lease_path.lstat().st_ino
+
+    def fail_first_child(argv, **_kwargs):
+        acquired_stat = lease_path.lstat()
+        assert acquired_stat.st_ino == staged_inode
+        assert acquired_stat.st_mode & 0o777 == 0o600
+        return subprocess.CompletedProcess(argv, 7, stdout="", stderr="boom")
+
+    monkeypatch.setattr(marketplace, "_run_claude_admin", fail_first_child)
+
+    result = marketplace.install(
+        request=_maintenance_request(),
+        child_env=_sealed_env(),
+        child_cwd=neutral_cwd,
+    )
+
+    restored_stat = lease_path.lstat()
+    assert result.outcome is InstallOutcome.FAILED
+    assert result.failure_kind is InstallFailureKind.CHILD
+    assert result.findings[-1] == "compensation completed"
+    assert restored_stat.st_ino == staged_inode
+    assert restored_stat.st_mode & 0o777 == 0o640
+    assert lease_path.read_text(encoding="utf-8") == "staged lease prestate"
+
+
+def test_snapshot_restores_directory_and_symlink_shapes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli import _marketplace
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    projection = tmp_path / ".autoskillit" / "marketplace"
+    projection.mkdir(parents=True)
+    (projection / "old.txt").write_text("old directory", encoding="utf-8")
+
+    original_target = tmp_path / "original-plugin"
+    replacement_target = tmp_path / "replacement-plugin"
+    original_target.mkdir()
+    replacement_target.mkdir()
+    target = _marketplace._installed_plugin_root(_VERSION)
+    target.parent.mkdir(parents=True)
+    target.symlink_to(original_target, target_is_directory=True)
+
+    snapshot = _marketplace._InstallSnapshot(target_root=target)
+    snapshot.stage()
+
+    _marketplace._InstallSnapshot._remove(projection)
+    projection.mkdir()
+    (projection / "new.txt").write_text("new directory", encoding="utf-8")
+    target.unlink()
+    target.symlink_to(replacement_target, target_is_directory=True)
+
+    assert snapshot.rollback() == ()
+    assert (projection / "old.txt").read_text(encoding="utf-8") == "old directory"
+    assert not (projection / "new.txt").exists()
+    assert target.is_symlink()
+    assert os.readlink(target) == str(original_target)
+    assert not snapshot._stage_dir.exists()
+
+
+def test_snapshot_commit_is_final_before_staging_cleanup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli import _marketplace
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    target = _marketplace._installed_plugin_root(_VERSION)
+    target.mkdir(parents=True)
+    payload = target / "payload.txt"
+    payload.write_text("before", encoding="utf-8")
+    snapshot = _marketplace._InstallSnapshot(target_root=target)
+    snapshot.stage()
+    payload.write_text("installed", encoding="utf-8")
+    original_rmtree = _marketplace.shutil.rmtree
+
+    def partially_remove_then_fail(path: Path, *args, **kwargs) -> None:
+        if Path(path) == snapshot._stage_dir:
+            staged_entry = next(snapshot._stage_dir.iterdir())
+            _marketplace._InstallSnapshot._remove(staged_entry)
+            raise OSError("injected partial staging cleanup failure")
+        original_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(_marketplace.shutil, "rmtree", partially_remove_then_fail)
+
+    snapshot.commit()
+
+    assert payload.read_text(encoding="utf-8") == "installed"
+    assert snapshot.rollback() == ()
+    assert snapshot._committed is True
+    assert snapshot._staged is False
+    assert snapshot._entries == []
+
+
+def test_incomplete_compensation_returns_recovery_required_with_both_diagnostics(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    settings = tmp_path / ".claude" / "settings.json"
+    settings.parent.mkdir(parents=True)
+    settings.write_text("before", encoding="utf-8")
+    real_restore_entry = marketplace._InstallSnapshot._restore_entry
+
+    def fail_settings_restore(_cls, path, shape, backup):
+        if path == settings:
+            raise OSError("injected settings restoration failure")
+        return real_restore_entry(path, shape, backup)
+
+    monkeypatch.setattr(
+        marketplace._InstallSnapshot,
+        "_restore_entry",
+        classmethod(fail_settings_restore),
+    )
+
+    def fail_child_after_mutation(argv, **_kwargs):
+        settings.write_text("residual mutation", encoding="utf-8")
+        return subprocess.CompletedProcess(
+            argv,
+            2,
+            stdout="",
+            stderr="primary child failure",
         )
-        projection = RetiringArtifactRecord(
-            record_id="projection-due",
-            artifact_kind=PluginArtifactKind.PROJECTION,
-            semantic_key="plugin:projection",
-            managed_path=(tmp_path / "projections" / "projection").absolute(),
-            manifest_path=(tmp_path / "projections" / ".projection.json").absolute(),
-            incarnation_id="00000000000040008000000000000002",
-            manifest_schema_version=2,
-            artifact_digest="b" * 64,
-            retired_at=now - timedelta(hours=2),
-            not_before=now,
+
+    monkeypatch.setattr(marketplace, "_run_claude_admin", fail_child_after_mutation)
+
+    result = marketplace.install(
+        request=_maintenance_request(),
+        child_env=_sealed_env(),
+        child_cwd=neutral_cwd,
+    )
+
+    assert result.outcome is InstallOutcome.RECOVERY_REQUIRED
+    assert result.failure_kind is InstallFailureKind.ROLLBACK
+    assert "primary child failure" in result.findings[0]
+    assert any("rollback failed" in finding for finding in result.findings)
+    assert any(
+        (
+            f"residual state for {settings}: expected file, observed file; "
+            "differs from staged prestate"
         )
-        future = RetiringArtifactRecord(
-            record_id="future",
-            artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
-            semantic_key="plugin:future",
-            managed_path=(tmp_path / "cache" / "future").absolute(),
-            manifest_path=(tmp_path / "cache" / ".future.json").absolute(),
-            incarnation_id="00000000000040008000000000000003",
-            manifest_schema_version=1,
-            artifact_digest="a" * 64,
-            retired_at=now,
-            not_before=now + timedelta(hours=6),
-        )
-        for record in (installed, projection, future):
-            append_retiring_record(record)
-        dispatched: list[tuple[PluginArtifactKind, str, datetime]] = []
-
-        class Owner:
-            def __init__(
-                self,
-                *,
-                artifact_kind: PluginArtifactKind,
-                managed_root: Path,
-                outcome: RetirementOutcome,
-            ) -> None:
-                self.artifact_kind = artifact_kind
-                self.managed_root = managed_root
-                self.outcome = outcome
-
-            def try_reclaim(self, record, sweep_now):
-                assert sweep_now == now
-                assert record.artifact_kind is self.artifact_kind
-                dispatched.append((record.artifact_kind, record.record_id, sweep_now))
-                return self.outcome
-
-        installed_owner = Owner(
-            artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
-            managed_root=tmp_path / "cache",
-            outcome=RetirementOutcome.RECLAIMED,
-        )
-        projection_owner = Owner(
-            artifact_kind=PluginArtifactKind.PROJECTION,
-            managed_root=tmp_path / "projections",
-            outcome=RetirementOutcome.DEFERRED_CONTENDED,
-        )
-        coordinator = DefaultPluginRetirementCoordinator(
-            projection_owner=projection_owner,
-            installed_owner=installed_owner,
-        )
-
-        assert coordinator.sweep_due(now) == (
-            RetirementOutcome.RECLAIMED,
-            RetirementOutcome.DEFERRED_CONTENDED,
-        )
-        assert dispatched == [
-            (PluginArtifactKind.INSTALLED_PLUGIN, "installed-due", now),
-            (PluginArtifactKind.PROJECTION, "projection-due", now),
-        ]
+        == finding
+        for finding in result.findings
+    )
+    evidence_finding = next(
+        finding
+        for finding in result.findings
+        if finding.startswith("recovery evidence preserved at ")
+    )
+    evidence_dir = Path(evidence_finding.removeprefix("recovery evidence preserved at "))
+    assert evidence_dir.is_dir()
+    assert any(
+        backup.is_file() and backup.read_text(encoding="utf-8") == "before"
+        for backup in evidence_dir.iterdir()
+    )
+    assert settings.read_text(encoding="utf-8") == "residual mutation"
 
 
-class TestClearPluginCacheKeepsItsPromise:
-    def test_docstring_claim_holds(self) -> None:
-        """A documented-but-unimplemented guarantee is worse than an absent one.
+def test_maintenance_uses_only_passed_env_and_non_project_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
+    project_cwd = tmp_path / "ambient-project"
+    project_cwd.mkdir()
+    monkeypatch.chdir(project_cwd)
+    monkeypatch.setenv("AMBIENT_ONLY", "must-not-leak")
+    monkeypatch.setattr(
+        "autoskillit.config.load_config",
+        lambda _path: pytest.fail("maintenance read ambient backend config"),
+    )
+    calls: list[tuple[tuple[str, ...], dict[str, str], Path]] = []
 
-        `_clear_plugin_cache`'s docstring has claimed since #924 that it removes
-        the `installed_plugins.json` entry. It did not, and
-        `InstalledPluginsFile.remove()` had zero callers anywhere in `src/`.
-        Readers trusted a guarantee the code did not provide.
-        """
-        from autoskillit.cli._marketplace import _clear_plugin_cache
+    def capture(argv, *, env, cwd):
+        calls.append((tuple(argv), dict(env), cwd))
+        if tuple(argv)[:3] == ("claude", "plugin", "install"):
+            target = marketplace._installed_plugin_root(_VERSION)
+            assert marketplace._InstallSnapshot._shape(target) == "missing"
+            target.mkdir(parents=True)
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
-        doc = _clear_plugin_cache.__doc__ or ""
-        assert "installed_plugins.json" in doc
+    monkeypatch.setattr(marketplace, "_run_claude_admin", capture)
+    result = marketplace.install(
+        request=_maintenance_request(),
+        child_env=_sealed_env(),
+        child_cwd=neutral_cwd,
+    )
 
-    def test_remove_is_actually_wired_in(self, tmp_path: Path, monkeypatch) -> None:
-        from autoskillit.cli._marketplace import _clear_plugin_cache
+    assert result.outcome is InstallOutcome.COMPLETED
+    assert len(calls) == 2
+    assert all(env == _sealed_env() for _, env, _ in calls)
+    assert all(cwd == neutral_cwd for _, _, cwd in calls)
+    assert not (neutral_cwd / ".autoskillit").exists()
 
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        _seed_installed_state(tmp_path, "0.0.1-old")
-        registry = tmp_path / ".claude" / "plugins" / "installed_plugins.json"
-        assert _PLUGIN_KEY in _read_json(registry)["plugins"]
 
-        _clear_plugin_cache()
+def test_direct_mode_snapshots_caller_env_and_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marketplace, _neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
 
-        assert _PLUGIN_KEY not in _read_json(registry)["plugins"], (
-            "_clear_plugin_cache still does not do what its docstring says"
-        )
+    from autoskillit import __version__ as installed_version
 
-    def test_active_reader_is_still_queued_before_registry_removal(
-        self,
-        tmp_path: Path,
-        monkeypatch,
-    ) -> None:
-        from autoskillit.cli._marketplace import _clear_plugin_cache
-        from autoskillit.cli._plugin_artifact import (
-            installed_artifact_lock_path,
-            publish_installed_plugin_artifact,
-        )
-        from autoskillit.core import ArtifactLease, read_retiring_cache
+    caller_cwd = tmp_path / "caller"
+    changed_cwd = tmp_path / "changed"
+    caller_cwd.mkdir()
+    changed_cwd.mkdir()
+    monkeypatch.chdir(caller_cwd)
+    monkeypatch.setenv("DIRECT_SNAPSHOT", "original")
+    _configure_direct_backend(monkeypatch)
+    monkeypatch.setattr(marketplace, "_ensure_workspace_ready", lambda **_kwargs: None)
+    calls: list[tuple[dict[str, str], Path]] = []
 
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        root = _seed_installed_state(tmp_path, "0.0.1-old")
-        identity = publish_installed_plugin_artifact(
-            root,
-            semantic_key="autoskillit@autoskillit-local:0.0.1-old",
-        )
-        registry = tmp_path / ".claude" / "plugins" / "installed_plugins.json"
-        reader = ArtifactLease.acquire_shared(installed_artifact_lock_path(root))
-        try:
-            _clear_plugin_cache()
-        finally:
-            reader.close()
+    def capture(argv, *, env, cwd):
+        calls.append((dict(env), cwd))
+        if len(calls) == 1:
+            os.environ["DIRECT_SNAPSHOT"] = "changed"
+        if tuple(argv)[:3] == ("claude", "plugin", "install"):
+            target = marketplace._installed_plugin_root(installed_version)
+            assert marketplace._InstallSnapshot._shape(target) == "missing"
+            target.mkdir(parents=True)
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
-        assert _PLUGIN_KEY not in _read_json(registry)["plugins"]
-        assert [record.identity for record in read_retiring_cache().records] == [identity]
+    monkeypatch.setattr(marketplace, "_run_claude_admin", capture)
+    result = marketplace.install(request=_direct_request())
+
+    assert result.outcome is InstallOutcome.COMPLETED
+    assert [env["DIRECT_SNAPSHOT"] for env, _ in calls] == ["original", "original"]
+    assert [cwd for _, cwd in calls] == [caller_cwd, caller_cwd]

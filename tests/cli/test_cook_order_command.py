@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -211,12 +212,29 @@ class TestCLIOrderCommand:
         installed_root = current_installed_plugin_root()
         installed_root.mkdir(parents=True)
         (installed_root / "plugin.json").write_text("{}\n", encoding="utf-8")
+        metadata = installed_root / ".claude-plugin" / "plugin.json"
+        metadata.parent.mkdir(parents=True)
+        metadata.write_text(
+            json.dumps({"name": "autoskillit", "version": __version__}),
+            encoding="utf-8",
+        )
         publish_installed_plugin_artifact(
             installed_root,
             semantic_key=installed_plugin_semantic_key(
                 _AUTOSKILLIT_PLUGIN_KEY,
                 __version__,
             ),
+        )
+        registry = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+        registry.parent.mkdir(parents=True, exist_ok=True)
+        registry.write_text(
+            json.dumps(
+                {
+                    "version": 2,
+                    "plugins": {_AUTOSKILLIT_PLUGIN_KEY: {"installPath": str(installed_root)}},
+                }
+            ),
+            encoding="utf-8",
         )
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""

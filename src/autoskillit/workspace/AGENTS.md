@@ -10,6 +10,11 @@ Claude Code plugin cache: those are derived copies that a third party versions
 and garbage-collects, and reading one produces sessions that run stale
 recipes/agents/hooks against current code. `project_default_plugin_authority()`
 is lazy; only its launch binding carries a validated artifact path and lease.
+The narrow exception is install-state diagnostics in `_install_state.py` and
+`_installed_artifact.py`: registry entries are read only as evidence that the
+trusted home/plugin/version-derived artifact is obligatory. They are never
+used as path authority, and exact identity is validated under its stable
+sidecar lease.
 
 **Containment checks over write destinations use `destination_location()`, never
 `Path.resolve()`** — resolve follows a final-component symlink, which answers

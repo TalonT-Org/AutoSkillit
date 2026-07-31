@@ -25,21 +25,21 @@ pytestmark = [pytest.mark.medium]
 
 SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 
-#: Modules permitted to read a plugin root out of `installed_plugins.json`.
-#: There is exactly one, and it is a *reporting* primitive — no execution path
-#: may derive a plugin source from it.
+#: Exact modules permitted to read `installed_plugins.json`. Every reader treats
+#: registry data as evidence only; no execution path may derive a plugin source
+#: or managed root from it.
 REGISTRY_READ_ALLOWLIST: dict[str, str] = {
     "core/_plugin_ids.py": (
-        "Defines registered_install_paths() itself — the diagnostics-only reader. "
-        "Its docstring states the constraint that no resolution path may use it."
+        "Defines registered_install_paths(), the stdlib evidence parser. Its output "
+        "cannot authorize a source, launch path, or managed artifact root."
     ),
     "workspace/_install_state.py": (
-        "verify_install_state() reports registry/filesystem disagreement. Reporting a "
-        "dangling installPath is the point; nothing here resolves a source from it."
+        "Builds the current diagnostic obligation and compares exact retirement "
+        "records with live registration evidence; trusted inputs derive every root."
     ),
-    "cli/doctor/_doctor_mcp.py": (
-        "The doctor check that dereferences installPath. Returning OK for a merely "
-        "present key is the inversion this ratchet exists to prevent recurring."
+    "workspace/_installed_artifact.py": (
+        "The shared verifier rereads registry paths under the exact artifact lease only "
+        "as obligation evidence; trusted home/plugin/version inputs derive its root."
     ),
 }
 
@@ -50,34 +50,25 @@ DESTINATION_RESOLVE_ALLOWLIST: dict[str, str] = {
 }
 
 PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
-    ("cli/_marketplace.py", "_restore", "path.unlink"): (
+    ("cli/_install_snapshot/_snapshot.py", "_remove", "path.unlink"): (
         1,
-        "Transaction rollback restores a snapshotted metadata file, not a leased artifact.",
+        "Transaction restoration removes the failed replacement before restoring its staged copy.",
     ),
-    ("cli/_marketplace.py", "commit", "shutil.rmtree"): (
+    ("cli/_install_snapshot/_snapshot.py", "_remove", "shutil.rmtree"): (
+        1,
+        "Transaction restoration removes a failed replacement directory under install ownership.",
+    ),
+    ("cli/_install_snapshot/_snapshot.py", "commit", "shutil.rmtree"): (
         1,
         "The transaction-owned backup is removed only after the installed replacement commits.",
     ),
-    ("cli/_marketplace.py", "rollback", "os.replace"): (
+    ("cli/_install_snapshot/_snapshot.py", "rollback", "shutil.rmtree"): (
         1,
-        "Rollback restores the exact transaction backup while installed-artifact "
-        "ownership is held.",
+        "Rollback removes its private staging directory after restoring every covered surface.",
     ),
-    ("cli/_marketplace.py", "rollback", "self._target_root.unlink"): (
+    ("cli/_install_snapshot/_snapshot.py", "stage", "shutil.rmtree"): (
         1,
-        "Rollback removes only the failed transaction target while artifact ownership is held.",
-    ),
-    ("cli/_marketplace.py", "rollback", "shutil.rmtree"): (
-        1,
-        "Rollback removes only the failed transaction target while artifact ownership is held.",
-    ),
-    ("cli/_marketplace.py", "stage_target_root", "os.replace"): (
-        1,
-        "The current installed root is moved to a transaction backup under its exclusive lease.",
-    ),
-    ("cli/_marketplace.py", "stage_target_root", "self._artifact_manifest_path.unlink"): (
-        1,
-        "The staged installed manifest is removed under the same exclusive transaction lease.",
+        "A failed snapshot construction removes only its private transaction staging directory.",
     ),
     ("cli/_marketplace.py", "upgrade", "scripts_dir.rename"): (
         1,
@@ -194,9 +185,9 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
 }
 
 PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
-    ("cli/_marketplace.py", "install", "()"): (
-        2,
-        "External Claude install commands intentionally consume no launch binding.",
+    ("cli/_marketplace.py", "_run_claude_admin", "()"): (
+        1,
+        "The centralized Claude administration gateway intentionally consumes no launch binding.",
     ),
     ("cli/session/_session_cook.py", "cook", "pass_fds"): (
         1,
@@ -296,6 +287,7 @@ _PLUGIN_LIFECYCLE_SYMBOLS = frozenset(
     {
         "ArtifactLease",
         "InstalledPluginArtifactRetirementOwner",
+        "_InstallSnapshot",
         "PluginArtifactIdentity",
         "PluginArtifactKind",
         "PluginArtifactRetirementOwner",

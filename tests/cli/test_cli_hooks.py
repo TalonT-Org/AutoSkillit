@@ -7,7 +7,19 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit import __version__
+from autoskillit.cli._install_contract import InstallMode, InstallRequest
+
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+
+
+def _direct_request(scope: str = "user") -> InstallRequest:
+    return InstallRequest(
+        scope=scope,
+        mode=InstallMode.DIRECT,
+        require_registered_plugin=True,
+        expected_version=__version__,
+    )
 
 
 def _extract_script_from_cmd(cmd: str) -> str:
@@ -25,7 +37,7 @@ def test_claude_settings_path_user_scope():
     """_claude_settings_path('user') returns ~/.claude/settings.json."""
     from autoskillit.cli._hooks import _claude_settings_path
 
-    p = _claude_settings_path("user")
+    p = _claude_settings_path("user", cwd=Path.cwd())
     assert p == Path.home() / ".claude" / "settings.json"
 
 
@@ -35,8 +47,15 @@ def test_claude_settings_path_project_scope(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     from autoskillit.cli._hooks import _claude_settings_path
 
-    p = _claude_settings_path("project")
+    p = _claude_settings_path("project", cwd=tmp_path)
     assert p == tmp_path / ".claude" / "settings.json"
+
+
+def test_claude_settings_path_rejects_invalid_scope(tmp_path: Path) -> None:
+    from autoskillit.cli._hooks import _claude_settings_path
+
+    with pytest.raises(ValueError, match="invalid Claude settings scope"):
+        _claude_settings_path("invalid", cwd=tmp_path)
 
 
 # HK11
@@ -133,6 +152,7 @@ def test_evict_stale_hooks_removes_legacy_formats(tmp_path):
     """install() must remove all legacy autoskillit hook formats before writing fresh ones."""
     from autoskillit.cli._hooks import (
         _evict_stale_autoskillit_hooks,
+        _find_autoskillit_hook_commands,
         sync_hooks_to_settings,
     )
 
@@ -178,6 +198,8 @@ def test_evict_stale_hooks_removes_legacy_formats(tmp_path):
         }
     }
     settings.write_text(json.dumps(legacy_data, indent=2))
+
+    assert len(_find_autoskillit_hook_commands(legacy_data)) == 3
 
     # Evict all autoskillit entries
     _evict_stale_autoskillit_hooks(settings)
@@ -374,6 +396,7 @@ def test_install_does_not_write_hooks_when_plugin_active(tmp_path, monkeypatch):
     Writing them to settings.json creates dual registration and doubles hook execution.
     """
     import importlib
+    from types import SimpleNamespace
 
     from autoskillit.cli._marketplace import install
 
@@ -381,16 +404,30 @@ def test_install_does_not_write_hooks_when_plugin_active(tmp_path, monkeypatch):
     settings_path.parent.mkdir(parents=True)
 
     app_module = importlib.import_module("autoskillit.cli._hooks")
-    monkeypatch.setattr(app_module, "_claude_settings_path", lambda scope: settings_path)
+    monkeypatch.setattr(
+        app_module,
+        "_claude_settings_path",
+        lambda scope, **_kwargs: settings_path,
+    )
     monkeypatch.setattr(
         "autoskillit.cli._init_helpers._is_plugin_installed",
         lambda **kwargs: True,
     )
     monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())
-    monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
+    monkeypatch.setattr("shutil.which", lambda cmd, *, path=None: f"/usr/bin/{cmd}")
     monkeypatch.setattr(
         "autoskillit.cli._plugin_artifact.publish_installed_plugin_artifact",
         lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "autoskillit.workspace.verify_installed_plugin_artifact",
+        lambda _spec: SimpleNamespace(
+            identity=SimpleNamespace(
+                incarnation_id="test-incarnation",
+                semantic_key=f"autoskillit@autoskillit-local:{__version__}",
+            ),
+            findings=(),
+        ),
     )
     monkeypatch.delenv("CLAUDECODE", raising=False)
 
@@ -398,9 +435,9 @@ def test_install_does_not_write_hooks_when_plugin_active(tmp_path, monkeypatch):
     monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-    install(scope="local")
+    install(request=_direct_request("local"))
 
-    data = json.loads(settings_path.read_text())
+    data = json.loads(settings_path.read_text()) if settings_path.exists() else {}
     all_commands = [
         h["command"]
         for event_entries in data.get("hooks", {}).values()
@@ -425,7 +462,11 @@ def test_register_all_skips_hook_sync_when_plugin_active(tmp_path, monkeypatch):
     settings_path.parent.mkdir(parents=True)
 
     _hooks_mod = importlib.import_module("autoskillit.cli._hooks")
-    monkeypatch.setattr(_hooks_mod, "_claude_settings_path", lambda scope: settings_path)
+    monkeypatch.setattr(
+        _hooks_mod,
+        "_claude_settings_path",
+        lambda scope, **_kwargs: settings_path,
+    )
     monkeypatch.setattr(
         "autoskillit.cli._init_helpers._is_plugin_installed",
         lambda **kwargs: True,
@@ -459,7 +500,11 @@ def test_register_all_writes_hooks_when_plugin_not_active(tmp_path, monkeypatch)
     settings_path.parent.mkdir(parents=True)
 
     _hooks_mod = importlib.import_module("autoskillit.cli._hooks")
-    monkeypatch.setattr(_hooks_mod, "_claude_settings_path", lambda scope: settings_path)
+    monkeypatch.setattr(
+        _hooks_mod,
+        "_claude_settings_path",
+        lambda scope, **_kwargs: settings_path,
+    )
     monkeypatch.setattr(
         "autoskillit.cli._init_helpers._is_plugin_installed",
         lambda **kwargs: False,

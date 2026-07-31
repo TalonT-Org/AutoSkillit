@@ -29,10 +29,13 @@ from autoskillit.cli._install_info import (
     comparison_branch,
     detect_install,
     dismissal_window,
-    upgrade_command,
 )
 from autoskillit.cli._restart import perform_restart
 from autoskillit.cli.ui._terminal import terminal_guard
+from autoskillit.cli.update._transaction import (
+    UpdateTransactionOutcome,
+    run_update_transaction,
+)
 from autoskillit.cli.update._update_checks_fetch import (
     _fetch_latest_version,
     invalidate_fetch_cache,
@@ -75,48 +78,6 @@ def _write_dismiss_state(home: Path, state: dict[str, object]) -> None:
     state_file = home / ".autoskillit" / _DISMISS_FILE
     state_file.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(state_file, json.dumps(state))
-
-
-def _verify_update_result(
-    info: InstallInfo,
-    current: str,
-    latest: str,
-    home: Path,
-    state: dict[str, object],
-) -> bool:
-    """Verify that the update subprocess advanced the installed version.
-
-    Calls importlib.metadata.version() directly to bypass the lru_cache in
-    version_info() and the process-lifetime cache in autoskillit.__version__.
-
-    Returns True if the version advanced (update succeeded).
-    Returns False if the version is unchanged (update silently failed).
-    """
-    import importlib.metadata
-
-    try:
-        new_version = importlib.metadata.version("autoskillit")
-    except Exception:
-        logger.debug("Failed to read version after update attempt", exc_info=True)
-        new_version = current
-
-    if new_version != current:
-        return True
-
-    from autoskillit.cli._install_info import upgrade_command
-
-    cmd = upgrade_command(info)
-    cmd_str = " ".join(cmd) if cmd else "autoskillit update"
-    print(
-        f"\nUpdate attempted but version is still {current}. "
-        f"To upgrade, run:\n"
-        f"  autoskillit update\n"
-        f"Or manually:\n"
-        f"  {cmd_str}\n"
-        f"  autoskillit install",
-        flush=True,
-    )
-    return False
 
 
 def _binary_signal(info: InstallInfo, home: Path, current: str) -> Signal | None:
@@ -254,42 +215,22 @@ def _is_dismissed(
 
 
 def _run_update_sequence(
-    info: InstallInfo,
-    current: str,
     home: Path,
     state: dict[str, object],
-    skip_env: dict[str, str],
 ) -> None:
-    """Run the upgrade command, then autoskillit install, then verify."""
-    cmd = upgrade_command(info)
-    if cmd is None:
-        return
-    target_branch = comparison_branch(info)
-    latest: str = (
-        _fetch_latest_version(target_branch, home) or current
-        if target_branch is not None
-        else current
-    )
-    install_result: subprocess.CompletedProcess[bytes] = subprocess.CompletedProcess(
-        args=["autoskillit", "install"], returncode=0
-    )
+    """Present the automatic caller around the shared update transaction."""
     with terminal_guard():
-        subprocess.run(cmd, check=False, env=skip_env)
-        install_result = subprocess.run(["autoskillit", "install"], check=False, env=skip_env)
-    if install_result.returncode != 0:
-        print(
-            "\nautoskillit install exited with an error. "
-            "Hooks and plugin cache may be stale. "
-            "Run 'autoskillit install' manually to fix.",
-            flush=True,
+        result = run_update_transaction(
+            home=home,
+            process_runner=subprocess.run,
         )
-    succeeded = _verify_update_result(info, current, latest, home, state)
-    if succeeded:
-        state.pop("update_prompt", None)
-        state.pop("binary_snoozed", None)
-        _write_dismiss_state(home, state)
-        invalidate_fetch_cache(home)
-        perform_restart()
+    if result.outcome is not UpdateTransactionOutcome.COMPLETED:
+        return
+    state.pop("update_prompt", None)
+    state.pop("binary_snoozed", None)
+    _write_dismiss_state(home, state)
+    invalidate_fetch_cache(home)
+    perform_restart()
 
 
 def run_update_checks(home: Path | None = None) -> None:
@@ -316,12 +257,6 @@ def run_update_checks(home: Path | None = None) -> None:
     ):
         return
 
-    _skip_env: dict[str, str] = {
-        **os.environ,
-        "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
-        "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
-    }
-
     info = detect_install()
     if info.install_type in (
         InstallType.UNKNOWN,
@@ -340,7 +275,7 @@ def run_update_checks(home: Path | None = None) -> None:
     # Gather signals (network I/O happens here; status_line deferred until we know output exists)
     raw_signals: list[Signal | None] = [
         _binary_signal(info, _home, current),
-        _hooks_signal(_claude_settings_path("user")),
+        _hooks_signal(_claude_settings_path("user", cwd=Path.cwd())),
         _source_drift_signal(info, _home),
         _dual_mcp_signal(_home),
     ]
@@ -382,7 +317,7 @@ def run_update_checks(home: Path | None = None) -> None:
             return
 
         if answer.lower() in ("", "y", "yes"):
-            _run_update_sequence(info, current, _home, state, _skip_env)
+            _run_update_sequence(_home, state)
             return
 
         # N path — write unified dismissal record

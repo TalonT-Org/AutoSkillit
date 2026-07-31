@@ -1,13 +1,9 @@
 """One authority reports every install-state invariant, and doctor believes it.
 
-Two doctor checks returned `OK` on the machine that could not start:
-`_check_installed_plugins_entry` never dereferenced `installPath`, and
-`_check_plugin_cache_integrity` treated "the cache directory is absent" as
-"nothing is broken". So the diagnostic layer affirmatively reassured the user
-while `cook` crashed on every launch. There was no failing signal to codify.
-
-`verify_install_state()` is the one place those invariants live, wired into
-`doctor`, MCP server startup, and post-install verification so it cannot rot.
+The old doctor registry check and cache-integrity check could each report `OK`
+for a machine that could not start. ``verify_install_state()`` now owns the
+registry obligation and exact current-artifact decision, wired into doctor,
+MCP server startup, and post-install verification so it cannot rot.
 """
 
 from __future__ import annotations
@@ -21,6 +17,13 @@ from autoskillit.core import (
     RETIRED_INSTALL_ARTIFACT_SHAPES,
     PluginArtifactIdentity,
     Severity,
+)
+from tests.fixtures.plugin_artifact_state import (
+    INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
+    PLUGIN_ARTIFACT_STATE_EXPECTATIONS,
+    PLUGIN_ARTIFACT_STATE_KINDS,
+    PluginArtifactStateKind,
+    build_plugin_artifact_state,
 )
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
@@ -59,18 +62,22 @@ def _checks(home: Path) -> set[str]:
 def _queue_registered_retirement(home: Path) -> PluginArtifactIdentity:
     from datetime import UTC, datetime, timedelta
 
+    from autoskillit import __version__
     from autoskillit.cli._plugin_artifact import (
         InstalledPluginArtifactRetirementOwner,
         publish_installed_plugin_artifact,
     )
 
-    live = home / "cache" / "1.0.0"
-    live.mkdir(parents=True)
-    (live / "plugin.json").write_text('{"name":"autoskillit"}')
+    live = (
+        home / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit" / __version__
+    )
+    metadata = live / ".claude-plugin" / "plugin.json"
+    metadata.parent.mkdir(parents=True)
+    metadata.write_text(json.dumps({"name": "autoskillit", "version": __version__}))
     _write_registry(home, live)
     identity = publish_installed_plugin_artifact(
         live,
-        semantic_key="autoskillit@autoskillit-local:1.0.0",
+        semantic_key=f"autoskillit@autoskillit-local:{__version__}",
     )
     InstalledPluginArtifactRetirementOwner(live.parent).enqueue_retirement(
         identity,
@@ -85,15 +92,140 @@ class TestVerifyInstallState:
 
         assert verify_install_state() == ()
 
+    def test_acquired_lease_closes_when_findings_consumption_fails(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from autoskillit.workspace import _install_state
+
+        class RaisingFindings:
+            def __iter__(self):
+                raise RuntimeError("findings consumption failed")
+
+        class TrackingLease:
+            closed = False
+
+            def close(self) -> None:
+                self.closed = True
+
+        lease = TrackingLease()
+
+        class Verification:
+            findings = RaisingFindings()
+
+            def __init__(self) -> None:
+                self.lease = lease
+
+        monkeypatch.setattr(_install_state, "_current_install_state_spec", object)
+        monkeypatch.setattr(
+            _install_state,
+            "verify_installed_plugin_artifact",
+            lambda _spec: Verification(),
+        )
+
+        with pytest.raises(RuntimeError, match="findings consumption failed"):
+            _install_state.verify_install_state()
+
+        assert lease.closed is True
+
+    def test_acquired_lease_closes_after_successful_findings_consumption(
+        self,
+        home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from autoskillit.workspace import _install_state
+
+        class TrackingLease:
+            closed = False
+
+            def close(self) -> None:
+                self.closed = True
+
+        lease = TrackingLease()
+
+        class Verification:
+            findings = ()
+
+            def __init__(self) -> None:
+                self.lease = lease
+
+        monkeypatch.setattr(
+            _install_state,
+            "verify_installed_plugin_artifact",
+            lambda _spec: Verification(),
+        )
+
+        _install_state.verify_install_state()
+
+        assert lease.closed is True
+
+    @pytest.mark.parametrize("kind", PLUGIN_ARTIFACT_STATE_KINDS, ids=str)
+    def test_complete_production_shaped_artifact_matrix(
+        self,
+        home: Path,
+        kind: PluginArtifactStateKind,
+    ) -> None:
+        from autoskillit.workspace import verify_install_state
+
+        state = build_plugin_artifact_state(home, kind)
+        expected = PLUGIN_ARTIFACT_STATE_EXPECTATIONS[kind]
+
+        findings = verify_install_state()
+        exact_findings = [
+            finding for finding in findings if finding.check.startswith("installed_plugin")
+        ]
+        assert {finding.check for finding in exact_findings} == expected.checks
+        if not expected.checks:
+            assert findings == ()
+            return
+
+        assert kind in INVALID_PLUGIN_ARTIFACT_STATE_KINDS
+        assert all(finding.severity is Severity.ERROR for finding in exact_findings)
+        assert any(str(state.managed_root) in finding.message for finding in exact_findings)
+        assert all("autoskillit install" in finding.message for finding in exact_findings)
+
     def test_dangling_install_path(self, home: Path) -> None:
         _write_registry(home, home / "does" / "not" / "exist")
         assert "installed_plugins_install_path" in _checks(home)
 
-    def test_resolvable_install_path_is_silent(self, home: Path) -> None:
+    def test_resolvable_stale_install_path_is_not_path_authority(self, home: Path) -> None:
         real = home / "cache" / "1.0.0"
         real.mkdir(parents=True)
         _write_registry(home, real)
-        assert "installed_plugins_install_path" not in _checks(home)
+        checks = _checks(home)
+        assert "installed_plugins_install_path" in checks
+        assert "installed_plugin_registry_missing" in checks
+
+    def test_current_spec_uses_fresh_metadata_and_live_obligation(
+        self,
+        home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import autoskillit.workspace._install_state as install_state
+
+        fresh_version = "9.8.7-fresh"
+        real_version = install_state.importlib.metadata.version
+
+        def version_for_test(package: str) -> str:
+            if package == "autoskillit":
+                return fresh_version
+            return real_version(package)
+
+        monkeypatch.setattr(
+            install_state.importlib.metadata,
+            "version",
+            version_for_test,
+        )
+
+        clean_spec = install_state._current_install_state_spec()
+        assert clean_spec.expected_version == fresh_version
+        assert clean_spec.require_registered_plugin is False
+
+        _write_registry(home, home / "cache" / "older")
+        obligated_spec = install_state._current_install_state_spec()
+        assert obligated_spec.expected_version == fresh_version
+        assert obligated_spec.require_registered_plugin is True
+        assert obligated_spec.managed_root.name == fresh_version
 
     def test_retired_artifact_shape_still_on_disk(self, home: Path) -> None:
         from tests.cli._upgrade_fixtures import seed_legacy_home
@@ -251,23 +383,6 @@ class TestVerifyInstallState:
 class TestDoctorReportsTheBrokenState:
     """The diagnostic inversion: OK on a machine that cannot start."""
 
-    def test_installed_plugins_entry_errors_on_a_dangling_path(self, home: Path) -> None:
-        from autoskillit.cli.doctor._doctor_mcp import _check_installed_plugins_entry
-
-        _write_registry(home, home / "does" / "not" / "exist")
-        result = _check_installed_plugins_entry()
-        assert result.severity is Severity.ERROR, (
-            "doctor reported OK for a registry entry whose installPath does not exist"
-        )
-
-    def test_installed_plugins_entry_is_ok_when_the_path_resolves(self, home: Path) -> None:
-        from autoskillit.cli.doctor._doctor_mcp import _check_installed_plugins_entry
-
-        real = home / "cache" / "1.0.0"
-        real.mkdir(parents=True)
-        _write_registry(home, real)
-        assert _check_installed_plugins_entry().severity is Severity.OK
-
     def test_cache_integrity_is_not_ok_when_the_cache_is_absent(self, home: Path) -> None:
         """`[]` from the validator means "nothing checked", not "nothing broken"."""
         from autoskillit.cli.doctor._doctor_mcp import _check_plugin_cache_integrity
@@ -281,6 +396,38 @@ class TestDoctorReportsTheBrokenState:
         results = _check_install_state_consistency()
         assert results
         assert all(r.severity is Severity.ERROR for r in results)
+        assert {result.check for result in results} >= {
+            "install_state:installed_plugins_install_path",
+            "install_state:installed_plugin_registry_missing",
+        }
+
+    def test_install_state_check_names_fresh_current_root(
+        self,
+        home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import autoskillit.workspace._install_state as install_state
+        from autoskillit.cli.doctor._doctor_mcp import _check_install_state_consistency
+
+        fresh_version = "9.8.7-fresh"
+        monkeypatch.setattr(
+            install_state.importlib.metadata,
+            "version",
+            lambda package: fresh_version if package == "autoskillit" else "",
+        )
+        _write_registry(home, home / "cache" / "older")
+
+        results = _check_install_state_consistency()
+        expected_root = (
+            home
+            / ".claude"
+            / "plugins"
+            / "cache"
+            / "autoskillit-local"
+            / "autoskillit"
+            / fresh_version
+        )
+        assert any(str(expected_root) in result.message for result in results)
 
     def test_install_state_check_is_ok_on_a_clean_machine(self, home: Path) -> None:
         from autoskillit.cli.doctor._doctor_mcp import _check_install_state_consistency

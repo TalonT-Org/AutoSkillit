@@ -22,6 +22,24 @@ import pytest
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
+def _installed_root(home: Path, version: str = "1.2.3") -> Path:
+    return home / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit" / version
+
+
+def _write_installed_registry(home: Path, root: Path) -> None:
+    registry = home / ".claude" / "plugins" / "installed_plugins.json"
+    registry.parent.mkdir(parents=True, exist_ok=True)
+    registry.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "plugins": {"autoskillit@autoskillit-local": {"installPath": str(root)}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def _seed_dangling_registry(home: Path) -> Path:
     """Point installed_plugins.json at a directory that does not exist.
 
@@ -244,14 +262,17 @@ class TestInstalledPluginArtifactAuthority:
         from autoskillit.cli import _plugin_artifact
         from autoskillit.core import PluginLoadMode
 
-        root = tmp_path.resolve()
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        root = _installed_root(tmp_path)
+        root.mkdir(parents=True)
+        _write_installed_registry(tmp_path, root)
 
         def interrupt(*_args, **_kwargs):
             raise SystemExit("stop")
 
         monkeypatch.setattr(
             _plugin_artifact.ArtifactLease,
-            "acquire_shared",
+            "acquire_existing_shared",
             interrupt,
         )
 
@@ -264,10 +285,14 @@ class TestInstalledPluginArtifactAuthority:
                 load_mode=PluginLoadMode.IMPLICIT_INSTALLED,
             )
 
-    def test_publication_round_trips_exact_external_incarnation(self, tmp_path: Path) -> None:
+    def test_publication_round_trips_exact_external_incarnation(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         from autoskillit.cli._plugin_artifact import (
             InstalledPluginArtifactAuthority,
-            installed_artifact_manifest_path,
+            installed_plugin_artifact_manifest_path,
             publish_installed_plugin_artifact,
         )
         from autoskillit.core import (
@@ -277,13 +302,21 @@ class TestInstalledPluginArtifactAuthority:
             PluginLoadMode,
         )
 
-        root = (tmp_path / "cache" / "autoskillit" / "1.2.3").resolve()
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        root = _installed_root(tmp_path)
         root.mkdir(parents=True)
         (root / "plugin.json").write_text('{"name":"autoskillit"}')
+        metadata = root / ".claude-plugin" / "plugin.json"
+        metadata.parent.mkdir(parents=True)
+        metadata.write_text(
+            json.dumps({"name": "autoskillit", "version": "1.2.3"}),
+            encoding="utf-8",
+        )
         semantic_key = "autoskillit@autoskillit-local:1.2.3"
 
         published = publish_installed_plugin_artifact(root, semantic_key=semantic_key)
-        manifest_path = installed_artifact_manifest_path(root)
+        _write_installed_registry(tmp_path, root)
+        manifest_path = installed_plugin_artifact_manifest_path(root)
         assert published.manifest_path == manifest_path
         assert manifest_path.parent == root.parent
         assert not manifest_path.is_relative_to(root)
@@ -312,10 +345,14 @@ class TestInstalledPluginArtifactAuthority:
             binding.close()
         assert binding.closed
 
-    def test_content_change_after_publication_fails_closed(self, tmp_path: Path) -> None:
+    def test_content_change_after_publication_fails_closed(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         from autoskillit.cli._plugin_artifact import (
             InstalledPluginArtifactAuthority,
-            installed_artifact_lock_path,
+            installed_plugin_artifact_lease_path,
             publish_installed_plugin_artifact,
         )
         from autoskillit.core import (
@@ -324,12 +361,14 @@ class TestInstalledPluginArtifactAuthority:
             PluginLoadMode,
         )
 
-        root = (tmp_path / "installed" / "1.2.3").resolve()
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        root = _installed_root(tmp_path)
         root.mkdir(parents=True)
         content = root / "plugin.json"
         content.write_text("before")
         semantic_key = "autoskillit@autoskillit-local:1.2.3"
         publish_installed_plugin_artifact(root, semantic_key=semantic_key)
+        _write_installed_registry(tmp_path, root)
         content.write_text("after")
 
         with pytest.raises(PluginArtifactValidationError, match="digest mismatch"):
@@ -341,7 +380,7 @@ class TestInstalledPluginArtifactAuthority:
                 load_mode=PluginLoadMode.IMPLICIT_INSTALLED,
             )
         with ArtifactLease.acquire_exclusive(
-            installed_artifact_lock_path(root),
+            installed_plugin_artifact_lease_path(root),
             blocking=False,
         ):
             pass
@@ -351,7 +390,7 @@ class TestInstalledPluginArtifactAuthority:
         tmp_path: Path,
     ) -> None:
         from autoskillit.cli._plugin_artifact import (
-            installed_artifact_manifest_path,
+            installed_plugin_artifact_manifest_path,
             publish_installed_plugin_artifact,
         )
         from autoskillit.core import PluginArtifactPublicationError
@@ -368,12 +407,12 @@ class TestInstalledPluginArtifactAuthority:
 
         assert internal_link.is_symlink()
         assert external.read_text() == "must survive"
-        assert not installed_artifact_manifest_path(root).exists()
+        assert not installed_plugin_artifact_manifest_path(root).exists()
 
     @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO creation requires POSIX")
     def test_publication_rejects_internal_special_file(self, tmp_path: Path) -> None:
         from autoskillit.cli._plugin_artifact import (
-            installed_artifact_manifest_path,
+            installed_plugin_artifact_manifest_path,
             publish_installed_plugin_artifact,
         )
         from autoskillit.core import PluginArtifactPublicationError
@@ -387,7 +426,7 @@ class TestInstalledPluginArtifactAuthority:
             publish_installed_plugin_artifact(root, semantic_key="plugin:1.2.3")
 
         assert special.exists()
-        assert not installed_artifact_manifest_path(root).exists()
+        assert not installed_plugin_artifact_manifest_path(root).exists()
 
     def test_generated_home_codex_does_not_construct_projection_authority(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -420,22 +459,31 @@ class TestInstalledPluginArtifactAuthority:
         assert authority is None
         assert load_mode is PluginLoadMode.GENERATED_HOME
 
-    def test_implicit_binding_rejects_wrong_transaction_identity(self, tmp_path: Path) -> None:
+    def test_implicit_binding_rejects_wrong_transaction_identity(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         from autoskillit.cli._plugin_artifact import (
             InstalledPluginArtifactAuthority,
             publish_installed_plugin_artifact,
         )
         from autoskillit.core import PluginArtifactValidationError, PluginLoadMode
 
-        root = (tmp_path / "installed" / "1.2.3").resolve()
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        root = _installed_root(tmp_path)
         root.mkdir(parents=True)
         (root / "plugin.json").write_text("content")
-        publish_installed_plugin_artifact(root, semantic_key="plugin:old")
+        publish_installed_plugin_artifact(
+            root,
+            semantic_key="autoskillit@autoskillit-local:old",
+        )
+        _write_installed_registry(tmp_path, root)
 
         with pytest.raises(PluginArtifactValidationError, match="semantic identity"):
             InstalledPluginArtifactAuthority(
                 root,
-                semantic_key="plugin:new",
+                semantic_key="autoskillit@autoskillit-local:1.2.3",
             ).acquire_launch_binding(
                 backend=object(),
                 load_mode=PluginLoadMode.IMPLICIT_INSTALLED,

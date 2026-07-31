@@ -1,5 +1,6 @@
 from ._claude_env import build_agent_env as build_agent_env
 from ._claude_env import build_claude_env as build_claude_env
+from ._claude_env import build_maintenance_env as build_maintenance_env
 from ._cmd_runner import CmdRunner as CmdRunner
 from ._cmd_runner import default_cmd_runner as default_cmd_runner
 from ._cmd_runner import run_gh as run_gh
@@ -27,7 +28,19 @@ from ._plugin_artifact_identity import (
     INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION as INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,  # noqa: E501
 )
 from ._plugin_artifact_identity import (
+    installed_plugin_artifact_lease_path as installed_plugin_artifact_lease_path,
+)
+from ._plugin_artifact_identity import (
+    installed_plugin_artifact_manifest_path as installed_plugin_artifact_manifest_path,
+)
+from ._plugin_artifact_identity import (
     installed_plugin_artifact_manifest_payload as installed_plugin_artifact_manifest_payload,
+)
+from ._plugin_artifact_identity import (
+    installed_plugin_artifact_root as installed_plugin_artifact_root,
+)
+from ._plugin_artifact_identity import (
+    installed_plugin_cache_dir as installed_plugin_cache_dir,
 )
 from ._plugin_artifact_identity import (
     read_installed_plugin_artifact_identity as read_installed_plugin_artifact_identity,
@@ -51,6 +64,8 @@ from ._plugin_ids import DIRECT_PREFIX as DIRECT_PREFIX
 from ._plugin_ids import MARKETPLACE_PREFIX as MARKETPLACE_PREFIX
 from ._plugin_ids import _installed_plugins_path as _installed_plugins_path
 from ._plugin_ids import detect_autoskillit_mcp_prefix as detect_autoskillit_mcp_prefix
+from ._plugin_ids import installed_plugin_semantic_key as installed_plugin_semantic_key
+from ._plugin_ids import parse_installed_plugin_semantic_key as parse_installed_plugin_semantic_key
 from ._plugin_ids import registered_install_paths as registered_install_paths
 from ._step_context import current_order_id as current_order_id
 from ._step_context import current_step_name as current_step_name

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 import json
 import os
 import shutil
 import subprocess
-import sys
-import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
+from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -20,8 +20,20 @@ from autoskillit.cli._init_helpers import (
     evict_direct_mcp_entry,
     validate_public_plugin_projection,
 )
+from autoskillit.cli._install_contract import (
+    InstallFailureKind,
+    InstallMode,
+    InstallOutcome,
+    InstallRequest,
+    InstallResult,
+)
+from autoskillit.cli._install_snapshot import (
+    _fetch_cache_path,
+    _installed_plugin_root,
+    _InstallSnapshot,
+    _plugin_cache_dir,
+)
 from autoskillit.core import (
-    DIRECT_INSTALL_CACHE_SUBDIR,
     SkillExecutionRole,
     SkillSource,
     atomic_write,
@@ -45,50 +57,48 @@ _MARKETPLACE_NAME = "autoskillit-local"
 
 
 class _InstallFailed(Exception):
-    """A post-preflight install step failed; the caller must roll back."""
+    """An operational install step failed; the caller must compensate."""
 
-
-def _plugin_cache_dir() -> Path:
-    return (
-        Path.home() / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / "autoskillit"
-    )
-
-
-def _installed_plugin_root() -> Path:
-    from autoskillit.cli._plugin_artifact import current_installed_plugin_root
-
-    return current_installed_plugin_root()
+    def __init__(self, kind: InstallFailureKind, message: str) -> None:
+        self.kind = kind
+        super().__init__(message)
 
 
 def _clear_plugin_cache(
     *,
     on_retirement_created: Callable[[str], None] | None = None,
+    current_version: str | None = None,
+    _lock_owned: bool = False,
 ) -> tuple[str, ...]:
     """Queue exact old versions and remove their installed_plugins.json reference."""
-    from autoskillit import __version__
+    if current_version is None:
+        from autoskillit import __version__
+
+        current_version = __version__
     from autoskillit.cli._installed_plugins import InstalledPluginsFile
     from autoskillit.cli._plugin_artifact import (
         InstalledPluginArtifactRetirementOwner,
         _read_installed_plugin_identity,
         default_plugin_retirement_coordinator,
-        installed_artifact_lock_path,
     )
     from autoskillit.core import (
         _AUTOSKILLIT_PLUGIN_KEY,
         ArtifactLease,
         PluginArtifactValidationError,
         _InstallLock,
+        installed_plugin_artifact_lease_path,
     )
 
     cache_dir = _plugin_cache_dir()
     owner = InstalledPluginArtifactRetirementOwner(cache_dir)
-    with _InstallLock():
+    lock_scope = nullcontext() if _lock_owned else _InstallLock()
+    with lock_scope:
         default_plugin_retirement_coordinator().migrate_legacy_cache()
         candidates = (
             tuple(
                 path
                 for path in sorted(cache_dir.iterdir(), key=lambda item: item.name)
-                if path.name != __version__
+                if path.name != current_version
                 and not path.name.startswith(".")
                 and path.is_dir()
                 and not path.is_symlink()
@@ -97,12 +107,11 @@ def _clear_plugin_cache(
             else ()
         )
 
-    created_ids: list[str] = []
-    deadline = datetime.now(UTC) + timedelta(hours=6)
-    for candidate in candidates:
-        reader = ArtifactLease.acquire_shared(installed_artifact_lock_path(candidate))
-        with reader:
-            with _InstallLock():
+        created_ids: list[str] = []
+        deadline = datetime.now(UTC) + timedelta(hours=6)
+        for candidate in candidates:
+            reader = ArtifactLease.acquire_shared(installed_plugin_artifact_lease_path(candidate))
+            with reader:
                 try:
                     identity = _read_installed_plugin_identity(candidate)
                 except PluginArtifactValidationError:
@@ -115,7 +124,6 @@ def _clear_plugin_cache(
                 if result.created:
                     created_ids.append(result.record_id)
 
-    with _InstallLock():
         InstalledPluginsFile().remove(_AUTOSKILLIT_PLUGIN_KEY)
     return tuple(created_ids)
 
@@ -131,7 +139,7 @@ def _assert_not_worktree() -> None:
     """
     pkg_dir = pkg_root()
     if is_git_worktree(pkg_dir):
-        raise SystemExit(
+        raise RuntimeError(
             "ERROR: 'autoskillit install' cannot be run when the package\n"
             "is installed from a git worktree.\n\n"
             f"  Detected worktree path: {pkg_dir}\n\n"
@@ -141,9 +149,17 @@ def _assert_not_worktree() -> None:
         )
 
 
-def _ensure_marketplace() -> Path:
+def _ensure_marketplace(
+    *,
+    cwd: Path | None = None,
+    version: str | None = None,
+) -> Path:
     """Create or update the local marketplace directory."""
-    from autoskillit import __version__
+    if version is None:
+        from autoskillit import __version__
+
+        version = __version__
+    projection_cwd = Path.cwd().resolve() if cwd is None else Path(cwd)
 
     pkg_dir = pkg_root()
     marketplace_dir = Path.home() / ".autoskillit" / "marketplace"
@@ -160,7 +176,7 @@ def _ensure_marketplace() -> Path:
                 "source": "./plugins/autoskillit",
                 "description": "Orchestrated skill-driven workflows"
                 " using Claude Code headless sessions",
-                "version": __version__,
+                "version": version,
             }
         ],
     }
@@ -182,7 +198,7 @@ def _ensure_marketplace() -> Path:
         public_plugin_root,
         catalog,
         SkillProjectionContext(
-            cwd=Path.cwd().resolve(),
+            cwd=projection_cwd,
             catalog=catalog,
         ),
     )
@@ -200,7 +216,7 @@ def _ensure_marketplace() -> Path:
     return marketplace_dir
 
 
-def _ensure_workspace_ready() -> None:
+def _ensure_workspace_ready(*, cwd: Path | None = None) -> None:
     """Repair project workspace state that install() is responsible for.
 
     Called after the CLAUDECODE guard — only when the actual install proceeds.
@@ -208,7 +224,7 @@ def _ensure_workspace_ready() -> None:
     """
     from autoskillit.core import ensure_project_temp
 
-    project_dir = Path.cwd()
+    project_dir = Path.cwd() if cwd is None else Path(cwd)
     # Repair .autoskillit/.gitignore and ensure temp/ exists
     if (project_dir / ".autoskillit").is_dir():
         ensure_project_temp(project_dir)
@@ -216,288 +232,489 @@ def _ensure_workspace_ready() -> None:
     # Migrate legacy .autoskillit/scripts/ to .autoskillit/recipes/ if present
     if (project_dir / ".autoskillit" / "scripts").exists():
         try:
-            upgrade()
+            upgrade(project_dir=project_dir)
         except OSError as exc:
             print(f"Warning: migration upgrade() failed (non-fatal): {exc}")
-
-
-class _InstallSnapshot:
-    """Pre-attempt state of every file ``install()`` mutates, for rollback.
-
-    ``install()`` used to retire the live plugin cache before securing its
-    replacement and never rolled back, so a failure between those two points
-    left ``installed_plugins.json`` pointing at a directory queued for deletion
-    — a dangling pointer roughly two hours later, once the sweeper ran. Every
-    failure path now restores this snapshot instead.
-    """
-
-    def __init__(self) -> None:
-        from autoskillit.cli._plugin_artifact import installed_artifact_manifest_path
-
-        self._marketplace_manifest = self._read(_marketplace_manifest_path())
-        self._installed_plugins = self._read(_installed_plugins_json_path())
-        self._target_root = _installed_plugin_root()
-        self._artifact_manifest_path = installed_artifact_manifest_path(self._target_root)
-        self._artifact_manifest = self._read(self._artifact_manifest_path)
-        self._target_backup: Path | None = None
-        self._target_mutation_owned = False
-        self._created_retiring_record_ids: set[str] = set()
-
-    @staticmethod
-    def _read(path: Path) -> str | None:
-        try:
-            return path.read_text()
-        except OSError:
-            return None
-
-    def _restore(self, path: Path, content: str | None) -> None:
-        if content is None:
-            if path.is_file():
-                path.unlink()
-            return
-        path.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write(path, content)
-
-    def stage_target_root(self) -> None:
-        """Move the unleased target aside while its exclusive lease is held."""
-        if not self._target_root.exists():
-            self._target_mutation_owned = True
-            return
-        backup = self._target_root.parent / (
-            f".{self._target_root.name}.autoskillit-install-backup-{uuid.uuid4().hex}"
-        )
-        os.replace(self._target_root, backup)
-        self._target_backup = backup
-        self._target_mutation_owned = True
-        if self._artifact_manifest_path.is_file() or self._artifact_manifest_path.is_symlink():
-            self._artifact_manifest_path.unlink()
-
-    def track_retirement(self, record_id: str) -> None:
-        self._created_retiring_record_ids.add(record_id)
-
-    def rollback(self) -> None:
-        """Restore the manifest, the registry, and the retiring queue."""
-        from autoskillit.core import remove_retiring_records
-
-        if self._target_mutation_owned:
-            if self._target_root.is_dir():
-                shutil.rmtree(self._target_root)
-            elif self._target_root.exists() or self._target_root.is_symlink():
-                self._target_root.unlink()
-            if self._target_backup is not None and self._target_backup.exists():
-                os.replace(self._target_backup, self._target_root)
-                self._target_backup = None
-            self._target_mutation_owned = False
-
-        self._restore(_marketplace_manifest_path(), self._marketplace_manifest)
-        self._restore(_installed_plugins_json_path(), self._installed_plugins)
-        self._restore(self._artifact_manifest_path, self._artifact_manifest)
-        remove_retiring_records(self._created_retiring_record_ids)
-
-    def commit(self) -> None:
-        """Discard the rollback copy after the new incarnation is published."""
-        backup = self._target_backup
-        self._target_backup = None
-        self._target_mutation_owned = False
-        if backup is not None and backup.is_dir():
-            try:
-                shutil.rmtree(backup)
-            except OSError:
-                logger.warning(
-                    "installed_plugin_backup_cleanup_failed",
-                    backup_path=str(backup),
-                    exc_info=True,
-                )
 
 
 def _marketplace_manifest_path() -> Path:
     return Path.home() / ".autoskillit" / "marketplace" / ".claude-plugin" / "marketplace.json"
 
 
-def _installed_plugins_json_path() -> Path:
-    return Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+def _claude_on_path(env: Mapping[str, str]) -> bool:
+    """Resolve Claude exactly once against the sealed PATH."""
+    return shutil.which("claude", path=env.get("PATH")) is not None
 
 
-def install(*, scope: str = "user") -> bool:
-    """Install the plugin persistently for Claude Code.
-
-    Sets up a local marketplace and installs the plugin so it loads
-    automatically in every Claude Code session (no --plugin-dir needed).
-
-    After updating autoskillit, re-run this command to refresh the cache.
-
-    Transactional: every check that can decline the install runs before the
-    first persistent mutation, and every failure afterwards restores the
-    pre-attempt state.
-
-    Parameters
-    ----------
-    scope
-        Where to enable: "user" (all projects), "project" (shared via repo),
-        or "local" (this project, gitignored).
-    """
-    # ---- Preflight. No persistent mutation may happen above this line. ----
-    # Order is load-bearing: the worktree guard must precede CLAUDECODE so a
-    # worktree install inside a Claude Code session names the real problem.
-    _assert_not_worktree()
-
-    if scope not in _VALID_SCOPES:
-        print(f"Invalid scope: {scope!r}. Must be one of: {', '.join(sorted(_VALID_SCOPES))}")
-        sys.exit(1)
-
-    from autoskillit.config import load_config
-
-    cfg = load_config(Path.cwd())
-
-    from autoskillit.execution import get_backend
-
-    backend = get_backend(cfg.agent_backend.backend)
-    if not backend.capabilities.plugin_install_capable:
-        print(
-            f"\nPlugin install requires a plugin_install_capable backend.\n"
-            f"Current backend: {cfg.agent_backend.backend!r}\n"
+def _validate_transaction_target(target: Path, expected_version: str) -> None:
+    """Validate an explicit-version target without consulting cached package state."""
+    expected_parent = _plugin_cache_dir()
+    if not target.is_absolute():
+        raise RuntimeError(f"Unsafe installed plugin target must be absolute: {target}")
+    if target != expected_parent / expected_version:
+        raise RuntimeError(
+            f"Unsafe installed plugin target does not match expected version target: {target}"
         )
-        return False
+    if target.is_symlink():
+        raise RuntimeError(f"Unsafe installed plugin target must not be a symlink: {target}")
+    if target.exists() and not target.is_dir():
+        raise RuntimeError(f"Unsafe installed plugin target must be a directory: {target}")
+    resolved_parent = expected_parent.resolve(strict=False)
+    if target.resolve(strict=False).parent != resolved_parent:
+        raise RuntimeError(f"Unsafe installed plugin target escapes managed cache: {target}")
 
-    marketplace_dir = Path.home() / ".autoskillit" / "marketplace"
-    plugin_ref = f"autoskillit@{_MARKETPLACE_NAME}"
 
-    # Cannot run `claude plugin` commands from inside a Claude Code session
-    if os.environ.get("CLAUDECODE"):
-        print("\nRun these commands in a regular terminal to complete installation:")
-        print(f"  claude plugin marketplace add {marketplace_dir}")
-        print(f"  claude plugin install {plugin_ref} --scope {scope}")
-        print("\nThen run: autoskillit init (in your project directory)")
-        return False  # deferred: user must complete manually in a regular terminal
+def _run_claude_admin(
+    argv: Sequence[str],
+    *,
+    env: Mapping[str, str],
+    cwd: Path,
+) -> subprocess.CompletedProcess[str]:
+    """Run one Claude administrative command with an explicit sealed context."""
+    if not argv:
+        raise ValueError("Claude administrative argv must not be empty")
+    return subprocess.run(
+        tuple(argv),
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+        timeout=30,
+        pass_fds=(),
+        shell=False,
+        env=dict(env),
+        cwd=cwd,
+    )
 
-    if shutil.which("claude") is None:
-        print("\nERROR: 'claude' command not found on PATH.")
-        print("Install Claude Code, then run:")
-        print(f"  claude plugin marketplace add {marketplace_dir}")
-        print(f"  claude plugin install {plugin_ref} --scope {scope}")
-        print("\nThen run: autoskillit init (in your project directory)")
-        sys.exit(1)
 
-    # ---- Mutation begins. Everything below rolls back on failure. ----
-    from autoskillit.workspace import reconcile_install_artifacts, verify_install_state
+def _typed_result(
+    outcome: InstallOutcome,
+    *,
+    failure_kind: InstallFailureKind | None = None,
+    verified_identity: str | None = None,
+    findings: tuple[str, ...] = (),
+) -> InstallResult:
+    return InstallResult(
+        outcome=outcome,
+        failure_kind=failure_kind,
+        verified_identity=verified_identity,
+        findings=findings,
+    )
 
-    # Repair artifacts a previous release left in a now-retired shape before
-    # anything reads them (e.g. the pre-0.10.892 symlinked plugin root).
-    for repaired in reconcile_install_artifacts():
-        print(f"Repaired legacy install artifact: ~/{repaired}")
 
-    from autoskillit.cli._plugin_artifact import _validate_installed_plugin_destination
-    from autoskillit.core import PluginArtifactValidationError
+def _compensated_result(
+    snapshot: _InstallSnapshot,
+    primary: _InstallFailed,
+    *,
+    owned_lease_fd: int | None = None,
+) -> InstallResult:
+    rollback_findings = snapshot.rollback(owned_lease_fd=owned_lease_fd)
+    primary_finding = f"{primary.kind.value} failure: {primary}"
+    if rollback_findings:
+        return _typed_result(
+            InstallOutcome.RECOVERY_REQUIRED,
+            failure_kind=InstallFailureKind.ROLLBACK,
+            findings=(primary_finding, *rollback_findings),
+        )
+    return _typed_result(
+        InstallOutcome.FAILED,
+        failure_kind=primary.kind,
+        findings=(primary_finding, "compensation completed"),
+    )
 
-    target_root = _installed_plugin_root()
+
+def _read_json_object(path: Path, *, purpose: str) -> dict:
     try:
-        _validate_installed_plugin_destination(target_root)
-    except PluginArtifactValidationError as exc:
-        print(f"Unsafe installed plugin target: {exc}")
-        raise SystemExit(1) from exc
+        raw = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}
+    except OSError as exc:
+        raise _InstallFailed(
+            InstallFailureKind.POSTCONDITION,
+            f"Could not verify {purpose} at {path}: {exc}",
+        ) from exc
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise _InstallFailed(
+            InstallFailureKind.POSTCONDITION,
+            f"Could not verify {purpose} at {path}: invalid JSON ({exc})",
+        ) from exc
+    if not isinstance(data, dict):
+        raise _InstallFailed(
+            InstallFailureKind.POSTCONDITION,
+            f"Could not verify {purpose} at {path}: expected a JSON object",
+        )
+    return data
 
-    snapshot = _InstallSnapshot()
 
-    from autoskillit.cli._plugin_artifact import installed_artifact_lock_path
+def _verify_cleanup(settings_path: Path, fetch_cache_path: Path) -> None:
+    direct = _read_json_object(
+        _user_claude_json_path(),
+        purpose="direct MCP registration eviction",
+    )
+    servers = direct.get("mcpServers", {})
+    if isinstance(servers, dict) and "autoskillit" in servers:
+        raise _InstallFailed(
+            InstallFailureKind.POSTCONDITION,
+            "Stale direct MCP registration remains after eviction",
+        )
+
+    settings = _read_json_object(settings_path, purpose="Claude hook eviction")
+    if _hooks_mod._find_autoskillit_hook_commands(settings):
+        raise _InstallFailed(
+            InstallFailureKind.POSTCONDITION,
+            f"Stale AutoSkillit hook remains in {settings_path}",
+        )
+    try:
+        fetch_cache_path.lstat()
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise _InstallFailed(
+            InstallFailureKind.POSTCONDITION,
+            f"Could not verify fetch-cache invalidation: {exc}",
+        ) from exc
+    raise _InstallFailed(
+        InstallFailureKind.POSTCONDITION,
+        f"Fetch cache remains after invalidation: {fetch_cache_path}",
+    )
+
+
+def install(
+    *,
+    request: InstallRequest,
+    child_env: Mapping[str, str] | None = None,
+    child_cwd: Path | None = None,
+) -> InstallResult:
+    """Install the Claude plugin as one typed, compensating transaction."""
+    ambient_env = dict(os.environ)
+    ambient_cwd = Path.cwd().resolve()
+    from autoskillit import __version__
+
+    install_request = request
+    effective_scope = install_request.scope
+    if (
+        install_request.mode is InstallMode.MAINTENANCE_UPDATE
+        and not install_request.require_registered_plugin
+    ):
+        return _typed_result(
+            InstallOutcome.NOT_REQUIRED,
+            findings=("Claude plugin publication is not required for this maintenance update",),
+        )
+
+    try:
+        if effective_scope not in _VALID_SCOPES:
+            raise RuntimeError(
+                f"Invalid scope: {effective_scope!r}. Must be one of: "
+                f"{', '.join(sorted(_VALID_SCOPES))}"
+            )
+        if install_request.mode is InstallMode.MAINTENANCE_UPDATE:
+            if child_env is None or child_cwd is None:
+                raise RuntimeError("Maintenance install requires a sealed child_env and child_cwd")
+            operation_env = dict(child_env)
+            operation_cwd = Path(child_cwd)
+            if not operation_cwd.is_absolute():
+                raise RuntimeError("Maintenance child_cwd must be absolute")
+            expected_version = install_request.expected_version
+            if expected_version is None:
+                raise RuntimeError("Maintenance install requires expected_version")
+            distribution_version = importlib.metadata.version("autoskillit")
+            if distribution_version != expected_version:
+                raise RuntimeError(
+                    "Maintenance install expected distribution version "
+                    f"{expected_version}, observed {distribution_version}"
+                )
+        else:
+            operation_env = dict(ambient_env if child_env is None else child_env)
+            operation_cwd = Path(ambient_cwd if child_cwd is None else child_cwd).resolve()
+            expected_version = install_request.expected_version or __version__
+
+        if not operation_cwd.is_dir():
+            raise RuntimeError(f"Install child_cwd is not a directory: {operation_cwd}")
+        if not all(
+            isinstance(key, str) and isinstance(value, str) for key, value in operation_env.items()
+        ):
+            raise RuntimeError("Install child_env must contain only string keys and values")
+
+        _assert_not_worktree()
+        if install_request.mode is InstallMode.DIRECT:
+            from autoskillit.config import load_config
+            from autoskillit.execution import get_backend
+
+            cfg = load_config(operation_cwd)
+            backend = get_backend(cfg.agent_backend.backend)
+            if not backend.capabilities.plugin_install_capable:
+                return _typed_result(
+                    InstallOutcome.DECLINED,
+                    findings=(
+                        "Plugin install requires a plugin_install_capable backend; "
+                        f"current backend is {cfg.agent_backend.backend!r}",
+                    ),
+                )
+
+        marketplace_dir = Path.home() / ".autoskillit" / "marketplace"
+        plugin_ref = f"autoskillit@{_MARKETPLACE_NAME}"
+        if operation_env.get("CLAUDECODE"):
+            return _typed_result(
+                InstallOutcome.DEFERRED,
+                findings=(
+                    "Run the Claude plugin marketplace and install commands in a regular terminal",
+                ),
+            )
+        if not _claude_on_path(operation_env):
+            raise RuntimeError(
+                "'claude' command not found in the sealed PATH.\n"
+                "Install Claude Code, then run:\n"
+                f"  claude plugin marketplace add {marketplace_dir}\n"
+                f"  claude plugin install {plugin_ref} --scope {effective_scope}\n"
+                "Then run: autoskillit init (in your project directory)"
+            )
+
+        target_root = _installed_plugin_root(expected_version)
+        _validate_transaction_target(target_root, expected_version)
+    except (OSError, RuntimeError, ValueError, importlib.metadata.PackageNotFoundError) as exc:
+        return _typed_result(
+            InstallOutcome.FAILED,
+            failure_kind=InstallFailureKind.PREFLIGHT,
+            findings=(f"preflight failure: {exc}",),
+        )
+
+    from autoskillit.cli._plugin_artifact import (
+        installed_plugin_semantic_key,
+        publish_installed_plugin_artifact,
+    )
     from autoskillit.core import (
         ArtifactLease,
         ArtifactLeaseContention,
         PluginArtifactPublicationError,
         _InstallLock,
+        installed_plugin_artifact_lease_path,
+    )
+    from autoskillit.workspace import (
+        InstallStateLeaseMode,
+        InstallStateSpec,
+        reconcile_install_artifacts,
+        verify_installed_plugin_artifact,
     )
 
+    settings_path = _hooks_mod._claude_settings_path(
+        effective_scope,
+        cwd=operation_cwd,
+    )
+    lease_path = installed_plugin_artifact_lease_path(target_root)
     try:
-        target_writer = ArtifactLease.acquire_exclusive(
-            installed_artifact_lock_path(_installed_plugin_root()),
-            blocking=False,
-        )
-    except ArtifactLeaseContention as exc:
-        print("Installed plugin is in use by an active session; retry after it exits.")
-        raise SystemExit(1) from exc
-    try:
-        marketplace_dir = _ensure_marketplace()
-        print(f"Marketplace prepared: {marketplace_dir}")
-
-        _ensure_workspace_ready()
-
         with _InstallLock():
-            snapshot.stage_target_root()
-        _clear_plugin_cache(on_retirement_created=snapshot.track_retirement)
-
-        # Register the marketplace (idempotent)
-        result = subprocess.run(
-            ["claude", "plugin", "marketplace", "add", str(marketplace_dir)],
-            capture_output=True,
-            text=True,
-            stdin=subprocess.DEVNULL,
-            timeout=30,
-            pass_fds=(),
-        )
-        if result.returncode != 0:
-            raise _InstallFailed(f"Failed to register marketplace: {result.stderr.strip()}")
-        print("Marketplace registered.")
-
-        # Install the plugin
-        result = subprocess.run(
-            ["claude", "plugin", "install", plugin_ref, "--scope", scope],
-            capture_output=True,
-            text=True,
-            stdin=subprocess.DEVNULL,
-            timeout=30,
-            pass_fds=(),
-        )
-        if result.returncode != 0:
-            raise _InstallFailed(f"Failed to install plugin: {result.stderr.strip()}")
-        from autoskillit import __version__
-        from autoskillit.cli._plugin_artifact import (
-            installed_plugin_semantic_key,
-            publish_installed_plugin_artifact,
-        )
-
-        try:
-            with _InstallLock():
-                publish_installed_plugin_artifact(
-                    _installed_plugin_root(),
-                    semantic_key=installed_plugin_semantic_key(
-                        plugin_ref,
-                        __version__,
-                    ),
-                    _owned_exclusive_lease=target_writer,
+            snapshot = _InstallSnapshot(
+                target_root=target_root,
+                settings_path=settings_path,
+                workspace_cwd=(
+                    operation_cwd if install_request.mode is InstallMode.DIRECT else None
+                ),
+            )
+            try:
+                snapshot.stage()
+            except (OSError, RuntimeError, ValueError) as exc:
+                return _typed_result(
+                    InstallOutcome.FAILED,
+                    failure_kind=InstallFailureKind.PREFLIGHT,
+                    findings=(f"preflight snapshot failure: {exc}",),
                 )
-        except PluginArtifactPublicationError as exc:
-            raise _InstallFailed(f"Failed to publish installed plugin identity: {exc}") from exc
-        snapshot.commit()
-    except _InstallFailed as exc:
-        snapshot.rollback()
-        print(str(exc))
-        sys.exit(1)
-    except BaseException:
-        snapshot.rollback()
-        raise
-    finally:
-        target_writer.close()
 
-    print(f"Plugin installed: {plugin_ref} (scope: {scope})")
+            try:
+                target_writer = ArtifactLease.acquire_exclusive(
+                    lease_path,
+                    blocking=False,
+                )
+            except ArtifactLeaseContention:
+                snapshot.discard()
+                return _typed_result(
+                    InstallOutcome.DEFERRED,
+                    findings=(
+                        "Installed plugin is in use by an active session; retry after it exits",
+                    ),
+                )
+            except (OSError, RuntimeError, ValueError) as exc:
+                return _compensated_result(
+                    snapshot,
+                    _InstallFailed(
+                        InstallFailureKind.PREFLIGHT,
+                        f"Could not acquire installed plugin lease: {exc}",
+                    ),
+                )
+            with target_writer:
+                try:
+                    for repaired in reconcile_install_artifacts():
+                        print(f"Repaired legacy install artifact: ~/{repaired}")
+                    marketplace_dir = _ensure_marketplace(
+                        cwd=operation_cwd,
+                        version=expected_version,
+                    )
+                    if install_request.mode is InstallMode.DIRECT:
+                        _ensure_workspace_ready(cwd=operation_cwd)
+                    _clear_plugin_cache(
+                        current_version=expected_version,
+                        _lock_owned=True,
+                    )
 
-    # Post-install verification via the single consistency authority. This
-    # replaces the narrower hooks-only check: a broken hook path was never the
-    # only way an install could land inconsistent.
-    for finding in verify_install_state():
-        logger.warning("install_state_inconsistent", check=finding.check, message=finding.message)
-        print(f"WARNING [{finding.check}]: {finding.message}")
-    if evict_direct_mcp_entry(_user_claude_json_path()):
-        print("Removed stale direct MCP entry from ~/.claude.json")
-    # Evict any stale autoskillit hooks from settings.json. The plugin was just
-    # activated and now provides hooks via hooks.json — settings.json must not
-    # contain them (dual registration causes every hook to fire twice).
-    _hooks_mod._evict_stale_autoskillit_hooks(_hooks_mod._claude_settings_path(scope))
-    from autoskillit.cli.update._update_checks import invalidate_fetch_cache
+                    try:
+                        result = _run_claude_admin(
+                            (
+                                "claude",
+                                "plugin",
+                                "marketplace",
+                                "add",
+                                str(marketplace_dir),
+                            ),
+                            env=operation_env,
+                            cwd=operation_cwd,
+                        )
+                    except (OSError, subprocess.SubprocessError) as exc:
+                        raise _InstallFailed(
+                            InstallFailureKind.CHILD,
+                            f"Failed to register marketplace: {exc}",
+                        ) from exc
+                    if result.returncode != 0:
+                        raise _InstallFailed(
+                            InstallFailureKind.CHILD,
+                            f"Failed to register marketplace: {result.stderr.strip()}",
+                        )
 
-    invalidate_fetch_cache(Path.home())
-    return True
+                    if not snapshot.quarantine_install_target():
+                        raise _InstallFailed(
+                            InstallFailureKind.POSTCONDITION,
+                            "Could not quarantine the pre-existing expected-version "
+                            f"plugin target before installation: {target_root}",
+                        )
+
+                    try:
+                        result = _run_claude_admin(
+                            (
+                                "claude",
+                                "plugin",
+                                "install",
+                                plugin_ref,
+                                "--scope",
+                                effective_scope,
+                            ),
+                            env=operation_env,
+                            cwd=operation_cwd,
+                        )
+                    except (OSError, subprocess.SubprocessError) as exc:
+                        raise _InstallFailed(
+                            InstallFailureKind.CHILD,
+                            f"Failed to install plugin: {exc}",
+                        ) from exc
+                    if result.returncode != 0:
+                        raise _InstallFailed(
+                            InstallFailureKind.CHILD,
+                            f"Failed to install plugin: {result.stderr.strip()}",
+                        )
+                    if not snapshot.install_target_is_directory():
+                        raise _InstallFailed(
+                            InstallFailureKind.POSTCONDITION,
+                            "Claude plugin install did not freshly materialize the "
+                            f"expected-version target: {target_root}",
+                        )
+
+                    try:
+                        publish_installed_plugin_artifact(
+                            target_root,
+                            semantic_key=installed_plugin_semantic_key(
+                                plugin_ref,
+                                expected_version,
+                            ),
+                            _owned_exclusive_lease=target_writer,
+                        )
+                    except PluginArtifactPublicationError as exc:
+                        raise _InstallFailed(
+                            InstallFailureKind.POSTCONDITION,
+                            f"Failed to publish installed plugin identity: {exc}",
+                        ) from exc
+
+                    if evict_direct_mcp_entry(_user_claude_json_path()):
+                        print("Removed stale direct MCP entry from ~/.claude.json")
+                    _hooks_mod._evict_stale_autoskillit_hooks(settings_path)
+                    from autoskillit.cli.update._update_checks import invalidate_fetch_cache
+
+                    invalidate_fetch_cache(Path.home())
+                    _verify_cleanup(settings_path, _fetch_cache_path(Path.home()))
+
+                    verification = verify_installed_plugin_artifact(
+                        InstallStateSpec(
+                            home=Path.home(),
+                            plugin_ref=plugin_ref,
+                            expected_version=expected_version,
+                            require_registered_plugin=(install_request.require_registered_plugin),
+                            lease_mode=InstallStateLeaseMode.EXCLUSIVE,
+                            supplied_lease=target_writer,
+                        )
+                    )
+                    if verification.identity is None or verification.findings:
+                        messages = "; ".join(
+                            f"{finding.check}: {finding.message}"
+                            for finding in verification.findings
+                        )
+                        raise _InstallFailed(
+                            InstallFailureKind.POSTCONDITION,
+                            "Installed plugin exact verification failed"
+                            + (f": {messages}" if messages else ""),
+                        )
+                    verified_identity = verification.identity.semantic_key
+                    snapshot.commit()
+                except _InstallFailed as exc:
+                    return _compensated_result(
+                        snapshot,
+                        exc,
+                        owned_lease_fd=target_writer.fileno(),
+                    )
+                except BaseException as exc:
+                    logger.warning(
+                        "install_transaction_unexpected_failure",
+                        failure=str(exc),
+                        exc_info=True,
+                    )
+                    if not isinstance(exc, Exception):
+                        try:
+                            _compensated_result(
+                                snapshot,
+                                _InstallFailed(
+                                    InstallFailureKind.POSTCONDITION,
+                                    f"Install transaction failed: {exc}",
+                                ),
+                                owned_lease_fd=target_writer.fileno(),
+                            )
+                        except BaseException:
+                            logger.warning(
+                                "install_control_flow_compensation_failed",
+                                failure=str(exc),
+                                exc_info=True,
+                            )
+                        raise
+                    compensated = _compensated_result(
+                        snapshot,
+                        _InstallFailed(
+                            InstallFailureKind.POSTCONDITION,
+                            f"Install transaction failed: {exc}",
+                        ),
+                        owned_lease_fd=target_writer.fileno(),
+                    )
+                    return compensated
+    except (OSError, RuntimeError, ValueError) as exc:
+        return _typed_result(
+            InstallOutcome.FAILED,
+            failure_kind=InstallFailureKind.PREFLIGHT,
+            findings=(f"install lock failure: {exc}",),
+        )
+
+    success_message = f"Plugin installed: {plugin_ref} (scope: {effective_scope})"
+    return _typed_result(
+        InstallOutcome.COMPLETED,
+        verified_identity=verified_identity,
+        findings=(success_message,),
+    )
 
 
-def upgrade():
+def upgrade(*, project_dir: Path | None = None):
     """Migrate a project from .autoskillit/scripts/ to .autoskillit/recipes/.
 
     Renames the directory and rewrites YAML top-level keys:
@@ -506,7 +723,7 @@ def upgrade():
 
     Idempotent: safe to run multiple times.
     """
-    project_dir = Path.cwd()
+    project_dir = Path.cwd() if project_dir is None else Path(project_dir)
     scripts_dir = project_dir / ".autoskillit" / "scripts"
     recipes_dir = project_dir / ".autoskillit" / "recipes"
 

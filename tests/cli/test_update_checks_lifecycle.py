@@ -1,16 +1,21 @@
 """Tests for cli/_update_checks.py — UC-11 fetch cache lifecycle, UC-12 state
-transitions, and T1/T2/T6 update sequence and verification."""
+transitions, and T2/T6 automatic update sequencing."""
 
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from autoskillit import __version__
+from autoskillit.cli._install_contract import InstallMode, InstallRequest
+from autoskillit.cli.update._transaction import (
+    UpdateTransactionOutcome,
+    UpdateTransactionResult,
+)
 from autoskillit.cli.update._update_checks_fetch import (
     _fetch_with_cache,
 )
@@ -22,6 +27,15 @@ from ._update_checks_helpers import (
 )
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+
+
+def _direct_request() -> InstallRequest:
+    return InstallRequest(
+        scope="user",
+        mode=InstallMode.DIRECT,
+        require_registered_plugin=True,
+        expected_version=__version__,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -146,35 +160,25 @@ def test_run_update_sequence_invalidates_fetch_cache(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """_run_update_sequence must delete github_fetch_cache.json on success."""
+    from autoskillit.cli.update._transaction import (
+        UpdateTransactionOutcome,
+        UpdateTransactionResult,
+    )
     from autoskillit.cli.update._update_checks import _run_update_sequence
 
     cache_file = tmp_path / ".autoskillit" / "github_fetch_cache.json"
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     cache_file.write_text('{"some": "data"}', encoding="utf-8")
 
-    class FakeTG:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-    info = _make_stable_info()
-    upgrade_ok = subprocess.CompletedProcess([], returncode=0)
-    install_ok = subprocess.CompletedProcess([], returncode=0)
-    calls = iter([upgrade_ok, install_ok])
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.subprocess.run", lambda *a, **kw: next(calls)
-    )
-    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", FakeTG)
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
-    )
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._verify_update_result", lambda *a, **kw: True
+        "autoskillit.cli.update._update_checks.run_update_transaction",
+        lambda **kwargs: UpdateTransactionResult(
+            outcome=UpdateTransactionOutcome.COMPLETED,
+            expected_version="0.9.1",
+        ),
     )
     monkeypatch.setattr("autoskillit.cli.update._update_checks.perform_restart", lambda: None)
-    _run_update_sequence(info, "0.9.0", tmp_path, {}, {})
+    _run_update_sequence(tmp_path, {})
     assert not cache_file.exists(), "Fetch cache must be deleted after successful update"
 
 
@@ -188,31 +192,17 @@ def test_run_update_command_invalidates_fetch_cache(
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     cache_file.write_text('{"some": "data"}', encoding="utf-8")
 
-    class FakeTG:
-        def __enter__(self):
-            return self
+    from autoskillit.cli.update._transaction import (
+        UpdateTransactionOutcome,
+        UpdateTransactionResult,
+    )
 
-        def __exit__(self, *a):
-            return False
-
-    info = _make_stable_info()
-    monkeypatch.setattr("autoskillit.cli.update._update.detect_install", lambda: info)
-    monkeypatch.setattr("autoskillit.cli.update._update.terminal_guard", FakeTG)
-
-    upgrade_ok = subprocess.CompletedProcess([], returncode=0)
-    install_ok = subprocess.CompletedProcess([], returncode=0)
-    mock_run = MagicMock(side_effect=[upgrade_ok, install_ok])
-    monkeypatch.setattr("autoskillit.cli.update._update.subprocess.run", mock_run)
-
-    import autoskillit as _pkg
-
-    monkeypatch.setattr(_pkg, "__version__", "0.9.0")
-
-    import importlib.metadata
-
-    monkeypatch.setattr(importlib.metadata, "version", lambda _: "0.9.1")
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
+        "autoskillit.cli.update._update.run_update_transaction",
+        lambda **kwargs: UpdateTransactionResult(
+            outcome=UpdateTransactionOutcome.COMPLETED,
+            expected_version="0.9.1",
+        ),
     )
     monkeypatch.setattr("autoskillit.cli.update._update.perform_restart", lambda: None)
 
@@ -234,10 +224,20 @@ def test_install_invalidates_fetch_cache(monkeypatch: pytest.MonkeyPatch, tmp_pa
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
     monkeypatch.delenv("CLAUDECODE", raising=False)
-    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/claude")
+    monkeypatch.setattr("shutil.which", lambda *_args, **_kwargs: "/usr/bin/claude")
+
+    from autoskillit import __version__
+
+    expected_target = _app_mod._installed_plugin_root(__version__)
+
+    def _fake_claude_run(argv: tuple[str, ...], **_kwargs: object) -> object:
+        if argv[:3] == ("claude", "plugin", "install"):
+            expected_target.mkdir(parents=True)
+        return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
     monkeypatch.setattr(
         "subprocess.run",
-        lambda *a, **kw: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
+        _fake_claude_run,
     )
     monkeypatch.setattr("autoskillit.cli._marketplace.evict_direct_mcp_entry", lambda _: False)
     monkeypatch.setattr("autoskillit.cli._hooks._evict_stale_autoskillit_hooks", lambda _: None)
@@ -247,10 +247,28 @@ def test_install_invalidates_fetch_cache(monkeypatch: pytest.MonkeyPatch, tmp_pa
         "autoskillit.cli._plugin_artifact.publish_installed_plugin_artifact",
         lambda *args, **kwargs: None,
     )
+    monkeypatch.setattr(
+        "autoskillit.workspace.verify_installed_plugin_artifact",
+        lambda *args, **kwargs: type(
+            "Verification",
+            (),
+            {
+                "identity": type(
+                    "Identity",
+                    (),
+                    {
+                        "incarnation_id": "test-identity",
+                        "semantic_key": (f"autoskillit@autoskillit-local:{__version__}"),
+                    },
+                )(),
+                "findings": (),
+            },
+        )(),
+    )
 
     from autoskillit.cli._marketplace import install as _install
 
-    _install(scope="user")
+    _install(request=_direct_request())
     assert not cache_file.exists(), "Fetch cache must be deleted after plugin install"
 
 
@@ -545,82 +563,88 @@ def test_fetch_with_cache_epoch_check_contract(
 
 
 # ---------------------------------------------------------------------------
-# T1 — _verify_update_result uses install-type-aware upgrade command
+# T2 — automatic adapter suppresses completed-only effects on every non-success
 # ---------------------------------------------------------------------------
 
 
-def test_verify_update_result_prints_git_vcs_stable_command(
-    tmp_path: Path, capsys: pytest.CaptureFixture
-) -> None:
-    import importlib.metadata
-
-    from autoskillit.cli.update._update_checks import _verify_update_result
-
-    info = _make_stable_info()
-    with patch.object(importlib.metadata, "version", return_value="0.9.0"):
-        result = _verify_update_result(info, "0.9.0", "0.9.1", tmp_path, {})
-    assert result is False
-    out = capsys.readouterr().out
-    assert "uv tool upgrade autoskillit" in out
-    assert "autoskillit update" in out
-
-
-def test_verify_update_result_prints_git_vcs_develop_command(
-    tmp_path: Path, capsys: pytest.CaptureFixture
-) -> None:
-    import importlib.metadata
-
-    from autoskillit.cli.update._update_checks import _verify_update_result
-
-    info = _make_develop_info()
-    with patch.object(importlib.metadata, "version", return_value="0.9.0"):
-        result = _verify_update_result(info, "0.9.0", "0.9.1", tmp_path, {})
-    assert result is False
-    out = capsys.readouterr().out
-    assert "git+" in out
-    assert "uv tool upgrade autoskillit" not in out
-
-
-# ---------------------------------------------------------------------------
-# T2 — _run_update_sequence warns when autoskillit install exits non-zero
-# ---------------------------------------------------------------------------
-
-
-def test_run_update_sequence_warns_on_install_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        pytest.param(outcome, id=outcome.value)
+        for outcome in UpdateTransactionOutcome
+        if outcome is not UpdateTransactionOutcome.COMPLETED
+    ],
+)
+def test_run_update_sequence_has_no_completed_only_effects_for_every_noncompleted_outcome(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    outcome: UpdateTransactionOutcome,
 ) -> None:
     from autoskillit.cli.update._update_checks import _run_update_sequence
 
-    class FakeTG:
-        def __enter__(self):
-            return self
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks.run_update_transaction",
+        lambda **kwargs: UpdateTransactionResult(
+            outcome=outcome,
+            expected_version="0.9.1",
+        ),
+    )
+    effects: list[str] = []
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks._write_dismiss_state",
+        lambda *_args: effects.append("write"),
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks.invalidate_fetch_cache",
+        lambda *_args: effects.append("invalidate"),
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks.perform_restart",
+        lambda: effects.append("restart"),
+    )
+    state = {
+        "update_prompt": {"conditions": ["binary"]},
+        "binary_snoozed": True,
+        "preserved": "value",
+    }
+    _run_update_sequence(tmp_path, state)
+    assert state == {
+        "update_prompt": {"conditions": ["binary"]},
+        "binary_snoozed": True,
+        "preserved": "value",
+    }
+    assert effects == []
+    assert "updated successfully" not in capsys.readouterr().out
 
-        def __exit__(self, *a):
-            return False
 
-    info = _make_stable_info()
-    upgrade_ok = subprocess.CompletedProcess([], returncode=0)
-    install_fail = subprocess.CompletedProcess([], returncode=1)
-    calls = iter([upgrade_ok, install_fail])
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.subprocess.run", lambda *a, **kw: next(calls)
-    )
-    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", FakeTG)
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
-    )
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._verify_update_result", lambda *a, **kw: True
-    )
-    monkeypatch.setattr("autoskillit.cli.update._update_checks.perform_restart", lambda: None)
-    _run_update_sequence(info, "0.9.0", tmp_path, {}, {})
-    out = capsys.readouterr().out
-    assert "autoskillit install" in out
-    assert "stale" in out.lower()
+def test_run_update_sequence_passes_home_and_fresh_process_runner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli.update import _update_checks
+
+    captured: list[dict[str, object]] = []
+
+    def transaction(**kwargs: object) -> UpdateTransactionResult:
+        captured.append(kwargs)
+        return UpdateTransactionResult(
+            outcome=UpdateTransactionOutcome.FAILED_UPGRADE,
+        )
+
+    monkeypatch.setattr(_update_checks, "run_update_transaction", transaction)
+    _update_checks._run_update_sequence(tmp_path, {})
+
+    assert captured == [
+        {
+            "home": tmp_path,
+            "process_runner": _update_checks.subprocess.run,
+        }
+    ]
 
 
 # ---------------------------------------------------------------------------
-# T6 — binary_snoozed is never written by _verify_update_result
+# T6 — successful coordinator cleanup and restart
 # ---------------------------------------------------------------------------
 
 
@@ -630,50 +654,40 @@ def test_run_update_sequence_restarts_on_success(
     """After a successful upgrade, _run_update_sequence must call perform_restart."""
     from autoskillit.cli.update._update_checks import _run_update_sequence
 
-    info = _make_stable_info()
-    upgrade_ok = subprocess.CompletedProcess([], returncode=0)
-    install_ok = subprocess.CompletedProcess([], returncode=0)
-    calls = iter([upgrade_ok, install_ok])
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.subprocess.run", lambda *a, **kw: next(calls)
+        "autoskillit.cli.update._update_checks.run_update_transaction",
+        lambda **kwargs: UpdateTransactionResult(
+            outcome=UpdateTransactionOutcome.COMPLETED,
+            expected_version="0.9.1",
+        ),
     )
 
-    class FakeTG:
-        def __enter__(self):
-            return self
+    effects: list[str] = []
+    written_states: list[dict[str, object]] = []
 
-        def __exit__(self, *a):
-            return False
+    def write_state(_home: Path, state: dict[str, object]) -> None:
+        written_states.append(dict(state))
+        effects.append("write")
 
-    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", FakeTG)
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._fetch_latest_version", lambda *a, **kw: "0.9.1"
+        "autoskillit.cli.update._update_checks._write_dismiss_state",
+        write_state,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._verify_update_result", lambda *a, **kw: True
+        "autoskillit.cli.update._update_checks.invalidate_fetch_cache",
+        lambda *_args: effects.append("invalidate"),
     )
-
-    restart_called: list[bool] = []
     monkeypatch.setattr(
         "autoskillit.cli.update._update_checks.perform_restart",
-        lambda: restart_called.append(True),
+        lambda: effects.append("restart"),
     )
 
-    _run_update_sequence(info, "0.9.0", tmp_path, {}, {})
-    assert restart_called, (
-        "_run_update_sequence must call perform_restart() after successful upgrade"
-    )
-
-
-def test_verify_update_result_does_not_write_binary_snoozed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import importlib.metadata
-
-    from autoskillit.cli.update._update_checks import _verify_update_result
-
-    info = _make_stable_info(commit_id="abc")
-    state: dict = {}
-    with patch.object(importlib.metadata, "version", return_value="0.9.0"):
-        _verify_update_result(info, "0.9.0", "0.9.1", tmp_path, state)
-    assert "binary_snoozed" not in state
+    state = {
+        "update_prompt": {"conditions": ["binary"]},
+        "binary_snoozed": True,
+        "preserved": "value",
+    }
+    _run_update_sequence(tmp_path, state)
+    assert state == {"preserved": "value"}
+    assert written_states == [{"preserved": "value"}]
+    assert effects == ["write", "invalidate", "restart"]

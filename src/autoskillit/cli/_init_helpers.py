@@ -516,7 +516,7 @@ def _register_all(
         plugin_ok = None
         codex_status = "ok"
     else:
-        settings_path = _claude_settings_path(scope)
+        settings_path = _claude_settings_path(scope, cwd=project_dir)
         _evict_stale_autoskillit_hooks(settings_path)
         sync_hooks_to_settings(settings_path)
 

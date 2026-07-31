@@ -5,6 +5,7 @@ from __future__ import annotations
 import stat
 from pathlib import Path
 
+from ._plugin_ids import DIRECT_INSTALL_CACHE_SUBDIR
 from .io import directory_tree_digest, read_versioned_json
 from .types import (
     PluginArtifactIdentity,
@@ -14,6 +15,34 @@ from .types import (
     is_canonical_plugin_artifact_digest,
     is_canonical_plugin_artifact_incarnation_id,
 )
+
+
+def installed_plugin_cache_dir(home: Path, plugin_ref: str) -> Path:
+    """Return the managed cache directory containing installed plugin versions."""
+    plugin_name = plugin_ref.partition("@")[0]
+    return Path(home) / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / plugin_name
+
+
+def installed_plugin_artifact_root(
+    home: Path,
+    plugin_ref: str,
+    version: str,
+) -> Path:
+    """Return the managed root for one installed plugin version."""
+    return installed_plugin_cache_dir(home, plugin_ref) / version
+
+
+def installed_plugin_artifact_manifest_path(managed_root: Path) -> Path:
+    """Return the stable external manifest for one installed plugin root."""
+    root = Path(managed_root)
+    return root.parent / f".{root.name}.autoskillit-artifact.json"
+
+
+def installed_plugin_artifact_lease_path(managed_root: Path) -> Path:
+    """Return the stable lease sidecar for one installed plugin root."""
+    manifest_path = installed_plugin_artifact_manifest_path(managed_root)
+    return manifest_path.with_suffix(manifest_path.suffix + ".lock")
+
 
 INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION = 1
 INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS = frozenset(
@@ -75,9 +104,7 @@ def read_installed_plugin_artifact_identity(
             f"installed plugin root must be a canonical directory: {supplied_root}"
         )
 
-    canonical_manifest = canonical_root.parent / (
-        f".{canonical_root.name}.autoskillit-artifact.json"
-    )
+    canonical_manifest = installed_plugin_artifact_manifest_path(canonical_root)
     selected_manifest = canonical_manifest if manifest_path is None else Path(manifest_path)
     if selected_manifest != canonical_manifest:
         raise PluginArtifactValidationError(

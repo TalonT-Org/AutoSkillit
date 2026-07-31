@@ -182,7 +182,7 @@ def _build_hook_diagnostic_warning(
 
     issues: list[str] = []
 
-    settings_path = _claude_settings_path("user")
+    settings_path = _claude_settings_path("user", cwd=Path.cwd())
     if settings_path.exists():
         broken = find_broken_hook_scripts(settings_path)
         drift = _count_hook_registry_drift(settings_path)

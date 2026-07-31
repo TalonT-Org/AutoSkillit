@@ -136,7 +136,10 @@ class ToolContext:
                           context accounting and recovery service.
     kitchen_id:           UUID string assigned when open_kitchen fires; scopes token telemetry
                           to the current kitchen session lifetime.
-    kitchen_open_state:   Immutable process-local open-operation lifecycle and effect journal.
+    kitchen_open_state:   Immutable process-local open-operation lifecycle and effect journal
+                          retained for the ToolContext lifetime. Fleet dispatch provenance
+                          instead uses request/task-scoped ContextVars; the different owners
+                          and lifetimes are intentional and must not be structurally unified.
     kitchen_transition_lock: KitchenTransitionLock serializing state snapshot replacement.
     active_recipe_packs:  frozenset[str] | None — pack names declared by the loaded recipe
                           (frozenset() when kitchen open but no recipe loaded; None when closed)

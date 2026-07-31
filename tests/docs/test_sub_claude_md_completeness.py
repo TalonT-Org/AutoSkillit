@@ -152,6 +152,16 @@ def test_tracked_guidance_families_and_counts() -> None:
     assert len(ALL_ADAPTERS) == 62
 
 
+def test_source_python_packages_have_guides() -> None:
+    package_dirs = sorted(init_file.parent for init_file in SRC_ROOT.rglob("__init__.py"))
+    missing = [
+        str(package_dir.relative_to(REPO_ROOT))
+        for package_dir in package_dirs
+        if not (package_dir / "AGENTS.md").is_file()
+    ]
+    assert not missing, f"Python packages missing AGENTS.md guidance: {missing}"
+
+
 def test_guide_adapter_sibling_contract() -> None:
     expected_adapters = {_sibling(guide, "CLAUDE.md") for guide in ALL_GUIDES - {_CAPTURE_GUIDE}}
     expected_guides = {_sibling(adapter, "AGENTS.md") for adapter in ALL_ADAPTERS}

@@ -269,7 +269,7 @@ def test_step6_stale_snapshot_dismisses_posted_authoritative_review(
     fake_bin.mkdir()
     fake_gh = fake_bin / "gh"
     fake_gh.write_text(
-        '#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" > "$GH_ARGS_PATH"\nexit "$GH_EXIT_CODE"\n'
+        '#!/usr/bin/env bash\nprintf \'%s\\0\' "$@" > "$GH_ARGS_PATH"\nexit "$GH_EXIT_CODE"\n'
     )
     fake_gh.chmod(0o755)
     gh_args_path = tmp_path / "gh-args.txt"
@@ -303,10 +303,15 @@ def test_step6_stale_snapshot_dismisses_posted_authoritative_review(
     )
 
     assert result.returncode == 0, result.stderr
-    gh_args = gh_args_path.read_text()
-    assert "/repos/{owner}/{repo}/pulls/{pr_number}/reviews/987/dismissals" in gh_args
-    assert "--method PUT" in gh_args
-    assert "Dismissed because the PR snapshot changed during review submission" in gh_args
+    gh_args = [item.decode() for item in gh_args_path.read_bytes().split(b"\0") if item]
+    assert gh_args == [
+        "api",
+        "/repos/{owner}/{repo}/pulls/{pr_number}/reviews/987/dismissals",
+        "--method",
+        "PUT",
+        "--field",
+        "message=Dismissed because the PR snapshot changed during review submission",
+    ]
     assert compensation_path.read_text() == expected_compensation_failed
 
 

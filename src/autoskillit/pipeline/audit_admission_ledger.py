@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS attempts (
     lifecycle TEXT NOT NULL,
     semantic_digest TEXT,
     correction_predecessor TEXT,
-    handle_digest TEXT,
+    handle_digest TEXT UNIQUE,
     reservation_json TEXT NOT NULL,
     committed_outcome_json TEXT,
     created_at TEXT NOT NULL,

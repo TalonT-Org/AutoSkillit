@@ -289,6 +289,37 @@ class TestReservation:
         assert a.slot_key != b.slot_key
         assert a.attempt_id != b.attempt_id
 
+    def test_handle_digest_collision_fails_closed(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        authority = _authority(tmp_path)
+        ledger = DefaultAuditAdmissionLedger(authority)
+        execution_id = RecipeExecutionId("exec-1")
+        version = ledger.create_or_get_installation(
+            recipe_execution_id=execution_id,
+            snapshot_digest=_digest("s"),
+        )
+        monkeypatch.setattr(
+            audit_ledger_module,
+            "compute_bytes_hash",
+            lambda _data: _digest("forced-handle-collision"),
+        )
+
+        first = ledger.reserve(_reservation_request(tmp_path, execution_id, version, intent="a"))
+        with pytest.raises(
+            sqlite3.IntegrityError,
+            match=r"UNIQUE constraint failed: attempts\.handle_digest",
+        ):
+            ledger.reserve(_reservation_request(tmp_path, execution_id, version, intent="b"))
+
+        assert first.reservation_handle is not None
+        assert ledger.resolve_reservation_handle(first.reservation_handle) is not None
+        with sqlite3.connect(authority.database_path) as connection:
+            attempt_count = connection.execute("SELECT COUNT(*) FROM attempts").fetchone()
+        assert attempt_count == (1,)
+
     def test_reserve_without_installation_raises(self, tmp_path: Path) -> None:
         ledger = DefaultAuditAdmissionLedger(_authority(tmp_path))
         execution_id = RecipeExecutionId("exec-1")

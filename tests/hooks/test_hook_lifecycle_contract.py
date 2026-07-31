@@ -161,6 +161,8 @@ def test_every_shell_capture_persistent_path_constant_is_registered() -> None:
         ("_syntax.py", "STAGING_NAME_RE"),
         ("_capture_lifecycle.py", "LEDGER_NAME"),
         ("_capture_lifecycle.py", "LOCK_NAME"),
+        ("_migration.py", "MIGRATION_NAME"),
+        ("_sweep_cursor.py", "CURSOR_NAME"),
     }
 
 

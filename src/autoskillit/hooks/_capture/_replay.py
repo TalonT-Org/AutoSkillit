@@ -19,8 +19,9 @@ if TYPE_CHECKING:
         UnavailableCaptureReference,
     )
     from autoskillit.hooks._capture_contract import (
-        CaptureFailureV2,
-        render_capture_failure_v2,
+        CaptureFailureReason,
+        CaptureFailureV3,
+        render_capture_failure_v3,
         render_capture_v2,
     )
 else:
@@ -32,14 +33,16 @@ else:
 
     if __package__ == "_capture":
         from _capture_contract import (
-            CaptureFailureV2,
-            render_capture_failure_v2,
+            CaptureFailureReason,
+            CaptureFailureV3,
+            render_capture_failure_v3,
             render_capture_v2,
         )
     else:
         from .._capture_contract import (
-            CaptureFailureV2,
-            render_capture_failure_v2,
+            CaptureFailureReason,
+            CaptureFailureV3,
+            render_capture_failure_v3,
             render_capture_v2,
         )
 
@@ -127,12 +130,14 @@ def _bounded_detail(value: str) -> str:
 
 def failure_transport(
     *,
+    reason: CaptureFailureReason,
     stage: str,
     detail: str,
     shell_returncode: int | None,
     settlement: RunnerSettlementEvidence | None,
-) -> CaptureFailureV2:
-    return CaptureFailureV2(
+) -> CaptureFailureV3:
+    return CaptureFailureV3(
+        reason=reason,
         stage=_failure_stage(stage),
         detail=_bounded_detail(detail),
         shell_returncode=shell_returncode,
@@ -140,8 +145,14 @@ def failure_transport(
     )
 
 
-def runner_failure(stage: str, detail: str) -> CaptureFailureV2:
+def runner_failure(
+    stage: str,
+    detail: str,
+    *,
+    reason: CaptureFailureReason = CaptureFailureReason.UNKNOWN_SETUP,
+) -> CaptureFailureV3:
     return failure_transport(
+        reason=reason,
         stage=stage,
         detail=detail,
         shell_returncode=None,
@@ -149,11 +160,11 @@ def runner_failure(stage: str, detail: str) -> CaptureFailureV2:
     )
 
 
-def _emit_failure(failure: CaptureFailureV2) -> None:
-    _write_and_flush_hook_stderr(render_capture_failure_v2(failure) + b"\n")
+def _emit_failure(failure: CaptureFailureV3) -> None:
+    _write_and_flush_hook_stderr(render_capture_failure_v3(failure) + b"\n")
 
 
-def capture_failure_return(failure: CaptureFailureV2) -> int:
+def capture_failure_return(failure: CaptureFailureV3) -> int:
     returncode = failure.shell_returncode
     result = _CAPTURE_FAILURE_RETURN_CODE if returncode is None or returncode == 0 else returncode
     try:

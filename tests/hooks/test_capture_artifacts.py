@@ -23,6 +23,11 @@ from autoskillit.hooks._capture._snapshot import (
     CommandOutcome,
     verify_capture_snapshot,
 )
+from autoskillit.hooks._capture._types import (
+    CaptureCleanupOutcome,
+    CleanupBlocker,
+    LockContended,
+)
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
     CapturePolicy,
@@ -39,12 +44,15 @@ from autoskillit.hooks._capture_contract import (
     CAPTURE_REQUEST_PROTOCOL_VERSION,
     NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
     PROTECTED_CAPTURE_ENV_VARS,
+    CaptureFailureReason,
     CaptureFailureV2,
+    CaptureFailureV3,
     CaptureLineageRef,
     CaptureRequest,
     CaptureV2Fields,
     encode_capture_request,
     parse_capture_failure_v2,
+    parse_capture_failure_v3,
     parse_capture_v2,
 )
 from autoskillit.hooks._capture_lifecycle import (
@@ -85,14 +93,14 @@ def _single_v2_marker(output: str) -> CaptureV2Fields:
     return parse_capture_v2(candidates[0])
 
 
-def _single_failure_marker(output: str) -> CaptureFailureV2:
+def _single_failure_marker(output: str) -> CaptureFailureV3:
     candidates = [
         line.encode()
         for line in output.splitlines()
-        if line.startswith("[AutoSkillit shell capture failure v2:")
+        if line.startswith("[AutoSkillit shell capture failure v3:")
     ]
     assert len(candidates) == 1
-    return parse_capture_failure_v2(candidates[0])
+    return parse_capture_failure_v3(candidates[0])
 
 
 def _runner_request(
@@ -1028,6 +1036,60 @@ def test_direct_control_flow_exception_settles_and_reraises(
     assert process.stdout.closed
 
 
+@pytest.mark.parametrize("reason", tuple(CaptureFailureReason))
+def test_setup_failure_reason_survives_runner_transport_without_sensitive_detail(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+    reason: CaptureFailureReason,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    sentinel = project / "command_ran"
+    encoded = base64.b64encode(f"printf ran > {sentinel}".encode()).decode()
+    sensitive = f"sensitive cause at {project} for {_CAPTURE_ID}"
+
+    def fail_create(*_args, **_kwargs):
+        raise CaptureSetupError(reason, "capture setup failed") from RuntimeError(sensitive)
+
+    monkeypatch.setattr(capture_artifacts, "create_capture_artifact", fail_create)
+
+    assert capture_artifacts._main(_runner_args(command=command, cwd=str(project))) == 1
+
+    captured = capfd.readouterr()
+    failure = _single_failure_marker(captured.err)
+    assert failure.reason is reason
+    assert failure.detail == "capture setup failed"
+    assert sensitive not in captured.err
+    assert str(project) not in captured.err
+    assert _CAPTURE_ID not in captured.err
+    assert not sentinel.exists()
+
+
+def test_recovery_contention_is_classified_at_the_runner_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    sentinel = project / "command_ran"
+    encoded = base64.b64encode(f"printf ran > {sentinel}".encode()).decode()
+
+    def contend(*_args, **_kwargs):
+        raise LockContended
+
+    monkeypatch.setattr(capture_artifacts, "create_capture_artifact", contend)
+
+    assert capture_artifacts._main(
+        _runner_args(command=f"printf ran > {sentinel}", cwd=str(project))
+    ) == 1
+
+    failure = _single_failure_marker(capfd.readouterr().err)
+    assert failure.reason is CaptureFailureReason.RECOVERY_CONTENDED
+    assert not sentinel.exists()
+
+
 @pytest.mark.parametrize("capture_id", ["", "0123456789abcde", "0123456789abcdeg"])
 def test_reject_mode_validates_capture_id(
     capture_id: str,
@@ -1051,27 +1113,20 @@ def test_valid_reject_runs_one_runner_tail_sweep(
 ) -> None:
     events: list[str] = []
 
-    class Store:
-        def sweep(self) -> SimpleNamespace:
-            events.append("sweep")
-            return SimpleNamespace(errors=0)
-
-    class OpenLifecycle:
-        def __enter__(self):
-            events.append("open")
-            return Store()
-
-        def __exit__(self, *_args):
-            events.append("close")
+    def reconcile(requested_cwd, budget):
+        assert requested_cwd == "/abs/project"
+        assert budget is capture_artifacts._capture_reconcile.RUNNER_TAIL_BUDGET
+        events.append("reconcile")
+        return CaptureCleanupOutcome()
 
     monkeypatch.setattr(
-        capture_artifacts,
-        "open_capture_lifecycle",
-        lambda requested_cwd, *, create: OpenLifecycle(),
+        capture_artifacts._capture_reconcile,
+        "reconcile_capture_store",
+        reconcile,
     )
 
     assert capture_artifacts._main(_runner_args(action="reject", command=None)) == 1
-    assert events == ["open", "sweep", "close"]
+    assert events == ["reconcile"]
     assert "capture request rejected before command execution" in capfd.readouterr().err
 
 
@@ -1080,32 +1135,23 @@ def test_runner_tail_preserves_dispatch_result_and_order(
 ) -> None:
     events: list[str] = []
 
-    class Store:
-        def sweep(self) -> SimpleNamespace:
-            events.append("sweep")
-            return SimpleNamespace(errors=0)
-
-    class OpenLifecycle:
-        def __enter__(self):
-            events.append("open")
-            return Store()
-
-        def __exit__(self, *_args):
-            events.append("close")
-
     def dispatch(*_args) -> int:
         events.append("dispatch")
         return 37
 
+    def reconcile(_requested_cwd, _budget):
+        events.append("reconcile")
+        return CaptureCleanupOutcome()
+
     monkeypatch.setattr(capture_artifacts, "_dispatch_runner", dispatch)
     monkeypatch.setattr(
-        capture_artifacts,
-        "open_capture_lifecycle",
-        lambda requested_cwd, *, create: OpenLifecycle(),
+        capture_artifacts._capture_reconcile,
+        "reconcile_capture_store",
+        reconcile,
     )
 
     assert capture_artifacts._main(_runner_args()) == 37
-    assert events == ["dispatch", "open", "sweep", "close"]
+    assert events == ["dispatch", "reconcile"]
 
 
 def test_runner_tail_cleanup_failure_does_not_replace_user_result(
@@ -1114,10 +1160,14 @@ def test_runner_tail_cleanup_failure_does_not_replace_user_result(
 ) -> None:
     monkeypatch.setattr(capture_artifacts, "_dispatch_runner", lambda *_args: 23)
 
-    def fail_open(_requested_cwd, *, create):
-        raise capture_artifacts.CaptureLifecycleError("🔥" * 512)
+    def fail_reconcile(_requested_cwd, _budget):
+        raise RuntimeError("🔥" * 512)
 
-    monkeypatch.setattr(capture_artifacts, "open_capture_lifecycle", fail_open)
+    monkeypatch.setattr(
+        capture_artifacts._capture_reconcile,
+        "reconcile_capture_store",
+        fail_reconcile,
+    )
 
     assert capture_artifacts._main(_runner_args()) == 23
     captured = capfd.readouterr()
@@ -1130,28 +1180,21 @@ def test_runner_tail_reports_sweep_outcome_errors(
     monkeypatch: pytest.MonkeyPatch,
     capfd: pytest.CaptureFixture[str],
 ) -> None:
-    class Store:
-        def sweep(self) -> SimpleNamespace:
-            return SimpleNamespace(errors=2)
-
-    class OpenLifecycle:
-        def __enter__(self):
-            return Store()
-
-        def __exit__(self, *_args):
-            return None
-
     monkeypatch.setattr(capture_artifacts, "_dispatch_runner", lambda *_args: 23)
     monkeypatch.setattr(
-        capture_artifacts,
-        "open_capture_lifecycle",
-        lambda requested_cwd, *, create: OpenLifecycle(),
+        capture_artifacts._capture_reconcile,
+        "reconcile_capture_store",
+        lambda requested_cwd, budget: CaptureCleanupOutcome(
+            errors=2,
+            remaining_due=1,
+            blocker=CleanupBlocker.LEDGER_INTEGRITY,
+        ),
     )
 
     assert capture_artifacts._main(_runner_args()) == 23
     captured = capfd.readouterr()
     assert captured.out == ""
-    assert "cleanup deferred after 2 errors" in captured.err
+    assert "blocker=ledger_integrity errors=2" in captured.err
 
 
 def test_runner_tail_still_sweeps_after_unexpected_dispatch_exception(
@@ -1160,26 +1203,18 @@ def test_runner_tail_still_sweeps_after_unexpected_dispatch_exception(
 ) -> None:
     swept: list[bool] = []
 
-    class Store:
-        def sweep(self) -> SimpleNamespace:
-            swept.append(True)
-            return SimpleNamespace(errors=0)
-
-    class OpenLifecycle:
-        def __enter__(self):
-            return Store()
-
-        def __exit__(self, *_args):
-            return None
-
     def fail_dispatch(*_args):
         raise RuntimeError("fault injection")
 
+    def reconcile(_requested_cwd, _budget):
+        swept.append(True)
+        return CaptureCleanupOutcome()
+
     monkeypatch.setattr(capture_artifacts, "_dispatch_runner", fail_dispatch)
     monkeypatch.setattr(
-        capture_artifacts,
-        "open_capture_lifecycle",
-        lambda requested_cwd, *, create: OpenLifecycle(),
+        capture_artifacts._capture_reconcile,
+        "reconcile_capture_store",
+        reconcile,
     )
 
     assert capture_artifacts._main(_runner_args()) == 1
@@ -1190,13 +1225,21 @@ def test_runner_tail_still_sweeps_after_unexpected_dispatch_exception(
 def test_malformed_runner_invocation_does_not_trigger_sweep(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def unexpected_open(*_args, **_kwargs):
-        raise AssertionError("malformed invocation must not trigger cleanup")
+    reconciled: list[str] = []
 
-    monkeypatch.setattr(capture_artifacts, "open_capture_lifecycle", unexpected_open)
+    def reconcile(requested_cwd, _budget):
+        reconciled.append(requested_cwd)
+        return CaptureCleanupOutcome()
+
+    monkeypatch.setattr(
+        capture_artifacts._capture_reconcile,
+        "reconcile_capture_store",
+        reconcile,
+    )
 
     assert capture_artifacts._main(["not-base64"]) == 1
     assert capture_artifacts._main([]) == 1
+    assert reconciled == []
 
 
 @pytest.mark.parametrize(
@@ -1389,8 +1432,10 @@ def test_spawn_failure_reports_failed_state_recovery_error(
 
     assert run_capture("printf never", str(project), _CAPTURE_ID) == 1
     captured = capfd.readouterr()
-    assert "primary spawn failure" in captured.err
-    assert "secondary recovery failure" in captured.err
+    failure = _single_failure_marker(captured.err)
+    assert failure.reason is CaptureFailureReason.FILESYSTEM_IO
+    assert "primary spawn failure" not in captured.err
+    assert "secondary recovery failure" not in captured.err
 
 
 def test_post_duplication_failure_closes_all_fds_and_prevents_command(
@@ -1807,7 +1852,9 @@ def test_capture_readback_failure_after_partial_output_closes_runtime_fds(
     captured = capfd.readouterr()
     artifact_path = _capture_dir(project) / f"shell_{_CAPTURE_ID}.log"
     assert '"status":"capture_failed"' in captured.err
-    assert "OSError: fault injection during readback" in captured.err
+    failure = _single_failure_marker(captured.err)
+    assert failure.reason is CaptureFailureReason.FILESYSTEM_IO
+    assert "fault injection during readback" not in captured.err
     assert "shell capture v2:" not in captured.out + captured.err
     assert artifact_path.read_bytes() == b"partial-output"
     assert process.terminated

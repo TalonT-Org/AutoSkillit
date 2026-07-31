@@ -389,7 +389,13 @@ def test_cleanup_defers_while_verified_reader_holds_shared_lease(
     reader = store.open_verified_capture(published.token)
     try:
         clock.advance(3601)
-        first = store.sweep(max_items=8, max_duration_seconds=1)
+        first = store.sweep(
+            capture_lifecycle.SweepBudgetSpec(
+                max_attempts=8,
+                max_transitions=32,
+                max_duration_seconds=1,
+            )
+        )
         assert first.carrier_lease_live == 1
         deferred = store.get_record(_CAPTURE_ID)
         assert deferred is not None
@@ -401,7 +407,13 @@ def test_cleanup_defers_while_verified_reader_holds_shared_lease(
     finally:
         reader.close()
     clock.advance(31)
-    second = store.sweep(max_items=8, max_duration_seconds=1)
+    second = store.sweep(
+        capture_lifecycle.SweepBudgetSpec(
+            max_attempts=8,
+            max_transitions=32,
+            max_duration_seconds=1,
+        )
+    )
     assert second.deleted == 1
     assert not (_capture_dir(project) / f"shell_{_CAPTURE_ID}.log").exists()
     root.close()

@@ -9,7 +9,7 @@ from collections.abc import Callable, Collection, Iterable
 from dataclasses import replace
 from typing import Protocol
 
-from . import _store_port
+from . import _store_port, _sweep_cursor
 from ._cleanup import close_preserving_primary
 from ._ledger import (
     CaptureLifecycleRecord,
@@ -22,8 +22,14 @@ from ._module_identity import register_module_aliases
 from ._types import (
     CaptureCleanupOutcome,
     CarrierLeaseLive,
+    CleanupBlocker,
+    CleanupProgress,
+    DueKey,
     LockContended,
     ObservedArtifact,
+    SweepAttempt,
+    SweepBudgetExceeded,
+    SweepBudgetSpec,
     Tampered,
 )
 
@@ -57,6 +63,127 @@ def due_capture_ids(
     ]
     due.sort()
     return [capture_id for _next_attempt_at, capture_id in due]
+
+
+def bounded_due_keys(
+    records: Iterable[SweepRecord],
+    now: float,
+    terminal_states: Collection[object],
+    max_records: int,
+) -> tuple[list[DueKey], bool, int, DueKey | None]:
+    due: list[DueKey] = []
+    inspected = 0
+    complete = True
+    rebuild_key: DueKey | None = None
+    for record in records:
+        if inspected >= max_records:
+            complete = False
+            break
+        inspected += 1
+        if record.state in terminal_states:
+            continue
+        key = DueKey(record.next_attempt_at, record.capture_id)
+        rebuild_key = key if rebuild_key is None else max(rebuild_key, key)
+        if record.next_attempt_at <= now:
+            due.append(key)
+    due.sort()
+    return due, complete, inspected, rebuild_key
+
+
+def select_due_keys(
+    store: _store_port.SweepStorePort,
+    now: float,
+    max_records: int,
+    terminal_states: Collection[object],
+) -> tuple[list[DueKey], bool, bool]:
+    with store._locked(blocking=False):
+        records, compaction_epoch, _size = store._load_locked()
+        due, complete, inspected, rebuild_key = bounded_due_keys(
+            records.values(),
+            now,
+            terminal_states,
+            max_records,
+        )
+        cursor = _sweep_cursor.load_cursor(
+            store._root_fd,
+            project_identity=store._project_identity,
+            root_identity=store._root_identity,
+            compaction_epoch=compaction_epoch,
+        )
+        repair_needed = cursor.status is not _sweep_cursor.CursorStatus.VALID
+        repaired = False
+        if repair_needed and complete and not due:
+            budget = store._sweep_budget
+            if budget is None:
+                raise RuntimeError("cursor repair requires an active sweep budget")
+            if store._sweep_cursor_writes >= budget.max_cursor_writes:
+                raise SweepBudgetExceeded(CleanupBlocker.CURSOR_WRITE_BUDGET)
+            if rebuild_key is None:
+                repaired = _sweep_cursor.clear_cursor(store._root_fd)
+            else:
+                _sweep_cursor.write_cursor(
+                    store._root_fd,
+                    project_identity=store._project_identity,
+                    root_identity=store._root_identity,
+                    compaction_epoch=compaction_epoch,
+                    due_key=rebuild_key,
+                )
+                repaired = True
+            if repaired:
+                store._sweep_cursor_writes += 1
+    store._sweep_records_inspected += inspected
+    return (
+        _sweep_cursor.rotate_after(due, cursor.due_key),
+        complete,
+        repaired or (repair_needed and bool(due)),
+    )
+
+
+def advance_cursor(
+    store: _store_port.SweepStorePort,
+    due_key: DueKey,
+    budget: SweepBudgetSpec,
+) -> None:
+    if store._sweep_cursor_writes >= budget.max_cursor_writes:
+        raise SweepBudgetExceeded(CleanupBlocker.CURSOR_WRITE_BUDGET)
+    with store._locked(blocking=False):
+        _records, compaction_epoch, _size = store._load_locked()
+        _sweep_cursor.write_cursor(
+            store._root_fd,
+            project_identity=store._project_identity,
+            root_identity=store._root_identity,
+            compaction_epoch=compaction_epoch,
+            due_key=due_key,
+        )
+    store._sweep_cursor_writes += 1
+
+
+def sweep_work_counters(
+    store: _store_port.SweepStorePort,
+) -> tuple[int, int, int, int]:
+    return (
+        store._sweep_records_inspected,
+        store._sweep_replay_bytes,
+        store._sweep_transitions,
+        store._sweep_cursor_writes,
+    )
+
+
+def account_replay_bytes(store: _store_port.SweepStorePort, amount: int) -> None:
+    budget = store._sweep_budget
+    if budget is not None and store._sweep_replay_bytes + amount > budget.max_replay_bytes:
+        raise SweepBudgetExceeded(CleanupBlocker.REPLAY_BYTE_BUDGET)
+    if budget is not None:
+        store._sweep_replay_bytes += amount
+
+
+def validate_store_root(
+    store: _store_port.SweepStorePort,
+    lifecycle_error: type[RuntimeError],
+) -> None:
+    value = os.fstat(store._root_fd)
+    if (value.st_dev, value.st_ino) != store._root_identity:
+        raise lifecycle_error("capture root identity changed")
 
 
 def create_verified_recovery_link(
@@ -451,7 +578,7 @@ def sweep_one(
     *,
     lifecycle_error: type[RuntimeError],
     max_retry_seconds: float,
-) -> tuple[str, int, int]:
+) -> tuple[SweepAttempt, int, int]:
     expected: CaptureLifecycleRecord | None = None
     lease: ObservedArtifact | None = None
     try:
@@ -464,7 +591,7 @@ def sweep_one(
                 or record.state in {CaptureState.DELETED, CaptureState.TAMPERED}
                 or record.next_attempt_at > now
             ):
-                return ("not_due", 0, 0)
+                return (SweepAttempt.NOT_DUE, 0, 0)
             expected = record
             if record.reference_status in {
                 CaptureReferenceStatus.ISSUED,
@@ -475,7 +602,7 @@ def sweep_one(
                     or record.manifest.reference_expiry is None
                     or now < record.manifest.reference_expiry
                 ):
-                    return ("not_due", 0, 0)
+                    return (SweepAttempt.NOT_DUE, 0, 0)
                 expired = replace(
                     record,
                     reference_status=CaptureReferenceStatus.EXPIRED,
@@ -500,7 +627,7 @@ def sweep_one(
             record = records.get(capture_id)
             now = store._wall_clock()
             if record is None or not same_record(expected, record) or record.next_attempt_at > now:
-                return ("not_due", 0, 0)
+                return (SweepAttempt.NOT_DUE, 0, 0)
             if record.state in {
                 CaptureState.RESERVED,
                 CaptureState.STAGED,
@@ -523,7 +650,7 @@ def sweep_one(
                 )
                 expected = record
                 if record.state is CaptureState.DELETED:
-                    return ("deleted", 0, 0)
+                    return (SweepAttempt.DELETED, 0, 0)
                 records, compaction_epoch, size = store._load_locked()
                 record = records[capture_id]
             deleting = store._deleting_record(record)
@@ -563,9 +690,9 @@ def sweep_one(
                 allowed_states={CaptureState.DELETING},
                 transform=lambda _current: deleted,
             )
-        return ("deleted", deleted_bytes, 0)
+        return (SweepAttempt.DELETED, deleted_bytes, 0)
     except CarrierLeaseLive:
-        return ("carrier_lease_live", 0, 0)
+        return (SweepAttempt.CARRIER_LEASE_LIVE, 0, 0)
     except Tampered:
         if expected is not None:
             _transition_if_current(
@@ -578,7 +705,7 @@ def sweep_one(
                     revision=record.revision + 1,
                 ),
             )
-        return ("tampered", 0, 0)
+        return (SweepAttempt.TAMPERED, 0, 0)
     except (lifecycle_error, OSError):
         retries = 0
         if expected is not None:
@@ -592,7 +719,7 @@ def sweep_one(
                 ),
             )
             retries = int(retry is not None)
-        return ("error", 0, retries)
+        return (SweepAttempt.ERROR, 0, retries)
     finally:
         if lease is not None:
             os.close(lease.fd)
@@ -600,52 +727,94 @@ def sweep_one(
 
 def run_bounded_sweep(
     *,
-    max_items: int,
-    max_duration_seconds: float,
+    budget: SweepBudgetSpec,
     monotonic: Callable[[], float],
     wall_clock: Callable[[], float],
-    due_ids: Callable[[float], list[str]],
-    sweep_one: Callable[[str], tuple[str, int, int]],
+    due_keys: Callable[[float, int], tuple[list[DueKey], bool, bool]],
+    before_attempt: Callable[[DueKey], None],
+    sweep_one: Callable[[str], tuple[SweepAttempt, int, int]],
+    work_counters: Callable[[], tuple[int, int, int, int]],
 ) -> CaptureCleanupOutcome:
     started = monotonic()
     examined = deleted = deleted_bytes = carrier_lease_live = 0
     not_due = tampered = errors = retry_count = 0
+    blocker = CleanupBlocker.NONE
     try:
-        pending = due_ids(wall_clock())
+        pending, discovery_complete, cursor_repair = due_keys(
+            wall_clock(),
+            budget.max_records_inspected,
+        )
     except LockContended:
         return CaptureCleanupOutcome(
             remaining_due=1,
+            blocker=CleanupBlocker.LOCK_CONTENDED,
             duration=max(0.0, monotonic() - started),
         )
+    except SweepBudgetExceeded as exc:
+        records_inspected, replay_bytes, transitions, cursor_writes = work_counters()
+        return CaptureCleanupOutcome(
+            remaining_due=1,
+            records_inspected=records_inspected,
+            replay_bytes=replay_bytes,
+            transitions=transitions,
+            cursor_writes=cursor_writes,
+            blocker=exc.blocker,
+            duration=max(0.0, monotonic() - started),
+        )
+    if not discovery_complete:
+        blocker = CleanupBlocker.RECORD_BUDGET
     lock_contended = False
-    for capture_id in pending[:max_items]:
-        if monotonic() - started >= max_duration_seconds:
+    for due_key in pending:
+        if examined >= budget.max_attempts:
+            if blocker is CleanupBlocker.NONE:
+                blocker = CleanupBlocker.ATTEMPT_BUDGET
+            break
+        _records, _bytes, transitions, _cursor_writes = work_counters()
+        if transitions + 4 > budget.max_transitions:
+            if blocker is CleanupBlocker.NONE:
+                blocker = CleanupBlocker.TRANSITION_BUDGET
+            break
+        if examined > 0 and monotonic() - started >= budget.max_duration_seconds:
+            if blocker is CleanupBlocker.NONE:
+                blocker = CleanupBlocker.ELAPSED_DEADLINE
             break
         try:
-            result, logical_bytes, retries = sweep_one(capture_id)
+            before_attempt(due_key)
+            result, logical_bytes, retries = sweep_one(due_key.capture_id)
         except LockContended:
             lock_contended = True
+            blocker = CleanupBlocker.LOCK_CONTENDED
+            break
+        except SweepBudgetExceeded as exc:
+            blocker = exc.blocker
             break
         examined += 1
         deleted_bytes += logical_bytes
         retry_count += retries
-        if result == "deleted":
+        if result is SweepAttempt.DELETED:
             deleted += 1
-        elif result == "carrier_lease_live":
+        elif result is SweepAttempt.CARRIER_LEASE_LIVE:
             carrier_lease_live += 1
-        elif result == "tampered":
+        elif result is SweepAttempt.TAMPERED:
             tampered += 1
-        elif result == "error":
+        elif result is SweepAttempt.ERROR:
             errors += 1
         else:
             not_due += 1
-    if lock_contended:
-        remaining_due = max(1, len(pending) - examined)
+    remaining_due = max(0, len(pending) - examined)
+    if lock_contended or not discovery_complete:
+        remaining_due = max(1, remaining_due)
+    records_inspected, replay_bytes, transitions, cursor_writes = work_counters()
+    if deleted:
+        progress = CleanupProgress.RETIRED
+    elif transitions:
+        progress = CleanupProgress.TRANSITIONED
+    elif cursor_repair and cursor_writes:
+        progress = CleanupProgress.CURSOR_REPAIRED
+    elif cursor_writes:
+        progress = CleanupProgress.CURSOR_ADVANCED
     else:
-        try:
-            remaining_due = len(due_ids(wall_clock()))
-        except LockContended:
-            remaining_due = max(1, len(pending) - examined)
+        progress = CleanupProgress.NONE
     return CaptureCleanupOutcome(
         examined=examined,
         deleted=deleted,
@@ -656,5 +825,11 @@ def run_bounded_sweep(
         errors=errors,
         retry_count=retry_count,
         remaining_due=remaining_due,
+        records_inspected=records_inspected,
+        replay_bytes=replay_bytes,
+        transitions=transitions,
+        cursor_writes=cursor_writes,
+        progress=progress,
+        blocker=blocker,
         duration=max(0.0, monotonic() - started),
     )

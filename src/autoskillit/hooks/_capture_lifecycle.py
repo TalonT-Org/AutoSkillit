@@ -21,8 +21,11 @@ else:
     _module_identity = _standalone_module_identity
 _module_identity.register_module_aliases(__name__)
 if TYPE_CHECKING:
+    from autoskillit.hooks._capture import _capacity as _capture_capacity
     from autoskillit.hooks._capture import _delivery as _capture_delivery
     from autoskillit.hooks._capture import _ledger as _capture_ledger
+    from autoskillit.hooks._capture import _ledger_view as _capture_ledger_view
+    from autoskillit.hooks._capture import _migration as _capture_migration
     from autoskillit.hooks._capture import _reader as _capture_reader
     from autoskillit.hooks._capture import _resolver as _capture_resolver
     from autoskillit.hooks._capture import _snapshot as _capture_snapshot
@@ -30,8 +33,11 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture import _syntax as _capture_syntax
     from autoskillit.hooks._capture import _types as _capture_types
 else:
+    _capture_capacity = importlib.import_module(f"{_module_identity.__package__}._capacity")
     _capture_delivery = importlib.import_module(f"{_module_identity.__package__}._delivery")
     _capture_ledger = importlib.import_module(f"{_module_identity.__package__}._ledger")
+    _capture_ledger_view = importlib.import_module(f"{_module_identity.__package__}._ledger_view")
+    _capture_migration = importlib.import_module(f"{_module_identity.__package__}._migration")
     _capture_reader = importlib.import_module(f"{_module_identity.__package__}._reader")
     _capture_resolver = importlib.import_module(f"{_module_identity.__package__}._resolver")
     _capture_snapshot = importlib.import_module(f"{_module_identity.__package__}._snapshot")
@@ -39,6 +45,11 @@ else:
     _capture_syntax = importlib.import_module(f"{_module_identity.__package__}._syntax")
     _capture_types = importlib.import_module(f"{_module_identity.__package__}._types")
 CaptureCleanupOutcome = _capture_types.CaptureCleanupOutcome
+CaptureCapacityReason = _capture_types.CaptureCapacityReason
+CleanupBlocker = _capture_types.CleanupBlocker
+DueKey = _capture_types.DueKey
+SweepAttempt = _capture_types.SweepAttempt
+SweepBudgetSpec = _capture_types.SweepBudgetSpec
 _ObservedArtifact = _capture_types.ObservedArtifact
 _CarrierLeaseLive = _capture_types.CarrierLeaseLive
 
@@ -54,6 +65,8 @@ UnavailableCaptureReference = _capture_snapshot.UnavailableCaptureReference
 VerifiedCaptureSnapshot = _capture_snapshot.VerifiedCaptureSnapshot
 
 __all__ = [
+    "CaptureCapacityError",
+    "CaptureCapacityReason",
     "CaptureCleanupOutcome",
     "CaptureDeliveryStatus",
     "CaptureLedgerError",
@@ -66,6 +79,7 @@ __all__ = [
     "CaptureStatus",
     "CaptureState",
     "CaptureTransitionCommittedError",
+    "SweepBudgetSpec",
 ]
 
 FRAME_MAGIC = _capture_ledger.FRAME_MAGIC
@@ -73,13 +87,11 @@ LEDGER_NAME = ".capture-lifecycle.ledger"
 LOCK_NAME = ".capture-lifecycle.lock"
 MAX_LEDGER_BYTES = _capture_ledger.MAX_LEDGER_BYTES
 MAX_ACTIVE_RECORDS = 4096
-
 _RETENTION_SECONDS = 3600.0
 _REFERENCE_LIFETIME_SECONDS = 1800.0
 _MAX_RETRY_SECONDS = 3600.0
-_COMPACTION_THRESHOLD_BYTES = 3 * 1024 * 1024
+_COMPACTION_THRESHOLD_BYTES = 31 * 1024 * 1024 // 8
 _MAX_COMPACTION_BYTES = 4 * 1024 * 1024
-_MAX_TOMBSTONES = 256
 _CAPTURE_ID_RE = _capture_syntax.CAPTURE_ID_RE
 _CLOEXEC, _NOFOLLOW, _NONBLOCK = os.O_CLOEXEC, os.O_NOFOLLOW, os.O_NONBLOCK
 _CONTROL_FLAGS = os.O_RDWR | os.O_CREAT | _CLOEXEC | _NOFOLLOW
@@ -97,6 +109,12 @@ class CaptureLedgerError(CaptureLifecycleError):
     pass
 
 
+class CaptureCapacityError(CaptureLedgerError):
+    def __init__(self, reason: CaptureCapacityReason) -> None:
+        self.reason = reason
+        super().__init__(_capture_capacity.reason_detail(reason))
+
+
 CaptureState = _capture_ledger.CaptureState
 CaptureReferenceStatus = _capture_ledger.CaptureReferenceStatus
 CaptureDeliveryStatus = _capture_ledger.CaptureDeliveryStatus
@@ -105,10 +123,6 @@ CaptureSnapshotStatus = _capture_ledger.CaptureSnapshotStatus
 CaptureStatus = _capture_ledger.CaptureStatus
 CaptureLifecycleRecord = _capture_ledger.CaptureLifecycleRecord
 CaptureTransitionCommittedError = _capture_ledger.CaptureTransitionCommittedError
-
-
-def _identity(value: os.stat_result) -> tuple[int, int]:
-    return (value.st_dev, value.st_ino)
 
 
 def _record_to_dict(record: CaptureLifecycleRecord) -> dict[str, object]:
@@ -151,17 +165,6 @@ def _legacy_record_from_dict(
         raise CaptureLedgerError(str(exc)) from exc
 
 
-def _validate_control_file(fd: int, name: str) -> None:
-    value = os.fstat(fd)
-    if (
-        not stat.S_ISREG(value.st_mode)
-        or value.st_nlink != 1
-        or value.st_uid != os.geteuid()
-        or value.st_mode & _UNTRUSTED_WRITE_BITS
-    ):
-        raise CaptureLifecycleError(f"unsafe lifecycle control file: {name}")
-
-
 class CaptureLifecycleStore:
     def __init__(
         self,
@@ -180,6 +183,11 @@ class CaptureLifecycleStore:
         self._root_identity = root_identity
         self._wall_clock = wall_clock
         self._monotonic = monotonic
+        self._ledger_view = _capture_ledger_view.LedgerView()
+        self._capacity = _capture_types.CaptureCapacitySpec()
+        self._sweep_budget: SweepBudgetSpec | None = None
+        self._sweep_records_inspected = self._sweep_replay_bytes = 0
+        self._sweep_transitions = self._sweep_cursor_writes = 0
 
     @classmethod
     def from_open_authorities(
@@ -211,22 +219,20 @@ class CaptureLifecycleStore:
             tampered=_capture_types.Tampered,
         )
 
-    def _validate_root(self) -> None:
-        if _identity(os.fstat(self._root_fd)) != self._root_identity:
-            raise CaptureLifecycleError("capture root identity changed")
-
     def capture_finalization_window(self) -> tuple[float, float]:
         return (now := self._wall_clock()), now + _RETENTION_SECONDS
 
     @contextmanager
     def _locked(self, *, blocking: bool = True) -> Iterator[None]:
-        self._validate_root()
+        _capture_sweep.validate_store_root(self, CaptureLifecycleError)
         try:
             fd = os.open(LOCK_NAME, _CONTROL_FLAGS, 0o600, dir_fd=self._root_fd)
         except OSError as exc:
             raise CaptureLifecycleError("cannot open lifecycle lock") from exc
         try:
-            _validate_control_file(fd, LOCK_NAME)
+            _capture_ledger_view.validate_control_file(
+                fd, LOCK_NAME, _UNTRUSTED_WRITE_BITS, CaptureLifecycleError
+            )
             try:
                 operation = fcntl.LOCK_EX
                 if not blocking:
@@ -236,7 +242,7 @@ class CaptureLifecycleStore:
                 if not blocking and exc.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
                     raise _capture_types.LockContended from exc
                 raise CaptureLifecycleError("cannot acquire lifecycle lock") from exc
-            self._validate_root()
+            _capture_sweep.validate_store_root(self, CaptureLifecycleError)
             yield
         finally:
             try:
@@ -250,7 +256,9 @@ class CaptureLifecycleStore:
         except OSError as exc:
             raise CaptureLedgerError("cannot open lifecycle ledger") from exc
         try:
-            _validate_control_file(fd, LEDGER_NAME)
+            _capture_ledger_view.validate_control_file(
+                fd, LEDGER_NAME, _UNTRUSTED_WRITE_BITS, CaptureLifecycleError
+            )
             return fd
         except BaseException:
             os.close(fd)
@@ -259,57 +267,17 @@ class CaptureLifecycleStore:
     def _load_locked(self) -> tuple[dict[str, CaptureLifecycleRecord], int, int]:
         fd = self._open_ledger()
         try:
-            size = os.fstat(fd).st_size
-            if size > MAX_LEDGER_BYTES:
-                raise CaptureLedgerError("lifecycle ledger exceeds bound")
-            data = bytearray()
-            offset = 0
-            while offset < size:
-                chunk = os.pread(fd, min(64 * 1024, size - offset), offset)
-                if not chunk:
-                    raise CaptureLedgerError("lifecycle ledger read ended early")
-                data.extend(chunk)
-                offset += len(chunk)
             try:
-                decoded = _capture_ledger.decode_ledger(bytes(data))
+                return _capture_migration.load_ledger(
+                    self,
+                    fd,
+                    self._ledger_view,
+                    max_ledger_bytes=MAX_LEDGER_BYTES,
+                )
+            except _capture_ledger_view.LegacyCompacted:
+                return self._load_locked()
             except _capture_ledger.LedgerCodecError as exc:
                 raise CaptureLedgerError(str(exc)) from exc
-            if decoded.truncate_at is not None:
-                os.ftruncate(fd, decoded.truncate_at)
-                os.fsync(fd)
-                size = decoded.truncate_at
-            records: dict[str, CaptureLifecycleRecord] = {}
-            source_versions: dict[str, int] = {}
-            compaction_epoch = 1
-            saw_legacy = False
-            for frame in decoded.frames:
-                if frame.compaction_epoch < compaction_epoch:
-                    raise CaptureLedgerError("lifecycle compaction epoch regressed")
-                compaction_epoch = frame.compaction_epoch
-                raw_capture_id = frame.record.get("capture_id")
-                previous = records.get(raw_capture_id) if isinstance(raw_capture_id, str) else None
-                if frame.format_version == 1:
-                    if previous is not None and source_versions[previous.capture_id] != 1:
-                        raise CaptureLedgerError("legacy frame follows current lifecycle state")
-                    saw_legacy = True
-                    record = _legacy_record_from_dict(
-                        frame.record,
-                        revision=1 if previous is None else previous.revision + 1,
-                        compaction_epoch=frame.compaction_epoch,
-                    )
-                else:
-                    record = replace(
-                        _record_from_dict(frame.record),
-                        compaction_epoch=frame.compaction_epoch,
-                    )
-                if previous is not None and frame.format_version != 1:
-                    _validate_successor(previous, record)
-                records[record.capture_id] = record
-                source_versions[record.capture_id] = frame.format_version
-            if saw_legacy:
-                self._compact_locked(records, compaction_epoch + 1)
-                return self._load_locked()
-            return records, compaction_epoch, size
         finally:
             os.close(fd)
 
@@ -333,7 +301,10 @@ class CaptureLifecycleStore:
             )
         except _capture_ledger.LedgerCodecError as exc:
             raise CaptureLedgerError(str(exc)) from exc
-        if size + len(frame) > _COMPACTION_THRESHOLD_BYTES:
+        if size + len(frame) > min(
+            _COMPACTION_THRESHOLD_BYTES,
+            self._capacity.compaction_high_bytes,
+        ):
             latest = dict(records)
             latest[record.capture_id] = record
             self._compact_locked(latest, compaction_epoch + 1)
@@ -342,6 +313,7 @@ class CaptureLifecycleStore:
         try:
             _capture_ledger.write_all(fd, frame)
             os.fsync(fd)
+            value = os.fstat(fd)
         except BaseException as primary_error:
             try:
                 os.close(fd)
@@ -359,21 +331,14 @@ class CaptureLifecycleStore:
             raise CaptureTransitionCommittedError(
                 "lifecycle transition committed before descriptor cleanup failed"
             ) from exc
+        self._ledger_view.note_append(records, record, compaction_epoch, value)
 
     def _compact_locked(
         self,
         records: Mapping[str, CaptureLifecycleRecord],
         compaction_epoch: int,
     ) -> None:
-        active = [
-            record for record in records.values() if record.state is not CaptureState.DELETED
-        ]
-        tombstones = sorted(
-            (record for record in records.values() if record.state is CaptureState.DELETED),
-            key=lambda record: (record.next_attempt_at, record.capture_id),
-            reverse=True,
-        )[:_MAX_TOMBSTONES]
-        compacted = sorted(active + tombstones, key=lambda record: record.capture_id)
+        compacted = _capture_capacity.compacted_records(records, self._capacity)
         try:
             frames = [
                 _capture_ledger.encode_frame(
@@ -384,13 +349,19 @@ class CaptureLifecycleStore:
             ]
         except _capture_ledger.LedgerCodecError as exc:
             raise CaptureLedgerError(str(exc)) from exc
-        if sum(map(len, frames)) > _MAX_COMPACTION_BYTES:
+        compacted_bound = min(
+            _MAX_COMPACTION_BYTES,
+            self._capacity.hard_ledger_bytes - _capture_capacity.recovery_headroom(self._capacity),
+        )
+        if sum(map(len, frames)) > compacted_bound:
             raise CaptureLedgerError("lifecycle compaction exceeds bound")
         temp_name = f".capture-lifecycle-compact-{secrets.token_hex(8)}"
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | _CLOEXEC | _NOFOLLOW
         fd = os.open(temp_name, flags, 0o600, dir_fd=self._root_fd)
         try:
-            _validate_control_file(fd, temp_name)
+            _capture_ledger_view.validate_control_file(
+                fd, temp_name, _UNTRUSTED_WRITE_BITS, CaptureLifecycleError
+            )
             for frame in frames:
                 _capture_ledger.write_all(fd, frame)
             os.fsync(fd)
@@ -417,6 +388,12 @@ class CaptureLifecycleStore:
                 pass
             raise
         os.fsync(self._root_fd)
+        value = os.stat(LEDGER_NAME, dir_fd=self._root_fd, follow_symlinks=False)
+        self._ledger_view.note_compaction(
+            {record.capture_id: record for record in compacted},
+            compaction_epoch,
+            value,
+        )
 
     @staticmethod
     def _authority_for(record: CaptureLifecycleRecord) -> CaptureWriteAuthority:
@@ -454,7 +431,17 @@ class CaptureLifecycleStore:
             or candidate.revision != previous.revision + 1
         ):
             raise CaptureLifecycleError("transition did not produce one valid successor")
+        reason = _capture_capacity.transition_reason(
+            records,
+            candidate,
+            compaction_epoch=compaction_epoch,
+            spec=self._capacity,
+        )
+        if reason is not None:
+            raise CaptureCapacityError(reason)
         self._append_locked(candidate, records, compaction_epoch, ledger_size)
+        if self._sweep_budget is not None:
+            self._sweep_transitions += 1
         return candidate
 
     def _transition(
@@ -520,11 +507,15 @@ class CaptureLifecycleStore:
             previous = records.get(capture_id)
             if previous is not None and previous.state is not CaptureState.DELETED:
                 raise CaptureLifecycleError("capture id already reserved")
-            if (
-                sum(current.state is not CaptureState.DELETED for current in records.values())
-                >= MAX_ACTIVE_RECORDS
-            ):
-                raise CaptureLedgerError("active lifecycle record bound reached")
+            reason = _capture_capacity.admission_reason(
+                records,
+                record,
+                compaction_epoch=compaction_epoch,
+                spec=self._capacity,
+                active_limit=min(MAX_ACTIVE_RECORDS, self._capacity.max_operational_records),
+            )
+            if reason is not None:
+                raise CaptureCapacityError(reason)
             self._append_locked(record, records, compaction_epoch, size)
         return record
 
@@ -588,7 +579,7 @@ class CaptureLifecycleStore:
                 or value.st_mode & _UNTRUSTED_WRITE_BITS
             ):
                 raise CaptureLifecycleError("unsafe staged capture artifact")
-            identity = _identity(value)
+            identity = _capture_ledger_view.identity(value)
             lease_fd = self.acquire_writer_lease(fd)
             staged = self.mark_staged(authority, identity)
             authority = self._authority_for(staged)
@@ -611,8 +602,8 @@ class CaptureLifecycleStore:
                 follow_symlinks=False,
             )
             if (
-                _identity(staging_value) != identity
-                or _identity(public_value) != identity
+                _capture_ledger_view.identity(staging_value) != identity
+                or _capture_ledger_view.identity(public_value) != identity
                 or staging_value.st_nlink != 2
                 or public_value.st_nlink != 2
             ):
@@ -624,7 +615,10 @@ class CaptureLifecycleStore:
                 dir_fd=self._root_fd,
                 follow_symlinks=False,
             )
-            if _identity(public_value) != identity or public_value.st_nlink != 1:
+            if (
+                _capture_ledger_view.identity(public_value) != identity
+                or public_value.st_nlink != 1
+            ):
                 raise CaptureLifecycleError("capture publication did not settle")
             published = self.mark_published(authority)
             authority = self._authority_for(published)
@@ -958,7 +952,7 @@ class CaptureLifecycleStore:
             lease_checked=lease_checked,
         )
 
-    def _sweep_one(self, capture_id: str) -> tuple[str, int, int]:
+    def _sweep_one(self, capture_id: str) -> tuple[SweepAttempt, int, int]:
         return _capture_sweep.sweep_one(
             self,
             capture_id,
@@ -966,28 +960,40 @@ class CaptureLifecycleStore:
             max_retry_seconds=_MAX_RETRY_SECONDS,
         )
 
-    def _due_ids(self, now: float) -> list[str]:
-        with self._locked(blocking=False):
-            records, _generation, _size = self._load_locked()
-        return _capture_sweep.due_capture_ids(
-            records.values(),
+    def _due_keys(
+        self,
+        now: float,
+        max_records: int,
+    ) -> tuple[list[DueKey], bool, bool]:
+        return _capture_sweep.select_due_keys(
+            self,
             now,
+            max_records,
             {CaptureState.DELETED, CaptureState.TAMPERED},
         )
 
+    def _advance_sweep_cursor(self, due_key: DueKey) -> None:
+        assert self._sweep_budget is not None
+        _capture_sweep.advance_cursor(self, due_key, self._sweep_budget)
+
     def sweep(
         self,
-        *,
-        max_items: int = 32,
-        max_duration_seconds: float = 0.05,
+        budget: SweepBudgetSpec,
     ) -> CaptureCleanupOutcome:
-        if max_items <= 0 or max_duration_seconds <= 0:
-            raise CaptureLifecycleError("cleanup bounds must be positive")
-        return _capture_sweep.run_bounded_sweep(
-            max_items=max_items,
-            max_duration_seconds=max_duration_seconds,
-            monotonic=self._monotonic,
-            wall_clock=self._wall_clock,
-            due_ids=self._due_ids,
-            sweep_one=self._sweep_one,
-        )
+        if type(budget) is not SweepBudgetSpec:
+            raise CaptureLifecycleError("cleanup requires one SweepBudgetSpec")
+        self._sweep_budget = budget
+        self._sweep_records_inspected = self._sweep_replay_bytes = 0
+        self._sweep_transitions = self._sweep_cursor_writes = 0
+        try:
+            return _capture_sweep.run_bounded_sweep(
+                budget=budget,
+                monotonic=self._monotonic,
+                wall_clock=self._wall_clock,
+                due_keys=self._due_keys,
+                before_attempt=self._advance_sweep_cursor,
+                sweep_one=self._sweep_one,
+                work_counters=lambda: _capture_sweep.sweep_work_counters(self),
+            )
+        finally:
+            self._sweep_budget = None

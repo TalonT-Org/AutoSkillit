@@ -310,14 +310,6 @@ def verify_installed_plugin_artifact(
             manifest_path=spec.manifest_path,
         )
         _validate_plugin_metadata_version(spec)
-        if (
-            identity.semantic_key != spec.semantic_key
-            or identity.managed_path != spec.managed_root
-            or identity.manifest_path != spec.manifest_path
-        ):
-            raise PluginArtifactValidationError(
-                "installed plugin identity does not match the trusted install transaction"
-            )
     except PluginArtifactUnavailableError as exc:
         findings.append(
             _finding(

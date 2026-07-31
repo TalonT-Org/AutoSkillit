@@ -669,13 +669,10 @@ def aggregate_experimental_review_candidates(
 
     eligible: list[dict[str, object]] = []
     for index, finding in enumerate(validated_standard):
-        default_source = (
-            "deletion_regression" if finding.get("dimension") == "deletion_regression" else "arch"
-        )
         eligible.append(
             normalize(
                 finding,
-                default_source=default_source,
+                default_source="arch",
                 original_index=index,
             )
         )

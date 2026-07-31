@@ -25,13 +25,11 @@ from autoskillit.core import (
     RetiringArtifactRecord,
     RetiringCacheReadResult,
     RetiringCacheState,
-    destination_location,
     directory_tree_digest,
     due_retiring_records,
     get_logger,
     installed_plugin_artifact_manifest_payload,
     installed_plugin_artifact_root,
-    installed_plugin_cache_dir,
     installed_plugin_semantic_key,
     log_plugin_artifact_lifecycle,
     migrate_retiring_cache_v1,
@@ -59,38 +57,6 @@ def current_installed_plugin_root() -> Path:
     from autoskillit import __version__
 
     return installed_plugin_artifact_root(Path.home(), "autoskillit", __version__)
-
-
-def _validate_installed_plugin_destination(root: Path) -> None:
-    """Reject a target whose lexical location cannot be mutated safely."""
-    supplied = Path(root)
-    expected = current_installed_plugin_root()
-    if supplied != expected or not supplied.is_absolute():
-        raise PluginArtifactValidationError(
-            f"installed plugin target is outside the current managed cache: {supplied}"
-        )
-    if supplied.is_symlink():
-        raise PluginArtifactValidationError(
-            f"installed plugin target must not be a symlink: {supplied}"
-        )
-    if supplied.exists() and not supplied.is_dir():
-        raise PluginArtifactValidationError(
-            f"installed plugin target must be a directory: {supplied}"
-        )
-    expected_parent = installed_plugin_cache_dir(
-        Path.home().resolve(strict=False),
-        "autoskillit",
-    )
-    try:
-        location = destination_location(supplied)
-    except (OSError, ValueError) as exc:
-        raise PluginArtifactValidationError(
-            f"installed plugin target cannot be located safely: {supplied}"
-        ) from exc
-    if location.parent != expected_parent:
-        raise PluginArtifactValidationError(
-            f"installed plugin target escapes the managed cache: {supplied}"
-        )
 
 
 def current_installed_plugin_authority() -> InstalledPluginArtifactAuthority:

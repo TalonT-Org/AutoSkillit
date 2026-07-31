@@ -140,7 +140,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _update_checks.py — dismissal state file
     ("src/autoskillit/cli/update/_update_checks.py", 80),
     # _update_checks_fetch.py — fetch cache (extracted from _update_checks.py)
-    ("src/autoskillit/cli/update/_update_checks_fetch.py", 58),
+    ("src/autoskillit/cli/update/_update_checks_fetch.py", 54),
     # smoke_utils/_review.py — enriched handoff and manifest
     ("src/autoskillit/smoke_utils/_review.py", 472),
     ("src/autoskillit/smoke_utils/_review.py", 576),

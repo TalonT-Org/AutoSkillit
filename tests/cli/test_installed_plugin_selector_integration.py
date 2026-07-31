@@ -230,7 +230,12 @@ def _run_session_launch(
     spawn_calls: list[tuple[tuple[object, ...], dict[str, object]]],
 ) -> None:
     (state.home / "project").mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(shutil, "which", lambda _binary: "/usr/bin/agent")
+
+    def resolve_agent(_binary: str, *, path: str | None = None) -> str:
+        assert path is None
+        return "/usr/bin/agent"
+
+    monkeypatch.setattr(shutil, "which", resolve_agent)
 
     def record_spawn(*args: object, **kwargs: object) -> object:
         spawn_calls.append((args, kwargs))

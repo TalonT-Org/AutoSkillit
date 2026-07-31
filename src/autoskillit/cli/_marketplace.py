@@ -249,13 +249,16 @@ def _claude_on_path(env: Mapping[str, str]) -> bool:
 def _validate_transaction_target(target: Path, expected_version: str) -> None:
     """Validate an explicit-version target without consulting cached package state."""
     expected_parent = _plugin_cache_dir()
-    if (
-        not target.is_absolute()
-        or target != expected_parent / expected_version
-        or target.is_symlink()
-        or (target.exists() and not target.is_dir())
-    ):
-        raise RuntimeError(f"Unsafe installed plugin target: {target}")
+    if not target.is_absolute():
+        raise RuntimeError(f"Unsafe installed plugin target must be absolute: {target}")
+    if target != expected_parent / expected_version:
+        raise RuntimeError(
+            f"Unsafe installed plugin target does not match expected version target: {target}"
+        )
+    if target.is_symlink():
+        raise RuntimeError(f"Unsafe installed plugin target must not be a symlink: {target}")
+    if target.exists() and not target.is_dir():
+        raise RuntimeError(f"Unsafe installed plugin target must be a directory: {target}")
     resolved_parent = expected_parent.resolve(strict=False)
     if target.resolve(strict=False).parent != resolved_parent:
         raise RuntimeError(f"Unsafe installed plugin target escapes managed cache: {target}")

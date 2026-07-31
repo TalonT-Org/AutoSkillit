@@ -143,11 +143,20 @@ def _sealed_env() -> dict[str, str]:
     return {"PATH": "/usr/bin", "SEALED": "yes"}
 
 
-@pytest.mark.parametrize("unsafe_kind", ["symlink", "non_directory", "escape"])
+@pytest.mark.parametrize(
+    ("unsafe_kind", "expected_reason"),
+    [
+        ("relative", "must be absolute"),
+        ("symlink", "must not be a symlink"),
+        ("non_directory", "must be a directory"),
+        ("escape", "does not match expected version target"),
+    ],
+)
 def test_unsafe_install_targets_are_rejected_before_mutation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     unsafe_kind: str,
+    expected_reason: str,
 ) -> None:
     marketplace, neutral_cwd = _configure_transaction(tmp_path, monkeypatch)
     target = marketplace._installed_plugin_root(_VERSION)
@@ -156,7 +165,13 @@ def test_unsafe_install_targets_are_rejected_before_mutation(
     sentinel = external / "keep.txt"
     sentinel.write_text("untouched", encoding="utf-8")
 
-    if unsafe_kind == "symlink":
+    if unsafe_kind == "relative":
+        monkeypatch.setattr(
+            marketplace,
+            "_installed_plugin_root",
+            lambda _version: Path(_VERSION),
+        )
+    elif unsafe_kind == "symlink":
         target.parent.mkdir(parents=True)
         target.symlink_to(external, target_is_directory=True)
     elif unsafe_kind == "non_directory":
@@ -185,7 +200,7 @@ def test_unsafe_install_targets_are_rejected_before_mutation(
 
     assert result.outcome is InstallOutcome.FAILED
     assert result.failure_kind is InstallFailureKind.PREFLIGHT
-    assert "Unsafe installed plugin target" in result.findings[0]
+    assert expected_reason in result.findings[0]
     assert child_calls == []
     assert sentinel.read_text(encoding="utf-8") == "untouched"
 

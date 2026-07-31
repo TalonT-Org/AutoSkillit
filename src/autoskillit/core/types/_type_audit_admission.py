@@ -124,7 +124,6 @@ class AuditAttemptLifecycle(StrEnum):
 class AuditPreparedEffectDeliveryStatus(StrEnum):
     PENDING = "PENDING"
     DELIVERED = "DELIVERED"
-    QUARANTINED = "QUARANTINED"
 
 
 def _require_nonempty(name: str, value: object) -> str:

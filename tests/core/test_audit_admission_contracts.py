@@ -258,7 +258,7 @@ def _prepared_effect(
         ),
         (
             AuditPreparedEffectDeliveryStatus,
-            {"PENDING", "DELIVERED", "QUARANTINED"},
+            {"PENDING", "DELIVERED"},
         ),
     ],
 )

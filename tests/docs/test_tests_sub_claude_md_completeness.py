@@ -1,4 +1,4 @@
-"""Structural tests for per-subfolder CLAUDE.md documentation files under tests/."""
+"""Structural tests for AGENTS.md documentation files under tests/."""
 
 import re
 from pathlib import Path
@@ -9,53 +9,28 @@ pytestmark = pytest.mark.small
 
 TESTS_ROOT = Path(__file__).resolve().parents[1]
 
-EXPECTED_SUB_CLAUDE_MDS = [
-    "arch/AGENTS.md",
-    "assets/AGENTS.md",
-    "cli/AGENTS.md",
-    "config/AGENTS.md",
-    "contracts/AGENTS.md",
-    "core/AGENTS.md",
-    "docs/AGENTS.md",
-    "execution/AGENTS.md",
-    "fleet/AGENTS.md",
-    "hooks/AGENTS.md",
-    "infra/AGENTS.md",
-    "migration/AGENTS.md",
-    "pipeline/AGENTS.md",
-    "planner/AGENTS.md",
-    "recipe/AGENTS.md",
-    "server/AGENTS.md",
-    "skills/AGENTS.md",
-    "skills_extended/AGENTS.md",
-    "workspace/AGENTS.md",
-]
+_DIRECT_CHILD_GUIDE_REFERENCE_RE = re.compile(
+    r"\bsee (?P<reference>[A-Za-z0-9_-]+/AGENTS\.md)(?![\w./-])"
+)
 
 
-def test_expected_sub_guidance_paths_match_tree():
-    actual = {path.relative_to(TESTS_ROOT).as_posix() for path in TESTS_ROOT.glob("*/AGENTS.md")}
-    assert set(EXPECTED_SUB_CLAUDE_MDS) == actual
-
-
-def test_all_tests_sub_claude_md_files_exist():
-    """Every test subdirectory has a CLAUDE.md file."""
-    missing = [p for p in EXPECTED_SUB_CLAUDE_MDS if not (TESTS_ROOT / p).is_file()]
-    assert not missing, f"Missing tests/ sub-CLAUDE.md files: {missing}"
-
-
-def test_top_level_tests_claude_md_references_all_subdirs():
-    """The top-level tests/AGENTS.md references each subdirectory's AGENTS.md."""
+def test_top_level_tests_agents_md_references_existing_guidance_files():
+    """Every direct-child guidance reference in tests/AGENTS.md resolves."""
     top_agents_md = TESTS_ROOT / "AGENTS.md"
     if not top_agents_md.is_file():
         pytest.fail("tests/AGENTS.md does not exist")
-    content = top_agents_md.read_text()
-    failures = []
-    for rel_path in EXPECTED_SUB_CLAUDE_MDS:
-        subdir = rel_path.split("/")[0]
-        marker = f"see {subdir}/AGENTS.md"
-        if marker not in content:
-            failures.append(f"tests/AGENTS.md missing reference: '{marker}'")
-    assert not failures, "Top-level tree missing sub-AGENTS.md references:\n" + "\n".join(failures)
+    content = top_agents_md.read_text(encoding="utf-8")
+    references = sorted(
+        {match.group("reference") for match in _DIRECT_CHILD_GUIDE_REFERENCE_RE.finditer(content)}
+    )
+    assert references, "tests/AGENTS.md contains no direct-child guidance references"
+
+    missing = sorted(
+        (TESTS_ROOT / reference).relative_to(TESTS_ROOT.parent).as_posix()
+        for reference in references
+        if not (TESTS_ROOT / reference).is_file()
+    )
+    assert not missing, f"tests/AGENTS.md references missing guidance files: {missing}"
 
 
 def test_top_level_tests_claude_md_no_per_file_subdir_listings():

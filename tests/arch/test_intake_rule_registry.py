@@ -42,8 +42,8 @@ _PATH_CLASS_PROBE_PATHS: dict[str, tuple[str, ...]] = {
     # agents-md is GENERATED from the live tree, not hand-listed — see below.
 }
 
-# The one per-package AGENTS.md the harness denies, with the reason it is denied.
-# Generated sweep found exactly 1 of 39 AGENTS.md files under src/autoskillit/ blocked.
+# The generated sweep discovers the live root-and-source guide set.
+# Only the listed source guide is blocked, for the reason recorded below.
 KNOWN_BLOCKED_AGENTS_MD: dict[str, str] = {
     "src/autoskillit/agents/AGENTS.md": (
         "Matches recipe_read_guard.py:31 (src/autoskillit/agents/.*\\.md), which exists to "

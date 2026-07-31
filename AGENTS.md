@@ -87,7 +87,7 @@ generic_automation_mcp/
 └── pyproject.toml
 ```
 
-`src/autoskillit/` packages — the table below is an index, not required reading: consult a package's own `AGENTS.md` (package-specific guidance) only for packages you are modifying. Each package has its own `AGENTS.md` plus a thin `CLAUDE.md` shim that imports it (except `recipes/`, `skills/`, and `skills_extended/` — `AGENTS.md` files for these are pending):
+`src/autoskillit/` packages — the table below is an index, not required reading. Packages without a local `AGENTS.md` inherit the nearest ancestor guide; consult package-local guides when present and applicable. Retained non-root guides use thin sibling `CLAUDE.md` shims except the intentionally unpaired `hooks/_capture/AGENTS.md`; root `CLAUDE.md` remains an overlay:
 
 | Package | IL | Purpose |
 |---|---|---|

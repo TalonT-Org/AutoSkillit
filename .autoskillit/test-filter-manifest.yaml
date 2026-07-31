@@ -116,12 +116,12 @@ src/autoskillit/agents/**:
 .github/AGENTS.md:
   - infra/
 
-CLAUDE.md:
+/CLAUDE.md:
   - infra/
   - contracts/
   - docs/
 
-AGENTS.md:
+/AGENTS.md:
   - infra/
   - contracts/
   - docs/

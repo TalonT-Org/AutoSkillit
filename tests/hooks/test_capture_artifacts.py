@@ -1635,6 +1635,39 @@ def test_capture_stream_failure_closes_pipe_and_artifact(
             os.fstat(fd)
 
 
+def test_capture_control_flow_exception_settles_and_reraises(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    process = _FakeCaptureProcess(b"")
+    settled: list[object] = []
+
+    monkeypatch.setattr(
+        capture_artifacts,
+        "_spawn_bash",
+        lambda *_args, **_kwargs: process,
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "_drain_capture",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(KeyboardInterrupt()),
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "_settle_failed_capture",
+        lambda supplied: settled.append(supplied),
+    )
+
+    with pytest.raises(KeyboardInterrupt):
+        run_capture("printf output", str(project), _CAPTURE_ID)
+
+    assert settled == [process]
+    assert _capture_record(project).state is CaptureState.FAILED
+    assert process.stdout.closed
+
+
 def test_capture_readback_failure_after_partial_output_closes_runtime_fds(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

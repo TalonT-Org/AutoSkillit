@@ -816,6 +816,8 @@ def run_capture(
                     lifecycle_error=CaptureLifecycleError,
                     runtime_errors=_CAPTURE_RUNTIME_ERRORS,
                 )
+            if not isinstance(exc, _CAPTURE_RUNTIME_ERRORS):
+                raise
             return _capture_replay.capture_failure_return(
                 _capture_replay.failure_transport(
                     stage=failure_stage,

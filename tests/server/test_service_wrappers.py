@@ -356,7 +356,8 @@ def test_load_and_validate_skips_file_read_when_content_in_recipe_info(
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
-    _write_valid_recipe(recipes_dir / "my-recipe.yaml")
+    recipe_path = recipes_dir / "my-recipe.yaml"
+    _write_valid_recipe(recipe_path)
 
     # Pre-compute the result while Path.read_text is still real; content is
     # already populated by Phase 2 (_collect_recipes stores raw text).
@@ -367,14 +368,20 @@ def test_load_and_validate_skips_file_read_when_content_in_recipe_info(
     # the lambda itself never calls read_text after the patch below.
     monkeypatch.setattr(recipe_io, "list_recipes", lambda _: pre_result)
 
-    # Patch Path.read_text AFTER pre-compute to assert it is NOT called.
-    monkeypatch.setattr(
-        Path,
-        "read_text",
-        lambda *a, **kw: (_ for _ in ()).throw(
-            AssertionError("Path.read_text should not be called when content is cached")
-        ),
-    )
+    # Guard only the recipe path: semantic validation may still read bundled
+    # skill frontmatter when the process-local skill cache is cold.
+    original_read_text = Path.read_text
+
+    def guarded_read_text(
+        path: Path,
+        encoding: str | None = None,
+        errors: str | None = None,
+    ) -> str:
+        if path == recipe_path:
+            raise AssertionError("recipe content should not be re-read when cached")
+        return original_read_text(path, encoding=encoding, errors=errors)
+
+    monkeypatch.setattr(Path, "read_text", guarded_read_text)
 
     result = load_and_validate("my-recipe", tmp_path)
     assert "content" in result

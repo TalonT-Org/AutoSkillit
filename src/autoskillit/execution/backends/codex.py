@@ -56,7 +56,9 @@ from autoskillit.core import (
     CookSessionHandle,
     ExecutableLaunchBinding,
     HookTrustPolicy,
+    ManagedHeadlessSessionLineageRef,
     NamedResume,
+    NativeShellCaptureDecision,
     NoResume,
     ObserverStatus,
     OutputFormat,
@@ -78,6 +80,9 @@ from autoskillit.execution.backends._backend_cmd_builder_base import (
     SHARED_BASELINE_ENV,
     BackendCmdBuilderBase,
     FlagVocabulary,
+    _filter_protected_native_shell_env,
+    _managed_native_shell_env,
+    _merge_caller_env_extras,
 )
 from autoskillit.execution.backends._claude_prompt import (
     _HEADLESS_EXCLUSIVE_VARS,
@@ -349,19 +354,6 @@ class CodexStateReadinessProbe:
             self._sleep(min(self.poll_interval_seconds, remaining))
 
 
-def _merge_caller_env_extras(
-    target: dict[str, str],
-    extras: Mapping[str, str] | None,
-    *,
-    denylist: frozenset[str] = frozenset(),
-) -> None:
-    """Merge untrusted caller extras without admitting cook-owned controls."""
-    if extras is None:
-        return
-    protected = denylist | CODEX_COOK_RESERVED_ENV_VARS | {CODEX_STARTUP_TRACE_ENV_VAR}
-    target.update({key: value for key, value in extras.items() if key not in protected})
-
-
 def _codex_exec_extras(
     *,
     session_type: str,
@@ -411,8 +403,13 @@ class CodexEnvPolicy:
             and not any(k.startswith(p) for p in self.denylist_prefixes)
         }
         if extras is not None:
+            filtered_extras = _filter_protected_native_shell_env(extras)
             out.update(
-                {key: value for key, value in extras.items() if key != CODEX_STARTUP_TRACE_ENV_VAR}
+                {
+                    key: value
+                    for key, value in filtered_extras.items()
+                    if key != CODEX_STARTUP_TRACE_ENV_VAR
+                }
             )
         # This is an outer-cook control signal, never child or nested-session state.
         out.pop(CODEX_STARTUP_TRACE_ENV_VAR, None)
@@ -1194,6 +1191,13 @@ class CodexBackend(BackendCmdBuilderBase):
             resume_message = cfg["resume_message"]
             sandbox_mode = cfg["sandbox_mode"]
             network_access = cfg.get("network_access", False)
+            native_shell_capture_decision = cfg["native_shell_capture_decision"]
+            managed_lineage_ref = cfg["managed_lineage_ref"]
+            managed_attempt_id = cfg["managed_attempt_id"]
+        else:
+            native_shell_capture_decision = None
+            managed_lineage_ref = None
+            managed_attempt_id = None
         projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
         if output_format != OutputFormat.JSON:
             logger.warning("codex_output_format_coerced")
@@ -1268,12 +1272,18 @@ class CodexBackend(BackendCmdBuilderBase):
             extras.setdefault(
                 "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(stream_idle_timeout_ms / 1000)
             )
-
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         env = CodexEnvPolicy().build_env(
             filtered_base,
             extras=extras,
             required=SKILL_SESSION_REQUIRED_ENV | {MCP_CLIENT_BACKEND_ENV_VAR},
+        )
+        env.update(
+            _managed_native_shell_env(
+                decision=native_shell_capture_decision,
+                lineage_ref=managed_lineage_ref,
+                attempt_id=managed_attempt_id,
+            )
         )
 
         _net_overrides: list[str] = []
@@ -1325,6 +1335,9 @@ class CodexBackend(BackendCmdBuilderBase):
         allowed_write_prefixes: tuple[str, ...] = (),
         sentinel_contract: str = "",
         resume_message: str | None = None,
+        native_shell_capture_decision: NativeShellCaptureDecision | None = None,
+        managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
+        managed_attempt_id: str | None = None,
     ) -> CmdSpec:
         projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
         if output_format != OutputFormat.STREAM_JSON:
@@ -1384,12 +1397,18 @@ class CodexBackend(BackendCmdBuilderBase):
             extras.setdefault(
                 "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(stream_idle_timeout_ms / 1000)
             )
-
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         env = CodexEnvPolicy().build_env(
             filtered_base,
             extras=extras,
             required=ORCHESTRATOR_SESSION_REQUIRED_ENV | {MCP_CLIENT_BACKEND_ENV_VAR},
+        )
+        env.update(
+            _managed_native_shell_env(
+                decision=native_shell_capture_decision,
+                lineage_ref=managed_lineage_ref,
+                attempt_id=managed_attempt_id,
+            )
         )
 
         cmd = _codex_exec_base(
@@ -1533,6 +1552,9 @@ class CodexBackend(BackendCmdBuilderBase):
         output_format: OutputFormat = OutputFormat.JSON,
         plugin_binding: PluginLaunchBinding | None = None,
         env_extras: Mapping[str, str] | None = None,
+        native_shell_capture_decision: NativeShellCaptureDecision | None = None,
+        managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
+        managed_attempt_id: str | None = None,
     ) -> CmdSpec:
         if not resume_session_id.strip():
             msg = "resume_session_id must be a non-empty string"
@@ -1553,6 +1575,13 @@ class CodexBackend(BackendCmdBuilderBase):
             filtered_base,
             extras=resume_extras,
             required=RESUME_SESSION_BASELINE_KEYS | {MCP_CLIENT_BACKEND_ENV_VAR},
+        )
+        env.update(
+            _managed_native_shell_env(
+                decision=native_shell_capture_decision,
+                lineage_ref=managed_lineage_ref,
+                attempt_id=managed_attempt_id,
+            )
         )
         return CmdSpec(
             cmd=tuple(cmd),

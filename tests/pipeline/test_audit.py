@@ -75,6 +75,42 @@ class TestFailureRecord:
         assert d["skill_command"] == "/foo"
         assert d["exit_code"] == 1
 
+    def test_to_dict_excludes_native_shell_execution_details(self) -> None:
+        record = _make_record()
+        launch_id = "a" * 32
+        attempt_id = "b" * 32
+        secret_placeholder = "<openai-api-key-placeholder>"
+        record.__dict__.update(
+            native_shell_capture={
+                "requested_mode": "direct",
+                "effective_mode": "direct",
+                "attributions": [
+                    "launch_authorized_direct",
+                    "project_policy_disabled",
+                ],
+                "launch_id": launch_id,
+                "attempt_id": attempt_id,
+            },
+            child_env={
+                "AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE": "direct",
+                "OPENAI_API_KEY": secret_placeholder,
+            },
+        )
+
+        serialized = json.dumps(record.to_dict(), sort_keys=True)
+        for forbidden in (
+            "native_shell_capture",
+            "requested_mode",
+            "effective_mode",
+            "attributions",
+            launch_id,
+            attempt_id,
+            "AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE",
+            "OPENAI_API_KEY",
+            secret_placeholder,
+        ):
+            assert forbidden not in serialized
+
 
 class TestDefaultAuditLog:
     def test_initially_empty(self):

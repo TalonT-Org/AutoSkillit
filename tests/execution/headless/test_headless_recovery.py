@@ -7,11 +7,44 @@ from unittest.mock import Mock
 
 import pytest
 
-from autoskillit.core import CmdSpec, PluginLoadMode, RetryReason, SkillResult
+from autoskillit.core import (
+    CmdSpec,
+    ManagedHeadlessSessionKind,
+    NativeShellCaptureMode,
+    PluginLoadMode,
+    RetryReason,
+    SkillResult,
+    resolve_native_shell_capture_decision,
+)
 from autoskillit.core.types import KillReason, SubprocessResult, TerminationReason
 from autoskillit.core.types._type_results import WriteEvidence
+from autoskillit.execution.headless._managed import _ManagedLineageObserver
+from tests.fakes import FakeManagedHeadlessSessionLineageStore
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+def _managed_observer(tmp_path: Path):
+    anchor = tmp_path / "managed-lineage"
+    anchor.mkdir()
+    store = FakeManagedHeadlessSessionLineageStore()
+    decision = resolve_native_shell_capture_decision(NativeShellCaptureMode.DIRECT)
+    lineage = store.create(
+        lineage_anchor=anchor,
+        launch_id="a" * 32,
+        decision=decision,
+        backend="codex",
+        session_kind=ManagedHeadlessSessionKind.SKILL,
+    )
+    observer = _ManagedLineageObserver.create(
+        store=store,
+        decision=decision,
+        reference=lineage.reference,
+        backend="codex",
+        session_kind=ManagedHeadlessSessionKind.SKILL,
+    )
+    assert observer is not None
+    return store, observer
 
 
 class TestNudgePtyMode:
@@ -208,8 +241,10 @@ class TestNudgePtyMode:
             inherited_fds=(91,),
         )
         parser = Mock()
-        parsed = Mock(output=marker, raw={})
+        parsed = Mock(output=marker, raw={}, session_id="nudge-native-session")
         parser.parse_stdout.return_value = parsed
+        lineage_store, lineage_observer = _managed_observer(tmp_path)
+        initial_attempt_id = lineage_observer.allocate_attempt()
         result = await _attempt_contract_nudge(
             skill_result=SkillResult(
                 success=False,
@@ -241,6 +276,7 @@ class TestNudgePtyMode:
             plugin_authority=authority,
             plugin_load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
             provider_extras={"ANTHROPIC_API_KEY": "fallback"},
+            managed_lineage_observer=lineage_observer,
         )
 
         assert result is not None and result.success is True
@@ -250,6 +286,14 @@ class TestNudgePtyMode:
         call_kwargs = backend.build_resume_cmd.call_args.kwargs
         assert call_kwargs["plugin_binding"] is authority.binding
         assert call_kwargs["env_extras"]["ANTHROPIC_API_KEY"] == "fallback"
+        assert call_kwargs["native_shell_capture_decision"] is lineage_observer.decision
+        assert call_kwargs["managed_lineage_ref"] is lineage_observer.reference
+        nudge_attempt_id = call_kwargs["managed_attempt_id"]
+        assert nudge_attempt_id != initial_attempt_id
+        assert lineage_store.load_reference(lineage_observer.reference).attempt_ids == (
+            initial_attempt_id,
+            nudge_attempt_id,
+        )
         assert runner.call_args_list[0][3]["pass_fds"] == (91,)
 
 

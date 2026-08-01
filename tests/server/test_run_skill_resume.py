@@ -3,13 +3,113 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
+from autoskillit.core import (
+    ManagedHeadlessSessionKind,
+    ManagedHeadlessSessionLineage,
+    ManagedHeadlessSessionLineageStatus,
+    ManagedHeadlessSessionLineageStore,
+    NativeShellCaptureMode,
+    NativeShellCaptureReason,
+    resolve_native_shell_capture_decision,
+)
+from autoskillit.execution import (
+    DefaultManagedHeadlessSessionLineageStore,
+    DefaultSkillSessionContractStore,
+    get_backend,
+)
+from autoskillit.server.tools._native_shell_capture import (
+    prepare_skill_native_shell_lineage,
+    rebind_verified_final_session,
+)
 from autoskillit.server.tools.tools_execution import run_skill
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+
+def _seed_skill_lineage(
+    store: ManagedHeadlessSessionLineageStore,
+    *,
+    anchor: Path,
+    backend_name: str,
+    session_id: str,
+    mode: NativeShellCaptureMode = NativeShellCaptureMode.DIRECT,
+) -> ManagedHeadlessSessionLineage:
+    lineage = store.create(
+        lineage_anchor=anchor,
+        launch_id="a" * 32,
+        decision=resolve_native_shell_capture_decision(mode),
+        backend=backend_name,
+        session_kind=ManagedHeadlessSessionKind.SKILL,
+    )
+    return store.bind_final_native_session_id(
+        lineage_anchor=anchor,
+        launch_id=lineage.launch_id,
+        session_id=session_id,
+        expected_generation=lineage.generation,
+        expected_record_digest=lineage.record_digest,
+    )
+
+
+def _attach_lineage_reference(
+    store: DefaultSkillSessionContractStore,
+    *,
+    session_id: str,
+    lineage: ManagedHeadlessSessionLineage,
+) -> None:
+    entry = store._session_path(session_id)  # noqa: SLF001
+    manifest = store._read_manifest(entry)  # noqa: SLF001
+    manifest["managed_lineage_ref"] = lineage.reference.to_dict()
+    store._write_manifest(entry, manifest)  # noqa: SLF001
+
+
+def test_verified_changed_resume_rebinds_lineage_index_and_contract_callback(
+    tmp_path: Path,
+) -> None:
+    store = DefaultManagedHeadlessSessionLineageStore()
+    lineage = _seed_skill_lineage(
+        store,
+        anchor=tmp_path,
+        backend_name="codex",
+        session_id="old-final",
+    )
+    lineage = store.bind_candidate_native_session_id(
+        lineage_anchor=tmp_path,
+        launch_id=lineage.launch_id,
+        session_id="new-final",
+        expected_generation=lineage.generation,
+        expected_record_digest=lineage.record_digest,
+    )
+    backend = MagicMock()
+    backend.capabilities.session_dir_persistent = True
+    rebound_contracts: list[tuple[str, object]] = []
+
+    rebind_verified_final_session(
+        store=store,
+        backend=backend,
+        reference=lineage.reference,
+        is_resume=True,
+        requested_session_id="old-final",
+        returned_session_id="new-final",
+        on_rebind=lambda session_id, reference: rebound_contracts.append((session_id, reference)),
+    )
+
+    rebound = store.find_by_final_native_session_id(
+        lineage_anchor=tmp_path,
+        session_id="new-final",
+    )
+    assert rebound.final_native_session_id == "new-final"
+    with pytest.raises(FileNotFoundError):
+        store.find_by_final_native_session_id(
+            lineage_anchor=tmp_path,
+            session_id="old-final",
+        )
+    assert rebound_contracts == [("new-final", lineage.reference)]
 
 
 def test_contract_lifecycle_cleans_provisional_and_failed_bound_state() -> None:
@@ -51,6 +151,315 @@ async def test_resume_session_id_threaded_to_executor(tool_ctx_kitchen_open, mon
 
     assert len(executor.calls) == 1
     assert executor.calls[0].resume_session_id == "sess-123"
+
+
+@pytest.mark.anyio
+async def test_resume_conflicting_mode_inherits_persisted_lineage(
+    tool_ctx_kitchen_open,
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """A valid persisted decision wins over a conflicting resume argument."""
+    import structlog.testing
+
+    from tests.conftest import bind_test_skill_resume_contract
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    session_id = "persisted-direct"
+    backend_name = tool_ctx_kitchen_open.backend.name
+    lineage = _seed_skill_lineage(
+        tool_ctx_kitchen_open.managed_headless_session_lineage_store,
+        anchor=tmp_path,
+        backend_name=backend_name,
+        session_id=session_id,
+    )
+    bind_test_skill_resume_contract(
+        tool_ctx_kitchen_open,
+        session_id=session_id,
+        cwd=tmp_path,
+    )
+    _attach_lineage_reference(
+        tool_ctx_kitchen_open.skill_session_contract_store,
+        session_id=session_id,
+        lineage=lineage,
+    )
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    with structlog.testing.capture_logs() as logs:
+        result = json.loads(
+            await run_skill(
+                "/implement",
+                str(tmp_path),
+                resume_session_id=session_id,
+                native_shell_capture_mode="capture",
+            )
+        )
+
+    assert result["success"] is True
+    assert len(executor.calls) == 1
+    call = executor.calls[0]
+    assert call.native_shell_capture_decision == lineage.decision
+    assert call.managed_lineage_ref == lineage.reference
+    diagnostic = next(
+        entry
+        for entry in logs
+        if entry.get("event") == "native_shell_capture_resume_override_rejected"
+    )
+    assert {
+        "requested_mode": diagnostic["requested_mode"],
+        "inherited_mode": diagnostic["inherited_mode"],
+        "reason": diagnostic["reason"],
+        "lineage_status": diagnostic["lineage_status"],
+        "resume_session_id": diagnostic["resume_session_id"],
+    } == {
+        "requested_mode": NativeShellCaptureMode.CAPTURE.value,
+        "inherited_mode": NativeShellCaptureMode.DIRECT.value,
+        "reason": NativeShellCaptureReason.RESUME_OVERRIDE_REJECTED.value,
+        "lineage_status": ManagedHeadlessSessionLineageStatus.OVERRIDE_REJECTED.value,
+        "resume_session_id": session_id,
+    }
+
+
+@pytest.mark.anyio
+async def test_resume_missing_lineage_falls_back_to_capture(
+    tool_ctx_kitchen_open,
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Requested direct cannot survive a resume contract with no lineage."""
+    import structlog.testing
+
+    from tests.conftest import bind_test_skill_resume_contract
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    session_id = "missing-lineage"
+    tool_ctx_kitchen_open.backend = get_backend("codex")
+    bind_test_skill_resume_contract(
+        tool_ctx_kitchen_open,
+        session_id=session_id,
+        cwd=tmp_path,
+    )
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    with structlog.testing.capture_logs() as logs:
+        result = json.loads(
+            await run_skill(
+                "/implement",
+                str(tmp_path),
+                resume_session_id=session_id,
+                native_shell_capture_mode="direct",
+            )
+        )
+
+    assert result["success"] is True
+    decision = executor.calls[0].native_shell_capture_decision
+    assert decision is not None
+    assert decision.mode is NativeShellCaptureMode.CAPTURE
+    assert decision.reason is NativeShellCaptureReason.INVALID_LINEAGE
+    assert decision.lineage_status is ManagedHeadlessSessionLineageStatus.MISSING
+    fallback_reference = executor.calls[0].managed_lineage_ref
+    assert fallback_reference is not None
+    fallback_lineage = tool_ctx_kitchen_open.managed_headless_session_lineage_store.load_reference(
+        fallback_reference
+    )
+    assert fallback_lineage.decision == decision
+    assert fallback_lineage.final_native_session_id is None
+    diagnostic = next(
+        entry
+        for entry in logs
+        if entry.get("event") == "native_shell_capture_resume_lineage_invalid"
+    )
+    assert diagnostic["requested_mode"] == NativeShellCaptureMode.DIRECT.value
+    assert diagnostic["effective_mode"] == NativeShellCaptureMode.CAPTURE.value
+    assert diagnostic["reason"] == NativeShellCaptureReason.INVALID_LINEAGE.value
+    assert diagnostic["lineage_status"] == ManagedHeadlessSessionLineageStatus.MISSING.value
+    assert diagnostic["resume_session_id"] == session_id
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_status"),
+    [
+        (FileNotFoundError("missing"), ManagedHeadlessSessionLineageStatus.MISSING),
+        (ValueError("bad JSON"), ManagedHeadlessSessionLineageStatus.CORRUPT),
+        (
+            ValueError("unsupported managed lineage schema"),
+            ManagedHeadlessSessionLineageStatus.UNSUPPORTED,
+        ),
+        (
+            ValueError("managed lineage anchor identity mismatch"),
+            ManagedHeadlessSessionLineageStatus.IDENTITY_MISMATCH,
+        ),
+    ],
+    ids=("missing", "corrupt", "unsupported", "stored-identity"),
+)
+def test_resume_lineage_load_failure_falls_back_to_capture(
+    tmp_path: Path,
+    error: Exception,
+    expected_status: ManagedHeadlessSessionLineageStatus,
+) -> None:
+    """Every untrusted store failure maps to a closed capture decision."""
+    import structlog.testing
+
+    lineage_store = DefaultManagedHeadlessSessionLineageStore()
+    reference_store = MagicMock(wraps=lineage_store)
+    valid = _seed_skill_lineage(
+        lineage_store,
+        anchor=tmp_path,
+        backend_name="codex",
+        session_id="native-session",
+    )
+    reference_store.load_reference.side_effect = error
+    backend = MagicMock()
+    backend.name = "codex"
+    backend.capabilities.session_dir_persistent = True
+
+    with structlog.testing.capture_logs() as logs:
+        preparation = prepare_skill_native_shell_lineage(
+            store=reference_store,
+            backend=backend,
+            lineage_anchor=tmp_path,
+            stored_reference=valid.reference,
+            resume_session_id="native-session",
+            requested_mode="direct",
+            is_resume=True,
+        )
+
+    assert preparation.decision is not None
+    assert preparation.decision.mode is NativeShellCaptureMode.CAPTURE
+    assert preparation.decision.reason is NativeShellCaptureReason.INVALID_LINEAGE
+    assert preparation.decision.lineage_status is expected_status
+    assert preparation.reference is not None
+    fallback = lineage_store.load_reference(preparation.reference)
+    assert fallback.decision == preparation.decision
+    assert fallback.final_native_session_id is None
+    diagnostic = next(
+        entry
+        for entry in logs
+        if entry.get("event") == "native_shell_capture_resume_lineage_invalid"
+    )
+    assert diagnostic["lineage_status"] == expected_status.value
+
+
+@pytest.mark.parametrize(
+    ("mismatch", "expected_status"),
+    [
+        ("session-kind", ManagedHeadlessSessionLineageStatus.UNSUPPORTED),
+        ("anchor", ManagedHeadlessSessionLineageStatus.IDENTITY_MISMATCH),
+        ("backend", ManagedHeadlessSessionLineageStatus.IDENTITY_MISMATCH),
+        ("backend-unavailable", ManagedHeadlessSessionLineageStatus.IDENTITY_MISMATCH),
+        ("launch", ManagedHeadlessSessionLineageStatus.LAUNCH_MISMATCH),
+        ("dispatch", ManagedHeadlessSessionLineageStatus.DISPATCH_MISMATCH),
+        ("native-session", ManagedHeadlessSessionLineageStatus.NATIVE_SESSION_MISMATCH),
+        ("candidate-only", ManagedHeadlessSessionLineageStatus.NATIVE_SESSION_MISMATCH),
+    ],
+)
+def test_resume_lineage_identity_mismatch_falls_back_to_capture(
+    tmp_path: Path,
+    mismatch: str,
+    expected_status: ManagedHeadlessSessionLineageStatus,
+) -> None:
+    """Every resume identity dimension fails safe without blocking execution."""
+    import structlog.testing
+
+    actual_store = DefaultManagedHeadlessSessionLineageStore()
+    lineage = _seed_skill_lineage(
+        actual_store,
+        anchor=tmp_path,
+        backend_name="codex",
+        session_id="native-session",
+    )
+    reference = lineage.reference
+    backend = MagicMock()
+    backend.name = "codex"
+    backend.capabilities.session_dir_persistent = True
+    if mismatch == "session-kind":
+        lineage = replace(lineage, session_kind=ManagedHeadlessSessionKind.FOOD_TRUCK)
+    elif mismatch == "anchor":
+        lineage = replace(lineage, lineage_anchor=str(tmp_path / "other"))
+    elif mismatch == "backend":
+        lineage = replace(lineage, backend="claude-code")
+    elif mismatch == "backend-unavailable":
+        backend = None
+    elif mismatch == "launch":
+        lineage = replace(lineage, launch_id="b" * 32)
+    elif mismatch == "dispatch":
+        lineage = replace(lineage, dispatch_id="dispatch-id")
+    elif mismatch == "native-session":
+        lineage = replace(lineage, final_native_session_id="different-session")
+    elif mismatch == "candidate-only":
+        lineage = replace(lineage, final_native_session_id=None)
+    store = MagicMock(wraps=actual_store)
+    store.load_reference.return_value = lineage
+
+    with structlog.testing.capture_logs() as logs:
+        preparation = prepare_skill_native_shell_lineage(
+            store=store,
+            backend=backend,
+            lineage_anchor=tmp_path,
+            stored_reference=reference,
+            resume_session_id="native-session",
+            requested_mode="direct",
+            is_resume=True,
+        )
+
+    if backend is None:
+        assert preparation.decision is None
+        assert preparation.reference is None
+    else:
+        assert preparation.decision is not None
+        assert preparation.decision.mode is NativeShellCaptureMode.CAPTURE
+        assert preparation.decision.lineage_status is expected_status
+        assert preparation.reference is not None
+        fallback = actual_store.load_reference(preparation.reference)
+        assert fallback.decision == preparation.decision
+        assert fallback.final_native_session_id is None
+    diagnostic = next(
+        entry
+        for entry in logs
+        if entry.get("event") == "native_shell_capture_resume_lineage_invalid"
+    )
+    assert diagnostic["lineage_status"] == expected_status.value
+
+
+def test_valid_resume_without_override_records_inherited_diagnostic(tmp_path: Path) -> None:
+    """A valid resume with no caller mode keeps the persisted decision."""
+    import structlog.testing
+
+    actual_store = DefaultManagedHeadlessSessionLineageStore()
+    lineage = _seed_skill_lineage(
+        actual_store,
+        anchor=tmp_path,
+        backend_name="codex",
+        session_id="native-session",
+    )
+    store = MagicMock()
+    store.load_reference.return_value = lineage
+    backend = MagicMock()
+    backend.name = "codex"
+
+    with structlog.testing.capture_logs() as logs:
+        preparation = prepare_skill_native_shell_lineage(
+            store=store,
+            backend=backend,
+            lineage_anchor=tmp_path,
+            stored_reference=lineage.reference,
+            resume_session_id="native-session",
+            requested_mode="",
+            is_resume=True,
+        )
+
+    assert preparation.decision == lineage.decision
+    assert preparation.reference == lineage.reference
+    diagnostic = next(
+        entry for entry in logs if entry.get("event") == "native_shell_capture_resume_inherited"
+    )
+    assert diagnostic["mode"] == NativeShellCaptureMode.DIRECT.value
+    assert diagnostic["reason"] == NativeShellCaptureReason.RESUME_INHERITED.value
+    assert diagnostic["lineage_status"] == ManagedHeadlessSessionLineageStatus.VALID.value
 
 
 @pytest.mark.anyio

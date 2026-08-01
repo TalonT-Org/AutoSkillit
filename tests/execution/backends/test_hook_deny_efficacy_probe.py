@@ -8,7 +8,6 @@ these results.
 
 from __future__ import annotations
 
-import base64
 import copy
 import json
 import os
@@ -23,6 +22,7 @@ import pytest
 
 from autoskillit.execution.backends._codex_hooks import generate_codex_hooks_config
 from autoskillit.hook_registry import HOOK_REGISTRY, HOOKS_DIR
+from autoskillit.hooks._capture_contract import decode_capture_request
 from tests.execution.backends.conftest import (
     _SKIP_CODEX,
     BACKENDS,
@@ -375,10 +375,9 @@ def test_shell_capture_hook_is_input_rewrite_and_excluded_from_deny_matrix(
     )
     assert argv[runner_index - 2] == sys.executable
     assert argv[runner_index - 1] == "-I"
-    assert argv[runner_index + 1] == "run"
-    assert (
-        base64.b64decode(argv[runner_index + 2], validate=True).decode()
-        == _OUTPUT_BUDGET_PROBE_COMMAND
-    )
-    assert argv[runner_index + 3] == str(tmp_path)
-    assert re.fullmatch(r"[0-9a-f]{16}", argv[runner_index + 4])
+    assert runner_index + 2 == len(argv)
+    request = decode_capture_request(argv[runner_index + 1])
+    assert request.action == "run"
+    assert request.command == _OUTPUT_BUDGET_PROBE_COMMAND
+    assert request.cwd == str(tmp_path)
+    assert re.fullmatch(r"[0-9a-f]{16}", request.capture_id)

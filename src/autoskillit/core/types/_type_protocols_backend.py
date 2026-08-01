@@ -20,6 +20,10 @@ from ._type_backend import (
 )
 from ._type_checkpoint import SessionCheckpoint
 from ._type_enums import ObserverStatus, OutputFormat
+from ._type_native_shell_capture import (
+    ManagedHeadlessSessionLineageRef,
+    NativeShellCaptureDecision,
+)
 from ._type_plugin_source import PluginLaunchBinding
 from ._type_results import ValidatedAddDir
 from ._type_resume import NoResume, ResumeSpec
@@ -150,6 +154,9 @@ class CodingAgentBackend(Protocol):
         output_format: OutputFormat = OutputFormat.JSON,
         plugin_binding: PluginLaunchBinding | None = None,
         env_extras: Mapping[str, str] | None = None,
+        native_shell_capture_decision: NativeShellCaptureDecision | None = None,
+        managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
+        managed_attempt_id: str | None = None,
     ) -> CmdSpec: ...
 
     def build_skill_session_cmd(
@@ -179,6 +186,9 @@ class CodingAgentBackend(Protocol):
         allowed_write_prefixes: tuple[str, ...] = (),
         sentinel_contract: str = "",
         resume_message: str | None = None,
+        native_shell_capture_decision: NativeShellCaptureDecision | None = None,
+        managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
+        managed_attempt_id: str | None = None,
     ) -> CmdSpec: ...
 
     def build_interactive_cmd(

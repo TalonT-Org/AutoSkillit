@@ -216,6 +216,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_inspector": frozenset({"core", "execution"}),
     "_type_intake_policy": frozenset({"core", "execution"}),
     "_type_invariant_registry": frozenset({"core"}),
+    "_type_native_shell_capture": frozenset(
+        {"cli", "core", "execution", "fleet", "pipeline", "server"}
+    ),
     "_install_detect": frozenset({"core", "cli", "config"}),
     "_linux_proc": frozenset({"core", "execution", "fleet", "cli"}),
     "_type_plugin_source": frozenset(
@@ -728,7 +731,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "execution/test_headless_result_write_reconciliation.py",
             "execution/test_planner_write_isolation.py",
             "execution/test_session_log_flush.py",
-            # execution/ — fixture-mediated pipeline dependents (16 files):
+            # execution/ — fixture-mediated pipeline dependents (18 files):
             # These use minimal_ctx or tool_ctx fixtures which import
             # autoskillit.pipeline at call time. Validated by REQ-GUARD-007.
             "execution/test_backend_dispatch.py",
@@ -745,6 +748,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "execution/test_headless_provider_fallback.py",
             "execution/test_headless_synthesis.py",
             "execution/test_idle_output_env.py",
+            "execution/test_managed_headless_attempt.py",
             "execution/test_write_evidence.py",
             "execution/test_zero_write_detection.py",
             "execution/test_session_log_fields.py",

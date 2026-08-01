@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import base64
 import io
 import json
-import re
 import shlex
 import subprocess
 import sys
@@ -14,7 +12,20 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.hooks._capture_contract import _MAX_COMMAND_BYTES, parse_capture_v2
+from autoskillit.hooks._capture_contract import (
+    _MAX_COMMAND_BYTES,
+    CAPTURE_REQUEST_PROTOCOL_VERSION,
+    MANAGED_ATTEMPT_ID_ENV_VAR,
+    MANAGED_LAUNCH_ID_ENV_VAR,
+    MANAGED_LINEAGE_DIGEST_ENV_VAR,
+    MANAGED_LINEAGE_REF_ENV_VAR,
+    NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
+    CaptureLineageRef,
+    CaptureRequest,
+    canonical_json_bytes,
+    decode_capture_request,
+    parse_capture_v2,
+)
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -55,12 +66,52 @@ def _runner_argv(command: str) -> list[str]:
     return shlex.split(lines[-1])
 
 
-def _transported_command(command: str) -> str:
+def _runner_request(command: str) -> CaptureRequest:
     argv = _runner_argv(command)
     assert argv[1] == "-I"
     assert Path(argv[2]).name == "_capture_artifacts.py"
-    assert argv[3] == "run"
-    return base64.b64decode(argv[4], validate=True).decode()
+    assert len(argv) == 4
+    return decode_capture_request(argv[3])
+
+
+def _transported_command(command: str) -> str:
+    request = _runner_request(command)
+    assert request.action == "run"
+    assert request.command is not None
+    return request.command
+
+
+def _set_managed_controls(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    mode: str,
+) -> CaptureLineageRef:
+    reference = CaptureLineageRef(
+        schema_version=1,
+        launch_id="a" * 32,
+        lineage_digest="b" * 64,
+        lineage_anchor="/managed/lineage/anchor",
+        anchor_device=12,
+        anchor_inode=34,
+    )
+    monkeypatch.setenv(NATIVE_SHELL_CAPTURE_MODE_ENV_VAR, mode)
+    monkeypatch.setenv(MANAGED_LAUNCH_ID_ENV_VAR, reference.launch_id)
+    monkeypatch.setenv(MANAGED_ATTEMPT_ID_ENV_VAR, "c" * 32)
+    monkeypatch.setenv(MANAGED_LINEAGE_DIGEST_ENV_VAR, reference.lineage_digest)
+    monkeypatch.setenv(
+        MANAGED_LINEAGE_REF_ENV_VAR,
+        canonical_json_bytes(
+            {
+                "schema_version": reference.schema_version,
+                "launch_id": reference.launch_id,
+                "lineage_digest": reference.lineage_digest,
+                "lineage_anchor": reference.lineage_anchor,
+                "anchor_device": reference.anchor_device,
+                "anchor_inode": reference.anchor_inode,
+            }
+        ).decode("ascii"),
+    )
+    return reference
 
 
 def test_silent_off_codex(monkeypatch):
@@ -81,6 +132,64 @@ def test_rewrites_on_codex_env(monkeypatch):
     assert _SENTINEL in command
     assert _transported_command(command) == "echo hello"
     assert "echo hello" in command
+    request = _runner_request(command)
+    assert request.mode == "capture"
+    assert request.attempt_id is None
+    assert request.lineage_ref is None
+    assert "using capture" in payload["hookSpecificOutput"]["additionalContext"]
+
+
+def test_valid_direct_controls_are_bound_into_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reference = _set_managed_controls(monkeypatch, mode="direct")
+
+    output = _run_hook(
+        _build_event("echo direct"),
+        monkeypatch,
+        env_backend="codex",
+    )
+    payload = json.loads(output)
+    request = _runner_request(_updated_command(output))
+
+    assert request.mode == "direct"
+    assert request.attempt_id == "c" * 32
+    assert request.lineage_ref == reference
+    assert "additionalContext" not in payload["hookSpecificOutput"]
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        (NATIVE_SHELL_CAPTURE_MODE_ENV_VAR, "invalid"),
+        (MANAGED_LAUNCH_ID_ENV_VAR, "d" * 32),
+        (MANAGED_ATTEMPT_ID_ENV_VAR, "invalid"),
+        (MANAGED_LINEAGE_DIGEST_ENV_VAR, "e" * 64),
+        (MANAGED_LINEAGE_REF_ENV_VAR, '{"not":"canonical lineage"}'),
+    ],
+)
+def test_invalid_or_mismatched_controls_fall_back_atomically_to_capture(
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    value: str,
+) -> None:
+    _set_managed_controls(monkeypatch, mode="direct")
+    monkeypatch.setenv(name, value)
+
+    output = _run_hook(
+        _build_event("echo fallback"),
+        monkeypatch,
+        env_backend="codex",
+    )
+    payload = json.loads(output)
+    request = _runner_request(_updated_command(output))
+
+    assert request.mode == "capture"
+    assert request.attempt_id is None
+    assert request.lineage_ref is None
+    diagnostic = payload["hookSpecificOutput"]["additionalContext"]
+    assert "using capture" in diagnostic
+    assert len(diagnostic.encode("utf-8")) <= 160
 
 
 def test_rewrites_on_turn_id_payload(monkeypatch):
@@ -128,10 +237,11 @@ def test_verified_disabled_policy_is_runner_owned(monkeypatch, tmp_path):
     assert argv[0] == sys.executable
     assert argv[1] == "-I"
     assert Path(argv[2]).name == "_capture_artifacts.py"
-    assert argv[3] == "run"
-    assert base64.b64decode(argv[4], validate=True).decode() == "echo hello"
-    assert argv[5] == str(tmp_path)
-    assert re.fullmatch(r"[0-9a-f]{16}", argv[6])
+    request = decode_capture_request(argv[3])
+    assert request.action == "run"
+    assert request.command == "echo hello"
+    assert request.cwd == str(tmp_path)
+    assert len(request.capture_id) == 16
 
     completed = subprocess.run(
         ["bash", "-c", command],
@@ -152,6 +262,14 @@ def test_malformed_stdin_fails_open(monkeypatch):
     assert _run_hook("not json", monkeypatch, env_backend="codex") == ""
 
 
+@pytest.mark.parametrize("serialized", ["[]", "null", "42", '"event"'])
+def test_non_mapping_hook_payload_fails_open(
+    monkeypatch: pytest.MonkeyPatch,
+    serialized: str,
+) -> None:
+    assert _run_hook(serialized, monkeypatch, env_backend="codex") == ""
+
+
 def test_missing_cwd_fails_open(monkeypatch):
     event = {"tool_input": {"command": "echo hello"}}
     assert _run_hook(event, monkeypatch, env_backend="codex") == ""
@@ -165,6 +283,15 @@ def test_non_string_command_fails_open(monkeypatch):
     assert _run_hook(event, monkeypatch, env_backend="codex") == ""
 
 
+@pytest.mark.parametrize("tool_input", [None, [], "command", 42])
+def test_non_mapping_tool_input_fails_open_without_crashing(
+    monkeypatch: pytest.MonkeyPatch,
+    tool_input: object,
+) -> None:
+    event = {"cwd": "/abs/project", "tool_input": tool_input}
+    assert _run_hook(event, monkeypatch, env_backend="codex") == ""
+
+
 @pytest.mark.parametrize("command", ["x" * (_MAX_COMMAND_BYTES + 1), "printf bad\x00command"])
 def test_invalid_command_transport_builds_nonexecuting_rejection(command):
     from autoskillit.hooks.shell_capture_hook import _build_harness
@@ -172,8 +299,36 @@ def test_invalid_command_transport_builds_nonexecuting_rejection(command):
     harness = _build_harness(command, "/abs/project", "0123456789abcdef")
     argv = _runner_argv(harness)
 
-    assert argv[3:] == ["reject", "", "/abs/project", "0123456789abcdef"]
+    request = decode_capture_request(argv[3])
+    assert request == CaptureRequest(
+        protocol_version=CAPTURE_REQUEST_PROTOCOL_VERSION,
+        action="reject",
+        mode="capture",
+        attempt_id=None,
+        lineage_ref=None,
+        cwd="/abs/project",
+        capture_id="0123456789abcdef",
+    )
     assert command not in harness
+
+
+def test_reject_envelope_retains_valid_managed_direct_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reference = _set_managed_controls(monkeypatch, mode="direct")
+
+    output = _run_hook(
+        _build_event("x" * (_MAX_COMMAND_BYTES + 1)),
+        monkeypatch,
+        env_backend="codex",
+    )
+    request = _runner_request(_updated_command(output))
+
+    assert request.action == "reject"
+    assert request.mode == "direct"
+    assert request.attempt_id == "c" * 32
+    assert request.lineage_ref == reference
+    assert request.command is None
 
 
 def test_valid_command_remains_policy_visible_without_becoming_shell_code() -> None:
@@ -196,21 +351,21 @@ def test_arg_max_exhaustion_builds_nonexecuting_rejection(
     command = "printf must-not-run"
     cwd = "/abs/project"
     capture_id = "0123456789abcdef"
-    encoded = base64.b64encode(command.encode()).decode("ascii")
-    runner_argv = [
-        sys.executable,
-        "-I",
-        str(shell_capture_hook._runner_path()),
-        "run",
-        encoded,
-        cwd,
-        capture_id,
-    ]
-    preflight_harness = shell_capture_hook._render_harness(
-        runner_argv,
+    run_request = shell_capture_hook.CaptureRequest(
+        protocol_version=shell_capture_hook.CAPTURE_REQUEST_PROTOCOL_VERSION,
+        action="run",
+        mode="capture",
+        attempt_id=None,
+        lineage_ref=None,
+        cwd=cwd,
+        capture_id=capture_id,
+        command=command,
+    )
+    run_argv, run_harness = shell_capture_hook._request_harness(
+        run_request,
         policy_command=command,
     )
-    argv_candidates = (runner_argv, ["bash", "-c", preflight_harness])
+    run_candidates = (run_argv, ["bash", "-c", run_harness])
 
     def _argv_bytes(argv: list[str]) -> int:
         return sum(len(shell_capture_hook.os.fsencode(argument)) + 1 for argument in argv)
@@ -220,20 +375,16 @@ def test_arg_max_exhaustion_builds_nonexecuting_rejection(
         for key, value in shell_capture_hook.os.environ.items()
     )
     pointer_size = shell_capture_hook.struct.calcsize("P")
-    for argv in argv_candidates:
+    for argv in run_candidates:
         pointer_bytes = (len(argv) + len(shell_capture_hook.os.environ) + 2) * pointer_size
         assert shell_capture_hook._exec_footprint(argv) == (
             _argv_bytes(argv) + environment_bytes + pointer_bytes
         )
 
     arg_max = (
-        max(shell_capture_hook._exec_footprint(argv) for argv in argv_candidates)
+        max(shell_capture_hook._exec_footprint(argv) for argv in run_candidates)
         + shell_capture_hook._ARG_MAX_HEADROOM_BYTES
         - 1
-    )
-    assert all(
-        _argv_bytes(argv) + shell_capture_hook._ARG_MAX_HEADROOM_BYTES <= arg_max
-        for argv in argv_candidates
     )
     monkeypatch.setattr(shell_capture_hook.os, "sysconf", lambda _name: arg_max)
 
@@ -242,10 +393,39 @@ def test_arg_max_exhaustion_builds_nonexecuting_rejection(
         cwd,
         capture_id,
     )
-    argv = _runner_argv(harness)
+    request = _runner_request(harness)
 
-    assert argv[3:] == ["reject", "", cwd, capture_id]
+    assert request.action == "reject"
+    assert request.cwd == cwd
+    assert request.capture_id == capture_id
     assert command not in harness
+
+
+def test_environment_only_arg_max_exhaustion_uses_local_fail_closed_harness(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.hooks.shell_capture_hook as shell_capture_hook
+
+    monkeypatch.setenv("PHASE4_OVERSIZED_ENVIRONMENT", "x" * 8192)
+    environment_floor = shell_capture_hook._exec_footprint(
+        [sys.executable, "-I", str(shell_capture_hook._runner_path()), "request"]
+    )
+    monkeypatch.setattr(
+        shell_capture_hook.os,
+        "sysconf",
+        lambda _name: environment_floor + shell_capture_hook._ARG_MAX_HEADROOM_BYTES - 1,
+    )
+
+    harness = shell_capture_hook._build_harness(
+        "printf must-not-run",
+        "/abs/project",
+        "0123456789abcdef",
+    )
+
+    assert harness.splitlines()[0] == _SENTINEL
+    assert harness.splitlines()[-1] == "exit 1"
+    assert "_capture_artifacts.py" not in harness
+    assert "must-not-run" not in harness
 
 
 def test_marker_provenance_is_emitted_by_runner(monkeypatch, tmp_path):
@@ -261,10 +441,11 @@ def test_marker_provenance_is_emitted_by_runner(monkeypatch, tmp_path):
     )
     command = _updated_command(output)
     argv = _runner_argv(command)
+    request = decode_capture_request(argv[3])
 
     assert argv[1] == "-I"
     assert Path(argv[2]).name == "_capture_artifacts.py"
-    assert re.fullmatch(r"[0-9a-f]{16}", argv[-1])
+    assert len(request.capture_id) == 16
     assert "printf 0123456789abcdef" in command
     assert "AutoSkillit hook shell_capture_hook" not in command
     assert "`" not in command
@@ -287,4 +468,4 @@ def test_marker_provenance_is_emitted_by_runner(monkeypatch, tmp_path):
     parsed = parse_capture_v2(candidates[0])
     assert parsed.reference_status == "published"
     assert parsed.reference is not None
-    assert f"shell_{argv[-1]}.log" not in completed.stdout
+    assert f"shell_{request.capture_id}.log" not in completed.stdout

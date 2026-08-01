@@ -130,6 +130,7 @@ class TestModuleCascadeCore:
             "_type_inspector",
             "_type_intake_policy",
             "_type_invariant_registry",
+            "_type_native_shell_capture",
             "_type_phoropter",
             "_type_token",
             "_type_tradition_manifest",

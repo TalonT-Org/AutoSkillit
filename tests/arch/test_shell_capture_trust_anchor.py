@@ -179,8 +179,10 @@ def test_shell_capture_code_has_no_pathname_harness_or_cleanup() -> None:
     sources = {
         relative: _source(relative)
         for relative in (
+            "hooks/_capture_contract.py",
             "hooks/shell_capture_hook.py",
             "hooks/_capture_artifacts.py",
+            "hooks/_capture_process.py",
         )
     }
     violations = {}
@@ -197,6 +199,13 @@ def test_shell_capture_code_has_no_pathname_harness_or_cleanup() -> None:
     assert not redirection_violations, (
         f"capture-root pathname redirection reintroduced: {redirection_violations}"
     )
+
+
+def test_isolated_runner_never_reads_requested_mode_from_environment() -> None:
+    source = _source("hooks/_capture_artifacts.py")
+    assert "NATIVE_SHELL_CAPTURE_MODE_ENV_VAR" not in source
+    assert "AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE" not in source
+    assert "decode_capture_request" in source
 
 
 def test_capture_deletion_is_confined_to_lifecycle_transactions() -> None:

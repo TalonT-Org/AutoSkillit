@@ -10,9 +10,16 @@ from collections import deque
 
 import pytest
 
+from autoskillit.core import (
+    ManagedHeadlessSessionKind,
+    NativeShellCaptureMode,
+    resolve_native_shell_capture_decision,
+)
 from autoskillit.core.types import PluginLoadMode, RetryReason, SkillResult
 from autoskillit.execution.commands import ClaudeHeadlessCmd
+from autoskillit.execution.headless._managed import _ManagedLineageObserver
 from tests.execution.conftest import _mock_backend
+from tests.fakes import FakeManagedHeadlessSessionLineageStore
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -69,6 +76,29 @@ def _build_echo_spec(_binding, provider_extras):
         cmd=("echo", "test"),
         env=dict(provider_extras or {}),
     )
+
+
+def _managed_observer(tmp_path):
+    anchor = tmp_path / "managed-lineage"
+    anchor.mkdir()
+    store = FakeManagedHeadlessSessionLineageStore()
+    decision = resolve_native_shell_capture_decision(NativeShellCaptureMode.DIRECT)
+    lineage = store.create(
+        lineage_anchor=anchor,
+        launch_id="a" * 32,
+        decision=decision,
+        backend="codex",
+        session_kind=ManagedHeadlessSessionKind.SKILL,
+    )
+    observer = _ManagedLineageObserver.create(
+        store=store,
+        decision=decision,
+        reference=lineage.reference,
+        backend="codex",
+        session_kind=ManagedHeadlessSessionKind.SKILL,
+    )
+    assert observer is not None
+    return store, observer
 
 
 class _Binding:
@@ -152,10 +182,20 @@ class TestProviderFallbackLoop:
         minimal_ctx.runner = fake_runner
         minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
         authority = _Authority()
+        lineage_store, lineage_observer = _managed_observer(tmp_path)
+        lineage_coordinates: list[tuple[object, object, str]] = []
 
-        def build_spec(binding, provider_extras):
+        def build_spec(binding, provider_extras, managed_attempt_id):
             assert binding is not None
             assert binding.closed is False
+            assert managed_attempt_id is not None
+            lineage_coordinates.append(
+                (
+                    lineage_observer.decision,
+                    lineage_observer.reference,
+                    managed_attempt_id,
+                )
+            )
             return ClaudeHeadlessCmd(
                 cmd=("echo", "test"),
                 env=dict(provider_extras or {}),
@@ -173,6 +213,7 @@ class TestProviderFallbackLoop:
             provider_fallback_name="anthropic",
             plugin_authority=authority,
             plugin_load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+            managed_lineage_observer=lineage_observer,
         )
 
         assert call_count[0] == 2
@@ -187,6 +228,16 @@ class TestProviderFallbackLoop:
         ]
         assert result.provider.fallback_activated is True
         assert result.provider.provider_used == "anthropic"
+        assert len(lineage_coordinates) == 2
+        assert {decision for decision, _, _ in lineage_coordinates} == {lineage_observer.decision}
+        assert {reference for _, reference, _ in lineage_coordinates} == {
+            lineage_observer.reference
+        }
+        attempt_ids = tuple(attempt_id for _, _, attempt_id in lineage_coordinates)
+        assert len(set(attempt_ids)) == 2
+        persisted_lineage = lineage_store.load_reference(lineage_observer.reference)
+        assert persisted_lineage.attempt_ids == attempt_ids
+        assert persisted_lineage.final_native_session_id == "s2"
 
     @pytest.mark.anyio
     async def test_budget_exhausted_triggers_fallback(self, minimal_ctx, tmp_path, monkeypatch):

@@ -902,4 +902,5 @@ class SessionIndexEntry(TypedDict):
     outcome_fields: dict[str, int | str] | None
     outcome_invariant_violated: bool
     outcome_qualifier: str | None
+    native_shell_capture: dict[str, object] | None
     schema_version: int

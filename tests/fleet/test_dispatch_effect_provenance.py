@@ -210,7 +210,7 @@ def test_outcome_constructors_require_provenance() -> None:
         )
 
 
-def test_dispatch_record_persists_provenance_in_schema_v9() -> None:
+def test_dispatch_record_persists_provenance_in_schema_v10() -> None:
     tracker = DispatchProvenanceTracker(operation_id="operation-7")
     tracker.start(
         DispatchEffectName.DISPATCH_ALLOCATION,
@@ -229,6 +229,6 @@ def test_dispatch_record_persists_provenance_in_schema_v9() -> None:
 
     restored = DispatchRecord.from_dict(record.to_dict())
 
-    assert FLEET_STATE_SCHEMA_VERSION == 9
+    assert FLEET_STATE_SCHEMA_VERSION == 10
     assert restored.effect_provenance["operation_id"] == "operation-7"
     assert restored.effect_provenance["retry_disposition"] == "resume_by_identity"

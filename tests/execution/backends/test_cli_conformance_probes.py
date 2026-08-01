@@ -8,13 +8,10 @@ The original Codex schema probes also record ``CanaryState`` issue updates.
 
 from __future__ import annotations
 
-import base64
-import binascii
 import hashlib
 import json
 import os
 import pty
-import re
 import select
 import shlex
 import shutil
@@ -57,6 +54,12 @@ from autoskillit.execution.backends._probe_cache import (
 from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.hook_registry import generate_hooks_json
 from autoskillit.hooks._capture_artifacts import run_capture
+from autoskillit.hooks._capture_contract import (
+    CAPTURE_REQUEST_PROTOCOL_VERSION,
+    CaptureRequest,
+    decode_capture_request,
+    encode_capture_request,
+)
 from tests.execution.backends._conformance_assertions import (
     assert_boundary_spill_behavior,
     assert_config_schema,
@@ -867,20 +870,16 @@ def _parse_capture_runner(command: str) -> tuple[str, str] | None:
         runner_index = next(
             index for index, value in enumerate(argv) if value.endswith("_capture_artifacts.py")
         )
-        if argv[runner_index - 1] != "-I" or argv[runner_index + 1] != "run":
+        if argv[runner_index - 1] != "-I" or runner_index + 2 != len(argv):
             return None
-        encoded = argv[runner_index + 2]
-        capture_id = argv[runner_index + 4]
-        if re.fullmatch(r"[0-9a-f]{16}", capture_id) is None:
+        request = decode_capture_request(argv[runner_index + 1])
+        if request.action != "run" or request.command is None:
             return None
-        decoded = base64.b64decode(encoded, validate=True).decode()
-        return decoded, capture_id
+        return request.command, request.capture_id
     except (
         StopIteration,
         IndexError,
         ValueError,
-        binascii.Error,
-        UnicodeDecodeError,
     ):
         return None
 
@@ -957,11 +956,21 @@ def test_shell_capture_assertion_requires_completed_rewritten_command(
     )
     production_output = capfd.readouterr()
     assert production_output.err == ""
-    encoded = base64.b64encode(_OUTPUT_BUDGET_CANARY_COMMAND.encode()).decode()
+    encoded = encode_capture_request(
+        CaptureRequest(
+            protocol_version=CAPTURE_REQUEST_PROTOCOL_VERSION,
+            action="run",
+            mode="capture",
+            attempt_id=None,
+            lineage_ref=None,
+            cwd="/tmp/workspace",
+            capture_id=capture_id,
+            command=_OUTPUT_BUDGET_CANARY_COMMAND,
+        )
+    )
     rewritten_command = (
         "# autoskillit-shell-capture v1\n"
-        f"/usr/bin/python3 -I /opt/autoskillit/_capture_artifacts.py run {encoded} "
-        f"/tmp/workspace {capture_id}"
+        f"/usr/bin/python3 -I /opt/autoskillit/_capture_artifacts.py {encoded}"
     )
 
     def _output(

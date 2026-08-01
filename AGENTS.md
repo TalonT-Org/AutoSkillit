@@ -96,14 +96,14 @@ generic_automation_mcp/
 | `core/` | IL-0 | Foundation — types/, runtime/, paths, IO, feature flags (zero autoskillit imports) |
 | `config/` | IL-1 | `AutomationConfig` + Dynaconf loader + 29 leaf dataclasses |
 | `pipeline/` | IL-1 | Pipeline state — `ToolContext` DI, gate, audit log, telemetry |
-| `execution/` | IL-1 | Headless sessions (headless/, process/, merge_queue/, session/), backends/, CI/GitHub |
+| `execution/` | IL-1 | Headless sessions (headless/, headless/_managed/, process/, merge_queue/, session/), backends/, CI/GitHub |
 | `workspace/` | IL-1 | Clone management, worktrees, skill resolution |
 | `workspace/_projected_artifact/` | IL-1 | Projected plugin publication, exact validation, and lease ownership |
 | `planner/` | IL-1 | Progressive resolution planner — phases, assignments, WPs, validation |
 | `report/` | IL-1 | HTML report renderer — `renderer.py` uses `pkg_root()` for asset resolution |
 | `recipe/` | IL-2 | Recipe schema, validation, semantic rules/ (campaign/, ci/, dataflow/, graph/) |
 | `migration/` | IL-2 | Versioned migration engine + failure store |
-| `fleet/` | IL-2 | Campaign dispatch, semaphore, sidecar, liveness, state persistence |
+| `fleet/` | IL-2 | Campaign dispatch, semaphore, sidecar, liveness, state persistence, and `_native_shell_capture/` lineage authority |
 | `server/` | IL-3 | FastMCP server — tools/, kitchen gating, session-type dispatch |
 | `server/recipe_section/` | IL-3 | Final invariant verification for schema-driven recipe-section page plans |
 | `cli/` | IL-3 | CLI — doctor/, update/, fleet/ subcommands, ui/, session/ management (including session/pty/); `_install_snapshot/` facade and `_snapshot.py` transaction restoration |

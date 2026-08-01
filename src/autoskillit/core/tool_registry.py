@@ -148,6 +148,7 @@ def _run_skill() -> ToolDef:
         "output_dir",
         "resume_session_id",
         "retry_after_audit_attempt_id",
+        "native_shell_capture_mode",
         "closure_authority_path",
         "closure_authority_hash",
         "closure_plan_paths",
@@ -349,12 +350,14 @@ _TOOL_DEFS = (
             "resume_message",
             "caller_instructions",
             "backend",
+            "native_shell_capture_mode",
         ),
         required=("recipe", "task"),
         wire_types={
             "ingredients": ToolWireType.OBJECT,
             "capture": ToolWireType.OBJECT,
             "resume_checkpoint": ToolWireType.OBJECT,
+            "native_shell_capture_mode": ToolWireType.STRING,
         },
     ),
     _tool(

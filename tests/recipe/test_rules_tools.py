@@ -116,14 +116,34 @@ def test_dead_with_param_detects_unknown_key() -> None:
 
 
 def test_dead_with_param_allows_valid_keys() -> None:
-    """Valid run_skill keys (skill_command, cwd, model, step_name) pass clean."""
+    """Valid run_skill keys, including the managed launch mode, pass clean."""
     recipe = _make_recipe_with_args(
         "run_skill",
-        {"skill_command": "/autoskillit:investigate", "cwd": "/tmp", "model": "sonnet"},
+        {
+            "skill_command": "/autoskillit:investigate",
+            "cwd": "/tmp",
+            "model": "sonnet",
+            "native_shell_capture_mode": "direct",
+        },
     )
     findings = run_semantic_rules(recipe)
     dead = [f for f in findings if f.rule == "dead-with-param"]
     assert not dead, "Valid keys must not trigger dead-with-param"
+
+
+def test_dead_with_param_allows_native_shell_capture_mode_for_food_truck() -> None:
+    recipe = _make_recipe_with_args(
+        "dispatch_food_truck",
+        {
+            "recipe": "implementation",
+            "task": "implement",
+            "native_shell_capture_mode": "capture",
+        },
+    )
+
+    dead = [f for f in run_semantic_rules(recipe) if f.rule == "dead-with-param"]
+
+    assert not dead
 
 
 def test_dead_with_param_skips_unknown_tools() -> None:

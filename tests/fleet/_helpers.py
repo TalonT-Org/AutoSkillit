@@ -75,6 +75,7 @@ def _setup_dispatch(
     ingredients: dict[str, Any] | None = None,
 ):
     """Wire tool_ctx for dispatch tests."""
+    from autoskillit.execution.session import DefaultManagedHeadlessSessionLineageStore
     from autoskillit.fleet import FleetSemaphore
     from autoskillit.recipe.schema import Recipe, RecipeKind
     from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
@@ -95,6 +96,7 @@ def _setup_dispatch(
     )
     tool_ctx.recipes = repo
     tool_ctx.executor = InMemoryHeadlessExecutor()
+    tool_ctx.managed_headless_session_lineage_store = DefaultManagedHeadlessSessionLineageStore()
 
 
 async def _run(

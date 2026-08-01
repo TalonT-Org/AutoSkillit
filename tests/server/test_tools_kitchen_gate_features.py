@@ -296,7 +296,11 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
         DefaultAuditAuthorityMaterializer,
         DefaultCommittedDispositionResolver,
     )
-    from tests.fakes import FakePluginArtifactAuthority, FakeSkillSessionContractStore
+    from tests.fakes import (
+        FakeManagedHeadlessSessionLineageStore,
+        FakePluginArtifactAuthority,
+        FakeSkillSessionContractStore,
+    )
 
     real_repo = DefaultRecipeRepository()
     audit_admission_ledger = DefaultAuditAdmissionLedger(
@@ -321,6 +325,7 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
         project_dir=different_dir,
         recipes=real_repo,
         skill_session_contract_store=FakeSkillSessionContractStore(),
+        managed_headless_session_lineage_store=(FakeManagedHeadlessSessionLineageStore()),
         context_admission_ledger=DefaultContextAdmissionLedger(
             ContextAdmissionStoreAuthority(
                 database_path=(

@@ -231,7 +231,7 @@ def reset_blocking_dispatch(state_path: Path, dispatch_name: str) -> bool:
         return False
 
 
-_LEGACY_SCHEMA_VERSIONS: frozenset[int] = frozenset({4, 5, 6, 7})
+_LEGACY_SCHEMA_VERSIONS: frozenset[int] = frozenset({4, 5, 6, 7, 8, 9})
 
 
 def _read_raw_json(state_path: Path) -> dict[str, Any] | None:
@@ -541,6 +541,8 @@ def append_dispatch_record(
         for i, d in enumerate(m.state.dispatches):
             if d.name == record.name:
                 _validate_transition(d.status, record.status, d.name)
+                if record.managed_lineage_ref is None:
+                    record.managed_lineage_ref = d.managed_lineage_ref
                 m.state.dispatches[i] = record
                 break
         else:
@@ -606,6 +608,8 @@ def upsert_dispatch_record_by_name(state_path: Path, record: DispatchRecord) -> 
                     record.reaper_reason = d.reaper_reason
                 if d.reaper_dispatch_id and not record.reaper_dispatch_id:
                     record.reaper_dispatch_id = d.reaper_dispatch_id
+                if record.managed_lineage_ref is None:
+                    record.managed_lineage_ref = d.managed_lineage_ref
                 m.state.dispatches[i] = record
                 m.mark_dirty()
                 return

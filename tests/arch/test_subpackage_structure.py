@@ -37,6 +37,7 @@ class TestCoreSubpackages:
             "_type_inspector",
             "_type_intake_policy",
             "_type_invariant_registry",
+            "_type_native_shell_capture",
             "_type_phoropter",
             "_type_plugin_source",
             "_type_protocols_backend",
@@ -73,8 +74,8 @@ class TestCoreSubpackages:
         assert len(combined) == len(remaining) + len(env) + len(features) + len(registries), (
             "Duplicate symbols across split modules"
         )
-        assert len(combined) == 138, (
-            f"Expected 138 symbols total, got {len(combined)} "
+        assert len(combined) == 143, (
+            f"Expected 143 symbols total, got {len(combined)} "
             f"(remaining={len(remaining)}, env={len(env)}, "
             f"features={len(features)}, registries={len(registries)})"
         )
@@ -153,6 +154,8 @@ class TestExecutionSubpackages:
             "_skill_session_contract_store",
             "_retry_fsm",
             "_exit_classification",
+            "_managed_headless_session_lineage",
+            "_managed_headless_session_lineage_codec",
         }
         actual = {
             p.stem for p in (SRC / "execution" / "session").glob("*.py") if p.stem != "__init__"

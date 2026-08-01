@@ -203,6 +203,28 @@ def test_private_env_vars_includes_execution_control_vars() -> None:
     assert expected <= AUTOSKILLIT_PRIVATE_ENV_VARS
 
 
+def test_private_env_vars_include_native_shell_lineage_controls() -> None:
+    from autoskillit.core import (
+        AUTOSKILLIT_PRIVATE_ENV_VARS,
+        CODEX_MCP_ENV_FORWARD_VARS,
+        MANAGED_ATTEMPT_ID_ENV_VAR,
+        MANAGED_LAUNCH_ID_ENV_VAR,
+        MANAGED_LINEAGE_DIGEST_ENV_VAR,
+        MANAGED_LINEAGE_REF_ENV_VAR,
+        NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
+    )
+
+    protected = {
+        NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
+        MANAGED_LAUNCH_ID_ENV_VAR,
+        MANAGED_ATTEMPT_ID_ENV_VAR,
+        MANAGED_LINEAGE_DIGEST_ENV_VAR,
+        MANAGED_LINEAGE_REF_ENV_VAR,
+    }
+    assert protected <= AUTOSKILLIT_PRIVATE_ENV_VARS
+    assert protected.isdisjoint(CODEX_MCP_ENV_FORWARD_VARS)
+
+
 def test_session_deadline_in_private_env_vars() -> None:
     from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
 

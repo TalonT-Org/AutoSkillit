@@ -34,6 +34,7 @@ from autoskillit.core import (
     HeadlessExecutor,
     InputContractResolver,
     KitchenTransitionLock,
+    ManagedHeadlessSessionLineageStore,
     McpResponseLog,
     MergeQueueWatcher,
     MigrationService,
@@ -135,6 +136,8 @@ class ToolContext:
     skill_resolver:       SkillResolver — resolves skill names to source tier
     skill_session_contract_store: SkillSessionContractStore — binds projected skill
                           contracts and snapshots to resumable backend session IDs.
+    managed_headless_session_lineage_store: ManagedHeadlessSessionLineageStore —
+                          durable authority for managed launch and continuation identity.
     context_admission_ledger: ContextAdmissionLedger — durable, shadow-only cumulative
     audit_admission_ledger: AuditAdmissionLedger — durable audit installation, attempt,
                             head, preflight, and disposition authority
@@ -211,6 +214,9 @@ class ToolContext:
     session_skill_manager: SessionSkillManager | None = field(default=None)
     skill_resolver: SkillResolver | None = field(default=None)
     skill_session_contract_store: SkillSessionContractStore = field(default=_MISSING)
+    managed_headless_session_lineage_store: ManagedHeadlessSessionLineageStore = field(
+        default=_MISSING
+    )
     context_admission_ledger: ContextAdmissionLedger = field(default=_MISSING)
     audit_admission_ledger: AuditAdmissionLedger = field(default=_MISSING)
     audit_authority_materializer: AuditAuthorityMaterializer = field(default=_MISSING)
@@ -257,6 +263,11 @@ class ToolContext:
         if self.skill_session_contract_store is _MISSING:
             raise TypeError(
                 "skill_session_contract_store must be supplied explicitly. "
+                "Use make_context() or pass an isolated store directly."
+            )
+        if self.managed_headless_session_lineage_store is _MISSING:
+            raise TypeError(
+                "managed_headless_session_lineage_store must be supplied explicitly. "
                 "Use make_context() or pass an isolated store directly."
             )
         if self.context_admission_ledger is _MISSING:

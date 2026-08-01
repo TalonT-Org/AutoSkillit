@@ -2969,21 +2969,36 @@ def resolve_context_admission_coverage(
     as_of: str,
 ) -> ProducerCoverageDef:
     """Resolve one static coverage row against runtime lineage inputs."""
-    row = next(
-        (item for item in CONTEXT_ADMISSION_COVERAGE if item.surface is surface),
+    surface_rows = tuple(item for item in CONTEXT_ADMISSION_COVERAGE if item.surface is surface)
+    if not surface_rows:
+        raise ContextAdmissionValidationError("unknown_producer_surface")
+    default_rows = tuple(
+        item for item in surface_rows if item.evidence[0].configuration_mode == "default"
+    )
+    if len(default_rows) != 1:
+        raise ContextAdmissionValidationError("invalid_coverage_default_cardinality")
+
+    exact = next(
+        (
+            item
+            for item in surface_rows
+            if item.evidence[0].backend == backend
+            and item.evidence[0].configuration_mode == configuration_mode
+            and item.evidence[0].tested_version == source_version
+            and item.evidence[0].checked_at == as_of
+        ),
         None,
     )
-    if row is None:
-        raise ContextAdmissionValidationError("unknown_producer_surface")
-    evidence = row.evidence[0]
-    matches = (
-        evidence.backend == backend
-        and evidence.configuration_mode == configuration_mode
-        and evidence.tested_version == source_version
-        and evidence.checked_at == as_of
+    if exact is not None:
+        return exact
+
+    configuration_rows = tuple(
+        item for item in surface_rows if item.evidence[0].configuration_mode == configuration_mode
     )
-    if matches:
-        return row
+    row = next(
+        (item for item in configuration_rows if item.evidence[0].backend == backend),
+        configuration_rows[0] if configuration_rows else default_rows[0],
+    )
     return replace(
         row,
         observation_state=CoverageState.UPSTREAM_GATED,

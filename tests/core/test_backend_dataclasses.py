@@ -427,6 +427,9 @@ def test_skill_session_config_fields_exhaustive():
         "sandbox_mode",
         "backend_override",
         "network_access",
+        "native_shell_capture_decision",
+        "managed_lineage_ref",
+        "managed_attempt_id",
     }
 
 

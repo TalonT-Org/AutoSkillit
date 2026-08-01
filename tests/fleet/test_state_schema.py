@@ -8,15 +8,18 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import ManagedHeadlessSessionLineageRef
 from autoskillit.fleet import (
     FLEET_STATE_SCHEMA_VERSION,
     DispatchEffectProvenance,
     DispatchRecord,
     DispatchStatus,
     DispatchTokenUsage,
+    append_dispatch_record,
     mark_dispatch_running,
     normalize_dispatch_token_usage,
     read_state,
+    upsert_dispatch_record_by_name,
     write_initial_state,
 )
 from autoskillit.fleet.state import _write_state, reset_blocking_dispatch
@@ -77,8 +80,8 @@ class TestDispatchRecordSchemaV2:
         assert dispatch_raw["dispatched_boot_id"] == "abc-boot"
         assert dispatch_raw["issue_url"] == "https://github.com/org/repo/issues/42"
 
-    def test_schema_version_is_9(self) -> None:
-        assert FLEET_STATE_SCHEMA_VERSION == 9
+    def test_schema_version_is_10(self) -> None:
+        assert FLEET_STATE_SCHEMA_VERSION == 10
 
     def test_read_state_returns_none_on_version_mismatch(self, tmp_path: Path) -> None:
         """read_state returns None when schema_version is stale (v1)."""
@@ -399,6 +402,7 @@ class TestDispatchRecordToDict:
             "resume_count",
             "backend_name",
             "effect_provenance",
+            "managed_lineage_ref",
         }
 
     def test_dispatch_record_to_dict_token_usage_is_shallow_copy(self) -> None:
@@ -429,6 +433,107 @@ class TestDispatchRecordToDict:
         actual = set(record.to_dict().keys())
         expected = {f.name for f in dataclasses.fields(DispatchRecord)}
         assert actual == expected
+
+
+class TestManagedLineageReferenceField:
+    @staticmethod
+    def _reference(tmp_path: Path) -> ManagedHeadlessSessionLineageRef:
+        return ManagedHeadlessSessionLineageRef(
+            launch_id="a" * 32,
+            lineage_digest="b" * 64,
+            lineage_anchor=str(tmp_path.resolve()),
+            anchor_device=1,
+            anchor_inode=2,
+        )
+
+    def test_managed_lineage_reference_round_trips_strictly(self, tmp_path: Path) -> None:
+        reference = self._reference(tmp_path)
+        record = DispatchRecord(name="dispatch", managed_lineage_ref=reference)
+
+        raw = record.to_dict()
+
+        assert raw["managed_lineage_ref"] == reference.to_dict()
+        assert DispatchRecord.from_dict(raw).managed_lineage_ref == reference
+
+    def test_malformed_managed_lineage_reference_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="managed lineage reference"):
+            DispatchRecord.from_dict(
+                {
+                    "name": "dispatch",
+                    "managed_lineage_ref": {"launch_id": "not-an-identity"},
+                }
+            )
+
+    def test_schema_v9_without_managed_lineage_reference_remains_readable(
+        self, tmp_path: Path
+    ) -> None:
+        state_path = tmp_path / "legacy-v9.json"
+        state_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 9,
+                    "campaign_id": "campaign",
+                    "campaign_name": "legacy",
+                    "manifest_path": "/m.yaml",
+                    "started_at": 1.0,
+                    "dispatches": [{"name": "dispatch", "status": "pending"}],
+                }
+            )
+        )
+
+        state = read_state(state_path)
+
+        assert state is not None
+        assert state.dispatches[0].managed_lineage_ref is None
+
+    def test_retry_reset_preserves_managed_lineage_reference(self, tmp_path: Path) -> None:
+        reference = self._reference(tmp_path)
+        state_path = tmp_path / "retry.json"
+        write_initial_state(
+            state_path,
+            "campaign",
+            "retry",
+            "/m.yaml",
+            [
+                DispatchRecord(
+                    name="dispatch",
+                    status=DispatchStatus.FAILURE,
+                    managed_lineage_ref=reference,
+                )
+            ],
+        )
+
+        assert reset_blocking_dispatch(state_path, "dispatch")
+        state = read_state(state_path)
+
+        assert state is not None
+        assert state.dispatches[0].managed_lineage_ref == reference
+
+    @pytest.mark.parametrize(
+        "replace_record",
+        [append_dispatch_record, upsert_dispatch_record_by_name],
+    )
+    def test_record_replacement_preserves_managed_lineage_reference(
+        self, tmp_path: Path, replace_record
+    ) -> None:
+        reference = self._reference(tmp_path)
+        state_path = tmp_path / "replacement.json"
+        write_initial_state(
+            state_path,
+            "campaign",
+            "replacement",
+            "/m.yaml",
+            [DispatchRecord(name="dispatch", managed_lineage_ref=reference)],
+        )
+
+        replace_record(
+            state_path,
+            DispatchRecord(name="dispatch", status=DispatchStatus.FAILURE),
+        )
+        state = read_state(state_path)
+
+        assert state is not None
+        assert state.dispatches[0].managed_lineage_ref == reference
 
 
 class TestDispatchRecordSchemaV3:

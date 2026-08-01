@@ -22,6 +22,7 @@ from autoskillit.core import (
     CapturedStream,
     CodingAgentBackend,
     EffectiveSkillInvocationAuthority,
+    ManagedHeadlessSessionLineageRef,
     SkillContractError,
     SkillExecutionRole,
     SkillResolver,
@@ -107,6 +108,24 @@ class _RunSkillContractLifecycle:
         if self.store is not None and self.bound_session_id is not None and not needs_retry:
             self.store.delete(self.bound_session_id)
             self.bound_session_id = None
+
+    def rebind_final(
+        self,
+        final_session_id: str,
+        managed_lineage_ref: ManagedHeadlessSessionLineageRef,
+    ) -> None:
+        if (
+            self.store is None
+            or self.bound_session_id is None
+            or self.bound_session_id == final_session_id
+        ):
+            return
+        self.store.rebind_final_session(
+            self.bound_session_id,
+            final_session_id,
+            managed_lineage_ref,
+        )
+        self.bound_session_id = final_session_id
 
     def cleanup(self) -> None:
         if self.store is not None and self.correlation_key is not None:

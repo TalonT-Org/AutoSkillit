@@ -50,6 +50,20 @@ def _contract(tmp_path: Path, projected_text: str):
     )
 
 
+def _lineage_ref(tmp_path: Path):
+    from autoskillit.core import ManagedHeadlessSessionLineageRef
+
+    anchor = tmp_path.resolve()
+    stat_result = anchor.stat()
+    return ManagedHeadlessSessionLineageRef(
+        launch_id="a" * 32,
+        lineage_digest="b" * 64,
+        lineage_anchor=str(anchor),
+        anchor_device=stat_result.st_dev,
+        anchor_inode=stat_result.st_ino,
+    )
+
+
 def test_store_round_trip_preserves_machine_contract_and_projected_snapshot(
     tmp_path: Path,
 ) -> None:
@@ -72,6 +86,58 @@ def test_store_round_trip_preserves_machine_contract_and_projected_snapshot(
     assert stored.raw_session_id == "backend/session:final"
     assert (stored.snapshot_dir / ".claude/skills/root/SKILL.md").read_text() == text
     assert stored.snapshot_dir.resolve().is_relative_to(root.resolve())
+
+
+def test_store_persists_lineage_binding_separately_and_rebinds_verified_final_id(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.execution.session import DefaultSkillSessionContractStore
+
+    root = tmp_path / "contracts"
+    text = "projected\n"
+    lineage_ref = _lineage_ref(tmp_path)
+    store = DefaultSkillSessionContractStore(root=root)
+    correlation_key = store.create_provisional(
+        contract=_contract(tmp_path, text),
+        snapshot={".claude/skills/root/SKILL.md": text},
+        managed_lineage_ref=lineage_ref,
+    )
+    store.observe_candidate(correlation_key, "candidate-only")
+    store.finalize(correlation_key, "resume-request")
+    stored = store.load("resume-request")
+    assert stored.managed_lineage_ref == lineage_ref
+    assert not hasattr(stored.contract, "managed_lineage_ref")
+
+    store.rebind_final_session("resume-request", "resume-final", lineage_ref)
+    rebound = store.load("resume-final")
+    assert rebound.raw_session_id == "resume-final"
+    assert rebound.managed_lineage_ref == lineage_ref
+    with pytest.raises(FileNotFoundError):
+        store.load("resume-request")
+    with pytest.raises(FileNotFoundError):
+        store.load("candidate-only")
+
+
+def test_store_rebind_requires_exact_persisted_lineage_reference(tmp_path: Path) -> None:
+    from autoskillit.execution.session import DefaultSkillSessionContractStore
+
+    text = "projected\n"
+    lineage_ref = _lineage_ref(tmp_path)
+    store = DefaultSkillSessionContractStore(root=tmp_path / "contracts")
+    correlation_key = store.create_provisional(
+        contract=_contract(tmp_path, text),
+        snapshot={".claude/skills/root/SKILL.md": text},
+        managed_lineage_ref=lineage_ref,
+    )
+    store.finalize(correlation_key, "resume-request")
+
+    with pytest.raises(ValueError, match="lineage reference mismatch"):
+        store.rebind_final_session(
+            "resume-request",
+            "resume-final",
+            replace(lineage_ref, lineage_digest="c" * 64),
+        )
+    assert store.load("resume-request").managed_lineage_ref == lineage_ref
 
 
 def test_contract_digest_authority_is_copied_and_immutable(tmp_path: Path) -> None:

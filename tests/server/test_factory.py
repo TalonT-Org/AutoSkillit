@@ -14,6 +14,7 @@ from autoskillit.execution.github import DefaultGitHubFetcher
 from autoskillit.execution.headless import DefaultHeadlessExecutor
 from autoskillit.execution.process import DefaultSubprocessRunner
 from autoskillit.execution.recording import RecordingSubprocessRunner
+from autoskillit.execution.session import DefaultManagedHeadlessSessionLineageStore
 from autoskillit.execution.testing import DefaultTestRunner
 from autoskillit.migration.engine import DefaultMigrationService
 from autoskillit.pipeline.context import ToolContext
@@ -54,6 +55,10 @@ def test_make_context_returns_toolcontext(tmp_path):
     assert ctx.gate is not None
     assert ctx.runner is not None
     assert isinstance(ctx.context_admission_ledger, DefaultContextAdmissionLedger)
+    assert isinstance(
+        ctx.managed_headless_session_lineage_store,
+        DefaultManagedHeadlessSessionLineageStore,
+    )
     assert (
         ctx.context_admission_ledger.database_path
         == (tmp_path / ".autoskillit" / "temp" / "context-admission" / "ledger.sqlite3").resolve()

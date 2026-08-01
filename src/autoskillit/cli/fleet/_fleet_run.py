@@ -13,7 +13,7 @@ from autoskillit.core import get_logger, is_feature_enabled
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
-    from autoskillit.core import CodingAgentBackend
+    from autoskillit.core import CodingAgentBackend, NativeShellCaptureMode
     from autoskillit.fleet import DispatchResult
 
 logger = get_logger(__name__)
@@ -53,6 +53,7 @@ async def _execute_fleet_run(
     resume_session_id: str | None,
     prior_dispatch_id: str | None,
     disable_quota_guard: bool,
+    native_shell_capture_mode: NativeShellCaptureMode | None = None,
 ) -> DispatchResult:
     import functools
 
@@ -166,6 +167,7 @@ async def _execute_fleet_run(
         dispatch_backend=dispatch_backend,
         provider_capability_overrides=_prov_overrides,
         effective_backend_map=_effective_backend_map,
+        native_shell_capture_mode=native_shell_capture_mode,
     )
 
 
@@ -185,6 +187,20 @@ def fleet_run(
     Dispatches a single recipe run non-interactively. Prints the dispatch
     result envelope as JSON on stdout. Exit 0 on SUCCESS, nonzero otherwise.
     """
+    from autoskillit.core import (
+        NativeShellCaptureReason,
+        pop_native_shell_capture_decision,
+    )
+
+    native_shell_capture_decision = pop_native_shell_capture_decision(os.environ)
+    if native_shell_capture_decision.reason is NativeShellCaptureReason.INVALID_ENVIRONMENT:
+        logger.warning(
+            "fleet_run_invalid_native_shell_capture_mode",
+            effective_mode=native_shell_capture_decision.mode.value,
+            reason=native_shell_capture_decision.reason.value,
+            lineage_status=native_shell_capture_decision.lineage_status.value,
+        )
+
     # --- Session-type guard (retained for headless — prevents recursive dispatch) ---
     if os.environ.get("AUTOSKILLIT_SESSION_TYPE") in ("skill", "leaf"):
         _fleet_run_error(
@@ -267,6 +283,7 @@ def fleet_run(
                 resume_session_id=resume_session_id,
                 prior_dispatch_id=prior_dispatch_id,
                 disable_quota_guard=disable_quota_guard,
+                native_shell_capture_mode=native_shell_capture_decision.mode,
             )
         )
     except KeyboardInterrupt as exc:

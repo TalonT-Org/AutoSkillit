@@ -4,7 +4,16 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from autoskillit.core import AGENT_BACKEND_ENV_VAR, AUTOSKILLIT_PRIVATE_ENV_VARS, EnvPolicy
+from autoskillit.core import (
+    AGENT_BACKEND_ENV_VAR,
+    AUTOSKILLIT_PRIVATE_ENV_VARS,
+    MANAGED_ATTEMPT_ID_ENV_VAR,
+    MANAGED_LAUNCH_ID_ENV_VAR,
+    MANAGED_LINEAGE_DIGEST_ENV_VAR,
+    MANAGED_LINEAGE_REF_ENV_VAR,
+    NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
+    EnvPolicy,
+)
 from autoskillit.execution.backends.codex import CodexEnvPolicy
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -85,6 +94,24 @@ class TestCodexEnvPolicy:
         base = {"PATH": "/usr/bin"}
         result = policy.build_env(base, extras={"CUSTOM_VAR": "custom_value"})
         assert result["CUSTOM_VAR"] == "custom_value"
+
+    def test_extras_cannot_introduce_protected_native_shell_controls(self) -> None:
+        policy = CodexEnvPolicy()
+        protected = {
+            NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
+            MANAGED_LAUNCH_ID_ENV_VAR,
+            MANAGED_ATTEMPT_ID_ENV_VAR,
+            MANAGED_LINEAGE_DIGEST_ENV_VAR,
+            MANAGED_LINEAGE_REF_ENV_VAR,
+        }
+
+        result = policy.build_env(
+            {"PATH": "/usr/bin"},
+            extras={**dict.fromkeys(protected, "hostile"), "CUSTOM_VAR": "preserved"},
+        )
+
+        assert protected.isdisjoint(result)
+        assert result["CUSTOM_VAR"] == "preserved"
 
     def test_extras_trusted_channel_bypasses_denylist(self) -> None:
         # extras is a trusted-injection channel: callers can explicitly re-introduce

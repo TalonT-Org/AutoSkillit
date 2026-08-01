@@ -945,14 +945,14 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
         "core": 30,  # +plugin identity authority + strict audit semantic codec
-        "core/types": 44,  # +audit admission ownership, ledger contracts, and protocols
+        "core/types": 45,  # +audit admission and native shell capture contracts
         "cli": 23,  # +_install_contract typed install process boundary (#4409)
         "cli/doctor": 11,  # +_doctor_skills capability declaration authenticity checks
         "workspace": 15,  # +_installed_artifact exact lease-protected authority (#4409);
         # +_install_state (single install-state consistency authority,
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
-        "hooks": 20,  # +_capture_lifecycle state leaf and +capture_lifecycle_hook SessionStart owner  # noqa: E501
+        "hooks": 21,  # +_capture_process owned shell process-group boundary  # noqa: E501
         "pipeline": 16,  # +context/audit admission ledgers +recipe initialization
         # +kitchen transition authority
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
@@ -1054,7 +1054,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "filter cascade",
     ),
     "fleet/_api.py": (
-        1550,
+        1575,
         "REQ-CNST-010-E6: fleet dispatch engine — evaluate_skip_when inlined here to avoid "
         "a 16th fleet/ module (sub-package file ceiling); keeps dispatch-related helpers "
         "co-located with the execution engine that calls them. Bumped to 1200 by the "
@@ -1062,7 +1062,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "closure-scoped _spawn_error, and _write_pid fail-closed contract add ~33 lines. "
         "Bumped to 1550 for #4417's per-effect dispatch provenance checkpoints and "
         "post-start crash persistence; those checkpoints must remain adjacent to the "
-        "side effects whose ambiguity they record.",
+        "side effects whose ambiguity they record. Bumped to 1575 so the managed native "
+        "shell lineage decision and provenance snapshot remain on the same dispatch "
+        "transaction boundary after conflict resolution.",
     ),
     "server/_recipe_delivery.py": (
         1460,
@@ -1173,7 +1175,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "run_skill launch denial paths before command construction (+139 net lines)",
     ),
     "execution/backends/codex.py": (
-        1800,
+        1825,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1206,7 +1208,16 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "(+39 net lines)"
         "; interactive Codex startup validation, explicit generated-home construction, "
         "profile probing, and durable cook-storage adapter integration remain co-located "
-        "with the backend whose command grammar they validate",
+        "with the backend whose command grammar they validate; managed native-shell "
+        "decision and lineage-reference injection remain adjacent to the Codex command "
+        "builders that own the protected environment boundary",
+    ),
+    "execution/backends/claude.py": (
+        1025,
+        "REQ-CNST-010-E19: Claude backend protocol parity keeps managed native-shell "
+        "decision/reference disposition beside executable launch-binding validation; "
+        "both are shared builder-interface obligations even though Claude deliberately "
+        "does not inject the Codex-only controls.",
     ),
     "execution/backends/_codex_session_storage.py": (
         1400,
@@ -1259,19 +1270,21 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "tool and delivery registries that define its surfaces.",
     ),
     "core/context_admission.py": (
-        3000,
+        3050,
         "REQ-CNST-010-E13: #4333 freezes one exhaustive protocol-v1 reducer and replay "
         "surface. Keeping all closed event transitions together makes atomic batch, "
         "idempotency, protected-pool, reconciliation, rollover, and declarative effect "
-        "semantics plus released-version dispatch reviewable as one state machine; "
-        "splitting dispatch branches would fragment exhaustiveness.",
+        "semantics, released-version dispatch, and configuration-aware coverage resolution "
+        "reviewable as one state machine; splitting dispatch branches would fragment "
+        "exhaustiveness.",
     ),
     "core/types/_type_context_admission.py": (
-        2300,
+        2350,
         "REQ-CNST-010-E14: #4333 freezes the complete content-free protocol-v1 schema in "
         "one IL-0 shard. Co-locating identities, records, closed event/effect unions, "
-        "states, canonical serialization, and the static coverage registry prevents "
-        "downstream layers from defining incompatible wire contracts.",
+        "states, canonical serialization, and the static coverage registry with its pinned "
+        "configuration variants prevents downstream layers from defining incompatible "
+        "wire contracts.",
     ),
     "pipeline/context_admission_ledger.py": (
         2300,
@@ -1290,11 +1303,19 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "and fail-closed health invariants.",
     ),
     "server/tools/tools_execution.py": (
-        2300,
+        2325,
         "REQ-CNST-010-E18: #4419 keeps the attested reservation, dispatch, exhaustive "
         "materialization outcome routing, and durable response finalization at the existing "
         "run_skill transaction boundary. Splitting that control flow would separate success "
-        "bookkeeping from the ledger state it must atomically finalize.",
+        "bookkeeping from the ledger state it must atomically finalize. Managed native-shell "
+        "lineage preparation remains at that same attested launch boundary so runtime "
+        "binding and child construction cannot select different modes.",
+    ),
+    "server/tools/_execution_helpers.py": (
+        1025,
+        "REQ-CNST-010-E20: shared run-skill contract lifecycle and response-shaping helpers "
+        "remain one server-tool support authority; the managed session metadata additions "
+        "must stay beside contract rehydration and persistence to prevent resume drift.",
     ),
 }
 
@@ -1471,6 +1492,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "core/types/_type_recipe_execution.py",
         "core/types/_type_subprocess.py",
         "core/types/_type_context_admission_persistence.py",
+        "core/types/_type_native_shell_capture.py",
     ):
         types_path = AUTOSKILLIT_ROOT / types_filename
         if not types_path.exists():

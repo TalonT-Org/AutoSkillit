@@ -33,6 +33,34 @@ def test_codex_mcp_env_forward_vars_subset_of_private() -> None:
     )
 
 
+def test_managed_native_shell_controls_are_scrubbed_and_never_mcp_forwarded() -> None:
+    """Protected launch authority is local to managed child construction."""
+    from autoskillit.core import (
+        AUTOSKILLIT_PRIVATE_ENV_VARS,
+        CODEX_MCP_ENV_FORWARD_VARS,
+        MANAGED_ATTEMPT_ID_ENV_VAR,
+        MANAGED_LAUNCH_ID_ENV_VAR,
+        MANAGED_LINEAGE_DIGEST_ENV_VAR,
+        MANAGED_LINEAGE_REF_ENV_VAR,
+        NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
+    )
+    from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+
+    protected = frozenset(
+        {
+            NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
+            MANAGED_LAUNCH_ID_ENV_VAR,
+            MANAGED_ATTEMPT_ID_ENV_VAR,
+            MANAGED_LINEAGE_DIGEST_ENV_VAR,
+            MANAGED_LINEAGE_REF_ENV_VAR,
+        }
+    )
+
+    assert protected <= AUTOSKILLIT_PRIVATE_ENV_VARS
+    assert protected <= _HEADLESS_EXCLUSIVE_VARS
+    assert protected.isdisjoint(CODEX_MCP_ENV_FORWARD_VARS)
+
+
 def test_codex_forward_vars_cover_server_consumed() -> None:
     """CODEX_MCP_ENV_FORWARD_VARS must cover every server-consumed env var."""
     from autoskillit.core import (

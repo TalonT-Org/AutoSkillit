@@ -57,7 +57,8 @@ occurrence identity.
 ## Protocol version 1
 
 Protocol version 1 is identified by `CONTEXT_ADMISSION_PROTOCOL_VERSION = 1`. The static
-`CONTEXT_ADMISSION_COVERAGE` registry has exactly one row for every `ProducerSurface`.
+`CONTEXT_ADMISSION_COVERAGE` registry has exactly one `default` row for every
+`ProducerSurface` and may add separately pinned configured variants.
 `reduce_context_admission(state, event)` is a pure, exhaustive transition function, and
 `replay_context_admission(initial_state, events)` deterministically folds a recorded stream.
 Neither function performs I/O, persistence, enforcement, response mutation, or estimation.
@@ -171,36 +172,42 @@ The states have these meanings:
   participation is required.
 
 Every authority state is `UPSTREAM_GATED` for the tested configuration. The following is the
-complete, version-pinned projection of `CONTEXT_ADMISSION_COVERAGE`; each row has a stable
-`COV-<surface>` claim ID and deterministically degrades on version or configuration mismatch.
+complete, version-pinned projection of `CONTEXT_ADMISSION_COVERAGE`. A default row uses the stable
+`COV-<surface>` claim ID; a configured variant appends the stable uppercase configuration suffix,
+as in `COV-NATIVE-SHELL-DIRECT`. Resolution matches surface, backend, configuration, tested
+version, and checked date exactly. A runtime mismatch degrades the known requested configuration
+when one exists, or otherwise the surface's single default row.
 
-| Producer surface | Control-point owner | Observation | Authority |
-|---|---|---|---|
-| `NATIVE_SHELL` | `shell_capture_hook` | `VERIFIED` | `UPSTREAM_GATED` |
-| `UNIFIED_EXEC_AND_WRITE_STDIN` | `codex_host` | `PARTIAL` | `UPSTREAM_GATED` |
-| `APPLY_PATCH` | `codex_host` | `PARTIAL` | `UPSTREAM_GATED` |
-| `AUTOSKILLIT_MCP` | `track_response_size` | `VERIFIED` | `UPSTREAM_GATED` |
-| `EXTERNAL_MCP` | `fastmcp_client` | `PARTIAL` | `UPSTREAM_GATED` |
-| `AUTOSKILLIT_LOCAL_FUNCTION` | `local_function_dispatch` | `VERIFIED` | `UPSTREAM_GATED` |
-| `OTHER_LOCAL_FUNCTION` | `codex_host` | `PARTIAL` | `UPSTREAM_GATED` |
-| `MCP_RESOURCE` | `fastmcp_client` | `PARTIAL` | `UPSTREAM_GATED` |
-| `CLIENT_PROVIDER_RETRIEVAL` | `codex_host` | `UPSTREAM_GATED` | `UPSTREAM_GATED` |
-| `CODE_MODE_AGGREGATE` | `codex_host` | `PARTIAL` | `UPSTREAM_GATED` |
-| `HOSTED_SPECIALIZED_TOOL` | `codex_host` | `PARTIAL` | `UPSTREAM_GATED` |
-| `HOOK_FEEDBACK` | `hook_registry` | `VERIFIED` | `UPSTREAM_GATED` |
-| `TOOL_ARGUMENT` | `final_request_assembler` | `PARTIAL` | `UPSTREAM_GATED` |
-| `TOOL_RESULT_ENVELOPE` | `final_request_assembler` | `PARTIAL` | `UPSTREAM_GATED` |
-| `USER_PROMPT` | `final_request_assembler` | `PARTIAL` | `UPSTREAM_GATED` |
-| `ASSISTANT_OUTPUT_HISTORY` | `final_request_assembler` | `PARTIAL` | `UPSTREAM_GATED` |
-| `SKILL_PLUGIN_CONTEXT` | `final_request_assembler` | `PARTIAL` | `UPSTREAM_GATED` |
-| `OTHER_CONTEXT_INJECTION` | `final_request_assembler` | `UPSTREAM_GATED` | `UPSTREAM_GATED` |
-| `HEADLESS_CHILD_PROMPT` | `headless_prompt_builder` | `VERIFIED` | `UPSTREAM_GATED` |
-| `PARENT_VISIBLE_CHILD_DELIVERY` | `child_delivery_receipt` | `VERIFIED` | `UPSTREAM_GATED` |
-| `COMPACTION_MODEL_WINDOW_TRANSITION` | `compaction_receiver` | `PARTIAL` | `UPSTREAM_GATED` |
+| Producer surface | Configuration | Claim ID | Control-point owner | Observation | Authority |
+|---|---|---|---|---|---|
+| `NATIVE_SHELL` | `default` | `COV-NATIVE-SHELL` | `shell_capture_hook` | `VERIFIED` | `UPSTREAM_GATED` |
+| `NATIVE_SHELL` | `direct` | `COV-NATIVE-SHELL-DIRECT` | `shell_capture_hook` | `PARTIAL` | `UPSTREAM_GATED` |
+| `UNIFIED_EXEC_AND_WRITE_STDIN` | `default` | `COV-UNIFIED-EXEC-AND-WRITE-STDIN` | `codex_host` | `PARTIAL` | `UPSTREAM_GATED` |
+| `APPLY_PATCH` | `default` | `COV-APPLY-PATCH` | `codex_host` | `PARTIAL` | `UPSTREAM_GATED` |
+| `AUTOSKILLIT_MCP` | `default` | `COV-AUTOSKILLIT-MCP` | `track_response_size` | `VERIFIED` | `UPSTREAM_GATED` |
+| `EXTERNAL_MCP` | `default` | `COV-EXTERNAL-MCP` | `fastmcp_client` | `PARTIAL` | `UPSTREAM_GATED` |
+| `AUTOSKILLIT_LOCAL_FUNCTION` | `default` | `COV-AUTOSKILLIT-LOCAL-FUNCTION` | `local_function_dispatch` | `VERIFIED` | `UPSTREAM_GATED` |
+| `OTHER_LOCAL_FUNCTION` | `default` | `COV-OTHER-LOCAL-FUNCTION` | `codex_host` | `PARTIAL` | `UPSTREAM_GATED` |
+| `MCP_RESOURCE` | `default` | `COV-MCP-RESOURCE` | `fastmcp_client` | `PARTIAL` | `UPSTREAM_GATED` |
+| `CLIENT_PROVIDER_RETRIEVAL` | `default` | `COV-CLIENT-PROVIDER-RETRIEVAL` | `codex_host` | `UPSTREAM_GATED` | `UPSTREAM_GATED` |
+| `CODE_MODE_AGGREGATE` | `default` | `COV-CODE-MODE-AGGREGATE` | `codex_host` | `PARTIAL` | `UPSTREAM_GATED` |
+| `HOSTED_SPECIALIZED_TOOL` | `default` | `COV-HOSTED-SPECIALIZED-TOOL` | `codex_host` | `PARTIAL` | `UPSTREAM_GATED` |
+| `HOOK_FEEDBACK` | `default` | `COV-HOOK-FEEDBACK` | `hook_registry` | `VERIFIED` | `UPSTREAM_GATED` |
+| `TOOL_ARGUMENT` | `default` | `COV-TOOL-ARGUMENT` | `final_request_assembler` | `PARTIAL` | `UPSTREAM_GATED` |
+| `TOOL_RESULT_ENVELOPE` | `default` | `COV-TOOL-RESULT-ENVELOPE` | `final_request_assembler` | `PARTIAL` | `UPSTREAM_GATED` |
+| `USER_PROMPT` | `default` | `COV-USER-PROMPT` | `final_request_assembler` | `PARTIAL` | `UPSTREAM_GATED` |
+| `ASSISTANT_OUTPUT_HISTORY` | `default` | `COV-ASSISTANT-OUTPUT-HISTORY` | `final_request_assembler` | `PARTIAL` | `UPSTREAM_GATED` |
+| `SKILL_PLUGIN_CONTEXT` | `default` | `COV-SKILL-PLUGIN-CONTEXT` | `final_request_assembler` | `PARTIAL` | `UPSTREAM_GATED` |
+| `OTHER_CONTEXT_INJECTION` | `default` | `COV-OTHER-CONTEXT-INJECTION` | `final_request_assembler` | `UPSTREAM_GATED` | `UPSTREAM_GATED` |
+| `HEADLESS_CHILD_PROMPT` | `default` | `COV-HEADLESS-CHILD-PROMPT` | `headless_prompt_builder` | `VERIFIED` | `UPSTREAM_GATED` |
+| `PARENT_VISIBLE_CHILD_DELIVERY` | `default` | `COV-PARENT-VISIBLE-CHILD-DELIVERY` | `child_delivery_receipt` | `VERIFIED` | `UPSTREAM_GATED` |
+| `COMPACTION_MODEL_WINDOW_TRANSITION` | `default` | `COV-COMPACTION-MODEL-WINDOW-TRANSITION` | `compaction_receiver` | `PARTIAL` | `UPSTREAM_GATED` |
 
-`VERIFIED` rows use AutoSkillit source at revision
+AutoSkillit-backed rows use source at revision
 `ac8f653a00d24b6be50ef285958cfb0e1b7a351b`. Codex-backed rows use
 codex-cli `0.145.0` at revision `25af12f7e61572b0bc18ddb1008be543b91519b0`.
+The configured `NATIVE_SHELL/direct` row pins the direct runner at
+`src/autoskillit/hooks/_capture_artifacts.py`; it is `PARTIAL`, not `VERIFIED`.
 `CLIENT_PROVIDER_RETRIEVAL` and `OTHER_CONTEXT_INJECTION` are explicitly inference-backed gap
 claims, not verified source claims. Static source pins are documentation provenance, not runtime
 lineage.

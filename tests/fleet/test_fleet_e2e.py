@@ -101,7 +101,7 @@ envelope = {
     "subtype": "success",
     "is_error": False,
     "result": text,
-    "session_id": "test-session-id",
+    "session_id": f"test-session-{os.getpid()}",
     "errors": [],
     "usage": usage_data,
 }
@@ -356,6 +356,7 @@ def fleet_runtime(
     tmp_path: Path, monkeypatch: Any, tool_ctx: Any
 ) -> Generator[FleetRuntime, None, None]:
     from autoskillit.execution.headless import DefaultHeadlessExecutor
+    from autoskillit.execution.session import DefaultManagedHeadlessSessionLineageStore
     from tests.fakes import InMemoryRecipeRepository
 
     shim_dir = tmp_path / "bin"
@@ -372,6 +373,7 @@ def fleet_runtime(
     tool_ctx.recipes = recipes
     tool_ctx.kitchen_id = uuid4().hex[:16]
     tool_ctx.project_dir = tmp_path
+    tool_ctx.managed_headless_session_lineage_store = DefaultManagedHeadlessSessionLineageStore()
 
     dispatches_dir = tool_ctx.temp_dir / "dispatches"
     dispatches_dir.mkdir(parents=True, exist_ok=True)
@@ -446,7 +448,7 @@ async def test_two_dispatch_happy_path(fleet_runtime: FleetRuntime) -> None:
     )
 
     result_b = await rt.dispatch("recipe-b", shim_mode="success")
-    assert result_b["success"] is True
+    assert result_b["success"] is True, result_b.get("user_visible_message")
 
     for result in [result_a, result_b]:
         state = rt.read_dispatch_state(result["dispatch_id"])
@@ -508,7 +510,7 @@ async def test_continue_on_failure_when_flagged(fleet_runtime: FleetRuntime) -> 
     assert decision.next_dispatch_name == ""
 
     result_b = await rt.dispatch("recipe-b", shim_mode="success")
-    assert result_b["success"] is True
+    assert result_b["success"] is True, result_b
 
     state_b = rt.read_dispatch_state(result_b["dispatch_id"])
     assert state_b is not None
@@ -938,7 +940,7 @@ async def test_two_concurrent_dispatches_allowed_with_max2(
         tg.start_soon(_dispatch, 1)
 
     assert results[0] is not None and results[0]["success"] is True
-    assert results[1] is not None and results[1]["success"] is True
+    assert results[1] is not None and results[1]["success"] is True, results[1]
 
 
 @pytest.mark.anyio
@@ -965,7 +967,7 @@ async def test_third_concurrent_dispatch_refused_with_max2(
         tg.start_soon(_fast)
 
     assert results[0] is not None and results[0]["success"] is True
-    assert results[1] is not None and results[1]["success"] is True
+    assert results[1] is not None and results[1]["success"] is True, results[1]
     assert results[2] is not None
     assert results[2]["error"] == "fleet_parallel_refused"
     assert results[2]["success"] is False
@@ -996,7 +998,7 @@ async def test_fourth_concurrent_dispatch_refused_with_max3(
         tg.start_soon(_fast)
 
     assert results[0] is not None and results[0]["success"] is True
-    assert results[1] is not None and results[1]["success"] is True
+    assert results[1] is not None and results[1]["success"] is True, results[1]
     assert results[2] is not None and results[2]["success"] is True
     assert results[3] is not None
     assert results[3]["error"] == "fleet_parallel_refused"
@@ -1009,10 +1011,10 @@ async def test_fourth_concurrent_dispatch_refused_with_max3(
 
 
 @pytest.mark.anyio
-async def test_end_to_end_resumable_dispatch_uses_resume_flag(
+async def test_end_to_end_unverified_resume_does_not_use_resume_flag(
     fleet_runtime: FleetRuntime, monkeypatch: Any, tmp_path: Path
 ) -> None:
-    """resume_session_id reaches build_food_truck_cmd and produces --resume <id> in the cmd."""
+    """A native session ID without durable lineage cannot produce a resume flag."""
     from autoskillit.fleet._api import execute_dispatch
 
     rt = fleet_runtime
@@ -1058,9 +1060,7 @@ async def test_end_to_end_resumable_dispatch_uses_resume_flag(
 
     assert captured_cmds, "build_food_truck_cmd was never called"
     cmd = captured_cmds[0]
-    assert "--resume" in cmd
-    idx = cmd.index("--resume")
-    assert cmd[idx + 1] == "test-session-id"
+    assert "--resume" not in cmd
 
 
 @pytest.mark.asyncio

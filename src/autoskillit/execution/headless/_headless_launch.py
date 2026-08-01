@@ -12,6 +12,8 @@ from autoskillit.core import (
     CmdSpec,
     CodingAgentBackend,
     HeadlessSkillDispatchPreparation,
+    ManagedHeadlessSessionLineageRef,
+    NativeShellCaptureDecision,
     OutputFormat,
     PluginArtifactAuthority,
     PluginLaunchBinding,
@@ -37,6 +39,12 @@ from autoskillit.execution.headless._headless_recovery import (
     _extract_missing_token_hints,
     _merge_token_usage,
 )
+from autoskillit.execution.headless._managed import (
+    _build_attempt_spec,
+    _BuildSpec,
+    _headless_plugin_load_mode,
+    _ManagedLineageObserver,
+)
 from autoskillit.execution.session import _check_expected_patterns
 
 if TYPE_CHECKING:
@@ -45,27 +53,6 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _NUDGE_TIMEOUT: float = 60.0
-
-_BuildSpec = Callable[
-    [PluginLaunchBinding | None, Mapping[str, str] | None],
-    CmdSpec,
-]
-
-
-def _headless_plugin_load_mode(
-    backend: CodingAgentBackend,
-    *,
-    add_dirs: Sequence[ValidatedAddDir] = (),
-) -> PluginLoadMode:
-    """Resolve how this concrete backend launch obtains its skill tree."""
-    capabilities = backend.capabilities
-    if not capabilities.skill_injection_capable:
-        return PluginLoadMode.NONE
-    if capabilities.plugin_install_capable:
-        return PluginLoadMode.EXPLICIT_PLUGIN_DIR
-    if add_dirs:
-        return PluginLoadMode.GENERATED_HOME
-    return PluginLoadMode.PROJECTED_HOME
 
 
 def _skill_launch_spec_builder(
@@ -89,12 +76,15 @@ def _skill_launch_spec_builder(
     resume_message: str | None,
     readonly_skill: bool,
     network_access: bool,
+    native_shell_capture_decision: NativeShellCaptureDecision | None,
+    managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
 ) -> _BuildSpec:
     """Bind stable skill-command inputs while leaving attempt identity late-bound."""
 
     def build(
         plugin_binding: PluginLaunchBinding | None,
         provider_extras: Mapping[str, str] | None,
+        managed_attempt_id: str | None = None,
     ) -> CmdSpec:
         config = SkillSessionConfig(
             completion_marker=completion_marker,
@@ -117,6 +107,9 @@ def _skill_launch_spec_builder(
                 "read-only" if readonly_skill else backend.capabilities.default_skill_sandbox_mode
             ),
             network_access=network_access,
+            native_shell_capture_decision=native_shell_capture_decision,
+            managed_lineage_ref=managed_lineage_ref,
+            managed_attempt_id=managed_attempt_id,
         )
         return backend.build_skill_session_cmd(skill_command, cwd, config)
 
@@ -142,12 +135,15 @@ def _food_truck_launch_spec_builder(
     allowed_write_prefixes: tuple[str, ...],
     sentinel_contract: str,
     resume_message: str | None,
+    native_shell_capture_decision: NativeShellCaptureDecision | None,
+    managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
 ) -> _BuildSpec:
     """Bind food-truck inputs while finalizing semantic capability per binding."""
 
     def build(
         plugin_binding: PluginLaunchBinding | None,
         provider_extras: Mapping[str, str] | None,
+        managed_attempt_id: str | None = None,
     ) -> CmdSpec:
         attempt_cwd = cwd
         if capability_preparation is not None:
@@ -180,6 +176,9 @@ def _food_truck_launch_spec_builder(
             allowed_write_prefixes=allowed_write_prefixes,
             sentinel_contract=sentinel_contract,
             resume_message=resume_message,
+            native_shell_capture_decision=native_shell_capture_decision,
+            managed_lineage_ref=managed_lineage_ref,
+            managed_attempt_id=managed_attempt_id,
         )
 
     return build
@@ -236,6 +235,8 @@ async def _run_headless_attempt(
     session_id: str | None,
     on_session_id_resolved: Callable[[str], None] | None,
     stream_parser: StreamParser,
+    managed_lineage_observer: _ManagedLineageObserver | None = None,
+    managed_attempt_id: str | None = None,
 ) -> tuple[SubprocessResult, CmdSpec]:
     """Build and execute one provider attempt under one owned plugin binding."""
     with _plugin_launch_binding(
@@ -243,7 +244,13 @@ async def _run_headless_attempt(
         backend=backend,
         load_mode=plugin_load_mode,
     ) as binding:
-        spec = build_spec(binding, provider_extras)
+        spec = _build_attempt_spec(
+            build_spec,
+            binding=binding,
+            provider_extras=provider_extras,
+            observer=managed_lineage_observer,
+            managed_attempt_id=managed_attempt_id,
+        )
         if spec.cmd:
             binary = Path(spec.cmd[0]).stem
             expected = backend.capabilities.process_name
@@ -309,6 +316,7 @@ async def _attempt_contract_nudge(
     plugin_authority: PluginArtifactAuthority | None = None,
     plugin_load_mode: PluginLoadMode = PluginLoadMode.NONE,
     session_env: Mapping[str, str] | None = None,
+    managed_lineage_observer: _ManagedLineageObserver | None = None,
 ) -> SkillResult | None:
     """Resume once to recover omitted structured tokens or the completion marker."""
     if backend is None or not backend.capabilities.session_resume_capable:
@@ -375,12 +383,28 @@ async def _attempt_contract_nudge(
             backend=backend,
             load_mode=plugin_load_mode,
         ) as binding:
+            managed_attempt_id = (
+                managed_lineage_observer.allocate_attempt()
+                if managed_lineage_observer is not None
+                else None
+            )
             spec = backend.build_resume_cmd(
                 resume_session_id=skill_result.session_id,
                 prompt=prompt,
                 output_format=OutputFormat.JSON,
                 plugin_binding=binding,
                 env_extras=effective_extras or None,
+                native_shell_capture_decision=(
+                    managed_lineage_observer.decision
+                    if managed_lineage_observer is not None
+                    else None
+                ),
+                managed_lineage_ref=(
+                    managed_lineage_observer.reference
+                    if managed_lineage_observer is not None
+                    else None
+                ),
+                managed_attempt_id=managed_attempt_id,
             )
             assert_headless_cmd(spec)
             nudge_result = await runner(
@@ -405,6 +429,8 @@ async def _attempt_contract_nudge(
     except Exception:
         logger.warning("nudge_parse_stdout_failed", exc_info=True)
         return None
+    if managed_lineage_observer is not None and nudge_session.session_id:
+        managed_lineage_observer.bind_candidate(nudge_session.session_id)
     combined_result = skill_result.result + "\n" + nudge_session.output
     nudge_usage = nudge_session.raw.get("token_usage")
 

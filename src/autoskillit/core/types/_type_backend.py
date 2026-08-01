@@ -11,6 +11,10 @@ from typing import Any
 
 from ._type_checkpoint import SessionCheckpoint
 from ._type_enums import BackendEventKind, HookTrustPolicy, OutputFormat
+from ._type_native_shell_capture import (
+    ManagedHeadlessSessionLineageRef,
+    NativeShellCaptureDecision,
+)
 from ._type_plugin_source import PluginLaunchBinding, normalize_inherited_fds
 from ._type_recipe_delivery import RecipeDeliveryBudgetDef
 from ._type_results import ValidatedAddDir
@@ -433,6 +437,24 @@ class SkillSessionConfig:
     sandbox_mode: str = "workspace-write"
     backend_override: str | None = None
     network_access: bool = False
+    native_shell_capture_decision: NativeShellCaptureDecision | None = None
+    managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
+    managed_attempt_id: str | None = None
+
+    def __post_init__(self) -> None:
+        managed_values = (
+            self.native_shell_capture_decision,
+            self.managed_lineage_ref,
+            self.managed_attempt_id,
+        )
+        if any(value is not None for value in managed_values) and not all(
+            value is not None for value in managed_values
+        ):
+            raise ValueError("managed native shell capture fields must be supplied together")
+        if self.managed_attempt_id is not None and not _re.fullmatch(
+            r"[0-9a-f]{32}", self.managed_attempt_id
+        ):
+            raise ValueError("managed_attempt_id must be 32 lowercase hexadecimal characters")
 
 
 @dataclass(frozen=True, slots=True)

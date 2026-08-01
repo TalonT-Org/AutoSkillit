@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import base64
+import errno
 import importlib
 import json
 import os
+import shlex
 import stat
 import subprocess
 from dataclasses import FrozenInstanceError
@@ -34,8 +36,14 @@ from autoskillit.hooks._capture_artifacts import (
     verify_reference_publication_binding,
 )
 from autoskillit.hooks._capture_contract import (
+    CAPTURE_REQUEST_PROTOCOL_VERSION,
+    NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
+    PROTECTED_CAPTURE_ENV_VARS,
     CaptureFailureV2,
+    CaptureLineageRef,
+    CaptureRequest,
     CaptureV2Fields,
+    encode_capture_request,
     parse_capture_failure_v2,
     parse_capture_v2,
 )
@@ -85,6 +93,32 @@ def _single_failure_marker(output: str) -> CaptureFailureV2:
     ]
     assert len(candidates) == 1
     return parse_capture_failure_v2(candidates[0])
+
+
+def _runner_request(
+    *,
+    action: str = "run",
+    command: str | None = "printf ran > command_ran",
+    cwd: str = "/abs/project",
+    capture_id: str = _CAPTURE_ID,
+    mode: str = "capture",
+    attempt_id: str | None = None,
+    lineage_ref: CaptureLineageRef | None = None,
+) -> CaptureRequest:
+    return CaptureRequest(
+        protocol_version=CAPTURE_REQUEST_PROTOCOL_VERSION,
+        action=action,
+        mode=mode,
+        attempt_id=attempt_id,
+        lineage_ref=lineage_ref,
+        cwd=cwd,
+        capture_id=capture_id,
+        command=command if action == "run" else None,
+    )
+
+
+def _runner_args(**changes: object) -> list[str]:
+    return [encode_capture_request(_runner_request(**changes))]  # type: ignore[arg-type]
 
 
 def _open_authority(project: Path):
@@ -504,13 +538,20 @@ def test_symlinked_policy_root_is_not_trusted(tmp_path: Path) -> None:
         anchor.close()
 
 
-def test_symlinked_policy_leaf_is_not_trusted(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "policy_filename",
+    [".hook_config.json", ".hook_config_overlay.json"],
+)
+def test_symlinked_policy_leaf_is_not_trusted(
+    policy_filename: str,
+    tmp_path: Path,
+) -> None:
     project = tmp_path / "project"
     temp_dir = project.joinpath(*CAPTURE_PATH_COMPONENTS[:2])
     temp_dir.mkdir(parents=True)
     external_config = tmp_path / "external-config.json"
     external_config.write_text(json.dumps({"output_budget_policy": {"disabled": True}}))
-    (temp_dir / ".hook_config.json").symlink_to(external_config)
+    (temp_dir / policy_filename).symlink_to(external_config)
 
     anchor = open_project_anchor(str(project))
     try:
@@ -559,6 +600,137 @@ def test_verified_policy_merges_overlay_and_bounds_inline_bytes(
         assert read_capture_policy(anchor) == CapturePolicy(disabled=True, inline_bytes=expected)
     finally:
         anchor.close()
+
+
+@pytest.mark.parametrize("policy_source", ["base", "overlay"])
+@pytest.mark.parametrize("policy_disabled", [False, True])
+@pytest.mark.parametrize("requested_mode", ["capture", "direct"])
+def test_runner_policy_precedence_cross_product(
+    requested_mode: str,
+    policy_disabled: bool,
+    policy_source: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    temp_dir = project.joinpath(*CAPTURE_PATH_COMPONENTS[:2])
+    temp_dir.mkdir(parents=True)
+    base_disabled = not policy_disabled if policy_source == "overlay" else policy_disabled
+    (temp_dir / ".hook_config.json").write_text(
+        json.dumps({"output_budget_policy": {"disabled": base_disabled}})
+    )
+    if policy_source == "overlay":
+        (temp_dir / ".hook_config_overlay.json").write_text(
+            json.dumps({"output_budget_policy": {"disabled": policy_disabled}})
+        )
+
+    project_stat = project.stat()
+    reference = CaptureLineageRef(
+        schema_version=1,
+        launch_id="a" * 32,
+        lineage_digest="b" * 64,
+        lineage_anchor=str(project),
+        anchor_device=project_stat.st_dev,
+        anchor_inode=project_stat.st_ino,
+    )
+    observations: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        capture_artifacts,
+        "validate_lineage_reference",
+        lambda supplied_ref, supplied_attempt: (
+            supplied_ref == reference and supplied_attempt == "c" * 32
+        ),
+    )
+
+    def record_observation(
+        supplied_ref: CaptureLineageRef,
+        supplied_attempt: str,
+        **values: object,
+    ) -> bool:
+        assert supplied_ref == reference
+        assert supplied_attempt == "c" * 32
+        observations.append(values)
+        return True
+
+    monkeypatch.setattr(
+        capture_artifacts,
+        "record_runner_observation",
+        record_observation,
+    )
+
+    assert (
+        run_capture(
+            ":",
+            str(project),
+            _CAPTURE_ID,
+            requested_mode=requested_mode,
+            attempt_id="c" * 32,
+            lineage_ref=reference,
+        )
+        == 0
+    )
+
+    launch_direct = requested_mode == "direct"
+    effective_direct = launch_direct or policy_disabled
+    expected_reason = (
+        "launch_authorized_direct"
+        if launch_direct
+        else "project_policy_disabled"
+        if policy_disabled
+        else "capture_enabled"
+    )
+    assert observations == [
+        {
+            "effective_mode": "direct" if effective_direct else "capture",
+            "reason": expected_reason,
+            "project_policy_disabled": policy_disabled,
+        }
+    ]
+    assert _capture_dir(project).exists() is not effective_direct
+
+
+@pytest.mark.parametrize("requested_mode", ["capture", "direct"])
+def test_runner_observation_failure_prevents_command_execution(
+    requested_mode: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    project_stat = project.stat()
+    reference = CaptureLineageRef(
+        schema_version=1,
+        launch_id="a" * 32,
+        lineage_digest="b" * 64,
+        lineage_anchor=str(project),
+        anchor_device=project_stat.st_dev,
+        anchor_inode=project_stat.st_ino,
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "validate_lineage_reference",
+        lambda *_args: True,
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "record_runner_observation",
+        lambda *_args, **_kwargs: False,
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "_spawn_bash",
+        lambda *_args, **_kwargs: pytest.fail("command must not execute"),
+    )
+
+    with pytest.raises(CaptureSetupError, match="runner observation recording failed"):
+        run_capture(
+            ":",
+            str(project),
+            _CAPTURE_ID,
+            requested_mode=requested_mode,
+            attempt_id="c" * 32,
+            lineage_ref=reference,
+        )
 
 
 def test_policy_partial_open_failure_closes_autoskillit_fd(
@@ -722,13 +894,138 @@ def test_setup_failure_prevents_user_command_and_emits_failure_marker(
     temp_dir = project.joinpath(*CAPTURE_PATH_COMPONENTS[:2])
     temp_dir.mkdir(parents=True)
     (temp_dir / CAPTURE_PATH_COMPONENTS[2]).write_text("blocking file")
-    encoded = base64.b64encode(b"printf ran > command_ran").decode()
-
-    assert capture_artifacts._main(["run", encoded, str(project), _CAPTURE_ID]) == 1
+    assert (
+        capture_artifacts._main(_runner_args(command="printf ran > command_ran", cwd=str(project)))
+        == 1
+    )
     captured = capfd.readouterr()
     assert '"status":"capture_failed"' in captured.err
     assert "shell capture v2:" not in captured.out + captured.err
     assert not (project / "command_ran").exists()
+
+
+@pytest.mark.parametrize("root_shape", ["blocking_file", "symlink"])
+def test_validated_direct_bypasses_unusable_capture_root_without_artifact_or_lease(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    root_shape: str,
+) -> None:
+    project = tmp_path / "project"
+    capture_parent = project.joinpath(*CAPTURE_PATH_COMPONENTS[:-1])
+    capture_parent.mkdir(parents=True)
+    capture_root = capture_parent / CAPTURE_PATH_COMPONENTS[-1]
+    if root_shape == "blocking_file":
+        capture_root.write_text("must remain a file", encoding="utf-8")
+    else:
+        external = tmp_path / "external-capture-root"
+        external.mkdir()
+        capture_root.symlink_to(external, target_is_directory=True)
+
+    project_stat = project.stat()
+    reference = CaptureLineageRef(
+        schema_version=1,
+        launch_id="a" * 32,
+        lineage_digest="b" * 64,
+        lineage_anchor=str(project),
+        anchor_device=project_stat.st_dev,
+        anchor_inode=project_stat.st_ino,
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "validate_lineage_reference",
+        lambda supplied_ref, supplied_attempt: (
+            supplied_ref == reference and supplied_attempt == "c" * 32
+        ),
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "record_runner_observation",
+        lambda *_args, **_kwargs: True,
+    )
+
+    sentinel = project / "direct-ran"
+    assert (
+        run_capture(
+            f"printf direct > {shlex.quote(str(sentinel))}",
+            str(project),
+            _CAPTURE_ID,
+            requested_mode="direct",
+            attempt_id="c" * 32,
+            lineage_ref=reference,
+        )
+        == 0
+    )
+
+    assert sentinel.read_text(encoding="utf-8") == "direct"
+    assert not list(capture_root.glob("shell_*.log"))
+    if root_shape == "blocking_file":
+        assert capture_root.read_text(encoding="utf-8") == "must remain a file"
+    else:
+        assert capture_root.is_symlink()
+        assert not list(capture_root.iterdir())
+
+
+def test_direct_control_flow_exception_settles_and_reraises(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    project_stat = project.stat()
+    reference = CaptureLineageRef(
+        schema_version=1,
+        launch_id="a" * 32,
+        lineage_digest="b" * 64,
+        lineage_anchor=str(project),
+        anchor_device=project_stat.st_dev,
+        anchor_inode=project_stat.st_ino,
+    )
+
+    class InterruptingProcess(_FakeCaptureProcess):
+        def wait(self, timeout: float | None = None) -> int:
+            del timeout
+            raise KeyboardInterrupt
+
+    process = InterruptingProcess(b"")
+    settled: list[object] = []
+    monkeypatch.setattr(
+        capture_artifacts,
+        "validate_lineage_reference",
+        lambda *_args: True,
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "record_runner_observation",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "_spawn_bash",
+        lambda *_args, **_kwargs: process,
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "_own_spawned_process",
+        lambda spawned, *, capture_output: spawned,
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "_settle_failed_capture",
+        lambda supplied: settled.append(supplied),
+    )
+
+    with pytest.raises(KeyboardInterrupt):
+        run_capture(
+            ":",
+            str(project),
+            _CAPTURE_ID,
+            requested_mode="direct",
+            attempt_id="c" * 32,
+            lineage_ref=reference,
+        )
+
+    assert settled == [process]
+    assert process.stdout.closed
 
 
 @pytest.mark.parametrize("capture_id", ["", "0123456789abcde", "0123456789abcdeg"])
@@ -736,9 +1033,15 @@ def test_reject_mode_validates_capture_id(
     capture_id: str,
     capfd: pytest.CaptureFixture[str],
 ) -> None:
-    assert capture_artifacts._main(["reject", "", "/abs/project", capture_id]) == 1
+    request = _runner_request(action="reject", command=None)
+    raw = json.loads(base64.b64decode(encode_capture_request(request), validate=True))
+    raw["capture_id"] = capture_id
+    encoded = base64.b64encode(
+        json.dumps(raw, sort_keys=True, separators=(",", ":")).encode()
+    ).decode()
+    assert capture_artifacts._main([encoded]) == 1
     captured = capfd.readouterr()
-    assert "invalid capture id" in captured.err
+    assert "invalid capture runner invocation" in captured.err
     assert "capture request rejected before command execution" not in captured.err
 
 
@@ -767,7 +1070,7 @@ def test_valid_reject_runs_one_runner_tail_sweep(
         lambda requested_cwd, *, create: OpenLifecycle(),
     )
 
-    assert capture_artifacts._main(["reject", "", "/abs/project", _CAPTURE_ID]) == 1
+    assert capture_artifacts._main(_runner_args(action="reject", command=None)) == 1
     assert events == ["open", "sweep", "close"]
     assert "capture request rejected before command execution" in capfd.readouterr().err
 
@@ -801,7 +1104,7 @@ def test_runner_tail_preserves_dispatch_result_and_order(
         lambda requested_cwd, *, create: OpenLifecycle(),
     )
 
-    assert capture_artifacts._main(["run", "encoded", "/abs/project", _CAPTURE_ID]) == 37
+    assert capture_artifacts._main(_runner_args()) == 37
     assert events == ["dispatch", "open", "sweep", "close"]
 
 
@@ -816,7 +1119,7 @@ def test_runner_tail_cleanup_failure_does_not_replace_user_result(
 
     monkeypatch.setattr(capture_artifacts, "open_capture_lifecycle", fail_open)
 
-    assert capture_artifacts._main(["run", "encoded", "/abs/project", _CAPTURE_ID]) == 23
+    assert capture_artifacts._main(_runner_args()) == 23
     captured = capfd.readouterr()
     assert captured.out == ""
     assert "shell capture cleanup failed" in captured.err
@@ -845,7 +1148,7 @@ def test_runner_tail_reports_sweep_outcome_errors(
         lambda requested_cwd, *, create: OpenLifecycle(),
     )
 
-    assert capture_artifacts._main(["run", "encoded", "/abs/project", _CAPTURE_ID]) == 23
+    assert capture_artifacts._main(_runner_args()) == 23
     captured = capfd.readouterr()
     assert captured.out == ""
     assert "cleanup deferred after 2 errors" in captured.err
@@ -879,7 +1182,7 @@ def test_runner_tail_still_sweeps_after_unexpected_dispatch_exception(
         lambda requested_cwd, *, create: OpenLifecycle(),
     )
 
-    assert capture_artifacts._main(["run", "encoded", "/abs/project", _CAPTURE_ID]) == 1
+    assert capture_artifacts._main(_runner_args()) == 1
     assert swept == [True]
     assert "capture runner failed" in capfd.readouterr().err
 
@@ -892,8 +1195,119 @@ def test_malformed_runner_invocation_does_not_trigger_sweep(
 
     monkeypatch.setattr(capture_artifacts, "open_capture_lifecycle", unexpected_open)
 
-    assert capture_artifacts._main(["reject", "nonempty", "/abs/project", _CAPTURE_ID]) == 1
-    assert capture_artifacts._main(["run", "encoded", "relative", _CAPTURE_ID]) == 1
+    assert capture_artifacts._main(["not-base64"]) == 1
+    assert capture_artifacts._main([]) == 1
+
+
+@pytest.mark.parametrize(
+    ("request_mode", "ambient_mode", "attempt_id", "lineage_ref"),
+    [
+        ("capture", "direct", None, None),
+        (
+            "direct",
+            "capture",
+            "d" * 32,
+            CaptureLineageRef(
+                schema_version=1,
+                launch_id="a" * 32,
+                lineage_digest="b" * 64,
+                lineage_anchor="/lineage/anchor",
+                anchor_device=12,
+                anchor_inode=34,
+            ),
+        ),
+    ],
+)
+def test_dispatch_uses_only_request_mode_and_keeps_lineage_anchor_distinct_from_cwd(
+    monkeypatch: pytest.MonkeyPatch,
+    request_mode: str,
+    ambient_mode: str,
+    attempt_id: str | None,
+    lineage_ref: CaptureLineageRef | None,
+) -> None:
+    observed: dict[str, object] = {}
+
+    def record_run(command: str, cwd: str, capture_id: str, **kwargs: object) -> int:
+        observed.update(
+            command=command,
+            cwd=cwd,
+            capture_id=capture_id,
+            **kwargs,
+        )
+        return 17
+
+    monkeypatch.setenv(NATIVE_SHELL_CAPTURE_MODE_ENV_VAR, ambient_mode)
+    monkeypatch.setattr(capture_artifacts, "run_capture", record_run)
+    request = _runner_request(
+        mode=request_mode,
+        cwd="/command/cwd",
+        attempt_id=attempt_id,
+        lineage_ref=lineage_ref,
+    )
+
+    assert capture_artifacts._dispatch_runner(request) == 17
+    assert observed["requested_mode"] == request_mode
+    assert observed["attempt_id"] == attempt_id
+    assert observed["lineage_ref"] == lineage_ref
+    assert observed["cwd"] == "/command/cwd"
+    if lineage_ref is not None:
+        assert lineage_ref.lineage_anchor == "/lineage/anchor"
+        assert observed["cwd"] != lineage_ref.lineage_anchor
+
+
+def test_spawn_scrubs_all_protected_controls_from_user_bash_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    anchor = open_project_anchor(str(project))
+    observed: dict[str, object] = {}
+
+    def record_popen(*_args, **kwargs):
+        observed.update(kwargs)
+        return SimpleNamespace()
+
+    for name in PROTECTED_CAPTURE_ENV_VARS:
+        monkeypatch.setenv(name, f"hostile-{name}")
+    monkeypatch.setenv("PHASE4_UNRELATED_ENV", "preserved")
+    monkeypatch.setattr(capture_artifacts.subprocess, "Popen", record_popen)
+    try:
+        capture_artifacts._spawn_bash(
+            anchor,
+            capture_artifacts._resolve_bash(),
+            "printf safe",
+            capture_output=False,
+        )
+    finally:
+        anchor.close()
+
+    child_environment = observed["env"]
+    assert isinstance(child_environment, dict)
+    assert not PROTECTED_CAPTURE_ENV_VARS.intersection(child_environment)
+    assert child_environment["PHASE4_UNRELATED_ENV"] == "preserved"
+    for name in PROTECTED_CAPTURE_ENV_VARS:
+        assert os.environ[name] == f"hostile-{name}"
+
+
+def test_e2big_spawn_failure_is_explicit_bounded_and_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+
+    def fail_spawn(*_args, **_kwargs):
+        raise OSError(errno.E2BIG, "argument list too long")
+
+    monkeypatch.setattr(capture_artifacts.subprocess, "Popen", fail_spawn)
+
+    assert run_capture("printf must-not-run", str(project), _CAPTURE_ID) == 1
+    captured = capfd.readouterr()
+    assert "argument/environment exceeds system limit" in captured.err
+    assert len(captured.err.encode("utf-8")) <= 512
+    assert "must-not-run" not in captured.out
 
 
 def test_verified_disabled_policy_runs_without_capture(
@@ -937,9 +1351,10 @@ def test_spawn_failure_closes_created_artifact_fd(
         raise OSError("fault injection")
 
     monkeypatch.setattr(subprocess, "Popen", fail_spawn)
-    encoded = base64.b64encode(b"printf ran > command_ran").decode()
-
-    assert capture_artifacts._main(["run", encoded, str(project), _CAPTURE_ID]) == 1
+    assert (
+        capture_artifacts._main(_runner_args(command="printf ran > command_ran", cwd=str(project)))
+        == 1
+    )
 
     captured = capfd.readouterr()
     assert '"status":"capture_failed"' in captured.err
@@ -1003,9 +1418,10 @@ def test_post_duplication_failure_closes_all_fds_and_prevents_command(
     monkeypatch.setattr(capture_artifacts.os, "dup", record_dup)
     monkeypatch.setattr(capture_artifacts, "_same_identity", fail_duplicated_identity)
     monkeypatch.setattr(capture_artifacts, "_spawn_bash", unexpected_spawn)
-    encoded = base64.b64encode(b"printf ran > command_ran").decode()
-
-    assert capture_artifacts._main(["run", encoded, str(project), _CAPTURE_ID]) == 1
+    assert (
+        capture_artifacts._main(_runner_args(command="printf ran > command_ran", cwd=str(project)))
+        == 1
+    )
 
     captured = capfd.readouterr()
     artifact_path = _capture_dir(project) / f"shell_{_CAPTURE_ID}.log"
@@ -1089,9 +1505,10 @@ def test_post_creation_identity_failure_closes_artifact_and_emits_failure(
         return value
 
     monkeypatch.setattr(capture_artifacts.os, "fstat", fail_artifact_identity)
-    encoded = base64.b64encode(b"printf ran > command_ran").decode()
-
-    assert capture_artifacts._main(["run", encoded, str(project), _CAPTURE_ID]) == 1
+    assert (
+        capture_artifacts._main(_runner_args(command="printf ran > command_ran", cwd=str(project)))
+        == 1
+    )
     captured = capfd.readouterr()
     assert '"status":"capture_failed"' in captured.err
     assert "shell capture v2:" not in captured.out + captured.err
@@ -1323,6 +1740,39 @@ def test_capture_stream_failure_closes_pipe_and_artifact(
     for fd in observed_fds:
         with pytest.raises(OSError):
             os.fstat(fd)
+
+
+def test_capture_control_flow_exception_settles_and_reraises(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    process = _FakeCaptureProcess(b"")
+    settled: list[object] = []
+
+    monkeypatch.setattr(
+        capture_artifacts,
+        "_spawn_bash",
+        lambda *_args, **_kwargs: process,
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "_drain_capture",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(KeyboardInterrupt()),
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "_settle_failed_capture",
+        lambda supplied: settled.append(supplied),
+    )
+
+    with pytest.raises(KeyboardInterrupt):
+        run_capture("printf output", str(project), _CAPTURE_ID)
+
+    assert settled == [process]
+    assert _capture_record(project).state is CaptureState.FAILED
+    assert process.stdout.closed
 
 
 def test_capture_readback_failure_after_partial_output_closes_runtime_fds(

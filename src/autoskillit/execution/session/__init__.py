@@ -10,6 +10,11 @@ from autoskillit.execution.session._exit_classification import (
     classify_infra_exit,  # noqa: F401 — re-export for callers
     has_rate_limit_signal,  # noqa: F401 — re-export for callers
 )
+from autoskillit.execution.session._managed_headless_session_lineage import (
+    DefaultManagedHeadlessSessionLineageStore,
+    ManagedHeadlessSessionLineageCASMismatch,
+    ManagedHeadlessSessionLineageConflictError,
+)
 from autoskillit.execution.session._retry_fsm import (
     _KILL_ANOMALY_SUBTYPES,  # noqa: F401 — re-export for callers
     _compute_retry,  # noqa: F401 — re-export for callers
@@ -51,7 +56,10 @@ _truncate = truncate_text
 # Re-export SkillResult so existing callers can import from this module.
 __all__ = [
     "CliSubtype",
+    "DefaultManagedHeadlessSessionLineageStore",
     "DefaultSkillSessionContractStore",
+    "ManagedHeadlessSessionLineageCASMismatch",
+    "ManagedHeadlessSessionLineageConflictError",
     "SessionState",
     "SessionStateLock",
     "SkillSessionContract",

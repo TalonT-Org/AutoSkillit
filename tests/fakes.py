@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import hashlib
+import json
 import re
 import uuid
 from collections import deque
@@ -23,7 +25,13 @@ from autoskillit.core.types import (
     DatabaseReader,
     HeadlessExecutor,
     HeadlessSkillDispatchPreparation,
+    ManagedHeadlessSessionKind,
+    ManagedHeadlessSessionLineage,
+    ManagedHeadlessSessionLineageRef,
+    ManagedHeadlessSessionTerminalState,
     MergeQueueWatcher,
+    NativeShellCaptureDecision,
+    NativeShellCaptureObservation,
     PluginArtifactAuthority,
     PluginArtifactIdentity,
     PluginLaunchBinding,
@@ -45,7 +53,14 @@ from autoskillit.core.types import (
 class FakeSkillSessionContractStore:
     """Always-present protocol fake for contexts that never launch skill sessions."""
 
-    def create_provisional(self, *, contract: Any, snapshot: Any) -> str:
+    def create_provisional(
+        self,
+        *,
+        contract: Any,
+        snapshot: Any,
+        managed_lineage_ref: Any = None,
+    ) -> str:
+        del managed_lineage_ref
         raise AssertionError("unexpected skill session contract persistence")
 
     def observe_candidate(self, correlation_key: str, session_id: str) -> None:
@@ -53,6 +68,14 @@ class FakeSkillSessionContractStore:
 
     def finalize(self, correlation_key: str, session_id: str) -> None:
         raise AssertionError("unexpected skill session finalization")
+
+    def rebind_final_session(
+        self,
+        session_id: str,
+        final_session_id: str,
+        managed_lineage_ref: Any,
+    ) -> None:
+        raise AssertionError("unexpected skill session final rebind")
 
     def load(self, session_id: str) -> Any:
         raise AssertionError("unexpected skill session resume")
@@ -62,6 +85,330 @@ class FakeSkillSessionContractStore:
 
     def discard(self, correlation_key: str) -> None:
         raise AssertionError("unexpected skill session discard")
+
+
+class FakeManagedHeadlessSessionLineageStore:
+    """Small in-memory lineage store with the production protocol's CAS behavior."""
+
+    def __init__(self) -> None:
+        self._records: dict[str, ManagedHeadlessSessionLineage] = {}
+        self._final_index: dict[str, str] = {}
+        self._dispatch_index: dict[str, str] = {}
+
+    @staticmethod
+    def _digest(value: object) -> str:
+        return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
+
+    def _next(
+        self,
+        lineage: ManagedHeadlessSessionLineage,
+        **changes: Any,
+    ) -> ManagedHeadlessSessionLineage:
+        provisional = dataclasses.replace(
+            lineage,
+            generation=lineage.generation + 1,
+            record_digest="0" * 64,
+            **changes,
+        )
+        return dataclasses.replace(
+            provisional,
+            record_digest=self._digest(provisional),
+        )
+
+    def _current(
+        self,
+        lineage_anchor: Path,
+        launch_id: str,
+        expected_generation: int | None = None,
+        expected_record_digest: str | None = None,
+    ) -> ManagedHeadlessSessionLineage:
+        lineage = self._records[launch_id]
+        if Path(lineage.lineage_anchor) != lineage_anchor.resolve():
+            raise ValueError("Managed lineage anchor mismatch")
+        if expected_generation is not None and (
+            lineage.generation != expected_generation
+            or lineage.record_digest != expected_record_digest
+        ):
+            raise RuntimeError("fake lineage CAS mismatch")
+        return lineage
+
+    def create(
+        self,
+        *,
+        lineage_anchor: Path,
+        launch_id: str,
+        decision: NativeShellCaptureDecision,
+        backend: str,
+        session_kind: ManagedHeadlessSessionKind,
+        dispatch_id: str | None = None,
+    ) -> ManagedHeadlessSessionLineage:
+        anchor = lineage_anchor.resolve()
+        stat_result = anchor.stat()
+        lineage_digest = self._digest(
+            {
+                "launch_id": launch_id,
+                "decision": decision.to_dict(),
+                "backend": backend,
+                "session_kind": session_kind.value,
+                "anchor": str(anchor),
+            }
+        )
+        provisional = ManagedHeadlessSessionLineage(
+            launch_id=launch_id,
+            decision=decision,
+            backend=backend,
+            session_kind=session_kind,
+            lineage_anchor=str(anchor),
+            anchor_device=stat_result.st_dev,
+            anchor_inode=stat_result.st_ino,
+            lineage_digest=lineage_digest,
+            generation=0,
+            record_digest="0" * 64,
+            dispatch_id=dispatch_id,
+        )
+        lineage = dataclasses.replace(
+            provisional,
+            record_digest=self._digest(provisional),
+        )
+        existing = self._records.get(launch_id)
+        if existing is not None:
+            return existing
+        self._records[launch_id] = lineage
+        if dispatch_id is not None:
+            self._dispatch_index[dispatch_id] = launch_id
+        return lineage
+
+    def load(
+        self,
+        *,
+        lineage_anchor: Path,
+        launch_id: str,
+    ) -> ManagedHeadlessSessionLineage:
+        return self._current(lineage_anchor, launch_id)
+
+    def load_reference(
+        self,
+        reference: ManagedHeadlessSessionLineageRef,
+    ) -> ManagedHeadlessSessionLineage:
+        lineage = self.load(
+            lineage_anchor=Path(reference.lineage_anchor),
+            launch_id=reference.launch_id,
+        )
+        if lineage.reference != reference:
+            raise ValueError("Managed lineage reference identity mismatch")
+        return lineage
+
+    def find_by_final_native_session_id(
+        self,
+        *,
+        lineage_anchor: Path,
+        session_id: str,
+    ) -> ManagedHeadlessSessionLineage:
+        return self.load(
+            lineage_anchor=lineage_anchor,
+            launch_id=self._final_index[session_id],
+        )
+
+    def find_by_dispatch_id(
+        self,
+        *,
+        lineage_anchor: Path,
+        dispatch_id: str,
+    ) -> ManagedHeadlessSessionLineage:
+        return self.load(
+            lineage_anchor=lineage_anchor,
+            launch_id=self._dispatch_index[dispatch_id],
+        )
+
+    def append_attempt(
+        self,
+        *,
+        lineage_anchor: Path,
+        launch_id: str,
+        attempt_id: str,
+        expected_generation: int,
+        expected_record_digest: str,
+    ) -> ManagedHeadlessSessionLineage:
+        current = self._current(
+            lineage_anchor,
+            launch_id,
+            expected_generation,
+            expected_record_digest,
+        )
+        if attempt_id in current.attempt_ids:
+            return current
+        updated = self._next(current, attempt_ids=(*current.attempt_ids, attempt_id))
+        self._records[launch_id] = updated
+        return updated
+
+    def bind_candidate_native_session_id(
+        self,
+        *,
+        lineage_anchor: Path,
+        launch_id: str,
+        session_id: str,
+        expected_generation: int,
+        expected_record_digest: str,
+    ) -> ManagedHeadlessSessionLineage:
+        current = self._current(
+            lineage_anchor,
+            launch_id,
+            expected_generation,
+            expected_record_digest,
+        )
+        if session_id in current.candidate_native_session_ids:
+            return current
+        updated = self._next(
+            current,
+            candidate_native_session_ids=(
+                *current.candidate_native_session_ids,
+                session_id,
+            ),
+        )
+        self._records[launch_id] = updated
+        return updated
+
+    def bind_final_native_session_id(
+        self,
+        *,
+        lineage_anchor: Path,
+        launch_id: str,
+        session_id: str,
+        expected_generation: int,
+        expected_record_digest: str,
+    ) -> ManagedHeadlessSessionLineage:
+        current = self._current(
+            lineage_anchor,
+            launch_id,
+            expected_generation,
+            expected_record_digest,
+        )
+        if current.final_native_session_id == session_id:
+            return current
+        if current.final_native_session_id is not None:
+            raise RuntimeError("fake lineage final identity already bound")
+        candidates = current.candidate_native_session_ids
+        if session_id not in candidates:
+            candidates = (*candidates, session_id)
+        updated = self._next(
+            current,
+            candidate_native_session_ids=candidates,
+            final_native_session_id=session_id,
+        )
+        self._records[launch_id] = updated
+        self._final_index[session_id] = launch_id
+        return updated
+
+    def rebind_final_native_session_id(
+        self,
+        *,
+        lineage_anchor: Path,
+        launch_id: str,
+        expected_session_id: str,
+        session_id: str,
+        expected_generation: int,
+        expected_record_digest: str,
+    ) -> ManagedHeadlessSessionLineage:
+        current = self._current(lineage_anchor, launch_id)
+        if current.final_native_session_id == session_id:
+            return current
+        current = self._current(
+            lineage_anchor,
+            launch_id,
+            expected_generation,
+            expected_record_digest,
+        )
+        if current.final_native_session_id != expected_session_id:
+            raise RuntimeError("fake lineage final identity no longer matches resume")
+        if self._final_index.get(expected_session_id) != launch_id:
+            raise RuntimeError("fake lineage prior final identity is not owned")
+        indexed_launch_id = self._final_index.get(session_id)
+        if indexed_launch_id is not None and indexed_launch_id != launch_id:
+            raise RuntimeError("fake lineage replacement final identity is already owned")
+        candidates = current.candidate_native_session_ids
+        if session_id not in candidates:
+            candidates = (*candidates, session_id)
+        updated = self._next(
+            current,
+            candidate_native_session_ids=candidates,
+            final_native_session_id=session_id,
+        )
+        self._records[launch_id] = updated
+        self._final_index[session_id] = launch_id
+        del self._final_index[expected_session_id]
+        return updated
+
+    def bind_dispatch_id(
+        self,
+        *,
+        lineage_anchor: Path,
+        launch_id: str,
+        dispatch_id: str,
+        expected_generation: int,
+        expected_record_digest: str,
+    ) -> ManagedHeadlessSessionLineage:
+        current = self._current(
+            lineage_anchor,
+            launch_id,
+            expected_generation,
+            expected_record_digest,
+        )
+        if current.dispatch_id == dispatch_id:
+            return current
+        updated = self._next(current, dispatch_id=dispatch_id)
+        self._records[launch_id] = updated
+        self._dispatch_index[dispatch_id] = launch_id
+        return updated
+
+    def set_terminal_state(
+        self,
+        *,
+        lineage_anchor: Path,
+        launch_id: str,
+        terminal_state: ManagedHeadlessSessionTerminalState,
+        expected_generation: int,
+        expected_record_digest: str,
+    ) -> ManagedHeadlessSessionLineage:
+        current = self._current(
+            lineage_anchor,
+            launch_id,
+            expected_generation,
+            expected_record_digest,
+        )
+        if current.terminal_state is terminal_state:
+            return current
+        if current.terminal_state is not ManagedHeadlessSessionTerminalState.ACTIVE:
+            raise RuntimeError("fake lineage terminal state already closed")
+        updated = self._next(current, terminal_state=terminal_state)
+        self._records[launch_id] = updated
+        return updated
+
+    def record_observation(
+        self,
+        *,
+        lineage_anchor: Path,
+        launch_id: str,
+        observation: NativeShellCaptureObservation,
+        expected_generation: int,
+        expected_record_digest: str,
+    ) -> ManagedHeadlessSessionLineage:
+        current = self._current(
+            lineage_anchor,
+            launch_id,
+            expected_generation,
+            expected_record_digest,
+        )
+        if observation in current.observations:
+            return current
+        updated = self._next(current, observations=(*current.observations, observation))
+        self._records[launch_id] = updated
+        return updated
+
+    def collect_runner_observations(
+        self,
+        reference: ManagedHeadlessSessionLineageRef,
+    ) -> ManagedHeadlessSessionLineage:
+        return self.load_reference(reference)
 
 
 @dataclasses.dataclass
@@ -209,6 +556,8 @@ class ExecutorCall:
     skill_contract: Any | None = None
     capability_contract: Any | None = None
     on_session_id_resolved: Callable[[str], None] | None = None
+    native_shell_capture_decision: NativeShellCaptureDecision | None = None
+    managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
 
 
 @dataclasses.dataclass
@@ -249,6 +598,8 @@ class DispatchFoodTruckCall:
     on_session_id_resolved: Callable[[str], None] | None = None
     backend_override: str | None = None
     capability_preparation: HeadlessSkillDispatchPreparation | None = None
+    native_shell_capture_decision: NativeShellCaptureDecision | None = None
+    managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
 
 
 _DEFAULT_SKILL_RESULT = SkillResult(
@@ -327,6 +678,8 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         skill_contract: Any | None = None,
         capability_contract: Any | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
+        native_shell_capture_decision: NativeShellCaptureDecision | None = None,
+        managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
     ) -> SkillResult:
         self.calls.append(
             ExecutorCall(
@@ -372,6 +725,8 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 skill_contract=skill_contract,
                 capability_contract=capability_contract,
                 on_session_id_resolved=on_session_id_resolved,
+                native_shell_capture_decision=native_shell_capture_decision,
+                managed_lineage_ref=managed_lineage_ref,
             )
         )
         if self._queue:
@@ -423,6 +778,8 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         on_session_id_resolved: Callable[[str], None] | None = None,
         backend_override: str | None = None,
         capability_preparation: HeadlessSkillDispatchPreparation | None = None,
+        native_shell_capture_decision: NativeShellCaptureDecision | None = None,
+        managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
     ) -> SkillResult:
         self.dispatch_calls.append(
             DispatchFoodTruckCall(
@@ -460,6 +817,8 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 on_session_id_resolved=on_session_id_resolved,
                 backend_override=backend_override,
                 capability_preparation=capability_preparation,
+                native_shell_capture_decision=native_shell_capture_decision,
+                managed_lineage_ref=managed_lineage_ref,
             )
         )
         if self._queue:

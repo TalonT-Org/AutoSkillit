@@ -132,6 +132,24 @@ def test_launch_id_in_headless_exclusive_vars() -> None:
     assert "AUTOSKILLIT_LAUNCH_ID" in _HEADLESS_EXCLUSIVE_VARS
 
 
+def test_native_shell_lineage_controls_are_headless_exclusive() -> None:
+    from autoskillit.core import (
+        MANAGED_ATTEMPT_ID_ENV_VAR,
+        MANAGED_LAUNCH_ID_ENV_VAR,
+        MANAGED_LINEAGE_DIGEST_ENV_VAR,
+        MANAGED_LINEAGE_REF_ENV_VAR,
+        NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
+    )
+
+    assert {
+        NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
+        MANAGED_LAUNCH_ID_ENV_VAR,
+        MANAGED_ATTEMPT_ID_ENV_VAR,
+        MANAGED_LINEAGE_DIGEST_ENV_VAR,
+        MANAGED_LINEAGE_REF_ENV_VAR,
+    } <= _HEADLESS_EXCLUSIVE_VARS
+
+
 def test_allowed_write_prefix_in_headless_exclusive_vars() -> None:
     assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIX" in _HEADLESS_EXCLUSIVE_VARS
 

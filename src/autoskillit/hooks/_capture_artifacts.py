@@ -609,13 +609,15 @@ def run_capture(
         if lineage_valid:
             assert lineage_ref is not None
             assert attempt_id is not None
-            record_runner_observation(
+            observation_recorded = record_runner_observation(
                 lineage_ref,
                 attempt_id,
                 effective_mode="direct" if effective_direct else "capture",
                 reason=effective_reason,
                 project_policy_disabled=policy.disabled,
             )
+            if not observation_recorded:
+                raise CaptureSetupError("runner observation recording failed")
         if effective_direct:
             try:
                 spawned = _spawn_bash(anchor, bash_path, command, capture_output=False)

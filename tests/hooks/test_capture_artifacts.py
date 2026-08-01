@@ -689,6 +689,50 @@ def test_runner_policy_precedence_cross_product(
     assert _capture_dir(project).exists() is not effective_direct
 
 
+@pytest.mark.parametrize("requested_mode", ["capture", "direct"])
+def test_runner_observation_failure_prevents_command_execution(
+    requested_mode: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    project_stat = project.stat()
+    reference = CaptureLineageRef(
+        schema_version=1,
+        launch_id="a" * 32,
+        lineage_digest="b" * 64,
+        lineage_anchor=str(project),
+        anchor_device=project_stat.st_dev,
+        anchor_inode=project_stat.st_ino,
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "validate_lineage_reference",
+        lambda *_args: True,
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "record_runner_observation",
+        lambda *_args, **_kwargs: False,
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "_spawn_bash",
+        lambda *_args, **_kwargs: pytest.fail("command must not execute"),
+    )
+
+    with pytest.raises(CaptureSetupError, match="runner observation recording failed"):
+        run_capture(
+            ":",
+            str(project),
+            _CAPTURE_ID,
+            requested_mode=requested_mode,
+            attempt_id="c" * 32,
+            lineage_ref=reference,
+        )
+
+
 def test_policy_partial_open_failure_closes_autoskillit_fd(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

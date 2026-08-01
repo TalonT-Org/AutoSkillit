@@ -628,6 +628,8 @@ def run_capture(
                 direct_settlement = (
                     _settle_failed_capture(process) if process is not None else None
                 )
+                if not isinstance(exc, _CAPTURE_RUNTIME_ERRORS):
+                    raise
                 return _capture_replay.capture_failure_return(
                     _capture_replay.failure_transport(
                         stage="direct process",

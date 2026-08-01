@@ -965,6 +965,69 @@ def test_validated_direct_bypasses_unusable_capture_root_without_artifact_or_lea
         assert not list(capture_root.iterdir())
 
 
+def test_direct_control_flow_exception_settles_and_reraises(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    project_stat = project.stat()
+    reference = CaptureLineageRef(
+        schema_version=1,
+        launch_id="a" * 32,
+        lineage_digest="b" * 64,
+        lineage_anchor=str(project),
+        anchor_device=project_stat.st_dev,
+        anchor_inode=project_stat.st_ino,
+    )
+
+    class InterruptingProcess(_FakeCaptureProcess):
+        def wait(self, timeout: float | None = None) -> int:
+            del timeout
+            raise KeyboardInterrupt
+
+    process = InterruptingProcess(b"")
+    settled: list[object] = []
+    monkeypatch.setattr(
+        capture_artifacts,
+        "validate_lineage_reference",
+        lambda *_args: True,
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "record_runner_observation",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "_spawn_bash",
+        lambda *_args, **_kwargs: process,
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "_own_spawned_process",
+        lambda spawned, *, capture_output: spawned,
+    )
+    monkeypatch.setattr(
+        capture_artifacts,
+        "_settle_failed_capture",
+        lambda supplied: settled.append(supplied),
+    )
+
+    with pytest.raises(KeyboardInterrupt):
+        run_capture(
+            ":",
+            str(project),
+            _CAPTURE_ID,
+            requested_mode="direct",
+            attempt_id="c" * 32,
+            lineage_ref=reference,
+        )
+
+    assert settled == [process]
+    assert process.stdout.closed
+
+
 @pytest.mark.parametrize("capture_id", ["", "0123456789abcde", "0123456789abcdeg"])
 def test_reject_mode_validates_capture_id(
     capture_id: str,

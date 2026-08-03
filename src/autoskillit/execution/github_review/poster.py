@@ -27,6 +27,7 @@ from autoskillit.execution._github_http import (
 )
 
 from . import _poster_support
+from ._mutation_coordinator import GitHubReviewMutationCoordinator
 from .canonical import (
     canonicalize_review_request,
     compute_review_operation_key,
@@ -52,7 +53,7 @@ class DefaultGitHubReviewPoster:
         self,
         *,
         ledger: GitHubReviewLedger,
-        coordinator: _poster_support.GitHubReviewMutationCoordinator,
+        coordinator: GitHubReviewMutationCoordinator,
         gateway: DefaultGitHubReviewGateway,
         review_comment_cap: int = 50,
         wall_clock: Callable[[], float] = time.time,

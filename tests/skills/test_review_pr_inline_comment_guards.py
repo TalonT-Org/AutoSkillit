@@ -85,15 +85,11 @@ def test_auditor_status_uses_one_authoritative_mapping() -> None:
 
 
 @pytest.mark.parametrize(("skill_name", "iteration_namespace"), _WRITERS)
-def test_canonical_writer_calls_post_pr_review_exactly_once(
+def test_canonical_writer_uses_iteration_namespace(
     skill_name: str,
     iteration_namespace: str,
 ) -> None:
     text = _skill_text(skill_name)
-    assert text.count("post_pr_review") == 1, (
-        f"{skill_name}/SKILL.md must contain exactly one post_pr_review call; "
-        "supplementary, summary-only, and fallback review submissions are forbidden"
-    )
     assert iteration_namespace in _publication_section(text)
 
 

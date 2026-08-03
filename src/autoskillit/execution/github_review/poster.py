@@ -76,9 +76,7 @@ class DefaultGitHubReviewPoster:
                     planned_comment_count=len(request.comments),
                     error=f"{type(exc).__name__}: {exc}",
                 )
-            except BaseException as exc:
-                if isinstance(exc, asyncio.CancelledError):
-                    raise
+            except Exception as exc:
                 return GitHubReviewPostResult(
                     operation_key="",
                     head_sha=request.head_sha,

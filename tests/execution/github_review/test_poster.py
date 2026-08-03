@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -24,6 +25,52 @@ from .fakes import (
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+@pytest.mark.anyio
+async def test_unexpected_exception_returns_ambiguous_result(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    clock = ManualClock()
+    poster = _poster(
+        tmp_path / "ledger.sqlite3",
+        StatefulReviewGateway(clock=clock),
+        clock,
+    )
+    monkeypatch.setattr(
+        poster,
+        "_post",
+        AsyncMock(side_effect=RuntimeError("unexpected failure")),
+    )
+
+    result = await poster.post(_request(tmp_path))
+
+    assert result.state is ReviewOperationState.AMBIGUOUS
+    assert result.error == "RuntimeError: unexpected failure"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("exception_type", [KeyboardInterrupt, SystemExit])
+async def test_process_control_exceptions_propagate(
+    exception_type: type[BaseException],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    clock = ManualClock()
+    poster = _poster(
+        tmp_path / "ledger.sqlite3",
+        StatefulReviewGateway(clock=clock),
+        clock,
+    )
+    monkeypatch.setattr(
+        poster,
+        "_post",
+        AsyncMock(side_effect=exception_type("stop")),
+    )
+
+    with pytest.raises(exception_type, match="stop"):
+        await poster.post(_request(tmp_path))
 
 
 @pytest.mark.anyio

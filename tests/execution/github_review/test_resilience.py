@@ -15,8 +15,13 @@ from autoskillit.core import (
 from autoskillit.execution import GitHubReviewLedger
 from autoskillit.execution.github_review import _poster_support
 
-from .fakes import CreateOutcome, ManualClock, StatefulReviewGateway
-from .test_poster import _poster, _request
+from .fakes import (
+    CreateOutcome,
+    ManualClock,
+    StatefulReviewGateway,
+    _poster,
+    _request,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 

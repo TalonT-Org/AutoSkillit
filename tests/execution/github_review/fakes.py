@@ -4,9 +4,19 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from autoskillit.core import ReviewResponseClass
+from autoskillit.core import (
+    GitHubReviewComment,
+    GitHubReviewRequest,
+    ReviewResponseClass,
+)
+from autoskillit.execution import (
+    DefaultGitHubReviewPoster,
+    GitHubReviewLedger,
+    GitHubReviewMutationCoordinator,
+)
 from autoskillit.execution.github_review.gateway import (
     CredentialScopeMaterial,
     GatewayResult,
@@ -201,3 +211,47 @@ def _classify(status_code: int | None) -> ReviewResponseClass:
     if status_code == 422:
         return ReviewResponseClass.VALIDATION_ERROR
     return ReviewResponseClass.CLIENT_ERROR
+
+
+def _request(tmp_path: Path, **overrides: object) -> GitHubReviewRequest:
+    values: dict[str, object] = {
+        "repository": "octo/example",
+        "pr_number": 42,
+        "head_sha": "a" * 40,
+        "logical_iteration": "review-pr:2",
+        "event": "COMMENT",
+        "body": "Automated review",
+        "comments": (
+            GitHubReviewComment(
+                path="src/example.py",
+                line=17,
+                body="Normalize this value.",
+            ),
+        ),
+        "receipt_path": tmp_path / "receipts" / "review.json",
+    }
+    values.update(overrides)
+    return GitHubReviewRequest(**values)
+
+
+def _poster(
+    database_path: Path,
+    gateway: StatefulReviewGateway,
+    clock: ManualClock,
+    *,
+    review_comment_cap: int = 50,
+) -> DefaultGitHubReviewPoster:
+    ledger = GitHubReviewLedger(database_path)
+    return DefaultGitHubReviewPoster(
+        ledger=ledger,
+        coordinator=GitHubReviewMutationCoordinator(
+            ledger=ledger,
+            clock=clock,
+            sleeper=AdvancingSleeper(clock),
+            minimum_interval_seconds=1.0,
+            lease_ttl_seconds=60.0,
+        ),
+        gateway=gateway,
+        review_comment_cap=review_comment_cap,
+        wall_clock=clock,
+    )

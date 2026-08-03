@@ -10,68 +10,20 @@ import pytest
 
 from autoskillit.core import (
     GitHubReviewComment,
-    GitHubReviewRequest,
     ReviewFindingDispositionKind,
     ReviewOperationState,
 )
-from autoskillit.execution import (
-    DefaultGitHubReviewPoster,
-    GitHubReviewLedger,
-    GitHubReviewMutationCoordinator,
-)
+from autoskillit.execution import GitHubReviewLedger
 
 from .fakes import (
-    AdvancingSleeper,
     CreateOutcome,
     ManualClock,
     StatefulReviewGateway,
+    _poster,
+    _request,
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
-
-
-def _request(tmp_path: Path, **overrides: object) -> GitHubReviewRequest:
-    values: dict[str, object] = {
-        "repository": "octo/example",
-        "pr_number": 42,
-        "head_sha": "a" * 40,
-        "logical_iteration": "review-pr:2",
-        "event": "COMMENT",
-        "body": "Automated review",
-        "comments": (
-            GitHubReviewComment(
-                path="src/example.py",
-                line=17,
-                body="Normalize this value.",
-            ),
-        ),
-        "receipt_path": tmp_path / "receipts" / "review.json",
-    }
-    values.update(overrides)
-    return GitHubReviewRequest(**values)
-
-
-def _poster(
-    database_path: Path,
-    gateway: StatefulReviewGateway,
-    clock: ManualClock,
-    *,
-    review_comment_cap: int = 50,
-) -> DefaultGitHubReviewPoster:
-    ledger = GitHubReviewLedger(database_path)
-    return DefaultGitHubReviewPoster(
-        ledger=ledger,
-        coordinator=GitHubReviewMutationCoordinator(
-            ledger=ledger,
-            clock=clock,
-            sleeper=AdvancingSleeper(clock),
-            minimum_interval_seconds=1.0,
-            lease_ttl_seconds=60.0,
-        ),
-        gateway=gateway,
-        review_comment_cap=review_comment_cap,
-        wall_clock=clock,
-    )
 
 
 @pytest.mark.anyio

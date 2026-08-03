@@ -1,16 +1,28 @@
 ---
 name: vis-lens-figure-table
-categories: [vis-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: "Create Decisional Layout visualization planning spec showing figure-vs-table selection heuristics: tables win for exact values, ≤5 items, leaderboards, and ablation matrices; figures win for trends, distributions, and spatial patterns; borderline cases recommend both. Decisional lens answering \"Should this result be a figure or a table?\""
+categories:
+- vis-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: 'Create Decisional Layout visualization planning spec showing figure-vs-table selection heuristics: tables win
+  for exact values, ≤5 items, leaderboards, and ablation matrices; figures win for trends, distributions, and spatial patterns;
+  borderline cases recommend both. Decisional lens answering "Should this result be a figure or a table?"'
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Figure-Table Lens - Evaluating figure vs table fit...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Figure-Table Lens - Evaluating figure vs table fit...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: mermaid
+  - name: plan-visualization
+  - name: vis-lens-caption-annot
+  - name: vis-lens-chart-select
+  - name: vis-lens-story-arc
 ---
 
 # Decisional Layout Visualization Lens

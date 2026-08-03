@@ -1,20 +1,39 @@
 ---
 name: audit-review-decisions
-categories: [audit]
-uses_capabilities: [agent_model, github_api_write]
-description: >
-  Audit merged PR review threads for agreed-but-deferred suggestions (design decisions,
-  future work, out-of-scope items) that were never implemented. Mines REVIEW-FLAG markers
-  from resolve-review and legacy keyword signals. Produces a structured markdown report
-  with VALID/RESOLVED/STALE classifications and annotates processed threads with [AUDIT]
-  markers to prevent re-identification on future runs.
+categories:
+- audit
+uses_capabilities:
+- github_api_write
+description: 'Audit merged PR review threads for agreed-but-deferred suggestions (design decisions, future work, out-of-scope
+  items) that were never implemented. Mines REVIEW-FLAG markers from resolve-review and legacy keyword signals. Produces a
+  structured markdown report with VALID/RESOLVED/STALE classifications and annotates processed threads with [AUDIT] markers
+  to prevent re-identification on future runs.
+
+  '
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Auditing PR review decisions...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Auditing PR review decisions...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Audit Review Decisions Skill
@@ -41,10 +60,10 @@ implemented. Identify review debt before it compounds.
 - Create files outside `${AUTOSKILLIT_TEMP}/audit-review-decisions/`
 - Have triage or validation subagents make GitHub API calls (local data only for Step 2)
 - Post duplicate `[AUDIT]` markers — check for existing marker before posting
-- Run subagents in the background (`run_in_background: true` is prohibited)
+- Detach child delegations instead of joining them (joining every child is required)
 - Use `gh pr list` without `--limit` to avoid pagination truncation
 - Use `\|` in Grep patterns — use `|` for alternation (ERE, not BRE)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Save raw PR JSON to temp before any analysis (Step 1)
@@ -56,7 +75,7 @@ implemented. Identify review debt before it compounds.
 - Skip threads that already contain an `[AUDIT]` comment
 - Resolve owner/repo from `git remote get-url origin` — never hardcode
 - Use `/autoskillit:` prefix when invoking any other skill
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ---
 
@@ -148,13 +167,13 @@ implemented. Identify review debt before it compounds.
 
 ### Step 2: Triage (Haiku — Broad Pass) (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 1. List all JSON files in `raw/`. Split into batches of ~5 files per agent.
 
-2. Launch **parallel Haiku subagents** (one per batch, `model: "haiku"`). Each agent:
+2. Launch **parallel children under the declared `haiku` model-class policy** (one per batch). Each child:
    - Reads its assigned JSON files only (no API calls).
    - Flags a thread if it matches any signal:
      - `<!-- REVIEW-FLAG:` tag present
@@ -184,14 +203,14 @@ Do not output any prose between subagent dispatches. Immediately proceed to the 
 
 ### Step 3: Validation (Sonnet — Deep Pass) (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-1. Group candidates into batches of ~10. Launch **parallel Sonnet subagents**
-   via `Agent(model="sonnet")` per batch.
+1. Group candidates into batches of ~10. Launch **parallel children under the declared `sonnet` model-class policy**
+   via `child delegation under the declared `sonnet` model-class policy` per batch.
 
-2. Each Sonnet agent receives its candidate batch and, for each candidate:
+2. Each child under the declared `sonnet` model-class policy receives its candidate batch and, for each candidate:
    - If `path` is set: reads the file and surrounding context.
    - Greps the current codebase for the core concern from `quote` (judgment-based
      pattern, not a literal string match).

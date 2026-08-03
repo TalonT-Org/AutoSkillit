@@ -1,15 +1,42 @@
 ---
 name: triage-issues
-categories: [github]
-uses_capabilities: [agent_model, cross_skill_ref, github_api_write]
-description: Analyze open GitHub issues and produce a sequenced implementation plan — grouping issues into parallel batches, ordering those batches, and tagging each issue with its recipe route. Use when user says "triage issues", "prioritize issues", or "plan issue order".
+categories:
+- github
+uses_capabilities:
+- github_api_write
+description: Analyze open GitHub issues and produce a sequenced implementation plan — grouping issues into parallel batches,
+  ordering those batches, and tagging each issue with its recipe route. Use when user says "triage issues", "prioritize issues",
+  or "plan issue order".
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Triaging issues...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Triaging issues...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
+  sibling_skills:
+  - name: analyze-prs
+  - name: collapse-issues
+  - name: investigate
+  - name: issue-splitter
+  - name: make-groups
 ---
 
 # Issue Triage Skill
@@ -37,12 +64,12 @@ Analyze open GitHub issues, classify each into a recipe route, group them into p
 - Create files outside `{{AUTOSKILLIT_TEMP}}/triage-issues/` directory
 - Use `--body` shell substitution (`--body "$(...)`) for `gh issue edit` — always write to
   `{{AUTOSKILLIT_TEMP}}/triage-issues/edit_body_{timestamp}.md` and use `--body-file`
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
-- Spawn all subagents via `Agent(model="sonnet")`
-- Issue all Task calls in a single message to maximize parallelism
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Pause for human input on ambiguous classifications
 - Write the triage report and manifest to `{{AUTOSKILLIT_TEMP}}/triage-issues/` (relative to the current working directory)
 - Use `gh` CLI for all GitHub operations (not raw API calls)
@@ -84,13 +111,13 @@ If there are zero open issues (after filtering), skip to Step 7 and output an em
 
 ### Step 2a: Parallel Split Analysis (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Before codebase analysis, run `issue-splitter` for every open issue to detect mixed-concern issues and expand the working set.
 
-Launch up to 8 subagents in parallel via `Agent(model="sonnet")`, one per issue. Each subagent invokes:
+Launch up to 8 subagents in parallel via `child delegation under the declared `sonnet` model-class policy`, one per issue. Each subagent invokes:
 
 ```
 /autoskillit:issue-splitter --issue {N} --repo {owner/repo} [--no-label if --no-label was passed] [--dry-run if --dry-run was passed]
@@ -134,7 +161,7 @@ Launch parallel subagents (up to 8) to analyze each issue. Each subagent receive
 - **File paths** — explicitly mentioned files or files inferred from the description
 - **Dependencies** — explicit issue references (`#N`) or inferred dependencies from content overlap
 
-Spawn all subagents via `Agent(model="sonnet")`.
+Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`.
 
 ### Step 3: Recipe Classification
 

@@ -216,35 +216,7 @@ def test_config_authority_keys_superset_of_server_authoritative() -> None:
     from autoskillit.core import CONFIG_AUTHORITY_KEYS
 
     assert SERVER_AUTHORITATIVE_INGREDIENTS <= CONFIG_AUTHORITY_KEYS
-    assert CONFIG_AUTHORITY_KEYS - SERVER_AUTHORITATIVE_INGREDIENTS == {
-        "source_dir",
-        "backend_supports_git_write",
-    }
-
-
-def test_apply_config_authoritative_overrides_capability_key_overrides_caller(tmp_path):
-    """Capability key registered in BACKEND_CAPABILITY_INGREDIENTS must be overridden by
-    capability_overrides, not the caller-supplied value."""
-    from types import SimpleNamespace
-
-    from autoskillit.config import apply_config_authoritative_overrides
-
-    recipe_ingredients = {
-        "backend_supports_git_write": SimpleNamespace(authority="config"),
-    }
-
-    with patch(
-        "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
-        return_value={},
-    ):
-        result = apply_config_authoritative_overrides(
-            {"backend_supports_git_write": "true"},
-            recipe_ingredients,
-            tmp_path,
-            capability_overrides={"backend_supports_git_write": "false"},
-        )
-
-    assert result["backend_supports_git_write"] == "false"
+    assert CONFIG_AUTHORITY_KEYS - SERVER_AUTHORITATIVE_INGREDIENTS == {"source_dir"}
 
 
 def test_apply_config_authoritative_overrides_unknown_key_retains_caller_value(tmp_path):
@@ -272,7 +244,6 @@ def test_apply_config_authoritative_overrides_unknown_key_retains_caller_value(t
             {"totally_unknown_key": "caller-value"},
             recipe_ingredients,
             tmp_path,
-            capability_overrides={"backend_supports_git_write": "false"},
         )
 
     assert result["totally_unknown_key"] == "caller-value"

@@ -718,6 +718,8 @@ def _assert_generated_child_probe(output: _GeneratedChildProbeOutput) -> None:
         parent_id=output.parent_id,
         agent_role=output.agent_role,
         output_discipline_digest=OUTPUT_DISCIPLINE_DIGEST,
+        child_terminal_sentinel="child-delivery-complete",
+        parent_terminal_sentinel="parent-delivery-complete",
     )
 
 

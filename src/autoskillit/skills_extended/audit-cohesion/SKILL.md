@@ -1,15 +1,32 @@
 ---
 name: audit-cohesion
-categories: [audit]
+categories:
+- audit
 uses_capabilities: []
-description: Audit codebase for internal cohesion - how well components fit together and maintain consistent patterns. Distinct from audit-arch (which checks rule violations); this checks integration fitness and convergence. Use when user says "audit cohesion", "check cohesion", "cohesion audit", or "alignment check".
+description: Audit codebase for internal cohesion - how well components fit together and maintain consistent patterns. Distinct
+  from audit-arch (which checks rule violations); this checks integration fitness and convergence. Use when user says "audit
+  cohesion", "check cohesion", "cohesion audit", or "alignment check".
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: audit-cohesion] Auditing codebase cohesion and integration fitness...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: audit-cohesion] Auditing codebase cohesion and integration fitness...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Cohesion Audit Skill
@@ -32,12 +49,12 @@ Audit the codebase for internal cohesion: how well components integrate and main
 - Modify any source code files
 - Update an existing report — always generate new
 - Duplicate findings that belong in audit-arch (rule violations)
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Use subagents for parallel exploration (one per cohesion dimension)
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - All output goes under `{{AUTOSKILLIT_TEMP}}/audit-cohesion/` (create if needed)
 - Final report: `{{AUTOSKILLIT_TEMP}}/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md`
 - Subagents must NOT create their own files — they return findings in their response text only
@@ -377,7 +394,7 @@ Flag duplicates (same name in different agents).
 
 ### Step 1: Launch Parallel Subagents (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 

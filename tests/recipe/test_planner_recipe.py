@@ -387,7 +387,6 @@ def test_planner_recipe_valid_on_codex_backend():
         "planner",
         project_dir=_PROJECT_ROOT,
         backend_name="codex",
-        ingredient_overrides={"backend_supports_git_write": "false"},
     )
     assert result["valid"] is True, "planner recipe invalid on codex: " + "; ".join(
         f"[{s.get('rule')}] {s.get('message', '')[:80]}"

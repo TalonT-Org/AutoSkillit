@@ -19,7 +19,7 @@ _OBSERVATIONS_DIR = "runner-observations"
 _SCHEMA_VERSION = 1
 _MAX_RECORD_BYTES = 256 * 1024
 _MAX_MARKER_BYTES = 8 * 1024
-_IDENTITY_FIELDS = {
+_LEGACY_IDENTITY_FIELDS = {
     "schema_version",
     "generation",
     "launch_id",
@@ -39,6 +39,7 @@ _IDENTITY_FIELDS = {
     "observations",
     "dropped_observation_count",
 }
+_IDENTITY_FIELDS = _LEGACY_IDENTITY_FIELDS | {"launch_contract_digest"}
 _VALID_MODES = {"capture", "direct"}
 _VALID_REASONS = {
     "capture_enabled",
@@ -202,7 +203,10 @@ def _validate_record(
     value = _strict_json(raw)
     if _canonical_json(value) != raw:
         raise ValueError("lineage record is not canonical")
-    if not isinstance(value, dict) or set(value) != _IDENTITY_FIELDS:
+    if not isinstance(value, dict) or set(value) not in (
+        _LEGACY_IDENTITY_FIELDS,
+        _IDENTITY_FIELDS,
+    ):
         raise ValueError("invalid lineage record shape")
     if (
         value["schema_version"] != _SCHEMA_VERSION

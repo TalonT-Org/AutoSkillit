@@ -487,7 +487,7 @@ class TestCLIOrderCommand:
         mock_config.packs.enabled = []
         monkeypatch.setattr("autoskillit.config.load_config", lambda *_a, **_kw: mock_config)
         monkeypatch.setattr(
-            "autoskillit.execution.get_backend",
+            "autoskillit.cli.session._session_backend.resolve_global_backend",
             lambda name: _real_get_backend(name),
         )
         monkeypatch.setattr(

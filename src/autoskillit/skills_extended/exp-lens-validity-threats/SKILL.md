@@ -1,16 +1,26 @@
 ---
 name: exp-lens-validity-threats
-categories: [exp-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: Create a validity threat matrix identifying alternative explanations and design mitigations. Adversarial lens answering "What alternative explanations survive?"
+categories:
+- exp-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Create a validity threat matrix identifying alternative explanations and design mitigations. Adversarial lens
+  answering "What alternative explanations survive?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Validity Threats Lens - Analyzing alternative explanations...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Validity Threats Lens - Analyzing alternative explanations...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: exp-lens-causal-assumptions
+  - name: exp-lens-severity-testing
+  - name: make-experiment-diag
+  - name: mermaid
 ---
 
 # Validity Threats Experimental Design Lens
@@ -45,8 +55,8 @@ hooks:
 
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-validity-threats/`
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Apply Campbell & Stanley's full threat taxonomy — do not skip threats just because they seem unlikely
@@ -55,7 +65,7 @@ hooks:
 - Distinguish threats that are ruled out by design from those that remain plausible
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-validity-threats/exp_diag_validity_threats_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -82,7 +92,7 @@ exploration for these fields if the context file supplies them. For any field ab
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn Explore subagents to investigate:
+Spawn child delegations to investigate:
 
 **Temporal Changes (History)**
 - Find system, environment, or data changes during the experiment

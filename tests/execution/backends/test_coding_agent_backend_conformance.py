@@ -51,7 +51,6 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "env_denylist_prefixes": "REQUIRED",
     "exit_code_is_terminal": "REQUIRED",
     "food_truck_capable": "OPTIONAL",
-    "git_metadata_writable": "REQUIRED",
     "github_api_callable": "OPTIONAL",
     "has_unguarded_filesystem_access": "REQUIRED",
     "hook_config_format": "REQUIRED",
@@ -126,7 +125,7 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         """BackendCapabilities contract — exercises multiple fields.
 
         Fields cited: applicable_guards, default_skill_sandbox_mode,
-        unnegotiated_tool_result_token_limit, git_metadata_writable,
+        unnegotiated_tool_result_token_limit,
         has_unguarded_filesystem_access, process_name_aliases,
         record_capable, replay_capable,
         cook_startup_observer_capable, session_dir_persistent,

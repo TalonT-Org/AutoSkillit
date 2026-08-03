@@ -6,8 +6,16 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
+from ._type_backend import CmdSpec
 from ._type_checkpoint import SessionCheckpoint  # noqa: F401, TC001
-from ._type_enums import SkillExecutionRole
+from ._type_launch import (
+    BackendAuthority,
+    LaunchAdapterResult,
+    LaunchPreparation,
+    LaunchResolutionRequest,
+    ResolvedLaunchContract,
+    SkillProjectionBinding,
+)
 from ._type_native_shell_capture import (
     ManagedHeadlessSessionLineageRef,
     NativeShellCaptureDecision,
@@ -23,24 +31,73 @@ from ._type_results import (
     ValidatedAddDir,
     WriteBehaviorSpec,
 )
-from ._type_skill_contract import (
-    SkillSessionContract,
-    SkillSourceIdentity,
-    StoredSkillSessionContract,
-)
+from ._type_skill_contract import SkillSessionContract, StoredSkillSessionContract
 
 __all__ = [
     "CompletionRequiredResolver",
     "InputContractResolver",
+    "LaunchAdapter",
+    "LaunchResolver",
     "TestRunner",
     "HeadlessExecutor",
-    "HeadlessSkillDispatchContract",
-    "HeadlessSkillDispatchPreparation",
+    "SkillProjectionPreparation",
     "OutputPatternResolver",
     "SkillContractView",
     "SkillSessionContractStore",
     "WriteExpectedResolver",
 ]
+
+
+@runtime_checkable
+class LaunchAdapter(Protocol):
+    """Selected backend's one-shot physical launch builder."""
+
+    def build(self, preparation: LaunchPreparation) -> LaunchAdapterResult: ...
+
+
+@runtime_checkable
+class LaunchResolver(Protocol):
+    """Authority selection, one-shot finalization, and secret rehydration boundary."""
+
+    def prepare(self, request: LaunchResolutionRequest) -> LaunchPreparation: ...
+
+    def prepare_resume(
+        self,
+        contract: ResolvedLaunchContract,
+        *,
+        command: str,
+        cwd: str,
+    ) -> LaunchPreparation:
+        """Restore authority from persisted evidence without selecting it again."""
+        ...
+
+    def backend_for_authority(self, authority: BackendAuthority) -> CodingAgentBackend:
+        """Resolve one typed authority to its registered runtime implementation."""
+        ...
+
+    def backend_for(self, preparation: LaunchPreparation) -> CodingAgentBackend:
+        """Return the selected runtime adapter without repeating authority selection."""
+        ...
+
+    def finalize(
+        self, preparation: LaunchPreparation, adapter: LaunchAdapter
+    ) -> ResolvedLaunchContract: ...
+
+    def validate_resume(
+        self,
+        expected: ResolvedLaunchContract,
+        actual: ResolvedLaunchContract,
+    ) -> None:
+        """Reject authority or portable-semantic drift before a resumed spawn."""
+        ...
+
+    def rehydrate_secret_environment(
+        self,
+        contract: ResolvedLaunchContract,
+        secret_environment: Mapping[str, str],
+        *,
+        inherited_fds: tuple[int, ...] = (),
+    ) -> CmdSpec: ...
 
 
 class _SkillContractOutputView(Protocol):
@@ -69,67 +126,8 @@ class SkillContractView(Protocol):
 
 
 @runtime_checkable
-class HeadlessSkillDispatchContract(Protocol):
-    """Immutable capability/source/projection authority for headless skill work."""
-
-    @property
-    def resolved_command(self) -> str: ...
-
-    @property
-    def projection_context(self) -> object: ...
-
-    @property
-    def invocation(self) -> object | None: ...
-
-    @property
-    def catalog(self) -> object | None: ...
-
-    @property
-    def root_name(self) -> str | None: ...
-
-    @property
-    def member_names(self) -> tuple[str, ...]: ...
-
-    @property
-    def execution_role(self) -> SkillExecutionRole: ...
-
-    @property
-    def capability_union(self) -> frozenset[str]: ...
-
-    @property
-    def source_identities(self) -> Mapping[str, SkillSourceIdentity]: ...
-
-    @property
-    def canonical_digests(self) -> Mapping[str, str]: ...
-
-    @property
-    def projected_digests(self) -> Mapping[str, str]: ...
-
-    @property
-    def projected_artifacts(self) -> Mapping[str, str]: ...
-
-    @property
-    def projection_version(self) -> int: ...
-
-    @property
-    def project_root(self) -> str | None: ...
-
-    @property
-    def cwd(self) -> str: ...
-
-    @property
-    def backend(self) -> str | None: ...
-
-    @property
-    def artifact_paths(self) -> tuple[str, ...]: ...
-
-
-@runtime_checkable
-class HeadlessSkillDispatchPreparation(Protocol):
-    """Resolved launch inputs used to acquire a physical plugin binding."""
-
-    @property
-    def resolved_command(self) -> str: ...
+class SkillProjectionPreparation(Protocol):
+    """Non-executable projection inputs awaiting one plugin binding."""
 
     @property
     def cwd(self) -> Path: ...
@@ -151,7 +149,7 @@ class HeadlessSkillDispatchPreparation(Protocol):
         *,
         backend: CodingAgentBackend,
         binding: PluginLaunchBinding,
-    ) -> HeadlessSkillDispatchContract: ...
+    ) -> SkillProjectionBinding: ...
 
 
 @runtime_checkable
@@ -177,6 +175,12 @@ class SkillSessionContractStore(Protocol):
         snapshot: Mapping[str, str],
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
     ) -> str: ...
+
+    def bind_launch(
+        self,
+        correlation_key: str,
+        launch_contract: ResolvedLaunchContract,
+    ) -> None: ...
 
     def observe_candidate(self, correlation_key: str, session_id: str) -> None: ...
 
@@ -231,10 +235,10 @@ class HeadlessExecutor(Protocol):
         provider_fallback_env: dict[str, str] | None = None,
         provider_fallback_name: str = "",
         resume_session_id: str = "",
+        resume_launch_contract: ResolvedLaunchContract | None = None,
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
-        backend_override: str | None = None,
-        backend_override_source: str | None = None,
+        backend_authority: BackendAuthority | None = None,
         marker_dir: Path | None = None,
         caller_session_id: str | None = None,
         inspector_eligible: bool = False,
@@ -244,9 +248,10 @@ class HeadlessExecutor(Protocol):
         closure_report_root: Path | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
         skill_contract: Any | None = None,
-        capability_contract: HeadlessSkillDispatchContract | None = None,
+        capability_contract: SkillProjectionBinding | None = None,
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
+        on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
     ) -> SkillResult: ...
 
     async def dispatch_food_truck(
@@ -283,11 +288,12 @@ class HeadlessExecutor(Protocol):
         marker_dir: Path | None = None,
         session_id: str | None = None,
         resume_message: str | None = None,
-        backend_override: str | None = None,
+        backend_authority: BackendAuthority | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
-        capability_preparation: HeadlessSkillDispatchPreparation | None = None,
+        capability_preparation: SkillProjectionPreparation | None = None,
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
+        on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
     ) -> SkillResult: ...
 
 

@@ -60,14 +60,13 @@ def _make_dormancy_hook() -> Any:
     )
 
 
-def _make_codex_backend(git_metadata_writable: bool = True) -> MagicMock:
+def _make_codex_backend() -> MagicMock:
     """Create a mock codex backend with empty applicable_guards."""
     from autoskillit.core import BackendCapabilities
 
     caps = BackendCapabilities(
         applicable_guards=frozenset(),
         anthropic_provider_capable=False,
-        git_metadata_writable=git_metadata_writable,
     )
     backend = MagicMock()
     backend.name = "codex"
@@ -95,11 +94,9 @@ def _make_skill_resolver_with_git_write() -> MagicMock:
     resolver = MagicMock()
     resolver.resolve.return_value = SimpleNamespace(
         uses_capabilities=capabilities,
-        backend_requirements=frozenset(),
     )
     resolver.resolve_invocation.return_value = SimpleNamespace(
         capability_union=capabilities,
-        backend_requirements=frozenset(),
     )
     return resolver
 
@@ -150,40 +147,6 @@ class TestCheckDispatchFeasibilityUnit:
                 skill_resolver=None,
             )
         assert result is None, f"Expected None for compatible backend, got: {result}"
-
-    def test_dispatch_feasibility_rejects_pinned_step_to_incapable_backend(self) -> None:
-        """An explicit pin to a backend lacking a required BackendCapabilities
-        property is rejected at admission time (REQ-013/014/017/018/019)."""
-        from autoskillit.config._config_dataclasses import AgentBackendConfig
-        from autoskillit.server.tools._preflight import _check_dispatch_feasibility
-
-        backend = _make_codex_backend(git_metadata_writable=False)
-        active_steps: dict[str, Any] = {
-            "resolve_review": _make_recipe_step(
-                "resolve_review", tool="run_skill", skill_name="resolve-review"
-            ),
-        }
-        config_backend = AgentBackendConfig(
-            recipe_overrides={"test-recipe": {"resolve_review": "codex"}},
-        )
-        # get_backend("codex") is patched to the same instance so the pinned-
-        # backend lookup inside _check_dispatch_feasibility deterministically
-        # observes git_metadata_writable=False, independent of whatever the
-        # real production Codex backend's default happens to be.
-        with patch("autoskillit.server.tools._preflight.get_backend", return_value=backend):
-            result = _check_dispatch_feasibility(
-                post_prune_step_names=["resolve_review"],
-                active_recipe_steps=active_steps,
-                backend=backend,
-                config_providers=_DEFAULT_PROVIDERS,
-                recipe_name="test-recipe",
-                config_backend=config_backend,
-                skill_resolver=_make_skill_resolver_with_git_write(),
-            )
-        assert result is not None
-        parsed = json.loads(result)
-        assert "git_metadata_writable" in parsed.get("error", "")
-        assert parsed.get("origin") == "agent_backend.recipe_overrides.test-recipe.resolve_review"
 
     def test_dispatch_feasibility_fails_closed_when_skill_resolver_missing_for_pinned_step(
         self,

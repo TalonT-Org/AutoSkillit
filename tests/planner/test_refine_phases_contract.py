@@ -95,7 +95,7 @@ class TestSkillMdPresence:
 
     def test_skill_md_has_categories_planner(self, skill_md: str) -> None:
         """Frontmatter must declare categories: [planner]."""
-        assert "categories: [planner]" in skill_md, (
+        assert "categories:\n- planner" in skill_md, (
             "SKILL.md must include 'categories: [planner]' in frontmatter. "
             "Required for feature-gate and skill-category routing."
         )

@@ -1,16 +1,28 @@
 ---
 name: vis-lens-reproducibility
-categories: [vis-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: "Create Replicative Reproducibility visualization planning spec showing data availability, preprocessing parameter disclosure (bin widths, smoothing windows), plotting library/version, random seeds, and code reference per figure. Replicative lens answering \"Can the figures be reproduced from the data and code?\""
+categories:
+- vis-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Create Replicative Reproducibility visualization planning spec showing data availability, preprocessing parameter
+  disclosure (bin widths, smoothing windows), plotting library/version, random seeds, and code reference per figure. Replicative
+  lens answering "Can the figures be reproduced from the data and code?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Reproducibility Lens - Auditing figure reproducibility...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Reproducibility Lens - Auditing figure reproducibility...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: mermaid
+  - name: plan-visualization
+  - name: vis-lens-methodology-norms
+  - name: vis-lens-multi-compare
+  - name: vis-lens-uncertainty
 ---
 
 # Replicative Reproducibility Visualization Lens

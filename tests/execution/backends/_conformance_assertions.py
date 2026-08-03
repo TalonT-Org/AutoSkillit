@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from autoskillit.core import SkillSemanticAdaptationResult, SkillSemanticPlan
 from autoskillit.core.types._type_enums import CodexEventType
 from autoskillit.execution.process._process_jsonl import _marker_is_standalone
 from autoskillit.hooks._capture._snapshot import CaptureFinalManifest
@@ -247,45 +249,271 @@ def assert_generated_child_delivery(
     parent_id: str,
     agent_role: str,
     output_discipline_digest: str,
+    backend: str = "codex",
+    semantic_plan: SkillSemanticPlan | None = None,
+    semantic_adaptation: SkillSemanticAdaptationResult | None = None,
+    child_terminal_sentinel: str | None = None,
+    sibling_result_sentinel: str | None = None,
+    parent_terminal_sentinel: str | None = None,
 ) -> None:
-    """Assert a generated Codex role reached one completed, linked child session."""
-    function_calls = [
-        event.get("payload", {})
-        for event in parent_events
-        if event.get("type") == "response_item"
-        and event.get("payload", {}).get("type") == "function_call"
-    ]
-    call_outputs = {
-        str(payload.get("call_id", "")): payload.get("output", "")
-        for event in parent_events
-        if event.get("type") == "response_item"
-        and (payload := event.get("payload", {})).get("type") == "function_call_output"
-    }
+    """Assert one semantic child-delivery plan over normalized Claude/Codex traces.
 
-    spawn_calls = [call for call in function_calls if call.get("name") == "spawn_agent"]
-    assert len(spawn_calls) == 1, f"expected one spawn_agent call, got {len(spawn_calls)}"
-    spawn = spawn_calls[0]
-    spawn_args = json.loads(str(spawn.get("arguments", "{}")))
-    assert spawn_args.get("agent_type") == agent_role
-    spawn_output = json.loads(str(call_outputs.get(str(spawn.get("call_id", "")), "{}")))
-    agent_id = spawn_output.get("agent_id")
-    assert isinstance(agent_id, str) and agent_id, "spawn_agent returned no agent_id"
+    This is the sole oracle for both deterministic adapter traces and the installed
+    Codex native-subagent probe.  Raw backend events are normalized locally so the
+    semantic assertions remain backend-neutral.
+    """
 
-    wait_calls = [call for call in function_calls if call.get("name") == "wait_agent"]
-    matching_waits = []
-    for wait_call in wait_calls:
-        wait_args = json.loads(str(wait_call.get("arguments", "{}")))
-        if wait_args.get("targets") == [agent_id]:
-            matching_waits.append(wait_call)
-    assert matching_waits, f"no wait_agent call targeted spawned child {agent_id}"
-    wait_outputs = [
-        str(call_outputs.get(str(wait_call.get("call_id", "")), ""))
-        for wait_call in matching_waits
-    ]
-    assert any('"completed"' in output for output in wait_outputs), (
-        f"wait_agent never reported child {agent_id} completed"
+    @dataclass(slots=True)
+    class _ObservedCall:
+        name: str
+        call_id: str
+        arguments: dict[str, object]
+        call_index: int
+        result: str = ""
+        result_index: int | None = None
+
+    def _mapping(value: object) -> dict[str, object]:
+        if isinstance(value, Mapping):
+            return {str(key): item for key, item in value.items()}
+        if isinstance(value, str):
+            try:
+                decoded = json.loads(value)
+            except (json.JSONDecodeError, TypeError):
+                return {}
+            if isinstance(decoded, dict):
+                return {str(key): item for key, item in decoded.items()}
+        return {}
+
+    def _text(value: object) -> str:
+        if isinstance(value, str):
+            return value
+        return json.dumps(value, sort_keys=True, default=str)
+
+    def _blocks(event: Mapping[str, object]) -> list[dict[str, object]]:
+        message = event.get("message")
+        if not isinstance(message, Mapping):
+            payload = event.get("payload")
+            if isinstance(payload, Mapping) and isinstance(payload.get("message"), Mapping):
+                message = payload["message"]
+            elif isinstance(payload, Mapping):
+                message = payload
+        if not isinstance(message, Mapping):
+            return []
+        content = message.get("content", ())
+        if not isinstance(content, list):
+            return []
+        return [dict(block) for block in content if isinstance(block, Mapping)]
+
+    observed: list[_ObservedCall] = []
+    by_id: dict[str, _ObservedCall] = {}
+    for index, event in enumerate(parent_events):
+        payload = event.get("payload", {})
+        if (
+            event.get("type") == "response_item"
+            and isinstance(payload, Mapping)
+            and payload.get("type") == "function_call"
+        ):
+            call = _ObservedCall(
+                name=str(payload.get("name", "")),
+                call_id=str(payload.get("call_id", "")),
+                arguments=_mapping(payload.get("arguments", {})),
+                call_index=index,
+            )
+            observed.append(call)
+            by_id[call.call_id] = call
+        elif (
+            event.get("type") == "response_item"
+            and isinstance(payload, Mapping)
+            and payload.get("type") == "function_call_output"
+        ):
+            call = by_id.get(str(payload.get("call_id", "")))
+            if call is not None:
+                call.result = _text(payload.get("output", ""))
+                call.result_index = index
+        for block in _blocks(event):
+            if block.get("type") == "tool_use":
+                call = _ObservedCall(
+                    name=str(block.get("name", "")),
+                    call_id=str(block.get("id", "")),
+                    arguments=_mapping(block.get("input", {})),
+                    call_index=index,
+                )
+                observed.append(call)
+                by_id[call.call_id] = call
+            elif block.get("type") == "tool_result":
+                call = by_id.get(str(block.get("tool_use_id", "")))
+                if call is not None:
+                    call.result = _text(block.get("content", ""))
+                    call.result_index = index
+
+    assert (semantic_plan is None) == (semantic_adaptation is None), (
+        "semantic plan and adaptation must be supplied together"
+    )
+    if semantic_plan is not None and semantic_adaptation is not None:
+        assert semantic_adaptation.unsupported_operation is None
+        semantic_adaptation.validate_for(semantic_plan, backend=backend)
+        expected_roles = tuple(
+            semantic_adaptation.logical_role_mapping[spawn.role]
+            for spawn in semantic_plan.child_spawns
+            for _ in range(spawn.count)
+        )
+    else:
+        expected_roles = (agent_role,)
+
+    spawn_names = {"spawn_agent"} if backend == "codex" else {"Agent"}
+    spawn_calls = [call for call in observed if call.name in spawn_names]
+    assert len(spawn_calls) == len(expected_roles), (
+        f"expected {len(expected_roles)} native child calls, got {len(spawn_calls)}"
+    )
+    role_key = "agent_type" if backend == "codex" else "subagent_type"
+    actual_roles = tuple(str(call.arguments.get(role_key, "")) for call in spawn_calls)
+    assert sorted(actual_roles) == sorted(expected_roles), (
+        f"native role mapping mismatch: expected {expected_roles}, got {actual_roles}"
     )
 
+    policies_by_native_role: dict[str, tuple[str | None, str | None, str, str | None]] = {}
+    if semantic_plan is not None and semantic_adaptation is not None:
+        for policy in semantic_plan.child_model_policies:
+            native_role = semantic_adaptation.logical_role_mapping[policy.role]
+            model, effort = semantic_adaptation.model_effort_policy[native_role]
+            policies_by_native_role[native_role] = (
+                policy.model_class,
+                policy.reasoning_effort,
+                model,
+                effort,
+            )
+    for call, native_role in zip(spawn_calls, actual_roles, strict=True):
+        policy = policies_by_native_role.get(native_role)
+        if policy is None:
+            assert "model" not in call.arguments
+            assert "reasoning_effort" not in call.arguments
+            continue
+        model_class, required_effort, physical_model, physical_effort = policy
+        if model_class is not None:
+            assert call.arguments.get("model") in {model_class, physical_model}, (
+                f"child {native_role!r} did not receive its canonical model policy"
+            )
+        else:
+            assert "model" not in call.arguments
+        if required_effort is not None:
+            if backend == "claude":
+                assert "reasoning_effort" not in call.arguments
+                assert any(
+                    required_effort in fragment
+                    for fragment in semantic_adaptation.instruction_fragments
+                ), f"child {native_role!r} omitted its reasoning policy instruction"
+            else:
+                assert call.arguments.get("reasoning_effort") in {
+                    required_effort,
+                    physical_effort,
+                }, f"child {native_role!r} did not receive its required reasoning effort"
+        else:
+            assert "reasoning_effort" not in call.arguments
+
+    if semantic_plan is not None and semantic_plan.concurrency is not None:
+        if semantic_plan.concurrency.required and len(spawn_calls) > 1:
+            if backend == "claude":
+                assert len({call.call_index for call in spawn_calls}) == 1, (
+                    "Claude parallel Agent calls were not issued in one assistant message"
+                )
+            else:
+                wait_indices = [call.call_index for call in observed if call.name == "wait_agent"]
+                assert wait_indices
+                assert max(call.call_index for call in spawn_calls) < min(wait_indices), (
+                    "Codex awaited a child before all parallel children were spawned"
+                )
+
+    child_ids: list[str] = []
+    child_results: list[tuple[str, int]] = []
+    if backend == "codex":
+        for call in spawn_calls:
+            child_id = _mapping(call.result).get("agent_id")
+            assert isinstance(child_id, str) and child_id, "spawn_agent returned no agent_id"
+            child_ids.append(child_id)
+        wait_calls = [call for call in observed if call.name == "wait_agent"]
+        for child_id in child_ids:
+            matching = [
+                call
+                for call in wait_calls
+                if child_id
+                in (
+                    call.arguments.get("targets", ())
+                    if isinstance(call.arguments.get("targets", ()), list | tuple)
+                    else ()
+                )
+            ]
+            assert matching, f"no wait_agent call targeted spawned child {child_id}"
+            completed = [
+                call
+                for call in matching
+                if '"completed"' in call.result and call.result_index is not None
+            ]
+            assert completed, f"wait_agent never reported child {child_id} completed"
+            terminal = completed[-1]
+            child_results.append((terminal.result, cast(int, terminal.result_index)))
+    else:
+        for call in spawn_calls:
+            assert call.result and call.result_index is not None, (
+                "Claude Agent call did not deliver an independent terminal result"
+            )
+            child_ids.append(call.call_id)
+            child_results.append((call.result, cast(int, call.result_index)))
+
+    if child_terminal_sentinel is not None:
+        assert all(child_terminal_sentinel in result for result, _ in child_results), (
+            "a child terminal result omitted the expected sentinel"
+        )
+    if semantic_plan is not None and semantic_plan.evidence is not None:
+        if semantic_plan.evidence.independent:
+            assert len(child_results) == len(expected_roles)
+            assert all(result.strip() for result, _ in child_results)
+
+    if semantic_plan is not None and semantic_adaptation is not None:
+        for target in semantic_adaptation.sibling_skill_targets.values():
+            matching = [
+                call
+                for call in observed
+                if call.name in {"Skill", "invoke_skill", "run_skill"}
+                and target in _text(call.arguments)
+            ]
+            assert matching, f"sibling skill {target!r} was not invoked"
+            assert any(call.result and call.result_index is not None for call in matching), (
+                f"sibling skill {target!r} produced no result"
+            )
+            if sibling_result_sentinel is not None:
+                assert any(sibling_result_sentinel in call.result for call in matching), (
+                    f"sibling skill {target!r} omitted its terminal sentinel"
+                )
+
+    def _assistant_text(event: Mapping[str, object]) -> str:
+        payload = event.get("payload", {})
+        if (
+            event.get("type") == "response_item"
+            and isinstance(payload, Mapping)
+            and payload.get("type") == "message"
+            and payload.get("role") == "assistant"
+        ):
+            return _text(payload.get("content", ""))
+        if event.get("type") == "result":
+            return _text(event.get("result", ""))
+        return "\n".join(
+            _text(block.get("text", "")) for block in _blocks(event) if block.get("type") == "text"
+        )
+
+    if parent_terminal_sentinel is not None:
+        terminal_indices = [
+            index
+            for index, event in enumerate(parent_events)
+            if parent_terminal_sentinel in _assistant_text(event)
+        ]
+        assert terminal_indices, "parent terminal success was not delivered"
+        assert child_results
+        assert min(terminal_indices) > max(index for _, index in child_results), (
+            "parent reported success before every child terminal result was delivered"
+        )
+
+    if backend != "codex":
+        return
     child_session_metas = [
         event.get("payload", {}) for event in child_events if event.get("type") == "session_meta"
     ]
@@ -294,34 +522,36 @@ def assert_generated_child_delivery(
         for meta in child_session_metas
         if (meta.get("forked_from_id") or meta.get("parent_thread_id")) == parent_id
     ]
-    assert len(linked_children) == 1, (
-        f"expected one child linked to {parent_id}, got {len(linked_children)}"
+    assert len(linked_children) == len(child_ids), (
+        f"expected {len(child_ids)} children linked to {parent_id}, got {len(linked_children)}"
     )
-    child = linked_children[0]
-    assert child.get("id") == agent_id
-    assert child.get("id") != parent_id
-    assert (child.get("forked_from_id") or child.get("parent_thread_id")) == parent_id
-    assert child.get("agent_role") == agent_role
-    base_instructions = child.get("base_instructions", {})
-    assert isinstance(base_instructions, dict)
-    base_text = base_instructions.get("text", "")
-    developer_blocks = []
-    for event in child_events:
-        payload = event.get("payload", {})
-        if (
-            event.get("type") != "response_item"
-            or payload.get("type") != "message"
-            or payload.get("role") != "developer"
-        ):
-            continue
-        content = payload.get("content", [])
-        if isinstance(content, str):
-            developer_blocks.append(content)
-        elif isinstance(content, list):
-            developer_blocks.extend(
-                str(block.get("text", "")) for block in content if isinstance(block, dict)
-            )
-    developer_text = "\n".join(developer_blocks)
-    assert output_discipline_digest in base_text or output_discipline_digest in developer_text, (
-        "generated child instructions omitted output discipline digest"
-    )
+    linked_by_id = {str(child.get("id", "")): child for child in linked_children}
+    assert set(linked_by_id) == set(child_ids)
+    for child_id, native_role in zip(child_ids, actual_roles, strict=True):
+        child = linked_by_id[child_id]
+        assert child_id != parent_id
+        assert (child.get("forked_from_id") or child.get("parent_thread_id")) == parent_id
+        assert child.get("agent_role") == native_role
+        base_instructions = child.get("base_instructions", {})
+        assert isinstance(base_instructions, dict)
+        base_text = str(base_instructions.get("text", ""))
+        developer_blocks = []
+        for event in child_events:
+            payload = event.get("payload", {})
+            if (
+                event.get("type") != "response_item"
+                or payload.get("type") != "message"
+                or payload.get("role") != "developer"
+            ):
+                continue
+            content = payload.get("content", [])
+            if isinstance(content, str):
+                developer_blocks.append(content)
+            elif isinstance(content, list):
+                developer_blocks.extend(
+                    str(block.get("text", "")) for block in content if isinstance(block, dict)
+                )
+        developer_text = "\n".join(developer_blocks)
+        assert (
+            output_discipline_digest in base_text or output_discipline_digest in developer_text
+        ), "generated child instructions omitted output discipline digest"

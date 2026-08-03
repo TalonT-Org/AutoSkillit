@@ -38,6 +38,8 @@ class TestCoreSubpackages:
             "_type_inspector",
             "_type_intake_policy",
             "_type_invariant_registry",
+            "_type_launch",
+            "_type_launch_projection",
             "_type_native_shell_capture",
             "_type_phoropter",
             "_type_plugin_source",
@@ -57,6 +59,7 @@ class TestCoreSubpackages:
             "_type_resume",
             "_type_session_env",
             "_type_skill_contract",
+            "_type_skill_semantics",
             "_type_subprocess",
             "_type_token",
             "_type_tradition_manifest",
@@ -75,8 +78,8 @@ class TestCoreSubpackages:
         assert len(combined) == len(remaining) + len(env) + len(features) + len(registries), (
             "Duplicate symbols across split modules"
         )
-        assert len(combined) == 143, (
-            f"Expected 143 symbols total, got {len(combined)} "
+        assert len(combined) == 136, (
+            f"Expected 136 symbols total, got {len(combined)} "
             f"(remaining={len(remaining)}, env={len(env)}, "
             f"features={len(features)}, registries={len(registries)})"
         )

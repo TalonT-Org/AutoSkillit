@@ -1,17 +1,27 @@
 ---
 name: arch-lens-deployment
-categories: [arch-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-write_paths: ["{{AUTOSKILLIT_TEMP}}/arch-lens-deployment/"]
-description: Create Deployment/Physical architecture diagram showing infrastructure topology, process boundaries, and network communication. Physical lens answering "Where does it run?"
+categories:
+- arch-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/arch-lens-deployment/'
+description: Create Deployment/Physical architecture diagram showing infrastructure topology, process boundaries, and network
+  communication. Physical lens answering "Where does it run?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Deployment Lens - Analyzing infrastructure topology...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Deployment Lens - Analyzing infrastructure topology...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: arch-lens-c4-container
+  - name: make-arch-diag
+  - name: mermaid
 ---
 
 # Deployment/Physical Architecture Lens
@@ -48,8 +58,8 @@ hooks:
 - Modify any source code files
 - Include code-level details
 - Show internal logic
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Focus on PHYSICAL deployment
@@ -65,7 +75,7 @@ hooks:
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-deployment/arch_diag_deployment_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 
 ## Analysis Workflow
@@ -87,7 +97,7 @@ If no `context_path` is provided, skip this step and explore the full CWD in Ste
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn Explore subagents to investigate:
+Spawn child delegations to investigate:
 
 **Process Boundaries**
 - Find main process entry points

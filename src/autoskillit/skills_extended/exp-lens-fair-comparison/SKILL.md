@@ -1,16 +1,26 @@
 ---
 name: exp-lens-fair-comparison
-categories: [exp-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: Create a comparison fairness matrix assessing whether alternatives are evaluated under symmetric constraints. Fairness lens answering "Are alternatives compared under symmetric constraints?"
+categories:
+- exp-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Create a comparison fairness matrix assessing whether alternatives are evaluated under symmetric constraints.
+  Fairness lens answering "Are alternatives compared under symmetric constraints?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Fair Comparison Lens - Analyzing symmetry of constraints...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Fair Comparison Lens - Analyzing symmetry of constraints...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: exp-lens-comparator-construction
+  - name: exp-lens-sensitivity-robustness
+  - name: make-experiment-diag
+  - name: mermaid
 ---
 
 # Fair Comparison Experimental Design Lens
@@ -46,8 +56,8 @@ hooks:
 - Modify any source code files
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-fair-comparison/`
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Build the full symmetry matrix — every method against every resource dimension
@@ -56,7 +66,7 @@ hooks:
 - Assess the winner's curse: did the proposed method benefit from more selection pressure?
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-fair-comparison/exp_diag_fair_comparison_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -83,7 +93,7 @@ exploration for these fields if the context file supplies them. For any field ab
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn Explore subagents to investigate:
+Spawn child delegations to investigate:
 
 **Compute & Resource Allocation**
 - Find compute resources used per method

@@ -165,8 +165,8 @@ def test_tool_ctx_log_dir_is_isolated_from_production(tool_ctx):
     assert not os.path.abspath(log_dir).startswith(production_path)
 
 
-def test_minimal_ctx_imports_only_core_pipeline_and_config():
-    """minimal_ctx fixture must only import from autoskillit.core, .pipeline, and .config."""
+def test_minimal_ctx_imports_only_l0_l1_composition_packages():
+    """minimal_ctx may import only the L0/L1 packages needed for composition."""
     import ast
     from pathlib import Path
 
@@ -180,7 +180,12 @@ def test_minimal_ctx_imports_only_core_pipeline_and_config():
             break
     assert func is not None, "minimal_ctx fixture not found in conftest.py"
 
-    ALLOWED_PREFIXES = ("autoskillit.core", "autoskillit.pipeline", "autoskillit.config")
+    ALLOWED_PREFIXES = (
+        "autoskillit.core",
+        "autoskillit.pipeline",
+        "autoskillit.config",
+        "autoskillit.execution",
+    )
 
     violations = []
     for node in ast.walk(func):
@@ -194,7 +199,7 @@ def test_minimal_ctx_imports_only_core_pipeline_and_config():
 
     assert not violations, (
         f"minimal_ctx imports from forbidden modules: {violations}. "
-        f"Only autoskillit.core, autoskillit.pipeline, and autoskillit.config are allowed."
+        "Only autoskillit core/config/pipeline/execution packages are allowed."
     )
 
 

@@ -1,15 +1,34 @@
 ---
 name: review-design
-categories: [research]
-uses_capabilities: [agent_model]
-description: Validate an experiment plan before execution using triage-first, fail-fast dimensional analysis with an adversarial red-team. Emits verdict (GO/REVISE/STOP), experiment_type, evaluation_dashboard, and revision_guidance.
+categories:
+- research
+uses_capabilities: []
+description: Validate an experiment plan before execution using triage-first, fail-fast dimensional analysis with an adversarial
+  red-team. Emits verdict (GO/REVISE/STOP), experiment_type, evaluation_dashboard, and revision_guidance.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: review-design] Reviewing experiment design...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: review-design] Reviewing experiment design...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Review Design Skill
@@ -50,12 +69,12 @@ best available plan.
 - Exit non-zero — GO, REVISE, and STOP are all normal outcomes (exit 0 in all cases)
 - Include code snippets, shell commands, or specific tool invocations in findings or revision guidance — findings describe gaps and risks, not implementation instructions
 - Prescribe HOW to fix an issue — findings must describe WHAT is lacking or at risk; the fix is the plan author's responsibility
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
-- Spawn all subagents via `Agent(model="sonnet")`
-- Issue all Task calls in a single message to maximize parallelism
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Write output to `{{AUTOSKILLIT_TEMP}}/review-design/` (relative to the current working directory)
 - After writing output files, emit the **absolute paths** as structured output tokens
   as your final output. Resolve relative save paths to absolute by prepending
@@ -259,7 +278,7 @@ contradicts the hypothesis), flag the design concern, not the code bug.
 
 ### Step 2: Level 1 Analysis — Fail-Fast (parallel) (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 

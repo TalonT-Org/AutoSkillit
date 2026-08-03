@@ -270,9 +270,3 @@ def close_issue_already_done(issue_url: str) -> dict[str, str]:
         timeout=60,
     )
     return {"closed": "true"}
-
-
-def gate_backend_write(backend_supports_git_write: str = "true") -> dict[str, str]:
-    if str(backend_supports_git_write).lower() in ("false", "0", "no", ""):
-        return {"backend_capable": "false"}
-    return {"backend_capable": "true"}

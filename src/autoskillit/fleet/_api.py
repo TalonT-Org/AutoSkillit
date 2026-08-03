@@ -13,6 +13,9 @@ import anyio
 import psutil
 
 from autoskillit.core import (
+    BackendAuthority,
+    BackendAuthorityKind,
+    BackendAuthorityTier,
     CaptureEntrySpec,
     FleetErrorCode,
     ManagedHeadlessSessionLineageRef,
@@ -25,7 +28,10 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.fleet._capture import _extract_captures, _normalize_capture_spec
-from autoskillit.fleet._checkpoint_bridge import load_dispatch_progress
+from autoskillit.fleet._checkpoint_bridge import (
+    bind_dispatch_launch_contract,
+    load_dispatch_progress,
+)
 from autoskillit.fleet._expressions import _CAMPAIGN_REF_RE, _interpolate_campaign_refs
 from autoskillit.fleet._issue_url_helpers import extract_issue_urls
 from autoskillit.fleet._native_shell_capture import (
@@ -34,9 +40,6 @@ from autoskillit.fleet._native_shell_capture import (
     prepare_food_truck_lineage,
     resolve_dispatch_timeout,
     set_lineage_terminal_state,
-)
-from autoskillit.fleet._native_shell_capture import (
-    build_capability_overrides as _build_capability_overrides,
 )
 from autoskillit.fleet._outcome import (
     _checkpoint_to_dict,
@@ -58,10 +61,10 @@ from autoskillit.fleet.state_types import (
     DispatchRejected,
     DispatchResult,
 )
-from autoskillit.workspace import default_skill_resolver, prepare_effective_skill_dispatch
+from autoskillit.workspace import default_skill_resolver, prepare_skill_projection
 
 if TYPE_CHECKING:
-    from autoskillit.core import CodingAgentBackend
+    from autoskillit.core import CodingAgentBackend, ResolvedLaunchContract
     from autoskillit.fleet.state import DispatchStateHandle
     from autoskillit.pipeline.context import ToolContext
 
@@ -255,7 +258,6 @@ async def execute_dispatch(
     prior_dispatch_id: str | None = None,
     resume_message: str | None = None,
     caller_instructions: str | None = None,
-    provider_capability_overrides: dict[str, str] | None = None,
     dispatch_backend: CodingAgentBackend | None = None,
     effective_backend_map: dict[str, str] | None = None,
     provenance: DispatchProvenanceTracker | None = None,
@@ -332,7 +334,6 @@ async def execute_dispatch(
             prior_dispatch_id=prior_dispatch_id,
             resume_message=resume_message,
             caller_instructions=caller_instructions,
-            provider_capability_overrides=provider_capability_overrides,
             dispatch_backend=dispatch_backend,
             effective_backend_map=effective_backend_map,
             provenance=provenance,
@@ -436,7 +437,6 @@ async def _run_dispatch(
     prior_dispatch_id: str | None = None,
     resume_message: str | None = None,
     caller_instructions: str | None = None,
-    provider_capability_overrides: dict[str, str] | None = None,
     dispatch_backend: CodingAgentBackend | None = None,
     effective_backend_map: dict[str, str] | None = None,
     provenance: DispatchProvenanceTracker | None = None,
@@ -480,15 +480,11 @@ async def _run_dispatch(
     _caller_backend_name = tool_ctx.backend.name if tool_ctx.backend is not None else ""
 
     try:
-        _capability_overrides = provider_capability_overrides or _build_capability_overrides(
-            _effective_backend
-        )
-        _merged_ingredients = {**(ingredients or {}), **_capability_overrides}
         validation_result = tool_ctx.recipes.load_and_validate(
             recipe,
             tool_ctx.project_dir,
             suppressed=tool_ctx.config.migration.suppressed if tool_ctx.config else None,
-            ingredient_overrides=_merged_ingredients,
+            ingredient_overrides=ingredients,
             temp_dir=tool_ctx.temp_dir,
             backend_name=_effective_backend.name if _effective_backend else None,
             effective_backend_map=effective_backend_map,
@@ -534,20 +530,6 @@ async def _run_dispatch(
             per_dispatch_state_path=None,
         )
 
-    if not validation_result.get("dispatch_feasible", True):
-        infeasible_steps = validation_result.get("infeasible_steps", [])
-        return DispatchResult(
-            DispatchRejected(
-                error_code=FleetErrorCode.FLEET_RECIPE_INVALID,
-                message=(
-                    f"Recipe '{recipe}' is dispatch-infeasible: "
-                    f"infeasible_steps={infeasible_steps}"
-                ),
-                effect_provenance=provenance.snapshot(),
-            ),
-            per_dispatch_state_path=None,
-        )
-
     try:
         full_recipe = tool_ctx.recipes.load(recipe_obj.path)
     except Exception as exc:
@@ -582,14 +564,10 @@ async def _run_dispatch(
         apply_config_authoritative_overrides,
     )
 
-    _capability_overrides = provider_capability_overrides or _build_capability_overrides(
-        _effective_backend
-    )
     effective_ingredients = apply_config_authoritative_overrides(
         effective_ingredients,
         full_recipe.ingredients,
         tool_ctx.project_dir,
-        capability_overrides=_capability_overrides,
     )
 
     effective_name = dispatch_name or recipe
@@ -846,8 +824,7 @@ async def _run_dispatch(
         )
         plugin_authority = capability_preparation = None
         if _effective_backend is not None:
-            plugin_authority, capability_preparation = prepare_effective_skill_dispatch(
-                resolved_command=prepared_prompt,
+            plugin_authority, capability_preparation = prepare_skill_projection(
                 project_root=tool_ctx.project_dir,
                 cwd=tool_ctx.project_dir,
                 resolver=tool_ctx.skill_resolver or default_skill_resolver(),
@@ -1118,6 +1095,9 @@ async def _run_dispatch(
             },
         )
 
+    def _on_launch_resolved(launch_contract: ResolvedLaunchContract) -> None:
+        bind_dispatch_launch_contract(state_path, effective_name, launch_contract)
+
     marker_dir: Path | None = None
     if _locator is not None:
         try:
@@ -1171,11 +1151,19 @@ async def _run_dispatch(
                     on_spawn=_on_spawn,
                     sentinel_contract=sentinel_contract,
                     resume_message=resume_message,
-                    backend_override=dispatch_backend.name
-                    if dispatch_backend is not None
-                    else None,
+                    backend_authority=(
+                        BackendAuthority(
+                            backend=dispatch_backend.name,
+                            kind=BackendAuthorityKind.CALLER,
+                            tier=BackendAuthorityTier.CALLER,
+                            key_path="dispatch.backend",
+                        )
+                        if dispatch_backend is not None
+                        else None
+                    ),
                     native_shell_capture_decision=capture_decision,
                     managed_lineage_ref=managed_lineage_ref,
+                    on_launch_resolved=_on_launch_resolved,
                 )
 
         # L2 fail-closed spawn gate: check closure-scoped error state.

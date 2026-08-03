@@ -220,7 +220,13 @@ def _select_probe_session_row(
     assert len(matches) == 1, f"expected one new probe session row, got {matches}"
     row = matches[0]
     assert row["success"] is True
-    assert row["backend_override_source"] == "explicit_config"
+    assert row["backend_authority"] == {
+        "backend": backend,
+        "kind": "step",
+        "tier": "step",
+        "key_path": f"agent_backend.step_overrides.{_PROBE_STEP_NAME}",
+    }
+    assert len(row["launch_contract_digest"]) == 64
     assert row["recipe_name"] == _PROBE_RECIPE_NAME
     assert row["configured_model"] == configured_model
     return row

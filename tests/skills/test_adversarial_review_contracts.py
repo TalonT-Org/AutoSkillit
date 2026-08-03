@@ -331,7 +331,7 @@ def test_rectify_sequential_revision_pattern(rectify_text: str) -> None:
 
 
 def test_make_plan_adversarial_steps_contain_continuation_protocol(make_plan_text: str) -> None:
-    """Each adversarial step in make-plan must include SendMessage continuation protocol."""
+    """Each adversarial step in make-plan must include a portable continuation protocol."""
     planning_idx = make_plan_text.find("## Planning Steps")
     assert planning_idx != -1
     step6_idx = make_plan_text.find("**Foundation Audit", planning_idx)
@@ -346,13 +346,13 @@ def test_make_plan_adversarial_steps_contain_continuation_protocol(make_plan_tex
         ("Step 8 (Registry Trace)", step8_idx, step9_idx),
     ]:
         section = make_plan_text[start:end].lower()
-        assert "sendmessage" in section, f"{label} must mention SendMessage"
+        assert "child continuation message" in section, f"{label} must name continuation"
         assert "summary" in section, f"{label} must mention required summary field"
         assert "continuation" in section, f"{label} must mention continuation"
 
 
 def test_rectify_adversarial_steps_contain_continuation_protocol(rectify_text: str) -> None:
-    """Each adversarial step in rectify must include SendMessage continuation protocol."""
+    """Each adversarial step in rectify must include a portable continuation protocol."""
     workflow_idx = rectify_text.find("## Rectify Workflow")
     assert workflow_idx != -1
     fa_idx = rectify_text.find("Foundation Audit", workflow_idx)
@@ -369,6 +369,6 @@ def test_rectify_adversarial_steps_contain_continuation_protocol(rectify_text: s
         ("Step 6 (Registry Trace)", rt_idx, rt_end),
     ]:
         section = rectify_text[start:end].lower()
-        assert "sendmessage" in section, f"{label} must mention SendMessage"
+        assert "child continuation message" in section, f"{label} must name continuation"
         assert "summary" in section, f"{label} must mention required summary field"
         assert "continuation" in section, f"{label} must mention continuation"

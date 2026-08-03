@@ -1,15 +1,36 @@
 ---
 name: generate-report
-categories: [research]
-uses_capabilities: [agent_model, git_metadata_write]
-description: Synthesize experiment results into a structured research report in the research/ folder. Supports --inconclusive flag.
+categories:
+- research
+uses_capabilities: []
+description: Synthesize experiment results into a structured research report in the research/ folder. Supports --inconclusive
+  flag.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: generate-report] Writing research report...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: generate-report] Writing research report...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
+  git_metadata_writes:
+  - purpose: perform the repository metadata update required by this skill
 ---
 
 # Write Report Skill
@@ -79,17 +100,17 @@ In addition to the arguments above, this skill reads from the worktree:
 - Omit the methodology section — reproducibility requires it
 - Frame inconclusive results as failures — they are valid findings
 - Create the report outside the worktree's `research/` directory
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Write the report to `research/` in the worktree root
 - Include experiment scripts inline as fenced code blocks for reproducibility
 - Commit the report to the worktree before returning
 - Include a "What We Learned" section regardless of outcome
 - Link back to the originating GitHub issue if an issue number is available
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Context Limit Behavior
 

@@ -98,7 +98,7 @@ class TestSkillMdPresence:
         assert "## Workflow" in skill_md, "SKILL.md must contain a '## Workflow' section."
 
     def test_has_categories_planner(self, skill_md: str) -> None:
-        assert "categories: [planner]" in skill_md, (
+        assert "categories:\n- planner" in skill_md, (
             "SKILL.md must include 'categories: [planner]' in frontmatter."
         )
 

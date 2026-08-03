@@ -1,15 +1,33 @@
 ---
 name: build-execution-map
-categories: [github]
-uses_capabilities: [agent_model]
+categories:
+- github
+uses_capabilities: []
 description: Analyze issue dependencies and produce a dispatch execution map for parallel orchestration
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '⚙️ [SKILL: build-execution-map] Analyzing issue dependencies...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''⚙️ [SKILL: build-execution-map] Analyzing issue dependencies...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # build-execution-map
@@ -45,21 +63,21 @@ Space-separated issue numbers (required, minimum 2), plus optional flags:
 - Use the `execution_map` or `execution_map_report` token names with unspaced `=` (always use `key = value` format)
 - Override the AI's parallelism judgment with mechanical rules
 - Assume issues conflict based solely on file-name overlap without reading the issue descriptions
-- Run subagents in the background (`run_in_background: true` is prohibited)
+- Detach child delegations instead of joining them (joining every child is required)
 - Treat a medium-severity cross-assessment as grounds for deferral — only critical severity defers
 - Emit has_deferred / deferred_count / dispatched_count with markdown decorators
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Use parallel subagents (up to 8) for issue fetching in Step 1
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Write both JSON and markdown report outputs to `{{AUTOSKILLIT_TEMP}}/build-execution-map/`
 - Emit `execution_map` and `execution_map_report` tokens with absolute paths (use `$(pwd)` to resolve the working directory prefix)
 - Emit structured output tokens as the final lines of text output (plain text, no markdown decorators)
 - Check the actual codebase when uncertain whether two issues' changes overlap
 - Capture per-pair reasoning in `pairwise_assessments` for auditability
 - Anchor all output paths to the current working directory
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -77,7 +95,7 @@ with `"Error: --max-parallel must be a positive integer"`. Validate the issue co
 
 ### Step 1 — Fetch Issue Data (parallel subagents) (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 

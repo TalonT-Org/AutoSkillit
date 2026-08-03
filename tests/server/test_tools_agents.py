@@ -185,44 +185,41 @@ def test_agent_defs_in_pyproject_artifacts():
     assert '"src/autoskillit/agents/**"' in content
 
 
-# T11: make-plan SKILL.md subagent_type references resolve to agent files
+def _semantic_agent_roles(skill_name: str) -> set[str]:
+    from autoskillit.core import pkg_root
+    from autoskillit.workspace import read_skill_frontmatter
+
+    skill_md = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
+    parsed = read_skill_frontmatter(skill_md)
+    assert parsed.data is not None
+    requirements = parsed.data.get("semantic_requirements", {})
+    return {role["name"] for role in requirements.get("logical_roles", [])}
+
+
+# T11: make-plan semantic agent roles resolve to agent files
 def test_make_plan_subagent_type_refs_resolve():
-    """Grep SKILL.md for autoskillit:plan-* subagent_type refs.
-
-    Each must correspond to an agent definition file in agents/.
-    """
-    import re
-
+    """Every plan-auditor semantic role must resolve to an agent definition."""
     from autoskillit.core import pkg_root
 
-    content = (pkg_root() / "skills_extended" / "make-plan" / "SKILL.md").read_text()
-    refs = re.findall(r"autoskillit:(plan-[a-z-]+)", content)
-    unique_refs = set(refs)
+    unique_refs = {name for name in _semantic_agent_roles("make-plan") if name.startswith("plan-")}
     assert len(unique_refs) >= 3, (
         f"Expected >=3 unique autoskillit:plan-* refs in SKILL.md, found {len(unique_refs)}"
     )
 
     agents_dir = pkg_root() / "agents"
-    for agent_name in set(refs):
+    for agent_name in unique_refs:
         agent_file = agents_dir / f"{agent_name}.md"
         assert agent_file.exists(), (
             f"SKILL.md references autoskillit:{agent_name} but {agent_file} does not exist"
         )
 
 
-# T11-rectify: rectify SKILL.md subagent_type references resolve to agent files
+# T11-rectify: rectify semantic agent roles resolve to agent files
 def test_rectify_subagent_type_refs_resolve():
-    """Grep rectify SKILL.md for autoskillit:plan-* subagent_type refs.
-
-    Each must correspond to an agent definition file in agents/.
-    """
-    import re
-
+    """Every rectify plan-auditor semantic role resolves to an agent definition."""
     from autoskillit.core import pkg_root
 
-    content = (pkg_root() / "skills_extended" / "rectify" / "SKILL.md").read_text()
-    refs = re.findall(r"autoskillit:(plan-[a-z-]+)", content)
-    unique_refs = set(refs)
+    unique_refs = {name for name in _semantic_agent_roles("rectify") if name.startswith("plan-")}
     assert len(unique_refs) >= 3, (
         f"Expected >=3 unique autoskillit:plan-* refs in rectify SKILL.md, "
         f"found {len(unique_refs)}"
@@ -384,16 +381,12 @@ _WP_RESULT_ALL_FIELDS = frozenset(
 )
 
 
-# T-NEW-1: planner-elaborate-wps SKILL.md subagent_type refs resolve to agent files
+# T-NEW-1: planner-elaborate-wps semantic agent roles resolve to agent files
 def test_elaborate_wps_subagent_type_refs_resolve():
-    """planner-elaborate-wps SKILL.md subagent_type refs resolve to agent files."""
-    import re
-
+    """planner-elaborate-wps semantic roles resolve to agent files."""
     from autoskillit.core import pkg_root
 
-    content = (pkg_root() / "skills_extended" / "planner-elaborate-wps" / "SKILL.md").read_text()
-    refs = re.findall(r'subagent_type.*?["\']autoskillit:([a-z][a-z0-9-]+)["\']', content)
-    unique_refs = set(refs)
+    unique_refs = _semantic_agent_roles("planner-elaborate-wps")
     assert len(unique_refs) >= 1, (
         f"Expected >=1 subagent_type ref in planner-elaborate-wps SKILL.md, "
         f"found {len(unique_refs)}"
@@ -406,16 +399,12 @@ def test_elaborate_wps_subagent_type_refs_resolve():
         )
 
 
-# T-NEW-4: audit-impl SKILL.md subagent_type refs resolve to agent files
+# T-NEW-4: audit-impl semantic agent roles resolve to agent files
 def test_audit_impl_subagent_type_refs_resolve():
-    """audit-impl SKILL.md subagent_type refs resolve to agent files."""
-    import re
-
+    """audit-impl semantic agent roles resolve to agent files."""
     from autoskillit.core import pkg_root
 
-    content = (pkg_root() / "skills_extended" / "audit-impl" / "SKILL.md").read_text()
-    refs = re.findall(r'subagent_type.*?["\']autoskillit:([a-z][a-z0-9-]+)["\']', content)
-    unique_refs = set(refs)
+    unique_refs = _semantic_agent_roles("audit-impl")
     assert len(unique_refs) >= 1, (
         f"Expected >=1 subagent_type ref in audit-impl SKILL.md, found {len(unique_refs)}"
     )

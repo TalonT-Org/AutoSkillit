@@ -1,15 +1,34 @@
 ---
 name: scope
-categories: [research]
-uses_capabilities: [agent_model]
-description: Survey codebase and web sources to build a known/unknown matrix for a research question. Phase 1 of the research recipe.
+categories:
+- research
+uses_capabilities: []
+description: Survey codebase and web sources to build a known/unknown matrix for a research question. Phase 1 of the research
+  recipe.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: scope] Scoping research question...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: scope] Scoping research question...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Scope Research Skill
@@ -50,15 +69,15 @@ text is supplementary context.
 - Propose solutions or write implementation code
 - Skip the prior art survey — always check what already exists in the codebase
 - Fabricate research findings when external sources return no results — if web searches or literature searches yield nothing, state that explicitly and note what the codebase evidence shows instead
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Write output to `{{AUTOSKILLIT_TEMP}}/scope/` directory
 - Clearly separate facts (what the code does) from hypotheses (what might be true)
 - Include a known/unknown matrix in the output
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -70,11 +89,11 @@ text is supplementary context.
 
 ### Step 1 — Parallel Exploration (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Launch subagents via `Agent(model="sonnet")` to explore in parallel.
+Launch subagents via `child delegation under the declared `sonnet` model-class policy` to explore in parallel.
 You **must launch at least 5 subagents**. Select from the suggested menu below,
 define entirely custom subagents, or use any combination. The menu is a guide,
 not a mandate — you are free to skip entries that are not relevant and substitute

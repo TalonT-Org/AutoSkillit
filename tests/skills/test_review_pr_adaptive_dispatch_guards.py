@@ -12,6 +12,8 @@ from typing import Any
 
 import pytest
 
+from autoskillit.workspace.skill_format import read_skill_frontmatter
+
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 SKILL_PATH = (
@@ -455,11 +457,16 @@ def test_deletion_dispatch_decision_is_gate_independent(
 
 def test_true_gate_dispatches_both_registered_agents_once() -> None:
     section = _section("### Step 3", "### Step 4")
-    for name in (
-        "autoskillit:pr-review-auditor-reachability",
-        "autoskillit:pr-review-auditor-abstraction-surface",
-    ):
-        assert section.count(f'Agent(subagent_type="{name}", model="sonnet")') == 1
+    parsed = read_skill_frontmatter(SKILL_PATH)
+    assert parsed.data is not None
+    requirements = parsed.data["semantic_requirements"]
+    roles = {
+        "pr-review-auditor-reachability",
+        "pr-review-auditor-abstraction-surface",
+    }
+    assert {spawn["role"] for spawn in requirements["child_spawns"]} == roles
+    assert {policy["role"] for policy in requirements["child_model_policies"]} == roles
+    assert {policy["model_class"] for policy in requirements["child_model_policies"]} == {"sonnet"}
     assert "ANNOTATED_DIFF" in section
     assert "VALID_DIFF_LINES" in section
     assert "fixed configured agent order" in section

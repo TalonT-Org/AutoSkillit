@@ -1,13 +1,32 @@
 ---
 name: select-vis-lenses
-categories: [research, vis-lens]
-uses_capabilities: [agent_model]
+categories:
+- research
+- vis-lens
+uses_capabilities: []
 phoropter_family: vis-lens
-description: >
-  Dial step of the vis-lens phoropter: parses experiment plan fields, applies
-  three-tier lens selection (Tier A mandatory, Tier B experiment-type, Tier C
-  methodology tradition), writes per-lens context files, and emits five
-  structured tokens for downstream vis-lens invocation.
+description: 'Dial step of the vis-lens phoropter: parses experiment plan fields, applies three-tier lens selection (Tier
+  A mandatory, Tier B experiment-type, Tier C methodology tradition), writes per-lens context files, and emits five structured
+  tokens for downstream vis-lens invocation.
+
+  '
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Select Vis-Lenses Skill
@@ -39,14 +58,14 @@ consumption. Does NOT invoke the vis-lens skills — that is handled by the
 - Skip vis-lens-always-on (it is always Tier A)
 - Write outputs outside `{{AUTOSKILLIT_TEMP}}/select-vis-lenses/`
 - Fabricate lens recommendations or validation conclusions not supported by the data — report what the experiment plan and scope show, not what you assume they should show
-- Run subagents in the background (`run_in_background: true` is prohibited)
+- Detach child delegations instead of joining them (joining every child is required)
 - Invoke vis-lens skills — that belongs to the `run_vis_lenses` recipe step
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Write a vis-lens context file for each selected lens before emitting tokens
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 

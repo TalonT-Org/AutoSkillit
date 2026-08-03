@@ -13,6 +13,14 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 class TestBackendRegistry:
+    def test_registry_is_the_only_semantic_adapter_authority(self) -> None:
+        from autoskillit.core import SkillSemanticPlan
+
+        for backend_name, backend_cls in BACKEND_REGISTRY.items():
+            backend = backend_cls()
+            result = backend.adapt_skill_semantics(SkillSemanticPlan(schema_version=1))
+            assert result.unsupported_operation is None, backend_name
+
     def test_get_backend_claude_code(self) -> None:
         result = get_backend("claude-code")
         assert isinstance(result, ClaudeCodeBackend)

@@ -31,7 +31,6 @@ from autoskillit.smoke_utils._git import (
     compute_domain_partitions,
     detect_zero_changes,
     fetch_merge_queue_data,
-    gate_backend_write,
 )
 from autoskillit.smoke_utils._helpers import try_load_json
 from autoskillit.smoke_utils._investigation import extract_investigation
@@ -91,7 +90,6 @@ __all__ = [
     "enrich_diff_context",
     "extract_investigation",
     "fetch_merge_queue_data",
-    "gate_backend_write",
     "init_counter",
     "normalize_local_review_finding",
     "parse_agent_eval_manifests",

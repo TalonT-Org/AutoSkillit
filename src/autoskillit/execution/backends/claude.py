@@ -54,6 +54,8 @@ from autoskillit.core import (
     SessionEvent,
     SessionLocator,
     SessionSummary,
+    SkillSemanticAdaptationResult,
+    SkillSemanticPlan,
     SkillSessionConfig,
     ValidatedAddDir,
     YAMLError,
@@ -883,6 +885,61 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             for f in self.capabilities.required_skill_fields
             if f not in data
         ]
+
+    def adapt_skill_semantics(self, plan: SkillSemanticPlan) -> SkillSemanticAdaptationResult:
+        """Adapt portable skill requirements to Claude Code instructions."""
+        role_mapping = {role.name: role.name for role in plan.logical_roles}
+        sibling_targets = {
+            sibling.name: f"/autoskillit:{sibling.name}" for sibling in plan.sibling_skills
+        }
+        model_policy: dict[str, tuple[str, str | None]] = {}
+        fragments = [f"Logical role {role.name!r}: {role.purpose}." for role in plan.logical_roles]
+        for policy in plan.child_model_policies:
+            model_id = self.translate_model(policy.model_class) if policy.model_class else ""
+            model_policy[policy.role] = (model_id, policy.reasoning_effort)
+        for spawn in plan.child_spawns:
+            spawn_policy = next(
+                (
+                    candidate
+                    for candidate in plan.child_model_policies
+                    if candidate.role == spawn.role
+                ),
+                None,
+            )
+            model_arg = (
+                f", model={spawn_policy.model_class!r}"
+                if spawn_policy is not None and spawn_policy.model_class is not None
+                else ""
+            )
+            effort_text = (
+                f" under reasoning policy {spawn_policy.reasoning_effort!r}"
+                if spawn_policy is not None and spawn_policy.reasoning_effort is not None
+                else ""
+            )
+            fragments.append(
+                f"Issue {spawn.count} Agent(subagent_type={spawn.role!r}{model_arg}) "
+                f"call{'s' if spawn.count != 1 else ''}{effort_text}."
+            )
+        if plan.concurrency is not None and plan.concurrency.required:
+            fragments.append("Issue all independent child calls in one message so they overlap.")
+        if plan.join is not None and plan.join.required:
+            fragments.append("Join every spawned child before parent synthesis.")
+        if plan.evidence is not None and plan.evidence.required:
+            boundary = "independent " if plan.evidence.independent else ""
+            fragments.append(f"Require {boundary}evidence from each child result.")
+        fragments.extend(f"Invoke sibling skill {target}." for target in sibling_targets.values())
+        fragments.extend(
+            f"Perform the required git metadata write: {write.purpose}."
+            for write in plan.git_metadata_writes
+        )
+        result = SkillSemanticAdaptationResult(
+            instruction_fragments=tuple(fragments),
+            logical_role_mapping=role_mapping,
+            sibling_skill_targets=sibling_targets,
+            model_effort_policy=model_policy,
+        )
+        result.validate_for(plan, backend=self.name)
+        return result
 
     def version(self) -> str:
         exec_path = os.environ.get("CLAUDE_CODE_EXECPATH") or self.version_cmd()[0]

@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.io import load_yaml
+from autoskillit.workspace.skill_format import read_skill_frontmatter
 
 SKILL_MD = (
     Path(__file__).parents[2] / "src/autoskillit/skills_extended/open-integration-pr/SKILL.md"
@@ -45,7 +46,14 @@ def test_skill_defines_step_4g_parallel_subagents(skill_text: str) -> None:
 
 
 def test_skill_spawns_parallel_subagents_for_domains(skill_text: str) -> None:
-    assert 'Agent(model="sonnet")' in skill_text
+    parsed = read_skill_frontmatter(SKILL_MD)
+    assert parsed.data is not None
+    requirements = parsed.data["semantic_requirements"]
+    assert requirements["concurrency"] == {"required": True}
+    assert requirements["join"] == {"required": True}
+    assert requirements["child_model_policies"] == [
+        {"role": "delegated-worker", "model_class": "sonnet"}
+    ]
 
 
 def test_skill_has_at_least_seven_domain_names(skill_text: str) -> None:

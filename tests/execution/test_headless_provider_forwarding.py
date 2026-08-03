@@ -7,7 +7,7 @@ import pytest
 
 from autoskillit.core.types import RetryReason, SkillResult
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
-from tests.execution.conftest import _mock_backend
+from tests.execution.conftest import _launch_preparation, _mock_backend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -296,6 +296,8 @@ async def test_no_fallback_env_returns_empty_provider_used(
         minimal_ctx,
         timeout=30.0,
         stale_threshold=5.0,
+        launch_resolver=minimal_ctx.launch_resolver,
+        launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
     )
 
     assert result.provider.provider_used == ""
@@ -339,6 +341,8 @@ async def test_provider_name_stamps_provider_used_on_result(
         timeout=30.0,
         stale_threshold=5.0,
         provider_name="bedrock",
+        launch_resolver=minimal_ctx.launch_resolver,
+        launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
     )
 
     assert result.provider.provider_used == "bedrock"
@@ -461,7 +465,7 @@ async def test_dispatch_food_truck_forwards_marker_dir_and_session_id(
     )
 
     minimal_ctx.backend = _mock_backend(
-        food_truck_capable=True, pty_required=True, channel_b_capable=True
+        food_truck_capable=True, pty_required=True, channel_b_capable=False
     )
     executor = DefaultHeadlessExecutor(minimal_ctx)
     marker = tmp_path / "markers"
@@ -543,6 +547,8 @@ async def test_execute_forwards_readonly_skill_to_build_result(
         timeout=10.0,
         stale_threshold=5.0,
         readonly_skill=True,
+        launch_resolver=minimal_ctx.launch_resolver,
+        launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
     )
 
     assert captured_readonly, "_build_skill_result was not called"
@@ -602,8 +608,8 @@ async def test_dispatch_food_truck_derives_marker_dir_from_cwd(
 
 
 @pytest.mark.anyio
-async def test_dispatch_food_truck_marker_dir_none_when_cwd_falsy(
-    minimal_ctx, monkeypatch
+async def test_dispatch_food_truck_marker_dir_none_without_channel_b(
+    minimal_ctx, tmp_path, monkeypatch
 ) -> None:
     execute_kwargs: dict = {}
 
@@ -633,12 +639,12 @@ async def test_dispatch_food_truck_marker_dir_none_when_cwd_falsy(
     from autoskillit.execution.headless import DefaultHeadlessExecutor
 
     minimal_ctx.backend = _mock_backend(
-        food_truck_capable=True, pty_required=True, channel_b_capable=True
+        food_truck_capable=True, pty_required=True, channel_b_capable=False
     )
     executor = DefaultHeadlessExecutor(minimal_ctx)
     await executor.dispatch_food_truck(
         "prompt",
-        "",
+        str(tmp_path),
         completion_marker="%%DONE%%",
     )
 
@@ -694,6 +700,8 @@ async def test_execute_claude_headless_forwards_marker_dir_to_runner(
         stale_threshold=30,
         marker_dir=Path("/custom/markers"),
         session_id="sess-abc",
+        launch_resolver=minimal_ctx.launch_resolver,
+        launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
     )
 
     assert runner_kwargs["marker_dir"] == Path("/custom/markers")
@@ -749,6 +757,8 @@ async def test_execute_claude_headless_pty_mode_from_backend(
         minimal_ctx,
         timeout=60,
         stale_threshold=30,
+        launch_resolver=minimal_ctx.launch_resolver,
+        launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
     )
 
     assert runner_kwargs["pty_mode"] is False
@@ -801,6 +811,8 @@ async def test_execute_claude_headless_session_log_dir_none_when_no_channel_b(
         minimal_ctx,
         timeout=60,
         stale_threshold=30,
+        launch_resolver=minimal_ctx.launch_resolver,
+        launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
     )
 
     assert runner_kwargs["session_log_dir"] is None
@@ -893,6 +905,8 @@ async def test_execute_claude_headless_passes_stream_parser_to_runner(
         minimal_ctx,
         timeout=60,
         stale_threshold=30,
+        launch_resolver=minimal_ctx.launch_resolver,
+        launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
     )
 
     assert runner_kwargs["stream_parser"] is sentinel
@@ -939,6 +953,8 @@ async def test_execute_claude_headless_stream_parser_receives_completion_marker(
         timeout=60,
         stale_threshold=30,
         completion_marker="%%TEST_MARKER%%",
+        launch_resolver=minimal_ctx.launch_resolver,
+        launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
     )
 
     backend.stream_parser.assert_called_once_with(completion_marker="%%TEST_MARKER%%")

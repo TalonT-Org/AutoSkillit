@@ -7,12 +7,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 
-from ._type_constants_registries import (
-    SKILL_CAPABILITY_REGISTRY,
-    validate_skill_capability_roles,
-)
 from ._type_enums import SkillExecutionRole, SkillSource
 from ._type_exceptions import SkillContractError
+from ._type_launch import ResolvedLaunchContract
 from ._type_native_shell_capture import ManagedHeadlessSessionLineageRef
 from ._type_results import WriteBehaviorSpec
 
@@ -25,14 +22,12 @@ __all__ = [
     "SkillSourceRef",
     "SkillVisibilitySpec",
     "StoredSkillSessionContract",
-    "derive_backend_requirements",
 ]
 
 
 MACHINE_ONLY_SKILL_FRONTMATTER_KEYS = frozenset(
     {
         "activate_deps",
-        "backend_requirements",
         "execution_role",
         "uses_capabilities",
     }
@@ -44,16 +39,8 @@ MACHINE_ONLY_SKILL_FRONTMATTER_KEYS = frozenset(
 # invalidation explicit instead of relying on the new digest to happen to
 # differ, and causes stale stored contracts to be refused loudly by the
 # assertion in _skill_session_contract_store rather than silently reused.
-SKILL_PROJECTION_VERSION = 2
-SKILL_SESSION_CONTRACT_SCHEMA_VERSION = 2
-
-
-def derive_backend_requirements(uses_capabilities: frozenset[str]) -> frozenset[str]:
-    """Return the backend-name constraints implied by a capability set."""
-    known = uses_capabilities & SKILL_CAPABILITY_REGISTRY.keys()
-    return frozenset().union(
-        *(SKILL_CAPABILITY_REGISTRY[capability].required_backends for capability in known)
-    )
+SKILL_PROJECTION_VERSION = 4
+SKILL_SESSION_CONTRACT_SCHEMA_VERSION = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,6 +149,8 @@ class SkillSessionContract:
     projection_substitutions: tuple[tuple[str, str], ...] = ()
     projection_gating: bool | None = None
     projection_namespace: str | None = None
+    launch_contract: ResolvedLaunchContract | None = None
+    launch_contract_digest: str = ""
     schema_version: int = SKILL_SESSION_CONTRACT_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -202,12 +191,18 @@ class SkillSessionContract:
             "canonical_contents",
             MappingProxyType(dict(self.canonical_contents)),
         )
-
-    @property
-    def backend_requirements(self) -> frozenset[str]:
-        """Derive backend constraints from the persisted capability union."""
-        validate_skill_capability_roles(self.capability_union, self.execution_role)
-        return derive_backend_requirements(self.capability_union)
+        if self.launch_contract is None:
+            if self.launch_contract_digest:
+                raise SkillContractError("launch digest requires a typed launch contract")
+        else:
+            digest = self.launch_contract.digest
+            if self.launch_contract_digest and self.launch_contract_digest != digest:
+                raise SkillContractError("launch contract digest mismatch")
+            object.__setattr__(self, "launch_contract_digest", digest)
+            if self.launch_contract.effective_backend != self.backend:
+                raise SkillContractError("launch contract backend mismatch")
+            if self.launch_contract.cwd != self.cwd:
+                raise SkillContractError("launch contract cwd mismatch")
 
 
 @dataclass(frozen=True, slots=True)

@@ -145,12 +145,17 @@ async def test_resume_session_id_threaded_to_executor(tool_ctx_kitchen_open, mon
         cwd="/tmp",
         resolved_command="/implement foo",
     )
+    stored = tool_ctx_kitchen_open.skill_session_contract_store.load("sess-123")
+    persisted_launch = stored.contract.launch_contract
+    assert persisted_launch is not None
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     await run_skill("/implement foo", "/tmp", resume_session_id="sess-123")
 
     assert len(executor.calls) == 1
     assert executor.calls[0].resume_session_id == "sess-123"
+    assert executor.calls[0].resume_launch_contract == persisted_launch
+    assert executor.calls[0].backend_authority == persisted_launch.backend_authority
 
 
 @pytest.mark.anyio

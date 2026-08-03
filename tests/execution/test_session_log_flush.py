@@ -575,12 +575,12 @@ def test_flush_index_includes_step_name_and_token_fields(tmp_path):
     assert entry["cache_read_tokens"] == 80
 
 
-def test_flush_index_includes_schema_version_6(tmp_path):
-    """sessions.jsonl entry must contain schema_version: 6."""
+def test_flush_index_includes_schema_version_7(tmp_path):
+    """sessions.jsonl entry must contain schema_version: 7."""
     _flush(tmp_path)
     index_path = tmp_path / "sessions.jsonl"
     entry = json.loads(index_path.read_text().strip().split("\n")[-1])
-    assert entry["schema_version"] == 6
+    assert entry["schema_version"] == 7
 
 
 def test_native_shell_diagnostic_is_limited_to_summary_and_index(tmp_path):

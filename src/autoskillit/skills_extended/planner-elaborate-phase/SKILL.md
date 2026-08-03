@@ -1,14 +1,29 @@
 ---
 name: planner-elaborate-phase
-categories: [planner]
+categories:
+- planner
 description: Elaborate a single phase into a full result, parallel-safe — receives plan snapshot + target phase ID
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: planner-elaborate-phase] Elaborating phase...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: planner-elaborate-phase] Elaborating phase...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # planner-elaborate-phase
@@ -41,8 +56,8 @@ independently and writes a single elaborated phase result. No dependency on
 - Communicate with other parallel worker instances
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts outside your designated input files and output directory
 - Explore parent directories of your input paths (e.g., `ls $(dirname $1)/..`)
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
@@ -51,7 +66,7 @@ independently and writes a single elaborated phase result. No dependency on
 - Write result to `$3/{phase_id}_result.json` (keep `_result.json` suffix — downstream consumers glob `*_result.json`)
 - Emit: `elab_result_path = <absolute path to {phase_id}_result.json>`
 - Include all `PhaseElaborated` fields in the result
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -81,11 +96,11 @@ unrelated to the task.
 
 ### Step 2: Launch parallel codebase exploration subagents (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn up to 5 simultaneous Explore subagents against the codebase in `source_dir`:
+Spawn up to 5 simultaneous child delegations against the codebase in `source_dir`:
 
 1. **Affected files** — Which files/modules fall within this phase's `scope`? Current state, imports, deviations from conventions.
 2. **Dependency analysis** — What imports and consumes the affected modules? Full import graph.

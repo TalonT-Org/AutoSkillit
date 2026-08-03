@@ -357,7 +357,6 @@ async def test_report_bug_dispatches_projected_skill_and_cleans_session(
         assert "uses_capabilities:" not in content
         assert "execution_role:" not in content
         assert "activate_deps:" not in content
-        assert "backend_requirements:" not in content
     root = captured["root"]
     assert isinstance(root, Path)
     assert not root.exists()
@@ -379,10 +378,21 @@ async def test_report_bug_delivers_winning_override_identity_and_projection(
         "---\n"
         "name: report-bug\n"
         "description: Winning report override.\n"
-        "uses_capabilities: [agent_model]\n"
         "execution_role: session\n"
+        "semantic_version: 1\n"
+        "semantic_requirements:\n"
+        "  logical_roles:\n"
+        "  - name: report-investigator\n"
+        "    purpose: investigate the report independently\n"
+        "  child_spawns:\n"
+        "  - role: report-investigator\n"
+        "  child_model_policies:\n"
+        "  - role: report-investigator\n"
+        "    model_class: sonnet\n"
         "---\n"
-        'winning report override body\nAgent(model="sonnet")\n'
+        "winning report override body\n"
+        "Spawn a child assigned logical role `report-investigator` under its declared "
+        "sonnet model-class policy.\n"
     )
     source_before = override.read_bytes()
     captured: dict[str, object] = {}
@@ -408,17 +418,12 @@ async def test_report_bug_delivers_winning_override_identity_and_projection(
 
     assert result["success"] is True
     contract = captured["contract"]
-    assert contract.source_identities["report-bug"].origin is SkillSource.PROJECT_LOCAL
-    assert contract.execution_role is SkillExecutionRole.SESSION
-    assert contract.capability_union == frozenset({"agent_model"})
+    assert contract.source_identities["report-bug"]["origin"] == SkillSource.PROJECT_LOCAL.value
+    assert contract.execution_role == SkillExecutionRole.SESSION.value
+    assert contract.capability_union == frozenset()
     assert contract.canonical_digests["report-bug"] == hashlib.sha256(source_before).hexdigest()
-    projected = contract.projected_artifacts["report-bug"]
-    assert "winning report override body" in projected
-    assert "uses_capabilities:" not in projected
-    assert "execution_role:" not in projected
-    assert (
-        contract.projected_digests["report-bug"] == hashlib.sha256(projected.encode()).hexdigest()
-    )
+    assert contract.projected_digests["report-bug"]
+    assert not hasattr(contract, "projected_artifacts")
     assert override.read_bytes() == source_before
 
 

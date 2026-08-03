@@ -1,16 +1,28 @@
 ---
 name: vis-lens-uncertainty
-categories: [vis-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: "Create Uncertainty Representation visualization planning spec showing error bar definitions, distribution-aware alternatives, and multi-seed variance protocols. Statistical lens answering \"How is uncertainty honestly represented?\""
+categories:
+- vis-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Create Uncertainty Representation visualization planning spec showing error bar definitions, distribution-aware
+  alternatives, and multi-seed variance protocols. Statistical lens answering "How is uncertainty honestly represented?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Uncertainty Lens - Analyzing uncertainty representation...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Uncertainty Lens - Analyzing uncertainty representation...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: mermaid
+  - name: plan-visualization
+  - name: vis-lens-antipattern
+  - name: vis-lens-chart-select
+  - name: vis-lens-reproducibility
+  - name: vis-lens-temporal
 ---
 
 # Uncertainty Representation Visualization Lens

@@ -12,15 +12,17 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import (
+    BackendAuthority,
     FleetErrorCode,
     ManagedHeadlessSessionLineageRef,
     ProcessCleanupResult,
+    ResolvedLaunchContract,
     RetryReason,
 )
 
 _resume_lock = threading.Lock()
 
-FLEET_STATE_SCHEMA_VERSION = 10
+FLEET_STATE_SCHEMA_VERSION = 11
 
 FLEET_HALTED_SENTINEL = "fleet_halted_on_failure"
 
@@ -35,6 +37,9 @@ _RETRY_IDENTITY_FIELDS: frozenset[str] = frozenset(
         "resume_count",
         "issue_url",
         "backend_name",
+        "backend_authority",
+        "launch_contract",
+        "launch_contract_digest",
         "managed_lineage_ref",
     }
 )
@@ -387,6 +392,9 @@ class DispatchRecord:
     resets_at: str = ""
     resume_count: int = 0
     backend_name: str = ""
+    backend_authority: BackendAuthority | None = None
+    launch_contract: ResolvedLaunchContract | None = None
+    launch_contract_digest: str = ""
     effect_provenance: dict[str, Any] = field(default_factory=dict)
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
 
@@ -425,6 +433,17 @@ class DispatchRecord:
             "resets_at": self.resets_at,
             "resume_count": self.resume_count,
             "backend_name": self.backend_name,
+            "backend_authority": (
+                dict(self.backend_authority.to_payload())
+                if self.backend_authority is not None
+                else None
+            ),
+            "launch_contract": (
+                json.loads(self.launch_contract.canonical_json)
+                if self.launch_contract is not None
+                else None
+            ),
+            "launch_contract_digest": self.launch_contract_digest,
             "effect_provenance": dict(self.effect_provenance),
             "managed_lineage_ref": (
                 self.managed_lineage_ref.to_dict()
@@ -448,6 +467,33 @@ class DispatchRecord:
             if managed_lineage_ref_raw is not None
             else None
         )
+        authority_raw = d.get("backend_authority")
+        if authority_raw is not None and not isinstance(authority_raw, Mapping):
+            raise TypeError("backend_authority must be an object")
+        backend_authority = (
+            BackendAuthority.from_payload(authority_raw) if authority_raw is not None else None
+        )
+        launch_raw = d.get("launch_contract")
+        launch_digest = d.get("launch_contract_digest", "")
+        if not isinstance(launch_digest, str):
+            raise TypeError("launch_contract_digest must be str")
+        if launch_raw is not None and not isinstance(launch_raw, Mapping):
+            raise TypeError("launch_contract must be an object")
+        if (launch_raw is None) != (not launch_digest):
+            raise ValueError("launch contract payload and digest must be persisted together")
+        launch_contract = (
+            ResolvedLaunchContract.from_payload(
+                launch_raw,
+                expected_digest=launch_digest,
+            )
+            if launch_raw is not None
+            else None
+        )
+        if launch_contract is not None:
+            if backend_authority is None:
+                raise ValueError("persisted launch contract requires typed backend authority")
+            if backend_authority != launch_contract.backend_authority:
+                raise ValueError("persisted fleet backend authority drifted from launch contract")
         return cls(
             name=d["name"],
             status=DispatchStatus(d.get("status", DispatchStatus.PENDING)),
@@ -504,6 +550,9 @@ class DispatchRecord:
             resets_at=d.get("resets_at", ""),
             resume_count=d.get("resume_count", 0),
             backend_name=d.get("backend_name", ""),
+            backend_authority=backend_authority,
+            launch_contract=launch_contract,
+            launch_contract_digest=launch_digest,
             effect_provenance=d.get("effect_provenance", {}),
             managed_lineage_ref=managed_lineage_ref,
         )

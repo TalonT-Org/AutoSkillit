@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -19,6 +20,7 @@ from autoskillit.core import (
 from autoskillit.core.types import KillReason, SubprocessResult, TerminationReason
 from autoskillit.core.types._type_results import WriteEvidence
 from autoskillit.execution.headless._managed import _ManagedLineageObserver
+from tests.execution.conftest import _launch_inputs, _mock_backend
 from tests.fakes import FakeManagedHeadlessSessionLineageStore
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -36,11 +38,13 @@ def _managed_observer(tmp_path: Path):
         backend="codex",
         session_kind=ManagedHeadlessSessionKind.SKILL,
     )
+    backend = _mock_backend(channel_b_capable=False, process_name="codex")
+    backend.name = "codex"
     observer = _ManagedLineageObserver.create(
         store=store,
         decision=decision,
         reference=lineage.reference,
-        backend="codex",
+        backend=backend,
         session_kind=ManagedHeadlessSessionKind.SKILL,
     )
     assert observer is not None
@@ -72,6 +76,10 @@ class TestNudgePtyMode:
         )
 
         backend = _mock_backend(pty_required=True, session_resume_capable=True)
+        launch_resolver, launch_preparation = _launch_inputs(
+            backend,
+            cwd=str(tmp_path),
+        )
 
         result_parser = Mock()
         parsed_session = Mock()
@@ -111,6 +119,8 @@ class TestNudgePtyMode:
             backend=backend,
             result_parser=result_parser,
             retry_reason=RetryReason.EARLY_STOP,
+            launch_resolver=launch_resolver,
+            launch_preparation=launch_preparation,
         )
 
         # After fix: runner must have been called with pty_mode=True
@@ -140,6 +150,10 @@ class TestNudgePtyMode:
         )
 
         backend = _mock_backend(pty_required=True, session_resume_capable=True)
+        launch_resolver, launch_preparation = _launch_inputs(
+            backend,
+            cwd=str(tmp_path),
+        )
 
         result_parser = Mock()
         parsed_session = Mock()
@@ -180,6 +194,8 @@ class TestNudgePtyMode:
             result_parser=result_parser,
             retry_reason=RetryReason.EARLY_STOP,
             pty_override=False,
+            launch_resolver=launch_resolver,
+            launch_preparation=launch_preparation,
         )
 
         assert mock_runner.last_pty_mode is False, (
@@ -197,6 +213,16 @@ class TestNudgePtyMode:
 
         class Binding:
             inherited_fds = (91,)
+            load_mode = PluginLoadMode.EXPLICIT_PLUGIN_DIR
+            plugin_dir = None
+            identity = SimpleNamespace(
+                semantic_key="test-binding",
+                incarnation_id="test-incarnation",
+                manifest_schema_version=1,
+                artifact_digest="test-artifact-digest",
+                managed_path="/tmp/test-managed-plugin",
+                manifest_path="/tmp/test-managed-plugin/manifest.json",
+            )
 
             def __init__(self) -> None:
                 self.closed = False
@@ -235,6 +261,10 @@ class TestNudgePtyMode:
             )
         )
         backend = _mock_backend(pty_required=False, session_resume_capable=True)
+        launch_resolver, launch_preparation = _launch_inputs(
+            backend,
+            cwd=str(tmp_path),
+        )
         backend.build_resume_cmd.return_value = CmdSpec(
             cmd=("claude", "--print", "--resume", "test-session"),
             env={},
@@ -277,6 +307,8 @@ class TestNudgePtyMode:
             plugin_load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
             provider_extras={"ANTHROPIC_API_KEY": "fallback"},
             managed_lineage_observer=lineage_observer,
+            launch_resolver=launch_resolver,
+            launch_preparation=launch_preparation,
         )
 
         assert result is not None and result.success is True
@@ -349,6 +381,10 @@ async def test_nudge_skips_for_block_delimiter_patterns(tmp_path: Path) -> None:
         pid=0,
     )
     backend = _mock_backend(pty_required=False, session_resume_capable=True)
+    launch_resolver, launch_preparation = _launch_inputs(
+        backend,
+        cwd=str(tmp_path),
+    )
     runner = MockSubprocessRunner()
 
     nudge_result = await _attempt_contract_nudge(
@@ -360,6 +396,8 @@ async def test_nudge_skips_for_block_delimiter_patterns(tmp_path: Path) -> None:
         runner=runner,
         backend=backend,
         result_parser=result_parser,
+        launch_resolver=launch_resolver,
+        launch_preparation=launch_preparation,
     )
 
     assert nudge_result is None

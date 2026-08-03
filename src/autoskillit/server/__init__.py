@@ -57,7 +57,6 @@ __all__ = [
     "make_context",
     "resolve_backend_override",
     # Admission helpers consumed by CLI (re-exported to avoid cross-submodule imports)
-    "_provider_aware_capability_overrides",
     "_compute_effective_backend_map",
     # Wire-format compatibility middleware
     "ClaudeCodeCompatMiddleware",
@@ -148,7 +147,6 @@ from autoskillit.server.tools import (  # noqa: E402, F401
 )
 from autoskillit.server.tools._auto_overrides import (  # noqa: E402, F401
     _compute_effective_backend_map,
-    _provider_aware_capability_overrides,
 )
 from autoskillit.server.tools.tools_kitchen import _build_tool_category_listing  # noqa: E402, F401
 

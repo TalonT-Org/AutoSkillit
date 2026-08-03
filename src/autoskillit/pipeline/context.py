@@ -35,6 +35,7 @@ from autoskillit.core import (
     HeadlessExecutor,
     InputContractResolver,
     KitchenTransitionLock,
+    LaunchResolver,
     ManagedHeadlessSessionLineageStore,
     McpResponseLog,
     MergeQueueWatcher,
@@ -99,6 +100,8 @@ class ToolContext:
                           exact artifact incarnation for each physical child launch.
     runner:               SubprocessRunner implementation (DefaultSubprocessRunner in production,
                           MockSubprocessRunner in tests)
+    launch_resolver:      LaunchResolver — sole backend authority selection and stable
+                          physical contract finalization boundary.
     backend:              CodingAgentBackend — the coding agent backend resolved from
                           config.agent_backend. Provides command building, stream/result
                           parsing, env policy, and session location. None in test
@@ -189,6 +192,7 @@ class ToolContext:
     gate: GateState
     plugin_authority: PluginArtifactAuthority
     runner: SubprocessRunner | None
+    launch_resolver: LaunchResolver = field(default=_MISSING)
     temp_dir: Path = field(default=_MISSING)
     project_dir: Path = field(default=_MISSING)
     plugin_retirement_coordinator: PluginRetirementCoordinator | None = None
@@ -253,6 +257,11 @@ class ToolContext:
     )
 
     def __post_init__(self) -> None:
+        if self.launch_resolver is _MISSING:
+            raise TypeError(
+                "launch_resolver must be supplied explicitly. "
+                "Use make_context() or pass an isolated resolver directly."
+            )
         if self.temp_dir is _MISSING:
             raise TypeError(
                 "temp_dir must be supplied explicitly — do not rely on defaults. "

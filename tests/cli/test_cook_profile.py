@@ -22,6 +22,7 @@ from autoskillit.core import (
     SkillProjectionContextAuthority,
     ValidatedAddDir,
 )
+from tests.fakes import adapt_test_skill_semantics
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -38,6 +39,7 @@ def _make_mock_backend_class():
             skill_injection_capable=False,
             plugin_install_capable=True,
         )
+        adapt_skill_semantics = staticmethod(adapt_test_skill_semantics)
 
         def binary_name(self) -> str:
             return "claude"
@@ -235,6 +237,7 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
             skill_injection_capable=True,
             plugin_install_capable=False,
         )
+        adapt_skill_semantics = staticmethod(adapt_test_skill_semantics)
 
         def binary_name(self) -> str:
             return "codex"

@@ -78,8 +78,6 @@ from autoskillit.server._state import _get_ctx_or_none
 from autoskillit.server.tools._authority_feedback import build_authority_clobber_warnings
 from autoskillit.server.tools._auto_overrides import (
     _compute_effective_backend_map,
-    _promote_capability_keys,
-    _provider_aware_capability_overrides,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._serve_helpers import (
@@ -363,19 +361,8 @@ async def load_recipe(
                 "kitchen_id": tool_ctx.kitchen_id,
                 "diagnostics_log_dir": str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
             }
-            _provider_overrides, _cap_detail = _provider_aware_capability_overrides(
-                tool_ctx.backend,
-                name,
-                tool_ctx.config.providers,
-                _raw_recipe_obj.steps if _raw_recipe_obj is not None else None,
-                skill_resolver=tool_ctx.skill_resolver,
-                config_backend=tool_ctx.config.agent_backend,
-                project_root=tool_ctx.project_dir,
-            )
-            _session_overrides.update(_provider_overrides)
             _config_layer = build_config_authoritative_layer(_defaults)
             _config_default = build_config_default_layer(_defaults)
-            _promote_capability_keys(_config_layer, _session_overrides)
             _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
                 _raw_recipe_obj.steps if _raw_recipe_obj is not None else None,
                 tool_ctx.backend.name if tool_ctx.backend else None,
@@ -411,32 +398,6 @@ async def load_recipe(
             result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
             if not result.get("valid", False):
                 result["validation_failed"] = True
-            if not result.get("dispatch_feasible", True):
-                result["dispatch_infeasible"] = True
-                result["user_visible_message"] = (
-                    f"Recipe is infeasible on current backend: "
-                    f"steps {result.get('infeasible_steps', [])} route to terminal failure."
-                )
-                _infeasible_envelope: dict[str, Any] = {
-                    "success": False,
-                    "dispatch_infeasible": True,
-                    "infeasible_steps": result.get("infeasible_steps", []),
-                    "user_visible_message": result["user_visible_message"],
-                }
-                if _cap_detail is not None and _cap_detail.resolution_path == "none_pass":
-                    _missing = list(_cap_detail.missing_provider_steps)
-                    _infeasible_envelope["missing_provider_steps"] = _missing
-                    _infeasible_envelope["escape_hatch"] = (
-                        f"Add provider overrides with ANTHROPIC_BASE_URL for steps: "
-                        f"{_missing}. Example config: "
-                        f"providers.recipe_overrides.<recipe>.*: <profile>"
-                    )
-                    _infeasible_envelope["user_visible_message"] = (
-                        f"Recipe is infeasible on current backend: steps "
-                        f"{_missing} lack ANTHROPIC_BASE_URL provider overrides. "
-                        f"{_infeasible_envelope['escape_hatch']}"
-                    )
-                return json.dumps(_infeasible_envelope)
             _authority_warnings = build_authority_clobber_warnings(
                 overrides or {}, _config_layer, caller_tool="load_recipe"
             )
@@ -896,15 +857,6 @@ async def validate_recipe(script_path: str) -> str:
                 logger.warning("validate_recipe_load_failed", path=script_path, exc_info=True)
                 _validate_recipe_name = ""
                 _validate_recipe_steps = None
-            _cap_overrides, _ = _provider_aware_capability_overrides(
-                tool_ctx.backend,
-                _validate_recipe_name,
-                tool_ctx.config.providers,
-                _validate_recipe_steps,
-                skill_resolver=tool_ctx.skill_resolver,
-                config_backend=tool_ctx.config.agent_backend,
-                project_root=tool_ctx.project_dir,
-            )
             _validate_effective_backend_map, _validate_backend_origin_map = (
                 _compute_effective_backend_map(
                     _validate_recipe_steps,
@@ -923,7 +875,6 @@ async def validate_recipe(script_path: str) -> str:
                 Path(script_path),
                 temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
                 backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
-                ingredient_overrides=_cap_overrides,
                 effective_backend_map=_validate_effective_backend_map,
                 backend_capabilities_map=_validate_backend_capabilities_map,
                 backend_origin_map=_validate_backend_origin_map,

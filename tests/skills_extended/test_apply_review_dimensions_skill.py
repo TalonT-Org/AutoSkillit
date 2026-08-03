@@ -28,7 +28,6 @@ def test_skill_frontmatter() -> None:
     assert isinstance(fm, dict), "SKILL.md frontmatter is not a YAML mapping"
     assert fm["name"] == "apply-review-dimensions"
     assert fm["categories"] == ["research"]
-    assert "backend_requirements" not in fm
 
 
 def test_skill_sections() -> None:

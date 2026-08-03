@@ -1,14 +1,33 @@
 ---
 name: investigate
-uses_capabilities: [agent_model, claude_dir]
-description: Deep investigation of errors, bugs, or codebase questions without making any code changes. Use when user mentions investigate, understand, explore, analyze, or pastes error tracebacks. Spawns parallel subagents for comprehensive exploration.
+uses_capabilities:
+- claude_dir
+description: Deep investigation of errors, bugs, or codebase questions without making any code changes. Use when user mentions
+  investigate, understand, explore, analyze, or pastes error tracebacks. Spawns parallel subagents for comprehensive exploration.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '🔍 [SKILL: investigate] Starting investigation...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''🔍 [SKILL: investigate] Starting investigation...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Investigation Skill
@@ -37,7 +56,7 @@ Deep analysis mode is activated when ANY of the following conditions are met:
 
 ### Model
 
-When deep analysis mode is active, all subagents are spawned via `Agent(model="sonnet")`. The main skill session model is controlled by the recipe or user — typically `opus[1m]` for the main session in deep mode.
+When deep analysis mode is active, all subagents are spawned via `child delegation under the declared `sonnet` model-class policy`. The main skill session model is controlled by the recipe or user — typically `opus[1m]` for the main session in deep mode.
 
 ### When NOT Activated
 
@@ -91,14 +110,14 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Create files outside `{{AUTOSKILLIT_TEMP}}/investigate/` directory
 - Choose or accept approaches, solutions, and/or fixes that are chosen simply because they are easier
 - File GitHub issues automatically (issue filing is always a separate, user-directed action)
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Use subagents for parallel exploration
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Limit total subagent spawns to 16 across all batches (standard and deep mode). If the investigation requires more exploration vectors, consolidate related questions into fewer, broader subagent prompts rather than spawning additional agents.
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Write findings as a markdown report with unique name to `{{AUTOSKILLIT_TEMP}}/investigate/` directory (relative to the current working directory)
 - After writing the investigation report, emit the **absolute path** as a structured output
   token as your final output. Resolve the relative `{{AUTOSKILLIT_TEMP}}/investigate/...`
@@ -135,11 +154,11 @@ Identify what needs investigation:
 
 ### Step 2: Launch Parallel Subagents (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn explore subagents to investigate different aspects simultaneously (some aspects may and should require multiple subagents):
+Spawn child delegations to investigate different aspects simultaneously (some aspects may and should require multiple subagents):
 
 **Core Implementation**
 - Find the primary source files
@@ -246,7 +265,7 @@ Cross-reference: if a commit message references the same error type, component n
 
 #### Part C: Conditional Analysis (only if history found)
 
-If Part A or Part B found matches, spawn a single subagent via `Agent(model="sonnet")` to:
+If Part A or Part B found matches, spawn a single subagent via `child delegation under the declared `sonnet` model-class policy` to:
 
 - Read the prior fix diffs via `git show {commit_hash}`
 - Read any prior investigation report files discovered during log scanning
@@ -362,7 +381,7 @@ Parse the investigation target (same as Step 1). Then propose an adaptive batch 
 
 ### Step D2: Batch 1 — Broad Parallel Exploration
 
-Launch a minimum of 5 parallel subagents via `Agent(model="sonnet")` covering:
+Launch a minimum of 5 parallel subagents via `child delegation under the declared `sonnet` model-class policy` covering:
 
 - **Code path tracing**: Trace execution paths through the primary affected components
 - **Log and history analysis**: Scan session logs and git history for prior occurrences
@@ -393,7 +412,7 @@ Deep mode must execute at least two completed agent waves. Do not begin a later 
 
 Fires when ANY finding across any batch is marked NEEDS-EVIDENCE.
 
-Spawn one adversarial subagent via `Agent(model="sonnet")` whose role is to disconfirm the primary hypothesis:
+Spawn one adversarial subagent via `child delegation under the declared `sonnet` model-class policy` whose role is to disconfirm the primary hypothesis:
 
 - Provide the primary hypothesis and all supporting evidence collected so far
 - Task: find counterevidence — code paths, behaviors, or data that contradict the hypothesis
@@ -407,7 +426,7 @@ Spawn one adversarial subagent via `Agent(model="sonnet")` whose role is to disc
 
 **Issue ALL blast radius subagent calls in a single message — one per candidate — so they execute in parallel. Do not iterate across multiple turns.**
 
-Spawn solution-space subagents to enumerate candidate fixes. For each candidate, spawn one blast radius subagent via `Agent(model="sonnet")` to assess:
+Spawn solution-space subagents to enumerate candidate fixes. For each candidate, spawn one blast radius subagent via `child delegation under the declared `sonnet` model-class policy` to assess:
 
 - Which components would be affected by this fix
 - What tests would need to be added or modified
@@ -415,7 +434,7 @@ Spawn solution-space subagents to enumerate candidate fixes. For each candidate,
 
 After blast radius analysis, converge to a single recommendation — the highest-confidence, lowest-blast-radius candidate with direct code evidence. Kill alternative options and document why each was rejected.
 
-**Adversarial Breakage Analysis:** After converging to a single recommendation, assess whether it proposes removal, replacement, or any action whose execution would eliminate, reduce, or supersede the function of an existing mechanism. If so, spawn one adversarial breakage subagent via `Agent(model="sonnet")` per such recommendation:
+**Adversarial Breakage Analysis:** After converging to a single recommendation, assess whether it proposes removal, replacement, or any action whose execution would eliminate, reduce, or supersede the function of an existing mechanism. If so, spawn one adversarial breakage subagent via `child delegation under the declared `sonnet` model-class policy` per such recommendation:
 
 1. Receive the recommendation and the mechanism it targets, along with the Design Intent findings for that mechanism
 2. Trace the mechanism's full dependency chain through code: callers, importers, flag consumers
@@ -428,7 +447,7 @@ If the recommendation does not propose removal or change of an existing mechanis
 
 ### Step D6: Post-Report Validation
 
-After writing the report (Step 4), spawn 2–3 independent validator subagents via `Agent(model="sonnet")` with distinct roles:
+After writing the report (Step 4), spawn 2–3 independent validator subagents via `child delegation under the declared `sonnet` model-class policy` with distinct roles:
 
 - **Validator 1 — Factual accuracy**: Cross-check every claim in the report against actual code/evidence. Flag any factual inaccuracy.
 - **Validator 2 — Recommendation soundness**: Assess whether the single recommendation is implementable, safe, and correctly scoped.
@@ -442,7 +461,7 @@ Before finalizing validation, check the report's structure directly. It must ret
 
 ### Standard Mode Template
 
-Use this template for each Explore subagent in standard mode:
+Use this template for each child delegation in standard mode:
 
 ```
 Investigate {specific aspect} of {target}.

@@ -1,15 +1,33 @@
 ---
 name: plan-experiment
-categories: [research]
-uses_capabilities: [agent_model]
+categories:
+- research
+uses_capabilities: []
 description: Convert a scope report into a structured experiment plan with hypothesis, variables, phases, and success criteria.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: plan-experiment] Planning experiment...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: plan-experiment] Planning experiment...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Plan Experiment Skill
@@ -61,15 +79,15 @@ incorporate the feedback before writing the plan.
   environment is needed or not, and why
 - Omit YAML frontmatter unless a V1–V4, V9, V10 ERROR is triggered — every plan must have frontmatter
 - Write frontmatter after the `# Experiment Plan:` heading — it always goes BEFORE
-- Run subagents in the background (`run_in_background: true` is prohibited)
+- Detach child delegations instead of joining them (joining every child is required)
 - Include database accession identifiers (GEO GSE*, SRA SRR*/SRP*, ENCODE ENCSR*, or
   any external dataset identifier) in the data_manifest without first confirming their
   existence via web search — accession patterns learned during training are frequently
   hallucinated
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Write output to `{{AUTOSKILLIT_TEMP}}/plan-experiment/` directory
 - State hypotheses as falsifiable claims with measurable outcomes
 - Define metrics before describing the method
@@ -80,7 +98,7 @@ incorporate the feedback before writing the plan.
 - Apply all 10 validation rules before writing the frontmatter block
 - Log V1–V4, V9, V10 ERRORs in a ## Frontmatter Validation Errors section instead of writing frontmatter
 - Log V5–V8, V10 network failure WARNINGs as # WARNING: ... YAML comments on the relevant field lines
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -109,11 +127,11 @@ Detect and read inputs:
 
 ### Step 2 — Explore Feasibility (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Launch subagents via `Agent(model="sonnet")` to assess feasibility. The following are
+Launch subagents via `child delegation under the declared `sonnet` model-class policy` to assess feasibility. The following are
 **minimum required** — launch as many additional subagents as needed to fill
 information gaps and produce the best possible experiment plan.
 

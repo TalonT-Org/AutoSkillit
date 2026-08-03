@@ -1,19 +1,38 @@
 ---
 name: enrich-issues
-categories: [github]
-uses_capabilities: [agent_model, github_api_write]
-description: >
-  Backfill structured requirements on existing GitHub issues triaged with
-  recipe:implementation labels. Scans candidates, skips already-enriched issues,
-  performs codebase-grounded analysis, and appends a Requirements section in
-  REQ-{GRP}-NNN format via gh issue edit.
+categories:
+- github
+uses_capabilities:
+- github_api_write
+description: 'Backfill structured requirements on existing GitHub issues triaged with recipe:implementation labels. Scans
+  candidates, skips already-enriched issues, performs codebase-grounded analysis, and appends a Requirements section in REQ-{GRP}-NNN
+  format via gh issue edit.
+
+  '
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: enrich-issues] Enriching issues...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: enrich-issues] Enriching issues...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # enrich-issues Skill
@@ -99,11 +118,11 @@ If no candidates remain after filtering, emit the result block immediately and e
 
 ### Step 5: Per-Issue Analysis (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Process up to 8 candidates in parallel using subagents via `Agent(model="sonnet")`.
+Process up to 8 candidates in parallel using subagents via `child delegation under the declared `sonnet` model-class policy`.
 For each candidate:
 
 #### 5a. Fetch Full Content
@@ -237,12 +256,12 @@ After processing all candidates, emit to stdout:
   skipped
 - Use `--body` shell substitution (`--body "$(...)`) for `gh issue edit` — always write to
   `{{AUTOSKILLIT_TEMP}}/enrich-issues/edit_body_{timestamp}.md` and use `--body-file`
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Respect `--dry-run`: never call `gh issue edit` when this flag is set
 - Verify codebase claims before incorporating them into requirements
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Emit the `---enrich-issues-result---` block as the final output
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency

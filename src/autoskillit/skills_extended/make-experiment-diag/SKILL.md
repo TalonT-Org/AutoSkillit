@@ -1,16 +1,26 @@
 ---
 name: make-experiment-diag
-categories: [exp-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [exp-lens]
-description: Interactive selection of experimental design lens for visualizing experiment methodology. Routes to the appropriate exp-lens-* skill.
+categories:
+- exp-lens
+uses_capabilities: []
+activate_deps:
+- exp-lens
+description: Interactive selection of experimental design lens for visualizing experiment methodology. Routes to the appropriate
+  exp-lens-* skill.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'make-experiment-diag - Selecting experimental design lens...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'make-experiment-diag - Selecting experimental design lens...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: exp-lens-
+  - name: make-arch-diag
+  - name: mermaid
+  - name: verify-diag
 ---
 
 # Experimental Design Diagram Selection

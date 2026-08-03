@@ -1,15 +1,33 @@
 ---
 name: run-experiment
-categories: [research]
-uses_capabilities: [agent_model]
+categories:
+- research
+uses_capabilities: []
 description: Execute a designed experiment in a worktree and collect structured results. Supports --adjust retry mode.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: run-experiment] Running experiment...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: run-experiment] Running experiment...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Run Experiment Skill
@@ -52,14 +70,14 @@ plan, executes what the plan describes, and reports what happened.
 - Skip result collection — every run must produce structured output
 - Assume what kind of experiment this is — read the plan and follow it
 - Commit files under `{{AUTOSKILLIT_TEMP}}/` — this directory is gitignored working space, NOT for version control. Do not use `git add -f` or `git add --force` to bypass the gitignore.
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Write results to `{{AUTOSKILLIT_TEMP}}/run-experiment/` in the worktree (disk only, never committed)
 - Report failures with enough detail for the `--adjust` retry to fix them
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Context Limit Behavior
 
@@ -89,7 +107,7 @@ Understand what the experiment requires before attempting to run anything.
 
 ### Step 2 — Pre-flight Check (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
@@ -99,7 +117,7 @@ Before running the experiment:
 3. If `--adjust` flag is set, read previous results from
    `{{AUTOSKILLIT_TEMP}}/run-experiment/` and identify what went wrong.
 
-Launch subagents via `Agent(model="sonnet")` if needed to investigate the experiment
+Launch subagents via `child delegation under the declared `sonnet` model-class policy` if needed to investigate the experiment
 setup, resolve dependencies, or research how to use specific tools mentioned
 in the plan.
 

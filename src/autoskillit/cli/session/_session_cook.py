@@ -53,14 +53,15 @@ def cook(
 ) -> None:
     """Launch Claude with all bundled AutoSkillit skills as slash commands."""
     from autoskillit.config import iter_display_categories, load_config
-    from autoskillit.execution import get_backend
     from autoskillit.workspace import (
         DefaultSessionSkillManager,
         DefaultSkillResolver,
         SkillsDirectoryProvider,
+        compile_session_skill_catalog,
         resolve_ephemeral_root,
         resolve_persistent_session_root,
         validate_skill_tier_roles,
+        write_skill_unavailability_metadata,
     )
 
     config = load_config()
@@ -73,7 +74,9 @@ def cook(
     skill_visibility = config.skill_visibility_spec()
     validate_skill_tier_roles(skill_visibility, skill_resolver, project_dir)
     if backend is None:
-        backend = get_backend(config.agent_backend.backend)
+        from autoskillit.cli.session._session_backend import resolve_global_backend
+
+        backend = resolve_global_backend(config.agent_backend.backend)
 
     if shutil.which(backend.binary_name()) is None:
         print(
@@ -177,6 +180,8 @@ def cook(
         visibility=skill_visibility,
         cook_session=True,
     )
+    catalog_compilation = compile_session_skill_catalog(session_catalog, backend)
+    session_catalog = catalog_compilation.catalog
     projection_context = skills_provider.catalog_projection_context(
         session_catalog,
         project_dir,
@@ -194,6 +199,11 @@ def cook(
         session_catalog,
         projection_context,
     ) as managed_home:
+        write_skill_unavailability_metadata(
+            Path(managed_home.skills_dir.path),
+            backend=backend.name,
+            unavailable=catalog_compilation.unavailable,
+        )
         from autoskillit.cli._plugin_artifact import interactive_plugin_authority
 
         artifact_authority, load_mode = interactive_plugin_authority(

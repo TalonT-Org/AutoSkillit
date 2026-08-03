@@ -13,13 +13,9 @@ from typing import Any
 import pytest
 
 from autoskillit.core import Severity
-from autoskillit.execution.backends import BACKEND_REGISTRY, get_backend
+from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.recipe._api import load_and_validate
-from autoskillit.recipe.io import all_validated_recipe_names, list_recipes, load_recipe
-from autoskillit.server.tools._auto_overrides import (
-    _backend_capability_overrides,
-    _compute_effective_backend_map,
-)
+from autoskillit.recipe.io import all_validated_recipe_names
 from autoskillit.workspace.skills import DefaultSkillResolver
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
@@ -27,7 +23,6 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 _ALL_RECIPE_NAMES = sorted(all_validated_recipe_names(_PROJECT_ROOT))
-_RECIPE_PATHS: dict[str, Path] = {r.name: r.path for r in list_recipes(_PROJECT_ROOT).items}
 _BACKEND_NAMES = sorted(BACKEND_REGISTRY.keys())
 
 
@@ -50,26 +45,11 @@ def _apply_marks(matrix_ids: list[tuple[str, str]]) -> list[Any]:
 
 
 @pytest.mark.parametrize("recipe_name,backend_name", _apply_marks(_MATRIX_IDS))
-def test_recipe_backend_matrix_cell(recipe_name: str, backend_name: str, monkeypatch) -> None:
-    monkeypatch.setattr(
-        "autoskillit.server.tools._auto_overrides.shutil.which",
-        lambda name: "/usr/local/bin/claude" if name == "claude" else None,
-    )
-    backend = get_backend(backend_name)
-    _raw = load_recipe(_RECIPE_PATHS[recipe_name])
-    _eff_map, _ = _compute_effective_backend_map(
-        _raw.steps,
-        backend_name,
-        None,
-        recipe_name,
-        skill_resolver=_SKILL_RESOLVER,
-    )
+def test_recipe_backend_matrix_cell(recipe_name: str, backend_name: str) -> None:
     result = load_and_validate(
         recipe_name,
         project_dir=_PROJECT_ROOT,
         backend_name=backend_name,
-        effective_backend_map=_eff_map,
-        ingredient_overrides=_backend_capability_overrides(backend),
         lister=_SKILL_RESOLVER,
     )
 
@@ -85,12 +65,6 @@ def test_recipe_backend_matrix_cell(recipe_name: str, backend_name: str, monkeyp
         f"Recipe '{recipe_name}' on backend '{backend_name}' produced empty content"
     )
 
-    if backend_name == "codex" and "gate_backend_write" in (result.get("infeasible_steps") or []):
-        assert result.get("dispatch_feasible") is False, (
-            f"Recipe '{recipe_name}' has reachable gate under codex but "
-            f"dispatch_feasible is not False — admission control regression."
-        )
-
     suggestions: list[dict[str, Any]] = result.get("suggestions", [])
     dangling = [
         s for s in suggestions if s.get("message", "").startswith("[post-prune] dangling route:")
@@ -99,59 +73,6 @@ def test_recipe_backend_matrix_cell(recipe_name: str, backend_name: str, monkeyp
         f"Recipe '{recipe_name}' on backend '{backend_name}' has dangling routes: "
         + "; ".join(s.get("message", "") for s in dangling)
     )
-
-    backend_compat_errors = [
-        s
-        for s in suggestions
-        if s.get("rule") == "backend-incompatible-skill" and s.get("severity") == Severity.ERROR
-    ]
-    assert not backend_compat_errors, (
-        f"Recipe '{recipe_name}' on backend '{backend_name}' has "
-        f"backend-incompatible-skill errors: "
-        + "; ".join(s.get("message", "") for s in backend_compat_errors)
-    )
-
-
-@pytest.mark.parametrize(
-    "recipe_name,backend_name",
-    [pytest.param(r, b, id=f"{r}/{b}") for r, b in _MATRIX_IDS],
-)
-def test_dispatch_feasible_per_backend(recipe_name: str, backend_name: str, monkeypatch) -> None:
-    """Dispatch feasibility must reflect gate_backend_write reachability per backend."""
-    monkeypatch.setattr(
-        "autoskillit.server.tools._auto_overrides.shutil.which",
-        lambda name: "/usr/local/bin/claude" if name == "claude" else None,
-    )
-    backend = get_backend(backend_name)
-    _raw = load_recipe(_RECIPE_PATHS[recipe_name])
-    _eff_map, _ = _compute_effective_backend_map(
-        _raw.steps,
-        backend_name,
-        None,
-        recipe_name,
-        skill_resolver=_SKILL_RESOLVER,
-    )
-    result = load_and_validate(
-        recipe_name,
-        project_dir=_PROJECT_ROOT,
-        backend_name=backend_name,
-        effective_backend_map=_eff_map,
-        ingredient_overrides=_backend_capability_overrides(backend),
-        lister=_SKILL_RESOLVER,
-    )
-
-    infeasible = result.get("infeasible_steps") or []
-    if backend_name == "codex" and "gate_backend_write" in infeasible:
-        assert result.get("dispatch_feasible") is False, (
-            f"Recipe '{recipe_name}' has reachable gate_backend_write under codex but "
-            f"dispatch_feasible is not False"
-        )
-    else:
-        assert result.get("dispatch_feasible") is True, (
-            f"Recipe '{recipe_name}' on backend '{backend_name}' expected "
-            f"dispatch_feasible=True (no infeasible gate), "
-            f"got {result.get('dispatch_feasible')}"
-        )
 
 
 def test_declared_unsupported_orphan_check() -> None:
@@ -181,36 +102,14 @@ def test_matrix_collection_count() -> None:
     )
 
 
-def test_recipe_backend_matrix_codex_with_provider_override() -> None:
-    """Codex with backend_supports_git_write=true: recipe is valid and feasible.
-
-    After the worker_routable discriminator fix, git_metadata_write has
-    worker_routable=True and required_backends=frozenset(). Merge-conflict steps
-    (resolve-merge-conflicts declares git_metadata_write) are routable at dispatch
-    time and do NOT produce backend-incompatible-skill findings. The recipe is
-    valid=True and dispatch_feasible=True when backend_supports_git_write=true."""
+def test_recipe_backend_matrix_codex_uses_semantic_adaptation() -> None:
+    """Codex composition is valid without capability-derived ingredients."""
     result = load_and_validate(
         "implementation",
         project_dir=_PROJECT_ROOT,
         backend_name="codex",
-        ingredient_overrides={"backend_supports_git_write": "true"},
         lister=_SKILL_RESOLVER,
     )
-    assert result["valid"] is True, (
-        "Expected valid=True: git_metadata_write skills are worker_routable=True "
-        "(required_backends=frozenset()) so no backend-incompatible-skill findings expected. "
-        f"Got valid={result['valid']}"
-    )
-    backend_compat_errors = [
-        s
-        for s in result.get("suggestions", [])
-        if s.get("rule") == "backend-incompatible-skill" and s.get("severity") == Severity.ERROR
-    ]
-    assert len(backend_compat_errors) == 0, (
-        f"Expected zero backend-incompatible-skill ERRORs: git_metadata_write is routable; "
-        f"got {len(backend_compat_errors)}"
-    )
-    assert result.get("dispatch_feasible") is True, (
-        f"Expected dispatch_feasible=True (backend_supports_git_write=true prevents "
-        f"gate infeasibility), got {result.get('dispatch_feasible')}"
-    )
+    assert result["valid"] is True
+    assert "dispatch_feasible" not in result
+    assert "infeasible_steps" not in result

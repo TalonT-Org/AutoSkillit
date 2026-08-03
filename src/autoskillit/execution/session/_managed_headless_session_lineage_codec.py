@@ -14,7 +14,7 @@ from autoskillit.core import (
     NativeShellCaptureObservation,
 )
 
-_RECORD_FIELDS = {
+_LEGACY_RECORD_FIELDS = {
     "schema_version",
     "generation",
     "launch_id",
@@ -34,6 +34,7 @@ _RECORD_FIELDS = {
     "observations",
     "dropped_observation_count",
 }
+_RECORD_FIELDS = _LEGACY_RECORD_FIELDS | {"launch_contract_digest"}
 
 
 def canonical_json(value: object) -> str:
@@ -65,6 +66,7 @@ def record_payload(lineage: ManagedHeadlessSessionLineage) -> dict[str, object]:
         "anchor_device": lineage.anchor_device,
         "anchor_inode": lineage.anchor_inode,
         "lineage_digest": lineage.lineage_digest,
+        "launch_contract_digest": lineage.launch_contract_digest,
         "attempt_ids": list(lineage.attempt_ids),
         "candidate_native_session_ids": list(lineage.candidate_native_session_ids),
         "final_native_session_id": lineage.final_native_session_id,
@@ -82,8 +84,12 @@ def record_to_dict(lineage: ManagedHeadlessSessionLineage) -> dict[str, object]:
 
 def lineage_from_dict(value: object) -> ManagedHeadlessSessionLineage:
     """Validate and deserialize one lineage record."""
-    if not isinstance(value, dict) or set(value) != _RECORD_FIELDS:
+    if not isinstance(value, dict) or frozenset(value) not in {
+        frozenset(_LEGACY_RECORD_FIELDS),
+        frozenset(_RECORD_FIELDS),
+    }:
         raise ValueError("Invalid managed lineage record shape")
+    legacy_record = "launch_contract_digest" not in value
     try:
         lineage = ManagedHeadlessSessionLineage(
             schema_version=_strict_int(value["schema_version"], "schema_version"),
@@ -99,6 +105,11 @@ def lineage_from_dict(value: object) -> ManagedHeadlessSessionLineage:
             anchor_inode=_strict_int(value["anchor_inode"], "anchor_inode"),
             lineage_digest=_strict_str(value["lineage_digest"], "lineage_digest"),
             record_digest=_strict_str(value["record_digest"], "record_digest"),
+            launch_contract_digest=(
+                ""
+                if legacy_record
+                else _strict_str(value["launch_contract_digest"], "launch_contract_digest")
+            ),
             attempt_ids=_strict_str_tuple(value["attempt_ids"], "attempt_ids"),
             candidate_native_session_ids=_strict_str_tuple(
                 value["candidate_native_session_ids"],
@@ -134,7 +145,10 @@ def lineage_from_dict(value: object) -> ManagedHeadlessSessionLineage:
     )
     if lineage.lineage_digest != expected_identity_digest:
         raise ValueError("Managed lineage identity digest mismatch")
-    if lineage.record_digest != digest(record_payload(lineage)):
+    persisted_payload = record_payload(lineage)
+    if legacy_record:
+        persisted_payload.pop("launch_contract_digest")
+    if lineage.record_digest != digest(persisted_payload):
         raise ValueError("Managed lineage record digest mismatch")
     return lineage
 

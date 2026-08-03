@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core.types import RetryReason, SkillResult
-from tests.execution.conftest import _mock_backend
+from tests.execution.conftest import _launch_preparation, _mock_backend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -21,6 +21,13 @@ _SUCCESS_RESULT = SkillResult(
     retry_reason=RetryReason.NONE,
     stderr="",
 )
+
+
+def _launch_kwargs(ctx, cwd: str) -> dict[str, object]:
+    return {
+        "launch_resolver": ctx.launch_resolver,
+        "launch_preparation": _launch_preparation(ctx, cwd=cwd),
+    }
 
 
 def _patch_common(monkeypatch, tmp_path, skill_result, ctx):
@@ -83,6 +90,7 @@ class TestProviderFieldsReachFlush:
             stale_threshold=5.0,
             provider_name="minimax",
             step_name="implement",
+            **_launch_kwargs(minimal_ctx, str(tmp_path)),
         )
 
         assert len(flush_calls) == 1
@@ -163,6 +171,7 @@ class TestProviderFieldsReachFlush:
             provider_fallback_env={"ANTHROPIC_API_KEY": "sk-test"},
             provider_fallback_name="anthropic",
             step_name="implement",
+            **_launch_kwargs(minimal_ctx, str(tmp_path)),
         )
 
         assert result.provider.fallback_activated is True
@@ -204,6 +213,7 @@ class TestProviderFieldsReachFlush:
             timeout=30.0,
             stale_threshold=5.0,
             provider_name="minimax",
+            **_launch_kwargs(minimal_ctx, str(tmp_path)),
         )
 
         assert result.subtype == "crashed"
@@ -248,6 +258,7 @@ class TestProviderFieldsReachFlush:
                 timeout=30.0,
                 stale_threshold=5.0,
                 provider_name="openai",
+                **_launch_kwargs(minimal_ctx, str(tmp_path)),
             )
 
         cancelled_calls = [f for f in flush_calls if f.get("termination_reason") == "CANCELLED"]
@@ -279,6 +290,7 @@ class TestProviderFieldsReachFlush:
             stale_threshold=5.0,
             step_name="implement",
             model_identity=ModelIdentity.anthropic("claude-opus-4-6"),
+            **_launch_kwargs(minimal_ctx, str(tmp_path)),
         )
 
         assert len(flush_calls) == 1

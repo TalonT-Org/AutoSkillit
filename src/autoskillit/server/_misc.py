@@ -66,7 +66,7 @@ from autoskillit.workspace import (
     SkillProjectionContext as SkillProjectionContext,
 )
 from autoskillit.workspace import (
-    build_effective_skill_dispatch_contract as build_effective_skill_dispatch_contract,
+    build_skill_projection_binding as build_skill_projection_binding,
 )
 from autoskillit.workspace import clone_registry as clone_registry
 from autoskillit.workspace import (

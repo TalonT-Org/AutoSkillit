@@ -19,8 +19,6 @@ _EXEMPT_FILES: frozenset[str] = frozenset(
         "execution/headless/_headless_result.py",
         # IL-0 module: cannot import BackendCapabilities (IL-1); routes version data by name
         "core/_version_snapshot.py",
-        # Binary name check on CmdSpec subprocess argv; no backend context in assert_headless_cmd()
-        "execution/headless/_headless_helpers.py",
         # FeatureDef.requires_backend_alignment is config-layer; no capabilities at scan time
         "cli/session/_session_launch.py",
     }

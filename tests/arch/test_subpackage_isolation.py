@@ -945,8 +945,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
         "core": 30,  # +plugin identity authority + strict audit semantic codec
-        # +audit admission ownership, native shell capture, protocols, and GitHub review types
-        "core/types": 46,
+        # +GitHub review types, portable launch authority, stable contract,
+        # closed skill semantics, and the non-executable projection binding shard.
+        "core/types": 49,
         "cli": 23,  # +_install_contract typed install process boundary (#4409)
         "cli/doctor": 11,  # +_doctor_skills capability declaration authenticity checks
         "workspace": 15,  # +_installed_artifact exact lease-protected authority (#4409);
@@ -1102,9 +1103,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "dispatch recovery (+8 net lines)"
         "; provider-aware capability override bridge: try/except around early find for "
         "graceful degradation when recipes.find raises (+10 net lines)"
-        "; CapabilityResolutionDetail destructive tuple at open_kitchen call sites and "
-        "_dispatch_infeasible_response accepting capability_detail kwarg for none_pass "
-        "diagnostic enrichment (+24 net lines)"
         "; config-default ingredient layer: build_config_default_layer call and "
         "docstring update for pipeline_health demotion (+10 net lines)"
         "; get_recipe session_serve_overrides replay via serve_recipe; "
@@ -1177,7 +1175,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "run_skill launch denial paths before command construction (+139 net lines)",
     ),
     "execution/backends/codex.py": (
-        1825,
+        1900,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1197,8 +1195,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; _materialize_profile_skills function (~43 lines) for T5-P4-A4-WP2 profile skill "
         "materialization into Codex session directories"
         "; debug-level symlink failure log in _materialize_profile_skills (+5 net lines)"
-        "; evidence comment above git_metadata_writable=False citing permissions.rs sandbox "
-        "protection and consumer path (+7 net lines) for T5-P6-A11-WP1"
         "; env-assembly consolidation via _assemble_shared_env_extras (T5-P4-A1-WP2)"
         "; explicit parameter dispositions for "
         "plugin_source/output_format/exit_after_stop_delay_ms "
@@ -1208,18 +1204,34 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "TOMLs (+12 net lines)"
         "; _register_agent_tomls session-config registration for generated roles "
         "(+39 net lines)"
-        "; interactive Codex startup validation, explicit generated-home construction, "
+        "; REQ-SEM-ADAPT-001 semantic-plan adaptation remains on the registered Codex "
+        "backend so model and reasoning policy resolution has one authority; "
+        "interactive Codex startup validation, explicit generated-home construction, "
         "profile probing, and durable cook-storage adapter integration remain co-located "
         "with the backend whose command grammar they validate; managed native-shell "
         "decision and lineage-reference injection remain adjacent to the Codex command "
         "builders that own the protected environment boundary",
     ),
     "execution/backends/claude.py": (
-        1025,
+        1100,
         "REQ-CNST-010-E19: Claude backend protocol parity keeps managed native-shell "
         "decision/reference disposition beside executable launch-binding validation; "
         "both are shared builder-interface obligations even though Claude deliberately "
-        "does not inject the Codex-only controls.",
+        "does not inject the Codex-only controls; REQ-SEM-ADAPT-001 semantic-plan "
+        "adaptation remains on this registered backend so native child syntax and model "
+        "alias resolution cannot drift into a second adapter registry.",
+    ),
+    "workspace/skill_capabilities.py": (
+        1100,
+        "REQ-SEM-SCHEMA-001: versioned semantic declarations, closed-operation parsing, "
+        "retired-key rejection, and precise per-skill diagnostics remain co-located at "
+        "the sole skill-frontmatter validation boundary.",
+    ),
+    "workspace/skills.py": (
+        1050,
+        "REQ-SEM-SCHEMA-002: semantic-plan threading and invalid-override fallback remain "
+        "inside the existing precedence resolver so a rejected project-local declaration "
+        "cannot poison unrelated skills or bypass the valid bundled fallback.",
     ),
     "execution/backends/_codex_session_storage.py": (
         1400,

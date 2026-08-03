@@ -276,11 +276,8 @@ from .types import AUTOSKILLIT_INSTALLED_VERSION as AUTOSKILLIT_INSTALLED_VERSIO
 from .types import AUTOSKILLIT_PRIVATE_ENV_VARS as AUTOSKILLIT_PRIVATE_ENV_VARS
 from .types import AUTOSKILLIT_SKILL_PREFIX as AUTOSKILLIT_SKILL_PREFIX
 from .types import AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES as AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES
-from .types import BACKEND_CAPABILITY_INGREDIENTS as BACKEND_CAPABILITY_INGREDIENTS
 from .types import CAMPAIGN_ID_ENV_VAR as CAMPAIGN_ID_ENV_VAR
-from .types import CAPABILITY_GATE_CALLABLES as CAPABILITY_GATE_CALLABLES
-from .types import CAPABILITY_INGREDIENT_MAP as CAPABILITY_INGREDIENT_MAP
-from .types import CAPABILITY_INGREDIENT_TO_SKIP_GUARD as CAPABILITY_INGREDIENT_TO_SKIP_GUARD
+from .types import CANONICAL_LAUNCH_DIGEST_FIELDS as CANONICAL_LAUNCH_DIGEST_FIELDS
 from .types import CAPTURE_VALID_VALUE_TYPES as CAPTURE_VALID_VALUE_TYPES
 from .types import CATEGORY_TAGS as CATEGORY_TAGS
 from .types import CLAUDE_CODE_CAPABILITIES as CLAUDE_CODE_CAPABILITIES
@@ -353,6 +350,7 @@ from .types import KNOWN_BACKEND_NAMES as KNOWN_BACKEND_NAMES
 from .types import KNOWN_CI_EVENTS as KNOWN_CI_EVENTS
 from .types import LABEL_LIFECYCLE_REGISTRY as LABEL_LIFECYCLE_REGISTRY
 from .types import LABEL_TRANSITIONS as LABEL_TRANSITIONS
+from .types import LAUNCH_CONTRACT_SCHEMA_VERSION as LAUNCH_CONTRACT_SCHEMA_VERSION
 from .types import LAUNCH_ID_ENV_VAR as LAUNCH_ID_ENV_VAR
 from .types import (
     MACHINE_ONLY_SKILL_FRONTMATTER_KEYS as MACHINE_ONLY_SKILL_FRONTMATTER_KEYS,
@@ -459,7 +457,10 @@ from .types import SKILL_CAPABILITY_REGISTRY as SKILL_CAPABILITY_REGISTRY
 from .types import SKILL_COMMAND_DISPLAY_MAX as SKILL_COMMAND_DISPLAY_MAX
 from .types import SKILL_COMMAND_PREFIX as SKILL_COMMAND_PREFIX
 from .types import SKILL_FILE_ADVISORY_MAP as SKILL_FILE_ADVISORY_MAP
+from .types import SKILL_MODEL_CLASSES as SKILL_MODEL_CLASSES
 from .types import SKILL_PROJECTION_VERSION as SKILL_PROJECTION_VERSION
+from .types import SKILL_REASONING_EFFORTS as SKILL_REASONING_EFFORTS
+from .types import SKILL_SEMANTIC_SCHEMA_VERSION as SKILL_SEMANTIC_SCHEMA_VERSION
 from .types import SKILL_SESSION_CONTRACT_SCHEMA_VERSION as SKILL_SESSION_CONTRACT_SCHEMA_VERSION
 from .types import SKILL_SESSION_REQUIRED_ENV as SKILL_SESSION_REQUIRED_ENV
 from .types import SKILL_TOOLS as SKILL_TOOLS
@@ -559,6 +560,9 @@ from .types import AuditVerdict as AuditVerdict
 from .types import AuthoritySourceId as AuthoritySourceId
 from .types import AuthorityUnavailableEffect as AuthorityUnavailableEffect
 from .types import AuthorityUnavailableEvent as AuthorityUnavailableEvent
+from .types import BackendAuthority as BackendAuthority
+from .types import BackendAuthorityKind as BackendAuthorityKind
+from .types import BackendAuthorityTier as BackendAuthorityTier
 from .types import BackendCapabilities as BackendCapabilities
 from .types import BackendConventions as BackendConventions
 from .types import BackendEventKind as BackendEventKind
@@ -578,7 +582,6 @@ from .types import CanonicalSpanId as CanonicalSpanId
 from .types import CanonicalSpanOwner as CanonicalSpanOwner
 from .types import CanonicalTokenUsage as CanonicalTokenUsage
 from .types import CapabilityNotSupportedError as CapabilityNotSupportedError
-from .types import CapabilityResolutionDetail as CapabilityResolutionDetail
 from .types import CapturedStream as CapturedStream
 from .types import CaptureEntrySpec as CaptureEntrySpec
 from .types import CaptureValueType as CaptureValueType
@@ -587,6 +590,8 @@ from .types import ChannelBStatus as ChannelBStatus
 from .types import ChannelConfirmation as ChannelConfirmation
 from .types import ChargeCommittedEffect as ChargeCommittedEffect
 from .types import ChargeDomain as ChargeDomain
+from .types import ChildModelPolicySpec as ChildModelPolicySpec
+from .types import ChildSpawnSpec as ChildSpawnSpec
 from .types import CIRunScope as CIRunScope
 from .types import CIWatcher as CIWatcher
 from .types import ClaudeContentBlockType as ClaudeContentBlockType
@@ -611,6 +616,7 @@ from .types import CodexItemType as CodexItemType
 from .types import CodingAgentBackend as CodingAgentBackend
 from .types import CommittedDispositionResolver as CommittedDispositionResolver
 from .types import CompletionRequiredResolver as CompletionRequiredResolver
+from .types import ConcurrencySpec as ConcurrencySpec
 from .types import ConflictRejectedEffect as ConflictRejectedEffect
 from .types import ContaminationOutcome as ContaminationOutcome
 from .types import ContextAdmissionAccountingResult as ContextAdmissionAccountingResult
@@ -649,6 +655,7 @@ from .types import EffectiveSkillInvocationAuthority as EffectiveSkillInvocation
 from .types import EnvPolicy as EnvPolicy
 from .types import EpochClosedEffect as EpochClosedEffect
 from .types import EpochFenceProof as EpochFenceProof
+from .types import EvidenceSpec as EvidenceSpec
 from .types import ExecutableLaunchBinding as ExecutableLaunchBinding
 from .types import ExecutionInstallSiteDef as ExecutionInstallSiteDef
 from .types import ExpiredIdempotencyTombstone as ExpiredIdempotencyTombstone
@@ -678,10 +685,9 @@ from .types import GitHubReviewPosterProtocol as GitHubReviewPosterProtocol
 from .types import GitHubReviewPostResult as GitHubReviewPostResult
 from .types import GitHubReviewReceipt as GitHubReviewReceipt
 from .types import GitHubReviewRequest as GitHubReviewRequest
+from .types import GitMetadataWriteSpec as GitMetadataWriteSpec
 from .types import HardCapabilityMismatch as HardCapabilityMismatch
 from .types import HeadlessExecutor as HeadlessExecutor
-from .types import HeadlessSkillDispatchContract as HeadlessSkillDispatchContract
-from .types import HeadlessSkillDispatchPreparation as HeadlessSkillDispatchPreparation
 from .types import HookTrustPolicy as HookTrustPolicy
 from .types import IdempotencyExpiredEffect as IdempotencyExpiredEffect
 from .types import IdempotencyNamespace as IdempotencyNamespace
@@ -702,13 +708,25 @@ from .types import InvariantDef as InvariantDef
 from .types import InventoryAdmissionDecision as InventoryAdmissionDecision
 from .types import InvocationTemplate as InvocationTemplate
 from .types import IssueLabelState as IssueLabelState
+from .types import JoinSpec as JoinSpec
 from .types import KillReason as KillReason
 from .types import KitchenTransitionLock as KitchenTransitionLock
 from .types import LabelDef as LabelDef
+from .types import LaunchAdapter as LaunchAdapter
+from .types import LaunchAdapterResult as LaunchAdapterResult
+from .types import LaunchContractError as LaunchContractError
+from .types import LaunchFallbackRoute as LaunchFallbackRoute
+from .types import LaunchPreparation as LaunchPreparation
+from .types import LaunchResolutionRequest as LaunchResolutionRequest
+from .types import LaunchResolver as LaunchResolver
+from .types import LaunchSurface as LaunchSurface
+from .types import LaunchValueSource as LaunchValueSource
+from .types import LaunchValueSourceKind as LaunchValueSourceKind
 from .types import LegacyRetiringEvidence as LegacyRetiringEvidence
 from .types import LensEntry as LensEntry
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
+from .types import LogicalRoleSpec as LogicalRoleSpec
 from .types import ManagedHeadlessSessionKind as ManagedHeadlessSessionKind
 from .types import ManagedHeadlessSessionLineage as ManagedHeadlessSessionLineage
 from .types import ManagedHeadlessSessionLineageRef as ManagedHeadlessSessionLineageRef
@@ -777,6 +795,7 @@ from .types import PromptContractError as PromptContractError
 from .types import ProposeOccurrenceEvent as ProposeOccurrenceEvent
 from .types import ProtectedPoolOwnerId as ProtectedPoolOwnerId
 from .types import ProtectedPoolSpec as ProtectedPoolSpec
+from .types import ProviderBinding as ProviderBinding
 from .types import ProviderOutcome as ProviderOutcome
 from .types import PRState as PRState
 from .types import QuarantineRecordedEffect as QuarantineRecordedEffect
@@ -828,6 +847,7 @@ from .types import ReservationRecordedEffect as ReservationRecordedEffect
 from .types import ReservationReleasedEffect as ReservationReleasedEffect
 from .types import ReserveClass as ReserveClass
 from .types import ReserveRequestEvent as ReserveRequestEvent
+from .types import ResolvedLaunchContract as ResolvedLaunchContract
 from .types import ResolvedSkillAuthority as ResolvedSkillAuthority
 from .types import (
     ResolveIndeterminateAcceptedEvent as ResolveIndeterminateAcceptedEvent,
@@ -855,6 +875,8 @@ from .types import ReviewReconciliationResult as ReviewReconciliationResult
 from .types import ReviewResponseClass as ReviewResponseClass
 from .types import RollbackAdmissionEvent as RollbackAdmissionEvent
 from .types import RolloverEpochEvent as RolloverEpochEvent
+from .types import SecretEnvironmentBinding as SecretEnvironmentBinding
+from .types import SemanticLaunchPlan as SemanticLaunchPlan
 from .types import ServeOverridesSnapshot as ServeOverridesSnapshot
 from .types import SessionCheckpoint as SessionCheckpoint
 from .types import SessionEvent as SessionEvent
@@ -869,6 +891,7 @@ from .types import ShadowContextAdmissionRecord as ShadowContextAdmissionRecord
 from .types import (
     ShadowContextAdmissionTargetRecord as ShadowContextAdmissionTargetRecord,
 )
+from .types import SiblingSkillSpec as SiblingSkillSpec
 from .types import SkillAuthority as SkillAuthority
 from .types import SkillCapabilityDef as SkillCapabilityDef
 from .types import SkillContractError as SkillContractError
@@ -878,9 +901,14 @@ from .types import SkillExecutionRole as SkillExecutionRole
 from .types import SkillFamilyDef as SkillFamilyDef
 from .types import SkillFrontmatterAuthority as SkillFrontmatterAuthority
 from .types import SkillLister as SkillLister
+from .types import SkillProjectionBinding as SkillProjectionBinding
 from .types import SkillProjectionContextAuthority as SkillProjectionContextAuthority
+from .types import SkillProjectionPreparation as SkillProjectionPreparation
 from .types import SkillResolver as SkillResolver
 from .types import SkillResult as SkillResult
+from .types import SkillSemanticAdaptationResult as SkillSemanticAdaptationResult
+from .types import SkillSemanticOperation as SkillSemanticOperation
+from .types import SkillSemanticPlan as SkillSemanticPlan
 from .types import SkillSessionConfig as SkillSessionConfig
 from .types import SkillSessionContract as SkillSessionContract
 from .types import SkillSessionContractStore as SkillSessionContractStore
@@ -953,8 +981,6 @@ from .types import (
 from .types import (
     decode_stored_context_admission_envelope as decode_stored_context_admission_envelope,
 )
-from .types import derive_backend_requirements as derive_backend_requirements
-from .types import describe_capability_mismatches as describe_capability_mismatches
 from .types import detect_body_marker as detect_body_marker
 from .types import (
     encode_stored_context_admission_envelope as encode_stored_context_admission_envelope,
@@ -1008,7 +1034,6 @@ from .types import session_type_for_skill_execution_role as session_type_for_ski
 from .types import strip_context_window_suffix as strip_context_window_suffix
 from .types import strip_markdown_code_regions as strip_markdown_code_regions
 from .types import truncate_text as truncate_text
-from .types import unsatisfied_backend_capabilities as unsatisfied_backend_capabilities
 from .types import (
     validate_context_admission_persistence_value as validate_context_admission_persistence_value,
 )

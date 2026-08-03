@@ -23,9 +23,20 @@ from autoskillit.execution.headless._managed import (
     _LineageCallbacks,
     _ManagedLineageObserver,
 )
+from tests.execution.conftest import _mock_backend
 from tests.fakes import FakeManagedHeadlessSessionLineageStore
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+def _backend_impl(name: str):
+    backend = _mock_backend(
+        channel_b_capable=name == "claude-code",
+        process_name=name,
+        session_resume_capable=True,
+    )
+    backend.name = name
+    return backend
 
 
 def _observer(
@@ -49,7 +60,7 @@ def _observer(
         store=store,
         decision=decision,
         reference=lineage.reference,
-        backend=backend,
+        backend=_backend_impl(backend),
         session_kind=session_kind,
     )
     assert observer is not None
@@ -117,7 +128,7 @@ def test_resumed_codex_final_binding_transfers_verified_ownership(tmp_path: Path
         store=store,
         decision=lineage.decision,
         reference=reference,
-        backend="codex",
+        backend=_backend_impl("codex"),
         session_kind=ManagedHeadlessSessionKind.SKILL,
     )
     assert observer is not None
@@ -155,7 +166,7 @@ def test_changed_final_binding_rejects_non_codex_lineage(tmp_path: Path) -> None
         store=store,
         decision=lineage.decision,
         reference=reference,
-        backend="claude-code",
+        backend=_backend_impl("claude-code"),
         session_kind=ManagedHeadlessSessionKind.SKILL,
     )
     assert observer is not None
@@ -237,7 +248,11 @@ async def test_default_executor_rebinds_changed_resumed_codex_final(
 ) -> None:
     from tests.execution.conftest import _mock_backend
 
-    backend = _mock_backend(session_dir_persistent=True)
+    backend = _mock_backend(
+        channel_b_capable=False,
+        session_dir_persistent=True,
+        session_resume_capable=True,
+    )
     backend.name = "codex"
     minimal_ctx.backend = backend
     store = FakeManagedHeadlessSessionLineageStore()

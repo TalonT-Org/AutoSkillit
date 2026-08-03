@@ -1,16 +1,27 @@
 ---
 name: vis-lens-antipattern
-categories: [vis-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: "Create Anti-Pattern Detection visualization audit showing severity-tiered catalog of visualization anti-patterns present in or planned for the experiment. Diagnostic lens answering \"Which visualization anti-patterns are present?\""
+categories:
+- vis-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Create Anti-Pattern Detection visualization audit showing severity-tiered catalog of visualization anti-patterns
+  present in or planned for the experiment. Diagnostic lens answering "Which visualization anti-patterns are present?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Anti-Pattern Lens - Scanning for visualization anti-patterns...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Anti-Pattern Lens - Scanning for visualization anti-patterns...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: mermaid
+  - name: plan-visualization
+  - name: vis-lens-always-on
+  - name: vis-lens-chart-select
+  - name: vis-lens-uncertainty
 ---
 
 # Anti-Pattern Detection Visualization Lens

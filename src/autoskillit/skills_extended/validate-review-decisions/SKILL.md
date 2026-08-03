@@ -1,21 +1,36 @@
 ---
 name: validate-review-decisions
-categories: [audit]
-uses_capabilities: [agent_model]
-description: >-
-  Validate review-decisions audit findings with mandatory intent analysis
-  and seven evidence-gathering rules. Adds docstring-as-contract recognition,
-  deliberate-change detection, test-as-intent-signal, consumer-impact
-  verification, architectural feasibility checks, behavioral simulation,
-  and symmetry-as-design recognition to the standard validation workflow.
-  Use when validating reports from audit-review-decisions specifically.
+categories:
+- audit
+uses_capabilities: []
+description: Validate review-decisions audit findings with mandatory intent analysis and seven evidence-gathering rules. Adds
+  docstring-as-contract recognition, deliberate-change detection, test-as-intent-signal, consumer-impact verification, architectural
+  feasibility checks, behavioral simulation, and symmetry-as-design recognition to the standard validation workflow. Use when
+  validating reports from audit-review-decisions specifically.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: validate-review-decisions] Validating review-decisions audit findings with intent analysis...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: validate-review-decisions] Validating review-decisions audit findings with intent analysis...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Validate Review-Decisions Audit Findings Skill
@@ -52,15 +67,15 @@ severities. The validated report carries a `validated: true` marker to signal do
 
 - Modify any source code files
 - Create files outside `$AUDIT_BASE_DIR/` (the per-run directory set in Step 5)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Start all independent child delegations before awaiting any result so they run concurrently
 - Write output files before synthesizing ALL subagent results
 - Subagents must NOT create their own files — they return findings in response text only
 - Do NOT include VALID BUT EXCEPTION WARRANTED findings in the validated report body — they belong in the validation summary only
-- Run subagents in the background (`run_in_background: true` is prohibited)
+- Detach child delegations instead of joining them (joining every child is required)
 
 **ALWAYS:**
-- Spawn all subagents via `Agent(model="sonnet")`
-- Issue all Task calls in a single message to maximize parallelism
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Write `validated: true` as the **first line** of the validated report file
 - Respect interactive vs headless mode for the approval step (Step 9)
 - Emit: `validated_report_path = <absolute path to the validated report file>`
@@ -125,9 +140,9 @@ by the top-level package touched (e.g., `pipeline/`, `execution/`, `server/`, `c
 
 ### Step 3 — Launch Parallel Subagents (SINGLE MESSAGE)
 
-**Issue ALL Task calls in a single message.**
+**Issue ALL child delegations in a single message.**
 
-Spawn the following agents simultaneously using `model: "sonnet"`:
+Spawn the following agents simultaneously under the declared `sonnet` model-class policy:
 
 **Code Validation Agents (8–9 agents)**
 

@@ -1,12 +1,33 @@
 ---
 name: promote-to-main
-categories: [github]
-uses_capabilities: [agent_model, cross_skill_ref, github_api_write]
-description: >
-  Promote integration to main with comprehensive changelog and PR creation. Use when
-  user says "promote to main", "open promotion PR", "integration to main", or
-  "create release PR to main". Runs pre-flight checks, change inventory, architecture
+categories:
+- github
+uses_capabilities:
+- github_api_write
+description: 'Promote integration to main with comprehensive changelog and PR creation. Use when user says "promote to main",
+  "open promotion PR", "integration to main", or "create release PR to main". Runs pre-flight checks, change inventory, architecture
   diagrams, and creates a rich PR with release notes and traceability.
+
+  '
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
+  sibling_skills:
+  - name: arch-lens-module-dependency
 ---
 
 # Promote to Main
@@ -44,12 +65,12 @@ and creates a comprehensive promotion PR.
 - Skip pre-flight checks — a failing pre-flight must block PR creation
 - Use the Bash tool for file reads — use Read, Grep, Glob for all codebase inspection
 - Use `gh pr create --body` inline — always use `--body-file`
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Run ALL pre-flight checks before any analysis work
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Check `gh auth status` before any GitHub operations
 - Output `pr_url = <url>` as a structured token (empty string when GitHub unavailable or dry-run)
 - Output `verdict = <value>` as a structured token
@@ -167,11 +188,11 @@ EOF
 
 ### Phase 1: Pre-flight Checks (parallel, blocking) (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn three parallel subagents via `Agent(model="sonnet")` to validate promotion readiness.
+Spawn three parallel subagents via `child delegation under the declared `sonnet` model-class policy` to validate promotion readiness.
 All three must pass before analysis proceeds. If any fails, report the failure clearly
 and exit 1. Do NOT create a PR when pre-flight fails.
 
@@ -237,7 +258,7 @@ treat as a warning (non-blocking) and note it in the report.
 
 ### Phase 2: Change Inventory (parallel subagents)
 
-Spawn four parallel subagents via `Agent(model="sonnet")`.
+Spawn four parallel subagents via `child delegation under the declared `sonnet` model-class policy`.
 
 #### Subagent 2A: Commit Categorization
 
@@ -361,7 +382,7 @@ Using ONLY classDef styles from the mermaid skill (no invented colors).
 
 #### Step 3.1: Select Arch-Lens Lenses
 
-Spawn a subagent via `Agent(model="sonnet")` with the `changed_files` list and this lens menu:
+Spawn a subagent via `child delegation under the declared `sonnet` model-class policy` with the `changed_files` list and this lens menu:
 
 ```
 c4-container, concurrency, data-lineage, deployment, development,
@@ -431,7 +452,7 @@ new/modified nodes, add to `validated_diagrams`. Otherwise discard.
 
 #### Step 4.1: Release Notes Synthesis
 
-Spawn one subagent via `Agent(model="sonnet")` with results from Phase 2 ONLY (no domain
+Spawn one subagent via `child delegation under the declared `sonnet` model-class policy` with results from Phase 2 ONLY (no domain
 analysis or quality assessment data).
 
 The subagent receives:

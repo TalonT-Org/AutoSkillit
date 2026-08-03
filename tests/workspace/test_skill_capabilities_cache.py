@@ -71,7 +71,7 @@ def test_constructor_rejects_nonpositive_limits(field: str, invalid: int) -> Non
 
 
 def test_resident_semantic_input_scans_once_and_reuses_tuple(evidence_cache, scan_calls) -> None:
-    content = _document("resident", 'git commit -m "resident"')
+    content = _document("resident", "Call test_check().")
 
     first = capabilities.classify_skill_capability_evidence(content, "resident")
     second = capabilities.classify_skill_capability_evidence(content, "resident")
@@ -111,28 +111,8 @@ def test_content_and_effective_name_are_independent_key_dimensions(
     edited = capabilities.classify_skill_capability_evidence(edited_content, "beta")
 
     assert self_reference == ()
-    assert [
-        (
-            item.capability,
-            item.actor,
-            item.direction,
-            item.classification,
-            item.source_span,
-            item.source,
-        )
-        for item in cross_reference
-    ] == [
-        (
-            "cross_skill_ref",
-            "self",
-            "outbound",
-            "executable",
-            (5, 5),
-            "Use the `/autoskillit:alpha` skill.",
-        )
-    ]
-    assert edited[0].source == "Use the `/autoskillit:gamma` skill."
-    assert edited[0].source_span == (5, 5)
+    assert cross_reference == ()
+    assert edited == ()
     assert len(scan_calls) == 3
     assert evidence_cache.info().entry_count == 3
 
@@ -152,7 +132,7 @@ def test_falsey_and_frontmatter_names_share_one_entry(evidence_cache, scan_calls
 @pytest.mark.parametrize(
     ("content", "skill_name"),
     (
-        (_document("surrogate", 'git commit -m "cold\ud800warm"'), "surrogate"),
+        (_document("surrogate", "Call test_check(). cold\ud800warm"), "surrogate"),
         (_document("surrogate", "Use the `/autoskillit:other` skill."), "logical\ud800"),
     ),
 )
@@ -178,7 +158,7 @@ def test_cold_and_warm_mixed_corpus_preserves_complete_evidence(
         "\n".join(
             (
                 "## Step 1",
-                'git commit -m "genuine"',
+                "Call test_check().",
                 "## Examples",
                 'gh issue edit 42 --body-file "artifact.md"',
             )
@@ -201,12 +181,12 @@ def test_cold_and_warm_mixed_corpus_preserves_complete_evidence(
         for item in cold
     ) == (
         (
-            "git_metadata_write",
+            "test_check",
             "self",
             "outbound",
             "executable",
             (6, 6),
-            'git commit -m "genuine"',
+            "Call test_check().",
         ),
         (
             "github_api_write",
@@ -217,9 +197,7 @@ def test_cold_and_warm_mixed_corpus_preserves_complete_evidence(
             'gh issue edit 42 --body-file "artifact.md"',
         ),
     )
-    assert capabilities.detect_skill_capabilities(content, "mixed") == frozenset(
-        {"git_metadata_write"}
-    )
+    assert capabilities.detect_skill_capabilities(content, "mixed") == frozenset({"test_check"})
     with pytest.raises(FrozenInstanceError):
         cold[0].source = "mutated"  # type: ignore[misc]
     assert len(scan_calls) == 1
@@ -280,7 +258,7 @@ def test_non_ascii_input_over_byte_limit_bypasses_cache(monkeypatch, scan_calls)
     effective_name = "unicode"
     content = _document(
         effective_name,
-        'éééééééééééééééé\ngit commit -m "unicode"',
+        "éééééééééééééééé\nCall test_check().",
     )
     character_weight = len(content) + len(effective_name)
     encoded_weight = len(content.encode("utf-8")) + len(effective_name.encode("utf-8"))
@@ -303,7 +281,7 @@ def test_non_ascii_input_over_byte_limit_bypasses_cache(monkeypatch, scan_calls)
 def test_record_charge_and_multi_entry_byte_eviction(monkeypatch, scan_calls) -> None:
     charged_content = _document(
         "charged",
-        'git commit -m "one"\ngh issue edit 1 --body-file two.md',
+        "Call test_check().\ngh issue edit 1 --body-file two.md",
     )
     charged_result = capabilities._scan_skill_capability_evidence_uncached(
         charged_content, "charged"
@@ -353,7 +331,7 @@ def test_character_preflight_bypasses_exact_accounting_and_retention(
         max_input_bytes=64,
     )
     monkeypatch.setattr(capabilities, "_SKILL_CAPABILITY_EVIDENCE_CACHE", cache)
-    content = _document("oversized", 'git commit -m "oversized"\n' + "x" * 80)
+    content = _document("oversized", "Call test_check().\n" + "x" * 80)
     calls = 0
     original_scanner = capabilities._scan_skill_capability_evidence_uncached
 
@@ -373,7 +351,7 @@ def test_character_preflight_bypasses_exact_accounting_and_retention(
     second = capabilities.classify_skill_capability_evidence(content, "oversized")
 
     assert first == second
-    assert first[0].capability == "git_metadata_write"
+    assert first[0].capability == "test_check"
     assert calls == 2
     assert cache.info().entry_count == 0
     assert cache.info().weight_bytes == 0
@@ -382,7 +360,7 @@ def test_character_preflight_bypasses_exact_accounting_and_retention(
 def test_completed_entry_overflow_scans_correctly_without_retention(
     monkeypatch, scan_calls
 ) -> None:
-    content = _document("completed", 'git commit -m "completed"')
+    content = _document("completed", "Call test_check().")
     key_weight = capabilities._skill_capability_evidence_input_weight_bytes(content, "completed")
     cache = capabilities._SkillCapabilityEvidenceCache(
         max_entries=2,
@@ -395,14 +373,14 @@ def test_completed_entry_overflow_scans_correctly_without_retention(
     second = capabilities.classify_skill_capability_evidence(content, "completed")
 
     assert first == second
-    assert first[0].capability == "git_metadata_write"
+    assert first[0].capability == "test_check"
     assert len(scan_calls) == 2
     assert cache.info().entry_count == 0
     assert cache.info().weight_bytes == 0
 
 
 def test_overlapping_cold_callers_share_one_generation(evidence_cache, monkeypatch) -> None:
-    content = _document("concurrent", 'git commit -m "concurrent"')
+    content = _document("concurrent", "Call test_check().")
     entered = Event()
     release = Event()
     counter_lock = Lock()
@@ -499,7 +477,7 @@ def test_different_cold_keys_scan_concurrently_outside_global_lock(
 
 
 def test_synchronized_warm_callers_reuse_resident_identity(evidence_cache, scan_calls) -> None:
-    content = _document("warm", 'git commit -m "warm"')
+    content = _document("warm", "Call test_check().")
     resident = capabilities.classify_skill_capability_evidence(content)
 
     with ThreadPoolExecutor(max_workers=8) as executor:
@@ -526,8 +504,8 @@ def test_waiter_receives_builder_tuple_after_resident_eviction(
         max_input_bytes=64 * 1024,
     )
     monkeypatch.setattr(capabilities, "_SKILL_CAPABILITY_EVIDENCE_CACHE", cache)
-    first_content = _document("first", 'git commit -m "first"')
-    second_content = _document("second", 'git commit -m "second"')
+    first_content = _document("first", "Call test_check().")
+    second_content = _document("second", "Call test_check().")
     scanner_entered = Event()
     scanner_release = Event()
     waiter_holds_result = Event()
@@ -588,9 +566,9 @@ def test_resuming_waiter_refreshes_same_resident_generation_to_mru(
         max_input_bytes=64 * 1024,
     )
     monkeypatch.setattr(capabilities, "_SKILL_CAPABILITY_EVIDENCE_CACHE", cache)
-    first_content = _document("first", 'git commit -m "first"')
-    second_content = _document("second", 'git commit -m "second"')
-    third_content = _document("third", 'git commit -m "third"')
+    first_content = _document("first", "Call test_check().")
+    second_content = _document("second", "Call test_check().")
+    third_content = _document("third", "Call test_check().")
     scanner_entered = Event()
     scanner_release = Event()
     waiter_awakened = Event()
@@ -662,7 +640,7 @@ def test_resuming_waiter_refreshes_same_resident_generation_to_mru(
 
 
 def test_scanner_failure_releases_waiters_and_allows_retry(evidence_cache, monkeypatch) -> None:
-    content = _document("failure", 'git commit -m "failure"')
+    content = _document("failure", "Call test_check().")
     entered = Event()
     release = Event()
     failure = RuntimeError("scanner failed")
@@ -706,13 +684,13 @@ def test_scanner_failure_releases_waiters_and_allows_retry(evidence_cache, monke
     assert evidence_cache.info().inflight_waiters == 0
     should_fail = False
     retry = capabilities.classify_skill_capability_evidence(content)
-    assert retry[0].capability == "git_metadata_write"
+    assert retry[0].capability == "test_check"
 
 
 def test_partial_bookkeeping_failure_resets_resident_state_and_allows_retry(
     evidence_cache, monkeypatch
 ) -> None:
-    content = _document("bookkeeping", 'git commit -m "bookkeeping"')
+    content = _document("bookkeeping", "Call test_check().")
     scanner_entered = Event()
     scanner_release = Event()
     original_eviction = capabilities._SkillCapabilityEvidenceCache._evict_if_needed_locked
@@ -776,4 +754,4 @@ def test_partial_bookkeeping_failure_resets_resident_state_and_allows_retry(
         original_scanner,
     )
     retry = capabilities.classify_skill_capability_evidence(content)
-    assert retry[0].capability == "git_metadata_write"
+    assert retry[0].capability == "test_check"

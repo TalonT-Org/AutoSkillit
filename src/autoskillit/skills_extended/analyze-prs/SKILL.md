@@ -1,15 +1,34 @@
 ---
 name: analyze-prs
-categories: [github]
-uses_capabilities: [agent_model]
-description: Analyze all open PRs targeting a base branch — determine merge order, identify file overlaps, and tag each PR as simple or needs_check for complexity. Use at the start of a PR consolidation workflow.
+categories:
+- github
+uses_capabilities: []
+description: Analyze all open PRs targeting a base branch — determine merge order, identify file overlaps, and tag each PR
+  as simple or needs_check for complexity. Use at the start of a PR consolidation workflow.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Analyzing open PRs...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Analyzing open PRs...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # PR Analysis Skill
@@ -31,12 +50,12 @@ complexity, and produce machine-readable output for the `merge-prs` recipe.
 - Merge, close, or modify any PR
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/merge-prs/` directory
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Use subagents to fetch PR data in parallel
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Abort clearly if `gh` CLI is not authenticated
 - Include every open PR targeting base_branch in the output — no PR is silently dropped (blocked PRs appear in ci_blocked_prs / review_blocked_prs arrays, not in the ordered prs list)
 - **Default to parallel batch processing**: When multiple PRs are present, ALWAYS process
@@ -44,7 +63,7 @@ complexity, and produce machine-readable output for the `merge-prs` recipe.
   subagent batches. Processing PRs one-at-a-time without an explicit user instruction to do
   so is the wrong default. Up to 8 PRs should be processed in a single parallel batch;
   launch additional batches for larger sets.
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Arguments
 
@@ -108,12 +127,12 @@ is active on `{base_branch}` with `MERGEABLE` entries.
 
 ### Step 1: Fetch PR Data (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 - **If `QUEUE_MODE = false`**: **ALWAYS launch subagents in parallel** — never process PRs
-  sequentially. Launch one Explore subagent per PR (up to 8 simultaneously; batch in groups
+  sequentially. Launch one child delegation per PR (up to 8 simultaneously; batch in groups
   of 8 if more):
 
   Each subagent fetches:

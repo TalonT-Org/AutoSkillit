@@ -1,15 +1,21 @@
 ---
 name: migrate-recipes
-uses_capabilities: [cross_skill_ref]
-activate_deps: [write-recipe]
-description: Apply versioned migration notes to an AutoSkillit recipe. Use when user confirms migration, called by agent or autoskillit migrate CLI, or invoked directly.
+uses_capabilities: []
+activate_deps:
+- write-recipe
+description: Apply versioned migration notes to an AutoSkillit recipe. Use when user confirms migration, called by agent or
+  autoskillit migrate CLI, or invoked directly.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: migrate-recipes] Migrating recipe files...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: migrate-recipes] Migrating recipe files...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: write-recipe
 ---
 
 # Migrate Scripts Skill

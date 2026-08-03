@@ -11,11 +11,8 @@ import fcntl
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from types import TracebackType
-    from typing import IO
+from types import TracebackType
+from typing import IO, Any
 
 from autoskillit.core import (
     DispatchIdentity,
@@ -231,7 +228,7 @@ def reset_blocking_dispatch(state_path: Path, dispatch_name: str) -> bool:
         return False
 
 
-_LEGACY_SCHEMA_VERSIONS: frozenset[int] = frozenset({4, 5, 6, 7, 8, 9})
+_LEGACY_SCHEMA_VERSIONS: frozenset[int] = frozenset({4, 5, 6, 7, 8, 9, 10})
 
 
 def _read_raw_json(state_path: Path) -> dict[str, Any] | None:
@@ -543,6 +540,11 @@ def append_dispatch_record(
                 _validate_transition(d.status, record.status, d.name)
                 if record.managed_lineage_ref is None:
                     record.managed_lineage_ref = d.managed_lineage_ref
+                if record.backend_authority is None:
+                    record.backend_authority = d.backend_authority
+                if record.launch_contract is None:
+                    record.launch_contract = d.launch_contract
+                    record.launch_contract_digest = d.launch_contract_digest
                 m.state.dispatches[i] = record
                 break
         else:

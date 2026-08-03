@@ -29,8 +29,10 @@ from autoskillit.fleet import (
     write_captured_values,
     write_initial_state,
 )
+from autoskillit.fleet._checkpoint_bridge import bind_dispatch_launch_contract
 from autoskillit.fleet.state import FLEET_STATE_SCHEMA_VERSION
 from autoskillit.fleet.state import _write_state as fleet_write_state
+from tests.execution.conftest import _mock_backend, _resolved_launch_contract
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -51,13 +53,60 @@ class TestInitialState:
 
         state = read_state(sp)
         assert state is not None
-        assert state.schema_version == 10
+        assert state.schema_version == 11
         assert state.campaign_id == "cid-1"
         assert state.campaign_name == "my-campaign"
         assert state.manifest_path == "/m.yaml"
         assert len(state.dispatches) == 3
         for d in state.dispatches:
             assert d.status == DispatchStatus.PENDING
+
+    def test_launch_contract_is_persisted_before_spawn_and_strictly_rehydrated(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        state_path = _state_path(tmp_path)
+        write_initial_state(
+            state_path,
+            "cid-1",
+            "my-campaign",
+            "/m.yaml",
+            [DispatchRecord(name="dispatch")],
+        )
+        backend = _mock_backend(channel_b_capable=False, process_name="claude")
+        contract = _resolved_launch_contract(backend, cwd=str(tmp_path))
+
+        bind_dispatch_launch_contract(state_path, "dispatch", contract)
+
+        restored = read_state(state_path)
+        assert restored is not None
+        dispatch = restored.dispatches[0]
+        assert dispatch.backend_authority == contract.backend_authority
+        assert dispatch.launch_contract == contract
+        assert dispatch.launch_contract_digest == contract.digest
+
+        raw = json.loads(state_path.read_text(encoding="utf-8"))
+        raw["dispatches"][0]["launch_contract_digest"] = "0" * 64
+        state_path.write_text(json.dumps(raw), encoding="utf-8")
+        assert read_state(state_path) is None
+
+    def test_schema_v10_state_remains_readable(self, tmp_path: Path) -> None:
+        state_path = _state_path(tmp_path)
+        write_initial_state(
+            state_path,
+            "cid-1",
+            "my-campaign",
+            "/m.yaml",
+            [DispatchRecord(name="dispatch")],
+        )
+        raw = json.loads(state_path.read_text(encoding="utf-8"))
+        raw["schema_version"] = 10
+        state_path.write_text(json.dumps(raw), encoding="utf-8")
+
+        restored = read_state(state_path)
+
+        assert restored is not None
+        assert restored.dispatches[0].launch_contract is None
 
     def test_read_state_round_trips_through_from_dict(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)

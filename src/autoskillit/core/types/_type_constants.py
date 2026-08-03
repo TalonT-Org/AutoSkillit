@@ -10,8 +10,6 @@ from hashlib import sha256
 from types import MappingProxyType
 from typing import NamedTuple
 
-from ._type_constants_registries import SKILL_CAPABILITY_REGISTRY
-
 __all__ = [
     "OUTPUT_DISCIPLINE_POLICY_VERSION",
     "OUTPUT_DISCIPLINE_BLOCK",
@@ -46,10 +44,6 @@ __all__ = [
     "RUN_PYTHON_SENTINEL_KEYS",
     "SCOPE_DIRECTION_SOURCE_TYPES",
     "WORKTREE_SKILLS",
-    "BACKEND_CAPABILITY_INGREDIENTS",
-    "CAPABILITY_INGREDIENT_TO_SKIP_GUARD",
-    "CAPABILITY_INGREDIENT_MAP",
-    "CAPABILITY_GATE_CALLABLES",
     "SkillFamilyDef",
     "GITHUB_API_SKILL_FAMILIES",
     "CODEX_ACTIVE_VIEWS_SUBDIR",
@@ -257,55 +251,6 @@ WORKTREE_SKILLS: frozenset[str] = frozenset(
     }
 )
 
-# Ingredient keys that are derived from a live runtime backend's capabilities
-# (not from LLM-supplied values). Used to gate recipe admission control — a
-# recipe is refused at load time when an ingredient in this set resolves to a
-# falsy value while a surviving step depends on it. Moved to IL-0 so it is
-# importable by the recipe layer (IL-2) without violating the IL-006 contract
-# that forbids recipe → config imports.
-BACKEND_CAPABILITY_INGREDIENTS: frozenset[str] = frozenset(
-    {
-        "backend_supports_git_write",
-    }
-)
-
-# Maps each BACKEND_CAPABILITY_INGREDIENTS key to its corresponding
-# skip_when_false ingredient reference string. Used by capability-feasibility
-# to detect vacuous gates — a gate whose guarded steps were all pruned.
-CAPABILITY_INGREDIENT_TO_SKIP_GUARD: dict[str, str] = {
-    "backend_supports_git_write": "inputs.backend_supports_git_write",
-}
-
-# Maps worker_routable capabilities to the specific recipe ingredients they
-# authorize. Derived from the authoritative capability definitions so recipe
-# admission cannot drift from dispatch-time hard-capability enforcement.
-CAPABILITY_INGREDIENT_MAP: dict[str, str] = {
-    name: capability.required_recipe_ingredient
-    for name, capability in SKILL_CAPABILITY_REGISTRY.items()
-    if capability.required_recipe_ingredient is not None
-}
-
-_UNKNOWN_CAPABILITY_INGREDIENTS = (
-    frozenset(CAPABILITY_INGREDIENT_MAP.values()) - BACKEND_CAPABILITY_INGREDIENTS
-)
-if _UNKNOWN_CAPABILITY_INGREDIENTS:
-    raise RuntimeError(
-        "SKILL_CAPABILITY_REGISTRY references unknown backend capability ingredients: "
-        f"{sorted(_UNKNOWN_CAPABILITY_INGREDIENTS)}"
-    )
-
-# Bare (un-dotted) callable names whose run_python steps are capability gates.
-# Each entry corresponds to a callable in smoke_utils that reads a
-# BACKEND_CAPABILITY_INGREDIENTS key and returns a verdict dict. When a
-# surviving step's with_args["callable"] final component matches an entry here
-# and the corresponding capability ingredient resolves falsy, the recipe is
-# marked dispatch-infeasible at load time.
-CAPABILITY_GATE_CALLABLES: frozenset[str] = frozenset(
-    {
-        "gate_backend_write",
-    }
-)
-
 
 class SkillFamilyDef(NamedTuple):
     """Skill family definition — groups sibling skills that must share API patterns."""
@@ -481,7 +426,6 @@ CONFIG_AUTHORITY_KEYS: frozenset[str] = frozenset(
         "adversarial_review_level",
         "is_fleet_dispatch",
         "dispatch_id",
-        "backend_supports_git_write",
     }
 )
 

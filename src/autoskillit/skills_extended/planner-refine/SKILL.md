@@ -9,6 +9,23 @@ hooks:
         - type: command
           command: "echo '[SKILL: planner-refine] Refining plan...'"
           once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # planner-refine
@@ -76,7 +93,7 @@ dicts). Extract the `message` field from each finding for classification. Group 
 **Failed WPs** (including `elaboration_failed` and `stub_consistency` findings) — re-elaborate:
 - For each failed WP ID, read its `{id}_result.json` from `{$2}/work_packages/` (provides
   `name`, `scope`, `estimated_files`) and its entry from `wp_manifest.json` for status context
-- Spawn a sub-agent with `model: "sonnet"` per failed WP. Provide: WP name, scope,
+- Spawn a sub-agent under the declared `sonnet` model-class policy per failed WP. Provide: WP name, scope,
   estimated_files, and the relevant portion of `wp_index.json` for context
 - Sub-agent writes a corrected `{$2}/work_packages/{id}_result.json`
 - Sub-agent appends corrected compact entry to `wp_index.json`

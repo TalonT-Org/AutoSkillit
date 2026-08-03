@@ -1,16 +1,29 @@
 ---
 name: vis-lens-multi-compare
-categories: [vis-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: "Create Compositional Layout visualization planning spec showing small-multiples vs overlay decisions, faceting strategy (row/col), shared-axis alignment, grouped vs stacked bars, factorial interaction plots, and panel reading order. Compositional lens answering \"Which layout best reveals the comparison structure?\""
+categories:
+- vis-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Create Compositional Layout visualization planning spec showing small-multiples vs overlay decisions, faceting
+  strategy (row/col), shared-axis alignment, grouped vs stacked bars, factorial interaction plots, and panel reading order.
+  Compositional lens answering "Which layout best reveals the comparison structure?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Multi-Compare Lens - Analyzing compositional layout strategy...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Multi-Compare Lens - Analyzing compositional layout strategy...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: mermaid
+  - name: plan-visualization
+  - name: vis-lens-methodology-norms
+  - name: vis-lens-reproducibility
+  - name: vis-lens-story-arc
+  - name: vis-lens-temporal
 ---
 
 # Compositional Layout Visualization Lens

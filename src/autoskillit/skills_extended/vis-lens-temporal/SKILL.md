@@ -1,16 +1,28 @@
 ---
 name: vis-lens-temporal
-categories: [vis-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: "Create Temporal Dynamics visualization planning spec showing axis scaling (linear vs log), smoothing disclosure, epoch/step alignment, run aggregation (mean + variance bands), early-stopping markers, and wall-clock vs step-count x-axis. Temporal lens answering \"Are training dynamics shown clearly and honestly?\""
+categories:
+- vis-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Create Temporal Dynamics visualization planning spec showing axis scaling (linear vs log), smoothing disclosure,
+  epoch/step alignment, run aggregation (mean + variance bands), early-stopping markers, and wall-clock vs step-count x-axis.
+  Temporal lens answering "Are training dynamics shown clearly and honestly?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Temporal Lens - Analyzing training curve representation...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Temporal Lens - Analyzing training curve representation...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: mermaid
+  - name: plan-visualization
+  - name: vis-lens-multi-compare
+  - name: vis-lens-story-arc
+  - name: vis-lens-uncertainty
 ---
 
 # Temporal Dynamics Visualization Lens

@@ -1,17 +1,34 @@
 ---
 name: compose-research-pr
-categories: [research]
-uses_capabilities: [github_api_write]
-description: >
-  Reads a PR prep file and validated experiment diagrams, composes the PR body,
-  and creates the GitHub PR. Part 3 of 3 in the decomposed research-PR flow.
+categories:
+- research
+uses_capabilities:
+- github_api_write
+description: 'Reads a PR prep file and validated experiment diagrams, composes the PR body, and creates the GitHub PR. Part
+  3 of 3 in the decomposed research-PR flow.
+
+  '
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: compose-research-pr] Composing and opening research PR...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: compose-research-pr] Composing and opening research PR...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Compose Research PR
@@ -41,14 +58,14 @@ Does NOT invoke lens skills or other sub-skills.
 - Fabricate diagram descriptions or validation conclusions not present in the source files — report what the files actually contain, not what you assume they should contain
 - Invent mermaid classDef colors — when embedding validated diagrams, include them verbatim.
   Using ONLY classDef styles from the mermaid skill when composing the PR body.
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Check `gh auth status` before attempting GitHub operations
 - Emit `pr_url` token as your final output (even if empty)
-- Use Agent subagents to read the prep file
-- Issue all Task calls in a single message to maximize parallelism
+- Use child delegations to read the prep file
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Diagram Validation Keywords
 
@@ -79,9 +96,9 @@ Create temp directory:
 
 Generate a timestamp `ts` for unique file naming.
 
-### Step 1: Read prep file via Agent subagent (SINGLE MESSAGE)
+### Step 1: Read prep file via child delegation (SINGLE MESSAGE)
 
-**Issue ALL Task/Explore subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Issue ALL backend-adapted child-delegation calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 

@@ -529,8 +529,8 @@ def _check_config_authority_requires_resolve_source(ctx: ValidationContext) -> l
                     message=(
                         f"Ingredient {name!r} declares authority='config' but is not a recognized "
                         f"config-authoritative key. Known keys come from "
-                        f"SERVER_AUTHORITATIVE_INGREDIENTS, BACKEND_CAPABILITY_INGREDIENTS, "
-                        f"or source_dir: {sorted(CONFIG_AUTHORITY_KEYS)}. "
+                        f"SERVER_AUTHORITATIVE_INGREDIENTS or source_dir: "
+                        f"{sorted(CONFIG_AUTHORITY_KEYS)}. "
                         f"Add the key to the appropriate registry in ingredient_defaults.py."
                     ),
                 )

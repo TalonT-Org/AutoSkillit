@@ -1,15 +1,32 @@
 ---
 name: resolve-review
 categories: [github]
-uses_capabilities: [agent_model, commit_files, github_api_write]
+uses_capabilities: [commit_files, github_api_write]
 description: Fetch PR review comments, run intent validation (ACCEPT/REJECT/DISCUSS) before applying fixes, publish deferred observations through the structured review tool, and resolve addressed threads. MCP-only — used exclusively by recipe orchestration via run_skill after review_pr reports changes_requested or needs_human verdict.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: resolve-review] Resolving PR review comments...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: resolve-review] Resolving PR review comments...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Resolve Review Skill
@@ -51,8 +68,8 @@ branch already checked out.
 - Exceed 3 fix-and-retest iterations
 - Delete or discard the working directory on failure
 - Modify tests to suppress failures introduced by reviewer fixes
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 - Classify a finding as ACCEPT when the proposed change violates a project-wide
   architectural constraint listed in the Architectural Constraint Catalog
 
@@ -66,7 +83,7 @@ branch already checked out.
 - Report a structured summary: findings fetched, fixes applied, fixes skipped (with reasons)
 - **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error. **Note:** Reads performed by subagents (Task/Agent) do NOT satisfy this requirement — they run in a child session whose reads are invisible to the parent. If a file was only read inside a subagent, you must Read it again in this main session before calling Edit.
 - **CWD awareness**: Before running `python3` or other interpreters, verify your current working directory is the worktree root (not the orchestrator's project root). Use absolute paths for imports or `cd` to the worktree first. A wrong-CWD import error wastes a full API turn.
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Context Limit Behavior
 
@@ -358,7 +375,7 @@ Critical and warning findings proceed to intent validation (Step 3.5). Info find
 
 ### Step 3.5: Intent Validation (Parallel Sub-Agents — BEFORE any code changes) (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
@@ -380,7 +397,7 @@ source files if a comment explicitly references code outside the hunk or the
 identical to the sub-agent path.
 
 This produces 3–6 groups on a typical PR. Launch one parallel sub-agent per group via
-`Agent(model="sonnet")`.
+`child delegation under the declared `sonnet` model-class policy`.
 
 **Context resolution hierarchy** (applied per finding):
 1. **`diff_context_map` code_region** — richest context (±50 annotated diff lines); used when review-pr ran in the same pipeline and wrote the handoff file.

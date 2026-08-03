@@ -327,6 +327,16 @@ class ProjectedPluginArtifactAuthority:
             f"{info.name}:{info.canonical_digest}"
             for info in sorted(catalog.skills, key=lambda skill: skill.name)
         )
+        adaptation_identity_parts: list[str] = []
+        for skill in sorted(catalog.skills, key=lambda item: item.name):
+            plan = skill.semantic_plan
+            if plan is None:
+                adaptation_identity_parts.append(f"{skill.name}:")
+                continue
+            adaptation = backend.adapt_skill_semantics(plan)
+            adaptation.validate_for(plan, backend=backend.name)
+            adaptation_identity_parts.append(f"{skill.name}:{adaptation.digest}")
+        adaptation_identity = "\n".join(adaptation_identity_parts)
         namespace_identity = "\n".join(
             f"{name}:{source.value}" for name, source in sorted(catalog.namespace_sources.items())
         )
@@ -336,6 +346,7 @@ class ProjectedPluginArtifactAuthority:
             projection_version=self.projection_version,
             default_base_branch=_default_base_branch(self.base_branch),
             skill_identity=skill_identity,
+            adaptation_identity=adaptation_identity,
             namespace_identity=namespace_identity,
             asset_digest=public_plugin_asset_digest(source_root),
         ).digest()

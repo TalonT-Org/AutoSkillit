@@ -1,15 +1,31 @@
 ---
 name: review-research-pr
 categories: [research]
-uses_capabilities: [agent_model]
 description: Automated diff-scoped research PR review using parallel audit subagents aligned to research quality dimensions. Posts inline GitHub review comments and submits a summary verdict. Use after a research PR is opened to gate on review approval.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: review-research-pr] Reviewing research pull request...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: review-research-pr] Reviewing research pull request...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Review Research PR Skill
@@ -47,18 +63,18 @@ a summary verdict. Called by the recipe pipeline after `open_research_pr` opens 
 - Modify any source code
 - Flag the absence of a clear experimental conclusion as a deficiency — inconclusive
   results are valid outcomes for research PRs (do not flag them)
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 - Embed diff content inline in subagent prompts — always pass by path and instruct subagents to Read
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not from a pre-captured URL)
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Output `verdict=` on the final line
 - Exit 0 in all normal cases; verdict drives recipe routing via on_result, not exit code
 - Exit non-zero only for unrecoverable errors (e.g., gh CLI truly unavailable after graceful degradation has already output verdict=needs_human)
 - Tag the authenticated GitHub user (`gh api user -q .login`) in escalation comments (`needs_human` verdict) — omit the mention silently if username derivation fails
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Deduplicate findings by (file, line) pairs before posting
 
 ## Workflow
@@ -133,11 +149,11 @@ validation. `VALID_LINE_RANGES` is used as fallback for interval checking.
 
 ### Step 3: Run Parallel Audit Subagents (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn parallel subagents via `Agent(model="sonnet")` for each research audit dimension.
+Spawn parallel subagents via `child delegation under the declared `sonnet` model-class policy` for each research audit dimension.
 Each subagent receives only the PR diff content (not the full codebase) and returns
 findings in JSON format:
 

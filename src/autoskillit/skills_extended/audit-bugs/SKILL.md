@@ -1,15 +1,33 @@
 ---
 name: audit-bugs
-categories: [audit]
-uses_capabilities: [claude_dir]
-description: Analyze historical bug patterns by mining Claude Code project logs for /autoskillit:investigate skill invocations since a specified date. Identifies recurring root causes, architectural gaps, and proactive detection strategies. Use when user says "audit bugs", "bug patterns", "analyze investigations", or "bug audit".
+categories:
+- audit
+uses_capabilities:
+- claude_dir
+description: Analyze historical bug patterns by mining Claude Code project logs for /autoskillit:investigate skill invocations
+  since a specified date. Identifies recurring root causes, architectural gaps, and proactive detection strategies. Use when
+  user says "audit bugs", "bug patterns", "analyze investigations", or "bug audit".
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: audit-bugs] Mining investigation logs for bug patterns...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: audit-bugs] Mining investigation logs for bug patterns...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Bug Pattern Audit Skill
@@ -48,8 +66,8 @@ The user may provide a "since" date (e.g., `2/7`, `2026-02-07`, `last week`). If
 
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/audit-bugs/` directory
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Use subagents heavily for parallel log analysis
@@ -57,7 +75,7 @@ The user may provide a "since" date (e.g., `2/7`, `2026-02-07`, `last week`). If
 - Final report: `{{AUTOSKILLIT_TEMP}}/audit-bugs/bug_pattern_audit_{YYYY-MM-DD_HHMMSS}.md`
 - Subagents must NOT create their own files - they return findings in their response text only
 - Do not change any code
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -85,7 +103,7 @@ Verify the directory exists and contains `.jsonl` files.
 
 ### Step 3: Dispatch Subagents for Parallel Analysis (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 

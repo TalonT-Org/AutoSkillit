@@ -1,8 +1,19 @@
 ---
 name: sous-chef
-uses_capabilities: [cross_skill_ref, github_api_write, open_kitchen, run_skill, test_check]
+uses_capabilities:
+- github_api_write
+- open_kitchen
+- run_skill
+- test_check
 execution_role: orchestrator
 description: Internal bootstrap document injected by open_kitchen into every orchestrator session.
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: arch-lens-
+  - name: build-execution-map
+  - name: implement-worktree-no-merge
+  - name: retry-worktree
 ---
 <!-- Internal bootstrap document — not a user-invocable skill.
      Injected by open_kitchen() into every orchestrator session. -->

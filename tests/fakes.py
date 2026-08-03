@@ -18,13 +18,17 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core.types import (
+    BackendAuthority,
     CIRunScope,
     CIWatcher,
     ClosureAuthoritySpec,
+    CmdSpec,
     CodingAgentBackend,
     DatabaseReader,
     HeadlessExecutor,
-    HeadlessSkillDispatchPreparation,
+    LaunchAdapter,
+    LaunchPreparation,
+    LaunchResolutionRequest,
     ManagedHeadlessSessionKind,
     ManagedHeadlessSessionLineage,
     ManagedHeadlessSessionLineageRef,
@@ -39,8 +43,12 @@ from autoskillit.core.types import (
     ProcessStaleError,
     RecipeNotFoundError,
     RecipeRepository,
+    ResolvedLaunchContract,
     SessionCheckpoint,  # noqa: F401, TC001
+    SkillProjectionPreparation,
     SkillResult,
+    SkillSemanticAdaptationResult,
+    SkillSemanticPlan,
     SubprocessResult,
     SubprocessRunner,
     TerminationReason,
@@ -48,6 +56,74 @@ from autoskillit.core.types import (
     TestRunner,
     WriteBehaviorSpec,
 )
+
+
+def adapt_test_skill_semantics(
+    plan: SkillSemanticPlan,
+) -> SkillSemanticAdaptationResult:
+    """Return a deterministic protocol-complete adaptation for backend test doubles."""
+    logical_roles = {role.name: role.name for role in plan.logical_roles}
+    result = SkillSemanticAdaptationResult(
+        instruction_fragments=("Use deterministic test-native skill semantics.",)
+        if plan.operations
+        else (),
+        logical_role_mapping=logical_roles,
+        sibling_skill_targets={
+            sibling.name: f"${sibling.name}" for sibling in plan.sibling_skills
+        },
+        model_effort_policy={
+            logical_roles[policy.role]: (
+                policy.model_class or "",
+                policy.reasoning_effort,
+            )
+            for policy in plan.child_model_policies
+        },
+    )
+    result.validate_for(plan, backend="test")
+    return result
+
+
+class FakeLaunchResolver:
+    """Non-launching protocol fake for contexts outside execution tests."""
+
+    def prepare(self, request: LaunchResolutionRequest) -> LaunchPreparation:
+        raise AssertionError(f"unexpected launch preparation for {request.surface.value}")
+
+    def prepare_resume(
+        self,
+        contract: ResolvedLaunchContract,
+        *,
+        command: str,
+        cwd: str,
+    ) -> LaunchPreparation:
+        raise AssertionError(f"unexpected resume preparation for {contract.surface.value}")
+
+    def backend_for_authority(self, authority: BackendAuthority) -> CodingAgentBackend:
+        raise AssertionError(f"unexpected backend lookup for {authority.key_path}")
+
+    def backend_for(self, preparation: LaunchPreparation) -> CodingAgentBackend:
+        raise AssertionError(f"unexpected backend lookup for {preparation.surface.value}")
+
+    def finalize(
+        self, preparation: LaunchPreparation, adapter: LaunchAdapter
+    ) -> ResolvedLaunchContract:
+        raise AssertionError(f"unexpected launch finalization for {preparation.surface.value}")
+
+    def validate_resume(
+        self,
+        expected: ResolvedLaunchContract,
+        actual: ResolvedLaunchContract,
+    ) -> None:
+        raise AssertionError(f"unexpected resume validation for {expected.surface.value}")
+
+    def rehydrate_secret_environment(
+        self,
+        contract: ResolvedLaunchContract,
+        secret_environment: Mapping[str, str],
+        *,
+        inherited_fds: tuple[int, ...] = (),
+    ) -> CmdSpec:
+        raise AssertionError(f"unexpected secret rehydration for {contract.surface.value}")
 
 
 class FakeSkillSessionContractStore:
@@ -65,6 +141,13 @@ class FakeSkillSessionContractStore:
 
     def observe_candidate(self, correlation_key: str, session_id: str) -> None:
         raise AssertionError("unexpected skill session candidate")
+
+    def bind_launch(
+        self,
+        correlation_key: str,
+        launch_contract: ResolvedLaunchContract,
+    ) -> None:
+        raise AssertionError("unexpected skill session launch binding")
 
     def finalize(self, correlation_key: str, session_id: str) -> None:
         raise AssertionError("unexpected skill session finalization")
@@ -265,6 +348,27 @@ class FakeManagedHeadlessSessionLineageStore:
                 session_id,
             ),
         )
+        self._records[launch_id] = updated
+        return updated
+
+    def bind_launch_contract_digest(
+        self,
+        *,
+        lineage_anchor: Path,
+        launch_id: str,
+        launch_contract_digest: str,
+        expected_generation: int,
+        expected_record_digest: str,
+    ) -> ManagedHeadlessSessionLineage:
+        current = self._current(
+            lineage_anchor,
+            launch_id,
+            expected_generation,
+            expected_record_digest,
+        )
+        if current.launch_contract_digest == launch_contract_digest:
+            return current
+        updated = self._next(current, launch_contract_digest=launch_contract_digest)
         self._records[launch_id] = updated
         return updated
 
@@ -544,8 +648,8 @@ class ExecutorCall:
     resume_session_id: str = ""
     resume_checkpoint: SessionCheckpoint | None = None
     resume_message: str | None = None
-    backend_override: str | None = None
-    backend_override_source: str | None = None
+    resume_launch_contract: ResolvedLaunchContract | None = None
+    backend_authority: BackendAuthority | None = None
     marker_dir: Path | None = None
     caller_session_id: str | None = None
     inspector_eligible: bool = False
@@ -558,6 +662,7 @@ class ExecutorCall:
     on_session_id_resolved: Callable[[str], None] | None = None
     native_shell_capture_decision: NativeShellCaptureDecision | None = None
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
+    on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None
 
 
 @dataclasses.dataclass
@@ -596,10 +701,11 @@ class DispatchFoodTruckCall:
     session_id: str | None = None
     resume_message: str | None = None
     on_session_id_resolved: Callable[[str], None] | None = None
-    backend_override: str | None = None
-    capability_preparation: HeadlessSkillDispatchPreparation | None = None
+    backend_authority: BackendAuthority | None = None
+    capability_preparation: SkillProjectionPreparation | None = None
     native_shell_capture_decision: NativeShellCaptureDecision | None = None
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
+    on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None
 
 
 _DEFAULT_SKILL_RESULT = SkillResult(
@@ -666,8 +772,8 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         resume_session_id: str = "",
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
-        backend_override: str | None = None,
-        backend_override_source: str | None = None,
+        resume_launch_contract: ResolvedLaunchContract | None = None,
+        backend_authority: BackendAuthority | None = None,
         marker_dir: Path | None = None,
         caller_session_id: str | None = None,
         inspector_eligible: bool = False,
@@ -680,6 +786,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         on_session_id_resolved: Callable[[str], None] | None = None,
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
+        on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
     ) -> SkillResult:
         self.calls.append(
             ExecutorCall(
@@ -713,8 +820,8 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 resume_session_id=resume_session_id,
                 resume_checkpoint=resume_checkpoint,
                 resume_message=resume_message,
-                backend_override=backend_override,
-                backend_override_source=backend_override_source,
+                resume_launch_contract=resume_launch_contract,
+                backend_authority=backend_authority,
                 marker_dir=marker_dir,
                 caller_session_id=caller_session_id,
                 inspector_eligible=inspector_eligible,
@@ -727,6 +834,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 on_session_id_resolved=on_session_id_resolved,
                 native_shell_capture_decision=native_shell_capture_decision,
                 managed_lineage_ref=managed_lineage_ref,
+                on_launch_resolved=on_launch_resolved,
             )
         )
         if self._queue:
@@ -776,10 +884,11 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         session_id: str | None = None,
         resume_message: str | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
-        backend_override: str | None = None,
-        capability_preparation: HeadlessSkillDispatchPreparation | None = None,
+        backend_authority: BackendAuthority | None = None,
+        capability_preparation: SkillProjectionPreparation | None = None,
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
+        on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
     ) -> SkillResult:
         self.dispatch_calls.append(
             DispatchFoodTruckCall(
@@ -815,10 +924,11 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 session_id=session_id,
                 resume_message=resume_message,
                 on_session_id_resolved=on_session_id_resolved,
-                backend_override=backend_override,
+                backend_authority=backend_authority,
                 capability_preparation=capability_preparation,
                 native_shell_capture_decision=native_shell_capture_decision,
                 managed_lineage_ref=managed_lineage_ref,
+                on_launch_resolved=on_launch_resolved,
             )
         )
         if self._queue:

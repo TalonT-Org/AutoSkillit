@@ -1,15 +1,24 @@
 ---
 name: elaborate-phase
-uses_capabilities: [cross_skill_ref]
-activate_deps: [dry-walkthrough]
-description: Elaborate a migration plan phase into a complete self-contained implementation plan. Use when user says "elaborate phase", "elaborate phase N", or "phase elaboration". Assesses codebase, writes detailed phase plan, then validates with dry walkthrough.
+uses_capabilities: []
+activate_deps:
+- dry-walkthrough
+description: Elaborate a migration plan phase into a complete self-contained implementation plan. Use when user says "elaborate
+  phase", "elaborate phase N", or "phase elaboration". Assesses codebase, writes detailed phase plan, then validates with
+  dry walkthrough.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '📝 [SKILL: elaborate-phase] Elaborating migration phase into self-contained plan...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''📝 [SKILL: elaborate-phase] Elaborating migration phase into self-contained plan...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: dry-walkthrough
+  - name: implement-worktree
+  - name: make-plan
 ---
 
 # Phase Elaboration Skill
@@ -38,8 +47,8 @@ Elaborate a single phase from a high-level migration plan into a complete, self-
 - Elaborate multiple phases at once - one phase per invocation
 - Make assumptions about codebase state without verifying
 - Read previous `Phase#.md` files unless you have a specific question that requires looking up a detail
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Assess current codebase state with subagents FIRST
@@ -49,7 +58,7 @@ Elaborate a single phase from a high-level migration plan into a complete, self-
 - Include verification commands and success criteria
 - Report findings to terminal output
 - Update the master plan if dry walkthrough reveals issues affecting subsequent phases
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Plan Directory Structure
 
@@ -116,11 +125,11 @@ Load and understand:
 
 ### Step 3: Assess Current Codebase State (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Launch **parallel Explore subagents** to understand the current state:
+Launch **parallel child delegations** to understand the current state:
 
 ```
 Subagent 1: Affected Files Assessment

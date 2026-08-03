@@ -1,16 +1,26 @@
 ---
 name: exp-lens-comparator-construction
-categories: [exp-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: Create Comparator Construction experimental design analysis assessing whether baselines and controls are fair and relevant. Counterfactual lens answering "Is the comparator fair and relevant?"
+categories:
+- exp-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Create Comparator Construction experimental design analysis assessing whether baselines and controls are fair
+  and relevant. Counterfactual lens answering "Is the comparator fair and relevant?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Comparator Construction Lens - Analyzing baseline fairness...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Comparator Construction Lens - Analyzing baseline fairness...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: exp-lens-estimand-clarity
+  - name: exp-lens-fair-comparison
+  - name: make-experiment-diag
+  - name: mermaid
 ---
 
 # Comparator Construction Experimental Design Lens
@@ -47,8 +57,8 @@ hooks:
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Accept at face value that baselines received symmetric treatment
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-comparator-construction/`
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Build a fairness matrix covering all treatment-vs-comparator pairs
@@ -57,7 +67,7 @@ hooks:
 - Identify temporal drift in baseline relevance
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-comparator-construction/exp_diag_comparator_construction_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -84,7 +94,7 @@ exploration for these fields if the context file supplies them. For any field ab
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn Explore subagents to investigate:
+Spawn child delegations to investigate:
 
 **Baseline/Control Definitions**
 - Find what the proposed method is compared against

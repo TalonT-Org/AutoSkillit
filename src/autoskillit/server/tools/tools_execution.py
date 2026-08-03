@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
 
 from autoskillit.core import (
-    AGENT_BACKEND_CLAUDE_CODE,
     CODEX_SESSIONS_SUBDIR,
     DISPATCH_ID_ENV_VAR,
     RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE,
@@ -39,6 +38,9 @@ from autoskillit.core import (
     AuditReservationRequest,
     AuditResultOutcome,
     AuditVerdict,
+    BackendAuthority,
+    BackendAuthorityKind,
+    BackendAuthorityTier,
     BoundScalar,
     ClosureAuthoritySpec,
     CodingAgentBackend,
@@ -49,6 +51,7 @@ from autoskillit.core import (
     NativeShellCaptureDecision,
     RecipeExecutionId,
     ReservationDecision,
+    ResolvedLaunchContract,
     SkillContractError,
     SkillExecutionRole,
     SkillResult,
@@ -98,9 +101,6 @@ from autoskillit.server._misc import (
     _hook_config_overlay_path,
     resolve_closure_write_dirs,
 )
-from autoskillit.server._misc import (
-    get_backend as _get_backend,
-)
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._recipe_execution import (
     RecipeExecutionAdmissionError,
@@ -118,10 +118,7 @@ from autoskillit.server._recipe_execution import (
     required_audit_finalization_effect_names as _required_audit_finalization_effect_names,
 )
 from autoskillit.server._subprocess import _run_subprocess_captured
-from autoskillit.server.tools._backend_compat import (
-    _check_backend_compat,
-    _is_backend_incompatible,  # noqa: F401  (re-exported for tests/arch/test_cross_registry_dispatch_sufficiency.py and tests/server/test_run_skill_backend_compat.py)
-)
+from autoskillit.server.tools._backend_compat import _check_backend_compat
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (
     AuditOutputMode,
@@ -162,12 +159,6 @@ from autoskillit.server.tools._execution_helpers import (
     derive_run_cmd_write_prefixes as _derive_run_cmd_write_prefixes,
 )
 from autoskillit.server.tools._execution_helpers import (
-    get_routing_caps as _get_routing_caps,
-)
-from autoskillit.server.tools._execution_helpers import (
-    has_routing_capability as _has_routing_capability,
-)
-from autoskillit.server.tools._execution_helpers import (
     make_project_skill_resolver as _make_project_skill_resolver,
 )
 from autoskillit.server.tools._execution_helpers import (
@@ -188,9 +179,6 @@ from autoskillit.server.tools._execution_helpers import (
 from autoskillit.server.tools._native_shell_capture import (
     prepare_skill_native_shell_lineage,
     rebind_verified_final_session,
-)
-from autoskillit.server.tools._preflight import (
-    _get_fix_required_hook_matchers,  # noqa: F401  (re-exported for tests/server/test_admission_dispatch_agreement.py)
 )
 from autoskillit.server.tools._types import ToolFailureEnvelope, deny_envelope
 
@@ -929,6 +917,8 @@ async def run_skill(
         _native_shell_capture_decision: NativeShellCaptureDecision | None = None
         _managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
         _resume_backend_obj: CodingAgentBackend | None = None
+        _resume_backend_authority: BackendAuthority | None = None
+        _resume_launch_contract: ResolvedLaunchContract | None = None
         _effective_skill_resolver = None
         invocation: EffectiveSkillInvocationAuthority | None = None
         projection_context: SkillProjectionContext | None = None
@@ -936,7 +926,13 @@ async def run_skill(
         if resume_session_id:
             try:
                 _stored_contract_entry = _contract_store.load(resume_session_id)
-                _resume_backend_obj = _get_backend(_stored_contract_entry.contract.backend)
+                _resume_launch_contract = _stored_contract_entry.contract.launch_contract
+                if _resume_launch_contract is None:
+                    raise SkillContractError("Resume contract has no resolved launch contract")
+                _resume_backend_authority = _resume_launch_contract.backend_authority
+                _resume_backend_obj = tool_ctx.launch_resolver.backend_for_authority(
+                    _resume_backend_authority
+                )
                 _validate_resumed_skill_contract(
                     _stored_contract_entry.contract,
                     cwd=cwd,
@@ -1490,15 +1486,9 @@ async def run_skill(
             )
             _effective_skill_contract = invocation if invocation is not None else _stored_contract
 
-            _provider_override = (
-                provider_extras
-                and "ANTHROPIC_BASE_URL" in provider_extras
-                and tool_ctx.backend is not None
-                and not tool_ctx.backend.capabilities.anthropic_provider_capable
-            )
-
-            # Explicit config backend override — highest authority, suppresses
-            # capability-driven routing for this step (REQ-RES-001).
+            # Config pins and the global configured backend are the only fresh
+            # launch authorities. Provider/model/capability metadata is never
+            # permitted to select a backend.
             from autoskillit.server._guards import _resolve_backend_override  # circular-break
 
             _explicit_resolution = _resolve_backend_override(
@@ -1506,10 +1496,6 @@ async def run_skill(
                 tool_ctx.recipe_name or "",
                 _cfg.agent_backend,
             )
-            _explicit_backend_override: str | None = (
-                _explicit_resolution.backend if _explicit_resolution else None
-            )
-
             _skill_caps: frozenset[str] = (
                 invocation.capability_union
                 if invocation is not None
@@ -1519,91 +1505,56 @@ async def run_skill(
             )
             _sandbox_overrides = _aggregate_sandbox_overrides(_skill_caps)
             _network_access = "sandbox_workspace_write.network_access=true" in _sandbox_overrides
-            _has_routing_cap = _has_routing_capability(_skill_caps)
-            _routing_caps = _get_routing_caps(_skill_caps) if _has_routing_cap else []
-            _skill_requires_claude = bool(
-                _has_routing_cap
-                and tool_ctx.backend is not None
-                and not tool_ctx.backend.capabilities.anthropic_provider_capable
-            )
+            if _stored_contract is not None:
+                if _resume_backend_authority is None or _resume_backend_obj is None:
+                    raise SkillContractError("Resume launch authority is unavailable")
+                _backend_authority = _resume_backend_authority
+                _effective_backend_obj = _resume_backend_obj
+            elif _explicit_resolution is not None:
+                authority_kind = (
+                    BackendAuthorityKind.RECIPE
+                    if _explicit_resolution.tier.startswith("recipe_")
+                    else BackendAuthorityKind.STEP
+                )
+                authority_tier = (
+                    BackendAuthorityTier.RECIPE
+                    if authority_kind is BackendAuthorityKind.RECIPE
+                    else BackendAuthorityTier.STEP
+                )
+                _backend_authority = BackendAuthority(
+                    backend=_explicit_resolution.backend,
+                    kind=authority_kind,
+                    tier=authority_tier,
+                    key_path=_explicit_resolution.key_path,
+                )
+                _effective_backend_obj = tool_ctx.launch_resolver.backend_for_authority(
+                    _backend_authority
+                )
+            else:
+                if tool_ctx.backend is None:
+                    raise SkillContractError("Global launch backend is unavailable")
+                _backend_authority = BackendAuthority(
+                    backend=tool_ctx.backend.name,
+                    kind=BackendAuthorityKind.GLOBAL,
+                    tier=BackendAuthorityTier.GLOBAL,
+                    key_path="agent_backend.backend",
+                )
+                _effective_backend_obj = tool_ctx.launch_resolver.backend_for_authority(
+                    _backend_authority
+                )
 
-            # When an explicit backend override pins a step to a non-claude
-            # backend, capability-driven routing must NOT crash on the missing
-            # claude binary — the operator has explicitly chosen the backend.
-            if (
-                _stored_contract is None
-                and _skill_requires_claude
-                and _explicit_backend_override is None
-            ):
-                if shutil.which("claude") is None:
-                    return SkillResult.crashed(
-                        exception=RuntimeError(
-                            f"Skill {target_name!r} requires claude-code backend "
-                            f"({', '.join(_routing_caps)} capability) but 'claude' binary "
-                            f"is not found on PATH. Install Claude Code CLI to "
-                            f"enable capability-driven routing."
-                        ),
-                        skill_command=resolved_command,
-                        order_id=effective_order_id,
-                    ).to_json()
-
-            # If an explicit override points to a non-claude backend whose
-            # binary is absent, fail closed with a clear message.
-            if (
-                _stored_contract is None
-                and _explicit_backend_override is not None
-                and _explicit_backend_override
-                != (tool_ctx.backend.name if tool_ctx.backend else None)
-            ):
-                try:
-                    _explicit_backend_obj_check = _get_backend(_explicit_backend_override)
-                except Exception:
-                    logger.warning(
-                        "explicit_backend_resolve_failed",
-                        backend=_explicit_backend_override,
-                        exc_info=True,
-                    )
+            if _explicit_resolution is not None:
+                _explicit_binary = _effective_backend_obj.capabilities.process_name
+                if _explicit_binary and shutil.which(_explicit_binary) is None:
                     return SkillResult.crashed(
                         exception=RuntimeError(
                             f"Step explicitly pinned to backend "
-                            f"{_explicit_backend_override!r} but that backend "
-                            f"is not registered. Check step_overrides / "
-                            f"recipe_overrides for typos."
+                            f"{_explicit_resolution.backend!r} but required binary "
+                            f"{_explicit_binary!r} is not found on PATH."
                         ),
                         skill_command=resolved_command,
                         order_id=effective_order_id,
                     ).to_json()
-                if _explicit_backend_obj_check is not None:
-                    _explicit_binary = getattr(
-                        _explicit_backend_obj_check.capabilities, "process_name", ""
-                    )
-                    if _explicit_binary and shutil.which(_explicit_binary) is None:
-                        return SkillResult.crashed(
-                            exception=RuntimeError(
-                                f"Step explicitly pinned to backend "
-                                f"{_explicit_backend_override!r} but required binary "
-                                f"{_explicit_binary!r} is not found on PATH."
-                            ),
-                            skill_command=resolved_command,
-                            order_id=effective_order_id,
-                        ).to_json()
-
-            if _stored_contract is not None:
-                backend_override = _stored_contract.backend
-            elif _explicit_backend_override is not None:
-                backend_override = _explicit_backend_override
-            elif _provider_override or _skill_requires_claude:
-                backend_override = AGENT_BACKEND_CLAUDE_CODE
-            else:
-                backend_override = None
-
-            _effective_backend_obj: CodingAgentBackend | None = (
-                _resume_backend_obj
-                if _stored_contract is not None
-                else _get_backend(backend_override)
-                if backend_override is not None and tool_ctx.backend is not None
-                else tool_ctx.backend
-            )
             if _stored_contract is None:
                 projection_context = bind_projection_backend(
                     projection_context, _effective_backend_obj
@@ -1621,29 +1572,13 @@ async def run_skill(
                     ),
                 )
 
-            _backend_override_source: str | None = None
-            if _stored_contract is not None:
-                _backend_override_source = "stored_contract"
-            elif _explicit_resolution is not None:
-                _backend_override_source = _explicit_resolution.key_path
-            elif _skill_requires_claude:
-                _backend_override_source = "skill_requirement"
-            elif _provider_override:
-                _backend_override_source = "provider_profile"
-
-            if backend_override:
-                _override_reasons: list[str] = (
-                    [_backend_override_source] if _backend_override_source else []
-                )
+            if _backend_authority.kind is not BackendAuthorityKind.GLOBAL:
                 logger.info(
                     "backend_override_activated",
-                    reason=(
-                        _override_reasons[0] if len(_override_reasons) == 1 else _override_reasons
-                    ),
+                    reason=_backend_authority.key_path,
                     skill=skill_command,
                     original_backend=tool_ctx.backend.name if tool_ctx.backend else "none",
-                    target_backend=backend_override,
-                    routing_capabilities=_routing_caps,
+                    target_backend=_backend_authority.backend,
                 )
 
             expected_output_patterns, write_spec, _skill_contract = (
@@ -2004,9 +1939,9 @@ async def run_skill(
                                 provider_extras=provider_extras,
                                 profile_name=profile_name_out,
                                 provider_name=profile_name_out,
-                                backend_override=backend_override,
-                                backend_override_source=_backend_override_source,
+                                backend_authority=_backend_authority,
                                 resume_session_id=resume_session_id,
+                                resume_launch_contract=_resume_launch_contract,
                                 marker_dir=_marker_dir,
                                 caller_session_id=_orchestrator_sid,
                                 inspector_eligible=_in_fleet_dispatch and bool(_inspector_model),
@@ -2018,6 +1953,7 @@ async def run_skill(
                                 capability_contract=_capability_contract,
                                 native_shell_capture_decision=(_native_shell_capture_decision),
                                 managed_lineage_ref=_managed_lineage_ref,
+                                on_launch_resolved=contract_lifecycle.bind_launch,
                                 on_session_id_resolved=(
                                     _observe_contract_session_id
                                     if contract_lifecycle.correlation_key is not None

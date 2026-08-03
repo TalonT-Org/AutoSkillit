@@ -1,17 +1,28 @@
 ---
 name: arch-lens-state-lifecycle
-categories: [arch-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-write_paths: ["{{AUTOSKILLIT_TEMP}}/arch-lens-state-lifecycle/"]
-description: Create State Lifecycle architecture diagram showing field contracts, validation gates, and resume safety. Contract overlay lens answering "How is state corruption prevented?"
+categories:
+- arch-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/arch-lens-state-lifecycle/'
+description: Create State Lifecycle architecture diagram showing field contracts, validation gates, and resume safety. Contract
+  overlay lens answering "How is state corruption prevented?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'State Lifecycle Lens - Analyzing state contracts...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'State Lifecycle Lens - Analyzing state contracts...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: arch-lens-error-resilience
+  - name: arch-lens-process-flow
+  - name: make-arch-diag
+  - name: mermaid
 ---
 
 # State Lifecycle Architecture Lens
@@ -48,8 +59,8 @@ hooks:
 - Modify any source code files
 - Show business logic details
 - Focus on data content (focus on mutation rules)
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Focus on STATE MUTATION RULES
@@ -65,7 +76,7 @@ hooks:
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-state-lifecycle/arch_diag_state_lifecycle_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 
 ## Analysis Workflow
@@ -87,7 +98,7 @@ If no `context_path` is provided, skip this step and explore the full CWD in Ste
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn Explore subagents to investigate:
+Spawn child delegations to investigate:
 
 **State Schema**
 - Find state/context definitions

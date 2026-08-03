@@ -5,10 +5,11 @@ from __future__ import annotations
 import ast
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
-from tests.execution.conftest import _mock_backend
+from tests.execution.conftest import _launch_preparation, _mock_backend
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -33,7 +34,10 @@ def _find_call(func_node: ast.AST, callee_name: str) -> ast.Call | None:
 class TestDispatchFoodTruckPtyOverrideGuard:
     def test_dispatch_food_truck_passes_pty_override_false(self) -> None:
         """dispatch_food_truck must call _execute_claude_headless with pty_override=False."""
-        src = Path(__file__).parents[2] / "src/autoskillit/execution/headless/__init__.py"
+        src = (
+            Path(__file__).parents[2]
+            / "src/autoskillit/execution/headless/_managed/_food_truck_executor.py"
+        )
         tree = ast.parse(src.read_text())
 
         dispatch_func = _find_function(tree, "dispatch_food_truck")
@@ -144,16 +148,27 @@ class TestBoundaryPtyDispatchPaths:
         minimal_ctx.runner = runner
         backend = _mock_backend(pty_required=True)
         minimal_ctx.backend = backend
+        launch_preparation = _launch_preparation(
+            minimal_ctx,
+            cwd=str(tmp_path),
+            backend=backend.name,
+        )
 
         spec = CmdSpec(cmd=("claude", "--print", "do something"), env={})
-        await _execute_claude_headless(
-            lambda _binding, _provider_extras: spec,
-            cwd=str(tmp_path),
-            ctx=minimal_ctx,
-            timeout=10.0,
-            stale_threshold=60.0,
-            step_backend=backend,
-        )
+        with patch.object(
+            minimal_ctx.launch_resolver,
+            "backend_for",
+            return_value=backend,
+        ):
+            await _execute_claude_headless(
+                lambda _binding, _provider_extras: spec,
+                cwd=str(tmp_path),
+                ctx=minimal_ctx,
+                timeout=10.0,
+                stale_threshold=60.0,
+                launch_resolver=minimal_ctx.launch_resolver,
+                launch_preparation=launch_preparation,
+            )
 
         assert runner.last_pty_mode is True, (
             f"run_headless_core with Claude Code backend (pty_required=True) must use "

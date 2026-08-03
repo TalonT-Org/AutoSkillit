@@ -26,7 +26,6 @@ from autoskillit.core import (
     get_logger,
     new_managed_attempt_id,
 )
-from autoskillit.execution.backends import get_backend
 from autoskillit.execution.session import ManagedHeadlessSessionLineageCASMismatch
 
 logger = get_logger(__name__)
@@ -48,7 +47,7 @@ class _ManagedLineageObserver:
         store: ManagedHeadlessSessionLineageStore,
         decision: NativeShellCaptureDecision,
         reference: ManagedHeadlessSessionLineageRef,
-        backend: str,
+        backend: CodingAgentBackend,
         session_kind: ManagedHeadlessSessionKind,
     ) -> None:
         self.store = store
@@ -57,11 +56,11 @@ class _ManagedLineageObserver:
         lineage = store.load_reference(reference)
         if lineage.decision != decision:
             raise ValueError("Managed lineage capture decision mismatch")
-        if lineage.backend != backend:
+        if lineage.backend != backend.name:
             raise ValueError("Managed lineage backend mismatch")
         if lineage.session_kind is not session_kind:
             raise ValueError("Managed lineage session kind mismatch")
-        capabilities = get_backend(backend).capabilities
+        capabilities = backend.capabilities
         self._verified_resume_final_session_id = (
             lineage.final_native_session_id
             if (
@@ -79,7 +78,7 @@ class _ManagedLineageObserver:
         store: ManagedHeadlessSessionLineageStore,
         decision: NativeShellCaptureDecision | None,
         reference: ManagedHeadlessSessionLineageRef | None,
-        backend: str,
+        backend: CodingAgentBackend,
         session_kind: ManagedHeadlessSessionKind,
     ) -> _ManagedLineageObserver | None:
         if decision is None and reference is None:
@@ -129,6 +128,18 @@ class _ManagedLineageObserver:
                 lineage_anchor=Path(self.reference.lineage_anchor),
                 launch_id=self.reference.launch_id,
                 session_id=session_id,
+                expected_generation=current.generation,
+                expected_record_digest=current.record_digest,
+            )
+        )
+
+    def bind_launch_contract_digest(self, launch_contract_digest: str) -> None:
+        """CAS-persist one pre-spawn physical contract digest."""
+        self._mutate(
+            lambda current: self.store.bind_launch_contract_digest(
+                lineage_anchor=Path(self.reference.lineage_anchor),
+                launch_id=self.reference.launch_id,
+                launch_contract_digest=launch_contract_digest,
                 expected_generation=current.generation,
                 expected_record_digest=current.record_digest,
             )

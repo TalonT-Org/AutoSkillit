@@ -10,8 +10,7 @@ from autoskillit.core import (
     CodingAgentBackend,
     SkillContractError,
     SkillExecutionRole,
-    describe_capability_mismatches,
-    unsatisfied_backend_capabilities,
+    SkillSemanticPlan,
 )
 from autoskillit.hook_registry import HOOK_REGISTRY
 from autoskillit.server._misc import get_backend
@@ -34,19 +33,15 @@ def _get_fix_required_hook_matchers(applicable_guards: frozenset[str]) -> list[s
     ]
 
 
-def check_hard_capability_feasibility(
-    uses_capabilities: frozenset[str],
+def check_skill_semantic_feasibility(
+    plans: tuple[SkillSemanticPlan, ...],
     backend: CodingAgentBackend,
 ) -> str | None:
-    """Return diagnostic string if any capability's required_backend_property is unsatisfied.
-
-    Delegates registry lookup and BackendCapabilities evaluation to the shared
-    core predicate, then formats the first mismatch for server callers. Returns
-    None when every capability is satisfied.
-    """
-    mismatches = unsatisfied_backend_capabilities(uses_capabilities, backend.capabilities)
-    if mismatches:
-        return f"Backend '{backend.name}': {describe_capability_mismatches(mismatches)}."
+    """Return the selected backend's exact first unsupported-operation diagnostic."""
+    for plan in plans:
+        adaptation = backend.adapt_skill_semantics(plan)
+        if adaptation.diagnostic is not None:
+            return adaptation.diagnostic
     return None
 
 
@@ -102,15 +97,8 @@ def _check_dispatch_feasibility(
 
     feasible_step_names: list[str] = []
     for step_name in run_skill_step_names:
-        # Explicit config backend override takes precedence over capability
-        # routing for preflight too (mirrors the dispatch path):
-        # - pinned to claude-code: feasible regardless of orchestrator backend
-        #   (effective backend enforces all fix-required hooks).
-        # - pinned to a non-claude backend: subject to hard-capability
-        #   feasibility check — if the pinned backend lacks a required
-        #   BackendCapabilities property (e.g. git_metadata_writable=False
-        #   for git_metadata_write skills), dispatch is infeasible and the
-        #   gate refuses the recipe.
+        # Explicit backend pins are checked against the resolved skill's typed
+        # semantic plans. Lexical capability discovery never participates.
         if config_backend is not None:
             _resolution = _resolve_backend_override(step_name, recipe_name, config_backend)
             if _resolution is not None:
@@ -119,18 +107,13 @@ def _check_dispatch_feasibility(
                     _pinned_backend = get_backend(_explicit)
                 except (ValueError, KeyError):
                     continue
-                # Hard-capability feasibility: when an explicit pin targets a
-                # backend that lacks a BackendCapabilities property required
-                # by the step's skill (REQ-RES-001 suppression is structural,
-                # not opaque — capability feasibility still applies), refuse
-                # dispatch.
                 if skill_resolver is None:
                     return json.dumps(
                         {
                             "success": False,
                             "kitchen": "preflight_failed",
                             "user_visible_message": (
-                                f"Cannot verify capability feasibility for explicitly-pinned "
+                                f"Cannot verify semantic feasibility for explicitly-pinned "
                                 f"step '{step_name}': skill resolver is not available."
                             ),
                             "error": "skill_resolver_unavailable_for_pinned_step",
@@ -155,7 +138,7 @@ def _check_dispatch_feasibility(
                                 "success": False,
                                 "kitchen": "preflight_failed",
                                 "user_visible_message": (
-                                    f"Cannot verify capability feasibility for explicitly-pinned "
+                                    f"Cannot verify semantic feasibility for explicitly-pinned "
                                     f"step '{step_name}': skill '{_skill_name}' has no valid "
                                     f"effective invocation. {exc}"
                                 ),
@@ -165,53 +148,33 @@ def _check_dispatch_feasibility(
                                 "skill": _skill_name,
                             }
                         )
-                    _requirements: frozenset[str] = _skill_invocation.backend_requirements
-                    if _requirements and _pinned_backend.name not in _requirements:
+                    semantic_error = check_skill_semantic_feasibility(
+                        _skill_invocation.semantic_plans,
+                        _pinned_backend,
+                    )
+                    if semantic_error:
                         return json.dumps(
                             {
                                 "success": False,
                                 "kitchen": "preflight_failed",
                                 "user_visible_message": (
-                                    f"Cannot dispatch step '{step_name}': explicitly pinned "
-                                    f"to backend '{_explicit}', but effective skill "
-                                    f"invocation '{_skill_name}' requires "
-                                    f"{sorted(_requirements)}."
+                                    f"Cannot dispatch step '{step_name}': explicitly "
+                                    f"pinned to backend '{_explicit}' which cannot adapt "
+                                    f"the skill semantics. {semantic_error}"
                                 ),
-                                "error": "backend_requirements_unsatisfied",
+                                "error": semantic_error,
                                 "stage": "dispatch_feasibility_preflight",
                                 "backend": _explicit,
                                 "step": step_name,
-                                "skill": _skill_name,
+                                "origin": _resolution.key_path,
+                                "remedy": (
+                                    f"Remove or change '{_resolution.key_path}' in "
+                                    "~/.autoskillit/config.yaml or "
+                                    "<project>/.autoskillit/config.yaml, or pin a "
+                                    "backend that supports the semantic operation."
+                                ),
                             }
                         )
-                    _skill_caps = _skill_invocation.capability_union
-                    if _skill_caps:
-                        hard_cap_err = check_hard_capability_feasibility(
-                            _skill_caps, _pinned_backend
-                        )
-                        if hard_cap_err:
-                            return json.dumps(
-                                {
-                                    "success": False,
-                                    "kitchen": "preflight_failed",
-                                    "user_visible_message": (
-                                        f"Cannot dispatch step '{step_name}': explicitly "
-                                        f"pinned to backend '{_explicit}' which lacks required "
-                                        f"capability. {hard_cap_err}"
-                                    ),
-                                    "error": hard_cap_err,
-                                    "stage": "dispatch_feasibility_preflight",
-                                    "backend": _explicit,
-                                    "step": step_name,
-                                    "origin": _resolution.key_path,
-                                    "remedy": (
-                                        f"Remove or change '{_resolution.key_path}' in "
-                                        "~/.autoskillit/config.yaml or "
-                                        "<project>/.autoskillit/config.yaml, or pin a "
-                                        "backend with the required capability."
-                                    ),
-                                }
-                            )
                 continue
 
         step = active_recipe_steps.get(step_name)

@@ -63,10 +63,9 @@ def _gate_ingredient(recipe: Recipe, ref: str) -> RecipeIngredient | None:
 def _is_user_configurable_gate(recipe: Recipe, ref: str) -> bool:
     """Whether `ref` (a skip_when_false/true value) gates on a user-facing ingredient.
 
-    Excludes hidden and authority:config ingredients (auto-resolved capability
-    flags such as backend_supports_git_write) — those are mechanically gated
-    but not something a user configures, so their steps are not phase
-    waypoints the summary needs to disclose.
+    Excludes hidden and authority:config ingredients, which are not something a
+    user configures and therefore are not phase waypoints the summary needs to
+    disclose.
     """
     ing = _gate_ingredient(recipe, ref)
     if ing is None:

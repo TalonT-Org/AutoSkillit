@@ -1,16 +1,26 @@
 ---
 name: exp-lens-measurement-validity
-categories: [exp-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: Analyze measurement validity for experimental design — auditing metric-construct alignment, proxy validity, reliability, sensitivity, and consequential validity. Argumentative lens answering "Do measurements justify the interpretation?"
+categories:
+- exp-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Analyze measurement validity for experimental design — auditing metric-construct alignment, proxy validity, reliability,
+  sensitivity, and consequential validity. Argumentative lens answering "Do measurements justify the interpretation?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Measurement Validity Lens - Auditing metric-construct alignment...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Measurement Validity Lens - Auditing metric-construct alignment...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: exp-lens-benchmark-representativeness
+  - name: exp-lens-estimand-clarity
+  - name: make-experiment-diag
+  - name: mermaid
 ---
 
 # Measurement Validity Experimental Design Lens
@@ -46,8 +56,8 @@ hooks:
 - Modify any source code or experimental artifacts
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-measurement-validity/`
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Treat every reported metric as a claim requiring a validity argument
@@ -56,7 +66,7 @@ hooks:
 - Identify where metric-construct alignment is weak or unsupported by evidence
 - BEFORE creating any optional diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-measurement-validity/exp_diag_measurement_validity_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -83,7 +93,7 @@ exploration for these fields if the context file supplies them. For any field ab
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn Explore subagents to investigate:
+Spawn child delegations to investigate:
 
 **Metric Definitions**
 - Find all metrics computed and reported

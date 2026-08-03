@@ -1,14 +1,32 @@
 ---
 name: audit-tests
-categories: [audit]
-description: Audit the test suite for useless tests, consolidation opportunities, over-mocking, weak assertions, placement/organization issues, xdist safety violations, test path filter integrity, and other test quality issues. Use when user says "audit tests", "audit test suite", "review tests", or "test quality check". Generates an improvement plan in {{AUTOSKILLIT_TEMP}}/ with explanations for each proposed change.
+categories:
+- audit
+description: Audit the test suite for useless tests, consolidation opportunities, over-mocking, weak assertions, placement/organization
+  issues, xdist safety violations, test path filter integrity, and other test quality issues. Use when user says "audit tests",
+  "audit test suite", "review tests", or "test quality check". Generates an improvement plan in {{AUTOSKILLIT_TEMP}}/ with
+  explanations for each proposed change.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: audit-tests] Auditing test suite...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: audit-tests] Auditing test suite...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Test Suite Audit Skill
@@ -30,12 +48,12 @@ Audit the test suite to identify useless tests, consolidation opportunities, qua
 - Flag tests as useless without reading and understanding them
 - Recommend removing tests that guard against real regressions
 - Recommend changes that would reduce meaningful coverage
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Use subagents for parallel exploration
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Read both the test AND the code it tests before judging
 - Provide file paths, line numbers, and an explanation for each finding
 - Write the improvement plan to `{{AUTOSKILLIT_TEMP}}/audit-tests/test_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
@@ -183,7 +201,7 @@ Tests and configuration that maintain the path-based test filter's correctness. 
 
 ### Step 1: Launch Parallel Subagents (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 

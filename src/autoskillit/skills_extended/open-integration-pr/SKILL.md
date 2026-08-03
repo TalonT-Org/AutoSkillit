@@ -1,20 +1,42 @@
 ---
 name: open-integration-pr
-categories: [github]
-uses_capabilities: [agent_model, cross_skill_ref, github_api_write]
-activate_deps: [arch-lens]
-description: >
-  Create an integration PR for the merge-prs. Reads pr_order_file JSON, generates
-  a rich PR body with per-PR details, arch-lens diagrams, and carried-forward Closes #N
-  references. Closes all collapsed PRs with a comment after creation. Use inside the
-  merge-prs after all PRs have been merged into the integration branch.
+categories:
+- github
+uses_capabilities:
+- github_api_write
+activate_deps:
+- arch-lens
+description: 'Create an integration PR for the merge-prs. Reads pr_order_file JSON, generates a rich PR body with per-PR details,
+  arch-lens diagrams, and carried-forward Closes #N references. Closes all collapsed PRs with a comment after creation. Use
+  inside the merge-prs after all PRs have been merged into the integration branch.
+
+  '
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: open-integration-pr] Opening integration pull request...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: open-integration-pr] Opening integration pull request...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
+  sibling_skills:
+  - name: arch-lens-module-dependency
 ---
 
 # Open Integration PR
@@ -53,15 +75,15 @@ PR, and output `pr_url=<url>`.
 - Modify any source code
 - Fail the pipeline if `gh` is unavailable or not authenticated — output `pr_url=` (empty) and exit successfully
 - Close original PRs before the integration PR is successfully created
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Check `gh auth status` before attempting any GitHub operations
 - Output `pr_url=<url>` on the last output line (empty string when GitHub unavailable)
 - Carry forward ALL `Closes #N` and `Fixes #N` lines found in original PR bodies
 - Use `gh pr create --body-file` (never inline body via `--body`)
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -193,8 +215,8 @@ Empty results are stored as empty lists.
 
 ### Step 4g: Run Parallel Domain Analysis Subagents
 
-For each domain `D` in `domain_diffs`, spawn a subagent via `Agent(model="sonnet")` in a single
-parallel message. **Issue all Task calls in a single message** to maximize parallelism.
+For each domain `D` in `domain_diffs`, spawn a subagent via `child delegation under the declared `sonnet` model-class policy` in a single
+parallel message. **Issue all child delegations in a single message** to maximize parallelism.
 **Skip domains with no diff content** (not in `domain_diffs`) — do not spawn subagents for them.
 
 Each subagent receives a prompt with:
@@ -225,7 +247,7 @@ The 7 canonical domain names are: **Server/MCP Tools**, **Pipeline/Execution**,
 
 ### Step 5: Select Arch-Lens Lenses
 
-Spawn a subagent via `Agent(model="sonnet")` with `changed_files` and the same lens
+Spawn a subagent via `child delegation under the declared `sonnet` model-class policy` with `changed_files` and the same lens
 menu as `open-pr`. Instruct it to return 1–3 lens names using the same `development`
 lens guard.
 

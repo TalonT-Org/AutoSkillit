@@ -33,7 +33,7 @@ def test_skill_path_exists() -> None:
 def test_has_research_category() -> None:
     """Frontmatter must declare categories: [research]."""
     text = SKILL_TEXT
-    assert any("research" in line for line in text.splitlines() if "categories:" in line), (
+    assert "categories:\n- research" in text, (
         "Frontmatter categories: field must include 'research'"
     )
 

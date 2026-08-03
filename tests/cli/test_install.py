@@ -152,7 +152,6 @@ class TestCLIInstall:
                 "activate_deps",
                 "uses_capabilities",
                 "execution_role",
-                "backend_requirements",
             }.isdisjoint(parsed.data)
             assert {
                 "canonical_digest",

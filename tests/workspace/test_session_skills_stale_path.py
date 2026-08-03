@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from autoskillit.core import ClaudeDirectoryConventions
+from tests.fakes import adapt_test_skill_semantics
 from tests.workspace._helpers import _CODEX_CAPABILITIES
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
@@ -21,6 +22,7 @@ def _codex_backend() -> MagicMock:
     backend.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
     backend.ensure_pre_launch.return_value = []
     backend.validate_session_layout.return_value = []
+    backend.adapt_skill_semantics.side_effect = adapt_test_skill_semantics
     return backend
 
 

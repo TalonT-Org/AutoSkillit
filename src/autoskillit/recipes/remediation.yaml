@@ -1,9 +1,9 @@
 name: remediation
 description: Investigate a bug, plan a fix, open a PR
 summary: bootstrap_clone > (claim_and_resolve?) > (create_and_publish?) > investigate
-  > rectify > (review-approach?) > dry-walkthrough > implement > test > merge (per plan part) > (audit-impl?)
-  > (open_pr?) > push > cleanup
-recipe_version: "1.0.0"
+  > rectify > (review-approach?) > dry-walkthrough > implement > test > merge (per
+  plan part) > (audit-impl?) > (open_pr?) > push > cleanup
+recipe_version: 1.0.0
 requires_packs:
 - github
 - ci
@@ -13,27 +13,27 @@ kitchen_rules:
 - NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent,
   WebFetch, WebSearch, NotebookEdit) from the orchestrator. All code changes and investigation
   happen through headless sessions via run_skill.
-- Route to on_failure when a step fails — the downstream skill (e.g., resolve-failures)
-  has diagnostic access that the orchestrator does not. Do not investigate or attempt
-  to fix failures directly.
-- 'SEQUENTIAL EXECUTION: complete full cycle per part before advancing. For each plan_part,
-  run the full cycle (dry_walkthrough → implement → test → merge) before starting
-  the next part.'
-- By default (open_pr=true), a feature branch is created with a unique name derived
-  from inputs.run_name and context.issue_number (e.g. investigate/42) or a date suffix
-  (e.g. investigate/20260304) when no issue is available. All worktree merges target
-  the feature branch (context.merge_target), not base_branch directly. The push step
-  publishes the feature branch, then prepare_pr → run_arch_lenses → compose_pr opens
-  a PR to base_branch. When open_pr=false, merges target base_branch directly and
-  prepare_pr is skipped.
+- "Route to on_failure when a step fails \u2014 the downstream skill (e.g., resolve-failures)\
+  \ has diagnostic access that the orchestrator does not. Do not investigate or attempt\
+  \ to fix failures directly."
+- "SEQUENTIAL EXECUTION: complete full cycle per part before advancing. For each plan_part,\
+  \ run the full cycle (dry_walkthrough \u2192 implement \u2192 test \u2192 merge)\
+  \ before starting the next part."
+- "By default (open_pr=true), a feature branch is created with a unique name derived\
+  \ from inputs.run_name and context.issue_number (e.g. investigate/42) or a date\
+  \ suffix (e.g. investigate/20260304) when no issue is available. All worktree merges\
+  \ target the feature branch (context.merge_target), not base_branch directly. The\
+  \ push step publishes the feature branch, then prepare_pr \u2192 run_arch_lenses\
+  \ \u2192 compose_pr opens a PR to base_branch. When open_pr=false, merges target\
+  \ base_branch directly and prepare_pr is skipped."
 - When arch_lenses=true (and open_pr=true), prepare_pr routes through run_arch_lenses
   before compose_pr, adding architecture lens diagrams to the PR. By default arch_lenses
   is off and prepare_pr routes directly to compose_pr.
-- 'SOURCE ISOLATION: After bootstrap_clone returns, the source_dir is strictly off-limits.
-  Never run any command in source_dir — no git checkout, git fetch, git reset, git
-  pull, run_cmd, run_skill, or any other operation. All work — skill invocations,
-  git operations, file reads — happens exclusively in the clone (work_dir). source_dir
-  is used ONLY to read the remote URL inside push_to_remote.'
+- "SOURCE ISOLATION: After bootstrap_clone returns, the source_dir is strictly off-limits.\
+  \ Never run any command in source_dir \u2014 no git checkout, git fetch, git reset,\
+  \ git pull, run_cmd, run_skill, or any other operation. All work \u2014 skill invocations,\
+  \ git operations, file reads \u2014 happens exclusively in the clone (work_dir).\
+  \ source_dir is used ONLY to read the remote URL inside push_to_remote."
 ingredients:
   task:
     description: Bug, error, or question to investigate
@@ -54,7 +54,8 @@ ingredients:
     description: Post-merge quality gate
     default: 'true'
   closure_authority_path:
-    description: Absolute path to frozen requirements authority JSON for closure-mode audit
+    description: Absolute path to frozen requirements authority JSON for closure-mode
+      audit
     default: ''
   closure_authority_hash:
     description: SHA-256 lowercase hex hash of the authority file content
@@ -63,27 +64,20 @@ ingredients:
     description: Review solution approaches against the plan (runs after rectify/make-plan)
     default: 'false'
   investigate:
-    description: >-
-      Run the investigate step. "true" (or "auto", the default) always runs;
-      "false" always skips. In fleet/batch dispatch, external orchestrators
-      resolve "auto" to "false" when the issue body contains an
-      investigation-complete marker. In direct orders, "auto" behaves like
-      "true".
-    default: 'auto'
+    description: Run the investigate step. "true" (or "auto", the default) always
+      runs; "false" always skips. In fleet/batch dispatch, external orchestrators
+      resolve "auto" to "false" when the issue body contains an investigation-complete
+      marker. In direct orders, "auto" behaves like "true".
+    default: auto
   open_pr:
     description: PR instead of direct merge
     default: 'true'
   arch_lenses:
     description: Generate architecture lens diagrams for the PR
     default: 'false'
-  backend_supports_git_write:
-    description: Whether the session backend supports .git/ metadata writes (git commit, rebase, worktree add). Resolved from backend capabilities at load time.
-    default: 'true'
-    hidden: true
-    authority: config
   auto_merge:
-    description: Automatically merge the PR after required checks pass — via merge
-      queue when available, direct merge otherwise
+    description: "Automatically merge the PR after required checks pass \u2014 via\
+      \ merge queue when available, direct merge otherwise"
     default: 'true'
   review_max_retries:
     description: Maximum number of review-resolve retry cycles before proceeding to
@@ -99,19 +93,18 @@ ingredients:
     description: Maximum number of merge-fix retry cycles before failing
     default: '3'
   audit_remediation_max_retries:
-    description: >-
-      Maximum audit remediation budget (allowed remediation rounds = value − 1).
-      Set to 3 for 2 remediation rounds.
+    description: "Maximum audit remediation budget (allowed remediation rounds = value\
+      \ \u2212 1). Set to 3 for 2 remediation rounds."
     default: '3'
   test_fix_max_retries:
     default: '3'
-    description: >-
-      Maximum pre-merge test → fix → test budget (allowed fix rounds = value − 1).
-      Set to 3 for 2 fix rounds per remediation cycle.
+    description: "Maximum pre-merge test \u2192 fix \u2192 test budget (allowed fix\
+      \ rounds = value \u2212 1). Set to 3 for 2 fix rounds per remediation cycle."
     hidden: true
   merge_test_fix_max_retries:
     default: '3'
-    description: Maximum iterations of the merge-gate test → fix → test cycle.
+    description: "Maximum iterations of the merge-gate test \u2192 fix \u2192 test\
+      \ cycle."
     hidden: true
   adversarial_review_level:
     description: Controls adversarial review depth in make-plan. "auto" estimates
@@ -129,9 +122,10 @@ ingredients:
     default: 'false'
     hidden: true
   run_mode:
-    description: 'Execution mode when processing multiple issues. Options: sequential
-      (default, one issue at a time) or parallel (all issues simultaneously with wavefront
-      step scheduling — fast steps for all pipelines before any slow step).'
+    description: "Execution mode when processing multiple issues. Options: sequential\
+      \ (default, one issue at a time) or parallel (all issues simultaneously with\
+      \ wavefront step scheduling \u2014 fast steps for all pipelines before any slow\
+      \ step)."
     default: sequential
     hidden: true
   max_parallel:
@@ -207,8 +201,8 @@ steps:
     note: 'Fetches issue title/slug and claims the issue in one turn. Returns issue_number,
       issue_title, issue_slug, and claimed boolean. When claimed=false (another session
       owns it), routes to register_clone_failure before escalate_stop so the clone
-      directory is registered for cleanup. issue_slug and issue_number are passed to
-      create_and_publish for branch naming.
+      directory is registered for cleanup. issue_slug and issue_number are passed
+      to create_and_publish for branch naming.
 
       '
   create_and_publish:
@@ -238,9 +232,10 @@ steps:
     skip_when_false: inputs.investigate
     model: ${{ 'opus[1m]' if inputs.depth == 'deep' else 'sonnet' }}
     with:
-      skill_command: "/autoskillit:investigate"
+      skill_command: /autoskillit:investigate
       skill_inputs:
-        topic: "${{ '--depth deep ' if inputs.depth == 'deep' else '' }}${{ inputs.task }} ${{ inputs.issue_url }}"
+        topic: ${{ '--depth deep ' if inputs.depth == 'deep' else '' }}${{ inputs.task
+          }} ${{ inputs.issue_url }}
       cwd: ${{ context.work_dir }}
       output_dir: '{{AUTOSKILLIT_TEMP}}/investigate'
       step_name: investigate
@@ -265,7 +260,7 @@ steps:
       callable: autoskillit.smoke_utils.extract_investigation
       investigation_path: ${{ context.investigation_path }}
       issue_number: ${{ context.issue_number }}
-      output_dir: "{{AUTOSKILLIT_TEMP}}/investigate"
+      output_dir: '{{AUTOSKILLIT_TEMP}}/investigate'
       work_dir: ${{ context.work_dir }}
     capture:
       effective_investigation_path:
@@ -273,21 +268,19 @@ steps:
         type: path
     on_success: rectify
     on_failure: release_issue_failure
-    note: >-
-      Resolves the effective investigation path for rectify. When investigate ran,
-      context.investigation_path contains the report path — pass it through. When
-      investigate was skipped (pruned by skip_when_false), investigation_path is
-      empty — extract the ## Investigation section from the issue body instead.
-      Validates extracted content contains the ## Recommendations heading
-      (structural completeness, not just non-empty).
-
+    note: "Resolves the effective investigation path for rectify. When investigate\
+      \ ran, context.investigation_path contains the report path \u2014 pass it through.\
+      \ When investigate was skipped (pruned by skip_when_false), investigation_path\
+      \ is empty \u2014 extract the ## Investigation section from the issue body instead.\
+      \ Validates extracted content contains the ## Recommendations heading (structural\
+      \ completeness, not just non-empty)."
   rectify:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:rectify"
+      skill_command: /autoskillit:rectify
       skill_inputs:
-        investigation_path: "${{ context.effective_investigation_path }}"
+        investigation_path: ${{ context.effective_investigation_path }}
       cwd: ${{ context.work_dir }}
       output_dir: '{{AUTOSKILLIT_TEMP}}/rectify'
       step_name: rectify
@@ -304,10 +297,10 @@ steps:
     note: 'Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically
       into plan_parts[].
 
-      ACCUMULATION: all_plan_paths accumulates across any re-entries to the rectify step.
-      On re-entry, the agent MUST append the captured plan_path to context.all_plan_paths
-      using a comma separator instead of letting the capture block overwrite the
-      accumulated value.
+      ACCUMULATION: all_plan_paths accumulates across any re-entries to the rectify
+      step. On re-entry, the agent MUST append the captured plan_path to context.all_plan_paths
+      using a comma separator instead of letting the capture block overwrite the accumulated
+      value.
 
       '
   salvage_rectify_plan:
@@ -325,19 +318,19 @@ steps:
       route: review_approach
     - route: release_issue_failure
     on_failure: release_issue_failure
-    note: 'Deterministic salvage for rectify context-limit stumbles: verifies captured
-      plan_parts artifacts exist on disk. salvaged routes onward as if rectify succeeded;
-      unsalvageable falls through to rectify''s original on_failure destination. Substitute
-      the captured ${{ context.plan_parts }} value into the plan_parts argument verbatim,
-      unmodified — do not reformat, quote, or re-derive it; the callable''s input grammar
-      absorbs rendering variance.'
+    note: "Deterministic salvage for rectify context-limit stumbles: verifies captured\
+      \ plan_parts artifacts exist on disk. salvaged routes onward as if rectify succeeded;\
+      \ unsalvageable falls through to rectify's original on_failure destination.\
+      \ Substitute the captured ${{ context.plan_parts }} value into the plan_parts\
+      \ argument verbatim, unmodified \u2014 do not reformat, quote, or re-derive\
+      \ it; the callable's input grammar absorbs rendering variance."
   review_approach:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:review-approach"
+      skill_command: /autoskillit:review-approach
       skill_inputs:
-        plan_path: "${{ context.plan_path }}"
+        plan_path: ${{ context.plan_path }}
       cwd: ${{ context.work_dir }}
       step_name: review_approach
       output_dir: '{{AUTOSKILLIT_TEMP}}/review-approach'
@@ -355,13 +348,13 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:dry-walkthrough"
+      skill_command: /autoskillit:dry-walkthrough
       skill_inputs:
-        plan_path: "${{ context.plan_path }}"
-        issue_url: "${{ inputs.issue_url }}"
-        review_path: "${{ context.review_path }}"
-        audit_cycle_path: "${{ context.audit_cycle_path }}"
-        plan_disposition_path: "${{ context.plan_disposition_path }}"
+        plan_path: ${{ context.plan_path }}
+        issue_url: ${{ inputs.issue_url }}
+        review_path: ${{ context.review_path }}
+        audit_cycle_path: ${{ context.audit_cycle_path }}
+        plan_disposition_path: ${{ context.plan_disposition_path }}
       cwd: ${{ context.work_dir }}
       output_dir: '{{AUTOSKILLIT_TEMP}}'
       step_name: dry_walkthrough
@@ -379,13 +372,13 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:dry-walkthrough"
+      skill_command: /autoskillit:dry-walkthrough
       skill_inputs:
-        plan_path: "${{ context.plan_path }}"
-        issue_url: "${{ inputs.issue_url }}"
-        review_path: "${{ context.review_path }}"
-        audit_cycle_path: "${{ context.audit_cycle_path }}"
-        plan_disposition_path: "${{ context.plan_disposition_path }}"
+        plan_path: ${{ context.plan_path }}
+        issue_url: ${{ inputs.issue_url }}
+        review_path: ${{ context.review_path }}
+        audit_cycle_path: ${{ context.audit_cycle_path }}
+        plan_disposition_path: ${{ context.plan_disposition_path }}
       cwd: ${{ context.work_dir }}
       output_dir: '{{AUTOSKILLIT_TEMP}}'
       step_name: retry_walkthrough
@@ -398,33 +391,34 @@ steps:
     - review_path
     - audit_cycle_path
     - plan_disposition_path
-    note: Bounded one-hop re-invoke of dry-walkthrough after a context-limit stumble
-      on the primary dry_walkthrough step. Never routes back to dry_walkthrough —
-      on_failure and on_context_limit both fall through to the original failure
-      destination.
+    note: "Bounded one-hop re-invoke of dry-walkthrough after a context-limit stumble\
+      \ on the primary dry_walkthrough step. Never routes back to dry_walkthrough\
+      \ \u2014 on_failure and on_context_limit both fall through to the original failure\
+      \ destination."
   create_impl_worktree:
     tool: run_cmd
     with:
-      cmd: "bash {{AUTOSKILLIT_SCRIPTS}}/create_impl_worktree.sh \"impl-${{ context.issue_number }}-$(date +%Y%m%d-%H%M%S)\" \"{{AUTOSKILLIT_TEMP}}\""
+      cmd: bash {{AUTOSKILLIT_SCRIPTS}}/create_impl_worktree.sh "impl-${{ context.issue_number
+        }}-$(date +%Y%m%d-%H%M%S)" "{{AUTOSKILLIT_TEMP}}"
       cwd: ${{ context.work_dir }}
       step_name: create_impl_worktree
     capture:
       worktree_path: ${{ result.worktree_path }}
     on_success: implement
     on_failure: release_issue_failure
-    note: Creates worktree at orchestrator level (unsandboxed) so .git/ metadata
-      writes succeed regardless of backend sandbox constraints.
+    note: Creates worktree at orchestrator level (unsandboxed) so .git/ metadata writes
+      succeed regardless of backend sandbox constraints.
   implement:
     tool: run_skill
     model: ''
     stale_threshold: 2400
     with:
-      skill_command: "/autoskillit:implement-worktree-no-merge"
+      skill_command: /autoskillit:implement-worktree-no-merge
       skill_inputs:
-        plan_path: "${{ context.plan_path }}"
+        plan_path: ${{ context.plan_path }}
       cwd: ${{ context.worktree_path }}
       step_name: implement
-      output_dir: '.'
+      output_dir: .
     capture:
       implementation_ref: ${{ result.worktree_path }}
       worktree_path: ${{ result.worktree_path }}
@@ -433,22 +427,20 @@ steps:
     retries: 0
     on_context_limit: retry_worktree
     on_rate_limit: retry_worktree
-    on_success: gate_backend_write
+    on_success: check_changes
     on_failure: release_issue_failure
-    optional: true
-    skip_when_false: inputs.backend_supports_git_write
   retry_worktree:
     tool: run_skill
     model: ''
     stale_threshold: 2400
     with:
-      skill_command: "/autoskillit:retry-worktree"
+      skill_command: /autoskillit:retry-worktree
       skill_inputs:
-        plan_path: "${{ context.plan_path }}"
-        worktree_path: "${{ context.worktree_path }}"
+        plan_path: ${{ context.plan_path }}
+        worktree_path: ${{ context.worktree_path }}
       cwd: ${{ context.worktree_path }}
       step_name: retry_worktree
-      output_dir: '.'
+      output_dir: .
     capture:
       implementation_ref: ${{ result.worktree_path }}
       worktree_path: ${{ result.worktree_path }}
@@ -466,18 +458,6 @@ steps:
     on_rate_limit: check_changes
     on_exhausted: release_issue_failure
     on_failure: release_issue_failure
-    optional: true
-    skip_when_false: inputs.backend_supports_git_write
-  gate_backend_write:
-    tool: run_python
-    with:
-      callable: autoskillit.smoke_utils.gate_backend_write
-      backend_supports_git_write: ${{ inputs.backend_supports_git_write }}
-    on_result:
-    - when: ${{ result.backend_capable }} == false
-      route: release_issue_failure
-    - route: check_changes
-    on_failure: release_issue_failure
   check_changes:
     tool: run_python
     with:
@@ -494,8 +474,8 @@ steps:
     - route: test
     on_failure: release_issue_failure
   close_issue_no_changes:
-    description: Release issue after zero-change detection — stages on non-default
-      branch, closes on promotion target
+    description: "Release issue after zero-change detection \u2014 stages on non-default\
+      \ branch, closes on promotion target"
     tool: release_issue
     optional: true
     skip_when_false: inputs.issue_url
@@ -505,11 +485,11 @@ steps:
       close_issue: 'true'
     on_success: register_clone_no_changes
     on_failure: register_clone_no_changes
-    note: 'Zero changes detected post-implement. Passes target_branch so release_issue
+    note: Zero changes detected post-implement. Passes target_branch so release_issue
       stages on non-default branches (base_branch != promotion_target) or closes on
       the promotion target branch. close_issue is silently ignored by release_issue
-      when staging applies (Branch 1 takes precedence over Branch 3). Routes to
-      register_clone_no_changes for clone cleanup and distinct terminal.'
+      when staging applies (Branch 1 takes precedence over Branch 3). Routes to register_clone_no_changes
+      for clone cleanup and distinct terminal.
   test:
     tool: test_check
     with:
@@ -531,11 +511,10 @@ steps:
     on_failure: release_issue_failure
     optional_context_refs:
     - merge_fix_count
-    note: >
-      Merge-failure iteration guard (dirty_tree / test_gate /
-      post_rebase_test_gate). Shares merge_fix_count with
-      check_merge_rebase_loop and check_dirty_main_retry.
+    note: 'Merge-failure iteration guard (dirty_tree / test_gate / post_rebase_test_gate).
+      Shares merge_fix_count with check_merge_rebase_loop and check_dirty_main_retry.
 
+      '
   diagnose_merge_gate:
     tool: run_python
     with:
@@ -554,13 +533,11 @@ steps:
     - merge_test_stdout
     - merge_test_stderr
     - merge_failed_step
-    note: >
-      Writes a structured diagnosis file from merge gate test output,
-      mirroring diagnose-ci format. Routes to assess on both success and
-      failure — assess proceeds without context if diagnosis fails. Uses
-      distinct context keys (merge_gate_*) to avoid collision with
-      ci_watch/diagnose_ci context variables from the CI path.
-
+    note: "Writes a structured diagnosis file from merge gate test output, mirroring\
+      \ diagnose-ci format. Routes to assess on both success and failure \u2014 assess\
+      \ proceeds without context if diagnosis fails. Uses distinct context keys (merge_gate_*)\
+      \ to avoid collision with ci_watch/diagnose_ci context variables from the CI\
+      \ path.\n"
   check_merge_rebase_loop:
     tool: run_python
     with:
@@ -576,11 +553,10 @@ steps:
     on_failure: release_issue_failure
     optional_context_refs:
     - merge_fix_count
-    note: >
-      Merge-failure iteration guard for rebase conflicts. Shares
-      merge_fix_count with check_merge_fix_loop and
-      check_dirty_main_retry.
+    note: 'Merge-failure iteration guard for rebase conflicts. Shares merge_fix_count
+      with check_merge_fix_loop and check_dirty_main_retry.
 
+      '
   check_dirty_main_retry:
     tool: run_python
     with:
@@ -596,11 +572,10 @@ steps:
     on_failure: release_issue_failure
     optional_context_refs:
     - merge_fix_count
-    note: >
-      Merge-failure iteration guard for dirty_main_repo retries.
-      Shares merge_fix_count with check_merge_fix_loop and
-      check_merge_rebase_loop.
+    note: 'Merge-failure iteration guard for dirty_main_repo retries. Shares merge_fix_count
+      with check_merge_fix_loop and check_merge_rebase_loop.
 
+      '
   check_ref_push_loop:
     tool: run_python
     with:
@@ -616,14 +591,13 @@ steps:
     on_failure: release_issue_failure
     optional_context_refs:
     - ref_push_count
-    note: >
-      Ref-coherence recovery guard. Uses a SEPARATE counter (ref_push_count,
-      max 3 under >= semantics = 2 usable push attempts) from merge_fix_count.
-      Push-and-retry is cheap and near-deterministic
-      (no LLM invocation), so it does not share the merge_fix_count budget.
-      On max exceeded, route to verify_ref_push_exhaustion for an authoritative
-      remote_is_ancestor re-check before escalating.
+    note: 'Ref-coherence recovery guard. Uses a SEPARATE counter (ref_push_count,
+      max 3 under >= semantics = 2 usable push attempts) from merge_fix_count. Push-and-retry
+      is cheap and near-deterministic (no LLM invocation), so it does not share the
+      merge_fix_count budget. On max exceeded, route to verify_ref_push_exhaustion
+      for an authoritative remote_is_ancestor re-check before escalating.
 
+      '
   ref_push:
     tool: push_to_remote
     with:
@@ -633,11 +607,9 @@ steps:
       force: 'true'
     on_success: commit_guard
     on_failure: release_issue_failure
-    note: >
-      Pushes the feature branch to remote to resolve ref_coherence divergence.
-      After push, routes back to commit_guard → main_repo_guard → merge to
-      retry the merge with aligned local/remote SHAs.
-
+    note: "Pushes the feature branch to remote to resolve ref_coherence divergence.\
+      \ After push, routes back to commit_guard \u2192 main_repo_guard \u2192 merge\
+      \ to retry the merge with aligned local/remote SHAs.\n"
   check_audit_remediation_loop:
     tool: run_python
     with:
@@ -653,10 +625,8 @@ steps:
     on_failure: release_issue_failure
     optional_context_refs:
     - audit_remediation_count
-    note: >
-      Guards the audit_impl → remediate → plan → implement → test
-      remediation cycle. Separate counter from merge_fix_count.
-
+    note: "Guards the audit_impl \u2192 remediate \u2192 plan \u2192 implement \u2192\
+      \ test remediation cycle. Separate counter from merge_fix_count.\n"
   reset_test_fix_counter:
     tool: run_python
     with:
@@ -666,11 +636,9 @@ steps:
       test_fix_loop_count: ${{ result.value }}
     on_success: reset_merge_test_fix_counter
     on_failure: reset_merge_test_fix_counter
-    note: >-
-      Resets test_fix_loop_count to 0 so each audit-remediation cycle gets a
-      fresh pre-merge fix budget. Routes to pre_remediation_merge to preserve
-      the worktree-merge step before starting a new remediation cycle.
-
+    note: Resets test_fix_loop_count to 0 so each audit-remediation cycle gets a fresh
+      pre-merge fix budget. Routes to pre_remediation_merge to preserve the worktree-merge
+      step before starting a new remediation cycle.
   reset_merge_test_fix_counter:
     tool: run_python
     with:
@@ -680,10 +648,8 @@ steps:
       merge_test_fix_loop_count: ${{ result.value }}
     on_success: reset_merge_fix_counter
     on_failure: reset_merge_fix_counter
-    note: >-
-      Resets merge_test_fix_loop_count to 0 so each audit-remediation cycle
-      gets a fresh merge-gate fix budget.
-
+    note: Resets merge_test_fix_loop_count to 0 so each audit-remediation cycle gets
+      a fresh merge-gate fix budget.
   reset_merge_fix_counter:
     tool: run_python
     with:
@@ -693,10 +659,8 @@ steps:
       merge_fix_count: ${{ result.value }}
     on_success: reset_ref_push_counter
     on_failure: reset_ref_push_counter
-    note: >-
-      Resets merge_fix_count to 0 so each audit-remediation cycle gets a
-      fresh merge-fix budget (dirty-tree, rebase, dirty-main retries).
-
+    note: Resets merge_fix_count to 0 so each audit-remediation cycle gets a fresh
+      merge-fix budget (dirty-tree, rebase, dirty-main retries).
   reset_ref_push_counter:
     tool: run_python
     with:
@@ -706,13 +670,10 @@ steps:
       pre_remediation_ref_push_count: ${{ result.value }}
     on_success: pre_remediation_merge
     on_failure: pre_remediation_merge
-    note: >-
-      Resets pre_remediation_ref_push_count to 0 so each audit-remediation
-      cycle gets a fresh pre-remediation ref-push budget. The final-merge
-      ref_push_count is exempt from cross-cycle resets (it guards the GO
-      path, which terminates the pipeline and never re-enters; see
-      _WRAPPER_LOOP_EXEMPT_COUNTERS in rules_loop_counter.py).
-
+    note: Resets pre_remediation_ref_push_count to 0 so each audit-remediation cycle
+      gets a fresh pre-remediation ref-push budget. The final-merge ref_push_count
+      is exempt from cross-cycle resets (it guards the GO path, which terminates the
+      pipeline and never re-enters; see _WRAPPER_LOOP_EXEMPT_COUNTERS in rules_loop_counter.py).
   check_ref_push_loop_pre_remediation:
     tool: run_python
     with:
@@ -728,17 +689,13 @@ steps:
     on_failure: release_issue_failure
     optional_context_refs:
     - pre_remediation_ref_push_count
-    note: >
-      Pre-remediation ref-coherence recovery guard. Uses its OWN dedicated
-      counter pre_remediation_ref_push_count (max 3 under >= semantics =
-      2 usable push attempts), independent from the final-merge
-      ref_push_count so the two sites cannot drain each other's budget.
-      On max exceeded, routes to verify_ref_push_exhaustion (same terminal
-      as check_ref_push_loop — both guards guard the same failure condition
-      and must share the graceful re-check route). Routes non-max_exceeded
-      to ref_push_pre_remediation, then commit_guard_pre_remediation and
-      pre_remediation_merge.
-
+    note: "Pre-remediation ref-coherence recovery guard. Uses its OWN dedicated counter\
+      \ pre_remediation_ref_push_count (max 3 under >= semantics = 2 usable push attempts),\
+      \ independent from the final-merge ref_push_count so the two sites cannot drain\
+      \ each other's budget. On max exceeded, routes to verify_ref_push_exhaustion\
+      \ (same terminal as check_ref_push_loop \u2014 both guards guard the same failure\
+      \ condition and must share the graceful re-check route). Routes non-max_exceeded\
+      \ to ref_push_pre_remediation, then commit_guard_pre_remediation and pre_remediation_merge.\n"
   ref_push_pre_remediation:
     tool: push_to_remote
     with:
@@ -748,10 +705,10 @@ steps:
       force: 'true'
     on_success: commit_guard_pre_remediation
     on_failure: release_issue_failure
-    note: >
-      Pushes the feature branch when the remote ref is an ancestor of the
-      local ref, then retries pre_remediation_merge through its commit guard.
+    note: 'Pushes the feature branch when the remote ref is an ancestor of the local
+      ref, then retries pre_remediation_merge through its commit guard.
 
+      '
   verify_ref_push_exhaustion:
     tool: run_python
     with:
@@ -763,17 +720,14 @@ steps:
       route: register_clone_unconfirmed
     - route: release_issue_failure
     on_failure: release_issue_failure
-    note: >-
-      Authoritative re-check before escalating ref-push budget exhaustion.
-      If the local branch is still a clean fast-forward of remote
-      (remote_is_ancestor=true), the work is audit-approved and
-      push-recoverable — route to register_clone_unconfirmed (preserves
-      the in-progress label for operator recovery) instead of applying
-      the fail label. Follows the check_ci_already_passed precedent
-      (implementation.yaml:1472) — the pattern of an authoritative
-      re-check before escalating is what's being followed; that
-      precedent step uses the wait_for_ci tool, this one uses run_python.
-
+    note: "Authoritative re-check before escalating ref-push budget exhaustion. If\
+      \ the local branch is still a clean fast-forward of remote (remote_is_ancestor=true),\
+      \ the work is audit-approved and push-recoverable \u2014 route to register_clone_unconfirmed\
+      \ (preserves the in-progress label for operator recovery) instead of applying\
+      \ the fail label. Follows the check_ci_already_passed precedent (implementation.yaml:1472)\
+      \ \u2014 the pattern of an authoritative re-check before escalating is what's\
+      \ being followed; that precedent step uses the wait_for_ci tool, this one uses\
+      \ run_python."
   pre_remediation_merge:
     tool: merge_worktree
     with:
@@ -794,7 +748,8 @@ steps:
       route: release_issue_failure
     - when: result.failed_step == 'dirty_main_repo'
       route: main_repo_guard_pre_remediation
-    - when: result.failed_step == 'ref_coherence' and result.remote_is_ancestor == true
+    - when: result.failed_step == 'ref_coherence' and result.remote_is_ancestor ==
+        true
       route: check_ref_push_loop_pre_remediation
     - when: result.failed_step == 'ref_coherence'
       route: release_issue_failure
@@ -804,20 +759,17 @@ steps:
       route: release_issue_failure
     - route: inter_part_push_pre_remediation
     on_failure: release_issue_failure
-    note: >
-      Merges the current worktree before the remediation cycle creates a new
-      one. Audit NO GO means the implementation is incomplete, not wrong —
-      merge it first, then remediate on top. This prevents orphaning the
-      original worktree when implement re-runs. A local-ahead ref_coherence
-      mismatch uses the shared ref_push_count budget and pre-remediation push
-      recovery; genuine divergence or indeterminate ancestry escalates.
-      dirty_tree routes to commit_guard_pre_remediation to auto-commit before
-      retrying merge. dirty_main_repo routes to main_repo_guard_pre_remediation
-      to stash. test_gate, post_rebase_test_gate, and rebase escalate to
-      release_issue_failure — leaving the worktree live and retrying from a
-      remediation cycle would orphan the original worktree. path_validation
-      means the worktree was already merged in a prior session and routes to
-      remediate.
+    note: "Merges the current worktree before the remediation cycle creates a new\
+      \ one. Audit NO GO means the implementation is incomplete, not wrong \u2014\
+      \ merge it first, then remediate on top. This prevents orphaning the original\
+      \ worktree when implement re-runs. A local-ahead ref_coherence mismatch uses\
+      \ the shared ref_push_count budget and pre-remediation push recovery; genuine\
+      \ divergence or indeterminate ancestry escalates. dirty_tree routes to commit_guard_pre_remediation\
+      \ to auto-commit before retrying merge. dirty_main_repo routes to main_repo_guard_pre_remediation\
+      \ to stash. test_gate, post_rebase_test_gate, and rebase escalate to release_issue_failure\
+      \ \u2014 leaving the worktree live and retrying from a remediation cycle would\
+      \ orphan the original worktree. path_validation means the worktree was already\
+      \ merged in a prior session and routes to remediate.\n"
   inter_part_push_pre_remediation:
     tool: push_to_remote
     with:
@@ -827,13 +779,12 @@ steps:
       force: 'true'
     on_success: remediate
     on_failure: remediate
-    note: >-
-      Pushes the feature branch to remote after pre_remediation_merge succeeds,
-      mirroring inter_part_push after the normal merge step. Closes the
-      ref_coherence divergence window so subsequent merge sites see a
-      coherent local-vs-remote state. Routes to remediate on both success
-      and failure — push failure here is non-fatal; the ref_coherence
-      recovery route handles it if the next merge detects divergence.
+    note: "Pushes the feature branch to remote after pre_remediation_merge succeeds,\
+      \ mirroring inter_part_push after the normal merge step. Closes the ref_coherence\
+      \ divergence window so subsequent merge sites see a coherent local-vs-remote\
+      \ state. Routes to remediate on both success and failure \u2014 push failure\
+      \ here is non-fatal; the ref_coherence recovery route handles it if the next\
+      \ merge detects divergence."
   commit_guard_pre_remediation:
     tool: run_python
     with:
@@ -855,21 +806,20 @@ steps:
       route: release_issue_failure
     - route: pre_remediation_merge
     on_failure: pre_remediation_merge
-
   assess:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:resolve-failures"
+      skill_command: /autoskillit:resolve-failures
       skill_inputs:
-        base_branch: "${{ inputs.base_branch }}"
-        diagnosis_path: "${{ context.merge_gate_diagnosis_path }}"
-        ci_conclusion: "${{ context.merge_gate_ci_conclusion }}"
-        plan_path: "${{ context.plan_path }}"
-        worktree_path: "${{ context.worktree_path }}"
+        base_branch: ${{ inputs.base_branch }}
+        diagnosis_path: ${{ context.merge_gate_diagnosis_path }}
+        ci_conclusion: ${{ context.merge_gate_ci_conclusion }}
+        plan_path: ${{ context.plan_path }}
+        worktree_path: ${{ context.worktree_path }}
       cwd: ${{ context.worktree_path }}
       step_name: assess
-      output_dir: '.'
+      output_dir: .
     capture:
       verdict: ${{ result.verdict }}
       fixes_applied: ${{ result.fixes_applied }}
@@ -892,8 +842,6 @@ steps:
     on_rate_limit: test
     on_failure: release_issue_failure
     on_exhausted: release_issue_failure
-    optional: true
-    skip_when_false: inputs.backend_supports_git_write
     optional_context_refs:
     - merge_gate_ci_conclusion
     - merge_gate_diagnosis_path
@@ -912,24 +860,23 @@ steps:
     on_failure: release_issue_failure
     optional_context_refs:
     - test_fix_loop_count
-    note: >-
-      Guards the pre-merge test → assess → test cycle. Caps at test_fix_max_retries
-      iterations (default 3). Counter increments after test failure, so the last
-      fix attempt always gets verified before the budget is exhausted.
+    note: "Guards the pre-merge test \u2192 assess \u2192 test cycle. Caps at test_fix_max_retries\
+      \ iterations (default 3). Counter increments after test failure, so the last\
+      \ fix attempt always gets verified before the budget is exhausted."
   merge_gate_assess:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:resolve-failures"
+      skill_command: /autoskillit:resolve-failures
       skill_inputs:
-        base_branch: "${{ inputs.base_branch }}"
-        diagnosis_path: "${{ context.merge_gate_diagnosis_path }}"
-        ci_conclusion: "${{ context.merge_gate_ci_conclusion }}"
-        plan_path: "${{ context.plan_path }}"
-        worktree_path: "${{ context.worktree_path }}"
+        base_branch: ${{ inputs.base_branch }}
+        diagnosis_path: ${{ context.merge_gate_diagnosis_path }}
+        ci_conclusion: ${{ context.merge_gate_ci_conclusion }}
+        plan_path: ${{ context.plan_path }}
+        worktree_path: ${{ context.worktree_path }}
       cwd: ${{ context.worktree_path }}
       step_name: merge_gate_assess
-      output_dir: '.'
+      output_dir: .
     capture:
       verdict: ${{ result.verdict }}
       fixes_applied: ${{ result.fixes_applied }}
@@ -952,15 +899,11 @@ steps:
     on_rate_limit: merge_gate_test
     on_failure: release_issue_failure
     on_exhausted: release_issue_failure
-    optional: true
-    skip_when_false: inputs.backend_supports_git_write
     optional_context_refs:
     - merge_gate_ci_conclusion
     - merge_gate_diagnosis_path
-    note: >-
-      Merge-gate-path variant of assess. Uses a separate counter
-      (merge_test_fix_loop_count) so merge-gate retries do not drain
-      the pre-merge test fix budget.
+    note: Merge-gate-path variant of assess. Uses a separate counter (merge_test_fix_loop_count)
+      so merge-gate retries do not drain the pre-merge test fix budget.
   merge_gate_test:
     tool: test_check
     with:
@@ -982,22 +925,21 @@ steps:
     on_failure: release_issue_failure
     optional_context_refs:
     - merge_test_fix_loop_count
-    note: >-
-      Merge-gate test fix iteration guard. Uses merge_test_fix_loop_count
-      (independent of test_fix_loop_count) to prevent merge-gate retries
-      from consuming the pre-merge fix budget.
+    note: Merge-gate test fix iteration guard. Uses merge_test_fix_loop_count (independent
+      of test_fix_loop_count) to prevent merge-gate retries from consuming the pre-merge
+      fix budget.
   rebase_conflict_fix:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:resolve-merge-conflicts"
+      skill_command: /autoskillit:resolve-merge-conflicts
       skill_inputs:
-        plan_path: "${{ context.plan_path }}"
-        base_branch: "${{ inputs.base_branch }}"
-        worktree_path: "${{ context.worktree_path }}"
+        plan_path: ${{ context.plan_path }}
+        base_branch: ${{ inputs.base_branch }}
+        worktree_path: ${{ context.worktree_path }}
       cwd: ${{ context.worktree_path }}
       step_name: rebase_conflict_fix
-      output_dir: '.'
+      output_dir: .
     capture:
       conflict_escalation_required: ${{ result.escalation_required }}
     on_result:
@@ -1009,29 +951,27 @@ steps:
     on_rate_limit: release_issue_failure
     retries: 1
     on_exhausted: release_issue_failure
-    optional: true
-    skip_when_false: inputs.backend_supports_git_write
   audit_impl:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:audit-impl"
+      skill_command: /autoskillit:audit-impl
       skill_inputs:
-        all_plan_paths: "${{ context.all_plan_paths }}"
-        deviation_manifest_path: "${{ context.deviation_manifest_path }}"
-        branch_name: "${{ context.branch_name }}"
-        base_branch: "${{ inputs.base_branch }}"
-        prior_audit_cycle_path: "${{ context.audit_cycle_path }}"
+        all_plan_paths: ${{ context.all_plan_paths }}
+        deviation_manifest_path: ${{ context.deviation_manifest_path }}
+        branch_name: ${{ context.branch_name }}
+        base_branch: ${{ inputs.base_branch }}
+        prior_audit_cycle_path: ${{ context.audit_cycle_path }}
       cwd: ${{ context.work_dir }}
       step_name: audit_impl
       output_dir: '{{AUTOSKILLIT_TEMP}}/audit-impl'
-      retry_after_audit_attempt_id: "${{ context.audit_attempt_id }}"
-      closure_authority_path: "${{ inputs.closure_authority_path }}"
-      closure_authority_hash: "${{ inputs.closure_authority_hash }}"
-      closure_plan_paths: "${{ context.all_plan_paths }}"
-      closure_base_sha: "${{ context.branch_name }}"
-      closure_diff_sha: ""
-      closure_target_sha: ""
+      retry_after_audit_attempt_id: ${{ context.audit_attempt_id }}
+      closure_authority_path: ${{ inputs.closure_authority_path }}
+      closure_authority_hash: ${{ inputs.closure_authority_hash }}
+      closure_plan_paths: ${{ context.all_plan_paths }}
+      closure_base_sha: ${{ context.branch_name }}
+      closure_diff_sha: ''
+      closure_target_sha: ''
     capture:
       remediation_path: ${{ result.remediation_path }}
       audit_cycle_path: ${{ result.audit_cycle_path }}
@@ -1049,13 +989,17 @@ steps:
       route: register_clone_failure
     - when: ${{ result.audit_status }} == NON_PUBLISHED_STANDALONE
       route: register_clone_failure
-    - when: ${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }} == GO
+    - when: ${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }}
+        == GO
       route: commit_guard
-    - when: ${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == GO
+    - when: ${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict
+        }} == GO
       route: commit_guard
-    - when: ${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }} == NO GO
+    - when: ${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }}
+        == NO GO
       route: check_audit_remediation_loop
-    - when: ${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == NO GO
+    - when: ${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict
+        }} == NO GO
       route: check_audit_remediation_loop
     - when: result.error
       route: register_clone_failure
@@ -1069,8 +1013,8 @@ steps:
     - deviation_manifest_path
     - audit_cycle_path
     - audit_attempt_id
-    note: Only run if inputs.audit_impl = true. If inputs.audit_impl = false, skip directly
-      to commit_guard.
+    note: Only run if inputs.audit_impl = true. If inputs.audit_impl = false, skip
+      directly to commit_guard.
   remediate:
     action: route
     with:
@@ -1080,15 +1024,15 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:make-plan"
+      skill_command: /autoskillit:make-plan
       skill_inputs:
-        adversarial_review_level: "${{ inputs.adversarial_review_level }}"
-        task: "${{ inputs.task }}"
-        issue_url: "${{ inputs.issue_url }}"
-        audit_cycle_path: "${{ context.audit_cycle_path }}"
+        adversarial_review_level: ${{ inputs.adversarial_review_level }}
+        task: ${{ inputs.task }}
+        issue_url: ${{ inputs.issue_url }}
+        audit_cycle_path: ${{ context.audit_cycle_path }}
       cwd: ${{ context.work_dir }}
       step_name: make_plan
-      output_dir: '.'
+      output_dir: .
     capture:
       plan_path: ${{ result.plan_path }}
       all_plan_paths: ${{ result.plan_path }}
@@ -1103,9 +1047,9 @@ steps:
     on_failure: release_issue_failure
     on_rate_limit: release_issue_failure
     on_context_limit: salvage_plan
-    note: 'Consumes the exact current NO GO audit_cycle_path and emits verdict=plan,
+    note: Consumes the exact current NO GO audit_cycle_path and emits verdict=plan,
       plan_path, and plan_disposition_path. all_plan_paths appends the recovered plan;
-      make-plan cannot close the audit lineage.'
+      make-plan cannot close the audit lineage.
   salvage_plan:
     tool: run_python
     with:
@@ -1126,12 +1070,12 @@ steps:
       route: dry_walkthrough
     - route: release_issue_failure
     on_failure: release_issue_failure
-    note: 'Deterministic salvage for make_plan context-limit stumbles: verifies captured
-      plan_parts artifacts exist on disk. salvaged routes onward as if make_plan succeeded;
-      unsalvageable falls through to make_plan''s original on_failure destination. Substitute
-      the captured ${{ context.plan_parts }} value into the plan_parts argument verbatim,
-      unmodified — do not reformat, quote, or re-derive it; the callable''s input grammar
-      absorbs rendering variance.'
+    note: "Deterministic salvage for make_plan context-limit stumbles: verifies captured\
+      \ plan_parts artifacts exist on disk. salvaged routes onward as if make_plan\
+      \ succeeded; unsalvageable falls through to make_plan's original on_failure\
+      \ destination. Substitute the captured ${{ context.plan_parts }} value into\
+      \ the plan_parts argument verbatim, unmodified \u2014 do not reformat, quote,\
+      \ or re-derive it; the callable's input grammar absorbs rendering variance."
   commit_guard:
     tool: run_python
     with:
@@ -1187,7 +1131,8 @@ steps:
       route: check_merge_rebase_loop
     - when: result.failed_step == 'dirty_main_repo'
       route: check_dirty_main_retry
-    - when: result.failed_step == 'ref_coherence' and result.remote_is_ancestor == true
+    - when: result.failed_step == 'ref_coherence' and result.remote_is_ancestor ==
+        true
       route: check_ref_push_loop
     - when: result.failed_step == 'ref_coherence'
       route: release_issue_failure
@@ -1209,27 +1154,23 @@ steps:
       force: 'true'
     on_success: next_or_done
     on_failure: next_or_done
-    note: 'Pushes the feature branch to remote after each part''s merge succeeds.
-      Closes the ref_coherence divergence window between multi-part merges. Routes
-      to next_or_done on both success and failure — push failure here is not fatal;
-      the ref_coherence recovery route handles it if the next part''s merge detects
-      divergence.
-
-      '
+    note: "Pushes the feature branch to remote after each part's merge succeeds. Closes\
+      \ the ref_coherence divergence window between multi-part merges. Routes to next_or_done\
+      \ on both success and failure \u2014 push failure here is not fatal; the ref_coherence\
+      \ recovery route handles it if the next part's merge detects divergence.\n"
   next_or_done:
     action: route
     on_result:
     - when: ${{ result.next }} == more_parts
       route: dry_walkthrough
     - route: check_has_commits
-    note: 'Routing step — no tool call. The agent evaluates what comes next: 1. If
-      more plan_parts remain for the current plan → go to dry_walkthrough with next
-      part. 2. If all plan_parts are complete → go to check_has_commits. Unlike implementation.yaml
-      (which routes done → audit_impl → push), remediation runs audit_impl pre-merge
-      (GO → commit_guard), so the fallthrough here goes directly to check_has_commits
-      → push (or close_issue_already_done if zero commits ahead of base).
-
-      '
+    note: "Routing step \u2014 no tool call. The agent evaluates what comes next:\
+      \ 1. If more plan_parts remain for the current plan \u2192 go to dry_walkthrough\
+      \ with next part. 2. If all plan_parts are complete \u2192 go to check_has_commits.\
+      \ Unlike implementation.yaml (which routes done \u2192 audit_impl \u2192 push),\
+      \ remediation runs audit_impl pre-merge (GO \u2192 commit_guard), so the fallthrough\
+      \ here goes directly to check_has_commits \u2192 push (or close_issue_already_done\
+      \ if zero commits ahead of base).\n"
   check_has_commits:
     tool: run_python
     with:
@@ -1279,15 +1220,15 @@ steps:
     model: ''
     retries: 1
     with:
-      skill_command: "/autoskillit:prepare-pr"
+      skill_command: /autoskillit:prepare-pr
       skill_inputs:
-        arch_lenses: "${{ inputs.arch_lenses }}"
-        plan_paths: "${{ context.all_plan_paths }}"
-        closing_issue: "${{ context.issue_number }}"
-        base_branch: "${{ inputs.base_branch }}"
-        run_name: "${{ inputs.run_name }}"
+        arch_lenses: ${{ inputs.arch_lenses }}
+        plan_paths: ${{ context.all_plan_paths }}
+        closing_issue: ${{ context.issue_number }}
+        base_branch: ${{ inputs.base_branch }}
+        run_name: ${{ inputs.run_name }}
       cwd: ${{ context.work_dir }}
-      output_dir: '.'
+      output_dir: .
       step_name: prepare_pr
     capture:
       prep_path: ${{ result.prep_path }}
@@ -1305,18 +1246,16 @@ steps:
     on_exhausted: release_issue_failure
     optional: true
     skip_when_false: inputs.open_pr
-    note: 'Reads plan, runs git diff, classifies changed files, selects 1–3 arch-lens
-      slugs, writes one PR context file per lens, and writes a PR prep file. Does
-      NOT invoke arch-lens skills.
-
-      '
+    note: "Reads plan, runs git diff, classifies changed files, selects 1\u20133 arch-lens\
+      \ slugs, writes one PR context file per lens, and writes a PR prep file. Does\
+      \ NOT invoke arch-lens skills.\n"
   run_arch_lenses:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:arch-lens-{slug}"
+      skill_command: /autoskillit:arch-lens-{slug}
       skill_inputs:
-        context_path: "{context_path}"
+        context_path: '{context_path}'
       cwd: ${{ context.work_dir }}
       step_name: run_arch_lenses
     capture_list:
@@ -1334,21 +1273,21 @@ steps:
       \ as slugs). For each lens slug, run:\n  /autoskillit:arch-lens-{slug} {matching_context_path}\n\
       Run all selected lenses in parallel (all run_skill calls in a single message).\
       \ Accumulate each diagram_path value into context.all_diagram_paths via capture_list.\
-      \ If a lens fails, continue with remaining lenses — compose_pr handles empty\
-      \ lists gracefully by omitting the Architecture Impact section.\n"
+      \ If a lens fails, continue with remaining lenses \u2014 compose_pr handles\
+      \ empty lists gracefully by omitting the Architecture Impact section.\n"
   compose_pr:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:compose-pr"
+      skill_command: /autoskillit:compose-pr
       skill_inputs:
-        work_dir: "${{ context.work_dir }}"
-        closing_issue: "${{ context.issue_number }}"
-        all_diagram_paths: "${{ context.all_diagram_paths }}"
-        base_branch: "${{ inputs.base_branch }}"
-        prep_path: "${{ context.prep_path }}"
+        work_dir: ${{ context.work_dir }}
+        closing_issue: ${{ context.issue_number }}
+        all_diagram_paths: ${{ context.all_diagram_paths }}
+        base_branch: ${{ inputs.base_branch }}
+        prep_path: ${{ context.prep_path }}
       cwd: ${{ context.work_dir }}
-      output_dir: '.'
+      output_dir: .
       step_name: compose_pr
     capture:
       pr_url:
@@ -1363,19 +1302,17 @@ steps:
     on_rate_limit: release_issue_failure
     optional: true
     skip_when_false: inputs.open_pr
-    note: 'Reads the PR prep file, validates arch-lens diagrams (must contain ★ or
-      ●), composes the PR body, and runs gh pr create. Degrades gracefully if gh is
-      unavailable (emits pr_url=).
-
-      '
+    note: "Reads the PR prep file, validates arch-lens diagrams (must contain \u2605\
+      \ or \u25CF), composes the PR body, and runs gh pr create. Degrades gracefully\
+      \ if gh is unavailable (emits pr_url=).\n"
   guard_pr_url:
     action: route
     on_result:
     - when: ${{ context.pr_url }}
       route: extract_pr_number
     - route: release_issue_failure
-    note: Guard — skip PR extraction if pr_url is empty (graceful degradation from
-      compose_pr).
+    note: "Guard \u2014 skip PR extraction if pr_url is empty (graceful degradation\
+      \ from compose_pr)."
   extract_pr_number:
     tool: run_cmd
     with:
@@ -1426,8 +1363,8 @@ steps:
       pr_head_sha: ${{ result.pr_head_sha }}
     on_success: annotate_pr_diff
     on_failure: annotate_pr_diff
-    note: 'Invalidates every previously captured annotation path before the next
-      publication attempt, so a failed retry cannot reuse an older authority.
+    note: 'Invalidates every previously captured annotation path before the next publication
+      attempt, so a failed retry cannot reuse an older authority.
 
       '
   annotate_pr_diff:
@@ -1436,7 +1373,8 @@ steps:
       callable: autoskillit.smoke_utils.annotate_pr_diff
       pr_number: ${{ context.pr_number }}
       cwd: ${{ context.work_dir }}
-      output_dir: '{{AUTOSKILLIT_TEMP}}/review-pr/iter_${{ context.review_loop_count }}'
+      output_dir: '{{AUTOSKILLIT_TEMP}}/review-pr/iter_${{ context.review_loop_count
+        }}'
       base_branch: ${{ inputs.base_branch }}
       local_review_rounds: ${{ inputs.local_review_rounds }}
       current_iteration: ${{ context.review_loop_count }}
@@ -1462,7 +1400,7 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:review-pr"
+      skill_command: /autoskillit:review-pr
       skill_inputs:
         feature_branch: "${{ context.merge_target }}"
         base_branch: "${{ inputs.base_branch }}"
@@ -1478,7 +1416,8 @@ steps:
         receipt_path: "{{AUTOSKILLIT_TEMP}}/review-pr/iter_${{ context.review_loop_count }}/batch_review_response_${{ context.pr_number }}.json"
       cwd: ${{ context.work_dir }}
       step_name: review_pr
-      output_dir: '{{AUTOSKILLIT_TEMP}}/review-pr/iter_${{ context.review_loop_count }}'
+      output_dir: '{{AUTOSKILLIT_TEMP}}/review-pr/iter_${{ context.review_loop_count
+        }}'
     capture:
       review_verdict: ${{ result.verdict }}
       review_operation_key: ${{ result.review_operation_key }}
@@ -1522,7 +1461,7 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:resolve-review"
+      skill_command: /autoskillit:resolve-review
       skill_inputs:
         base_branch: "${{ inputs.base_branch }}"
         feature_branch: "${{ context.merge_target }}"
@@ -1533,7 +1472,7 @@ steps:
         logical_iteration: "resolve-review:${{ context.review_loop_count }}"
         receipt_path: "{{AUTOSKILLIT_TEMP}}/resolve-review/iter_${{ context.review_loop_count }}/batch_review_response_${{ context.pr_number }}.json"
       cwd: ${{ context.work_dir }}
-      output_dir: '.'
+      output_dir: .
       step_name: resolve_review
     capture:
       verdict: ${{ result.verdict }}
@@ -1609,13 +1548,13 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:resolve-merge-conflicts"
+      skill_command: /autoskillit:resolve-merge-conflicts
       skill_inputs:
-        plan_path: "${{ context.plan_path }}"
-        base_branch: "${{ inputs.base_branch }}"
-        worktree_path: "${{ context.work_dir }}"
+        plan_path: ${{ context.plan_path }}
+        base_branch: ${{ inputs.base_branch }}
+        worktree_path: ${{ context.work_dir }}
       cwd: ${{ context.work_dir }}
-      output_dir: '.'
+      output_dir: .
       step_name: resolve_pre_review_conflicts
     capture:
       conflict_escalation_required: ${{ result.escalation_required }}
@@ -1628,8 +1567,6 @@ steps:
     on_rate_limit: release_issue_failure
     retries: 1
     on_exhausted: release_issue_failure
-    optional: true
-    skip_when_false: inputs.backend_supports_git_write
   re_push_review:
     tool: push_to_remote
     with:
@@ -1681,7 +1618,8 @@ steps:
     capture:
       review_loop_count: ${{ result.next_iteration }}
     on_result:
-    - when: ${{ context.review_verdict }} == stale_snapshot and ${{ result.max_exceeded }} == true
+    - when: ${{ context.review_verdict }} == stale_snapshot and ${{ result.max_exceeded
+        }} == true
       route: release_issue_failure
     - when: ${{ result.had_blocking }} == true and ${{ result.max_exceeded }} == false
       route: pre_review_cleanup
@@ -1690,20 +1628,20 @@ steps:
     optional_context_refs:
     - review_loop_count
     - review_verdict
-    note: 'Compound iteration + blocking guard. Routes back to pre_review_cleanup (then
-      annotate_pr_diff) only when had_blocking=true AND max_exceeded=false. had_blocking
-      is true when previous_verdict=changes_requested OR (local_review_rounds > 0 AND
-      iteration < local_review_rounds AND verdict not in LOCAL_ROUND_EXEMPT_VERDICTS).
-      approved_with_comments and needs_human yield had_blocking=false unconditionally
-      — approved_with_comments because its resolve pass is one-shot, needs_human because
-      it indicates review was skipped (graceful degradation) and re-review would be pointless.
-
-      '
+    note: "Compound iteration + blocking guard. Routes back to pre_review_cleanup\
+      \ (then annotate_pr_diff) only when had_blocking=true AND max_exceeded=false.\
+      \ had_blocking is true when previous_verdict=changes_requested OR (local_review_rounds\
+      \ > 0 AND iteration < local_review_rounds AND verdict not in LOCAL_ROUND_EXEMPT_VERDICTS).\
+      \ approved_with_comments and needs_human yield had_blocking=false unconditionally\
+      \ \u2014 approved_with_comments because its resolve pass is one-shot, needs_human\
+      \ because it indicates review was skipped (graceful degradation) and re-review\
+      \ would be pointless.\n"
   pre_review_cleanup:
     tool: run_python
     with:
       callable: autoskillit.smoke_utils.pre_iteration_cleanup
-      output_dir: '{{AUTOSKILLIT_TEMP}}/review-pr/iter_${{ context.review_loop_count }}'
+      output_dir: '{{AUTOSKILLIT_TEMP}}/review-pr/iter_${{ context.review_loop_count
+        }}'
       work_dir: ${{ context.work_dir }}
     on_success: clear_review_annotation_context
     on_failure: clear_review_annotation_context
@@ -1738,8 +1676,8 @@ steps:
     skip_when_false: inputs.open_pr
     note: 'Short-circuits CI wait when no workflow trigger matches the feature branch.
       ci_applicable=false means neither push nor pull_request triggers apply to this
-      branch/base combination, so wait_for_ci would exhaust its timeout budget with zero
-      CI runs.
+      branch/base combination, so wait_for_ci would exhaust its timeout budget with
+      zero CI runs.
 
       '
   check_pr_state:
@@ -1753,15 +1691,13 @@ steps:
     - route: ci_watch
     on_failure: ci_watch
     skip_when_false: inputs.open_pr
-    note: 'Pre-CI-watch gate: checks PR mergeable state before entering the CI polling
-      loop. CONFLICTING PRs cannot trigger pull_request workflows (GitHub cannot create
-      refs/pull/N/merge), so routing to ci_watch would produce a guaranteed no_runs.
-      Routes CONFLICTING directly to ci_conflict_fix (resolve-merge-conflicts) — GitHub''s
-      CONFLICTING status is authoritative, no stale-base exit-code discrimination
-      needed (mirrors merge-prs.yaml check_mergeability pattern). Routes MERGEABLE/UNKNOWN
-      to ci_watch.
-
-      '
+    note: "Pre-CI-watch gate: checks PR mergeable state before entering the CI polling\
+      \ loop. CONFLICTING PRs cannot trigger pull_request workflows (GitHub cannot\
+      \ create refs/pull/N/merge), so routing to ci_watch would produce a guaranteed\
+      \ no_runs. Routes CONFLICTING directly to ci_conflict_fix (resolve-merge-conflicts)\
+      \ \u2014 GitHub's CONFLICTING status is authoritative, no stale-base exit-code\
+      \ discrimination needed (mirrors merge-prs.yaml check_mergeability pattern).\
+      \ Routes MERGEABLE/UNKNOWN to ci_watch.\n"
   ci_watch:
     tool: wait_for_ci
     with:
@@ -1785,16 +1721,14 @@ steps:
     on_failure: detect_ci_conflict
     optional: true
     skip_when_false: inputs.open_pr
-    note: 'Waits for the GitHub Actions CI run on context.merge_target to complete
-      using the wait_for_ci MCP tool (timeout: 300 s). Captures structured output
-      (conclusion + failed job names) for downstream resolve_ci. Skipped when open_pr=false
-      — no remote feature branch is opened in that mode. Routes on result.conclusion:
-      success → check_repo_merge_state, no_runs → handle_no_ci_runs (auto_trigger
-      fires first: empty commit + force-push + re-poll; handle_no_ci_runs reached
-      only when push fails), timed_out → check_ci_timed_out_loop (iteration guard),
-      failure → detect_ci_conflict.
-
-      '
+    note: "Waits for the GitHub Actions CI run on context.merge_target to complete\
+      \ using the wait_for_ci MCP tool (timeout: 300 s). Captures structured output\
+      \ (conclusion + failed job names) for downstream resolve_ci. Skipped when open_pr=false\
+      \ \u2014 no remote feature branch is opened in that mode. Routes on result.conclusion:\
+      \ success \u2192 check_repo_merge_state, no_runs \u2192 handle_no_ci_runs (auto_trigger\
+      \ fires first: empty commit + force-push + re-poll; handle_no_ci_runs reached\
+      \ only when push fails), timed_out \u2192 check_ci_timed_out_loop (iteration\
+      \ guard), failure \u2192 detect_ci_conflict.\n"
   check_ci_timed_out_loop:
     tool: run_python
     with:
@@ -1914,15 +1848,14 @@ steps:
       route: ci_watch
     - route: mark_issue_failed_no_ci
     on_failure: mark_issue_failed_no_ci
-    note: 'Safety net before terminal escalation: re-polls CI with a short timeout
-      to detect if CI has already passed or failed despite the watcher failing to
-      observe it. Uses wait_for_ci as the authoritative signal (30s timeout for immediate
-      state detection). success → merge gate, failure → conflict remediation, timed_out
-      (still pending) → ci_watch for re-poll, no_runs → terminal escalation path.
-
-      '
+    note: "Safety net before terminal escalation: re-polls CI with a short timeout\
+      \ to detect if CI has already passed or failed despite the watcher failing to\
+      \ observe it. Uses wait_for_ci as the authoritative signal (30s timeout for\
+      \ immediate state detection). success \u2192 merge gate, failure \u2192 conflict\
+      \ remediation, timed_out (still pending) \u2192 ci_watch for re-poll, no_runs\
+      \ \u2192 terminal escalation path.\n"
   mark_issue_failed_no_ci:
-    description: Swap in-progress → fail label before CI failure escalation
+    description: "Swap in-progress \u2192 fail label before CI failure escalation"
     tool: release_issue
     optional: true
     skip_when_false: inputs.issue_url
@@ -1948,11 +1881,11 @@ steps:
     optional: true
     skip_when_false: inputs.pipeline_health
     with:
-      skill_command: "/autoskillit:analyze-pipeline-health"
+      skill_command: /autoskillit:analyze-pipeline-health
       skill_inputs:
-        kitchen_id: "${{ inputs.kitchen_id }}"
-        dispatch_id: "${{ inputs.dispatch_id }}"
-        diagnostics_log_dir: "${{ inputs.diagnostics_log_dir }}"
+        kitchen_id: ${{ inputs.kitchen_id }}
+        dispatch_id: ${{ inputs.dispatch_id }}
+        diagnostics_log_dir: ${{ inputs.diagnostics_log_dir }}
       cwd: ${{ context.work_dir }}
       step_name: analyze_pipeline_health
     on_success: escalate_stop_no_ci
@@ -1965,12 +1898,12 @@ steps:
       '
   escalate_stop_no_ci:
     action: stop
-    message: 'CI safety net: statusCheckRollup returned no checks for PR ${{ context.pr_number
-      }}. This typically means no workflow is configured to trigger on this branch
-      pattern. Check .github/workflows/ trigger configuration. This is NOT a test
-      failure — CI never started. Emit the L3 result sentinel JSON block now with
-      success=false. Example sentinel: {"success": false, "reason": "no CI checks
-      configured"}'
+    message: "CI safety net: statusCheckRollup returned no checks for PR ${{ context.pr_number\
+      \ }}. This typically means no workflow is configured to trigger on this branch\
+      \ pattern. Check .github/workflows/ trigger configuration. This is NOT a test\
+      \ failure \u2014 CI never started. Emit the L3 result sentinel JSON block now\
+      \ with success=false. Example sentinel: {\"success\": false, \"reason\": \"\
+      no CI checks configured\"}"
   check_repo_merge_state:
     tool: check_repo_merge_state
     block: pre_queue_gate
@@ -1989,14 +1922,12 @@ steps:
     on_success: route_queue_mode
     on_failure: immediate_merge
     skip_when_false: inputs.open_pr
-    note: 'Single GraphQL round-trip that captures queue_available, merge_group_trigger,
-      auto_merge_available, and ci_event for the target branch. Consolidates the former
-      three sequential run_cmd steps (check_merge_queue, check_merge_group_trigger,
-      check_auto_merge) into one MCP tool call. On failure (network error, auth failure),
-      falls through to immediate_merge (non-queue direct merge path). Skipped when
-      open_pr=false — no PR was opened.
-
-      '
+    note: "Single GraphQL round-trip that captures queue_available, merge_group_trigger,\
+      \ auto_merge_available, and ci_event for the target branch. Consolidates the\
+      \ former three sequential run_cmd steps (check_merge_queue, check_merge_group_trigger,\
+      \ check_auto_merge) into one MCP tool call. On failure (network error, auth\
+      \ failure), falls through to immediate_merge (non-queue direct merge path).\
+      \ Skipped when open_pr=false \u2014 no PR was opened.\n"
   route_queue_mode:
     block: pre_queue_gate
     action: route
@@ -2058,16 +1989,14 @@ steps:
       route: register_clone_unconfirmed
     - route: register_clone_unconfirmed
     on_failure: register_clone_unconfirmed
-    note: 'Short probe (60s) after enqueue_to_queue failure. If the PR is already
-      merged, route to release_issue_success. If the queue already confirms CI failure
-      (ejected_ci_failure or dropped_merge_group_ci), route directly to diagnose_ci.
-      If enrollment was attempted but the PR never appeared in the queue (not_enrolled),
-      route to release_issue_failure — this is a repo configuration error. For other
-      active queue states (dropped_healthy, ejected, stalled), route to wait_for_queue
-      for full 900s authoritative watch. If the probe timed out or returned an unexpected
-      state, escalate via register_clone_unconfirmed.
-
-      '
+    note: "Short probe (60s) after enqueue_to_queue failure. If the PR is already\
+      \ merged, route to release_issue_success. If the queue already confirms CI failure\
+      \ (ejected_ci_failure or dropped_merge_group_ci), route directly to diagnose_ci.\
+      \ If enrollment was attempted but the PR never appeared in the queue (not_enrolled),\
+      \ route to release_issue_failure \u2014 this is a repo configuration error.\
+      \ For other active queue states (dropped_healthy, ejected, stalled), route to\
+      \ wait_for_queue for full 900s authoritative watch. If the probe timed out or\
+      \ returned an unexpected state, escalate via register_clone_unconfirmed.\n"
   wait_for_queue:
     tool: wait_for_merge_queue
     with:
@@ -2100,19 +2029,17 @@ steps:
     - route: register_clone_unconfirmed
     on_failure: register_clone_unconfirmed
     skip_when_false: inputs.open_pr
-    note: 'Waits up to 15 minutes for the PR to merge through the queue. merged →
-      release_issue_success to apply staged label, then register_clone_success. release_issue_success
-      is optional with skip_when_false: inputs.issue_url — when issue_url is absent
-      the step is silently skipped and pipeline continues to register_clone_success.
-      ejected_ci_failure → diagnose_ci (CI failure; conflict resolution cannot fix
-      this). dropped_merge_group_ci → check_dropped_ci_loop (re-enqueue on first
-      drop, escalate to diagnose_ci after the cap is exceeded). not_enrolled →
-      release_issue_failure (enrollment failed; repo configuration error). ejected
-      → conflict fix cycle then re-enter. stalled → lightweight re-enrollment via
-      enqueue_pr. timeout → register_clone_unconfirmed (release claim without
-      staged label; merge unconfirmed).
-
-      '
+    note: "Waits up to 15 minutes for the PR to merge through the queue. merged \u2192\
+      \ release_issue_success to apply staged label, then register_clone_success.\
+      \ release_issue_success is optional with skip_when_false: inputs.issue_url \u2014\
+      \ when issue_url is absent the step is silently skipped and pipeline continues\
+      \ to register_clone_success. ejected_ci_failure \u2192 diagnose_ci (CI failure;\
+      \ conflict resolution cannot fix this). dropped_merge_group_ci \u2192 check_dropped_ci_loop\
+      \ (re-enqueue on first drop, escalate to diagnose_ci after the cap is exceeded).\
+      \ not_enrolled \u2192 release_issue_failure (enrollment failed; repo configuration\
+      \ error). ejected \u2192 conflict fix cycle then re-enter. stalled \u2192 lightweight\
+      \ re-enrollment via enqueue_pr. timeout \u2192 register_clone_unconfirmed (release\
+      \ claim without staged label; merge unconfirmed).\n"
   reenroll_stalled_pr:
     tool: enqueue_pr
     with:
@@ -2188,14 +2115,12 @@ steps:
       route: diagnose_ci
     - route: reenter_merge_queue_cheap
     on_failure: diagnose_ci
-    note: 'Circuit breaker for the dropped_merge_group_ci re-enrollment loop. Tracks
-      merge-group-CI drop count in a file-based counter. On the first drop, re-enqueues
-      via reenter_merge_queue_cheap (transient CI failure is often self-healing).
-      After 2 consecutive drops, escalates to diagnose_ci — the merge-group CI is
-      persistently failing, so a re-enqueue is unlikely to help. Mirrors the
-      check_dropped_healthy_loop pattern for the dropped_healthy branch.
-
-      '
+    note: "Circuit breaker for the dropped_merge_group_ci re-enrollment loop. Tracks\
+      \ merge-group-CI drop count in a file-based counter. On the first drop, re-enqueues\
+      \ via reenter_merge_queue_cheap (transient CI failure is often self-healing).\
+      \ After 2 consecutive drops, escalates to diagnose_ci \u2014 the merge-group\
+      \ CI is persistently failing, so a re-enqueue is unlikely to help. Mirrors the\
+      \ check_dropped_healthy_loop pattern for the dropped_healthy branch.\n"
   queue_ejected_fix:
     tool: run_python
     with:
@@ -2219,13 +2144,13 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:resolve-merge-conflicts"
+      skill_command: /autoskillit:resolve-merge-conflicts
       skill_inputs:
-        plan_path: "${{ context.plan_path }}"
-        base_branch: "${{ inputs.base_branch }}"
-        worktree_path: "${{ context.work_dir }}"
+        plan_path: ${{ context.plan_path }}
+        base_branch: ${{ inputs.base_branch }}
+        worktree_path: ${{ context.work_dir }}
       cwd: ${{ context.work_dir }}
-      output_dir: '.'
+      output_dir: .
       step_name: resolve_queue_merge_conflicts
     capture:
       conflict_escalation_required: ${{ result.escalation_required }}
@@ -2239,11 +2164,9 @@ steps:
     retries: 1
     on_exhausted: diagnose_ci
     skip_when_false: inputs.open_pr
-    note: 'Resolves rebase conflicts on the feature branch after queue ejection. Only
-      reached when the cheap rebase in queue_ejected_fix encountered conflicts. escalation_required=true
-      → release_issue_failure for human review.
-
-      '
+    note: "Resolves rebase conflicts on the feature branch after queue ejection. Only\
+      \ reached when the cheap rebase in queue_ejected_fix encountered conflicts.\
+      \ escalation_required=true \u2192 release_issue_failure for human review.\n"
   re_push_queue_fix:
     tool: push_to_remote
     with:
@@ -2314,13 +2237,11 @@ steps:
     - route: detect_ci_conflict
     on_failure: detect_ci_conflict
     skip_when_false: inputs.open_pr
-    note: 'Validates CI on the rebased feature branch after queue ejection fix and
-      re-push. Routes on result.conclusion: success → reenter_merge_queue, no_runs
-      → release_issue_failure (auto_trigger fires first: empty commit + force-push
-      + re-poll; no_runs reached only when trigger recovery fails), timed_out → check_ci_post_queue_loop,
-      failure → detect_ci_conflict.
-
-      '
+    note: "Validates CI on the rebased feature branch after queue ejection fix and\
+      \ re-push. Routes on result.conclusion: success \u2192 reenter_merge_queue,\
+      \ no_runs \u2192 release_issue_failure (auto_trigger fires first: empty commit\
+      \ + force-push + re-poll; no_runs reached only when trigger recovery fails),\
+      \ timed_out \u2192 check_ci_post_queue_loop, failure \u2192 detect_ci_conflict.\n"
   check_ci_post_queue_loop:
     tool: run_python
     with:
@@ -2337,11 +2258,10 @@ steps:
     optional_context_refs:
     - ci_post_queue_loop_count
     skip_when_false: inputs.open_pr
-    note: 'Iteration guard for the ci_watch_post_queue_fix timed_out self-loop. Caps
-      at 2 iterations (initial + 1 retry). On budget exhaustion, routes to release_issue_failure
-      — this is already a post-ejection retry path so further escalation is not warranted.
-
-      '
+    note: "Iteration guard for the ci_watch_post_queue_fix timed_out self-loop. Caps\
+      \ at 2 iterations (initial + 1 retry). On budget exhaustion, routes to release_issue_failure\
+      \ \u2014 this is already a post-ejection retry path so further escalation is\
+      \ not warranted.\n"
   reenter_merge_queue:
     tool: enqueue_pr
     with:
@@ -2401,11 +2321,9 @@ steps:
     - route: register_clone_unconfirmed
     on_failure: register_clone_unconfirmed
     skip_when_false: inputs.open_pr
-    note: 'Polls GitHub PR state every 10 s for up to 15 minutes. merged → release_issue_success.
-      closed → conflict fix cycle. timeout → register_clone_unconfirmed (releases
-      claim; merge unconfirmed).
-
-      '
+    note: "Polls GitHub PR state every 10 s for up to 15 minutes. merged \u2192 release_issue_success.\
+      \ closed \u2192 conflict fix cycle. timeout \u2192 register_clone_unconfirmed\
+      \ (releases claim; merge unconfirmed).\n"
   direct_merge_conflict_fix:
     tool: run_python
     with:
@@ -2428,13 +2346,13 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:resolve-merge-conflicts"
+      skill_command: /autoskillit:resolve-merge-conflicts
       skill_inputs:
-        plan_path: "${{ context.plan_path }}"
-        base_branch: "${{ inputs.base_branch }}"
-        worktree_path: "${{ context.work_dir }}"
+        plan_path: ${{ context.plan_path }}
+        base_branch: ${{ inputs.base_branch }}
+        worktree_path: ${{ context.work_dir }}
       cwd: ${{ context.work_dir }}
-      output_dir: '.'
+      output_dir: .
       step_name: resolve_direct_merge_conflicts
     capture:
       conflict_escalation_required: ${{ result.escalation_required }}
@@ -2448,11 +2366,9 @@ steps:
     retries: 1
     on_exhausted: diagnose_ci
     skip_when_false: inputs.open_pr
-    note: 'Resolves rebase conflicts after direct-merge rejection. Only reached when
-      the cheap rebase in direct_merge_conflict_fix encountered conflicts. escalation_required=true
-      → release_issue_failure for human review.
-
-      '
+    note: "Resolves rebase conflicts after direct-merge rejection. Only reached when\
+      \ the cheap rebase in direct_merge_conflict_fix encountered conflicts. escalation_required=true\
+      \ \u2192 release_issue_failure for human review.\n"
   re_push_direct_fix:
     tool: push_to_remote
     with:
@@ -2486,13 +2402,11 @@ steps:
     on_success: wait_for_immediate_merge
     on_failure: release_issue_failure
     skip_when_false: inputs.open_pr
-    note: 'Merges the PR immediately using plain --squash when autoMergeAllowed=false.
-      Unlike direct_merge, no --auto flag is used — GitHub executes the merge synchronously
-      rather than queueing it for when checks pass. On failure, escalates via release_issue_failure
-      so the issue claim is released and the pipeline reports an error rather than
-      silently succeeding.
-
-      '
+    note: "Merges the PR immediately using plain --squash when autoMergeAllowed=false.\
+      \ Unlike direct_merge, no --auto flag is used \u2014 GitHub executes the merge\
+      \ synchronously rather than queueing it for when checks pass. On failure, escalates\
+      \ via release_issue_failure so the issue claim is released and the pipeline\
+      \ reports an error rather than silently succeeding.\n"
   wait_for_immediate_merge:
     tool: run_python
     with:
@@ -2508,13 +2422,11 @@ steps:
     - route: register_clone_unconfirmed
     on_failure: register_clone_unconfirmed
     skip_when_false: inputs.open_pr
-    note: 'Polls GitHub PR state every 10s for up to 5 minutes (30 iterations). Since
-      immediate_merge uses --squash without --auto, the merge completes synchronously
-      — this poll is a confirmation window. merged → release_issue_success. closed
-      → PR was rejected (stale base or conflict) — route to conflict fix. timeout
-      → register_clone_unconfirmed.
-
-      '
+    note: "Polls GitHub PR state every 10s for up to 5 minutes (30 iterations). Since\
+      \ immediate_merge uses --squash without --auto, the merge completes synchronously\
+      \ \u2014 this poll is a confirmation window. merged \u2192 release_issue_success.\
+      \ closed \u2192 PR was rejected (stale base or conflict) \u2014 route to conflict\
+      \ fix. timeout \u2192 register_clone_unconfirmed.\n"
   immediate_merge_conflict_fix:
     tool: run_python
     with:
@@ -2537,13 +2449,13 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:resolve-merge-conflicts"
+      skill_command: /autoskillit:resolve-merge-conflicts
       skill_inputs:
-        plan_path: "${{ context.plan_path }}"
-        base_branch: "${{ inputs.base_branch }}"
-        worktree_path: "${{ context.work_dir }}"
+        plan_path: ${{ context.plan_path }}
+        base_branch: ${{ inputs.base_branch }}
+        worktree_path: ${{ context.work_dir }}
       cwd: ${{ context.work_dir }}
-      output_dir: '.'
+      output_dir: .
       step_name: resolve_immediate_merge_conflicts
     capture:
       conflict_escalation_required: ${{ result.escalation_required }}
@@ -2557,11 +2469,9 @@ steps:
     retries: 1
     on_exhausted: diagnose_ci
     skip_when_false: inputs.open_pr
-    note: 'Resolves rebase conflicts after immediate-merge rejection. Only reached
-      when the cheap rebase in immediate_merge_conflict_fix encountered conflicts.
-      escalation_required=true → release_issue_failure for human review.
-
-      '
+    note: "Resolves rebase conflicts after immediate-merge rejection. Only reached\
+      \ when the cheap rebase in immediate_merge_conflict_fix encountered conflicts.\
+      \ escalation_required=true \u2192 release_issue_failure for human review.\n"
   re_push_immediate_fix:
     tool: push_to_remote
     with:
@@ -2590,14 +2500,15 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:diagnose-ci"
+      skill_command: /autoskillit:diagnose-ci
       skill_inputs:
-        ci_failed_jobs: "${{ context.ci_failed_jobs }}"
-        event: "${{ context.ci_event }}"
-        branch: "${{ context.merge_target }}"
+        ci_failed_jobs: ${{ context.ci_failed_jobs }}
+        event: ${{ context.ci_event }}
+        branch: ${{ context.merge_target }}
       cwd: ${{ context.work_dir }}
       step_name: diagnose_ci
-      output_dir: '{{AUTOSKILLIT_TEMP}}/diagnose-ci/rebase_${{ context.ci_rebase_count }}_flake_${{ context.ci_flake_count }}'
+      output_dir: '{{AUTOSKILLIT_TEMP}}/diagnose-ci/rebase_${{ context.ci_rebase_count
+        }}_flake_${{ context.ci_flake_count }}'
     capture:
       diagnosis_path: ${{ result.diagnosis_path }}
     on_success: resolve_ci
@@ -2620,22 +2531,20 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:resolve-failures"
+      skill_command: /autoskillit:resolve-failures
       skill_inputs:
-        base_branch: "${{ inputs.base_branch }}"
-        diagnosis_path: "${{ context.diagnosis_path }}"
-        ci_failed_jobs: "${{ context.ci_failed_jobs }}"
-        ci_conclusion: "${{ context.ci_conclusion }}"
-        plan_path: "${{ context.plan_path }}"
-        worktree_path: "${{ context.work_dir }}"
+        base_branch: ${{ inputs.base_branch }}
+        diagnosis_path: ${{ context.diagnosis_path }}
+        ci_failed_jobs: ${{ context.ci_failed_jobs }}
+        ci_conclusion: ${{ context.ci_conclusion }}
+        plan_path: ${{ context.plan_path }}
+        worktree_path: ${{ context.work_dir }}
       cwd: ${{ context.work_dir }}
-      output_dir: '.'
+      output_dir: .
       step_name: resolve_ci
     capture:
       verdict: ${{ result.verdict }}
     retries: 2
-    optional: true
-    skip_when_false: inputs.backend_supports_git_write
     on_exhausted: release_issue_failure
     on_context_limit: release_issue_failure
     on_rate_limit: release_issue_failure
@@ -2652,16 +2561,14 @@ steps:
       route: release_issue_failure
     - route: release_issue_failure
     on_failure: release_issue_failure
-    note: 'Runs when ci_watch reports a CI failure. Receives ci_failed_jobs from wait_for_ci
-      structured output to avoid redundant CI failure re-investigation. Routes via
-      on_result: verdict dispatch — real_fix pushes, already_green rebases and re-diagnoses
-      (sibling fix may have landed), flake_suspected routes to check_flake_loop (bounded
-      by ci_flake_count <= 3, shared across all diagnose_ci callers; escalates to
-      release_issue_failure when exceeded), ci_only_failure routes to check_flake_loop
-      (bounded retry, then escalates via max_exceeded).
-      Retries up to 2 times (3 total attempts) before exhausting to release_issue_failure.
-
-      '
+    note: "Runs when ci_watch reports a CI failure. Receives ci_failed_jobs from wait_for_ci\
+      \ structured output to avoid redundant CI failure re-investigation. Routes via\
+      \ on_result: verdict dispatch \u2014 real_fix pushes, already_green rebases\
+      \ and re-diagnoses (sibling fix may have landed), flake_suspected routes to\
+      \ check_flake_loop (bounded by ci_flake_count <= 3, shared across all diagnose_ci\
+      \ callers; escalates to release_issue_failure when exceeded), ci_only_failure\
+      \ routes to check_flake_loop (bounded retry, then escalates via max_exceeded).\
+      \ Retries up to 2 times (3 total attempts) before exhausting to release_issue_failure.\n"
   pre_resolve_rebase:
     tool: run_python
     with:
@@ -2674,28 +2581,24 @@ steps:
       route: check_ci_rebase_loop
     - route: resolve_pre_resolve_conflicts
     on_failure: resolve_pre_resolve_conflicts
-    note: 'Rebases the feature branch against integration head when resolve_ci emits
-      already_green — the worktree was already clean because a sibling pipeline''s
-      fix already landed on integration. Pulling it in before re-running diagnose_ci
-      gives the pipeline a real chance at emitting real_fix and reaching re_push.
-
-      '
+    note: "Rebases the feature branch against integration head when resolve_ci emits\
+      \ already_green \u2014 the worktree was already clean because a sibling pipeline's\
+      \ fix already landed on integration. Pulling it in before re-running diagnose_ci\
+      \ gives the pipeline a real chance at emitting real_fix and reaching re_push.\n"
   resolve_pre_resolve_conflicts:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:resolve-merge-conflicts"
+      skill_command: /autoskillit:resolve-merge-conflicts
       skill_inputs:
-        plan_path: "${{ context.plan_path }}"
-        base_branch: "${{ inputs.base_branch }}"
-        worktree_path: "${{ context.work_dir }}"
+        plan_path: ${{ context.plan_path }}
+        base_branch: ${{ inputs.base_branch }}
+        worktree_path: ${{ context.work_dir }}
       cwd: ${{ context.work_dir }}
-      output_dir: '.'
+      output_dir: .
       step_name: resolve_pre_resolve_conflicts
     capture:
       conflict_escalation_required: ${{ result.escalation_required }}
-    optional: true
-    skip_when_false: inputs.backend_supports_git_write
     on_result:
     - when: ${{ result.escalation_required }} == true
       route: diagnose_ci
@@ -2720,11 +2623,9 @@ steps:
     on_failure: release_issue_failure
     optional_context_refs:
     - ci_rebase_count
-    note: 'Guards the resolve_ci(already_green) → pre_resolve_rebase → diagnose_ci
-      cycle. Caps at 3 rebase-rediagnose iterations. If CI keeps reporting already_green
-      after 3 rebases, a structural issue requires human intervention.
-
-      '
+    note: "Guards the resolve_ci(already_green) \u2192 pre_resolve_rebase \u2192 diagnose_ci\
+      \ cycle. Caps at 3 rebase-rediagnose iterations. If CI keeps reporting already_green\
+      \ after 3 rebases, a structural issue requires human intervention.\n"
   check_flake_loop:
     tool: run_python
     with:
@@ -2740,14 +2641,12 @@ steps:
     on_failure: release_issue_failure
     optional_context_refs:
     - ci_flake_count
-    note: 'Guards ALL resolve_ci(flake_suspected) → re_push cycles. The ci_flake_count
-      counter is shared across all entry points into diagnose_ci, including CI watch
-      retries, merge queue ejections, dropped-CI-group paths, and conflict resolution
-      escalations. Caps at 3 total flake_suspected verdicts per pipeline run. If CI
-      keeps failing with the same flake_suspected verdict after 3 iterations from any
-      combination of callers, the failure requires human intervention.
-
-      '
+    note: "Guards ALL resolve_ci(flake_suspected) \u2192 re_push cycles. The ci_flake_count\
+      \ counter is shared across all entry points into diagnose_ci, including CI watch\
+      \ retries, merge queue ejections, dropped-CI-group paths, and conflict resolution\
+      \ escalations. Caps at 3 total flake_suspected verdicts per pipeline run. If\
+      \ CI keeps failing with the same flake_suspected verdict after 3 iterations\
+      \ from any combination of callers, the failure requires human intervention.\n"
   re_push:
     tool: push_to_remote
     with:
@@ -2779,24 +2678,22 @@ steps:
     on_failure: diagnose_ci
     optional: true
     skip_when_false: inputs.open_pr
-    note: 'Stale-base triage gate for CI FAILURE paths only. Do NOT route check_pr_mergeable
-      CONFLICTING here — GitHub''s CONFLICTING status is authoritative and should
-      route directly to ci_conflict_fix. Valid callers: ci_watch, check_ci_timed_out_loop,
-      check_ci_already_passed, ci_watch_post_queue_fix. Exit 0 (base NOT ancestor)
-      → ci_conflict_fix. Exit 1 (base IS ancestor or fetch failed) → diagnose_ci.
-
-      '
+    note: "Stale-base triage gate for CI FAILURE paths only. Do NOT route check_pr_mergeable\
+      \ CONFLICTING here \u2014 GitHub's CONFLICTING status is authoritative and should\
+      \ route directly to ci_conflict_fix. Valid callers: ci_watch, check_ci_timed_out_loop,\
+      \ check_ci_already_passed, ci_watch_post_queue_fix. Exit 0 (base NOT ancestor)\
+      \ \u2192 ci_conflict_fix. Exit 1 (base IS ancestor or fetch failed) \u2192 diagnose_ci.\n"
   ci_conflict_fix:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:resolve-merge-conflicts"
+      skill_command: /autoskillit:resolve-merge-conflicts
       skill_inputs:
-        plan_path: "${{ context.plan_path }}"
-        base_branch: "${{ inputs.base_branch }}"
-        worktree_path: "${{ context.work_dir }}"
+        plan_path: ${{ context.plan_path }}
+        base_branch: ${{ inputs.base_branch }}
+        worktree_path: ${{ context.work_dir }}
       cwd: ${{ context.work_dir }}
-      output_dir: '.'
+      output_dir: .
       step_name: ci_conflict_fix
     capture:
       conflict_escalation_required: ${{ result.escalation_required }}
@@ -2815,13 +2712,14 @@ steps:
       conflict resolution, routes to re_push to re-trigger CI on the rebased branch.
       On escalation (LOW confidence conflicts), tool failure, context limit, or retry
       exhaustion, routes to diagnose_ci for CI log capture before release_issue_failure.
-      diagnose_ci runs before resolve_ci. If diagnosis fails, resolve_ci proceeds without
-      diagnosis context. retries: 1 bounds the loop; after 2 total attempts, escalates.
+      diagnose_ci runs before resolve_ci. If diagnosis fails, resolve_ci proceeds
+      without diagnosis context. retries: 1 bounds the loop; after 2 total attempts,
+      escalates.
 
       '
   register_clone_unconfirmed:
-    description: Register clone as preserved — merge unconfirmed, in-progress label
-      retained
+    description: "Register clone as preserved \u2014 merge unconfirmed, in-progress\
+      \ label retained"
     tool: register_clone_status
     with:
       clone_path: ${{ context.work_dir }}
@@ -2829,12 +2727,10 @@ steps:
       step_name: register_clone_unconfirmed
     on_success: analyze_pipeline_health_unconfirmed
     on_failure: analyze_pipeline_health_unconfirmed
-    note: 'Called when a merge-wait step times out before merge is confirmed. Does
-      NOT call release_issue — the in-progress label stays on the issue so operators
-      can see the PR is still actively queued. The clone is preserved (status: unconfirmed)
-      for human inspection.
-
-      '
+    note: "Called when a merge-wait step times out before merge is confirmed. Does\
+      \ NOT call release_issue \u2014 the in-progress label stays on the issue so\
+      \ operators can see the PR is still actively queued. The clone is preserved\
+      \ (status: unconfirmed) for human inspection.\n"
   analyze_pipeline_health_unconfirmed:
     description: Run post-pipeline diagnostic analysis on session logs (unconfirmed
       path)
@@ -2844,11 +2740,11 @@ steps:
     optional: true
     skip_when_false: inputs.pipeline_health
     with:
-      skill_command: "/autoskillit:analyze-pipeline-health"
+      skill_command: /autoskillit:analyze-pipeline-health
       skill_inputs:
-        kitchen_id: "${{ inputs.kitchen_id }}"
-        dispatch_id: "${{ inputs.dispatch_id }}"
-        diagnostics_log_dir: "${{ inputs.diagnostics_log_dir }}"
+        kitchen_id: ${{ inputs.kitchen_id }}
+        dispatch_id: ${{ inputs.dispatch_id }}
+        diagnostics_log_dir: ${{ inputs.diagnostics_log_dir }}
       cwd: ${{ context.work_dir }}
       step_name: analyze_pipeline_health
     on_success: done_unconfirmed
@@ -2935,11 +2831,11 @@ steps:
     optional: true
     skip_when_false: inputs.pipeline_health
     with:
-      skill_command: "/autoskillit:analyze-pipeline-health"
+      skill_command: /autoskillit:analyze-pipeline-health
       skill_inputs:
-        kitchen_id: "${{ inputs.kitchen_id }}"
-        dispatch_id: "${{ inputs.dispatch_id }}"
-        diagnostics_log_dir: "${{ inputs.diagnostics_log_dir }}"
+        kitchen_id: ${{ inputs.kitchen_id }}
+        dispatch_id: ${{ inputs.dispatch_id }}
+        diagnostics_log_dir: ${{ inputs.diagnostics_log_dir }}
       cwd: ${{ context.work_dir }}
       step_name: analyze_pipeline_health
     on_success: done
@@ -2947,7 +2843,8 @@ steps:
     on_context_limit: done
     on_rate_limit: done
     note: 'Execute this diagnostic step. Failures are logged but do not alter pipeline
-      routing. Both on_failure and on_context_limit route to the same terminal as on_success.
+      routing. Both on_failure and on_context_limit route to the same terminal as
+      on_success.
 
       '
   analyze_pipeline_health_error:
@@ -2958,11 +2855,11 @@ steps:
     optional: true
     skip_when_false: inputs.pipeline_health
     with:
-      skill_command: "/autoskillit:analyze-pipeline-health"
+      skill_command: /autoskillit:analyze-pipeline-health
       skill_inputs:
-        kitchen_id: "${{ inputs.kitchen_id }}"
-        dispatch_id: "${{ inputs.dispatch_id }}"
-        diagnostics_log_dir: "${{ inputs.diagnostics_log_dir }}"
+        kitchen_id: ${{ inputs.kitchen_id }}
+        dispatch_id: ${{ inputs.dispatch_id }}
+        diagnostics_log_dir: ${{ inputs.diagnostics_log_dir }}
       cwd: ${{ context.work_dir }}
       step_name: analyze_pipeline_health
     on_success: escalate_stop
@@ -2990,11 +2887,11 @@ steps:
     optional: true
     skip_when_false: inputs.pipeline_health
     with:
-      skill_command: "/autoskillit:analyze-pipeline-health"
+      skill_command: /autoskillit:analyze-pipeline-health
       skill_inputs:
-        kitchen_id: "${{ inputs.kitchen_id }}"
-        dispatch_id: "${{ inputs.dispatch_id }}"
-        diagnostics_log_dir: "${{ inputs.diagnostics_log_dir }}"
+        kitchen_id: ${{ inputs.kitchen_id }}
+        dispatch_id: ${{ inputs.dispatch_id }}
+        diagnostics_log_dir: ${{ inputs.diagnostics_log_dir }}
       cwd: ${{ context.work_dir }}
       step_name: analyze_pipeline_health
     on_success: done_no_changes
@@ -3022,11 +2919,11 @@ steps:
     optional: true
     skip_when_false: inputs.pipeline_health
     with:
-      skill_command: "/autoskillit:analyze-pipeline-health"
+      skill_command: /autoskillit:analyze-pipeline-health
       skill_inputs:
-        kitchen_id: "${{ inputs.kitchen_id }}"
-        dispatch_id: "${{ inputs.dispatch_id }}"
-        diagnostics_log_dir: "${{ inputs.diagnostics_log_dir }}"
+        kitchen_id: ${{ inputs.kitchen_id }}
+        dispatch_id: ${{ inputs.dispatch_id }}
+        diagnostics_log_dir: ${{ inputs.diagnostics_log_dir }}
       cwd: ${{ context.work_dir }}
       step_name: analyze_pipeline_health
     on_success: done_already_done
@@ -3044,14 +2941,16 @@ steps:
       "reason": "remediation_complete"}'
   done_no_changes:
     action: stop
-    message: 'Pipeline completed with zero changes — the implement step produced no
-      commits. Emit the L3 result sentinel JSON block now with success=true and
-      reason="no_changes". Example sentinel: {"success": true, "reason": "no_changes"}'
+    message: "Pipeline completed with zero changes \u2014 the implement step produced\
+      \ no commits. Emit the L3 result sentinel JSON block now with success=true and\
+      \ reason=\"no_changes\". Example sentinel: {\"success\": true, \"reason\": \"\
+      no_changes\"}"
   done_already_done:
     action: stop
-    message: 'Pipeline completed — changes were already merged by a prior run. Emit
-      the L3 result sentinel JSON block now with success=true and reason="already_done".
-      Example sentinel: {"success": true, "reason": "already_done"}'
+    message: "Pipeline completed \u2014 changes were already merged by a prior run.\
+      \ Emit the L3 result sentinel JSON block now with success=true and reason=\"\
+      already_done\". Example sentinel: {\"success\": true, \"reason\": \"already_done\"\
+      }"
   escalate_stop:
     action: stop
     message: 'Human intervention needed. Review the latest output for details. Emit

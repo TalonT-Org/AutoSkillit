@@ -27,7 +27,7 @@ def test_recipe_validation_error_response_surfaces_semantic_errors() -> None:
             {
                 "severity": "error",
                 "rule": "backend-incompatible-skill",
-                "message": "step 'implement' requires git_metadata_writable backend",
+                "message": "step 'implement' has unsupported semantic requirements",
             }
         ],
     }

@@ -829,6 +829,7 @@ class TestRunHeadlessCore:
         backend.name = "claude-code"
         backend.capabilities.pty_required = False
         backend.capabilities.channel_b_capable = False
+        backend.capabilities.process_name = "claude"
         backend.build_skill_session_cmd.return_value = CmdSpec(
             cmd=("claude", "--print", "hello"), env={}
         )

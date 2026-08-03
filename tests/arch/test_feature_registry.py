@@ -829,33 +829,23 @@ def test_build_features_dict_warns_enabling_deprecated_feature(monkeypatch):
     assert result["test_depr_cfg"] is True
 
 
-def test_cli_session_launch_gates_backend_alignment_features() -> None:
-    """For every FEATURE_REGISTRY entry with requires_backend_alignment=True,
-    _session_launch.py must contain an is_feature_enabled call.
+def test_cli_session_backend_resolution_has_no_feature_gate_reselection() -> None:
+    """Interactive launches resolve one explicit global backend authority.
 
-    This ensures future experimental backends automatically get CLI-path gates,
-    not just the server path gate in _factory.py.
+    Feature gates may control feature availability, but must never silently replace
+    the configured backend during launch composition.
     """
-    from autoskillit.core import paths
-    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
-
-    alignment_features = [k for k, v in FEATURE_REGISTRY.items() if v.requires_backend_alignment]
-    if not alignment_features:
-        pytest.skip("No requires_backend_alignment features in registry")
-
     import ast
 
-    session_launch_path = paths.pkg_root() / "cli" / "session" / "_session_launch.py"
-    tree = ast.parse(session_launch_path.read_text(), filename=str(session_launch_path))
+    from autoskillit.core import paths
+
+    session_backend_path = paths.pkg_root() / "cli" / "session" / "_session_backend.py"
+    tree = ast.parse(session_backend_path.read_text(), filename=str(session_backend_path))
 
     calls = [
-        node
+        node.func.id
         for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "is_feature_enabled"
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
     ]
-    assert calls, (
-        "_session_launch.py must contain an is_feature_enabled() call to gate CLI-path "
-        f"access for backend-alignment features: {alignment_features}"
-    )
+    assert "is_feature_enabled" not in calls
+    assert "BackendAuthority" in calls

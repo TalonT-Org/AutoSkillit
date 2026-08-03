@@ -1,15 +1,36 @@
 ---
 name: implement-experiment
-categories: [research]
-uses_capabilities: [agent_model, git_metadata_write]
-description: Deploy experiment artifacts in an isolated git worktree following an approved experiment plan, with per-phase commits.
+categories:
+- research
+uses_capabilities: []
+description: Deploy experiment artifacts in an isolated git worktree following an approved experiment plan, with per-phase
+  commits.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: implement-experiment] Implementing experiment...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: implement-experiment] Implementing experiment...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
+  git_metadata_writes:
+  - purpose: perform the repository metadata update required by this skill
 ---
 
 # Implement Experiment Skill
@@ -54,14 +75,14 @@ tokens after the skill name for the first path-like token (starts with `/`,
 - Execute `git merge` commands (all branch content must be applied via
   `git cherry-pick` or `git checkout <branch> -- <file>`)
 - Blame pre-commit or lint failures on "pre-existing issues" — ALL pre-commit checks must pass on the committed code
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 - Consider implementation complete with zero tracked source changes — if you cannot produce any tracked changes, report failure explicitly rather than completing with temp-only artifacts. Temp-only writes (`{{AUTOSKILLIT_TEMP}}/`, draft files) never authorizes finishing with zero tracked source changes.
 
 **ALWAYS:**
 - Create a new worktree from the current branch
 - Use subagents to deeply understand the codebase context BEFORE implementing
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Follow the implementation phases from the experiment plan
 - Put all experiment artifacts in one self-contained `research/` subfolder
 - Commit per phase with descriptive messages
@@ -69,7 +90,7 @@ tokens after the skill name for the first path-like token (starts with `/`,
 - Write `tests/test_{script_name}.py` alongside each experiment script created in Step 4
 - Run `pytest --collect-only` after creating tests to verify discovery before committing
 - **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error. **Note:** Reads performed by subagents (Task/Agent) do NOT satisfy this requirement — they run in a child session whose reads are invisible to the parent. If a file was only read inside a subagent, you must Read it again in this main session before calling Edit.
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Context Limit Behavior
 
@@ -140,11 +161,11 @@ branch_name = ${BRANCH_NAME}
 
 ### Step 2 — Deep Context Understanding (Subagents) (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Before implementing anything, launch subagents via `Agent(model="sonnet")` to understand
+Before implementing anything, launch subagents via `child delegation under the declared `sonnet` model-class policy` to understand
 the codebase context needed for the experiment. The following are **minimum
 required** — launch as many additional subagents as needed.
 

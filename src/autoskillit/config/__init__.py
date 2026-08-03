@@ -65,7 +65,6 @@ from autoskillit.config.settings import (
     validate_layer_keys,
     write_config_layer,
 )
-from autoskillit.core import BACKEND_CAPABILITY_INGREDIENTS
 
 __all__ = [
     "AgentBackendConfig",
@@ -109,7 +108,6 @@ __all__ = [
     "load_config",
     "remap_retired_keys",
     "resolve_ingredient_defaults",
-    "BACKEND_CAPABILITY_INGREDIENTS",
     "CONFIG_DEFAULT_INGREDIENTS",
     "SERVER_AUTHORITATIVE_CONFIG_PATHS",
     "SERVER_AUTHORITATIVE_INGREDIENTS",

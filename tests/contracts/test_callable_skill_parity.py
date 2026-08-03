@@ -89,9 +89,8 @@ def test_recipe_skills_have_contract_tests() -> None:
         # --- Merge-gate/remediation cluster (REQ-EXC-001 audit, #3977):
         #     These skills are dispatched only within recipe pipelines where
         #     the orchestrator manages session setup, error routing, and
-        #     retry logic. Backend compatibility is enforced structurally
-        #     by REQ-SAT-001 (test_backend_reachability.py) which asserts
-        #     incompatible steps are pruned before dispatch. ---
+        #     retry logic. Backend-neutral semantic requirements are adapted
+        #     before dispatch. ---
         "diagnose-ci",
         "implement-worktree-no-merge",
         "resolve-failures",

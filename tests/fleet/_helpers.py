@@ -177,6 +177,8 @@ def _mock_backend_with_locator(
     """Build a mock backend with configured session_locator for dispatch tests."""
     from unittest.mock import Mock
 
+    from autoskillit.core import SkillSemanticAdaptationResult
+
     mock_locator = Mock()
     if project_log_dir is not None:
         mock_locator.project_log_dir.return_value = project_log_dir
@@ -189,4 +191,5 @@ def _mock_backend_with_locator(
     mock_backend = Mock()
     mock_backend.name = "mock-backend"
     mock_backend.session_locator.return_value = mock_locator
+    mock_backend.adapt_skill_semantics.return_value = SkillSemanticAdaptationResult()
     return mock_backend

@@ -651,6 +651,7 @@ async def test_open_kitchen_result_keys_match_typed_dict(tmp_path, monkeypatch):
 @pytest.mark.anyio
 async def test_sous_chef_rules_injected_at_open_kitchen(tmp_path, monkeypatch):
     """Path B (no-name) must inject full sous-chef SKILL.md into response text."""
+    from autoskillit.execution.backends import ClaudeCodeBackend
     from autoskillit.workspace import SkillsDirectoryProvider
 
     monkeypatch.chdir(tmp_path)
@@ -658,6 +659,7 @@ async def test_sous_chef_rules_injected_at_open_kitchen(tmp_path, monkeypatch):
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.project_dir = tmp_path
     mock_ctx.skill_resolver = SkillsDirectoryProvider().resolver
+    mock_ctx.backend = ClaudeCodeBackend()
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):

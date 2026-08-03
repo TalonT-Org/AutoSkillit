@@ -28,6 +28,7 @@ from autoskillit.workspace import (
     project_agent_skill_document,
     resolve_ephemeral_root,
 )
+from tests.fakes import adapt_test_skill_semantics
 from tests.workspace._helpers import _CODEX_CAPABILITIES
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
@@ -35,7 +36,6 @@ pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 _MACHINE_ONLY_FRONTMATTER_KEYS = {
     "uses_capabilities",
     "execution_role",
-    "backend_requirements",
 }
 
 
@@ -74,6 +74,7 @@ def _codex_backend() -> MagicMock:
     backend.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
     backend.ensure_pre_launch.return_value = []
     backend.validate_session_layout.return_value = []
+    backend.adapt_skill_semantics.side_effect = adapt_test_skill_semantics
     return backend
 
 
@@ -112,9 +113,8 @@ def test_agent_skill_projector_preserves_public_document_and_stable_digest(
         "---\n"
         "name: projected-skill\n"
         "description: Public description.\n"
-        "uses_capabilities: [agent_model]\n"
+        "uses_capabilities: []\n"
         "execution_role: session\n"
-        "backend_requirements: [claude-code]\n"
         "metadata:\n"
         "  public-key: public-value\n"
         "---\n"

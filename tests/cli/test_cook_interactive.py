@@ -27,6 +27,7 @@ from autoskillit.core import (
     SkillProjectionContextAuthority,
     ValidatedAddDir,
 )
+from tests.fakes import adapt_test_skill_semantics
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -83,6 +84,7 @@ class _Backend:
         session_dir_persistent=False,
         skill_injection_capable=True,
     )
+    adapt_skill_semantics = staticmethod(adapt_test_skill_semantics)
 
     def __init__(self) -> None:
         self.build_calls: list[dict[str, object]] = []
@@ -380,7 +382,7 @@ def test_cook_resolves_default_backend(monkeypatch: pytest.MonkeyPatch, tmp_path
     _install_harness(monkeypatch, tmp_path)
     requested: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.execution.get_backend",
+        "autoskillit.cli.session._session_backend.resolve_global_backend",
         lambda name: requested.append(name) or backend,
     )
 
@@ -449,6 +451,7 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
             session_dir_persistent=False,
             skill_injection_capable=True,
         )
+        adapt_skill_semantics = staticmethod(adapt_test_skill_semantics)
 
         def binary_name(self) -> str:
             return "claude"

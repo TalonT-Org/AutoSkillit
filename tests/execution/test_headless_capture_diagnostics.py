@@ -25,6 +25,8 @@ from autoskillit.core import (
 from autoskillit.execution.backends import ClaudeCodeBackend
 from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
 from autoskillit.execution.headless._managed import _attempt as diagnostics
+from autoskillit.execution.launch_resolution import DefaultLaunchResolver
+from tests.execution.conftest import _launch_preparation
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -48,6 +50,7 @@ class _AttemptObserver:
     def __init__(self) -> None:
         self.attempts: list[str] = []
         self.final_session_ids: list[str] = []
+        self.launch_contract_digests: list[str] = []
 
     def allocate_attempt(self) -> str:
         attempt_id = f"{len(self.attempts) + 1:032x}"
@@ -62,6 +65,9 @@ class _AttemptObserver:
 
     def bind_candidate(self, _session_id: str) -> None:
         return
+
+    def bind_launch_contract_digest(self, digest: str) -> None:
+        self.launch_contract_digests.append(digest)
 
     def bind_returned_final(self, session_id: str) -> None:
         self.final_session_ids.append(session_id)
@@ -101,6 +107,7 @@ class _ExecutionContext:
         )
         self.runner = runner
         self.backend = ClaudeCodeBackend()
+        self.launch_resolver = DefaultLaunchResolver()
         self.audit = _ExecutionAudit()
         self.token_log = _ExecutionTokenLog()
         self.github_api_log = None
@@ -278,6 +285,11 @@ async def test_terminal_epilogue_projects_one_attempt_aware_snapshot_to_all_sink
                     timeout=30.0,
                     stale_threshold=5.0,
                     managed_lineage_observer=cast(Any, observer),
+                    launch_resolver=execution_ctx.launch_resolver,
+                    launch_preparation=_launch_preparation(
+                        execution_ctx,
+                        cwd=str(tmp_path),
+                    ),
                 )
         else:
             result = await _execute_claude_headless(
@@ -287,6 +299,11 @@ async def test_terminal_epilogue_projects_one_attempt_aware_snapshot_to_all_sink
                 timeout=30.0,
                 stale_threshold=5.0,
                 managed_lineage_observer=cast(Any, observer),
+                launch_resolver=execution_ctx.launch_resolver,
+                launch_preparation=_launch_preparation(
+                    execution_ctx,
+                    cwd=str(tmp_path),
+                ),
             )
             assert result.success is (terminal_case.endswith("success"))
 

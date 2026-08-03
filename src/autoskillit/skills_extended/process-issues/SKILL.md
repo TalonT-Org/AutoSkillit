@@ -1,15 +1,41 @@
 ---
 name: process-issues
-uses_capabilities: [agent_model, cross_skill_ref, github_api_write, run_skill]
+uses_capabilities:
+- github_api_write
+- run_skill
 execution_role: orchestrator
-description: Execute recipe sessions batch-by-batch for triaged GitHub issues. Reads the triage-issues output manifest, processes each batch sequentially, and launches the appropriate recipe for each issue. Use when user says "process issues", "run issues", or "execute pipeline for issues".
+description: Execute recipe sessions batch-by-batch for triaged GitHub issues. Reads the triage-issues output manifest, processes
+  each batch sequentially, and launches the appropriate recipe for each issue. Use when user says "process issues", "run issues",
+  or "execute pipeline for issues".
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Processing issues...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Processing issues...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
+  sibling_skills:
+  - name: analyze-prs
+  - name: merge-pr
+  - name: open-pr
+  - name: triage-issues
 ---
 
 # Process Issues Skill
@@ -36,8 +62,8 @@ issues upfront, load recipe, execute session, collect result, report.
 - Modify any source code files
 - Reimplement recipe steps inline — always use `load_recipe` to load the recipe YAML and
   follow it as an orchestrator
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Process batches in ascending order: batch 1 before batch 2 before batch 3
@@ -59,8 +85,8 @@ issues upfront, load recipe, execute session, collect result, report.
   transitions are fully automated.
 - Emit `---process-issues-result---` result block on completion (success or failure)
 - Write the summary report to `{{AUTOSKILLIT_TEMP}}/process-issues/` (relative to the current working directory)
-- Spawn all subagents via `Agent(model="sonnet")`
-- Issue all Task calls in a single message to maximize parallelism
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Use `gh` CLI for all GitHub operations (not raw API calls)
 - Include `--force` in all `gh label create` calls
 

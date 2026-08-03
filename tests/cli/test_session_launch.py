@@ -596,10 +596,10 @@ def test_run_interactive_session_uses_injected_backend(monkeypatch: pytest.Monke
     assert build_called, "Injected backend must be used"
 
 
-def test_run_interactive_session_default_backend_calls_get_backend(
+def test_run_interactive_session_default_backend_uses_typed_resolver(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When backend= is not passed, _run_interactive_session calls get_backend()."""
+    """When backend= is absent, the configured name crosses the typed resolver boundary."""
     from unittest.mock import MagicMock
 
     get_backend_called: list = []
@@ -630,14 +630,17 @@ def test_run_interactive_session_default_backend_calls_get_backend(
 
     _stub_plugin_installed(monkeypatch, installed=True)
     _capture_subprocess(monkeypatch)
-    monkeypatch.setattr("autoskillit.execution.get_backend", fake_get_backend)
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_backend.resolve_global_backend",
+        fake_get_backend,
+    )
     _run_interactive_session(system_prompt="test")
-    assert get_backend_called, "get_backend must be called when backend is not injected"
+    assert get_backend_called, "typed resolver must be called when backend is not injected"
     assert get_backend_called[0] == "claude-code"
 
 
-def test_get_backend_di_used_in_session_launch(monkeypatch: pytest.MonkeyPatch) -> None:
-    """get_backend DI path in _run_interactive_session invokes stub's build_interactive_cmd."""
+def test_typed_resolver_di_used_in_session_launch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Typed resolver DI invokes the selected stub's interactive command builder."""
     from unittest.mock import MagicMock
 
     from autoskillit.core import BackendCapabilities, CmdSpec
@@ -675,17 +678,20 @@ def test_get_backend_di_used_in_session_launch(monkeypatch: pytest.MonkeyPatch) 
     mock_config.agent_backend.backend = "claude-code"
 
     monkeypatch.setattr("autoskillit.config.load_config", lambda: mock_config)
-    monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: _DIBackend())
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_backend.resolve_global_backend",
+        lambda name: _DIBackend(),
+    )
     _stub_plugin_installed(monkeypatch)
     _capture_subprocess(monkeypatch)
     _run_interactive_session(system_prompt="test")
-    assert build_calls, "Stub backend's build_interactive_cmd must be invoked via get_backend DI"
+    assert build_calls, "Stub backend's build_interactive_cmd must be invoked via resolver DI"
 
 
-def test_skill_injection_false_via_get_backend_forwards_system_prompt_kwarg(
+def test_skill_injection_false_via_typed_resolver_forwards_system_prompt_kwarg(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """skill_injection_capable=False stub via get_backend DI still receives system_prompt kwarg."""
+    """A non-injecting resolver-selected backend still receives system_prompt."""
     from unittest.mock import MagicMock
 
     from autoskillit.core import BackendCapabilities, CmdSpec
@@ -722,7 +728,10 @@ def test_skill_injection_false_via_get_backend_forwards_system_prompt_kwarg(
     mock_config.agent_backend.backend = "claude-code"
 
     monkeypatch.setattr("autoskillit.config.load_config", lambda: mock_config)
-    monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: _NoInjectDIBackend())
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_backend.resolve_global_backend",
+        lambda name: _NoInjectDIBackend(),
+    )
 
     def mock_run(cmd, **kwargs):
         return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
@@ -793,11 +802,10 @@ def test_codex_like_backend_no_claude_flags(monkeypatch: pytest.MonkeyPatch) -> 
 # ---------------------------------------------------------------------------
 
 
-def test_feature_flag_gate_blocks_codex_backend_without_feature(
+def test_configured_codex_authority_is_not_implicitly_rerouted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When config specifies backend='codex' but codex_backend feature is disabled,
-    _run_interactive_session falls back to claude-code backend."""
+    """A configured Codex authority remains Codex regardless of capability hints."""
     from unittest.mock import MagicMock
 
     from autoskillit.core import CmdSpec
@@ -856,13 +864,16 @@ def test_feature_flag_gate_blocks_codex_backend_without_feature(
         return _CodexStub()
 
     monkeypatch.setattr("autoskillit.config.load_config", lambda: mock_config)
-    monkeypatch.setattr("autoskillit.execution.get_backend", fake_get_backend)
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_backend.resolve_global_backend",
+        fake_get_backend,
+    )
     monkeypatch.setattr(
         subprocess, "run", lambda *a, **kw: type("Result", (), {"returncode": 0})()
     )
     _run_interactive_session(system_prompt="test")
-    assert backends_used == ["claude-code", "claude-code"], (
-        f"Expected fallback to claude-code, got: {backends_used}"
+    assert backends_used == ["codex", "codex"], (
+        f"Expected configured Codex authority, got: {backends_used}"
     )
 
 
@@ -910,7 +921,10 @@ def test_feature_flag_gate_allows_codex_backend_when_feature_enabled(
     mock_config.experimental_enabled = True
 
     monkeypatch.setattr("autoskillit.config.load_config", lambda: mock_config)
-    monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: _CodexStub())
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_backend.resolve_global_backend",
+        lambda name: _CodexStub(),
+    )
     monkeypatch.setattr(
         subprocess, "run", lambda *a, **kw: type("Result", (), {"returncode": 0})()
     )

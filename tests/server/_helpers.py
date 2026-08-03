@@ -485,7 +485,7 @@ _PATCHED_DEFAULTS = {
     "pipeline_health": "true",
 }
 
-_SERVER_ONLY_KEYS = frozenset({"kitchen_id", "diagnostics_log_dir", "backend_supports_git_write"})
+_SERVER_ONLY_KEYS = frozenset({"kitchen_id", "diagnostics_log_dir"})
 
 _MINIMAL_SCRIPT_YAML = """\
 name: test-script

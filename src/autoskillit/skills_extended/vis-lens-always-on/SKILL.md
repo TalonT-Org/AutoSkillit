@@ -1,16 +1,28 @@
 ---
 name: vis-lens-always-on
-categories: [vis-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: "Create Always-On visualization triage report running three sequential analysis passes (anti-pattern, accessibility, annotation completeness) and emitting a combined PASS|WARN_N|FAIL_N verdict. Composite lens answering \"What are the blocking visualization issues?\""
+categories:
+- vis-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Create Always-On visualization triage report running three sequential analysis passes (anti-pattern, accessibility,
+  annotation completeness) and emitting a combined PASS|WARN_N|FAIL_N verdict. Composite lens answering "What are the blocking
+  visualization issues?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Always-On Lens - Running combined triage passes...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Always-On Lens - Running combined triage passes...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: mermaid
+  - name: plan-visualization
+  - name: vis-lens-antipattern
+  - name: vis-lens-caption-annot
+  - name: vis-lens-color-access
 ---
 
 # Always-On Visualization Triage Lens

@@ -22,7 +22,9 @@ from autoskillit.core import (
     CapturedStream,
     CodingAgentBackend,
     EffectiveSkillInvocationAuthority,
+    LaunchSurface,
     ManagedHeadlessSessionLineageRef,
+    ResolvedLaunchContract,
     SkillContractError,
     SkillExecutionRole,
     SkillResolver,
@@ -56,10 +58,10 @@ from autoskillit.server._misc import SkillProjectionContext, _hook_config_overla
 from autoskillit.server._response_budget import shape_json_response
 from autoskillit.server.tools._types import deny_envelope
 from autoskillit.workspace import (
-    EffectiveSkillDispatchContract,
     EffectiveSkillInvocation,
     SkillInfo,
-    build_effective_skill_dispatch_contract,
+    SkillProjectionBinding,
+    build_skill_projection_binding,
     default_skill_resolver,
 )
 
@@ -92,6 +94,10 @@ class _RunSkillContractLifecycle:
     def observe_candidate(self, candidate_session_id: str) -> None:
         if self.store is not None and self.correlation_key is not None:
             self.store.observe_candidate(self.correlation_key, candidate_session_id)
+
+    def bind_launch(self, launch_contract: ResolvedLaunchContract) -> None:
+        if self.store is not None and self.correlation_key is not None:
+            self.store.bind_launch(self.correlation_key, launch_contract)
 
     def finalize(self, session_id: str) -> None:
         if self.store is None or self.correlation_key is None:
@@ -254,10 +260,10 @@ def build_validated_skill_dispatch_contract(
     projection_context: SkillProjectionContext,
     add_dirs: list[ValidatedAddDir],
     stored_contract: SkillSessionContract | None,
-) -> EffectiveSkillDispatchContract:
+) -> SkillProjectionBinding:
     """Build immutable executor authority and verify resumed projected bytes."""
-    contract = build_effective_skill_dispatch_contract(
-        resolved_command,
+    del resolved_command
+    contract = build_skill_projection_binding(
         projection_context,
         artifact_paths=(add_dir.path for add_dir in add_dirs),
     )
@@ -276,24 +282,6 @@ def aggregate_sandbox_overrides(skill_caps: frozenset[str]) -> frozenset[str]:
             for cap in skill_caps
             if cap in SKILL_CAPABILITY_REGISTRY
         )
-    )
-
-
-def has_routing_capability(skill_caps: frozenset[str]) -> bool:
-    """Return whether any declared capability is worker-routable."""
-    return any(
-        SKILL_CAPABILITY_REGISTRY.get(cap) is not None
-        and SKILL_CAPABILITY_REGISTRY[cap].worker_routable
-        for cap in skill_caps
-    )
-
-
-def get_routing_caps(skill_caps: frozenset[str]) -> list[str]:
-    """Return the sorted worker-routable capabilities."""
-    return sorted(
-        cap
-        for cap in skill_caps
-        if SKILL_CAPABILITY_REGISTRY.get(cap) and SKILL_CAPABILITY_REGISTRY[cap].worker_routable
     )
 
 
@@ -540,7 +528,17 @@ def validate_resumed_skill_contract(
         raise SkillContractError(
             f"Resume contract backend {contract.backend!r} does not match {actual!r}"
         )
-    contract.backend_requirements
+    launch_contract = contract.launch_contract
+    if launch_contract is None:
+        raise SkillContractError("Resume contract is missing physical launch authority")
+    if contract.launch_contract_digest != launch_contract.digest:
+        raise SkillContractError("Resume launch contract digest mismatch")
+    if launch_contract.surface is not LaunchSurface.HEADLESS_SKILL:
+        raise SkillContractError("Resume launch surface is not headless-skill")
+    if launch_contract.effective_backend != contract.backend:
+        raise SkillContractError("Resume launch backend does not match skill contract")
+    if launch_contract.cwd != contract.cwd:
+        raise SkillContractError("Resume launch cwd does not match skill contract")
 
 
 def persist_run_skill_state(skill_result: SkillResult, project_dir: Path) -> None:

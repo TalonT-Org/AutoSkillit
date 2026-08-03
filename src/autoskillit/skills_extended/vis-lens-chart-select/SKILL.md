@@ -1,16 +1,29 @@
 ---
 name: vis-lens-chart-select
-categories: [vis-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: "Create Chart Type Selection visualization planning spec showing encoding channel assignments, Cleveland-McGill perceptual hierarchy, and data-type→chart-type matrix. Typological lens answering \"Which chart type is perceptually optimal for this data?\""
+categories:
+- vis-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Create Chart Type Selection visualization planning spec showing encoding channel assignments, Cleveland-McGill
+  perceptual hierarchy, and data-type→chart-type matrix. Typological lens answering "Which chart type is perceptually optimal
+  for this data?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Chart Select Lens - Analyzing chart type fit...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Chart Select Lens - Analyzing chart type fit...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: mermaid
+  - name: plan-visualization
+  - name: vis-lens-antipattern
+  - name: vis-lens-figure-table
+  - name: vis-lens-methodology-norms
+  - name: vis-lens-uncertainty
 ---
 
 # Chart Type Selection Visualization Lens
@@ -102,8 +115,8 @@ metadata:
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-chart-select/`
 - Use `radar` or `pie` chart types — these are perceptually inferior and excluded from the controlled vocabulary
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Apply the Cleveland-McGill perceptual hierarchy when ranking chart alternatives: **position > length > angle > area > color saturation > color hue**
@@ -112,7 +125,7 @@ metadata:
 - Use colorblind-safe palettes (wong, okabe-ito, viridis, cividis)
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-chart-select/vis_spec_chart_select_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):

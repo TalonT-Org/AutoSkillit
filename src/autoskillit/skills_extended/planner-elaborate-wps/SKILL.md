@@ -1,16 +1,35 @@
 ---
 name: planner-elaborate-wps
 uses_capabilities: []
-categories: [planner]
-description: >
-  Elaborate all work packages for a target phase via parallel L0 subagents.
-  One invocation per phase; spawns one L0 per WP concurrently. (Pass 3 loop body)
+categories:
+- planner
+description: 'Elaborate all work packages for a target phase via parallel L0 subagents. One invocation per phase; spawns one
+  L0 per WP concurrently. (Pass 3 loop body)
+
+  '
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: wp-elaborator
+    purpose: elaborate one work package and return a bounded JSON result
+  child_spawns:
+  - role: wp-elaborator
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: wp-elaborator
+    model_class: sonnet
 ---
 
 # planner-elaborate-wps
 
 Pass 3 loop body. Receives one phase context file (written by `expand_wps`), spawns one L0
-subagent per WP in parallel using the native Agent/Task tool, collects results,
+subagent per WP in parallel using the backend-adapted child delegation, collects results,
 and writes per-WP result files plus a phase sentinel file. The L1 (this skill)
 is the sole writer for this phase's WPs — no concurrent write races.
 
@@ -37,17 +56,17 @@ is the sole writer for this phase's WPs — no concurrent write races.
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts outside your designated input files and output directory
 - Explore parent directories of your input paths (e.g., `ls $(dirname $1)/..`)
 - Read result files from other phases
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
 **ALWAYS:**
-- Spawn all L0 subagents in parallel using the native Agent/Task tool (NOT run_skill — skill session guard blocks it)
+- Spawn all L0 subagents in parallel using the backend-adapted child delegation (NOT run_skill — skill session guard blocks it)
 - Write the phase sentinel file before emitting the output token
 - Emit: `phase_wps_result_dir = <absolute path to work_packages/ directory>`
 - Write a stub result for any L0 that fails or returns invalid JSON
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -98,11 +117,11 @@ Before spawning any L0, filter the WP list to skip any WP whose `$2/work_package
 already exists on disk. This idempotency guard prevents redundant L0 re-spawns on retry after
 partial completion (e.g., when an L1 session is resumed after context recovery).
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Use the native Agent tool with `subagent_type: "autoskillit:wp-elaborator"` to spawn one
+Use the native child delegation with `subagent_type: "autoskillit:wp-elaborator"` to spawn one
 agent per WP simultaneously. If WP count > 6, spawn in sequential batches of 6 — await
 each batch before starting the next.
 

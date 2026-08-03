@@ -1,14 +1,32 @@
 ---
 name: dry-walkthrough
-uses_capabilities: [agent_model]
-description: Plan validation executor. ALWAYS invoke this skill when instructed to validate or dry-walkthrough a plan. Do not read the plan or trace changes directly — use this skill first to load the validation workflow.
+uses_capabilities: []
+description: Plan validation executor. ALWAYS invoke this skill when instructed to validate or dry-walkthrough a plan. Do
+  not read the plan or trace changes directly — use this skill first to load the validation workflow.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '🔎 [SKILL: dry-walkthrough] Validating plan...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''🔎 [SKILL: dry-walkthrough] Validating plan...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Dry Walkthrough Skill
@@ -55,22 +73,22 @@ The plan file must remain a **clean, self-contained implementation instruction s
 - Remove or defer goals or phases from the plan
 - Reduce the plan's scope to a "simpler fix" - the plan defines the problem scope, not you
 - Consider effort as a reason for choosing one approach over another
-- Run subagents in the background (`run_in_background: true` is prohibited)
+- Detach child delegations instead of joining them (joining every child is required)
 - Write plan content, corrections, or the verification marker to any file other than the original plan file path provided as input. If the Edit tool is denied on the plan file, do NOT create a copy elsewhere — output a failure message instead.
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Start all independent child delegations before awaiting any result so they run concurrently
 - Discover a latest plan, audit cycle, inventory, or disposition report
 - Open audit-cycle artifacts directly in Step 4.7 or reinterpret the verified preflight result
 
 **ALWAYS:**
 - Keep the plan as clean implementation instructions only (information/background helpful to implementation is okay)
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Report all findings to terminal output (your response text)
 - Fix issues by directly updating the plan content
 - Verify assumptions against actual codebase
 - Remove deprecation code/notes and rollback mechanisms
 - Make sure the plan includes warning against using the codebase as a notepad with useless comments
 - Prefer the long term health of project over quick, easy, and minimal fixes
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Context Limit Behavior
 
@@ -107,7 +125,7 @@ After resolving the plan path, check whether this is a part file of a multi-part
 
 ### Step 2: Extract and Validate Each Phase (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 

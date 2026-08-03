@@ -1,15 +1,41 @@
 ---
 name: audit-friction
-categories: [audit]
-uses_capabilities: [claude_dir]
-description: Scan Claude Code project logs for friction patterns — repeated failures, approach loops, tool errors, misunderstanding cycles, and stuck workflows. Categorizes and counts friction events to surface what causes the most resistance. Use when user says "audit friction", "find friction", "friction audit", or "what keeps going wrong".
+categories:
+- audit
+uses_capabilities:
+- claude_dir
+description: Scan Claude Code project logs for friction patterns — repeated failures, approach loops, tool errors, misunderstanding
+  cycles, and stuck workflows. Categorizes and counts friction events to surface what causes the most resistance. Use when
+  user says "audit friction", "find friction", "friction audit", or "what keeps going wrong".
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: audit-friction] Scanning logs for friction patterns...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: audit-friction] Scanning logs for friction patterns...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: friction-batch-scanner
+    purpose: scan an assigned log batch and return bounded evidence
+  - name: friction-category-analyzer
+    purpose: independently validate one friction category and return bounded evidence
+  child_spawns:
+  - role: friction-batch-scanner
+  - role: friction-category-analyzer
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: friction-batch-scanner
+    model_class: haiku
+  - role: friction-category-analyzer
+    model_class: sonnet
 ---
 
 # Friction Audit Skill
@@ -50,15 +76,15 @@ The user may provide a "since" date (e.g., `2/7`, `2026-02-07`, `last month`). I
 - Create files outside `{{AUTOSKILLIT_TEMP}}/audit-friction/` directory
 - Have subagents write files — they return all findings in response text only
 - Analyze subagent log subdirectories (`*/subagents/`) — top-level session files only
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Use subagents heavily for parallel log analysis
 - All output goes under `{{AUTOSKILLIT_TEMP}}/audit-friction/` (create if needed)
 - Final report: `{{AUTOSKILLIT_TEMP}}/audit-friction/friction_audit_{YYYY-MM-DD_HHMMSS}.md`
 - Report the file and line counts to the terminal before choosing analysis mode
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Friction Categories
 
@@ -149,13 +175,13 @@ Report both counts to the terminal. If zero files match, extend the window by 15
 
 ### Step 3: Haiku Batch Scan (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Split the log file list into batches. Use batches of ~5 files for smaller corpora; reduce to ~3 files per batch when the corpus is large so each Haiku agent isn't overloaded. Dispatch one **Haiku model** subagent per batch in parallel.
+Split the log file list into batches. Use batches of ~5 files for smaller corpora; reduce to ~3 files per batch when the corpus is large so Each child under the declared `haiku` model-class policy isn't overloaded. Dispatch one **Haiku model** subagent per batch in parallel.
 
-Each Haiku subagent should run the full keyword battery from the Friction Signal Patterns section against each assigned file. Do not read files in full — grep only. For each hit, pull 20 lines of context (`-A 10 -B 10`) to confirm the event and assign a category:
+Each child under the declared `haiku` model-class policy should run the full keyword battery from the Friction Signal Patterns section against each assigned file. Do not read files in full — grep only. For each hit, pull 20 lines of context (`-A 10 -B 10`) to confirm the event and assign a category:
 
 - `"is_error": true` hits → Tool Failure Loops
 - Error keyword hits → Tool Failure Loops, Build/Compile Errors, or Search Failures depending on context
@@ -172,13 +198,13 @@ Return all findings as structured text. Do not write any files.
 
 ### Step 4: Sonnet Deep Analysis per Category (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-After all Haiku agents return, group all indicators by category. Dispatch **Sonnet model** subagents to analyze the grouped indicators in parallel. Any category with at least one indicator warrants a subagent. Spawn one subagent per category when there are many; batch smaller related groups when overall volume is low. The orchestrator decides the grouping.
+After all children under the declared `haiku` model-class policy return, group all indicators by category. Dispatch **Sonnet model** subagents to analyze the grouped indicators in parallel. Any category with at least one indicator warrants a subagent. Spawn one subagent per category when there are many; batch smaller related groups when overall volume is low. The orchestrator decides the grouping.
 
-Each Sonnet subagent should:
+Each child under the declared `sonnet` model-class policy should:
 
 - Receive the list of `(file, line_start, line_end)` pointers for its assigned category
 - Read those specific line ranges with the bounded `rg -n -M 500 -A 10 -B 10 ... 2>&1 | head -c 12000` form to confirm or reclassify each indicator (Haiku may misfire on edge cases)

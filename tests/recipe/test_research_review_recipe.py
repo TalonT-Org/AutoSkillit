@@ -45,7 +45,7 @@ class TestResearchReviewRecipe:
 
     def test_hidden_ingredient_count(self, recipe) -> None:
         hidden = {k: v for k, v in recipe.ingredients.items() if v.hidden}
-        assert len(hidden) == 1
+        assert not hidden
 
     def test_user_ingredients_present(self, recipe) -> None:
         names = set(recipe.ingredients.keys())

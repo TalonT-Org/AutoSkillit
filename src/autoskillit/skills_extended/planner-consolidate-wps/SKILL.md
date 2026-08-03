@@ -1,14 +1,29 @@
 ---
 name: planner-consolidate-wps
-categories: [planner]
+categories:
+- planner
 description: Analyze WP complexity per phase and emit consolidation group manifests for trivial WP merging (L1+L0 pattern)
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: planner-consolidate-wps] Analyzing WP complexity for consolidation...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: planner-consolidate-wps] Analyzing WP complexity for consolidation...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # planner-consolidate-wps
@@ -45,9 +60,9 @@ merging).
 - Skip a WP from a manifest — every WP must appear in exactly one group (singleton = no-op)
 - Use a `merged_id` that is not one of the `source_wp_ids`
 - Allow an L0 to write files outside `$2/work_packages/consolidation/`
-- Run subagents in the background (`run_in_background: true` is prohibited)
+- Detach child delegations instead of joining them (joining every child is required)
 - Spawn more than 6 L0s in a single parallel batch
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
@@ -56,7 +71,7 @@ merging).
 - Validate each L0 response before writing its manifest
 - Write a manifest for every phase, even if it contains only singleton groups
 - Emit: `consolidation_manifest_dir = {planner_dir}/work_packages/consolidation`
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -98,7 +113,7 @@ For each phase, assemble a context packet containing:
 
 ### Step 4: Dispatch parallel L0 subagents (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 

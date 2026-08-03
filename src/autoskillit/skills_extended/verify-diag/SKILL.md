@@ -1,14 +1,31 @@
 ---
 name: verify-diag
-categories: [arch-lens]
-description: Verify an architecture diagram against the actual codebase. Checks component existence, connection accuracy, and read/write directionality. Use when user says "verify diagram", "verify diag", "check diagram", or wants to validate diagram accuracy.
+categories:
+- arch-lens
+description: Verify an architecture diagram against the actual codebase. Checks component existence, connection accuracy,
+  and read/write directionality. Use when user says "verify diagram", "verify diag", "check diagram", or wants to validate
+  diagram accuracy.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: verify-diag] Verifying architecture diagram...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: verify-diag] Verifying architecture diagram...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Verify Diagram Skill
@@ -28,15 +45,15 @@ Verify an architecture diagram's factual accuracy against the actual codebase. A
 
 - Modify source code files
 - Modify the diagram during verification (report findings only)
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 **ALWAYS:**
 - Verify every named component exists in the codebase
 - Trace actual code paths for every connection
 - Determine read/write directionality for every connection
 - Report findings to terminal, not to files
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ---
 
@@ -208,11 +225,11 @@ Common patterns and how to represent them:
 
 ## Launching Verification (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn one Explore subagent per diagram. Each agent:
+Spawn one child delegation per diagram. Each agent:
 1. Reads the full diagram file
 2. Reads the relevant source files in the codebase
 3. Performs all 5 verification steps

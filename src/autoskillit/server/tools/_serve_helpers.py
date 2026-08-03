@@ -142,12 +142,11 @@ def _build_serve_override_stack(
     config_default: dict[str, str],
     session_overrides: dict[str, str],
     config_layer: dict[str, str],
-    backend_overrides: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Single source of truth for serve override stack construction.
 
-    Priority (highest wins): config_layer > backend_overrides > caller_overrides
-    > snapshot_baseline > session_overrides > config_default
+    Priority (highest wins): config_layer > caller_overrides > snapshot_baseline
+    > session_overrides > config_default
     """
     snapshot_baseline: dict[str, str] = {}
     if ctx.session_serve_overrides is not None:
@@ -157,7 +156,6 @@ def _build_serve_override_stack(
         **session_overrides,
         **snapshot_baseline,
         **(caller_overrides or {}),
-        **(backend_overrides or {}),
         **config_layer,
     }
 
@@ -194,7 +192,6 @@ def serve_recipe(
     config_default: dict[str, str],
     session_overrides: dict[str, str],
     config_layer: dict[str, str],
-    backend_overrides: dict[str, str] | None = None,
     ingredients_only: bool = False,
     resolved_defaults: dict[str, str] | None = None,
     effective_backend_map: dict[str, str] | None = None,
@@ -212,7 +209,6 @@ def serve_recipe(
         config_default=config_default,
         session_overrides=session_overrides,
         config_layer=config_layer,
-        backend_overrides=backend_overrides,
     )
     defer_unresolved = _resolve_serve_defer_unresolved(ctx, caller_overrides)
     kwargs: dict[str, Any] = {

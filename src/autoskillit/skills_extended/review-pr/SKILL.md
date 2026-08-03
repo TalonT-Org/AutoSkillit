@@ -1,15 +1,36 @@
 ---
 name: review-pr
 categories: [github]
-uses_capabilities: [agent_model, agent_subagent]
 description: Automated diff-scoped PR code review using parallel audit subagents. Posts inline GitHub review comments and submits a summary verdict. Use after a PR is opened to gate CI on review approval.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: review-pr] Reviewing pull request...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: review-pr] Reviewing pull request...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: pr-review-auditor-abstraction-surface
+    purpose: perform the named independent responsibility and return bounded evidence
+  - name: pr-review-auditor-reachability
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: pr-review-auditor-abstraction-surface
+  - role: pr-review-auditor-reachability
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: pr-review-auditor-abstraction-surface
+    model_class: sonnet
+  - role: pr-review-auditor-reachability
+    model_class: sonnet
 ---
 
 # Review PR Skill
@@ -50,8 +71,8 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - Post review comments when `gh` is unavailable — output `verdict=needs_human` and exit 0
 - Let standard or deletion agents read outside the supplied PR diff content
 - Modify any source code
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 - Specify `subagent_type` for standard or deletion audit agents. The only permitted
   registered calls are the exact reachability and abstraction-surface calls in Step 3.
 - Give standard or deletion agents repository-read access. Only the two registered
@@ -68,13 +89,13 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - Exit 0 in all normal cases; verdict drives recipe routing via on_result, not exit code
 - Exit non-zero only for unrecoverable errors (e.g., gh CLI truly unavailable after graceful degradation has already output verdict=needs_human)
 - Tag the authenticated GitHub user (`gh api user -q .login`) in escalation comments (`needs_human` verdict) — omit the mention silently if username derivation fails
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Bind the checkout root, refs, exact diff, manifest generation, agent working directory,
   parent evidence reads, and every effect to the same metrics authority
 - Revalidate checkout/live refs and the byte-identical metrics marker immediately before
   verdict, artifact handoff, or GitHub mutation
 - Deduplicate findings by (file, line) pairs before posting
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Publish every fixed-name file through a same-directory `mktemp` path and atomic
   `mv`; a redirect may target only that temporary path, never the fixed destination.
   Never `open(path, 'w')` or `.write_text()` inside a `python3` heredoc or
@@ -669,12 +690,12 @@ Parse `STANDARD_DISPATCH_AGENTS` and iterate the structured
 Add deletion work only when `DELETION_DISPATCH_REQUIRED` is true, independently of
 `GATE_STATE`, and only while constructing the existing single foreground parallel batch.
 
-**Issue ALL Task tool calls in a single message — one per dimension — so they execute
+**Issue ALL child delegations in a single message — one per dimension — so they execute
 in parallel. Do NOT iterate through dimensions across multiple turns.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Standard and deletion subagents use ephemeral `Agent(model="sonnet")` calls and receive
+Standard and deletion subagents use ephemeral `child delegation under the declared `sonnet` model-class policy` calls and receive
 only PR diff content. The two experimental agents use the exact registered calls below
 and run with cwd `REVIEW_CHECKOUT_ROOT`.
 
@@ -727,8 +748,8 @@ and run with cwd `REVIEW_CHECKOUT_ROOT`.
 When eligible, issue these calls exactly once in the same foreground parallel message
 as the standard and deletion calls:
 
-- `Agent(subagent_type="autoskillit:pr-review-auditor-reachability", model="sonnet")`
-- `Agent(subagent_type="autoskillit:pr-review-auditor-abstraction-surface", model="sonnet")`
+- `a child assigned logical role `pr-review-auditor-reachability` under its declared model policy`
+- `a child assigned logical role `pr-review-auditor-abstraction-surface` under its declared model policy`
 
 For both registered calls, inline the actual `ANNOTATED_DIFF` string, the exact
 `VALID_DIFF_LINES` JSON authority, `REVIEW_CHECKOUT_ROOT`, `METRICS_HEAD_SHA`,

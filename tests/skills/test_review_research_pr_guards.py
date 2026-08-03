@@ -28,8 +28,7 @@ def test_review_research_pr_has_research_category() -> None:
     """Frontmatter must declare categories: [research]."""
     text = _text()
     assert "categories:" in text
-    # Verify 'research' appears on a categories line, not just anywhere in the file
-    assert any("research" in line for line in text.splitlines() if "categories:" in line), (
+    assert "categories:\n- research" in text, (
         "Frontmatter categories: field must include 'research'"
     )
 

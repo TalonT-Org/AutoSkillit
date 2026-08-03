@@ -55,7 +55,6 @@ def test_l2_food_truck_retains_run_skill_guidance_without_machine_frontmatter():
     assert "uses_capabilities:" not in prompt
     assert "execution_role:" not in prompt
     assert "activate_deps:" not in prompt
-    assert "backend_requirements:" not in prompt
 
 
 def test_fleet_prompt_contains_budget_exceeded_routing():

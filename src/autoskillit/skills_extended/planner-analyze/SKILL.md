@@ -1,14 +1,32 @@
 ---
 name: planner-analyze
-categories: [planner]
+categories:
+- planner
 description: Analyze project structure for planning decomposition
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: planner-analyze] Analyzing project structure...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: planner-analyze] Analyzing project structure...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # planner-analyze
@@ -31,26 +49,26 @@ Detect language, framework, test infrastructure, project structure, and existing
 
 - Modify any target project files
 - Write analysis.json outside `$1/`
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start all independent child delegations before awaiting any result so they run concurrently
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
 **ALWAYS:**
-- Use Explore subagents for all file reads
+- Use child delegations for all file reads
 - Spawn all 4 subagents in parallel
 - Write valid JSON to `analysis.json`
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
-### Step 1: Launch 4 parallel Explore subagents (SINGLE MESSAGE)
+### Step 1: Launch 4 parallel child delegations (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn all four concurrently with `model: "sonnet"`:
+Spawn all four concurrently under the declared `sonnet` model-class policy:
 
 1. **Languages & Frameworks** — Identify primary language, framework, build system. Look for: `pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`, `pom.xml`, `build.gradle`, import statements, dependency files.
 

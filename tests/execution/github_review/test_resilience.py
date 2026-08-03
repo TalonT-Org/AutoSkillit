@@ -11,9 +11,11 @@ from autoskillit.core import (
     ReviewFindingDispositionKind,
     ReviewOperationState,
     ReviewReconciliationResult,
+    ReviewResponseClass,
 )
 from autoskillit.execution import GitHubReviewLedger
 from autoskillit.execution.github_review import _poster_support
+from autoskillit.execution.github_review.gateway import GatewayResult
 
 from .fakes import (
     CreateOutcome,
@@ -38,6 +40,50 @@ def _validation_error(index: int) -> dict[str, object]:
             }
         ],
     }
+
+
+def _invalid_comment_response(field: str) -> GatewayResult:
+    return GatewayResult(
+        status_code=422,
+        data={
+            "message": "Validation Failed",
+            "errors": [
+                {
+                    "resource": "PullRequestReviewComment",
+                    "field": field,
+                    "code": "invalid",
+                    "message": "line must be part of the diff",
+                }
+            ],
+        },
+        headers={},
+        response_class=ReviewResponseClass.VALIDATION_ERROR,
+    )
+
+
+@pytest.mark.parametrize("field", ["comments[0]", "comments[0].line"])
+def test_structured_invalid_comment_index_accepts_optional_subfield(field: str) -> None:
+    assert (
+        _poster_support.structured_invalid_comment_index(
+            _invalid_comment_response(field),
+            1,
+        )
+        == 0
+    )
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["comments[0].", "comments[0]line", "comments[].line", "comments[0"],
+)
+def test_structured_invalid_comment_index_rejects_malformed_suffix(field: str) -> None:
+    assert (
+        _poster_support.structured_invalid_comment_index(
+            _invalid_comment_response(field),
+            1,
+        )
+        is None
+    )
 
 
 def _self_review_error() -> dict[str, object]:

@@ -208,11 +208,13 @@ def structured_invalid_comment_index(
     if not any(term in message for term in ("diff", "line", "anchor")):
         return None
     field = str(item.get("field", ""))
-    prefix, separator, _ = field.partition("].")
-    if separator != "]." or not prefix.startswith("comments["):
+    if not field.startswith("comments["):
+        return None
+    index_text, separator, suffix = field.removeprefix("comments[").partition("]")
+    if separator != "]" or (suffix and not (suffix.startswith(".") and suffix[1:])):
         return None
     try:
-        index = int(prefix.removeprefix("comments["))
+        index = int(index_text)
     except ValueError:
         return None
     return index if 0 <= index < comment_count else None

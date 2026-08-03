@@ -71,9 +71,10 @@ def _mock_mgr():
     return MagicMock()
 
 
-def _run_cook(profile, cfg, mock_mgr):
+def _run_cook(profile, cfg, mock_mgr, generated_home: Path):
     mock_backend_cls, captured = _make_mock_backend_class()
-    generated_home = Path.cwd().resolve()
+    skills_dir = generated_home / "skills"
+    skills_dir.mkdir(parents=True)
 
     @contextmanager
     def managed_session(
@@ -85,7 +86,7 @@ def _run_cook(profile, cfg, mock_mgr):
         yield ManagedSessionHome(
             launch_id=launch_id,
             generated_home=generated_home,
-            skills_dir=ValidatedAddDir(str(generated_home)),
+            skills_dir=ValidatedAddDir(str(skills_dir)),
             pass_fds=(),
         )
 
@@ -117,37 +118,37 @@ def _run_cook(profile, cfg, mock_mgr):
     return captured
 
 
-def test_profile_valid_injects_provider_env_var(_mock_mgr):
+def test_profile_valid_injects_provider_env_var(_mock_mgr, tmp_path: Path):
     """AUTOSKILLIT_PROVIDER_PROFILE must be in env_extras when --profile is given."""
     cfg = MagicMock()
     cfg.experimental_enabled = True
     cfg.providers.profiles = {"minimax": {"ANTHROPIC_BASE_URL": "https://minimax.example"}}
-    captured = _run_cook("minimax", cfg, _mock_mgr)
+    captured = _run_cook("minimax", cfg, _mock_mgr, tmp_path / "generated-home")
     assert len(captured) >= 1, "build_interactive_cmd was not called"
     env = captured[0]
     assert env.get("AUTOSKILLIT_PROVIDER_PROFILE") == "minimax"
 
 
-def test_profile_valid_injects_profile_env_vars(_mock_mgr):
+def test_profile_valid_injects_profile_env_vars(_mock_mgr, tmp_path: Path):
     """Profile's own env vars (API creds) must be injected into env_extras."""
     cfg = MagicMock()
     cfg.experimental_enabled = True
     cfg.providers.profiles = {
         "minimax": {"ANTHROPIC_BASE_URL": "https://mm.io", "ANTHROPIC_API_KEY": "sk-mm"}
     }
-    captured = _run_cook("minimax", cfg, _mock_mgr)
+    captured = _run_cook("minimax", cfg, _mock_mgr, tmp_path / "generated-home")
     assert len(captured) >= 1, "build_interactive_cmd was not called"
     env = captured[0]
     assert env.get("ANTHROPIC_BASE_URL") == "https://mm.io"
     assert env.get("ANTHROPIC_API_KEY") == "sk-mm"
 
 
-def test_profile_none_does_not_inject_provider_env(_mock_mgr):
+def test_profile_none_does_not_inject_provider_env(_mock_mgr, tmp_path: Path):
     """When profile=None, AUTOSKILLIT_PROVIDER_PROFILE must NOT appear in env_extras."""
     cfg = MagicMock()
     cfg.experimental_enabled = True
     cfg.providers.profiles = {}
-    captured = _run_cook(None, cfg, _mock_mgr)
+    captured = _run_cook(None, cfg, _mock_mgr, tmp_path / "generated-home")
     assert len(captured) >= 1, "build_interactive_cmd was not called"
     env = captured[0]
     assert "AUTOSKILLIT_PROVIDER_PROFILE" not in env

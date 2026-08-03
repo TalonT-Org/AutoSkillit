@@ -20,6 +20,7 @@ from autoskillit.core import (
     ReviewOperationState,
     ReviewReconciliationResult,
     ReviewResponseClass,
+    get_logger,
 )
 from autoskillit.execution._github_http import (
     github_error_message,
@@ -46,6 +47,7 @@ _EXPECTED_REMOTE_STATES = {
     "COMMENT": "COMMENTED",
 }
 _FINAL_STATES = frozenset({ReviewOperationState.SUCCEEDED, ReviewOperationState.RECONCILED})
+logger = get_logger(__name__)
 
 
 class DefaultGitHubReviewPoster:
@@ -78,6 +80,7 @@ class DefaultGitHubReviewPoster:
                     error=f"{type(exc).__name__}: {exc}",
                 )
             except Exception as exc:
+                logger.error("github_review_post_failed", exc_info=True)
                 return GitHubReviewPostResult(
                     operation_key="",
                     head_sha=request.head_sha,

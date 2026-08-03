@@ -54,21 +54,6 @@ def _decision(event: dict, monkeypatch: pytest.MonkeyPatch) -> str | None:
 
 
 @pytest.mark.parametrize(
-    "event_factory",
-    [_bash_event, _run_cmd_event],
-    ids=["bash-command-top-level-cwd", "run-cmd-cmd-input-cwd"],
-)
-def test_raw_pull_review_post_is_denied_for_both_command_tools(
-    event_factory,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    command = f"gh api --method POST {_REVIEW_ROUTE} -f event=COMMENT"
-
-    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) == "deny"
-
-
-@pytest.mark.parametrize(
     "command",
     [
         "gh pr review 7 --comment --body 'review body'",

@@ -102,7 +102,7 @@ _STORE_FACTORY_TOKEN = object()
 
 
 class CaptureLifecycleError(RuntimeError):
-    pass
+    failure_reason = _capture_capacity.CaptureFailureReason.LEDGER_INTEGRITY
 
 
 class CaptureLedgerError(CaptureLifecycleError):

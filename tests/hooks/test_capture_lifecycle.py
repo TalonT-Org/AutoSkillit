@@ -51,6 +51,7 @@ from autoskillit.hooks._capture_artifacts import (
     open_capture_root,
     open_project_anchor,
 )
+from autoskillit.hooks._capture_contract import CaptureContractError
 from autoskillit.hooks._capture_lifecycle import (
     CaptureCapacityError,
     CaptureCapacityReason,
@@ -129,6 +130,26 @@ def test_runtime_failure_reason_prefers_exact_transported_reason() -> None:
     assert (
         runtime_failure_reason(ConflictingFailure())
         is CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED
+    )
+
+
+@pytest.mark.parametrize(
+    "error_type",
+    (
+        CaptureLifecycleError,
+        CaptureLedgerError,
+        capture_lifecycle._capture_ledger.LedgerCodecError,
+        capture_lifecycle._capture_ledger.CaptureTransitionCommittedError,
+        capture_lifecycle._capture_migration.MigrationIntegrityError,
+        CaptureContractError,
+    ),
+)
+def test_runtime_failure_reason_reads_closed_integrity_metadata(
+    error_type: type[BaseException],
+) -> None:
+    assert (
+        runtime_failure_reason(error_type("invalid capture state"))
+        is CaptureFailureReason.LEDGER_INTEGRITY
     )
 
 

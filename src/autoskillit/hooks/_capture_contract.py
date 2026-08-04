@@ -180,6 +180,8 @@ _FAILURE_V3_KEYS = _FAILURE_KEYS | {"reason"}
 class CaptureContractError(ValueError):
     """Raised when a V2 capture transport value is invalid or noncanonical."""
 
+    failure_reason = CaptureFailureReason.LEDGER_INTEGRITY
+
 
 @dataclass(frozen=True, slots=True)
 class CaptureV2Fields:

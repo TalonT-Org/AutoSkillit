@@ -57,12 +57,6 @@ def runtime_failure_reason(exc: BaseException) -> CaptureFailureReason:
         return reason
     if isinstance(exc, OSError):
         return os_failure_reason(exc)
-    if type(exc).__name__ in {
-        "CaptureLedgerError",
-        "CaptureLifecycleError",
-        "CaptureTransitionCommittedError",
-    }:
-        return CaptureFailureReason.LEDGER_INTEGRITY
     return CaptureFailureReason.UNKNOWN_SETUP
 
 

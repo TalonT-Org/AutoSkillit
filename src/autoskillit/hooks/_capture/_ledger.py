@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from typing import Any, cast
 
 from . import _snapshot
+from ._failure_policy import CaptureFailureReason
 from ._lifecycle_policy import (
     CaptureDeliveryStatus,
     CaptureReferenceStatus,
@@ -93,9 +94,13 @@ _MAX_JSON_NODES = 4096
 class LedgerCodecError(RuntimeError):
     """Raised when framed lifecycle bytes are not strictly recoverable."""
 
+    failure_reason = CaptureFailureReason.LEDGER_INTEGRITY
+
 
 class CaptureTransitionCommittedError(RuntimeError):
     """Raised only after a lifecycle transition frame was durably synced."""
+
+    failure_reason = CaptureFailureReason.LEDGER_INTEGRITY
 
 
 @dataclass(frozen=True, slots=True)

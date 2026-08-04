@@ -44,7 +44,7 @@ class MigrationBlockedError(RuntimeError):
 
 
 class MigrationIntegrityError(RuntimeError):
-    pass
+    failure_reason = CaptureFailureReason.LEDGER_INTEGRITY
 
 
 class MigrationAuthorityError(OSError):

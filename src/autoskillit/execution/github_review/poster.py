@@ -949,14 +949,6 @@ class DefaultGitHubReviewPoster:
             raise ValueError("review finding accounting is not exhaustive")
         now = self.wall_clock()
         all_findings = _poster_support.canonical_findings(request)
-        effective_body = str(
-            _poster_support.payload(
-                request=request,
-                operation_key=operation_key,
-                findings=findings,
-                event=effective_event,
-            )["body"]
-        )
         receipt = GitHubReviewReceipt(
             schema_version=1,
             operation_key=operation_key,
@@ -967,7 +959,9 @@ class DefaultGitHubReviewPoster:
             requested_event=request.event,
             effective_event=effective_event,
             requested_body_digest=_poster_support.text_digest(request.body),
-            effective_body_digest=_poster_support.text_digest(effective_body),
+            effective_body_digest=_poster_support.effective_body_digest(
+                request, operation_key, findings, effective_event
+            ),
             canonical_finding_digest=_poster_support.finding_set_digest(all_findings),
             state=state,
             response_class=response_class,

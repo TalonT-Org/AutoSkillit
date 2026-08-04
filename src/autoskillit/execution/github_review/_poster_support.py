@@ -244,6 +244,25 @@ def text_digest(value: str) -> str:
     return hashlib.sha256(normalize_text(value).encode()).hexdigest()
 
 
+def effective_body_digest(
+    request: GitHubReviewRequest,
+    operation_key: str,
+    findings: tuple[CanonicalFinding, ...],
+    event: str,
+) -> str:
+    """Digest the exact top-level body sent to GitHub for one attempt."""
+    return text_digest(
+        str(
+            payload(
+                request=request,
+                operation_key=operation_key,
+                findings=findings,
+                event=event,
+            )["body"]
+        )
+    )
+
+
 def finding_set_digest(findings: tuple[CanonicalFinding, ...]) -> str:
     return hashlib.sha256(canonical_json([finding.wire for finding in findings])).hexdigest()
 

@@ -2900,10 +2900,33 @@ def test_reconcile_adapter_preserves_runtime_failure_reason(
 @pytest.mark.parametrize(
     ("reason", "blocker"),
     (
+        (
+            CaptureFailureReason.ACTIVE_CAPACITY_EXHAUSTED,
+            CleanupBlocker.FILESYSTEM_AUTHORITY,
+        ),
+        (
+            CaptureFailureReason.RETENTION_CAPACITY_EXHAUSTED,
+            CleanupBlocker.FILESYSTEM_AUTHORITY,
+        ),
+        (
+            CaptureFailureReason.FORENSIC_EVIDENCE_EXHAUSTED,
+            CleanupBlocker.FILESYSTEM_AUTHORITY,
+        ),
+        (
+            CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED,
+            CleanupBlocker.FILESYSTEM_AUTHORITY,
+        ),
+        (
+            CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED,
+            CleanupBlocker.FILESYSTEM_AUTHORITY,
+        ),
         (CaptureFailureReason.PERMISSION_DENIED, CleanupBlocker.PERMISSION_DENIED),
         (CaptureFailureReason.FILESYSTEM_IO, CleanupBlocker.FILESYSTEM_IO),
         (CaptureFailureReason.LEDGER_INTEGRITY, CleanupBlocker.LEDGER_INTEGRITY),
         (CaptureFailureReason.MIGRATION_BLOCKED, CleanupBlocker.MIGRATION_BLOCKED),
+        (CaptureFailureReason.FILESYSTEM_AUTHORITY, CleanupBlocker.FILESYSTEM_AUTHORITY),
+        (CaptureFailureReason.RECOVERY_CONTENDED, CleanupBlocker.FILESYSTEM_AUTHORITY),
+        (CaptureFailureReason.UNKNOWN_SETUP, CleanupBlocker.FILESYSTEM_AUTHORITY),
     ),
 )
 def test_reconcile_adapter_preserves_closed_setup_reason(

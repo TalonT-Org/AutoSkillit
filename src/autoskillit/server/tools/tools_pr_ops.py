@@ -15,8 +15,10 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
     GitHubReviewComment,
+    GitHubReviewPostResult,
     GitHubReviewRequest,
     ReviewOperationState,
+    ReviewResponseClass,
     atomic_write,
     destination_location,
     get_logger,
@@ -28,6 +30,24 @@ from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
+
+
+def _review_post_error(
+    *,
+    head_sha: str,
+    error: str,
+    state: ReviewOperationState,
+    response_class: ReviewResponseClass,
+) -> str:
+    return json.dumps(
+        GitHubReviewPostResult(
+            operation_key="",
+            head_sha=head_sha,
+            state=state,
+            response_class=response_class,
+            error=error,
+        ).to_dict()
+    )
 
 
 def _get_ctx():
@@ -219,18 +239,18 @@ async def post_pr_review(
             tool_ctx = _get_ctx()
             poster = tool_ctx.github_review_poster
             if poster is None:
-                return json.dumps(
-                    {
-                        "success": False,
-                        "error": "github_review_poster is not configured",
-                    }
+                return _review_post_error(
+                    head_sha=head_sha,
+                    error="github_review_poster is not configured",
+                    state=ReviewOperationState.AMBIGUOUS,
+                    response_class=ReviewResponseClass.SERVER_ERROR,
                 )
             if not os.path.isdir(cwd):
-                return json.dumps(
-                    {
-                        "success": False,
-                        "error": "cwd must be an existing directory",
-                    }
+                return _review_post_error(
+                    head_sha=head_sha,
+                    error="cwd must be an existing directory",
+                    state=ReviewOperationState.TERMINAL,
+                    response_class=ReviewResponseClass.CLIENT_ERROR,
                 )
             root = (Path(cwd) / ".autoskillit" / "temp").resolve()
             destination = destination_location(Path(receipt_path))
@@ -239,16 +259,24 @@ async def post_pr_review(
                 or not destination.is_relative_to(root)
                 or destination.name != f"batch_review_response_{pr_number}.json"
             ):
-                return json.dumps(
-                    {
-                        "success": False,
-                        "error": (
-                            "receipt_path must be an absolute contained path under "
-                            f"{root} named batch_review_response_{pr_number}.json"
-                        ),
-                    }
+                return _review_post_error(
+                    head_sha=head_sha,
+                    error=(
+                        "receipt_path must be an absolute contained path under "
+                        f"{root} named batch_review_response_{pr_number}.json"
+                    ),
+                    state=ReviewOperationState.TERMINAL,
+                    response_class=ReviewResponseClass.CLIENT_ERROR,
                 )
-            typed_comments = tuple(map(GitHubReviewComment.from_wire, comments))
+            try:
+                typed_comments = tuple(map(GitHubReviewComment.from_wire, comments))
+            except (KeyError, TypeError, ValueError) as exc:
+                return _review_post_error(
+                    head_sha=head_sha,
+                    error=f"{type(exc).__name__}: {exc}",
+                    state=ReviewOperationState.TERMINAL,
+                    response_class=ReviewResponseClass.CLIENT_ERROR,
+                )
             request = GitHubReviewRequest(
                 cwd=cwd,
                 receipt_path=receipt_path,
@@ -298,7 +326,12 @@ async def post_pr_review(
             return json.dumps(result.to_dict())
         except Exception as exc:
             logger.error("post_pr_review unhandled exception", exc_info=True)
-            return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+            return _review_post_error(
+                head_sha=head_sha,
+                error=f"{type(exc).__name__}: {exc}",
+                state=ReviewOperationState.AMBIGUOUS,
+                response_class=ReviewResponseClass.SERVER_ERROR,
+            )
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})

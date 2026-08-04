@@ -430,7 +430,9 @@ async def test_post_pr_review_missing_poster_returns_structured_error(
         )
     )
 
-    assert result["success"] is False
+    assert "success" not in result
+    assert result["state"] == ReviewOperationState.AMBIGUOUS.value
+    assert result["response_class"] == ReviewResponseClass.SERVER_ERROR.value
     assert "github_review_poster" in result["error"]
 
 
@@ -468,7 +470,10 @@ async def test_post_pr_review_never_raises_when_poster_fails(
         )
     )
 
-    assert result == {"success": False, "error": "RuntimeError: poster exploded"}
+    assert "success" not in result
+    assert result["state"] == ReviewOperationState.AMBIGUOUS.value
+    assert result["response_class"] == ReviewResponseClass.SERVER_ERROR.value
+    assert result["error"] == "RuntimeError: poster exploded"
 
 
 @pytest.mark.anyio
@@ -508,6 +513,8 @@ async def test_post_pr_review_never_raises_on_invalid_comment_shape(
         )
     )
 
-    assert result["success"] is False
+    assert "success" not in result
+    assert result["state"] == ReviewOperationState.TERMINAL.value
+    assert result["response_class"] == ReviewResponseClass.CLIENT_ERROR.value
     assert result["error"]
     assert poster.requests == []

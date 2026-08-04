@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import errno
 import json
 import os
@@ -89,6 +90,30 @@ class TestInitialState:
         raw["dispatches"][0]["launch_contract_digest"] = "0" * 64
         state_path.write_text(json.dumps(raw), encoding="utf-8")
         assert read_state(state_path) is None
+
+    def test_launch_contract_rebind_rejects_digest_drift(self, tmp_path: Path) -> None:
+        state_path = _state_path(tmp_path)
+        write_initial_state(
+            state_path,
+            "cid-1",
+            "my-campaign",
+            "/m.yaml",
+            [DispatchRecord(name="dispatch")],
+        )
+        backend = _mock_backend(channel_b_capable=False, process_name="claude")
+        contract = _resolved_launch_contract(backend, cwd=str(tmp_path))
+        drifted = dataclasses.replace(contract, network_access=not contract.network_access)
+        assert drifted.digest != contract.digest
+
+        bind_dispatch_launch_contract(state_path, "dispatch", contract)
+
+        with pytest.raises(ValueError, match="launch_contract_digest drifted"):
+            bind_dispatch_launch_contract(state_path, "dispatch", drifted)
+
+        restored = read_state(state_path)
+        assert restored is not None
+        assert restored.dispatches[0].launch_contract == contract
+        assert restored.dispatches[0].launch_contract_digest == contract.digest
 
     def test_schema_v10_state_remains_readable(self, tmp_path: Path) -> None:
         state_path = _state_path(tmp_path)

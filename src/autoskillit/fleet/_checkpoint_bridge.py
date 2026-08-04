@@ -42,6 +42,7 @@ def bind_dispatch_launch_contract(
             previous = dispatch.launch_contract
             if previous is not None:
                 stable_fields = (
+                    ("launch_contract_digest", previous.digest, launch_contract.digest),
                     ("surface", previous.surface, launch_contract.surface),
                     (
                         "backend_authority",

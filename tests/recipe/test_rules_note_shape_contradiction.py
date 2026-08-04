@@ -33,6 +33,58 @@ def test_note_with_inline_append_instruction_flagged() -> None:
 
 
 @pytest.mark.parametrize(
+    ("expected_phrase", "note"),
+    [
+        pytest.param(
+            "embed-in-skill_command",
+            "embed it into the skill_command",
+            id="embed",
+        ),
+        pytest.param(
+            "concatenate-to-skill_command",
+            "concatenate the topic to the skill_command",
+            id="concatenate",
+        ),
+        pytest.param(
+            "replace-in-skill_command",
+            "replace {topic} in the skill_command",
+            id="replace",
+        ),
+        pytest.param(
+            "inline-arg-example-quoted",
+            'Use "/autoskillit:foo {topic}" for this call',
+            id="quoted-example",
+        ),
+        pytest.param(
+            "inline-arg-example-unquoted",
+            "Call /autoskillit:foo {topic} for this step",
+            id="unquoted-example",
+        ),
+    ],
+)
+def test_additional_inline_append_patterns_flagged(expected_phrase: str, note: str) -> None:
+    """Every detector family has a positive case independent of the append branch."""
+    recipe = _make_workflow(
+        {
+            "step": {
+                "tool": "run_skill",
+                "with": {
+                    "skill_command": "/autoskillit:foo",
+                    "skill_inputs": {"topic": "bar"},
+                },
+                "note": note,
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done"},
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == "note-shape-contradiction"]
+    assert len(matched) == 1
+    assert expected_phrase in matched[0].message
+
+
+@pytest.mark.parametrize(
     "note",
     [
         pytest.param("do NOT append it to skill_command", id="not"),

@@ -643,7 +643,9 @@ def test_legacy_migration_retires_until_reduced_publication_capacity_fits(
         store.get_record(_CAPTURE_ID)
         decoded = capture_lifecycle._capture_ledger.decode_ledger(ledger.read_bytes())
         assert {frame.format_version for frame in decoded.frames} == {2}
-        assert sum(not carrier.exists() for carrier in carriers) >= 1
+        assert len(decoded.frames) == 2
+        assert sum(not carrier.exists() for carrier in carriers) == 2
+        assert ledger.stat().st_size <= low
         assert (
             not _capture_dir(project)
             .joinpath(capture_lifecycle._capture_migration.MIGRATION_NAME)

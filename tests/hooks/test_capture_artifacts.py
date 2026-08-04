@@ -45,13 +45,11 @@ from autoskillit.hooks._capture_contract import (
     NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
     PROTECTED_CAPTURE_ENV_VARS,
     CaptureFailureReason,
-    CaptureFailureV2,
     CaptureFailureV3,
     CaptureLineageRef,
     CaptureRequest,
     CaptureV2Fields,
     encode_capture_request,
-    parse_capture_failure_v2,
     parse_capture_failure_v3,
     parse_capture_v2,
 )
@@ -1046,7 +1044,7 @@ def test_setup_failure_reason_survives_runner_transport_without_sensitive_detail
     project = tmp_path / "project"
     project.mkdir()
     sentinel = project / "command_ran"
-    encoded = base64.b64encode(f"printf ran > {sentinel}".encode()).decode()
+    command = f"printf ran > {sentinel}"
     sensitive = f"sensitive cause at {project} for {_CAPTURE_ID}"
 
     def fail_create(*_args, **_kwargs):
@@ -1074,16 +1072,16 @@ def test_recovery_contention_is_classified_at_the_runner_boundary(
     project = tmp_path / "project"
     project.mkdir()
     sentinel = project / "command_ran"
-    encoded = base64.b64encode(f"printf ran > {sentinel}".encode()).decode()
 
     def contend(*_args, **_kwargs):
         raise LockContended
 
     monkeypatch.setattr(capture_artifacts, "create_capture_artifact", contend)
 
-    assert capture_artifacts._main(
-        _runner_args(command=f"printf ran > {sentinel}", cwd=str(project))
-    ) == 1
+    assert (
+        capture_artifacts._main(_runner_args(command=f"printf ran > {sentinel}", cwd=str(project)))
+        == 1
+    )
 
     failure = _single_failure_marker(capfd.readouterr().err)
     assert failure.reason is CaptureFailureReason.RECOVERY_CONTENDED

@@ -391,7 +391,7 @@ def _spawn_bash(
             _DIRECTORY_FLAGS & ~getattr(os, "O_NOFOLLOW", 0),
         )
     except OSError as exc:
-        raise CaptureSetupError("cannot preserve runner cwd") from exc
+        raise CaptureSetupError.from_os_error(exc, "cannot preserve runner cwd") from exc
 
     process: subprocess.Popen[bytes] | None = None
     restore_error: OSError | None = None
@@ -408,10 +408,11 @@ def _spawn_bash(
         )
     except OSError as exc:
         if exc.errno == errno.E2BIG:
-            raise CaptureSetupError(
-                "capture shell spawn rejected: argument/environment exceeds system limit"
+            raise CaptureSetupError.from_os_error(
+                exc,
+                "capture shell spawn rejected: argument/environment exceeds system limit",
             ) from exc
-        raise CaptureSetupError("cannot spawn capture shell") from exc
+        raise CaptureSetupError.from_os_error(exc, "cannot spawn capture shell") from exc
     finally:
         try:
             os.fchdir(original_cwd_fd)
@@ -422,9 +423,11 @@ def _spawn_bash(
     if restore_error is not None:
         if process is not None:
             _settle_failed_capture(_own_spawned_process(process, capture_output=capture_output))
-        raise CaptureSetupError("cannot restore runner cwd") from restore_error
+        raise CaptureSetupError.from_os_error(
+            restore_error, "cannot restore runner cwd"
+        ) from restore_error
     if process is None:
-        raise CaptureSetupError("capture shell did not start")
+        raise CaptureSetupError.unknown("capture shell did not start")
     return process
 
 
@@ -440,7 +443,7 @@ def _drain_capture(
 
     stream = process.stdout
     if stream is None:
-        raise CaptureSetupError("capture pipe unavailable")
+        raise CaptureSetupError.filesystem_io("capture pipe unavailable")
 
     head_limit = (2 * inline_bytes) // 3
     tail_limit = inline_bytes - head_limit
@@ -553,7 +556,7 @@ def _resolve_bash(candidates: Sequence[str] = _TRUSTED_BASH_CANDIDATES) -> str:
             pass
         finally:
             os.close(fd)
-    raise CaptureSetupError("trusted bash executable unavailable")
+    raise CaptureSetupError.authority("trusted bash executable unavailable")
 
 
 def _settle_failed_capture(

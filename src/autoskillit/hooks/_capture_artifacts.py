@@ -593,7 +593,7 @@ def run_capture(
         or (attempt_id is None) != (lineage_ref is None)
         or (requested_mode == "direct" and lineage_ref is None)
     ):
-        raise CaptureSetupError("invalid capture authority")
+        raise CaptureSetupError.unknown("invalid capture authority")
     try:
         command_bytes = command.encode("utf-8")
     except UnicodeEncodeError as exc:
@@ -638,7 +638,7 @@ def run_capture(
                 project_policy_disabled=policy.disabled,
             )
             if not observation_recorded:
-                raise CaptureSetupError("runner observation recording failed")
+                raise CaptureSetupError.unknown("runner observation recording failed")
         if effective_direct:
             try:
                 spawned = _spawn_bash(anchor, bash_path, command, capture_output=False)
@@ -653,8 +653,9 @@ def run_capture(
                     raise
                 return _capture_replay.capture_failure_return(
                     _capture_replay.failure_transport(
+                        reason=_capture_failure_policy.runtime_failure_reason(exc),
                         stage="direct process",
-                        detail=f"direct process failed: {type(exc).__name__}: {exc}",
+                        detail="direct process failed",
                         shell_returncode=(
                             None if direct_settlement is None else direct_settlement.returncode
                         ),
@@ -699,6 +700,7 @@ def run_capture(
                 terminal_committed = True
                 return _capture_replay.capture_failure_return(
                     _capture_replay.failure_transport(
+                        reason=CaptureFailureReason.FILESYSTEM_IO,
                         stage=failure_stage,
                         detail=("capture output drain truncated after process-group settlement"),
                         shell_returncode=command_returncode,

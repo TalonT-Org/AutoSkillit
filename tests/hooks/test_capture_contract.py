@@ -22,9 +22,9 @@ from autoskillit.core import (
     NativeShellCaptureMode,
 )
 from autoskillit.hooks._capture_contract import (
-    CAPTURE_REQUEST_PROTOCOL_VERSION,
     CAPTURE_FAILURE_V3_PRODUCER,
     CAPTURE_FAILURE_V3_SCHEMA_VERSION,
+    CAPTURE_REQUEST_PROTOCOL_VERSION,
     CAPTURE_V2_PRODUCER,
     CAPTURE_V2_SCHEMA_VERSION,
     MAX_CAPTURE_FAILURE_V2_BYTES,

@@ -100,17 +100,21 @@ class _Clock:
 def test_capacity_failure_reason_mapping_is_exhaustive_and_enum_keyed() -> None:
     mapping = capture_capacity._FAILURE_REASONS
 
-    assert set(mapping) == set(CaptureCapacityReason)
-    assert all(type(reason) is CaptureCapacityReason for reason in mapping)
-    assert all(type(reason) is CaptureFailureReason for reason in mapping.values())
-    assert (
-        mapping[CaptureCapacityReason.PROJECTED_COMPACTED_BYTES]
-        is CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED
-    )
-    assert (
-        mapping[CaptureCapacityReason.HARD_LEDGER_CAPACITY]
-        is CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED
-    )
+    assert mapping == {
+        CaptureCapacityReason.ACTIVE_CAPACITY: (CaptureFailureReason.ACTIVE_CAPACITY_EXHAUSTED),
+        CaptureCapacityReason.RETENTION_CAPACITY: (
+            CaptureFailureReason.RETENTION_CAPACITY_EXHAUSTED
+        ),
+        CaptureCapacityReason.FORENSIC_EVIDENCE: (
+            CaptureFailureReason.FORENSIC_EVIDENCE_EXHAUSTED
+        ),
+        CaptureCapacityReason.PROJECTED_COMPACTED_BYTES: (
+            CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED
+        ),
+        CaptureCapacityReason.HARD_LEDGER_CAPACITY: (
+            CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED
+        ),
+    }
 
 
 @pytest.mark.parametrize("reason", tuple(CaptureCapacityReason))

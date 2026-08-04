@@ -155,6 +155,7 @@ async def test_resume_session_id_threaded_to_executor(tool_ctx_kitchen_open, mon
     assert len(executor.calls) == 1
     assert executor.calls[0].resume_session_id == "sess-123"
     assert executor.calls[0].resume_launch_contract == persisted_launch
+    assert persisted_launch.backend_authority is not None
     assert executor.calls[0].backend_authority == persisted_launch.backend_authority
 
 

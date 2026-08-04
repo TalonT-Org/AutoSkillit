@@ -112,6 +112,7 @@ class CaptureLedgerError(CaptureLifecycleError):
 class CaptureCapacityError(CaptureLedgerError):
     def __init__(self, reason: CaptureCapacityReason) -> None:
         self.reason = reason
+        self.failure_reason = _capture_capacity.failure_reason(reason)
         super().__init__(_capture_capacity.reason_detail(reason))
 
 

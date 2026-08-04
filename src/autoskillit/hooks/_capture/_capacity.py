@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from . import _ledger
+from ._failure_policy import CaptureFailureReason
 from ._module_identity import register_module_aliases
 from ._types import CaptureCapacityReason, CaptureCapacitySpec
 
@@ -20,9 +21,25 @@ _REASON_DETAILS = {
     CaptureCapacityReason.HARD_LEDGER_CAPACITY: "hard lifecycle ledger capacity reached",
 }
 
+_FAILURE_REASONS = {
+    CaptureCapacityReason.ACTIVE_CAPACITY: CaptureFailureReason.ACTIVE_CAPACITY_EXHAUSTED,
+    CaptureCapacityReason.RETENTION_CAPACITY: CaptureFailureReason.RETENTION_CAPACITY_EXHAUSTED,
+    CaptureCapacityReason.FORENSIC_EVIDENCE: CaptureFailureReason.FORENSIC_EVIDENCE_EXHAUSTED,
+    CaptureCapacityReason.PROJECTED_COMPACTED_BYTES: (
+        CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED
+    ),
+    CaptureCapacityReason.HARD_LEDGER_CAPACITY: (
+        CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED
+    ),
+}
+
 
 def reason_detail(reason: CaptureCapacityReason) -> str:
     return _REASON_DETAILS[reason]
+
+
+def failure_reason(reason: CaptureCapacityReason) -> CaptureFailureReason:
+    return _FAILURE_REASONS[reason]
 
 
 def recovery_headroom(spec: CaptureCapacitySpec) -> int:

@@ -279,7 +279,7 @@ def create_capture_artifact(
         )
     except CaptureCapacityError as exc:
         raise CaptureSetupError(
-            _capture_failure_policy.capacity_failure_reason(exc.reason),
+            exc.failure_reason,
             "capture capacity is exhausted",
         ) from exc
     except (CaptureLifecycleError, CaptureTransitionCommittedError) as exc:

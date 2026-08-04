@@ -570,6 +570,23 @@ def test_protected_lineage_reference_requires_canonical_exact_json() -> None:
         decode_lineage_ref_json(" " * (contract._MAX_LINEAGE_REF_JSON_BYTES + 1))
 
 
+def test_v3_failure_reason_values_remain_uppercase_and_pinned() -> None:
+    assert {reason.name: reason.value for reason in CaptureFailureReason} == {
+        "ACTIVE_CAPACITY_EXHAUSTED": "ACTIVE_CAPACITY_EXHAUSTED",
+        "RETENTION_CAPACITY_EXHAUSTED": "RETENTION_CAPACITY_EXHAUSTED",
+        "FORENSIC_EVIDENCE_EXHAUSTED": "FORENSIC_EVIDENCE_EXHAUSTED",
+        "PROJECTED_COMPACTED_BYTES_EXHAUSTED": ("PROJECTED_COMPACTED_BYTES_EXHAUSTED"),
+        "HARD_LEDGER_CAPACITY_EXHAUSTED": "HARD_LEDGER_CAPACITY_EXHAUSTED",
+        "MIGRATION_BLOCKED": "MIGRATION_BLOCKED",
+        "LEDGER_INTEGRITY": "LEDGER_INTEGRITY",
+        "FILESYSTEM_AUTHORITY": "FILESYSTEM_AUTHORITY",
+        "PERMISSION_DENIED": "PERMISSION_DENIED",
+        "FILESYSTEM_IO": "FILESYSTEM_IO",
+        "RECOVERY_CONTENDED": "RECOVERY_CONTENDED",
+        "UNKNOWN_SETUP": "UNKNOWN_SETUP",
+    }
+
+
 @pytest.mark.parametrize("reason", tuple(CaptureFailureReason))
 def test_v3_failure_frame_has_closed_reason_and_is_canonical(
     reason: CaptureFailureReason,

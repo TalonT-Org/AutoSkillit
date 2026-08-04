@@ -20,9 +20,14 @@ from typing import cast
 
 import pytest
 
+import autoskillit.hooks._capture._capacity as capture_capacity
 import autoskillit.hooks._capture._reconcile as capture_reconcile
 import autoskillit.hooks._capture._sweep_cursor as sweep_cursor
 import autoskillit.hooks._capture_lifecycle as capture_lifecycle
+from autoskillit.hooks._capture._failure_policy import (
+    CaptureFailureReason,
+    runtime_failure_reason,
+)
 from autoskillit.hooks._capture._lifecycle_policy import CaptureStatus
 from autoskillit.hooks._capture._snapshot import (
     CaptureAuthorityError,
@@ -88,6 +93,53 @@ class _Clock:
 
     def advance(self, seconds: float) -> None:
         self.value += seconds
+
+
+def test_capacity_failure_reason_mapping_is_exhaustive_and_enum_keyed() -> None:
+    mapping = capture_capacity._FAILURE_REASONS
+
+    assert set(mapping) == set(CaptureCapacityReason)
+    assert all(type(reason) is CaptureCapacityReason for reason in mapping)
+    assert all(type(reason) is CaptureFailureReason for reason in mapping.values())
+    assert (
+        mapping[CaptureCapacityReason.PROJECTED_COMPACTED_BYTES]
+        is CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED
+    )
+    assert (
+        mapping[CaptureCapacityReason.HARD_LEDGER_CAPACITY]
+        is CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED
+    )
+
+
+@pytest.mark.parametrize("reason", tuple(CaptureCapacityReason))
+def test_capacity_error_preserves_internal_and_transported_reasons(
+    reason: CaptureCapacityReason,
+) -> None:
+    failure = CaptureCapacityError(reason)
+
+    assert failure.reason is reason
+    assert failure.failure_reason is capture_capacity.failure_reason(reason)
+
+
+def test_runtime_failure_reason_prefers_exact_transported_reason() -> None:
+    class ConflictingFailure(RuntimeError):
+        reason = CaptureFailureReason.UNKNOWN_SETUP
+        failure_reason = CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED
+
+    assert (
+        runtime_failure_reason(ConflictingFailure())
+        is CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED
+    )
+
+
+def test_migration_phase_persisted_values_remain_uppercase_and_pinned() -> None:
+    assert {
+        phase.name: phase.value for phase in capture_lifecycle._capture_migration.MigrationPhase
+    } == {
+        "PLANNED": "PLANNED",
+        "QUARANTINED": "QUARANTINED",
+        "RETIRED": "RETIRED",
+    }
 
 
 def test_lifecycle_record_rejects_invalid_identity_at_construction() -> None:

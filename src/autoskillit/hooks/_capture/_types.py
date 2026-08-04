@@ -61,7 +61,7 @@ class LedgerIncarnation:
             raise ValueError("invalid lifecycle ledger incarnation")
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class LedgerSnapshot:
     size: int
     ctime_ns: int

@@ -726,60 +726,6 @@ class GitHubReviewLedger:
             if cursor.rowcount != 1:
                 raise ValueError("review mutation lease was lost before release")
 
-    def reserve_mutation_slot(
-        self,
-        *,
-        scope_id: str,
-        owner_token: str,
-        now: float,
-        minimum_interval_seconds: float,
-    ) -> float:
-        """Compatibility pacing API retained for direct coordinator tests."""
-
-        self.initialize()
-        with self._connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            row = connection.execute(
-                "SELECT lease_owner, lease_expires_at, next_mutation_not_before, "
-                "backoff_until, in_flight_operation_key FROM rate_scopes "
-                "WHERE scope_id = ?",
-                (scope_id,),
-            ).fetchone()
-            if row is None:
-                connection.execute(
-                    "INSERT INTO rate_scopes(scope_id) VALUES (?)",
-                    (scope_id,),
-                )
-                row = (None, 0.0, 0.0, 0.0, None)
-            current_owner = row[0]
-            lease_expires_at = float(row[1])
-            next_not_before = float(row[2])
-            backoff_until = float(row[3])
-            in_flight = row[4]
-            if current_owner == owner_token and in_flight in {None, owner_token}:
-                return 0.0
-            if in_flight is not None and in_flight != owner_token:
-                return max(
-                    0.0,
-                    lease_expires_at - now,
-                    next_not_before - now,
-                    backoff_until - now,
-                )
-            delay = max(0.0, next_not_before - now, backoff_until - now)
-            if delay > 0:
-                return delay
-            connection.execute(
-                "UPDATE rate_scopes SET lease_owner = ?, lease_expires_at = 0, "
-                "next_mutation_not_before = ?, in_flight_operation_key = NULL "
-                "WHERE scope_id = ?",
-                (
-                    owner_token,
-                    now + minimum_interval_seconds,
-                    scope_id,
-                ),
-            )
-            return 0.0
-
     def set_backoff(self, *, scope_id: str, until: float) -> None:
         self.initialize()
         with self._connect() as connection:

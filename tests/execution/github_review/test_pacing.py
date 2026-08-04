@@ -24,6 +24,31 @@ class MutableClock:
         self.value += delay
 
 
+def _claim_and_release(
+    ledger: GitHubReviewLedger,
+    *,
+    now: float,
+    owner_token: str,
+) -> MutationSlot:
+    slot = ledger.claim_mutation_slot(
+        scope_id="github-review",
+        lease_owner=owner_token,
+        operation_key=owner_token,
+        now=now,
+        minimum_interval_seconds=1.0,
+        lease_ttl_seconds=60.0,
+    )
+    if slot.ready:
+        ledger.finish_mutation(
+            scope_id="github-review",
+            lease_owner=slot.lease_owner,
+            lease_generation=slot.lease_generation,
+            operation_key=owner_token,
+            keep_in_flight=False,
+        )
+    return slot
+
+
 def _reserve_in_process(
     database_path: str,
     now: float,
@@ -31,13 +56,12 @@ def _reserve_in_process(
     queue: multiprocessing.Queue,
 ) -> None:
     try:
-        delay = GitHubReviewLedger(Path(database_path)).reserve_mutation_slot(
-            scope_id="github-review",
+        slot = _claim_and_release(
+            GitHubReviewLedger(Path(database_path)),
             owner_token=owner_token,
             now=now,
-            minimum_interval_seconds=1.0,
         )
-        queue.put(("ok", delay))
+        queue.put(("ok", slot.delay))
     except BaseException as exc:  # pragma: no cover - surfaced in the parent
         queue.put(("error", f"{type(exc).__name__}: {exc}"))
 
@@ -47,59 +71,30 @@ def test_mutation_slot_is_durable_across_ledger_instances(tmp_path: Path) -> Non
     first = GitHubReviewLedger(database_path)
     second = GitHubReviewLedger(database_path)
 
-    assert (
-        first.reserve_mutation_slot(
-            scope_id="github-review",
-            owner_token="owner-a",
-            now=100.0,
-            minimum_interval_seconds=1.0,
-        )
-        == 0.0
-    )
-    assert second.reserve_mutation_slot(
-        scope_id="github-review",
+    assert _claim_and_release(first, owner_token="owner-a", now=100.0).ready is True
+    assert _claim_and_release(
+        second,
         owner_token="owner-b",
         now=100.0,
-        minimum_interval_seconds=1.0,
-    ) == pytest.approx(1.0)
+    ).delay == pytest.approx(1.0)
 
 
-def test_same_owner_can_reacquire_reserved_slot_without_double_delay(
+def test_released_owner_observes_the_persisted_interval(
     tmp_path: Path,
 ) -> None:
     ledger = GitHubReviewLedger(tmp_path / "ledger.sqlite3")
-    assert (
-        ledger.reserve_mutation_slot(
-            scope_id="github-review",
-            owner_token="same-attempt",
-            now=10.0,
-            minimum_interval_seconds=1.0,
-        )
-        == 0.0
-    )
-    assert (
-        ledger.reserve_mutation_slot(
-            scope_id="github-review",
-            owner_token="same-attempt",
-            now=10.0,
-            minimum_interval_seconds=1.0,
-        )
-        == 0.0
-    )
+    assert _claim_and_release(ledger, owner_token="same-attempt", now=10.0).ready is True
+    assert _claim_and_release(
+        ledger,
+        owner_token="same-attempt",
+        now=10.0,
+    ).delay == pytest.approx(1.0)
 
 
 def test_mutation_slot_backpressure_crosses_process_boundary(tmp_path: Path) -> None:
     database_path = tmp_path / "ledger.sqlite3"
     parent_ledger = GitHubReviewLedger(database_path)
-    assert (
-        parent_ledger.reserve_mutation_slot(
-            scope_id="github-review",
-            owner_token="parent",
-            now=100.0,
-            minimum_interval_seconds=1.0,
-        )
-        == 0.0
-    )
+    assert _claim_and_release(parent_ledger, owner_token="parent", now=100.0).ready is True
 
     context = multiprocessing.get_context("spawn")
     queue = context.Queue()

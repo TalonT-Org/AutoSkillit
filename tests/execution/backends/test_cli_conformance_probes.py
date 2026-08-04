@@ -1253,8 +1253,8 @@ def _assert_generated_child_probe(output: _GeneratedChildProbeOutput) -> None:
         parent_id=output.parent_id,
         agent_role=output.agent_role,
         output_discipline_digest=OUTPUT_DISCIPLINE_DIGEST,
-        child_terminal_sentinel="child-delivery-complete",
-        parent_terminal_sentinel="parent-delivery-complete",
+        child_terminal_sentinel="child-capability-complete",
+        parent_terminal_sentinel="parent-capability-complete",
     )
     evidence = assert_generated_codex_child_delivery(
         output.parent_events,

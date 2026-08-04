@@ -283,10 +283,13 @@ async def test_stale_resume_never_reopens_a_capability(monkeypatch: pytest.Monke
 async def test_fresh_run_skill_revokes_explorer_authority_after_injection_outcome(
     tool_ctx_kitchen_open,
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
     refresh_fails: bool,
 ) -> None:
     """A freshly minted binding is terminally cleaned on success and refresh failure."""
+    from autoskillit.execution.backends.codex import CodexBackend
     from autoskillit.server.tools import tools_execution
+    from autoskillit.workspace import DefaultSessionSkillManager, SkillsDirectoryProvider
     from tests.fakes import InMemoryHeadlessExecutor
 
     cleanup_store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
@@ -306,21 +309,34 @@ async def test_fresh_run_skill_revokes_explorer_authority_after_injection_outcom
         return bindings
 
     monkeypatch.setattr(cleanup_store, "bind_launches", _capture_bound_authority)
-    backend = MagicMock()
-    backend.name = "codex"
-    backend.conventions = tool_ctx_kitchen_open.backend.conventions
+    concrete_backend = CodexBackend()
+    backend = MagicMock(wraps=concrete_backend)
+    backend.name = concrete_backend.name
+    backend.conventions = concrete_backend.conventions
     backend.capabilities = replace(
-        tool_ctx_kitchen_open.backend.capabilities,
+        concrete_backend.capabilities,
         terminal_explorer_capable=True,
     )
     if refresh_fails:
         backend.refresh_explorer_binding_env.side_effect = RuntimeError("injection failed")
+    else:
+        backend.refresh_explorer_binding_env.return_value = None
 
     tool_ctx_kitchen_open.backend = backend
+    tool_ctx_kitchen_open.session_skill_manager = DefaultSessionSkillManager(
+        SkillsDirectoryProvider(),
+        ephemeral_root=tmp_path / "ephemeral-sessions",
+        persistent_root=tmp_path / "persistent-sessions",
+    )
     tool_ctx_kitchen_open.read_only_resolver = lambda _command: True
     tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.exploration_context_store = cleanup_store
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(
+        tool_ctx_kitchen_open.launch_resolver,
+        "backend_for_authority",
+        lambda _authority: backend,
+    )
     monkeypatch.setattr(
         tools_execution,
         "_explorer_launch_identity",
@@ -341,22 +357,30 @@ async def test_fresh_run_skill_revokes_explorer_authority_after_injection_outcom
 async def test_resumed_run_skill_revokes_replacement_authority_after_refresh_failure(
     tool_ctx_kitchen_open,
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """Resume refresh failure revokes the replacement authority before returning."""
+    from autoskillit.execution.backends.codex import CodexBackend
     from autoskillit.server.tools import tools_execution
+    from autoskillit.workspace import DefaultSessionSkillManager, SkillsDirectoryProvider
     from tests.conftest import bind_test_skill_resume_contract
     from tests.fakes import InMemoryHeadlessExecutor
 
-    original_backend = tool_ctx_kitchen_open.backend
-    backend = MagicMock()
-    backend.name = "codex"
-    backend.conventions = original_backend.conventions
+    concrete_backend = CodexBackend()
+    backend = MagicMock(wraps=concrete_backend)
+    backend.name = concrete_backend.name
+    backend.conventions = concrete_backend.conventions
     backend.capabilities = replace(
-        original_backend.capabilities,
+        concrete_backend.capabilities,
         terminal_explorer_capable=True,
     )
     backend.refresh_explorer_binding_env.side_effect = RuntimeError("replacement injection failed")
     tool_ctx_kitchen_open.backend = backend
+    tool_ctx_kitchen_open.session_skill_manager = DefaultSessionSkillManager(
+        SkillsDirectoryProvider(),
+        ephemeral_root=tmp_path / "ephemeral-sessions",
+        persistent_root=tmp_path / "persistent-sessions",
+    )
     bind_test_skill_resume_contract(
         tool_ctx_kitchen_open,
         session_id="explorer-resume",
@@ -374,7 +398,11 @@ async def test_resumed_run_skill_revokes_replacement_authority_after_refresh_fai
     tool_ctx_kitchen_open.exploration_context_store = cleanup_store
     tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    monkeypatch.setattr(tools_execution, "_get_backend", lambda _name: backend)
+    monkeypatch.setattr(
+        tool_ctx_kitchen_open.launch_resolver,
+        "backend_for_authority",
+        lambda _authority: backend,
+    )
     monkeypatch.setattr(
         tools_execution,
         "_explorer_launch_identity",

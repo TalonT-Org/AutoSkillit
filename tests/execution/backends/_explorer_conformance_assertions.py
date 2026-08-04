@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+
+@dataclass(frozen=True, slots=True)
 class GeneratedChildEvidence:
     """Authoritative identity fields extracted from one linked Codex child."""
 
@@ -272,4 +274,3 @@ def assert_generated_codex_child_delivery(
         network_policy=network_policy,
         definition_digest=definition_digest,
     )
-

@@ -8,6 +8,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from ._type_backend import CmdSpec
 from ._type_checkpoint import SessionCheckpoint  # noqa: F401, TC001
+from ._type_execution_identity import ExecutionIdentity
 from ._type_launch import (
     BackendAuthority,
     LaunchAdapterResult,
@@ -16,8 +17,6 @@ from ._type_launch import (
     ResolvedLaunchContract,
     SkillProjectionBinding,
 )
-from ._type_enums import SkillExecutionRole
-from ._type_execution_identity import ExecutionIdentity
 from ._type_native_shell_capture import (
     ManagedHeadlessSessionLineageRef,
     NativeShellCaptureDecision,

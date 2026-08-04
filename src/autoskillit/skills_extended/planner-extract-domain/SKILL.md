@@ -158,7 +158,7 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 - Abort the calling recipe on failure — log a warning and return gracefully
 - Detach child delegations instead of joining them (joining every child is required)
 - If `$1` is empty or the file does not exist, STOP immediately and report failure
-- Dispatch independent exploration vectors sequentially
+- Start independent child delegations sequentially
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
@@ -166,7 +166,7 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 - Read the analysis file from argument $1 before spawning subagents
 - Use the registered exploration roles for all repository reads
 - Dispatch ready, scope-disjoint vectors concurrently
-- Start all independent child delegations before awaiting any result
+- Start all independent child delegations in a single message before awaiting any result
 - Wait for every dispatched exploration result before synthesis
 
 ## Workflow

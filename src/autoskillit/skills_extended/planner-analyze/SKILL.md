@@ -127,13 +127,14 @@ Detect language, framework, test infrastructure, project structure, and existing
 - Write analysis.json outside `$1/`
 - Detach child delegations instead of joining them (joining every child is required)
 - Run exploration leaves in the background
-- Dispatch exploration vectors sequentially when they are scope-disjoint
+- Start independent child delegations sequentially
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
 **ALWAYS:**
 - Use the registered exploration roles for all repository reads
 - Dispatch all 5 applicable vectors through the deterministic router
+- Start all independent child delegations in a single message before awaiting any result
 - Write valid JSON to `analysis.json`
 - Wait for every exploration result before synthesis
 
@@ -141,7 +142,7 @@ Detect language, framework, test infrastructure, project structure, and existing
 
 ### Step 1: Launch 5 routed exploration vectors
 
-Dispatch all ready, scope-disjoint vectors together. Do not iterate across multiple turns.
+Dispatch all ready, scope-disjoint vectors in a single message before awaiting any result.
 
 Do not output prose between dispatches. Immediately proceed to the next vector.
 

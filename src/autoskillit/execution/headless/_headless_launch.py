@@ -56,6 +56,7 @@ logger = get_logger(__name__)
 
 _NUDGE_TIMEOUT: float = 60.0
 
+
 def _bind_effective_execution_identity(
     skill_result: SkillResult,
     backend: CodingAgentBackend,
@@ -83,6 +84,7 @@ def _bind_effective_execution_identity(
                 exc_info=True,
             )
     return dataclasses.replace(skill_result, execution_identity=effective)
+
 
 def _report_plugin_binding_close_failure(
     primary_error: BaseException,

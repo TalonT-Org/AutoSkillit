@@ -1278,7 +1278,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "inside the existing precedence resolver so a rejected project-local declaration "
         "cannot poison unrelated skills or bypass the valid bundled fallback; typed "
         "invalidity and exclusion records remain adjacent to the resolver transitions "
-        "whose rejected candidates they describe.",
+        "whose rejected candidates they describe; "
+        "REQ-CNST-010-E20: exploration-vector frontmatter parsing, canonical marker "
+        "binding, and exact migrated-body replacement stay beside the SKILL.md parser so "
+        "discovery and projection share one fail-closed content authority.",
     ),
     "execution/backends/_codex_session_storage.py": (
         1400,
@@ -1294,12 +1297,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "generated-home lease and cleanup transaction, and backend-specific layout "
         "validation; keeping those operations together preserves both assembly ordering "
         "and the create/validate/yield/delete ownership proof",
-    ),
-    "workspace/skills.py": (
-        1250,
-        "REQ-CNST-010-E20: Phase C keeps exploration-vector frontmatter parsing, canonical "
-        "marker binding, and exact migrated-body replacement beside the existing SKILL.md "
-        "parser so discovery and projection share one fail-closed content authority",
     ),
     "rules_skill_content.py": (
         1200,

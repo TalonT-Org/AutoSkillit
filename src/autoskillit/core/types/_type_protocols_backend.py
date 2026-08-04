@@ -30,8 +30,8 @@ from ._type_native_shell_capture import (
 from ._type_plugin_source import PluginLaunchBinding
 from ._type_results import ValidatedAddDir
 from ._type_resume import NoResume, ResumeSpec
-from ._type_skill_semantics import SkillSemanticAdaptationResult, SkillSemanticPlan
 from ._type_skill_contract import ExplorationVectorDef
+from ._type_skill_semantics import SkillSemanticAdaptationResult, SkillSemanticPlan
 
 __all__ = [
     "StreamParser",

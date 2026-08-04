@@ -149,7 +149,7 @@ independently and writes a single elaborated phase result. No dependency on
 - Explore parent directories of your input paths (e.g., `ls $(dirname $1)/..`)
 - Detach child delegations instead of joining them (joining every child is required)
 - Run exploration leaves in the background
-- Dispatch ready exploration vectors sequentially when they are scope-disjoint
+- Start independent child delegations sequentially
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
@@ -159,6 +159,7 @@ independently and writes a single elaborated phase result. No dependency on
 - Emit: `elab_result_path = <absolute path to {phase_id}_result.json>`
 - Include all `PhaseElaborated` fields in the result
 - Dispatch all ready, scope-disjoint vectors through the deterministic router before awaiting any result, then join every result
+- Start all independent child delegations in a single message before awaiting any result
 
 ## Workflow
 

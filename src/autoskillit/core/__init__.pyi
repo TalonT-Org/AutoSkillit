@@ -610,9 +610,9 @@ from .types import ChannelBStatus as ChannelBStatus
 from .types import ChannelConfirmation as ChannelConfirmation
 from .types import ChargeCommittedEffect as ChargeCommittedEffect
 from .types import ChargeDomain as ChargeDomain
+from .types import ChildExecutionIdentity as ChildExecutionIdentity
 from .types import ChildModelPolicySpec as ChildModelPolicySpec
 from .types import ChildSpawnSpec as ChildSpawnSpec
-from .types import ChildExecutionIdentity as ChildExecutionIdentity
 from .types import CIRunScope as CIRunScope
 from .types import CIWatcher as CIWatcher
 from .types import ClaudeContentBlockType as ClaudeContentBlockType

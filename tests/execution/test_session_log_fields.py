@@ -48,7 +48,7 @@ class _FakeLocator:
         return ()
 
 
-def test_execution_identity_reaches_summary_and_schema_6_index(tmp_path):
+def test_execution_identity_reaches_summary_and_schema_7_index(tmp_path):
     identity = ExecutionIdentity(
         requested_parent_backend="codex",
         effective_parent_backend="codex",
@@ -79,7 +79,7 @@ def test_execution_identity_reaches_summary_and_schema_6_index(tmp_path):
     entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
 
     assert summary["execution_identity"] == identity.to_dict()
-    assert entry["schema_version"] == 6
+    assert entry["schema_version"] == 7
     assert entry["child_executions"] == [identity.children[0].to_dict()]
     assert entry["backend_override_tier"] == "recipe_step"
     assert entry["parent_session_id"] == "parent-id"

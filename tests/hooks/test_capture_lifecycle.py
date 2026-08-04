@@ -2860,6 +2860,44 @@ def test_reconcile_adapter_opens_existing_store_without_creation(tmp_path: Path)
 
 
 @pytest.mark.parametrize(
+    ("failure", "blocker"),
+    (
+        (
+            CaptureLifecycleError.from_os_error(
+                "cannot open lifecycle lock",
+                OSError(errno.EACCES, "denied"),
+            ),
+            CleanupBlocker.PERMISSION_DENIED,
+        ),
+        (
+            capture_lifecycle._capture_migration.MigrationAuthorityError(
+                "cannot inspect legacy migration transaction",
+                error_number=errno.EIO,
+            ),
+            CleanupBlocker.FILESYSTEM_IO,
+        ),
+    ),
+)
+def test_reconcile_adapter_preserves_runtime_failure_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    failure: BaseException,
+    blocker: CleanupBlocker,
+) -> None:
+    def fail_open(*_args, **_kwargs):
+        raise failure
+
+    monkeypatch.setattr(capture_reconcile._authority, "open_capture_lifecycle", fail_open)
+
+    outcome = capture_reconcile.reconcile_capture_store(
+        "/project",
+        capture_reconcile.RUNNER_TAIL_BUDGET,
+    )
+
+    assert outcome.blocker is blocker
+    assert outcome.errors == 1
+
+
+@pytest.mark.parametrize(
     ("reason", "blocker"),
     (
         (CaptureFailureReason.PERMISSION_DENIED, CleanupBlocker.PERMISSION_DENIED),

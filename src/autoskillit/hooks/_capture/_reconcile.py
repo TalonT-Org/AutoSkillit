@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import errno
 from collections.abc import Callable
 
 from . import _authority, _migration
-from ._failure_policy import CaptureFailureReason
+from ._failure_policy import CaptureFailureReason, runtime_failure_reason
 from ._module_identity import register_module_aliases
 from ._types import (
     CaptureCleanupOutcome,
@@ -39,12 +38,16 @@ def _failure_outcome(blocker: CleanupBlocker) -> CaptureCleanupOutcome:
     return CaptureCleanupOutcome(errors=1, remaining_due=1, blocker=blocker)
 
 
-def _os_blocker(exc: OSError) -> CleanupBlocker:
-    if exc.errno in {errno.EACCES, errno.EPERM}:
-        return CleanupBlocker.PERMISSION_DENIED
-    if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
-        return CleanupBlocker.FILESYSTEM_AUTHORITY
-    return CleanupBlocker.FILESYSTEM_IO
+_FAILURE_BLOCKERS = {
+    CaptureFailureReason.PERMISSION_DENIED: CleanupBlocker.PERMISSION_DENIED,
+    CaptureFailureReason.FILESYSTEM_IO: CleanupBlocker.FILESYSTEM_IO,
+    CaptureFailureReason.LEDGER_INTEGRITY: CleanupBlocker.LEDGER_INTEGRITY,
+    CaptureFailureReason.MIGRATION_BLOCKED: CleanupBlocker.MIGRATION_BLOCKED,
+}
+
+
+def _failure_blocker(reason: CaptureFailureReason) -> CleanupBlocker:
+    return _FAILURE_BLOCKERS.get(reason, CleanupBlocker.FILESYSTEM_AUTHORITY)
 
 
 def reconcile_capture_store(
@@ -58,31 +61,20 @@ def reconcile_capture_store(
             return lifecycle.sweep(budget)
     except _authority.CaptureStoreAbsentError:
         return CaptureCleanupOutcome(blocker=CleanupBlocker.STORE_ABSENT)
-    except _authority.CaptureSetupError as exc:
-        reason = exc.reason
-        if reason is CaptureFailureReason.PERMISSION_DENIED:
-            return _failure_outcome(CleanupBlocker.PERMISSION_DENIED)
-        if reason is CaptureFailureReason.FILESYSTEM_IO:
-            return _failure_outcome(CleanupBlocker.FILESYSTEM_IO)
-        if reason is CaptureFailureReason.LEDGER_INTEGRITY:
-            return _failure_outcome(CleanupBlocker.LEDGER_INTEGRITY)
-        if reason is CaptureFailureReason.MIGRATION_BLOCKED:
-            return _failure_outcome(CleanupBlocker.MIGRATION_BLOCKED)
-        return _failure_outcome(CleanupBlocker.FILESYSTEM_AUTHORITY)
     except _migration.MigrationBlockedError:
         return CaptureCleanupOutcome(
             remaining_due=1,
             progress=CleanupProgress.CURSOR_ADVANCED,
             blocker=CleanupBlocker.MIGRATION_BLOCKED,
         )
-    except _migration.MigrationAuthorityError:
-        return _failure_outcome(CleanupBlocker.FILESYSTEM_AUTHORITY)
-    except _migration.MigrationIntegrityError:
-        return _failure_outcome(CleanupBlocker.LEDGER_INTEGRITY)
-    except _authority.CaptureLifecycleError:
-        return _failure_outcome(CleanupBlocker.LEDGER_INTEGRITY)
-    except OSError as exc:
-        return _failure_outcome(_os_blocker(exc))
+    except (
+        _authority.CaptureSetupError,
+        _migration.MigrationAuthorityError,
+        _migration.MigrationIntegrityError,
+        _authority.CaptureLifecycleError,
+        OSError,
+    ) as exc:
+        return _failure_outcome(_failure_blocker(runtime_failure_reason(exc)))
 
 
 def cleanup_diagnostic(

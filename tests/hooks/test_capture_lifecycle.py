@@ -138,6 +138,12 @@ def test_runtime_failure_reason_prefers_exact_transported_reason() -> None:
     )
 
 
+def test_cleanup_outcome_field_types_are_publicly_exported() -> None:
+    assert capture_lifecycle.CleanupBlocker is CleanupBlocker
+    assert capture_lifecycle.CleanupProgress is CleanupProgress
+    assert {"CleanupBlocker", "CleanupProgress"} <= set(capture_lifecycle.__all__)
+
+
 @pytest.mark.parametrize(
     "error_type",
     (

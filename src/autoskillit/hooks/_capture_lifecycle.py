@@ -51,6 +51,7 @@ else:
 CaptureCleanupOutcome = _capture_types.CaptureCleanupOutcome
 CaptureCapacityReason = _capture_types.CaptureCapacityReason
 CleanupBlocker = _capture_types.CleanupBlocker
+CleanupProgress = _capture_types.CleanupProgress
 DueKey = _capture_types.DueKey
 SweepAttempt = _capture_types.SweepAttempt
 SweepBudgetSpec = _capture_types.SweepBudgetSpec
@@ -82,6 +83,8 @@ __all__ = [
     "CaptureStatus",
     "CaptureState",
     "CaptureTransitionCommittedError",
+    "CleanupBlocker",
+    "CleanupProgress",
     "SweepBudgetSpec",
 ]
 

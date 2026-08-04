@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NamedTuple, assert_never
+from typing import TYPE_CHECKING, Any, assert_never
 
 import regex as re
 
 from autoskillit.core import (
     BackendAuthorityKind,
+    BackendPinResolution,
     InputContractResolver,
     SessionType,
     extract_bash_write_targets,
@@ -462,15 +463,6 @@ def _resolve_provider_profile(
         logger.warning("provider_profile_not_found", provider=name, tier="default")
         return (name, {})
     return (name, _profile_to_env(profile))
-
-
-class BackendPinResolution(NamedTuple):
-    """Result of resolving an explicit backend override from config."""
-
-    backend: str
-    kind: BackendAuthorityKind
-    tier: str
-    key_path: str
 
 
 def _resolve_backend_override(

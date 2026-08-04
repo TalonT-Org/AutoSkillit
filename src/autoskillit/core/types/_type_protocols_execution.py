@@ -16,6 +16,8 @@ from ._type_launch import (
     ResolvedLaunchContract,
     SkillProjectionBinding,
 )
+from ._type_enums import SkillExecutionRole
+from ._type_execution_identity import ExecutionIdentity
 from ._type_native_shell_capture import (
     ManagedHeadlessSessionLineageRef,
     NativeShellCaptureDecision,
@@ -252,6 +254,7 @@ class HeadlessExecutor(Protocol):
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
+        execution_identity: ExecutionIdentity = ExecutionIdentity(),
     ) -> SkillResult: ...
 
     async def dispatch_food_truck(

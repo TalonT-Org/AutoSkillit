@@ -90,14 +90,14 @@ Key properties:
 L3 (interactive fleet)
 └── L2 food truck  (dispatch_food_truck)
     └── L1 worker  (run_skill)
-        └── L0 subagent  (Agent/Task tool)
+        └── L0 exploration leaf  (backend-native agent dispatch)
 ```
 
 ## Mapping Table
 
 | Orchestration Level | SessionType enum (headless) | CLI label (interactive) | CLI command | Headless variant |
 |---|---|---|---|---|
-| L0 (leaf) | n/a — Claude Agent | n/a | n/a | Always headless |
+| L0 (leaf) | n/a — backend-native agent | n/a | n/a | Always headless |
 | L1 (session) | `SKILL` | `"cook"` | `autoskillit cook` | `run_skill` worker |
 | L2 (orchestrator) | `ORCHESTRATOR` | `"order"` | `autoskillit order` | Food truck |
 | L3 (fleet) | `FLEET` | `"fleet"` | `autoskillit fleet` | None — no L4 exists |
@@ -116,13 +116,13 @@ L3 (interactive fleet)
 - **`run_cmd` and `run_python` remain L2-or-higher.** L2 and L3 may call them; headless
   L1 may not. Interactive sessions retain the existing headless-guard bypass.
 - **L0 agents cannot launch anything.** They are terminal nodes — they cannot
-  call `run_skill`, cannot invoke the Agent tool to spawn sub-agents, and
-  cannot open sub-sessions. (L0 agents are themselves spawned via Agent/Task
-  by an L1 — the constraint is on outbound calls only.)
+  call `run_skill`, spawn sub-agents, or open sub-sessions. An L1 launches an L0
+  through the backend-bound native convention: Claude uses `Agent`, while Codex
+  uses `spawn_agent`. The constraint is on outbound calls from the leaf.
 - **L3 has no headless variant.** There is no L4 to dispatch an L3. Fleet
   always runs interactively.
 - **Spawning is strictly downward.** L3 dispatches L2 with `dispatch_food_truck`, L2
-  dispatches L1 with `run_skill`, and L1 spawns L0.
+  dispatches L1 with `run_skill`, and L1 dispatches L0 through its bound backend convention.
   No level can spawn a peer or a higher level.
 - **food trucks are L2, not L1.** A food truck is a headless L2 session
   dispatched by an L3 fleet. It retains full orchestrator capabilities

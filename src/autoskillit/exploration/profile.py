@@ -32,6 +32,13 @@ class RepositoryProfileActivation:
     schema_version: str = PROFILE_SCHEMA_VERSION
 
 
+_PROFILE_RESOLUTION_ORDER = (
+    RepositoryProfileId.AUTOSKILLIT,
+    RepositoryProfileId.GENERIC_PYTHON,
+    RepositoryProfileId.LANGUAGE_NEUTRAL,
+)
+
+
 def _contains_python_source(root: Path, *, max_entries: int = 50_000) -> tuple[bool, str]:
     seen = 0
     for directory, names, files in os.walk(root, followlinks=False):
@@ -120,3 +127,15 @@ def activate_repository_profiles(
         profile_versions=profile_versions,
         activation_digest=activation_digest,
     )
+
+
+def resolve_repository_profile(root: str | Path) -> RepositoryProfileId:
+    """Resolve the most specific applicable profile for a trusted repository root."""
+    applicability = {
+        activation.profile: activation.applicability
+        for activation in activate_repository_profiles(root).activations
+    }
+    for profile in _PROFILE_RESOLUTION_ORDER:
+        if applicability.get(profile) is ExplorationApplicability.APPLICABLE:
+            return profile
+    raise RuntimeError("language-neutral repository profile must always be applicable")

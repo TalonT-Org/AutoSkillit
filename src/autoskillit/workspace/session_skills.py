@@ -27,6 +27,7 @@ from autoskillit.core import (
     EffectiveSkillCatalogAuthority,
     EffectiveSkillInvocationAuthority,
     ManagedSessionHome,
+    RepositoryProfileId,
     ResolvedSkillAuthority,
     SkillAuthority,
     SkillContractError,
@@ -541,6 +542,7 @@ class SkillsDirectoryProvider:
         gating: bool | None = None,
         backend: CodingAgentBackend | None = None,
         durable_scripts_root: Path | None = None,
+        resolved_exploration_profile: RepositoryProfileId | None = None,
     ) -> SkillProjectionContext:
         """Build one projection context bound to a resolved path-free catalog.
 
@@ -560,6 +562,7 @@ class SkillsDirectoryProvider:
             catalog=catalog,
             backend=backend,
             conventions=backend.conventions if backend is not None else None,
+            resolved_exploration_profile=resolved_exploration_profile,
             substitutions={
                 "{{AUTOSKILLIT_TEMP}}": self._temp_dir_relpath,
                 "{{AUTOSKILLIT_SCRIPTS}}": str(scripts_root / "recipes" / "scripts"),
@@ -939,6 +942,11 @@ class DefaultSessionSkillManager:
             substitutions=projection_context.substitutions,
             gating=False,
             namespace=projection_context.namespace,
+            exploration_launch_context_ref=projection_context.exploration_launch_context_ref,
+            resolved_exploration_profile=projection_context.resolved_exploration_profile,
+            active_exploration_applicabilities=(
+                projection_context.active_exploration_applicabilities
+            ),
             parent_sandbox_mode=projection_context.parent_sandbox_mode,
             projection_version=projection_context.projection_version,
         )

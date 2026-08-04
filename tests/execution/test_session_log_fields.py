@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import ChildExecutionIdentity, ExecutionIdentity
 from autoskillit.core.types._type_results import ModelIdentity, ProviderOutcome
 from autoskillit.core.types._type_results_execution import (
     RecipeIdentity,
@@ -45,6 +46,43 @@ class _FakeLocator:
 
     def list_sessions(self, cwd: str) -> tuple:
         return ()
+
+
+def test_execution_identity_reaches_summary_and_schema_6_index(tmp_path):
+    identity = ExecutionIdentity(
+        requested_parent_backend="codex",
+        effective_parent_backend="codex",
+        requested_parent_model="opus",
+        effective_parent_model="gpt-5.5",
+        cli_version="0.146.0",
+        override_tier="recipe_step",
+        override_key_path="agent_backend.recipe_overrides.planner.analyze",
+        parent_session_id="parent-id",
+        children=(
+            ChildExecutionIdentity(
+                task_id="task-a",
+                role="semantic-code-navigator",
+                plan_digest="plan-sha",
+                definition_digest="definition-sha",
+                requested_backend="codex",
+                effective_backend="codex",
+                requested_model="sonnet",
+                effective_model="gpt-5.6-luna",
+                requested_effort="high",
+                effective_effort="max",
+                session_id="child-id",
+            ),
+        ),
+    )
+    _flush(tmp_path, execution_identity=identity, proc_snapshots=None)
+    summary = json.loads((tmp_path / "sessions" / "test-session-001" / "summary.json").read_text())
+    entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+
+    assert summary["execution_identity"] == identity.to_dict()
+    assert entry["schema_version"] == 6
+    assert entry["child_executions"] == [identity.children[0].to_dict()]
+    assert entry["backend_override_tier"] == "recipe_step"
+    assert entry["parent_session_id"] == "parent-id"
 
 
 def test_flush_session_log_includes_write_path_warnings_in_summary(tmp_path):

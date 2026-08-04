@@ -20,6 +20,7 @@ from ._codex_config import (
     codex_recipe_delivery_calling_contract,
     ensure_codex_mcp_registered,
 )
+from ._codex_execution_identity import extract_codex_execution_identity
 from ._codex_hooks import (
     _is_autoskillit_hook_entry,
     generate_codex_hooks_config,
@@ -134,6 +135,7 @@ __all__ = [
     "_write_codex_config",
     "codex_recipe_delivery_calling_contract",
     "ensure_codex_mcp_registered",
+    "extract_codex_execution_identity",
     "enumerate_fresh_codex_marker_ids",
     "get_backend",
     "make_codex_scenario_player",

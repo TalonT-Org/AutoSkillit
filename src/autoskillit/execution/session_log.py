@@ -409,6 +409,7 @@ def flush_session_log(
 
     # Write github_api_usage.json from pre-computed telemetry bundle
     github_api_requests = telemetry.github_api_requests
+    execution_identity = telemetry.execution_identity
     if telemetry.github_api_usage is not None:
         atomic_write(
             session_dir / "github_api_usage.json",
@@ -426,6 +427,7 @@ def flush_session_log(
         "pid": pid,
         "cwd": cwd,
         "claude_code_log": cc_log_str,
+        "codex_log": _codex_log_str,
         "skill_command": skill_command,
         "success": success,
         "subtype": subtype,
@@ -458,6 +460,7 @@ def flush_session_log(
         "backend": backend,
         "backend_authority": dict(backend_authority) if backend_authority is not None else None,
         "launch_contract_digest": launch_contract_digest,
+        "execution_identity": execution_identity.to_dict(),
         "orphaned_tool_result": orphaned_tool_result,
         "last_stop_reason": last_stop_reason,
         "request_ids": _cb_request_ids,
@@ -588,6 +591,17 @@ def flush_session_log(
         "backend": backend,
         "backend_authority": dict(backend_authority) if backend_authority is not None else None,
         "launch_contract_digest": launch_contract_digest,
+        "requested_parent_backend": execution_identity.requested_parent_backend,
+        "effective_parent_backend": execution_identity.effective_parent_backend,
+        "requested_parent_model": execution_identity.requested_parent_model,
+        "effective_parent_model": execution_identity.effective_parent_model,
+        "requested_parent_effort": execution_identity.requested_parent_effort,
+        "effective_parent_effort": execution_identity.effective_parent_effort,
+        "execution_cli_version": execution_identity.cli_version,
+        "backend_override_tier": execution_identity.override_tier,
+        "backend_override_key_path": execution_identity.override_key_path,
+        "parent_session_id": execution_identity.parent_session_id,
+        "child_executions": [child.to_dict() for child in execution_identity.children],
         "autoskillit_version": versions.get("autoskillit_version", "") if versions else "",
         "claude_code_version": versions.get("claude_code_version", "") if versions else "",
         "codex_version": versions.get("codex_version", "") if versions else "",

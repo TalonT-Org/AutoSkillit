@@ -14,6 +14,15 @@ YAML pipeline definitions that describe a sequence of steps. Each step invokes a
 ### Skills
 Markdown instruction files (`SKILL.md`) that define what a headless Claude session should do. Skills are registered as `/autoskillit:*` slash commands. Each skill runs in its own context window, so pipelines can run for hours without hitting context limits.
 
+Skills that adopt specialized repository exploration declare a reviewed, flat
+`exploration_vectors` frontmatter inventory. Exact HTML markers bind each vector definition to its
+canonical prose. Source resolution validates the closed schema and marker coverage; session
+projection then builds a deterministic router plan and replaces only migrated marker bodies after
+the backend is bound. Claude materializes native `Agent` calls and Codex materializes native
+`spawn_agent` calls, both using the same typed task packets and parent-owned merge/synthesis rules.
+Retained and excluded vectors remain prose, so a conditional or unsupported investigation is not
+silently promoted to unconditional native dispatch. See [Explorer Agents](explorer-agents.md).
+
 ### The Orchestrator
 When you run `autoskillit order`, Claude Code acts as a pipeline orchestrator. It reads the recipe, collects ingredients from you, and executes steps in sequence. The orchestrator never reads or writes code itself — it delegates all work through `run_skill` (headless sessions) and `run_cmd` (shell commands).
 

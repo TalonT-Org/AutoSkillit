@@ -30,6 +30,7 @@ class TestCoreSubpackages:
             "_type_context_admission_persistence",
             "_type_dispatch_identity",
             "_type_enums",
+            "_type_execution_identity",
             "_type_exploration",
             "_type_exceptions",
             "_type_figure_spec",

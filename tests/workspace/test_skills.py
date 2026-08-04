@@ -1526,6 +1526,7 @@ def test_projection_strips_all_machine_authority_and_preserves_private_deps(
         {
             "activate_deps",
             "execution_role",
+            "exploration_vectors",
             "uses_capabilities",
         }
     )
@@ -1538,6 +1539,7 @@ def test_projection_strips_all_machine_authority_and_preserves_private_deps(
         "uses_capabilities: []\n"
         "execution_role: session\n"
         "activate_deps: [dependency]\n"
+        "exploration_vectors: []\n"
         "---\n"
         "public body\n",
         encoding="utf-8",

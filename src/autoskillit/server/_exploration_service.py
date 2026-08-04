@@ -31,6 +31,7 @@ from autoskillit.exploration import (
     evaluate_completeness,
     page_evidence,
     readiness_waves,
+    reclassify_cross_leaf,
     route_frontier,
 )
 from autoskillit.pipeline import ExplorationContext
@@ -239,19 +240,24 @@ class DefaultExplorationService:
             )
             for collector in inactive
         )
-        plan = route_frontier(
-            snapshot,
-            (
-                FrontierItem(
-                    collector.collector_id,
-                    task_query,
-                    collector.profile,
-                    scope=query.scope,
-                )
-                for collector in runnable
-            ),
-            activation.activations,
+        discovered_frontier = tuple(
+            FrontierItem(
+                collector.collector_id,
+                task_query,
+                RepositoryProfileId.LANGUAGE_NEUTRAL,
+                scope=query.scope,
+            )
+            for collector in runnable
         )
+        routed_frontier = reclassify_cross_leaf(
+            discovered_frontier,
+            handoffs={
+                collector.collector_id: collector.profile
+                for collector in runnable
+                if collector.profile is not RepositoryProfileId.LANGUAGE_NEUTRAL
+            },
+        )
+        plan = route_frontier(snapshot, routed_frontier, activation.activations)
         runnable_by_id = {collector.collector_id: collector for collector in runnable}
         for wave in readiness_waves(plan):
             for collector_id in wave.items:

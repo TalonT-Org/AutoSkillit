@@ -176,6 +176,7 @@ def test_stub_class_satisfies_coding_agent_backend():
         CmdSpec,
         CodingAgentBackend,
         EnvPolicy,
+        ExplorationDispatchRenderer,
         NoResume,
         OutputFormat,
         PluginLaunchBinding,
@@ -203,6 +204,9 @@ def test_stub_class_satisfies_coding_agent_backend():
                 skills_subdir=Path("test/skills"),
                 project_local_skill_search_dirs=(),
             )
+
+        @property
+        def exploration_dispatch_renderer(self) -> ExplorationDispatchRenderer: ...
 
         def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec: ...
 

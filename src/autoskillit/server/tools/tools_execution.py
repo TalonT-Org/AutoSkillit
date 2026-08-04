@@ -45,7 +45,6 @@ from autoskillit.core import (
     ClosureAuthoritySpec,
     CodingAgentBackend,
     EffectiveSkillInvocationAuthority,
-    ExplorationContextStoreProtocol,
     InvocationTemplate,
     KillReason,
     ManagedHeadlessSessionLineageRef,
@@ -59,7 +58,6 @@ from autoskillit.core import (
     TerminationReason,
     ValidatedAddDir,
     WriteBehaviorSpec,
-    agent_definition_digest,
     closure_authority_spec_from_args,
     compute_audit_slot_intent_digest,
     compute_bytes_hash,
@@ -69,9 +67,7 @@ from autoskillit.core import (
     find_caller_session_id,
     get_logger,
     is_feature_enabled,
-    load_agent_definitions,
     parse_plan_paths,
-    pkg_root,
     render_target_skill_command,
     resolve_temp_dir,
 )
@@ -81,13 +77,21 @@ from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.execution import (
     CaptureSetupError,
 )
-from autoskillit.pipeline import EXPLORER_ROLE_NAMES, gate_error_result
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
+from autoskillit.pipeline import gate_error_result
 from autoskillit.server import mcp
 from autoskillit.server._audit_authority_materializer import (
     derive_initial_lifecycle_ids,
     load_current_prior_authority,
     normalize_audited_plan_refs,
+)
+from autoskillit.server._explorer_projection import (
+    _build_requested_execution_identity,
+    _cleanup_explorer_launch,
+    _explorer_launch_identity,
+    _issue_explorer_binding_env,
+    _resolve_exploration_applicabilities,
+    _resolve_exploration_profile,
 )
 from autoskillit.server._guards import (
     _check_dry_walkthrough,
@@ -195,96 +199,6 @@ _PURE_SLEEP_RE = re.compile(
 
 INGREDIENT_LOCK_DENY_PREFIX = "INGREDIENT LOCK ENFORCED"
 DEPENDENCY_DENY_PREFIX = "DEPENDENCY UNMET"
-
-
-def _explorer_launch_identity(
-    invocation: EffectiveSkillInvocationAuthority | None,
-) -> tuple[Path, str] | None:
-    """Return only pre-override, registry-derived parent launch identity.
-
-    The roles are packless AgentDefs, not skill invocations.  The parent
-    invocation establishes repository/source authority; exact child roles are
-    selected later from the canonical AgentDef registry.
-    """
-    if invocation is None:
-        return None
-    source_ref = invocation.root.source_ref
-    project_root = invocation.project_root
-    if source_ref is None or project_root is None:
-        raise SkillContractError("Explorer invocation lacks trusted source identity")
-    origin = getattr(source_ref.origin, "value", str(source_ref.origin))
-    return Path(project_root).resolve(), f"{origin}:{source_ref.skill_path}"
-
-
-def _issue_explorer_binding_env(
-    tool_ctx: ToolContext,
-    *,
-    session_id: str,
-    projection_context: SkillProjectionContext,
-    identity: tuple[Path, str] | None,
-    authority_home: Path,
-) -> dict[str, dict[str, str]] | None:
-    """Mint one shared principal replicated to both terminal role projections."""
-    if identity is None or projection_context.backend is None:
-        return None
-    if not projection_context.backend.capabilities.terminal_explorer_capable:
-        return None
-    if projection_context.parent_sandbox_mode != "read-only":
-        return None
-    store = tool_ctx.exploration_context_store
-    if store is None:
-        raise SkillContractError("Explorer context store is unavailable")
-    repository_root, parent_source_identity = identity
-    definitions = tuple(
-        definition
-        for definition in load_agent_definitions(pkg_root() / "agents")
-        if definition.name in EXPLORER_ROLE_NAMES
-    )
-    if {definition.name for definition in definitions} != EXPLORER_ROLE_NAMES:
-        raise SkillContractError("Canonical explorer AgentDef registry is incomplete")
-    bindings = store.bind_launches(
-        owner_id=f"uid:{os.getuid()}",
-        session_id=session_id,
-        cwd=projection_context.cwd,
-        repository_root=repository_root,
-        source_identities={
-            definition.name: (
-                f"{definition.name}:{agent_definition_digest(definition)}:{parent_source_identity}"
-            )
-            for definition in definitions
-        },
-        authority_home=authority_home,
-    )
-    return {role: dict(environment) for role, environment in bindings.items()}
-
-
-def _cleanup_explorer_launch(
-    store: ExplorationContextStoreProtocol[object],
-    *,
-    session_id: str,
-    session_home: Path | None,
-    backend: CodingAgentBackend | None,
-) -> None:
-    """Revoke durable exploration authority before attempting config scrubbing."""
-    try:
-        store.cleanup_session(session_id)
-    except Exception:
-        logger.warning(
-            "exploration_context_cleanup_failed",
-            session_id=session_id,
-            exc_info=True,
-        )
-    finally:
-        if backend is None or session_home is None:
-            return
-        try:
-            backend.clear_explorer_binding_env(session_home, EXPLORER_ROLE_NAMES)
-        except Exception:
-            logger.warning(
-                "exploration_binding_scrub_failed",
-                session_id=session_id,
-                exc_info=True,
-            )
 
 
 def _recipe_execution_deny(code: str, message: str) -> str:
@@ -1650,6 +1564,8 @@ async def run_skill(
                         order_id=effective_order_id,
                     ).to_json()
             if _stored_contract is None:
+                if projection_context is None:
+                    raise SkillContractError("Fresh execution lacks projection authority")
                 _fresh_parent_sandbox_mode = (
                     "read-only"
                     if tool_ctx.read_only_resolver and tool_ctx.read_only_resolver(skill_command)
@@ -1658,7 +1574,19 @@ async def run_skill(
                 projection_context = bind_projection_backend(
                     projection_context,
                     _effective_backend_obj,
+                    resolution=_explicit_resolution,
                     parent_sandbox_mode=_fresh_parent_sandbox_mode,
+                    resolved_exploration_profile=_resolve_exploration_profile(
+                        tool_ctx,
+                        projection_context,
+                    ),
+                    active_exploration_applicabilities=(
+                        _resolve_exploration_applicabilities(
+                            projection_context,
+                            skill_inputs=skill_inputs,
+                            output_dir=output_dir,
+                        )
+                    ),
                 )
             _explorer_parent_identity = _explorer_launch_identity(invocation)
             if invocation is not None and _stored_contract is None:
@@ -1970,6 +1898,22 @@ async def run_skill(
                     )
                 )
 
+            _capability_contract = build_validated_skill_dispatch_contract(
+                projection_context,
+                skill_add_dirs,
+                _stored_contract,
+            )
+            if _stored_contract is not None:
+                _execution_identity = _stored_contract.execution_identity
+            else:
+                _execution_identity = _build_requested_execution_identity(
+                    projection_context=projection_context,
+                    target_name=target_name,
+                    skill_add_dirs=skill_add_dirs,
+                    effective_backend=_effective_backend_obj,
+                    effective_model=effective_model,
+                    explicit_resolution=_explicit_resolution,
+                )
             if invocation is not None and _stored_contract is None:
                 if not skill_add_dirs:
                     raise SkillContractError(
@@ -1987,13 +1931,9 @@ async def run_skill(
                     read_only=is_read_only,
                     completion_required=completion_required,
                     skill_contract_json=_serialize_skill_contract(_skill_contract),
+                    execution_identity=_execution_identity,
                 )
 
-            _capability_contract = build_validated_skill_dispatch_contract(
-                projection_context,
-                skill_add_dirs,
-                _stored_contract,
-            )
             _lineage_store = tool_ctx.managed_headless_session_lineage_store
             _lineage_preparation = prepare_skill_native_shell_lineage(
                 store=_lineage_store,
@@ -2115,6 +2055,7 @@ async def run_skill(
                                 native_shell_capture_decision=(_native_shell_capture_decision),
                                 managed_lineage_ref=_managed_lineage_ref,
                                 on_launch_resolved=contract_lifecycle.bind_launch,
+                                execution_identity=_execution_identity,
                                 on_session_id_resolved=(
                                     _observe_contract_session_id
                                     if contract_lifecycle.correlation_key is not None

@@ -112,6 +112,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_codex_config",  # Codex output ceiling derived from measured exemptions
         "_fmt_response_spill",  # standalone spill schema and exemption mirror digests
         "_response_budget",  # canonical spill schema digest
+        "_explorer_projection",  # server-owned logger and immutable projection authority
+        "_explorer_dispatch",  # immutable backend-specific native dispatch renderers
         "tools_recipe",  # request-scoped recipe pagination ContextVar
         # Thread-safe callback registry decouples artifact retirement from page-cache lifecycle.
         "_lifecycle",
@@ -943,15 +945,16 @@ def test_no_subpackage_exceeds_10_files() -> None:
     """
     EXEMPTIONS: dict[str, int] = {
         # +generation-bound replay store and post-enforcement initialization commits.
-        "server": 21,  # +_exploration_service server-owned collector adapter
+        "server": 22,  # +_exploration_service collector and +_explorer_projection authority
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         # +_github_http review boundary and +launch_resolution authority.
         "execution": 19,
         # +agent_definition native-role authority (#4443).
         "core": 31,
         # +GitHub review types, portable launch authority, stable contract,
-        # closed skill semantics, non-executable projection binding, and explorer contracts.
-        "core/types": 50,
+        # closed skill semantics, non-executable projection binding, explorer contracts,
+        # and execution-identity value objects/protocols.
+        "core/types": 51,
         "cli": 24,  # +_install_contract typed install process boundary (#4409);
         # +_capture_store capture-store stats/reclaim command
         "cli/doctor": 12,  # +_doctor_skills capability declaration authenticity checks;
@@ -982,7 +985,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # and per-attempt storage concerns out of the public backend gateway:
         # +_codex_config_lock, +_codex_prelaunch, +_codex_session_storage.
         # +_explorer_conformance version-bound live attestation authority (#4443)
-        "execution/backends": 17,
+        "execution/backends": 19,  # +execution identity parser and explorer dispatch adapter
         "smoke_utils": 11,  # cross-interpreter upgrade smoke support
     }
     violations: list[str] = []
@@ -1253,14 +1256,15 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "Codex explorer role registration and invocation wiring",
     ),
     "execution/backends/claude.py": (
-        1100,
+        1103,
         "REQ-CNST-010-E19: Claude backend protocol parity keeps managed native-shell "
         "decision/reference disposition beside executable launch-binding validation; "
         "both are shared builder-interface obligations even though Claude deliberately "
         "does not inject the Codex-only controls; REQ-SEM-ADAPT-001 semantic-plan "
         "adaptation remains on this registered backend so native child syntax and model "
         "alias resolution cannot drift into a second adapter registry; #4443 also threads "
-        "parent sandbox authority through the shared no-op setup boundary.",
+        "parent sandbox authority through the shared no-op setup boundary and explorer "
+        "dispatch rendering preserves the same backend-owned syntax authority.",
     ),
     "workspace/skill_capabilities.py": (
         1100,
@@ -1290,6 +1294,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "generated-home lease and cleanup transaction, and backend-specific layout "
         "validation; keeping those operations together preserves both assembly ordering "
         "and the create/validate/yield/delete ownership proof",
+    ),
+    "workspace/skills.py": (
+        1250,
+        "REQ-CNST-010-E20: Phase C keeps exploration-vector frontmatter parsing, canonical "
+        "marker binding, and exact migrated-body replacement beside the existing SKILL.md "
+        "parser so discovery and projection share one fail-closed content authority",
     ),
     "rules_skill_content.py": (
         1200,
@@ -1370,11 +1380,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "projection and execution-identity persistence remain at the same admission boundary.",
     ),
     "server/tools/_execution_helpers.py": (
-        1025,
+        1075,
         "REQ-CNST-010-E20: shared run-skill contract lifecycle and response-shaping helpers "
         "remain one server-tool support authority; the managed session metadata additions "
         "must stay beside contract rehydration and persistence to prevent resume drift. #4443 "
-        "also keeps parent sandbox authority in the same fresh/resumed projection contract.",
+        "also keeps parent sandbox authority, resolved backend/profile applicability, vector "
+        "projection, and execution identity in the same fresh/resumed projection contract.",
     ),
     "hook_registry.py": (
         1100,

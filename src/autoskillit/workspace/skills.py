@@ -10,6 +10,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, NamedTuple
 
+import regex as re
+
 from autoskillit.core import (
     ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS,
     FEATURE_REGISTRY,
@@ -17,7 +19,13 @@ from autoskillit.core import (
     RETIRED_SKILL_NAMES,
     SKILL_CAPABILITY_REGISTRY,
     SKILL_CONTRACT_REMEDIATIONS,
+    ExplorationTaskSpec,
+    ExplorationVectorApplicabilityId,
+    ExplorationVectorDef,
+    ExplorationVectorDisposition,
     FeatureLifecycle,
+    RelationshipKind,
+    RepositoryProfileId,
     SkillContractError,
     SkillExecutionRole,
     SkillInvalidityAuthority,
@@ -105,6 +113,7 @@ class SkillInfo:
     semantic_plan: SkillSemanticPlan | None = None
     execution_role: SkillExecutionRole | None = SkillExecutionRole.SESSION
     activate_deps: tuple[str, ...] = ()
+    exploration_vectors: tuple[ExplorationVectorDef, ...] = ()
     canonical_content: str = ""
     canonical_digest: str = ""
     frontmatter: SkillFrontmatterParseResult | None = None
@@ -181,6 +190,7 @@ class SkillCatalogEntry:
     semantic_plan: SkillSemanticPlan | None
     execution_role: SkillExecutionRole
     activate_deps: tuple[str, ...]
+    exploration_vectors: tuple[ExplorationVectorDef, ...]
     canonical_content: str
     canonical_digest: str
     frontmatter: SkillFrontmatterParseResult
@@ -209,6 +219,7 @@ class SkillCatalogEntry:
             semantic_plan=skill.semantic_plan,
             execution_role=skill.execution_role,
             activate_deps=skill.activate_deps,
+            exploration_vectors=skill.exploration_vectors,
             canonical_content=skill.canonical_content,
             canonical_digest=skill.canonical_digest,
             frontmatter=skill.frontmatter,
@@ -394,6 +405,209 @@ def override_names(overrides: frozenset[ProjectLocalOverride]) -> frozenset[str]
 
 _LIST_ALL_CACHE: list[SkillInfo] | None = None
 _LIST_ALL_CACHE_KEY: tuple[float, float] = (0.0, 0.0)
+_EXPLORATION_VECTOR_KEYS = frozenset(
+    {
+        "id",
+        "disposition",
+        "rationale",
+        "applicability",
+        "role",
+        "profile",
+        "relationship_classes",
+        "task_id",
+        "frontier_item_id",
+        "depends_on",
+        "scope",
+        "max_results",
+        "max_report_bytes",
+        "evidence_version",
+        "native_dispatch",
+    }
+)
+_EXPLORATION_VECTOR_MARKER_TOKEN = "autoskillit:exploration-vector"
+_EXPLORATION_VECTOR_OPEN_RE = re.compile(
+    r'^<!-- autoskillit:exploration-vector id="'
+    r'(?P<id>[a-z][a-z0-9]*(?:-[a-z0-9]+)*)" -->$'
+)
+_EXPLORATION_VECTOR_CLOSE = "<!-- /autoskillit:exploration-vector -->"
+
+
+def _string_tuple(value: object, field_name: str) -> tuple[str, ...]:
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise SkillContractError(f"exploration vector {field_name} must be a list of strings")
+    return tuple(value)
+
+
+def _parse_exploration_vector_frontmatter(value: object) -> tuple[ExplorationVectorDef, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise SkillContractError("exploration_vectors must be a list")
+    vectors: list[ExplorationVectorDef] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict) or set(item) != _EXPLORATION_VECTOR_KEYS:
+            raise SkillContractError(
+                f"exploration_vectors[{index}] must contain exactly the registered keys"
+            )
+        try:
+            for field_name in (
+                "id",
+                "disposition",
+                "rationale",
+                "applicability",
+                "profile",
+                "task_id",
+                "frontier_item_id",
+            ):
+                if not isinstance(item[field_name], str):
+                    raise SkillContractError(f"exploration vector {field_name} must be text")
+            role = item["role"]
+            if role is not None and not isinstance(role, str):
+                raise SkillContractError("exploration vector role must be text or null")
+            native_dispatch = item["native_dispatch"]
+            if not isinstance(native_dispatch, bool):
+                raise SkillContractError("exploration vector native_dispatch must be boolean")
+            max_results = item["max_results"]
+            max_report_bytes = item["max_report_bytes"]
+            evidence_version = item["evidence_version"]
+            if any(
+                type(number) is not int
+                for number in (max_results, max_report_bytes, evidence_version)
+            ):
+                raise SkillContractError("exploration vector limits and versions must be integers")
+            profile = RepositoryProfileId(item["profile"])
+            vector = ExplorationVectorDef(
+                id=item["id"],
+                disposition=ExplorationVectorDisposition(item["disposition"]),
+                rationale=item["rationale"],
+                applicability=ExplorationVectorApplicabilityId(item["applicability"]),
+                role=role,
+                profile=profile,
+                relationship_classes=tuple(
+                    RelationshipKind(relationship)
+                    for relationship in _string_tuple(
+                        item["relationship_classes"],
+                        "relationship_classes",
+                    )
+                ),
+                task=ExplorationTaskSpec(
+                    task_id=item["task_id"],
+                    frontier_item_id=item["frontier_item_id"],
+                    profile=profile,
+                    depends_on=_string_tuple(item["depends_on"], "depends_on"),
+                    scope=_string_tuple(item["scope"], "scope"),
+                ),
+                max_results=max_results,
+                max_report_bytes=max_report_bytes,
+                evidence_version=evidence_version,
+                native_dispatch=native_dispatch,
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise SkillContractError(
+                f"exploration_vectors[{index}] contains an invalid closed-schema value"
+            ) from exc
+        vectors.append(vector)
+    ids = tuple(vector.id for vector in vectors)
+    if len(ids) != len(set(ids)):
+        raise SkillContractError("exploration vector ids must be unique")
+    return tuple(vectors)
+
+
+def _bind_exploration_vector_markers(
+    content: str,
+    vectors: tuple[ExplorationVectorDef, ...],
+) -> tuple[ExplorationVectorDef, ...]:
+    declared = {vector.id: vector for vector in vectors}
+    if len(declared) != len(vectors):
+        raise SkillContractError("exploration vector ids must be unique")
+    bodies: dict[str, str] = {}
+    active_id: str | None = None
+    body_lines: list[str] = []
+    for raw_line in content.splitlines(keepends=True):
+        line = raw_line.rstrip("\r\n")
+        if _EXPLORATION_VECTOR_MARKER_TOKEN not in line:
+            if active_id is not None:
+                body_lines.append(raw_line)
+            continue
+        opening = _EXPLORATION_VECTOR_OPEN_RE.fullmatch(line)
+        if opening is not None:
+            marker_id = opening.group("id")
+            if active_id is not None:
+                raise SkillContractError("exploration vector markers cannot be nested")
+            if marker_id not in declared:
+                raise SkillContractError(f"unknown exploration vector marker {marker_id!r}")
+            if marker_id in bodies:
+                raise SkillContractError(f"duplicate exploration vector marker {marker_id!r}")
+            active_id = marker_id
+            body_lines = []
+            continue
+        if line == _EXPLORATION_VECTOR_CLOSE:
+            if active_id is None:
+                raise SkillContractError("mismatched exploration vector closing marker")
+            body = "".join(body_lines).replace("\r\n", "\n").replace("\r", "\n").strip("\n")
+            if not body.strip():
+                raise SkillContractError(f"exploration vector {active_id!r} has an empty body")
+            bodies[active_id] = body
+            active_id = None
+            body_lines = []
+            continue
+        raise SkillContractError("malformed or embedded exploration vector marker token")
+    if active_id is not None:
+        raise SkillContractError(f"exploration vector {active_id!r} is missing its closing marker")
+    missing = set(declared).difference(bodies)
+    if missing:
+        raise SkillContractError(f"missing exploration vector markers: {sorted(missing)!r}")
+    return tuple(replace(vector, body=bodies[vector.id]) for vector in vectors)
+
+
+def replace_exploration_vector_bodies(
+    content: str,
+    vectors: tuple[ExplorationVectorDef, ...],
+    replacements: Mapping[str, str],
+) -> str:
+    """Replace exactly every migrated marker body while retaining reviewed prose."""
+    bound = _bind_exploration_vector_markers(content, vectors)
+    supplied = {vector.id: vector for vector in vectors}
+    if any(vector.body != supplied[vector.id].body for vector in bound):
+        raise SkillContractError(
+            "exploration vector body differs from its canonical parsed authority"
+        )
+    expected = {
+        vector.id
+        for vector in bound
+        if vector.disposition is ExplorationVectorDisposition.MIGRATED
+    }
+    if set(replacements) != expected:
+        raise SkillContractError(
+            "exploration vector replacements must exactly match migrated marker ids"
+        )
+    normalized: dict[str, str] = {}
+    for marker_id, replacement_body in replacements.items():
+        if not isinstance(replacement_body, str) or not replacement_body.strip():
+            raise SkillContractError(f"replacement for exploration vector {marker_id!r} is empty")
+        replacement_body = replacement_body.replace("\r\n", "\n").replace("\r", "\n").strip("\n")
+        if _EXPLORATION_VECTOR_MARKER_TOKEN in replacement_body:
+            raise SkillContractError("exploration vector replacement contains a marker token")
+        normalized[marker_id] = replacement_body
+
+    output: list[str] = []
+    active_id: str | None = None
+    for raw_line in content.splitlines(keepends=True):
+        line = raw_line.rstrip("\r\n")
+        opening = _EXPLORATION_VECTOR_OPEN_RE.fullmatch(line)
+        if opening is not None:
+            active_id = opening.group("id")
+            output.append(raw_line)
+            if active_id in normalized:
+                output.append(normalized[active_id] + "\n")
+            continue
+        if line == _EXPLORATION_VECTOR_CLOSE:
+            output.append(raw_line)
+            active_id = None
+            continue
+        if active_id not in normalized:
+            output.append(raw_line)
+    return "".join(output)
 
 
 def _dir_mtime(path: Path) -> float:
@@ -510,6 +724,15 @@ def _skill_info_from_frontmatter(
         activate_deps_raw = []
     activate_deps = tuple(str(dep) for dep in activate_deps_raw)
 
+    exploration_vectors: tuple[ExplorationVectorDef, ...] = ()
+    try:
+        exploration_vectors = _bind_exploration_vector_markers(
+            parsed.content,
+            _parse_exploration_vector_frontmatter(data.get("exploration_vectors")),
+        )
+    except SkillContractError as exc:
+        invalid_reasons.append(str(exc))
+
     # These names are reserved machine-derived fields. Reading them here makes
     # attempts to inject source identity through YAML an explicit contract error.
     supplied_canonical_content = data.get("canonical_content")
@@ -548,6 +771,7 @@ def _skill_info_from_frontmatter(
         semantic_plan=semantic_plan,
         execution_role=execution_role,
         activate_deps=activate_deps,
+        exploration_vectors=exploration_vectors,
         canonical_content=parsed.content,
         canonical_digest=canonical_digest,
         frontmatter=parsed,

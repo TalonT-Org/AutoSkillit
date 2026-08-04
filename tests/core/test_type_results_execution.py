@@ -65,3 +65,27 @@ class TestExecutionTypesNotInResults:
 
         sr = SkillResult.crashed(Exception("test"))
         assert isinstance(sr.provider, ProviderOutcome)
+
+    def test_execution_identity_is_cycle_free_and_gateway_exported(self):
+        from autoskillit.core import (
+            BackendPinResolution,
+            ChildExecutionIdentity,
+            ExecutionIdentity,
+        )
+        from autoskillit.core.types._type_execution_identity import __all__ as identity_all
+
+        resolution = BackendPinResolution("codex", "recipe_step", "agent_backend.x")
+        assert resolution.backend == "codex"
+        assert set(identity_all) == {
+            "BackendPinResolution",
+            "ChildExecutionIdentity",
+            "ExecutionIdentity",
+        }
+        children = (
+            ChildExecutionIdentity("b", "role", "plan", "definition"),
+            ChildExecutionIdentity("a", "role", "plan", "definition"),
+        )
+        assert [
+            child["task_id"]
+            for child in ExecutionIdentity(children=children).to_dict()["children"]
+        ] == ["a", "b"]

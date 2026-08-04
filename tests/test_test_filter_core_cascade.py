@@ -121,6 +121,7 @@ class TestModuleCascadeCore:
             "tool_sequence_analysis",
             "_type_checkpoint",
             "_type_results",
+            "_type_execution_identity",
             "_type_exploration",
             "_type_results_execution",
             "_type_backend",

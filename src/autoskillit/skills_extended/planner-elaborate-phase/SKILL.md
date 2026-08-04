@@ -3,6 +3,97 @@ name: planner-elaborate-phase
 categories:
 - planner
 description: Elaborate a single phase into a full result, parallel-safe — receives plan snapshot + target phase ID
+exploration_vectors:
+  - id: affected-files
+    disposition: migrated
+    rationale: Semantic navigation covers affected source modules, symbols, imports, and structural deviations across the phase scope.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, imports, references]
+    task_id: planner-elaborate-phase-affected-files
+    frontier_item_id: planner-elaborate-phase-affected-files-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: affected-file-impact
+    disposition: migrated
+    rationale: Repository impact evidence covers configuration, registries, artifacts, tests, fixtures, and downstream consumers for the affected scope.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [references, affects]
+    task_id: planner-elaborate-phase-affected-file-impact
+    frontier_item_id: planner-elaborate-phase-affected-file-impact-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: dependency-analysis
+    disposition: migrated
+    rationale: Semantic navigation covers import, call, and consumer relationships for affected modules.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [imports, calls, references]
+    task_id: planner-elaborate-phase-dependencies
+    frontier_item_id: planner-elaborate-phase-dependencies-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: test-coverage
+    disposition: migrated
+    rationale: Repository impact evidence covers tests, coverage surfaces, and downstream verification gaps.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [references, affects]
+    task_id: planner-elaborate-phase-test-coverage
+    frontier_item_id: planner-elaborate-phase-test-coverage-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: pattern-discovery
+    disposition: migrated
+    rationale: Repository impact evidence covers reusable utilities, conventions, tests, fixtures, and artifact consumers within the affected scope.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [references, affects]
+    task_id: planner-elaborate-phase-patterns
+    frontier_item_id: planner-elaborate-phase-patterns-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: cross-phase-boundaries
+    disposition: migrated
+    rationale: Semantic navigation covers dependency direction and structural handoff surfaces while the parent retains cross-phase synthesis.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [imports, calls, references]
+    task_id: planner-elaborate-phase-boundaries
+    frontier_item_id: planner-elaborate-phase-boundaries-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -57,7 +148,8 @@ independently and writes a single elaborated phase result. No dependency on
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts outside your designated input files and output directory
 - Explore parent directories of your input paths (e.g., `ls $(dirname $1)/..`)
 - Detach child delegations instead of joining them (joining every child is required)
-- Start independent child delegations sequentially
+- Run exploration leaves in the background
+- Dispatch ready exploration vectors sequentially when they are scope-disjoint
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
@@ -66,7 +158,7 @@ independently and writes a single elaborated phase result. No dependency on
 - Write result to `$3/{phase_id}_result.json` (keep `_result.json` suffix — downstream consumers glob `*_result.json`)
 - Emit: `elab_result_path = <absolute path to {phase_id}_result.json>`
 - Include all `PhaseElaborated` fields in the result
-- Start all independent child delegations before awaiting any result to maximize concurrency
+- Dispatch all ready, scope-disjoint vectors through the deterministic router before awaiting any result, then join every result
 
 ## Workflow
 
@@ -94,19 +186,32 @@ phase — its `technical_approach`, `scope`, and `assignments[]` — must serve 
 Do not elaborate into work not requested by the task. Flag if the phase goal appears
 unrelated to the task.
 
-### Step 2: Launch parallel codebase exploration subagents (SINGLE MESSAGE)
+### Step 2: Launch parallel codebase exploration vectors
 
-**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
+Dispatch all ready, scope-disjoint vectors together. Do not iterate across multiple turns, and join every child before synthesis.
 
-Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
+Do not output prose between dispatches. Immediately proceed to the next vector.
 
-Spawn up to 5 simultaneous child delegations against the codebase in `source_dir`:
+Dispatch the 6 exploration vectors through the deterministic router against the codebase in `source_dir`:
 
-1. **Affected files** — Which files/modules fall within this phase's `scope`? Current state, imports, deviations from conventions.
-2. **Dependency analysis** — What imports and consumes the affected modules? Full import graph.
-3. **Test coverage** — Which tests cover the affected scope? Gaps in coverage?
-4. **Pattern discovery** — What conventions and reusable utilities exist in this scope?
-5. **Cross-phase boundaries** — Based on snapshot context (other phases' names/goals/scopes), where do likely dependencies or handoff points exist?
+<!-- autoskillit:exploration-vector id="affected-files" -->
+1. **Affected source structure** — Which source files, modules, and symbols fall within this phase's `scope`? Capture current imports and structural deviations.
+<!-- /autoskillit:exploration-vector -->
+<!-- autoskillit:exploration-vector id="affected-file-impact" -->
+2. **Affected artifact and consumer impact** — Which configuration, registries, generated artifacts, tests, fixtures, and downstream consumers are tied to the affected scope?
+<!-- /autoskillit:exploration-vector -->
+<!-- autoskillit:exploration-vector id="dependency-analysis" -->
+3. **Dependency analysis** — What imports and consumes the affected modules? Full import graph.
+<!-- /autoskillit:exploration-vector -->
+<!-- autoskillit:exploration-vector id="test-coverage" -->
+4. **Test coverage** — Which tests cover the affected scope? Gaps in coverage?
+<!-- /autoskillit:exploration-vector -->
+<!-- autoskillit:exploration-vector id="pattern-discovery" -->
+5. **Pattern discovery** — What conventions, reusable utilities, fixtures, and artifact consumers exist in this scope?
+<!-- /autoskillit:exploration-vector -->
+<!-- autoskillit:exploration-vector id="cross-phase-boundaries" -->
+6. **Cross-phase boundaries** — Based on snapshot context (other phases' names/goals/scopes), where do structural dependencies or handoff points exist?
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 3: Write phase result
 

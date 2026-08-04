@@ -58,6 +58,7 @@ from autoskillit.core import (
     CmdSpec,
     CookSessionHandle,
     ExecutableLaunchBinding,
+    ExplorationDispatchRenderer,
     HookTrustPolicy,
     ManagedHeadlessSessionLineageRef,
     NamedResume,
@@ -120,6 +121,9 @@ from autoskillit.execution.backends._codex_config import (
 from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
 from autoskillit.execution.backends._codex_prelaunch import codex_prelaunch_transaction
 from autoskillit.execution.backends._codex_session_storage import CodexSessionStore
+from autoskillit.execution.backends._explorer_dispatch import (
+    CODEX_EXPLORATION_DISPATCH_RENDERER,
+)
 
 
 def _codex_home_from_plugin_binding(
@@ -1485,6 +1489,10 @@ class CodexBackend(BackendCmdBuilderBase):
             persistent_session_root_subdir=Path(CODEX_SESSIONS_SUBDIR),
             skill_sigil=self.capabilities.skill_sigil,
         )
+
+    @property
+    def exploration_dispatch_renderer(self) -> ExplorationDispatchRenderer:
+        return CODEX_EXPLORATION_DISPATCH_RENDERER
 
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:
         spec = self.build_headless_cmd(skill_command)

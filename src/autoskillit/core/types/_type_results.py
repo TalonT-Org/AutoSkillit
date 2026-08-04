@@ -19,6 +19,7 @@ from ..closure_hashing import HASH_RE as _HASH_RE
 from ._type_audit_admission import AuditAttemptId, AuditOutcomeStatus
 from ._type_audit_cycle import AuditVerdict
 from ._type_enums import KillReason, RetryReason, SessionOutcome
+from ._type_execution_identity import ExecutionIdentity
 
 T = TypeVar("T")
 
@@ -565,6 +566,8 @@ class SkillResult:
     outcome_fields: dict[str, int | str] | None = None
     outcome_invariant_violated: bool = False
     outcome_qualifier: str | None = None
+    execution_identity: ExecutionIdentity = field(default_factory=ExecutionIdentity.empty)
+    """Requested launch intent plus backend-owned effective execution evidence."""
 
     def to_json(self) -> str:
         data: dict[str, Any] = {
@@ -609,6 +612,7 @@ class SkillResult:
             "audit_attempt_id": (
                 self.audit.attempt_id.value if self.audit.attempt_id is not None else None
             ),
+            "execution_identity": self.execution_identity.to_dict(),
         }
         if self.worktree_path is not None:
             data["worktree_path"] = self.worktree_path
@@ -810,6 +814,17 @@ class SessionIndexEntry(TypedDict):
     backend: str  # "claude-code" or "codex" — unambiguous backend identifier
     backend_authority: dict[str, object] | None
     launch_contract_digest: str
+    requested_parent_backend: str
+    effective_parent_backend: str
+    requested_parent_model: str
+    effective_parent_model: str
+    requested_parent_effort: str
+    effective_parent_effort: str
+    execution_cli_version: str
+    backend_override_tier: str
+    backend_override_key_path: str
+    parent_session_id: str
+    child_executions: list[dict[str, str]]
     skill_command: str
     success: bool
     subtype: str

@@ -85,6 +85,7 @@ def cook(
     """Launch Claude with all bundled AutoSkillit skills as slash commands."""
     from autoskillit.config import iter_display_categories, load_config
     from autoskillit.execution import all_backends
+    from autoskillit.exploration import resolve_repository_profile
     from autoskillit.workspace import (
         DefaultSessionSkillManager,
         DefaultSkillResolver,
@@ -235,6 +236,7 @@ def cook(
         skill_catalog=session_catalog,
         generated_home_available=True,
         retain_projection_source=True,
+        resolved_exploration_profile=resolve_repository_profile(project_dir),
     )
     session_mgr = DefaultSessionSkillManager(
         skills_provider,

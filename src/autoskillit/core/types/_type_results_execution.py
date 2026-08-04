@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ._type_constants import KNOWN_CI_EVENTS
+from ._type_execution_identity import ExecutionIdentity
 
 __all__ = [
     "SessionTelemetry",
@@ -27,9 +28,9 @@ __all__ = [
 class SessionTelemetry:
     """Typed bundle of all per-session telemetry fields passed to flush_session_log.
 
-    All fields are required — constructing without any field is a TypeError,
-    making omissions visible at construction time rather than silently defaulting
-    to None and skipping the corresponding write gate inside flush_session_log.
+    Legacy telemetry fields are required so omissions remain visible. Execution
+    identity has an explicit empty sentinel for callers that do not launch a
+    specialized parent/child execution.
     """
 
     token_usage: dict[str, Any] | None
@@ -39,6 +40,7 @@ class SessionTelemetry:
     github_api_requests: int
     loc_insertions: int
     loc_deletions: int
+    execution_identity: ExecutionIdentity = ExecutionIdentity()
 
     @classmethod
     def empty(cls) -> SessionTelemetry:
@@ -51,6 +53,7 @@ class SessionTelemetry:
             github_api_requests=0,
             loc_insertions=0,
             loc_deletions=0,
+            execution_identity=ExecutionIdentity.empty(),
         )
 
 

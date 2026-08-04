@@ -259,6 +259,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         }
     ),
     "_type_results_execution": frozenset({"core", "execution", "server", "pipeline"}),
+    "_type_execution_identity": frozenset({"core", "execution", "server"}),
     "_type_exploration": frozenset({"core", "exploration", "pipeline", "server"}),
     "_type_backend": frozenset(
         {"core", "execution", "cli", "migration", "recipe", "server", "workspace"}
@@ -837,6 +838,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_run_skill_add_dirs.py",
             "server/test_tools_execution_backend_mixing.py",
             "server/test_tools_workspace.py",
+            "server/test_admission_dispatch_agreement.py",
+            "server/test_explorer_dispatch.py",
+            "server/test_skill_session_vector_persistence.py",
             "cli",
             "fleet",
             "skills",
@@ -1025,7 +1029,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     # Standalone modules (not subpackage directories)
     # L1
     "report": frozenset({"report", "skills_extended"}),
-    "exploration": frozenset({"exploration", "server"}),
+    "exploration": frozenset({"exploration", "server", "cli"}),
     "planner": frozenset(
         {
             "planner",

@@ -585,6 +585,7 @@ from .types import BackendAuthorityTier as BackendAuthorityTier
 from .types import BackendCapabilities as BackendCapabilities
 from .types import BackendConventions as BackendConventions
 from .types import BackendEventKind as BackendEventKind
+from .types import BackendPinResolution as BackendPinResolution
 from .types import BackgroundSupervisor as BackgroundSupervisor
 from .types import BareResume as BareResume
 from .types import BindingFailure as BindingFailure
@@ -611,6 +612,7 @@ from .types import ChargeCommittedEffect as ChargeCommittedEffect
 from .types import ChargeDomain as ChargeDomain
 from .types import ChildModelPolicySpec as ChildModelPolicySpec
 from .types import ChildSpawnSpec as ChildSpawnSpec
+from .types import ChildExecutionIdentity as ChildExecutionIdentity
 from .types import CIRunScope as CIRunScope
 from .types import CIWatcher as CIWatcher
 from .types import ClaudeContentBlockType as ClaudeContentBlockType
@@ -676,9 +678,16 @@ from .types import EpochClosedEffect as EpochClosedEffect
 from .types import EpochFenceProof as EpochFenceProof
 from .types import EvidenceSpec as EvidenceSpec
 from .types import ExecutableLaunchBinding as ExecutableLaunchBinding
+from .types import ExecutionIdentity as ExecutionIdentity
 from .types import ExecutionInstallSiteDef as ExecutionInstallSiteDef
 from .types import ExpiredIdempotencyTombstone as ExpiredIdempotencyTombstone
 from .types import ExpireIdempotencyKeyEvent as ExpireIdempotencyKeyEvent
+from .types import ExplorationDispatchConventions as ExplorationDispatchConventions
+from .types import ExplorationDispatchMaterialization as ExplorationDispatchMaterialization
+from .types import ExplorationDispatchRenderer as ExplorationDispatchRenderer
+from .types import ExplorationVectorApplicabilityId as ExplorationVectorApplicabilityId
+from .types import ExplorationVectorDef as ExplorationVectorDef
+from .types import ExplorationVectorDisposition as ExplorationVectorDisposition
 from .types import FailureRecord as FailureRecord
 from .types import FeatureDef as FeatureDef
 from .types import FeatureLifecycle as FeatureLifecycle

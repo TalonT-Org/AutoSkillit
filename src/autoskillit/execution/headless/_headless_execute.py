@@ -20,6 +20,7 @@ from autoskillit.core import (
     ClosureAuthoritySpec,
     CmdSpec,
     CodingAgentBackend,
+    ExecutionIdentity,
     KillReason,
     LaunchPreparation,
     LaunchResolver,
@@ -67,6 +68,9 @@ from autoskillit.execution.headless._headless_helpers import (
 from autoskillit.execution.headless._headless_launch import (
     _attempt_contract_nudge,
     _run_headless_attempt,
+)
+from autoskillit.execution.headless._headless_launch import (
+    _bind_effective_execution_identity as _bind_execution_identity,
 )
 from autoskillit.execution.headless._headless_result import _build_skill_result
 from autoskillit.execution.headless._managed import _attempt as _diag
@@ -138,6 +142,7 @@ async def _execute_claude_headless(
     closure_report_root: Path | None = None,
     skill_contract: SkillContract | None = None,
     managed_lineage_observer: _ManagedLineageObserver | None = None,
+    execution_identity: ExecutionIdentity = ExecutionIdentity(),
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -467,6 +472,7 @@ async def _execute_claude_headless(
         break
 
     assert skill_result is not None
+    skill_result = _bind_execution_identity(skill_result, _step_backend, execution_identity)
     provider_outcome = ProviderOutcome(
         provider_used=current_provider_name,
         fallback_activated=fallback_activated,
@@ -520,6 +526,7 @@ async def _execute_claude_headless(
             session_id="",
             step_name=step_name,
             order_id=order_id,
+            execution_identity=skill_result.execution_identity,
         )
 
     skill_result = dataclasses.replace(

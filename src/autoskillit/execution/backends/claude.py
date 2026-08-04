@@ -44,6 +44,7 @@ from autoskillit.core import (
     CookSessionHandle,
     ExecutableLaunchBinding,
     ManagedHeadlessSessionLineageRef,
+    ExplorationDispatchRenderer,
     NamedResume,
     NativeShellCaptureDecision,
     NoResume,
@@ -89,6 +90,9 @@ from autoskillit.execution.backends._claude_prompt import (
     apply_prompt_injector_chain,
 )
 from autoskillit.execution.backends._cmd_builder import CmdBuilder
+from autoskillit.execution.backends._explorer_dispatch import (
+    CLAUDE_EXPLORATION_DISPATCH_RENDERER,
+)
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import parse_session_result
 
@@ -397,6 +401,10 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             ),
             skill_sigil=self.capabilities.skill_sigil,
         )
+
+    @property
+    def exploration_dispatch_renderer(self) -> ExplorationDispatchRenderer:
+        return CLAUDE_EXPLORATION_DISPATCH_RENDERER
 
     def setup_session_dir(
         self,

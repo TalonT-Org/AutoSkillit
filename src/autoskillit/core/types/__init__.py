@@ -42,6 +42,8 @@ from ._type_enums import *  # noqa: F401, F403
 from ._type_enums import __all__ as _enums_all
 from ._type_exceptions import *  # noqa: F401, F403
 from ._type_exceptions import __all__ as _exceptions_all
+from ._type_execution_identity import *  # noqa: F401, F403
+from ._type_execution_identity import __all__ as _execution_identity_all
 from ._type_exploration import *  # noqa: F401, F403
 from ._type_exploration import __all__ as _exploration_all
 from ._type_figure_spec import *  # noqa: F401, F403
@@ -124,6 +126,7 @@ __all__ = (
     + _enums_all
     + _exceptions_all
     + _exploration_all
+    + _execution_identity_all
     + _figure_spec_all
     + _github_review_all
     + _helpers_all

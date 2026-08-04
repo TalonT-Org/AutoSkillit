@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.core import (
     CmdSpec,
     CodingAgentBackend,
+    ExecutionIdentity,
     LaunchPreparation,
     LaunchResolver,
     OutputFormat,
@@ -25,6 +26,7 @@ from autoskillit.core import (
     get_logger,
     plugin_launch_binding_scope,
 )
+from autoskillit.execution.backends import extract_codex_execution_identity
 from autoskillit.execution.headless._headless_helpers import (
     _resolve_pty_mode,
     _resolve_session_log_dir,
@@ -54,6 +56,33 @@ logger = get_logger(__name__)
 
 _NUDGE_TIMEOUT: float = 60.0
 
+def _bind_effective_execution_identity(
+    skill_result: SkillResult,
+    backend: CodingAgentBackend,
+    requested: ExecutionIdentity,
+) -> SkillResult:
+    effective = requested
+    if (
+        backend.capabilities.terminal_explorer_capable
+        and requested.children
+        and skill_result.session_id
+    ):
+        try:
+            locator = backend.session_locator()
+            parent_rollout = locator.locate_session(skill_result.session_id)
+            if parent_rollout is not None:
+                effective = extract_codex_execution_identity(
+                    parent_rollout,
+                    requested=requested,
+                    child_rollout_resolver=locator.locate_session,
+                )
+        except (OSError, ValueError):
+            logger.warning(
+                "codex_execution_identity_extraction_failed",
+                session_id=skill_result.session_id,
+                exc_info=True,
+            )
+    return dataclasses.replace(skill_result, execution_identity=effective)
 
 def _report_plugin_binding_close_failure(
     primary_error: BaseException,

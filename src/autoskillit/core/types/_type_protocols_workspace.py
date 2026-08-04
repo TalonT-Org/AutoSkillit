@@ -10,6 +10,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from ._type_backend import BackendConventions
 from ._type_enums import SkillExecutionRole, SkillInvalidityKind, SkillSource
+from ._type_exploration import RepositoryProfileId
 from ._type_plugin_source import (
     PluginArtifactIdentity,
     PluginLaunchBinding,
@@ -20,7 +21,13 @@ from ._type_plugin_source import (
 )
 from ._type_protocols_backend import CodingAgentBackend
 from ._type_results import CleanupResult, CloneResult, ManagedSessionHome, ValidatedAddDir
-from ._type_skill_contract import SkillSourceIdentity, SkillSourceRef, SkillVisibilitySpec
+from ._type_skill_contract import (
+    ExplorationVectorApplicabilityId,
+    ExplorationVectorDef,
+    SkillSourceIdentity,
+    SkillSourceRef,
+    SkillVisibilitySpec,
+)
 from ._type_skill_semantics import SkillSemanticPlan
 
 __all__ = [
@@ -167,6 +174,9 @@ class SkillAuthority(Protocol):
     def activate_deps(self) -> tuple[str, ...]: ...
 
     @property
+    def exploration_vectors(self) -> tuple[ExplorationVectorDef, ...]: ...
+
+    @property
     def canonical_content(self) -> str: ...
 
     @property
@@ -262,6 +272,17 @@ class SkillProjectionContextAuthority(Protocol):
     def namespace(self) -> str | None: ...
 
     @property
+    def exploration_launch_context_ref(self) -> str | None: ...
+
+    @property
+    def resolved_exploration_profile(self) -> RepositoryProfileId | None: ...
+
+    @property
+    def active_exploration_applicabilities(
+        self,
+    ) -> frozenset[ExplorationVectorApplicabilityId]: ...
+
+    @property
     def parent_sandbox_mode(self) -> str: ...
 
     @property
@@ -269,6 +290,9 @@ class SkillProjectionContextAuthority(Protocol):
 
     @property
     def skills(self) -> tuple[SkillAuthority, ...]: ...
+
+    @property
+    def exploration_vectors(self) -> Mapping[str, tuple[ExplorationVectorDef, ...]]: ...
 
 
 @runtime_checkable

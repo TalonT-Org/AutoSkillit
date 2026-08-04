@@ -1048,6 +1048,7 @@ class TestBuildSkillResultCrossValidation:
         "pre_contamination_subtype",
         "ndjson_unknown_event_count",
         "ndjson_unknown_item_count",
+        "execution_identity",
     }
 
     def test_expected_skill_keys_includes_provider(self):

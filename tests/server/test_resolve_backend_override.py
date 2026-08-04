@@ -28,10 +28,16 @@ class TestResolveBackendOverride:
         assert result.kind is BackendAuthorityKind.RECIPE
 
     def test_recipe_wildcard(self) -> None:
+        from autoskillit.core import BackendAuthorityKind
         from autoskillit.server._guards import _resolve_backend_override
 
         cfg = _make_backend(recipe_overrides={"remediation": {"*": "codex"}})
-        assert _backend(_resolve_backend_override("any_step", "remediation", cfg)) == "codex"
+        result = _resolve_backend_override("any_step", "remediation", cfg)
+        assert result is not None
+        assert result.backend == "codex"
+        assert result.kind is BackendAuthorityKind.RECIPE
+        assert result.tier == "recipe_wildcard"
+        assert result.key_path == "agent_backend.recipe_overrides.remediation.*"
 
     def test_exact_beats_wildcard(self) -> None:
         from autoskillit.server._guards import _resolve_backend_override

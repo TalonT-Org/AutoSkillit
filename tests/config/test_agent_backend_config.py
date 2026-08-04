@@ -84,6 +84,13 @@ class TestAgentBackendConfigLoading:
 
         cfg = load_config(tmp_path)
         assert cfg.agent_backend.backend == "claude-code"
+        assert cfg.agent_backend.recipe_overrides == {
+            "planner": {
+                "analyze": "codex",
+                "extract_domain": "codex",
+                "elaborate_phases": "codex",
+            }
+        }
 
     def test_defaults_yaml_has_agent_backend_section(self) -> None:
         from autoskillit.core.io import load_yaml
@@ -92,6 +99,13 @@ class TestAgentBackendConfigLoading:
         defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
         assert "agent_backend" in defaults
         assert defaults["agent_backend"]["backend"] == "claude-code"
+        assert defaults["agent_backend"]["recipe_overrides"] == {
+            "planner": {
+                "analyze": "codex",
+                "extract_domain": "codex",
+                "elaborate_phases": "codex",
+            }
+        }
 
     def test_agent_backend_env_var_override(self, tmp_path, monkeypatch) -> None:
         from autoskillit.config import load_config
@@ -227,7 +241,14 @@ class TestAgentBackendConfigOverrides:
         )
         cfg = load_config(tmp_path)
         assert cfg.agent_backend.backend == "codex"
-        assert cfg.agent_backend.recipe_overrides == {"remediation": {"dry_walkthrough": "codex"}}
+        assert cfg.agent_backend.recipe_overrides == {
+            "planner": {
+                "analyze": "codex",
+                "extract_domain": "codex",
+                "elaborate_phases": "codex",
+            },
+            "remediation": {"dry_walkthrough": "codex"},
+        }
         assert cfg.agent_backend.step_overrides == {"implement": "claude-code"}
 
     def test_string_shorthand_still_works(self) -> None:

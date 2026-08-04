@@ -105,6 +105,35 @@ def test_default_service_executes_profile_scoped_collectors_and_rejects_replay_m
         )
 
 
+def test_default_service_routes_discovered_cross_profile_frontiers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.exploration import reclassify_cross_leaf as real_reclassify
+
+    root = tmp_path / "repository"
+    _seed_repository(root)
+    observed_handoffs: list[dict[str, RepositoryProfileId]] = []
+
+    def record_reclassification(items, *, handoffs):
+        observed_handoffs.append(dict(handoffs))
+        return real_reclassify(items, handoffs=handoffs)
+
+    monkeypatch.setattr(
+        _exploration_service,
+        "reclassify_cross_leaf",
+        record_reclassification,
+    )
+
+    DefaultExplorationService().collect(
+        ExplorationQuerySpec("needle", scope=("module.py",)),
+        root=root,
+    )
+
+    assert observed_handoffs
+    assert RepositoryProfileId.GENERIC_PYTHON in observed_handoffs[0].values()
+
+
 def test_shared_principal_rejects_repository_mutation_after_issuance(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

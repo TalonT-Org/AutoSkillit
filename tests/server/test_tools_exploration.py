@@ -67,13 +67,13 @@ def test_fresh_launch_injects_only_server_issued_role_bindings(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from autoskillit.server.tools import tools_execution
+    from autoskillit.server import _explorer_projection as explorer_projection
 
     roles = ("semantic-code-navigator", "repository-impact-profiler")
     definitions = tuple(SimpleNamespace(name=role) for role in roles)
-    monkeypatch.setattr(tools_execution, "load_agent_definitions", lambda _path: definitions)
+    monkeypatch.setattr(explorer_projection, "load_agent_definitions", lambda _path: definitions)
     monkeypatch.setattr(
-        tools_execution,
+        explorer_projection,
         "agent_definition_digest",
         lambda definition: f"digest-{definition.name}",
     )
@@ -94,7 +94,7 @@ def test_fresh_launch_injects_only_server_issued_role_bindings(
     authority_home = tmp_path / "generated-session"
     authority_home.mkdir()
 
-    bindings = tools_execution._issue_explorer_binding_env(
+    bindings = explorer_projection._issue_explorer_binding_env(
         tool_ctx,
         session_id="server-materialized-session",
         projection_context=projection_context,

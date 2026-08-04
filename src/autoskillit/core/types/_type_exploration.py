@@ -33,6 +33,7 @@ def _canonical_digest(domain: str, value: object) -> str:
 class RepositoryProfileId(StrEnum):
     """Built-in capability profiles used by the deterministic router."""
 
+    AUTO = "auto"
     LANGUAGE_NEUTRAL = "language-neutral"
     GENERIC_PYTHON = "generic-python"
     AUTOSKILLIT = "autoskillit"
@@ -308,7 +309,7 @@ class ExplorationTaskSpec:
 
 @dataclass(frozen=True, slots=True)
 class ExplorationRouterPlan:
-    snapshot: RepositorySnapshot
+    snapshot: RepositorySnapshot | None
     tasks: tuple[ExplorationTaskSpec, ...]
     activations: tuple[ProfileActivation, ...]
 
@@ -317,7 +318,7 @@ class ExplorationRouterPlan:
         return _canonical_digest(
             "exploration-router-plan/v1",
             {
-                "snapshot": self.snapshot.digest,
+                "snapshot": self.snapshot.digest if self.snapshot is not None else None,
                 "tasks": [
                     [
                         task.task_id,

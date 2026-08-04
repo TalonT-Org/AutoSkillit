@@ -84,6 +84,8 @@ src/autoskillit/skills_extended/*/SKILL.md:
   - skills_extended/
   - workspace/
   - planner/
+  - execution/
+  - server/test_explorer_dispatch.py
 
 src/autoskillit/config/defaults.yaml:
   - config/

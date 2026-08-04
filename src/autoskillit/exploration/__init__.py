@@ -17,8 +17,12 @@ from .identity import (
     resolve_repository_identity,
 )
 from .pagination import page_evidence
-from .profile import RepositoryProfileActivation, activate_repository_profiles
-from .router import readiness_waves, route_frontier
+from .profile import (
+    RepositoryProfileActivation,
+    activate_repository_profiles,
+    resolve_repository_profile,
+)
+from .router import readiness_waves, reclassify_cross_leaf, route_frontier
 from .snapshot import (
     SnapshotCaptureLimits,
     SnapshotCaptureResult,
@@ -49,7 +53,9 @@ __all__ = [
     "pagination_identity",
     "page_evidence",
     "resolve_repository_identity",
+    "resolve_repository_profile",
     "resolve_repository_path",
     "readiness_waves",
+    "reclassify_cross_leaf",
     "route_frontier",
 ]

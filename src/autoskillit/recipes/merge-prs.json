@@ -932,7 +932,7 @@
       "on_exhausted": "register_clone_failure",
       "on_context_limit": "register_clone_failure",
       "on_rate_limit": "register_clone_failure",
-      "note": "The agent reads context.pr_order_file at context.current_pr_number to get the current PR's complexity. Appends number and complexity to skill_command:\n  /autoskillit:merge-pr {pr_number} {complexity}\nescalation_required=true → ambiguous conflict, human intervention needed → escalate_stop. needs_plan=true → conflict_report_path set as context.task → plan. merged=false (timeout/conflict) → register_clone_failure. merged=true + fallthrough → PR merged directly → next_part_or_next_pr.\n"
+      "note": "The agent reads context.pr_order_file at context.current_pr_number to get the current PR's number and complexity. Both values are passed via structured skill_inputs (skill_inputs.pr_number and skill_inputs.complexity) — do NOT append them to skill_command, which stays the fixed literal /autoskillit:merge-pr. escalation_required=true → ambiguous conflict, human intervention needed → escalate_stop. needs_plan=true → conflict_report_path set as context.task → plan. merged=false (timeout/conflict) → register_clone_failure. merged=true + fallthrough → PR merged directly → next_part_or_next_pr.\n"
     },
     "plan": {
       "tool": "run_skill",

@@ -48,8 +48,8 @@ class MigrationIntegrityError(RuntimeError):
 
 
 class MigrationAuthorityError(OSError):
-    def __init__(self, detail: str) -> None:
-        super().__init__(errno.ELOOP, detail)
+    def __init__(self, detail: str, *, error_number: int | None = errno.ELOOP) -> None:
+        super().__init__(error_number, detail)
 
 
 @dataclass(frozen=True, slots=True)
@@ -257,12 +257,18 @@ def load_transaction(root_fd: int) -> LegacyMigrationTxn | None:
     except FileNotFoundError:
         return None
     except OSError as exc:
-        raise MigrationAuthorityError("cannot inspect legacy migration transaction") from exc
+        raise MigrationAuthorityError(
+            "cannot inspect legacy migration transaction",
+            error_number=exc.errno,
+        ) from exc
     _validate_file(observed)
     try:
         fd = os.open(MIGRATION_NAME, _READ_FLAGS, dir_fd=root_fd)
     except OSError as exc:
-        raise MigrationAuthorityError("cannot open legacy migration transaction") from exc
+        raise MigrationAuthorityError(
+            "cannot open legacy migration transaction",
+            error_number=exc.errno,
+        ) from exc
     try:
         current = os.fstat(fd)
         _validate_file(current)

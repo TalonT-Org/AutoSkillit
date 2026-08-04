@@ -163,6 +163,22 @@ def test_migration_phase_persisted_values_remain_uppercase_and_pinned() -> None:
     }
 
 
+def test_migration_authority_error_preserves_wrapped_os_errno(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    migration = capture_lifecycle._capture_migration
+
+    def deny_stat(*_args, **_kwargs):
+        raise OSError(errno.EACCES, "denied")
+
+    monkeypatch.setattr(migration.os, "stat", deny_stat)
+
+    with pytest.raises(migration.MigrationAuthorityError) as caught:
+        migration.load_transaction(1)
+
+    assert caught.value.errno == errno.EACCES
+
+
 def test_lifecycle_record_rejects_invalid_identity_at_construction() -> None:
     with pytest.raises(
         capture_lifecycle._capture_ledger.LedgerCodecError,

@@ -48,17 +48,35 @@ def _install_skill_invocation(
     return resolver
 
 
+def _install_codex_launch_backend(tool_ctx: Any, tmp_path: Path, monkeypatch) -> None:
+    """Install a concrete Codex backend with its required persistent projection root."""
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.workspace import DefaultSessionSkillManager, SkillsDirectoryProvider
+
+    backend = CodexBackend()
+    tool_ctx.backend = backend
+    tool_ctx.session_skill_manager = DefaultSessionSkillManager(
+        SkillsDirectoryProvider(),
+        ephemeral_root=tmp_path / "ephemeral-sessions",
+        persistent_root=tmp_path / "persistent-sessions",
+    )
+    monkeypatch.setattr(
+        tool_ctx.launch_resolver,
+        "backend_for_authority",
+        lambda _authority: backend,
+    )
+
+
 @pytest.mark.anyio
 async def test_provider_profile_cannot_override_global_backend_authority(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
     """Provider metadata cannot change a Codex global backend authority."""
-    from autoskillit.execution.backends import get_backend
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    tool_ctx_kitchen_open.backend = get_backend("codex")
+    _install_codex_launch_backend(tool_ctx_kitchen_open, tmp_path, monkeypatch)
     _install_skill_invocation(tool_ctx_kitchen_open, name="probe")
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
@@ -139,12 +157,11 @@ async def test_provider_profile_does_not_emit_backend_authority_log(
     """Provider selection is not a backend authority source."""
     import structlog
 
-    from autoskillit.execution.backends import get_backend
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    tool_ctx_kitchen_open.backend = get_backend("codex")
+    _install_codex_launch_backend(tool_ctx_kitchen_open, tmp_path, monkeypatch)
     _install_skill_invocation(tool_ctx_kitchen_open, name="probe")
 
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)

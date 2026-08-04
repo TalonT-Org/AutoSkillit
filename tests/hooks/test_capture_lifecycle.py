@@ -2841,6 +2841,17 @@ def test_reconcile_adapter_opens_existing_store_without_creation(tmp_path: Path)
     assert outcome.errors == 0
     assert outcome.remaining_due == 0
 
+    absent_project = tmp_path / "absent-project"
+    absent_project.mkdir()
+    absent_outcome = capture_reconcile.reconcile_capture_store(
+        str(absent_project),
+        capture_reconcile.RUNNER_TAIL_BUDGET,
+    )
+
+    assert absent_outcome.blocker is CleanupBlocker.STORE_ABSENT
+    assert absent_outcome.errors == 0
+    assert not _capture_dir(absent_project).exists()
+
 
 @pytest.mark.parametrize(
     ("reason", "blocker"),

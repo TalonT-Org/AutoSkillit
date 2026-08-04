@@ -96,8 +96,8 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 
 **ALWAYS:**
 - Use child delegations for file reads and diff retrieval in Steps 1, 2, and 2.5
-- Use `a child assigned logical role `audit-impl-slice-auditor` under its declared model policy` for Step 3 audit slices
-- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
+- Use a child assigned logical role `audit-impl-slice-auditor` under its declared model policy for Step 3 audit slices
+- Spawn all subagents via child delegation under the declared `sonnet` model-class policy
 - Resolve all plan files before starting (abort early if any are missing)
 - Start all independent child delegations before awaiting any result to maximize concurrency
 - On every verdict in an attested invocation, read the opaque `reservation_handle` and exact

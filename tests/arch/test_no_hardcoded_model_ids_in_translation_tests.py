@@ -1,7 +1,7 @@
 """Architectural guard: translation tests must not hardcode alias-resolved model IDs.
 
-Tests must assert against CODEX_MODEL_ALIASES[key] rather than literal alias output
-strings. This prevents co-authoring of wrong values: if the alias dict is wrong,
+Tests must assert against the backend alias registries rather than literal alias output
+strings. This prevents co-authoring of wrong values: if an alias dict is wrong,
 tests that hardcode the same wrong value pass silently.
 
 Passthrough tests (e.g., translate_model("o3") == "o3") are NOT flagged because
@@ -23,9 +23,12 @@ def _get_test_model_translation_path() -> Path:
 
 
 def _get_alias_values() -> frozenset[str]:
-    from autoskillit.core.types._type_backend import CODEX_MODEL_ALIASES
+    from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES, CODEX_MODEL_ALIASES
 
-    return frozenset(CODEX_MODEL_ALIASES.values())
+    registries = (CLAUDE_MODEL_ALIASES, CODEX_MODEL_ALIASES)
+    return frozenset(
+        value for aliases in registries for key, value in aliases.items() if value != key
+    )
 
 
 def _collect_rhs_string_literals_in_assert_eq(tree: ast.AST) -> list[str]:
@@ -68,6 +71,6 @@ def test_no_hardcoded_model_ids_in_translation_tests() -> None:
     assert not violations, (
         f"test_model_translation.py hardcodes alias-resolved model ID(s) in assert "
         f"comparisons: {violations!r}. "
-        "Use CODEX_MODEL_ALIASES[key] instead of literal strings so tests track the "
-        "source dict rather than cementing stale values."
+        "Use the backend alias registry instead of literal strings so tests track the "
+        "source mapping rather than cementing stale values."
     )

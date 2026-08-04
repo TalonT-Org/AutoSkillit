@@ -13,6 +13,7 @@ from autoskillit.config import (
     RunSkillConfig,
 )
 from autoskillit.core.claude_conventions import ClaudeDirectoryConventions
+from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES
 from autoskillit.execution.commands import _inject_completion_directive
 from autoskillit.server.tools.tools_execution import run_skill
 from tests.conftest import _make_result
@@ -239,7 +240,7 @@ class TestRunSkillModel:
         await run_skill("/investigate error", "/tmp", model="sonnet")
         cmd = tool_ctx_kitchen_open.runner.call_args_list[-1][0]
         assert "--model" in cmd
-        assert cmd[cmd.index("--model") + 1] == "sonnet"
+        assert cmd[cmd.index("--model") + 1] == CLAUDE_MODEL_ALIASES["sonnet"]
 
     # MOD_S3
     @pytest.mark.anyio

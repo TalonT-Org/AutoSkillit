@@ -229,7 +229,7 @@ ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS: tuple[str, ...] = (
 _CONTEXT_WINDOW_SUFFIX_RE: _re.Pattern[str] = _re.compile(r"\[\d+[mk]?\]$", _re.IGNORECASE)
 
 CLAUDE_MODEL_ALIASES: dict[str, str] = {
-    "sonnet": "sonnet",
+    "sonnet": "claude-sonnet-5",
     "opus": "opus",
     "haiku": "haiku",
 }

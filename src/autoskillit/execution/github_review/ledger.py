@@ -524,38 +524,6 @@ class GitHubReviewLedger:
                 raise ValueError("persisted review retry has inconsistent operation state")
             return True
 
-    def record_attempt(
-        self,
-        *,
-        operation_key: str,
-        attempt_number: int,
-        payload_json: bytes,
-        response_class: ReviewResponseClass,
-        status_code: int | None,
-        error: str | None,
-    ) -> None:
-        """Compatibility wrapper for callers that do not need exact attempt metadata."""
-
-        attempt_digest = hashlib.sha256(payload_json).hexdigest()
-        self.begin_attempt(
-            operation_key=operation_key,
-            attempt_number=attempt_number,
-            attempt_digest=attempt_digest,
-            payload_json=payload_json,
-            canonical_indexes=(),
-            omitted_dispositions=(),
-            effective_event="",
-            effective_body_digest="",
-        )
-        self.complete_attempt(
-            operation_key=operation_key,
-            attempt_number=attempt_number,
-            state=ReviewOperationState.POSTING,
-            response_class=response_class,
-            status_code=status_code,
-            error=error,
-        )
-
     def load_attempts(self, operation_key: str) -> tuple[ReviewAttemptRecord, ...]:
         if not self.database_path.exists():
             return ()

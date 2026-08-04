@@ -17,7 +17,10 @@ from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 _INLINE_APPEND_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     (
         "append-to-skill_command",
-        re.compile(r"append\w*\s+.{0,40}?\bskill_command\b", re.IGNORECASE),
+        re.compile(
+            r"(?<!\b(?:not|never|don't)\s)append\w*\s+.{0,40}?\bskill_command\b",
+            re.IGNORECASE,
+        ),
     ),
     (
         "embed-in-skill_command",

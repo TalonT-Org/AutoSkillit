@@ -32,6 +32,35 @@ def test_note_with_inline_append_instruction_flagged() -> None:
     assert matched[0].step_name == "step"
 
 
+@pytest.mark.parametrize(
+    "note",
+    [
+        pytest.param("do NOT append it to skill_command", id="not"),
+        pytest.param("never append it to skill_command", id="never"),
+        pytest.param("don't append it to skill_command", id="dont"),
+    ],
+)
+def test_negated_inline_append_instruction_clean(note: str) -> None:
+    """A prohibition on inline arguments describes the correct structured shape."""
+    recipe = _make_workflow(
+        {
+            "step": {
+                "tool": "run_skill",
+                "with": {
+                    "skill_command": "/autoskillit:foo",
+                    "skill_inputs": {"topic": "bar"},
+                },
+                "note": note,
+                "on_success": "done",
+            },
+            "done": {"action": "stop", "message": "Done"},
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == "note-shape-contradiction"]
+    assert matched == []
+
+
 def test_note_without_skill_inputs_clean() -> None:
     """Pre-migration inline-args form is internally consistent — no finding."""
     recipe = _make_workflow(

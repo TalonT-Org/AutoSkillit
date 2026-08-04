@@ -33,8 +33,6 @@ else:
         analyze_github_mutations,
     )
 
-GITHUB_MUTATION_DENY_TRIGGER: str = "Unsafe raw GitHub mutation is prohibited"
-
 _RUN_CMD_SUFFIX = "__run_cmd"
 _REVIEW_KINDS: frozenset[GitHubMutationKind] = frozenset(
     {

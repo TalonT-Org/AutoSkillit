@@ -263,12 +263,12 @@ steps:
       \ context.all_plan_paths using a comma separator instead of letting the capture\
       \ block overwrite the accumulated value. For multi-group runs, the accumulated\
       \ value looks like \"/path/groupA_plan.md,/path/groupB_plan.md\". ISSUE CONTEXT:\
-      \ If inputs.issue_url is a non-empty string, pass it to the skill so the make-plan\
-      \ skill can call fetch_github_issue internally to get full issue content: \"\
-      /autoskillit:make-plan {group_path}\\n\\nGitHub Issue: {inputs.issue_url}\"\
-      \ ADVERSARIAL REVIEW LEVEL: If inputs.adversarial_review_level is a non-empty\
-      \ string, append it to the skill_command: \"/autoskillit:make-plan {group_path}\\\
-      n\\nadversarial_review_level={inputs.adversarial_review_level}\" verdict=plan\
+      \ issue_url is passed via skill_inputs.issue_url \u2014 do NOT append it to skill_command.\
+      \ The make-plan skill reads skill_inputs.issue_url directly and calls fetch_github_issue\
+      \ internally when non-empty. ADVERSARIAL REVIEW LEVEL: adversarial_review_level\
+      \ is passed via skill_inputs.adversarial_review_level \u2014 do NOT append it to\
+      \ skill_command. The make-plan skill reads it directly from skill_inputs when\
+      \ non-empty. verdict=plan\
       \ is the only successful result.\n"
   salvage_plan:
     tool: run_python

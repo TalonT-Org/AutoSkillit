@@ -240,7 +240,7 @@
       "on_failure": "release_issue_failure",
       "on_context_limit": "release_issue_failure",
       "on_rate_limit": "release_issue_failure",
-      "note": "ISSUE CONTEXT: If inputs.issue_url is a non-empty string, append it to the skill_command so the investigate skill can detect and fetch the issue itself: \"/autoskillit:investigate {task}\\n\\nGitHub Issue: {inputs.issue_url}\" The skill detects the URL pattern and calls fetch_github_issue internally. DEPTH: When inputs.depth == 'deep', passes --depth deep flag and sets model to opus[1m] for the main skill session. Subagents within the skill always use model: sonnet regardless of depth setting.\n"
+      "note": "skill_command stays fixed as \"/autoskillit:investigate\" — do NOT append arguments. All dynamic content is passed via skill_inputs.topic as a single concatenated string: depth flag prefix (\"--depth deep \" when inputs.depth == 'deep'), inputs.task, and inputs.issue_url. The investigate skill parses the GitHub issue URL directly from the topic text and calls fetch_github_issue internally when non-empty. DEPTH: When inputs.depth == 'deep', the step-level model is set to opus[1m]; subagents always use sonnet regardless of depth.\n"
     },
     "bridge_investigation": {
       "tool": "run_python",

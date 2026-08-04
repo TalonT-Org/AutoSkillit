@@ -537,11 +537,12 @@ steps:
       route: implement_phase
     on_failure: escalate_stop
     on_context_limit: salvage_plan_phase
-    note: 'Plans the current setup phase. Replace ${{ context.group_files }} in the skill_command with the FIRST REMAINING
-      phase file path from the list — do NOT pass the entire list. Pass the path directly to the skill (do not read it). Glob
-      plan_dir for *_part_*.md or single plan file. ITERATION: After each implement_phase cycle, advance to the next entry
-      in context.group_files for the following plan_phase iteration. On audit remediation re-entry, consume the exact current
-      audit_cycle_path and emit its plan_disposition_path; verdict=plan is the only success.
+    note: 'Plans the current setup phase. Set skill_inputs.task to the FIRST REMAINING phase file path from context.group_files
+      — do NOT pass the entire list, and do NOT read the file; pass the path directly via skill_inputs.task (not via skill_command,
+      which stays the fixed literal /autoskillit:make-plan). Glob plan_dir for *_part_*.md or single plan file. ITERATION: After
+      each implement_phase cycle, advance to the next entry in context.group_files for the following plan_phase iteration,
+      updating skill_inputs.task accordingly. On audit remediation re-entry, skill_inputs.audit_cycle_path carries the exact
+      current audit_cycle_path; the skill emits its matching plan_disposition_path; verdict=plan is the only success.
 
       '
     optional_context_refs:

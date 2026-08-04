@@ -7,6 +7,7 @@ import dataclasses
 import inspect
 import re
 import sys
+from collections.abc import Callable
 from enum import StrEnum
 from pathlib import Path
 from typing import get_type_hints
@@ -25,6 +26,10 @@ from autoskillit.core import (
     ReviewOperationState,
     ReviewReconciliationResult,
     ReviewResponseClass,
+    is_valid_github_review_head_sha,
+    is_valid_github_review_logical_iteration,
+    is_valid_github_review_operation_key,
+    is_valid_github_review_repository,
 )
 from autoskillit.core.types import _type_github_review
 
@@ -51,6 +56,10 @@ _PUBLIC_NAMES = {
     "ReviewResponseClass",
     "ReviewReconciliationResult",
     "ReviewFindingDispositionKind",
+    "is_valid_github_review_head_sha",
+    "is_valid_github_review_logical_iteration",
+    "is_valid_github_review_operation_key",
+    "is_valid_github_review_repository",
 }
 
 
@@ -70,6 +79,25 @@ def _request(**overrides: object) -> GitHubReviewRequest:
     }
     values.update(overrides)
     return GitHubReviewRequest(**values)
+
+
+@pytest.mark.parametrize(
+    ("validator", "valid", "invalid"),
+    [
+        (is_valid_github_review_head_sha, "a" * 40, "A" * 40),
+        (is_valid_github_review_operation_key, "f" * 64, "review-v1:approved"),
+        (is_valid_github_review_repository, "octo/example", "Octo/example"),
+        (is_valid_github_review_logical_iteration, "review-pr:2", "review_pr:2"),
+    ],
+)
+def test_review_identity_validators_share_canonical_wire_rules(
+    validator: Callable[[object], bool],
+    valid: str,
+    invalid: str,
+) -> None:
+    assert validator(valid) is True
+    assert validator(invalid) is False
+    assert validator(None) is False
 
 
 def test_contract_module_exports_exact_public_surface() -> None:

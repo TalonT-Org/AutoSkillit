@@ -9,7 +9,12 @@ from typing import Any
 
 import regex as re
 
-from autoskillit.core import GitHubReviewComment, GitHubReviewRequest, normalize_owner_repo
+from autoskillit.core import (
+    GitHubReviewComment,
+    GitHubReviewRequest,
+    is_valid_github_review_logical_iteration,
+    normalize_owner_repo,
+)
 
 _SHA_RE = re.compile(r"[0-9a-f]{40}")
 _EVENTS = frozenset({"APPROVE", "COMMENT", "REQUEST_CHANGES"})
@@ -104,11 +109,7 @@ def _validated_identity_wire(request: GitHubReviewRequest) -> dict[str, Any]:
         raise ValueError("pr_number must be positive")
     if not _SHA_RE.fullmatch(request.head_sha):
         raise ValueError("head_sha must be a full lowercase hexadecimal commit SHA")
-    if (
-        not isinstance(request.logical_iteration, str)
-        or ":" not in request.logical_iteration
-        or any(not part for part in request.logical_iteration.split(":", 1))
-    ):
+    if not is_valid_github_review_logical_iteration(request.logical_iteration):
         raise ValueError("logical_iteration must be a namespaced string")
     return {
         "comments": [record for _, record in canonical_comment_records(request)],

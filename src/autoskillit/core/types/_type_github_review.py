@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from enum import StrEnum
@@ -19,7 +20,41 @@ __all__ = [
     "ReviewOperationState",
     "ReviewReconciliationResult",
     "ReviewResponseClass",
+    "is_valid_github_review_head_sha",
+    "is_valid_github_review_logical_iteration",
+    "is_valid_github_review_operation_key",
+    "is_valid_github_review_repository",
 ]
+
+_HEAD_SHA_RE = re.compile(r"[0-9a-f]{40}")
+_LOGICAL_ITERATION_RE = re.compile(
+    r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?:[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?"
+)
+_OPERATION_KEY_RE = re.compile(r"[0-9a-f]{64}")
+_REPOSITORY_RE = re.compile(
+    r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?/"
+    r"[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?"
+)
+
+
+def is_valid_github_review_head_sha(value: object) -> bool:
+    """Return whether a value is a canonical full lowercase Git commit SHA."""
+    return isinstance(value, str) and _HEAD_SHA_RE.fullmatch(value) is not None
+
+
+def is_valid_github_review_logical_iteration(value: object) -> bool:
+    """Return whether a value is a canonical namespaced review iteration."""
+    return isinstance(value, str) and _LOGICAL_ITERATION_RE.fullmatch(value) is not None
+
+
+def is_valid_github_review_operation_key(value: object) -> bool:
+    """Return whether a value is the canonical SHA-256 review operation key."""
+    return isinstance(value, str) and _OPERATION_KEY_RE.fullmatch(value) is not None
+
+
+def is_valid_github_review_repository(value: object) -> bool:
+    """Return whether a value is a canonical lowercase owner/repository identity."""
+    return isinstance(value, str) and _REPOSITORY_RE.fullmatch(value) is not None
 
 
 class ReviewOperationState(StrEnum):

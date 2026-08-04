@@ -679,6 +679,12 @@ from .types import GitHubReviewPosterProtocol as GitHubReviewPosterProtocol
 from .types import GitHubReviewPostResult as GitHubReviewPostResult
 from .types import GitHubReviewReceipt as GitHubReviewReceipt
 from .types import GitHubReviewRequest as GitHubReviewRequest
+from .types import is_valid_github_review_head_sha as is_valid_github_review_head_sha
+from .types import (
+    is_valid_github_review_logical_iteration as is_valid_github_review_logical_iteration,
+)
+from .types import is_valid_github_review_operation_key as is_valid_github_review_operation_key
+from .types import is_valid_github_review_repository as is_valid_github_review_repository
 from .types import HardCapabilityMismatch as HardCapabilityMismatch
 from .types import HeadlessExecutor as HeadlessExecutor
 from .types import HeadlessSkillDispatchContract as HeadlessSkillDispatchContract

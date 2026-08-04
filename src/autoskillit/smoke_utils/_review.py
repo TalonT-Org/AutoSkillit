@@ -10,20 +10,16 @@ from datetime import UTC
 from pathlib import Path
 from typing import Any, TypeGuard
 
-import regex as re
-
-from autoskillit.core import get_logger
+from autoskillit.core import (
+    get_logger,
+    is_valid_github_review_head_sha,
+    is_valid_github_review_logical_iteration,
+    is_valid_github_review_operation_key,
+    is_valid_github_review_repository,
+)
 
 logger = get_logger(__name__)
 
-_FULL_LOWER_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
-_CANONICAL_REPOSITORY_RE = re.compile(
-    r"^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?/"
-    r"[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$"
-)
-_LOGICAL_ITERATION_RE = re.compile(
-    r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?:[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
-)
 _REVIEW_RECEIPT_MAX_BYTES = 1_048_576
 _FINAL_REVIEW_STATES = frozenset({"SUCCEEDED", "RECONCILED"})
 _FINAL_RECONCILIATION_RESULTS = frozenset({"NOT_NEEDED", "MATCHED", "ENRICHED"})
@@ -95,7 +91,7 @@ def annotate_pr_diff(
 
     def _required_scalar(args: list[str], *, timeout: int) -> str:
         value = _stdout_bytes(_run(args, timeout=timeout)).decode("utf-8", errors="strict").strip()
-        if not _FULL_LOWER_SHA_RE.fullmatch(value):
+        if not is_valid_github_review_head_sha(value):
             raise RuntimeError(f"annotation command returned an invalid ref ({' '.join(args)})")
         return value
 
@@ -126,9 +122,9 @@ def annotate_pr_diff(
             raise RuntimeError("live PR head/base refs were malformed")
         head_sha = payload.get("headRefOid")
         base_sha = payload.get("baseRefOid")
-        if not isinstance(head_sha, str) or not _FULL_LOWER_SHA_RE.fullmatch(head_sha.strip()):
+        if not isinstance(head_sha, str) or not is_valid_github_review_head_sha(head_sha.strip()):
             raise RuntimeError("live PR head ref was missing")
-        if not isinstance(base_sha, str) or not _FULL_LOWER_SHA_RE.fullmatch(base_sha.strip()):
+        if not isinstance(base_sha, str) or not is_valid_github_review_head_sha(base_sha.strip()):
             raise RuntimeError("live PR base ref was missing")
         return head_sha.strip(), base_sha.strip()
 
@@ -488,11 +484,11 @@ def check_review_posted(
     if mode != "github":
         return _review_check_failed("invalid_review_mode")
     if (
-        not _CANONICAL_REPOSITORY_RE.fullmatch(repository)
+        not is_valid_github_review_repository(repository)
         or not _is_positive_int(pr_number)
-        or not _FULL_LOWER_SHA_RE.fullmatch(head_sha)
-        or not _LOGICAL_ITERATION_RE.fullmatch(logical_iteration)
-        or not operation_key
+        or not is_valid_github_review_head_sha(head_sha)
+        or not is_valid_github_review_logical_iteration(logical_iteration)
+        or not is_valid_github_review_operation_key(operation_key)
         or post_state not in _FINAL_REVIEW_STATES
     ):
         return _review_check_failed("invalid_expected_identity")

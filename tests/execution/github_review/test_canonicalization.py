@@ -169,6 +169,15 @@ def test_malformed_repository_identity_is_rejected(repository: str) -> None:
         compute_review_operation_key(_request(repository=repository))
 
 
+@pytest.mark.parametrize(
+    "logical_iteration",
+    ["review_pr:2", "Review-pr:2", "review-pr:", "review-pr:two words"],
+)
+def test_noncanonical_logical_iteration_is_rejected(logical_iteration: str) -> None:
+    with pytest.raises(ValueError, match="namespaced string"):
+        compute_review_operation_key(_request(logical_iteration=logical_iteration))
+
+
 def test_canonicalization_does_not_mutate_the_request() -> None:
     request = _request()
     before = request.comments

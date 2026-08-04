@@ -5703,9 +5703,7 @@ _REVIEW_REPOSITORY = "openai/autoskillit"
 _REVIEW_PR_NUMBER = 42
 _REVIEW_HEAD_SHA = "0123456789abcdef0123456789abcdef01234567"
 _REVIEW_LOGICAL_ITERATION = "review-pr:2"
-_REVIEW_OPERATION_KEY = (
-    "openai/autoskillit:42:0123456789abcdef0123456789abcdef01234567:review-pr:2"
-)
+_REVIEW_OPERATION_KEY = "f" * 64
 
 
 def test_check_review_posted_has_keyword_only_identity_signature() -> None:
@@ -5903,6 +5901,7 @@ def test_check_review_posted_rejects_receipt_identity_mismatch(
         ("head_sha", "abc123"),
         ("logical_iteration", "2"),
         ("operation_key", ""),
+        ("operation_key", "review-v1:approved"),
     ],
 )
 def test_check_review_posted_rejects_noncanonical_requested_identity(

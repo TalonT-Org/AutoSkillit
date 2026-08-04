@@ -818,21 +818,21 @@ skills:
     - name: review_receipt_path
       type: string
     expected_output_patterns:
-    - "review_operation_key[ \\t]*=[ \\t]*[A-Za-z0-9:._-]+"
+    - "review_operation_key[ \\t]*=[ \\t]*(?:[0-9a-f]{64}|local|none)"
     - "review_head_sha[ \\t]*=[ \\t]*[0-9a-f]{40}"
     - "review_post_state[ \\t]*=[ \\t]*(SUCCEEDED|RECONCILED|LOCAL|STALE_SNAPSHOT)"
     - "review_receipt_path[ \\t]*=[ \\t]*(?:/.+|none)"
     - "verdict[ \\t]*=[ \\t]*(approved|approved_with_comments|changes_requested|needs_human|stale_snapshot)"
     - "(?:%%REVIEW_GATE::(LOOP_REQUIRED|CLEAR)%%|verdict[ \\t]*=[ \\t]*(approved_with_comments|stale_snapshot))"
     pattern_examples:
-    - "review_operation_key = review-v1:approved\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = approved\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
-    - "review_operation_key = review-v1:comments\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = RECONCILED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = approved_with_comments\n%%ORDER_UP%%"
-    - "review_operation_key = review-v1:changes\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = changes_requested\n%%REVIEW_GATE::LOOP_REQUIRED%%\n%%ORDER_UP%%"
-    - "review_operation_key = review-v1:human\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = needs_human\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
+    - "review_operation_key = 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = approved\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
+    - "review_operation_key = 123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = RECONCILED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = approved_with_comments\n%%ORDER_UP%%"
+    - "review_operation_key = 23456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = changes_requested\n%%REVIEW_GATE::LOOP_REQUIRED%%\n%%ORDER_UP%%"
+    - "review_operation_key = 3456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef012\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = needs_human\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
     - "review_operation_key = local\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = LOCAL\nreview_receipt_path = none\nverdict = approved\n%%REVIEW_GATE::CLEAR%%\n%%ORDER_UP%%"
     - "review_operation_key = none\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = STALE_SNAPSHOT\nreview_receipt_path = none\nverdict = stale_snapshot\n%%ORDER_UP%%"
     negative_examples:
-    - "review_operation_key = review-v1:approved\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = approved\n%%ORDER_UP%%"
+    - "review_operation_key = 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = approved\n%%ORDER_UP%%"
 
   arch-lens-c4-container:
     inputs:
@@ -2071,15 +2071,15 @@ skills:
     - name: review_receipt_path
       type: file_path
     expected_output_patterns:
-    - "review_operation_key[ \\t]*=[ \\t]*\\S+"
+    - "review_operation_key[ \\t]*=[ \\t]*[0-9a-f]{64}"
     - "review_head_sha[ \\t]*=[ \\t]*[0-9a-f]{40}"
     - "review_post_state[ \\t]*=[ \\t]*(SUCCEEDED|RECONCILED)"
     - "review_receipt_path[ \\t]*=[ \\t]*/.+"
     - "verdict[ \\t]*=[ \\t]*(approved|changes_requested|needs_human)"
     pattern_examples:
-    - "review_operation_key = research-review-v1:approved\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = approved\n%%ORDER_UP%%"
-    - "review_operation_key = research-review-v1:changes\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = RECONCILED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = changes_requested\n%%ORDER_UP%%"
-    - "review_operation_key = research-review-v1:human\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = needs_human\n%%ORDER_UP%%"
+    - "review_operation_key = 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = approved\n%%ORDER_UP%%"
+    - "review_operation_key = 123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = RECONCILED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = changes_requested\n%%ORDER_UP%%"
+    - "review_operation_key = 23456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = needs_human\n%%ORDER_UP%%"
 
   audit-claims:
     inputs:
@@ -2121,15 +2121,15 @@ skills:
     - name: review_receipt_path
       type: file_path
     expected_output_patterns:
-    - "review_operation_key[ \\t]*=[ \\t]*\\S+"
+    - "review_operation_key[ \\t]*=[ \\t]*[0-9a-f]{64}"
     - "review_head_sha[ \\t]*=[ \\t]*[0-9a-f]{40}"
     - "review_post_state[ \\t]*=[ \\t]*(SUCCEEDED|RECONCILED)"
     - "review_receipt_path[ \\t]*=[ \\t]*/.+"
     - "verdict[ \\t]*=[ \\t]*(approved|changes_requested|needs_human)"
     pattern_examples:
-    - "review_operation_key = audit-claims-v1:approved\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = approved\n%%ORDER_UP%%"
-    - "review_operation_key = audit-claims-v1:changes\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = RECONCILED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = changes_requested\n%%ORDER_UP%%"
-    - "review_operation_key = audit-claims-v1:human\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = needs_human\n%%ORDER_UP%%"
+    - "review_operation_key = 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = approved\n%%ORDER_UP%%"
+    - "review_operation_key = 123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = RECONCILED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = changes_requested\n%%ORDER_UP%%"
+    - "review_operation_key = 23456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01\nreview_head_sha = 0123456789abcdef0123456789abcdef01234567\nreview_post_state = SUCCEEDED\nreview_receipt_path = /tmp/batch_review_response_42.json\nverdict = needs_human\n%%ORDER_UP%%"
 
   resolve-claims-review:
     inputs:

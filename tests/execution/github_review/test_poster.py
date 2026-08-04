@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -158,6 +159,16 @@ async def test_success_requires_review_and_comment_readback_with_remote_ids(
     assert payload["event"] == "COMMENT"
     assert result.operation_key in payload["body"]
     assert "<!-- autoskillit-review-finding:" in payload["comments"][0]["body"]
+    assert (
+        result.receipt.requested_body_digest == hashlib.sha256(request.body.encode()).hexdigest()
+    )
+    assert (
+        result.receipt.effective_body_digest
+        == hashlib.sha256(payload["body"].encode()).hexdigest()
+    )
+    assert result.receipt.effective_body_digest != result.receipt.requested_body_digest
+    attempt = GitHubReviewLedger(database_path).load_attempts(result.operation_key)[0]
+    assert attempt.effective_body_digest == result.receipt.effective_body_digest
     assert request.receipt_path is not None
     assert not request.receipt_path.exists(), "the server handler owns receipt projection"
     json.dumps(result.to_dict())

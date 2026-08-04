@@ -59,7 +59,7 @@ def schedule_retry(
 ) -> None:
     """Atomically persist the precise next attempt before it is claimed."""
 
-    _, retry_payload_json, retry_attempt_digest = attempt_material(
+    retry_payload, retry_payload_json, retry_attempt_digest = attempt_material(
         request=request,
         operation_key=operation_key,
         findings=retry_findings,
@@ -77,7 +77,7 @@ def schedule_retry(
         retry_canonical_indexes=tuple(finding.canonical_index for finding in retry_findings),
         retry_omitted_dispositions=retry_omitted,
         retry_effective_event=retry_effective_event,
-        retry_effective_body_digest=_poster_support.text_digest(request.body),
+        retry_effective_body_digest=_poster_support.text_digest(str(retry_payload["body"])),
     )
 
 

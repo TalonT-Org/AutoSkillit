@@ -827,7 +827,7 @@ def run_capture(
                     )
                     terminal_committed = True
                 except _CAPTURE_RUNTIME_ERRORS:
-                    pass
+                    logger.error("capture_failure_commit_failed", exc_info=True)
             elif finalized_capture is not None:
                 _capture_delivery.settle_finalized_failure(
                     lifecycle,

@@ -1411,6 +1411,7 @@ def test_spawn_failure_reports_failed_state_recovery_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capfd: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     project = tmp_path / "project"
     project.mkdir()
@@ -1434,6 +1435,11 @@ def test_spawn_failure_reports_failed_state_recovery_error(
     assert failure.reason is CaptureFailureReason.FILESYSTEM_IO
     assert "primary spawn failure" not in captured.err
     assert "secondary recovery failure" not in captured.err
+    recovery_logs = [
+        record for record in caplog.records if record.message == "capture_failure_commit_failed"
+    ]
+    assert len(recovery_logs) == 1
+    assert recovery_logs[0].exc_info is not None
 
 
 def test_post_duplication_failure_closes_all_fds_and_prevents_command(

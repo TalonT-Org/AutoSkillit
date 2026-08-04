@@ -1411,10 +1411,10 @@ def test_spawn_failure_reports_failed_state_recovery_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capfd: pytest.CaptureFixture[str],
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     project = tmp_path / "project"
     project.mkdir()
+    logged_events: list[tuple[str, bool]] = []
 
     def fail_spawn(*_args, **_kwargs):
         raise OSError("primary spawn failure")
@@ -1422,12 +1422,16 @@ def test_spawn_failure_reports_failed_state_recovery_error(
     def fail_recovery(*_args, **_kwargs):
         raise capture_artifacts.CaptureLifecycleError("secondary recovery failure")
 
+    def record_error(message: str, *, exc_info: bool = False) -> None:
+        logged_events.append((message, exc_info))
+
     monkeypatch.setattr(capture_artifacts, "_spawn_bash", fail_spawn)
     monkeypatch.setattr(
         capture_artifacts.CaptureLifecycleStore,
         "commit_capture_failure",
         fail_recovery,
     )
+    monkeypatch.setattr(capture_artifacts.logger, "error", record_error)
 
     assert run_capture("printf never", str(project), _CAPTURE_ID) == 1
     captured = capfd.readouterr()
@@ -1435,11 +1439,7 @@ def test_spawn_failure_reports_failed_state_recovery_error(
     assert failure.reason is CaptureFailureReason.FILESYSTEM_IO
     assert "primary spawn failure" not in captured.err
     assert "secondary recovery failure" not in captured.err
-    recovery_logs = [
-        record for record in caplog.records if record.message == "capture_failure_commit_failed"
-    ]
-    assert len(recovery_logs) == 1
-    assert recovery_logs[0].exc_info is not None
+    assert ("capture_failure_commit_failed", True) in logged_events
 
 
 def test_post_duplication_failure_closes_all_fds_and_prevents_command(

@@ -372,7 +372,7 @@ def minimal_ctx(tmp_path):
         CommittedDispositionResolver,
         ContextAdmissionStoreAuthority,
     )
-    from autoskillit.execution import DefaultLaunchResolver
+    from autoskillit.execution.launch_resolution import DefaultLaunchResolver
     from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.audit_admission_ledger import DefaultAuditAdmissionLedger
     from autoskillit.pipeline.context import ToolContext

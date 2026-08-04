@@ -180,26 +180,34 @@ def test_minimal_ctx_imports_only_l0_l1_composition_packages():
             break
     assert func is not None, "minimal_ctx fixture not found in conftest.py"
 
-    ALLOWED_PREFIXES = (
+    allowed_prefixes = (
         "autoskillit.core",
         "autoskillit.pipeline",
         "autoskillit.config",
-        "autoskillit.execution",
     )
+    allowed_modules = {"autoskillit.execution.launch_resolution"}
 
     violations = []
     for node in ast.walk(func):
-        if (
-            isinstance(node, ast.ImportFrom)
-            and node.module
-            and node.module.startswith("autoskillit.")
-        ):
-            if not any(node.module.startswith(p) for p in ALLOWED_PREFIXES):
-                violations.append(node.module)
+        if isinstance(node, ast.ImportFrom) and node.module:
+            imported_modules = (node.module,)
+        elif isinstance(node, ast.Import):
+            imported_modules = tuple(alias.name for alias in node.names)
+        else:
+            continue
+
+        for module in imported_modules:
+            if not module.startswith("autoskillit."):
+                continue
+            if module not in allowed_modules and not any(
+                module == prefix or module.startswith(f"{prefix}.") for prefix in allowed_prefixes
+            ):
+                violations.append(module)
 
     assert not violations, (
         f"minimal_ctx imports from forbidden modules: {violations}. "
-        "Only autoskillit core/config/pipeline/execution packages are allowed."
+        "Only autoskillit core/config/pipeline packages and the exact "
+        "autoskillit.execution.launch_resolution module are allowed."
     )
 
 

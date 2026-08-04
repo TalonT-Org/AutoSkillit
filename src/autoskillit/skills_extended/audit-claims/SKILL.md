@@ -1,6 +1,7 @@
 ---
 name: audit-claims
-categories: [research]
+categories:
+- research
 description: >
   Parallel subagent-driven claim extraction and citation integrity audit for
   research PRs. Extracts claims by section, matches against available evidence,

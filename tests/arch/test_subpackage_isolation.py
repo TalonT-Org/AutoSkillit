@@ -943,7 +943,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +generation-bound replay store and post-enforcement initialization commits.
         "server": 20,  # +_audit_authority_materializer canonical publication boundary
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
-        "execution": 18,
+        # +_github_http review boundary and +launch_resolution authority.
+        "execution": 19,
         "core": 30,  # +plugin identity authority + strict audit semantic codec
         # +GitHub review types, portable launch authority, stable contract,
         # closed skill semantics, and the non-executable projection binding shard.

@@ -160,6 +160,7 @@ def test_operation_state_vocabulary_is_closed() -> None:
     assert {member.name for member in ReviewOperationState} == {
         "DRY_RUN",
         "PREPARED",
+        "RETRY_PENDING",
         "POSTING",
         "COMMITTED_PENDING_VERIFICATION",
         "SUCCEEDED",

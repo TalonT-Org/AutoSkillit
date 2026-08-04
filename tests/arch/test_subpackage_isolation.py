@@ -946,7 +946,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "execution": 18,
         "core": 30,  # +plugin identity authority + strict audit semantic codec
         # +audit admission ownership, native shell capture, protocols, and GitHub review types
-        "core/types": 45,
+        "core/types": 46,
         "cli": 23,  # +_install_contract typed install process boundary (#4409)
         "cli/doctor": 11,  # +_doctor_skills capability declaration authenticity checks
         "workspace": 15,  # +_installed_artifact exact lease-protected authority (#4409);

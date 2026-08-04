@@ -23,6 +23,7 @@ _module_identity.register_module_aliases(__name__)
 if TYPE_CHECKING:
     from autoskillit.hooks._capture import _capacity as _capture_capacity
     from autoskillit.hooks._capture import _delivery as _capture_delivery
+    from autoskillit.hooks._capture import _failure_policy as _capture_failure_policy
     from autoskillit.hooks._capture import _ledger as _capture_ledger
     from autoskillit.hooks._capture import _ledger_view as _capture_ledger_view
     from autoskillit.hooks._capture import _migration as _capture_migration
@@ -35,6 +36,9 @@ if TYPE_CHECKING:
 else:
     _capture_capacity = importlib.import_module(f"{_module_identity.__package__}._capacity")
     _capture_delivery = importlib.import_module(f"{_module_identity.__package__}._delivery")
+    _capture_failure_policy = importlib.import_module(
+        f"{_module_identity.__package__}._failure_policy"
+    )
     _capture_ledger = importlib.import_module(f"{_module_identity.__package__}._ledger")
     _capture_ledger_view = importlib.import_module(f"{_module_identity.__package__}._ledger_view")
     _capture_migration = importlib.import_module(f"{_module_identity.__package__}._migration")
@@ -102,7 +106,17 @@ _STORE_FACTORY_TOKEN = object()
 
 
 class CaptureLifecycleError(RuntimeError):
-    failure_reason = _capture_capacity.CaptureFailureReason.LEDGER_INTEGRITY
+    failure_reason = _capture_failure_policy.CaptureFailureReason.LEDGER_INTEGRITY
+
+    @classmethod
+    def from_os_error(
+        cls,
+        detail: str,
+        exc: OSError,
+    ) -> CaptureLifecycleError:
+        error = cls(detail)
+        error.failure_reason = _capture_failure_policy.os_failure_reason(exc)
+        return error
 
 
 class CaptureLedgerError(CaptureLifecycleError):
@@ -229,7 +243,7 @@ class CaptureLifecycleStore:
         try:
             fd = os.open(LOCK_NAME, _CONTROL_FLAGS, 0o600, dir_fd=self._root_fd)
         except OSError as exc:
-            raise CaptureLifecycleError("cannot open lifecycle lock") from exc
+            raise CaptureLifecycleError.from_os_error("cannot open lifecycle lock", exc) from exc
         try:
             _capture_ledger_view.validate_control_file(
                 fd, LOCK_NAME, _UNTRUSTED_WRITE_BITS, CaptureLifecycleError
@@ -242,7 +256,9 @@ class CaptureLifecycleStore:
             except OSError as exc:
                 if not blocking and exc.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
                     raise _capture_types.LockContended from exc
-                raise CaptureLifecycleError("cannot acquire lifecycle lock") from exc
+                raise CaptureLifecycleError.from_os_error(
+                    "cannot acquire lifecycle lock", exc
+                ) from exc
             _capture_sweep.validate_store_root(self, CaptureLifecycleError)
             yield
         finally:
@@ -255,7 +271,7 @@ class CaptureLifecycleStore:
         try:
             fd = os.open(LEDGER_NAME, _CONTROL_FLAGS | os.O_APPEND, 0o600, dir_fd=self._root_fd)
         except OSError as exc:
-            raise CaptureLedgerError("cannot open lifecycle ledger") from exc
+            raise CaptureLedgerError.from_os_error("cannot open lifecycle ledger", exc) from exc
         try:
             _capture_ledger_view.validate_control_file(
                 fd, LEDGER_NAME, _UNTRUSTED_WRITE_BITS, CaptureLifecycleError

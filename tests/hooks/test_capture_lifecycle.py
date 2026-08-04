@@ -153,6 +153,52 @@ def test_runtime_failure_reason_reads_closed_integrity_metadata(
     )
 
 
+@pytest.mark.parametrize(
+    ("control_name", "error_type"),
+    (
+        (capture_lifecycle.LOCK_NAME, CaptureLifecycleError),
+        (capture_lifecycle.LEDGER_NAME, CaptureLedgerError),
+    ),
+)
+@pytest.mark.parametrize(
+    ("error_number", "expected_reason"),
+    (
+        (errno.EACCES, CaptureFailureReason.PERMISSION_DENIED),
+        (errno.ELOOP, CaptureFailureReason.FILESYSTEM_AUTHORITY),
+        (errno.EIO, CaptureFailureReason.FILESYSTEM_IO),
+    ),
+)
+def test_lifecycle_control_open_preserves_os_failure_reason(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    control_name: str,
+    error_type: type[CaptureLifecycleError],
+    error_number: int,
+    expected_reason: CaptureFailureReason,
+) -> None:
+    anchor, root, store = _open_store(tmp_path / "project", _Clock())
+    real_open = capture_lifecycle.os.open
+
+    def fail_control(name, *args, **kwargs):
+        if name == control_name:
+            raise OSError(error_number, "denied")
+        return real_open(name, *args, **kwargs)
+
+    monkeypatch.setattr(capture_lifecycle.os, "open", fail_control)
+    try:
+        with pytest.raises(error_type) as caught:
+            if control_name == capture_lifecycle.LOCK_NAME:
+                with store._locked():
+                    pass
+            else:
+                store._open_ledger()
+
+        assert runtime_failure_reason(caught.value) is expected_reason
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_migration_phase_persisted_values_remain_uppercase_and_pinned() -> None:
     assert {
         phase.name: phase.value for phase in capture_lifecycle._capture_migration.MigrationPhase

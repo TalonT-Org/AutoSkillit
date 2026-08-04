@@ -51,20 +51,6 @@ class NamePattern(Protocol):
     def fullmatch(self, value: str) -> object | None: ...
 
 
-def due_capture_ids(
-    records: Iterable[SweepRecord],
-    now: float,
-    terminal_states: Collection[object],
-) -> list[str]:
-    due = [
-        (record.next_attempt_at, record.capture_id)
-        for record in records
-        if record.state not in terminal_states and record.next_attempt_at <= now
-    ]
-    due.sort()
-    return [capture_id for _next_attempt_at, capture_id in due]
-
-
 def bounded_due_keys(
     records: Iterable[SweepRecord],
     now: float,

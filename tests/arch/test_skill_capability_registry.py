@@ -129,6 +129,22 @@ def test_test_check_and_run_skill_work_on_codex() -> None:
     assert SKILL_CAPABILITY_REGISTRY["run_skill"].codex_status == "works-as-is"
 
 
+@pytest.mark.anyio
+async def test_test_check_and_run_skill_are_runtime_visible_on_codex(monkeypatch) -> None:
+    from autoskillit.server import mcp
+    from autoskillit.server._session_type import _apply_session_type_visibility
+
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    monkeypatch.delenv("AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_HEADLESS_AUTO_GATE", raising=False)
+
+    _apply_session_type_visibility()
+
+    tool_names = {tool.name for tool in await mcp.list_tools()}
+    assert {"run_skill", "test_check"} <= tool_names
+
+
 def test_fix_required_capability_is_only_github_api_write() -> None:
     assert {
         name

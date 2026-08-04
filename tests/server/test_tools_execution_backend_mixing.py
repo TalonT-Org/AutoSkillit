@@ -53,17 +53,12 @@ async def test_provider_profile_cannot_override_global_backend_authority(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
     """Provider metadata cannot change a Codex global backend authority."""
-    from unittest.mock import MagicMock
-
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.execution.backends import get_backend
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    fake_backend = MagicMock(spec=CodingAgentBackend)
-    fake_backend.name = "codex"
-    fake_backend.capabilities.anthropic_provider_capable = False
-    tool_ctx_kitchen_open.backend = fake_backend
+    tool_ctx_kitchen_open.backend = get_backend("codex")
     _install_skill_invocation(tool_ctx_kitchen_open, name="probe")
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
@@ -90,8 +85,11 @@ async def test_provider_profile_cannot_override_global_backend_authority(
 
     await run_skill("/autoskillit:probe", str(tmp_path))
 
-    assert not executor.calls
+    assert len(executor.calls) == 1
     assert "backend_override" not in captured
+    authority = captured["backend_authority"]
+    assert authority.backend == "codex"
+    assert authority.kind.value == "global"
 
 
 @pytest.mark.anyio
@@ -139,19 +137,14 @@ async def test_provider_profile_does_not_emit_backend_authority_log(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
     """Provider selection is not a backend authority source."""
-    from unittest.mock import MagicMock
-
     import structlog
 
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from autoskillit.execution.backends import get_backend
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    fake_backend = MagicMock(spec=CodingAgentBackend)
-    fake_backend.name = "codex"
-    fake_backend.capabilities.anthropic_provider_capable = False
-    tool_ctx_kitchen_open.backend = fake_backend
+    tool_ctx_kitchen_open.backend = get_backend("codex")
     _install_skill_invocation(tool_ctx_kitchen_open, name="probe")
 
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
@@ -175,7 +168,7 @@ async def test_provider_profile_does_not_emit_backend_authority_log(
         entry for entry in log_list if entry.get("event") == "backend_override_activated"
     ]
     assert not override_logs
-    assert not executor.calls
+    assert len(executor.calls) == 1
 
 
 @pytest.mark.anyio

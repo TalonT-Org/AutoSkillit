@@ -1,7 +1,7 @@
 ---
 name: audit-feature-gates
 categories: [audit]
-uses_capabilities: [agent_model]
+uses_capabilities: []
 description: >
   Audit feature flag isolation — traces import chains, runtime gates, tool/skill
   tag coverage, UI surfaces, and test markers to detect leakage and miswiring.
@@ -12,6 +12,28 @@ hooks:
         - type: command
           command: "echo '[SKILL: audit-feature-gates] Read-only audit — no code changes permitted'"
           once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+    - name: delegated-worker
+      purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+    - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+    - role: delegated-worker
+      model_class: sonnet
+  sibling_skills:
+    - name: validate-audit
+    - name: audit-arch
+    - name: audit-tests
+    - name: audit-cohesion
 ---
 
 # Audit Feature Gates Skill
@@ -44,7 +66,7 @@ to enumerate features.
 - Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Issue all 6 Task calls in a single message to maximize parallelism
 - Subagents must NOT create their own files — they return findings in response text only
 

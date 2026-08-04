@@ -1,12 +1,29 @@
 ---
 name: review-promotion
 categories: [github]
-uses_capabilities: [agent_model]
+uses_capabilities: []
 description: >
   Reviewer-facing deep analysis of an integration-to-main promotion. Performs domain
   risk scoring, breaking change audit, regression risk assessment, test coverage delta,
   and cross-domain dependency analysis. Use when you want a reviewer's guide before
   approving a promotion PR.
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+    - name: delegated-worker
+      purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+    - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+    - role: delegated-worker
+      model_class: sonnet
 ---
 
 # Review Promotion
@@ -138,7 +155,7 @@ Store as `domain_pr_numbers`.
 
 #### Step 1.5: Parallel Domain Analysis Subagents
 
-For each domain `D` in `domain_diffs`, spawn a subagent via `Agent(model="sonnet")` in a
+For each domain `D` in `domain_diffs`, spawn a subagent via `child delegation under the declared `sonnet` model-class policy` in a
 single parallel message.
 
 Each subagent receives:
@@ -165,7 +182,7 @@ Each subagent returns ONLY a JSON object:
 
 #### Step 1.6: Cross-Domain Dependency Analysis
 
-Spawn one subagent via `Agent(model="sonnet")` with ALL domain summaries from Step 1.5.
+Spawn one subagent via `child delegation under the declared `sonnet` model-class policy` with ALL domain summaries from Step 1.5.
 
 Analyze cross-domain dependencies:
 - Do recipe schema changes require corresponding server tool updates?
@@ -184,7 +201,7 @@ Return JSON:
 
 ### Phase 2: Quality Assessment (parallel subagents)
 
-Spawn three parallel subagents via `Agent(model="sonnet")`.
+Spawn three parallel subagents via `child delegation under the declared `sonnet` model-class policy`.
 
 #### Subagent 2A: Test Coverage Delta
 
@@ -266,7 +283,7 @@ Return JSON:
 
 ### Phase 3: Review Summary Synthesis
 
-Spawn one subagent via `Agent(model="sonnet")` with ALL results from Phases 1–2.
+Spawn one subagent via `child delegation under the declared `sonnet` model-class policy` with ALL results from Phases 1–2.
 
 The subagent synthesizes a reviewer-focused verdict based on:
 - Domain risk scores from Phase 1

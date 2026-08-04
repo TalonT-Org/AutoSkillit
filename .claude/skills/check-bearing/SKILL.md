@@ -1,6 +1,6 @@
 ---
 name: check-bearing
-uses_capabilities: [agent_model]
+uses_capabilities: []
 description: Assess a branch or PR's alignment with the strategic compass. Evaluates whether changes advance, drift from, or close off strategic directions. Produces an alignment dashboard with per-direction impact analysis and a verdict.
 hooks:
   PreToolUse:
@@ -9,6 +9,27 @@ hooks:
         - type: command
           command: "echo '[SKILL: check-bearing] Checking strategic alignment...'"
           once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+    - name: delegated-worker
+      purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+    - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+    - role: delegated-worker
+      model_class: sonnet
+  sibling_skills:
+    - name: review-pr
+    - name: audit-impl
+    - name: review-design
 ---
 
 # Check Bearing — Strategic Alignment Review
@@ -72,7 +93,7 @@ hooks:
   direction X" — most changes are genuinely NEUTRAL to most directions
 
 **ALWAYS:**
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Initialize code-index via `set_project_path` before exploration (Step 0.5)
 - Parse the `---compass-data---` block before launching any analysis subagents
 - Provide specific file-level evidence for every non-NEUTRAL assessment

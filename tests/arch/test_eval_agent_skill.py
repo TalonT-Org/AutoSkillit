@@ -45,11 +45,15 @@ def test_eval_agent_has_critical_constraints():
     assert "**ALWAYS:**" in source
 
 
-def test_eval_agent_uses_agent_tool():
-    """SKILL.md instructs use of native Agent tool with autoskillit: subagent_type."""
+def test_eval_agent_delegates_to_named_agent():
+    """SKILL.md declares child delegation targeting the named autoskillit agent definition."""
     source = _SKILL_FILE.read_text()
-    assert "Agent(subagent_type=" in source
-    assert "autoskillit:" in source
+    parts = source.split("---", 2)
+    fm = load_yaml(parts[1])
+    semantic = fm.get("semantic_requirements") or {}
+    roles = {spawn.get("role") for spawn in semantic.get("child_spawns") or []}
+    assert "evaluated-agent" in roles, "child_spawns must declare the evaluated-agent role"
+    assert "autoskillit:{agent_name}" in source
 
 
 def test_eval_agent_uses_write_tool():

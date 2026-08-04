@@ -1,6 +1,6 @@
 ---
 name: chart-course
-uses_capabilities: [agent_model, cross_skill_ref]
+uses_capabilities: []
 description: Interactive strategic compass builder. Guides the user through mapping all possible project directions with progressive codebase analysis, web research, and architectural diagrams at every step. Produces a machine-readable compass document for downstream alignment tracking.
 hooks:
   PreToolUse:
@@ -9,6 +9,31 @@ hooks:
         - type: command
           command: "echo '[SKILL: chart-course] Charting strategic course...'"
           once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+    - name: delegated-worker
+      purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+    - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+    - role: delegated-worker
+      model_class: sonnet
+  sibling_skills:
+    - name: arch-lens-c4-container
+    - name: arch-lens-module-dependency
+    - name: mermaid
+    - name: investigate
+    - name: scope
+    - name: review-approach
+    - name: make-plan
 ---
 
 # Chart Course — Interactive Strategic Compass Builder
@@ -60,7 +85,7 @@ incorporate the issue content as additional strategic context.
 - Proceed past a checkpoint without user response
 
 **ALWAYS:**
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Initialize code-index via `set_project_path` before exploration (Phase 1)
 - Ask the user before moving to the next phase
 - Generate at least one diagram per direction explored
@@ -116,7 +141,7 @@ If `compass_path` was provided:
 
 #### Step 1.3: Launch Parallel Exploration Subagents
 
-Launch ALL concurrently in a single message. Every subagent is spawned via `Agent(model="sonnet")`.
+Launch ALL concurrently in a single message. Every subagent is spawned via `child delegation under the declared `sonnet` model-class policy`.
 
 **Subagent A: Architecture & Extension Points**
 Explore protocol definitions, plugin points, layering (L0/L1/L2/L3),
@@ -203,14 +228,14 @@ From the user's description, extract:
 
 For each direction, launch targeted analysis:
 
-**Subagent: Codebase Fit Analysis** via `Agent(model="sonnet")`
+**Subagent: Codebase Fit Analysis** via `child delegation under the declared `sonnet` model-class policy`
 - Where in the architecture would this connect?
 - What existing protocols, abstractions, or extension points support it?
 - What would need to change to accommodate it?
 - What existing capabilities does it build on?
 - What would it conflict with or make harder?
 
-**Subagent: External Research** (via `Agent(model="sonnet")`, web search)
+**Subagent: External Research** (via `child delegation under the declared `sonnet` model-class policy`, web search)
 - How do other projects in this space handle this?
 - Are there standards, libraries, or patterns to adopt?
 - What pitfalls have others encountered?

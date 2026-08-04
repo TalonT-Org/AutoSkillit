@@ -1,10 +1,19 @@
 ---
 name: eval-agent
 categories: [eval]
-uses_capabilities: [agent_subagent]
+uses_capabilities: []
 description: >
   Invoke a named agent definition against a provided prompt and capture its output.
   Execution primitive for the agent-eval recipe — isolates a single agent invocation.
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+    - name: evaluated-agent
+      purpose: run the named agent definition under evaluation against the prepared prompt and return its full output
+  child_spawns:
+    - role: evaluated-agent
+  join:
+    required: true
 ---
 
 # Eval Agent Wrapper
@@ -45,7 +54,7 @@ Example invocation:
 **ALWAYS:**
 - Parse `--agent-name` and `--prompt-file` from the ARGUMENTS string
 - Read the prompt file using the Read tool
-- Invoke the agent via `Agent(subagent_type="autoskillit:{agent_name}", prompt=<file contents>)`
+- Invoke the agent via child delegation bound to the `evaluated-agent` logical role, targeting the named agent definition `autoskillit:{agent_name}` with the prompt file contents
 - Write output JSON to `{{AUTOSKILLIT_TEMP}}/eval-agent/{agent_name}_output.json` (relative to the current working directory) using the Write tool
 - Emit `agent_output_path = <absolute_path>` as a structured output token (plain text, no markdown formatting on the token name)
 - The absolute path in the structured output token must be constructed by prepending the current working directory to the relative output path
@@ -67,11 +76,9 @@ If the file cannot be read, proceed to Step 4 (error handling).
 
 ### Step 3: Invoke Agent and Capture Output
 
-Invoke the agent using the native Agent tool:
-
-```
-Agent(subagent_type="autoskillit:{agent_name}", prompt=<prompt file contents>)
-```
+Invoke the agent as a child delegation bound to the `evaluated-agent` logical role:
+delegate to the named agent definition `autoskillit:{agent_name}`, passing the prompt
+file contents verbatim as the delegation prompt.
 
 Capture the agent's full response text.
 

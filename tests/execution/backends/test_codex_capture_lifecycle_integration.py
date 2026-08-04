@@ -438,7 +438,7 @@ def test_saturated_installed_store_recovers_across_both_cleanup_owners(
                     ).exists()
                     record = validation_store.get_record(artifact.authority.capture_id)
                     assert record is not None
-                    assert record.state is CaptureState.RESERVED
+                    assert record.state is CaptureState.PUBLISHED_WRITING
             finally:
                 validation_root.close()
         finally:

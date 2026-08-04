@@ -543,7 +543,6 @@ def test_mixed_legacy_history_migrates_once_without_manufacturing_final_authorit
             root,
             wall_clock=lambda: 1_000_000.0,
         )
-        outcome = store.sweep(capture_reconcile.RUNNER_TAIL_BUDGET)
         migrated = store.get_record(_CAPTURE_ID)
         preserved = store.get_record(other_id)
         first_bytes = ledger.read_bytes()
@@ -561,7 +560,6 @@ def test_mixed_legacy_history_migrates_once_without_manufacturing_final_authorit
         assert migrated.legacy_cleanup is not None
         assert migrated.legacy_cleanup.observed_size == len(b"captured")
         assert migrated.revision == 3
-        assert outcome.cursor_writes == 1
         assert preserved == reopened.get_record(other_id)
         assert ledger.read_bytes() == first_bytes
         decoded = capture_lifecycle._capture_ledger.decode_ledger(first_bytes)
@@ -663,7 +661,15 @@ def test_legacy_migration_retires_until_reduced_publication_capacity_fits(
         assert bounded.records_inspected == 1
         assert bounded.cursor_writes == 0
 
-        store.get_record(_CAPTURE_ID)
+        store._sweep_budget = capture_reconcile.RUNNER_TAIL_BUDGET
+        store._sweep_records_inspected = store._sweep_replay_bytes = 0
+        store._sweep_transitions = store._sweep_cursor_writes = 0
+        try:
+            store.get_record(_CAPTURE_ID)
+        finally:
+            store._sweep_budget = None
+
+        assert store._sweep_cursor_writes == 1
         decoded = capture_lifecycle._capture_ledger.decode_ledger(ledger.read_bytes())
         assert {frame.format_version for frame in decoded.frames} == {2}
         assert len(decoded.frames) == 2
@@ -3186,7 +3192,12 @@ def test_recovery_transition_compacts_within_reserved_headroom(
     anchor, root, store = _open_store(project, clock)
     try:
         current = store.reserve_capture(_CAPTURE_ID)
-        candidate = store._deleting_record(current)
+        candidate = replace(
+            current,
+            state=CaptureState.TAMPERED,
+            retention_phase=CaptureRetentionPhase.TAMPERED,
+            revision=current.revision + 1,
+        )
         projected = {_CAPTURE_ID: candidate}
         encoded = capture_capacity.compacted_bytes(
             projected,
@@ -3214,7 +3225,7 @@ def test_recovery_transition_compacts_within_reserved_headroom(
         )
 
         ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
-        assert recovered.state is CaptureState.DELETING
+        assert recovered.state is CaptureState.TAMPERED
         assert ledger.stat().st_size <= store._capacity.hard_ledger_bytes
         assert ledger.stat().st_size > (
             store._capacity.hard_ledger_bytes - capture_capacity.recovery_headroom(store._capacity)

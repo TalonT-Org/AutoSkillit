@@ -57,7 +57,6 @@ SweepAttempt = _capture_types.SweepAttempt
 SweepBudgetSpec = _capture_types.SweepBudgetSpec
 _ObservedArtifact = _capture_types.ObservedArtifact
 _CarrierLeaseLive = _capture_types.CarrierLeaseLive
-
 CaptureAuthorityError = _capture_snapshot.CaptureAuthorityError
 CaptureFailureEvidence = _capture_types.CaptureFailureEvidence
 CaptureFinalManifest = _capture_snapshot.CaptureFinalManifest
@@ -83,11 +82,9 @@ __all__ = [
     "CaptureStatus",
     "CaptureState",
     "CaptureTransitionCommittedError",
-    "CleanupBlocker",
-    "CleanupProgress",
+    *("CleanupBlocker", "CleanupProgress"),
     "SweepBudgetSpec",
 ]
-
 FRAME_MAGIC = _capture_ledger.FRAME_MAGIC
 LEDGER_NAME = ".capture-lifecycle.ledger"
 LOCK_NAME = ".capture-lifecycle.lock"
@@ -340,7 +337,6 @@ class CaptureLifecycleStore:
         self,
         records: Mapping[str, CaptureLifecycleRecord],
         compaction_epoch: int,
-        *,
         candidate: CaptureLifecycleRecord | None = None,
     ) -> None:
         compacted = _capture_capacity.compacted_records(records, self._capacity)

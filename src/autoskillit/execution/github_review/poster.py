@@ -563,13 +563,6 @@ class DefaultGitHubReviewPoster:
                             remote_comment_id=existing_id,
                         )
                     )
-            _poster_retry.release_slot(
-                self,
-                scope_id,
-                slot,
-                operation_key,
-                keep_in_flight=False,
-            )
             if not reduced or len(reduced) >= len(findings):
                 self.ledger.complete_attempt(
                     operation_key=operation_key,
@@ -578,6 +571,13 @@ class DefaultGitHubReviewPoster:
                     response_class=response_class,
                     status_code=response.status_code,
                     error="validation fallback did not produce a nonempty strict subset",
+                )
+                _poster_retry.release_slot(
+                    self,
+                    scope_id,
+                    slot,
+                    operation_key,
+                    keep_in_flight=False,
                 )
                 return _poster_support.nonfinal_result(
                     request,
@@ -601,6 +601,13 @@ class DefaultGitHubReviewPoster:
                 retry_findings=next_findings,
                 retry_effective_event=effective_event,
                 retry_omitted=next_omitted_tuple,
+            )
+            _poster_retry.release_slot(
+                self,
+                scope_id,
+                slot,
+                operation_key,
+                keep_in_flight=False,
             )
             return await self._attempt(
                 request=request,

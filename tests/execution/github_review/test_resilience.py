@@ -273,6 +273,54 @@ async def test_crash_before_reduced_retry_claim_resumes_persisted_intent(
 
 
 @pytest.mark.anyio
+async def test_release_failure_after_reduced_retry_preserves_retry_intent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _request(
+        tmp_path,
+        comments=(
+            GitHubReviewComment(path="src/a.py", line=10, body="Keep A"),
+            GitHubReviewComment(path="src/b.py", line=20, body="Reject B"),
+            GitHubReviewComment(path="src/c.py", line=30, body="Keep C"),
+        ),
+    )
+    database_path = tmp_path / "ledger.sqlite3"
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(
+        clock=clock,
+        outcomes=[
+            CreateOutcome(422, data=_validation_error(1)),
+            CreateOutcome(200, commit=True),
+        ],
+    )
+    poster = _poster(database_path, gateway, clock)
+
+    def fail_release(**_kwargs: object) -> None:
+        raise RuntimeError("lease release failed")
+
+    monkeypatch.setattr(poster.ledger, "finish_mutation", fail_release)
+
+    interrupted = await poster.post(request)
+
+    operation_key = compute_review_operation_key(request)
+    ledger = GitHubReviewLedger(database_path)
+    operation = ledger.load_operation(operation_key)
+    assert interrupted.state is ReviewOperationState.AMBIGUOUS
+    assert operation is not None
+    assert operation.state is ReviewOperationState.RETRY_PENDING
+    assert [attempt.state for attempt in ledger.load_attempts(operation_key)] == [
+        ReviewOperationState.TERMINAL.value,
+        ReviewOperationState.RETRY_PENDING.value,
+    ]
+
+    recovered = await _poster(database_path, gateway, clock).post(request)
+
+    assert recovered.state is ReviewOperationState.SUCCEEDED
+    assert len(gateway.create_calls) == 2
+
+
+@pytest.mark.anyio
 async def test_crash_after_reduced_batch_reconciles_persisted_subset_without_repost(
     tmp_path: Path,
 ) -> None:

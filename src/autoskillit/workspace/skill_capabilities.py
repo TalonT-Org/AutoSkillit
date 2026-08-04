@@ -830,8 +830,8 @@ _RAW_PORTABLE_TOKEN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     ("Agent(", "semantic_requirements.child_spawns"),
     ("Task(", "semantic_requirements.child_spawns"),
     ("spawn_agent", "semantic_requirements.child_spawns"),
-    ("send_message", "semantic_requirements.required_join"),
-    ("wait_agent", "semantic_requirements.required_join"),
+    ("send_message", "semantic_requirements.join"),
+    ("wait_agent", "semantic_requirements.join"),
     ("subagent_type=", "semantic_requirements.logical_roles"),
 )
 _SEMANTIC_REQUIREMENT_KEYS = frozenset(

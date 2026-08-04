@@ -30,16 +30,6 @@ class CaptureFailureReason(StrEnum):
     UNKNOWN_SETUP = "UNKNOWN_SETUP"
 
 
-def valid_failure_reason(value: object) -> bool:
-    if not isinstance(value, (str, CaptureFailureReason)):
-        return False
-    try:
-        CaptureFailureReason(value)
-    except ValueError:
-        return False
-    return True
-
-
 def os_failure_reason(exc: OSError) -> CaptureFailureReason:
     if exc.errno in {errno.EACCES, errno.EPERM}:
         return CaptureFailureReason.PERMISSION_DENIED

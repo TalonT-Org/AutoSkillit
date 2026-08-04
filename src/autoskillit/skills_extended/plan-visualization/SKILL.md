@@ -26,7 +26,18 @@ semantic_requirements:
   - role: delegated-worker
     model_class: sonnet
   sibling_skills:
-  - name: vis-lens-
+  - name: vis-lens-always-on
+  - name: vis-lens-antipattern
+  - name: vis-lens-caption-annot
+  - name: vis-lens-chart-select
+  - name: vis-lens-color-access
+  - name: vis-lens-figure-table
+  - name: vis-lens-methodology-norms
+  - name: vis-lens-multi-compare
+  - name: vis-lens-reproducibility
+  - name: vis-lens-story-arc
+  - name: vis-lens-temporal
+  - name: vis-lens-uncertainty
 ---
 
 # Plan Visualization Skill

@@ -10,7 +10,19 @@ description: Internal bootstrap document injected by open_kitchen into every orc
 semantic_version: 1
 semantic_requirements:
   sibling_skills:
-  - name: arch-lens-
+  - name: arch-lens-c4-container
+  - name: arch-lens-concurrency
+  - name: arch-lens-data-lineage
+  - name: arch-lens-deployment
+  - name: arch-lens-development
+  - name: arch-lens-error-resilience
+  - name: arch-lens-module-dependency
+  - name: arch-lens-operational
+  - name: arch-lens-process-flow
+  - name: arch-lens-repository-access
+  - name: arch-lens-scenarios
+  - name: arch-lens-security
+  - name: arch-lens-state-lifecycle
   - name: build-execution-map
   - name: implement-worktree-no-merge
   - name: retry-worktree

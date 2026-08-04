@@ -17,7 +17,24 @@ hooks:
 semantic_version: 1
 semantic_requirements:
   sibling_skills:
-  - name: exp-lens-
+  - name: exp-lens-benchmark-representativeness
+  - name: exp-lens-causal-assumptions
+  - name: exp-lens-comparator-construction
+  - name: exp-lens-error-budget
+  - name: exp-lens-estimand-clarity
+  - name: exp-lens-exploratory-confirmatory
+  - name: exp-lens-fair-comparison
+  - name: exp-lens-governance-risk
+  - name: exp-lens-iterative-learning
+  - name: exp-lens-measurement-validity
+  - name: exp-lens-pipeline-integrity
+  - name: exp-lens-randomization-blocking
+  - name: exp-lens-reproducibility-artifacts
+  - name: exp-lens-sensitivity-robustness
+  - name: exp-lens-severity-testing
+  - name: exp-lens-unit-interference
+  - name: exp-lens-validity-threats
+  - name: exp-lens-variance-stability
   - name: make-arch-diag
   - name: mermaid
   - name: verify-diag

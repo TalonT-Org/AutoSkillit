@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeGuard
 
 __all__ = [
     "GitHubReviewAttempt",
@@ -20,10 +20,12 @@ __all__ = [
     "ReviewOperationState",
     "ReviewReconciliationResult",
     "ReviewResponseClass",
+    "is_final_github_review_state",
     "is_valid_github_review_head_sha",
     "is_valid_github_review_logical_iteration",
     "is_valid_github_review_operation_key",
     "is_valid_github_review_repository",
+    "review_receipt_validation_error",
 ]
 
 _HEAD_SHA_RE = re.compile(r"[0-9a-f]{40}")
@@ -94,6 +96,14 @@ class ReviewFindingDispositionKind(StrEnum):
     OMITTED_INVALID = "OMITTED_INVALID"
 
 
+def is_final_github_review_state(value: object) -> bool:
+    """Return whether a wire value represents a successfully finalized review."""
+    return isinstance(value, str) and value in {
+        ReviewOperationState.SUCCEEDED.value,
+        ReviewOperationState.RECONCILED.value,
+    }
+
+
 @dataclass(frozen=True, slots=True)
 class GitHubReviewComment:
     path: str
@@ -155,6 +165,19 @@ class GitHubReviewFindingDisposition:
     remote_comment_id: int | None = None
     reason: str | None = None
 
+    @classmethod
+    def from_wire(cls, item: object) -> GitHubReviewFindingDisposition:
+        """Decode one finding disposition from its durable wire representation."""
+        if not isinstance(item, Mapping):
+            raise TypeError("finding disposition must be an object")
+        return cls(
+            original_index=_required_int(item, "original_index"),
+            kind=ReviewFindingDispositionKind(_required_str(item, "kind")),
+            canonical_index=_optional_int(item, "canonical_index"),
+            remote_comment_id=_optional_int(item, "remote_comment_id"),
+            reason=_optional_str_or_none(item, "reason"),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class GitHubReviewReceipt:
@@ -179,6 +202,41 @@ class GitHubReviewReceipt:
     created_at: float
     updated_at: float
     final_attempt_digest: str | None = None
+
+    @classmethod
+    def from_wire(cls, item: Mapping[str, object]) -> GitHubReviewReceipt:
+        """Decode the complete durable receipt wire representation."""
+        raw_dispositions = item["finding_dispositions"]
+        if not isinstance(raw_dispositions, list):
+            raise TypeError("finding_dispositions must be a list")
+        return cls(
+            schema_version=_required_int(item, "schema_version"),
+            operation_key=_required_str(item, "operation_key"),
+            repository=_required_str(item, "repository"),
+            pr_number=_required_int(item, "pr_number"),
+            head_sha=_required_str(item, "head_sha"),
+            logical_iteration=_required_str(item, "logical_iteration"),
+            requested_event=_required_str(item, "requested_event"),
+            effective_event=_required_str(item, "effective_event"),
+            requested_body_digest=_required_str(item, "requested_body_digest"),
+            effective_body_digest=_required_str(item, "effective_body_digest"),
+            canonical_finding_digest=_required_str(item, "canonical_finding_digest"),
+            state=ReviewOperationState(_required_str(item, "state")),
+            response_class=ReviewResponseClass(_required_str(item, "response_class")),
+            review_id=_optional_int(item, "review_id"),
+            comment_ids=_required_int_tuple(item, "comment_ids"),
+            canonical_finding_count=_required_int(item, "canonical_finding_count"),
+            reconciliation_result=ReviewReconciliationResult(
+                _required_str(item, "reconciliation_result")
+            ),
+            finding_dispositions=tuple(
+                GitHubReviewFindingDisposition.from_wire(disposition)
+                for disposition in raw_dispositions
+            ),
+            created_at=_required_float(item, "created_at"),
+            updated_at=_required_float(item, "updated_at"),
+            final_attempt_digest=_optional_str_or_none(item, "final_attempt_digest"),
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return _wire(asdict(self))
@@ -206,6 +264,110 @@ class GitHubReviewPostResult:
         return _wire(asdict(self))
 
 
+def review_receipt_validation_error(
+    payload: Mapping[str, object],
+    *,
+    operation_key: str,
+    repository: str,
+    pr_number: int,
+    head_sha: str,
+    logical_iteration: str,
+    post_state: str,
+) -> str | None:
+    """Return the stable failure code for an authoritative receipt effect."""
+    required_fields = {
+        "schema_version",
+        "operation_key",
+        "repository",
+        "pr_number",
+        "head_sha",
+        "logical_iteration",
+        "state",
+        "review_id",
+        "comment_ids",
+        "canonical_finding_count",
+        "finding_dispositions",
+        "reconciliation_result",
+    }
+    if not required_fields.issubset(payload):
+        return "incomplete_receipt"
+    if (
+        payload.get("schema_version") != 1
+        or isinstance(payload.get("schema_version"), bool)
+        or payload.get("operation_key") != operation_key
+        or payload.get("repository") != repository
+        or payload.get("pr_number") != pr_number
+        or payload.get("head_sha") != head_sha
+        or payload.get("logical_iteration") != logical_iteration
+        or payload.get("state") != post_state
+        or not is_final_github_review_state(payload.get("state"))
+        or payload.get("reconciliation_result")
+        not in {
+            ReviewReconciliationResult.NOT_NEEDED.value,
+            ReviewReconciliationResult.MATCHED.value,
+            ReviewReconciliationResult.ENRICHED.value,
+        }
+        or payload.get("dry_run", False) is not False
+        or not _is_positive_int(payload.get("review_id"))
+    ):
+        return "receipt_identity_mismatch"
+    comment_ids = payload.get("comment_ids")
+    dispositions = payload.get("finding_dispositions")
+    count = payload.get("canonical_finding_count")
+    if (
+        not isinstance(comment_ids, list)
+        or any(not _is_positive_int(value) for value in comment_ids)
+        or len(set(comment_ids)) != len(comment_ids)
+        or not isinstance(count, int)
+        or isinstance(count, bool)
+        or count < 0
+        or not isinstance(dispositions, list)
+        or len(dispositions) != count
+    ):
+        return "incomplete_finding_accounting"
+
+    indexes: set[int] = set()
+    disposition_remote_ids: set[int] = set()
+    remote_kinds = {
+        ReviewFindingDispositionKind.POSTED.value,
+        ReviewFindingDispositionKind.ALREADY_PRESENT.value,
+    }
+    for disposition in dispositions:
+        if not isinstance(disposition, Mapping):
+            return "incomplete_finding_accounting"
+        original_index = disposition.get("original_index")
+        kind = disposition.get("kind")
+        if (
+            not isinstance(original_index, int)
+            or isinstance(original_index, bool)
+            or original_index < 0
+            or original_index >= count
+            or original_index in indexes
+            or not isinstance(kind, str)
+            or kind not in remote_kinds | {ReviewFindingDispositionKind.OMITTED_INVALID.value}
+        ):
+            return "incomplete_finding_accounting"
+        indexes.add(original_index)
+        remote_comment_id = disposition.get("remote_comment_id")
+        if kind in remote_kinds:
+            if (
+                not _is_positive_int(remote_comment_id)
+                or remote_comment_id in disposition_remote_ids
+            ):
+                return "incomplete_finding_accounting"
+            disposition_remote_ids.add(remote_comment_id)
+        elif (
+            remote_comment_id is not None
+            or not isinstance(disposition.get("reason"), str)
+            or not str(disposition["reason"]).strip()
+        ):
+            return "incomplete_finding_accounting"
+
+    if indexes != set(range(count)) or disposition_remote_ids != set(comment_ids):
+        return "incomplete_finding_accounting"
+    return None
+
+
 def _wire(value: Any) -> Any:
     if isinstance(value, StrEnum):
         return value.value
@@ -225,6 +387,33 @@ def _required_int(item: Mapping[str, object], key: str) -> int:
     return value
 
 
+def _is_positive_int(value: object) -> TypeGuard[int]:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _optional_int(item: Mapping[str, object], key: str) -> int | None:
+    value = item.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError(f"{key} must be an integer or null")
+    return value
+
+
+def _required_float(item: Mapping[str, object], key: str) -> float:
+    value = item[key]
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        raise TypeError(f"{key} must be numeric")
+    return float(value)
+
+
+def _required_int_tuple(item: Mapping[str, object], key: str) -> tuple[int, ...]:
+    value = item[key]
+    if not isinstance(value, list):
+        raise TypeError(f"{key} must be a list")
+    return tuple(_required_int({key: entry}, key) for entry in value)
+
+
 def _required_str(item: Mapping[str, object], key: str) -> str:
     value = item[key]
     if not isinstance(value, str):
@@ -236,4 +425,11 @@ def _optional_str(item: Mapping[str, object], key: str, *, default: str) -> str:
     value = item.get(key, default)
     if not isinstance(value, str):
         raise TypeError(f"{key} must be a string")
+    return value
+
+
+def _optional_str_or_none(item: Mapping[str, object], key: str) -> str | None:
+    value = item.get(key)
+    if value is not None and not isinstance(value, str):
+        raise TypeError(f"{key} must be a string or null")
     return value

@@ -12,18 +12,17 @@ from typing import Any, TypeGuard
 
 from autoskillit.core import (
     get_logger,
+    is_final_github_review_state,
     is_valid_github_review_head_sha,
     is_valid_github_review_logical_iteration,
     is_valid_github_review_operation_key,
     is_valid_github_review_repository,
+    review_receipt_validation_error,
 )
 
 logger = get_logger(__name__)
 
 _REVIEW_RECEIPT_MAX_BYTES = 1_048_576
-_FINAL_REVIEW_STATES = frozenset({"SUCCEEDED", "RECONCILED"})
-_FINAL_RECONCILIATION_RESULTS = frozenset({"NOT_NEEDED", "MATCHED", "ENRICHED"})
-_REMOTE_FINDING_KINDS = frozenset({"POSTED", "ALREADY_PRESENT"})
 
 
 def annotate_pr_diff(
@@ -415,57 +414,6 @@ def _is_positive_int(value: object) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
-def _valid_finding_partition(
-    payload: dict[str, Any],
-    *,
-    comment_ids: list[int],
-) -> bool:
-    count = payload.get("canonical_finding_count")
-    dispositions = payload.get("finding_dispositions")
-    if (
-        not isinstance(count, int)
-        or isinstance(count, bool)
-        or count < 0
-        or not isinstance(dispositions, list)
-        or len(dispositions) != count
-    ):
-        return False
-
-    indexes: set[int] = set()
-    disposition_remote_ids: set[int] = set()
-    for disposition in dispositions:
-        if not isinstance(disposition, dict):
-            return False
-        original_index = disposition.get("original_index")
-        kind = disposition.get("kind")
-        if (
-            not isinstance(original_index, int)
-            or isinstance(original_index, bool)
-            or original_index < 0
-            or original_index >= count
-            or original_index in indexes
-            or kind not in _REMOTE_FINDING_KINDS | {"OMITTED_INVALID"}
-        ):
-            return False
-        indexes.add(original_index)
-        remote_comment_id = disposition.get("remote_comment_id")
-        if kind in _REMOTE_FINDING_KINDS:
-            if (
-                not _is_positive_int(remote_comment_id)
-                or remote_comment_id in disposition_remote_ids
-            ):
-                return False
-            disposition_remote_ids.add(remote_comment_id)
-        elif (
-            remote_comment_id is not None
-            or not isinstance(disposition.get("reason"), str)
-            or not disposition["reason"].strip()
-        ):
-            return False
-
-    return indexes == set(range(count)) and disposition_remote_ids == set(comment_ids)
-
-
 def check_review_posted(
     *,
     cwd: str,
@@ -489,7 +437,7 @@ def check_review_posted(
         or not is_valid_github_review_head_sha(head_sha)
         or not is_valid_github_review_logical_iteration(logical_iteration)
         or not is_valid_github_review_operation_key(operation_key)
-        or post_state not in _FINAL_REVIEW_STATES
+        or not is_final_github_review_state(post_state)
     ):
         return _review_check_failed("invalid_expected_identity")
 
@@ -514,46 +462,17 @@ def check_review_posted(
     if payload is None:
         return _review_check_failed("invalid_receipt")
 
-    required_fields = {
-        "schema_version",
-        "operation_key",
-        "repository",
-        "pr_number",
-        "head_sha",
-        "logical_iteration",
-        "state",
-        "review_id",
-        "comment_ids",
-        "canonical_finding_count",
-        "finding_dispositions",
-        "reconciliation_result",
-    }
-    if not required_fields.issubset(payload):
-        return _review_check_failed("incomplete_receipt")
-    if (
-        payload.get("schema_version") != 1
-        or isinstance(payload.get("schema_version"), bool)
-        or payload.get("operation_key") != operation_key
-        or payload.get("repository") != repository
-        or payload.get("pr_number") != pr_number
-        or payload.get("head_sha") != head_sha
-        or payload.get("logical_iteration") != logical_iteration
-        or payload.get("state") != post_state
-        or payload.get("state") not in _FINAL_REVIEW_STATES
-        or payload.get("reconciliation_result") not in _FINAL_RECONCILIATION_RESULTS
-        or payload.get("dry_run", False) is not False
-        or not _is_positive_int(payload.get("review_id"))
-    ):
-        return _review_check_failed("receipt_identity_mismatch")
-
-    comment_ids = payload.get("comment_ids")
-    if (
-        not isinstance(comment_ids, list)
-        or any(not _is_positive_int(value) for value in comment_ids)
-        or len(set(comment_ids)) != len(comment_ids)
-        or not _valid_finding_partition(payload, comment_ids=comment_ids)
-    ):
-        return _review_check_failed("incomplete_finding_accounting")
+    validation_error = review_receipt_validation_error(
+        payload,
+        operation_key=operation_key,
+        repository=repository,
+        pr_number=pr_number,
+        head_sha=head_sha,
+        logical_iteration=logical_iteration,
+        post_state=post_state,
+    )
+    if validation_error is not None:
+        return _review_check_failed(validation_error)
     return {"reviews_posted": "true", "sentinel": ""}
 
 

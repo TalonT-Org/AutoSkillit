@@ -26,10 +26,12 @@ from autoskillit.core import (
     ReviewOperationState,
     ReviewReconciliationResult,
     ReviewResponseClass,
+    is_final_github_review_state,
     is_valid_github_review_head_sha,
     is_valid_github_review_logical_iteration,
     is_valid_github_review_operation_key,
     is_valid_github_review_repository,
+    review_receipt_validation_error,
 )
 from autoskillit.core.types import _type_github_review
 
@@ -56,10 +58,12 @@ _PUBLIC_NAMES = {
     "ReviewResponseClass",
     "ReviewReconciliationResult",
     "ReviewFindingDispositionKind",
+    "is_final_github_review_state",
     "is_valid_github_review_head_sha",
     "is_valid_github_review_logical_iteration",
     "is_valid_github_review_operation_key",
     "is_valid_github_review_repository",
+    "review_receipt_validation_error",
 }
 
 
@@ -98,6 +102,42 @@ def test_review_identity_validators_share_canonical_wire_rules(
     assert validator(valid) is True
     assert validator(invalid) is False
     assert validator(None) is False
+
+
+def test_receipt_effect_validation_owns_final_state_and_finding_partition() -> None:
+    payload: dict[str, object] = {
+        "schema_version": 1,
+        "operation_key": "f" * 64,
+        "repository": "octo/example",
+        "pr_number": 42,
+        "head_sha": "a" * 40,
+        "logical_iteration": "review-pr:3",
+        "state": "SUCCEEDED",
+        "review_id": 700,
+        "comment_ids": [900],
+        "canonical_finding_count": 1,
+        "finding_dispositions": [
+            {"original_index": 0, "kind": "POSTED", "remote_comment_id": 900}
+        ],
+        "reconciliation_result": "NOT_NEEDED",
+    }
+
+    def validate() -> str | None:
+        return review_receipt_validation_error(
+            payload,
+            operation_key="f" * 64,
+            repository="octo/example",
+            pr_number=42,
+            head_sha="a" * 40,
+            logical_iteration="review-pr:3",
+            post_state="SUCCEEDED",
+        )
+
+    assert is_final_github_review_state("SUCCEEDED") is True
+    assert validate() is None
+
+    payload["finding_dispositions"] = []
+    assert validate() == "incomplete_finding_accounting"
 
 
 def test_contract_module_exports_exact_public_surface() -> None:

@@ -17,22 +17,20 @@ from typing import Any
 from autoskillit.core import (
     GitHubReviewFindingDisposition,
     GitHubReviewReceipt,
-    ReviewFindingDispositionKind,
     ReviewOperationState,
-    ReviewReconciliationResult,
     ReviewResponseClass,
     fsync_directory,
     private_file_identity,
     private_sidecar_issue,
     publish_private_file,
     reconcile_initialization_links,
+    review_receipt_validation_error,
     unlink_sqlite_initialization_artifacts,
 )
 
 _SCHEMA_VERSION = 1
 _DIRECTORY_MODE = 0o700
 _DATABASE_MODE = 0o600
-_FINAL_STATES = frozenset({ReviewOperationState.SUCCEEDED, ReviewOperationState.RECONCILED})
 _SCHEMA = """
 CREATE TABLE metadata (
     key TEXT PRIMARY KEY,
@@ -540,19 +538,17 @@ class GitHubReviewLedger:
         return tuple(_attempt_from_row(operation_key, int(row[0]), row[1:]) for row in rows)
 
     def save_receipt(self, receipt: GitHubReviewReceipt) -> None:
-        if receipt.state not in _FINAL_STATES:
-            raise ValueError("only final-success review receipts may be persisted")
-        dispositions = receipt.finding_dispositions
-        if (
-            len(dispositions) != receipt.canonical_finding_count
-            or len({item.original_index for item in dispositions}) != len(dispositions)
-            or any(
-                item.remote_comment_id is None
-                for item in dispositions
-                if item.kind is ReviewFindingDispositionKind.POSTED
-            )
-        ):
-            raise ValueError("review receipt finding accounting is incomplete")
+        validation_error = review_receipt_validation_error(
+            receipt.to_dict(),
+            operation_key=receipt.operation_key,
+            repository=receipt.repository,
+            pr_number=receipt.pr_number,
+            head_sha=receipt.head_sha,
+            logical_iteration=receipt.logical_iteration,
+            post_state=receipt.state.value,
+        )
+        if validation_error is not None:
+            raise ValueError(f"review receipt is invalid: {validation_error}")
         wire = json.dumps(
             receipt.to_dict(),
             sort_keys=True,
@@ -595,7 +591,7 @@ class GitHubReviewLedger:
             ).fetchone()
         if row is None:
             return None
-        return _receipt_from_wire(json.loads(bytes(row[0])))
+        return GitHubReviewReceipt.from_wire(json.loads(bytes(row[0])))
 
     def rate_scope_id(self, *, credential: str, api_origin: str) -> str:
         self.initialize()
@@ -847,6 +843,12 @@ def _attempt_from_row(
     )
 
 
+def _dispositions_from_wire(data: object) -> tuple[GitHubReviewFindingDisposition, ...]:
+    if not isinstance(data, list) or any(not isinstance(item, dict) for item in data):
+        raise TypeError("persisted finding dispositions must be a list of objects")
+    return tuple(GitHubReviewFindingDisposition.from_wire(item) for item in data)
+
+
 def _dispositions_json(
     dispositions: tuple[GitHubReviewFindingDisposition, ...],
 ) -> bytes:
@@ -864,49 +866,3 @@ def _dispositions_json(
         sort_keys=True,
         separators=(",", ":"),
     ).encode()
-
-
-def _dispositions_from_wire(
-    data: list[dict[str, Any]],
-) -> tuple[GitHubReviewFindingDisposition, ...]:
-    return tuple(
-        GitHubReviewFindingDisposition(
-            original_index=int(item["original_index"]),
-            kind=ReviewFindingDispositionKind(item["kind"]),
-            canonical_index=(
-                None if item.get("canonical_index") is None else int(item["canonical_index"])
-            ),
-            remote_comment_id=(
-                None if item.get("remote_comment_id") is None else int(item["remote_comment_id"])
-            ),
-            reason=item.get("reason"),
-        )
-        for item in data
-    )
-
-
-def _receipt_from_wire(data: dict[str, Any]) -> GitHubReviewReceipt:
-    dispositions = _dispositions_from_wire(data["finding_dispositions"])
-    return GitHubReviewReceipt(
-        schema_version=int(data["schema_version"]),
-        operation_key=str(data["operation_key"]),
-        repository=str(data["repository"]),
-        pr_number=int(data["pr_number"]),
-        head_sha=str(data["head_sha"]),
-        logical_iteration=str(data["logical_iteration"]),
-        requested_event=str(data["requested_event"]),
-        effective_event=str(data["effective_event"]),
-        requested_body_digest=str(data["requested_body_digest"]),
-        effective_body_digest=str(data["effective_body_digest"]),
-        canonical_finding_digest=str(data["canonical_finding_digest"]),
-        state=ReviewOperationState(data["state"]),
-        response_class=ReviewResponseClass(data["response_class"]),
-        review_id=None if data.get("review_id") is None else int(data["review_id"]),
-        comment_ids=tuple(int(item) for item in data.get("comment_ids", [])),
-        canonical_finding_count=int(data["canonical_finding_count"]),
-        reconciliation_result=ReviewReconciliationResult(data["reconciliation_result"]),
-        finding_dispositions=dispositions,
-        created_at=float(data["created_at"]),
-        updated_at=float(data["updated_at"]),
-        final_attempt_digest=data.get("final_attempt_digest"),
-    )

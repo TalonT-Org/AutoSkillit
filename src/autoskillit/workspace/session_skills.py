@@ -161,7 +161,7 @@ class _InitializedSession:
 
 @dataclass(frozen=True, slots=True)
 class SkillUnavailableMetadata:
-    """Deterministic reason one SESSION skill is absent for a selected backend."""
+    """Deterministic SESSION omission with supplemental backend detail."""
 
     skill: str
     backend: str
@@ -204,18 +204,16 @@ def compile_session_skill_catalog(
             supported.append(cast(SkillCatalogEntry, skill))
             continue
         adaptation = backend.adapt_skill_semantics(plan)
-        if adaptation.unsupported_operation is not None:
-            expected = adaptation.unsupported(
-                backend=backend.name,
-                operation=adaptation.unsupported_operation,
-            )
-            if adaptation.diagnostic != expected.diagnostic:
-                raise SkillContractError("unsupported semantic diagnostic is not canonical")
+        unsupported_operation = adaptation.validate_refusal_for(
+            plan,
+            backend=backend.name,
+        )
+        if unsupported_operation is not None:
             unavailable.append(
                 SkillUnavailableMetadata(
                     skill=skill.name,
                     backend=backend.name,
-                    operation=adaptation.unsupported_operation,
+                    operation=unsupported_operation,
                     diagnostic=adaptation.diagnostic or "unsupported skill semantics",
                 )
             )

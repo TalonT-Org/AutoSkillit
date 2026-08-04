@@ -9,10 +9,10 @@ from enum import StrEnum
 from hashlib import sha256
 from types import MappingProxyType
 
-from ._type_backend import SKILL_MODEL_CLASSES, SKILL_REASONING_EFFORTS
 from ._type_exceptions import SkillContractError
 
 __all__ = [
+    "SKILL_MODEL_CLASS_REGISTRY",
     "SKILL_SEMANTIC_SCHEMA_VERSION",
     "ChildModelPolicySpec",
     "ChildSpawnSpec",
@@ -23,10 +23,34 @@ __all__ = [
     "LogicalRoleSpec",
     "SiblingSkillSpec",
     "SkillSemanticAdaptationResult",
+    "SkillModelClassDef",
     "SkillSemanticOperation",
     "SkillSemanticPlan",
 ]
 
+
+@dataclass(frozen=True, slots=True)
+class SkillModelClassDef:
+    """Static definition of one backend-neutral logical model class."""
+
+    description: str
+
+
+SKILL_MODEL_CLASS_REGISTRY: Mapping[str, SkillModelClassDef] = MappingProxyType(
+    {
+        "haiku": SkillModelClassDef(
+            description="Lightweight logical class for focused delegated work",
+        ),
+        "sonnet": SkillModelClassDef(
+            description="Balanced logical class for general delegated work",
+        ),
+        "opus": SkillModelClassDef(
+            description="Highest-capability logical class for demanding delegated work",
+        ),
+    }
+)
+
+SKILL_REASONING_EFFORTS: frozenset[str] = frozenset({"medium", "high", "xhigh"})
 
 SKILL_SEMANTIC_SCHEMA_VERSION = 1
 
@@ -98,10 +122,10 @@ class ChildModelPolicySpec:
 
     def __post_init__(self) -> None:
         _require_nonempty(self.role, "child model policy role")
-        if self.model_class is not None and self.model_class not in SKILL_MODEL_CLASSES:
+        if self.model_class is not None and self.model_class not in SKILL_MODEL_CLASS_REGISTRY:
             raise SkillContractError(
                 f"unknown semantic model class {self.model_class!r}; "
-                f"expected one of {sorted(SKILL_MODEL_CLASSES)}"
+                f"expected one of {sorted(SKILL_MODEL_CLASS_REGISTRY)}"
             )
         if (
             self.reasoning_effort is not None
@@ -329,15 +353,29 @@ class SkillSemanticAdaptationResult:
             ).encode()
         ).hexdigest()
 
+    def validate_refusal_for(
+        self,
+        plan: SkillSemanticPlan,
+        *,
+        backend: str,
+    ) -> SkillSemanticOperation | None:
+        """Return a refusal's structured authority after validating it against the plan."""
+        operation = self.unsupported_operation
+        if operation is None:
+            if self.diagnostic is not None:
+                raise SkillContractError("supported semantic adaptation cannot carry a diagnostic")
+            return None
+        if operation not in plan.operations:
+            raise SkillContractError(
+                f"backend {backend!r} reported unsupported semantic operation "
+                f"{operation.value!r} not declared by the semantic plan"
+            )
+        return operation
+
     def validate_for(self, plan: SkillSemanticPlan, *, backend: str) -> None:
         """Fail closed unless every declared semantic field has one observable adaptation."""
-        if self.unsupported_operation is not None:
-            expected = self.unsupported(backend=backend, operation=self.unsupported_operation)
-            if self.diagnostic != expected.diagnostic:
-                raise SkillContractError("unsupported semantic diagnostic is not canonical")
+        if self.validate_refusal_for(plan, backend=backend) is not None:
             raise SkillContractError(self.diagnostic or "unsupported skill semantics")
-        if self.diagnostic is not None:
-            raise SkillContractError("supported semantic adaptation cannot carry a diagnostic")
         logical_names = {role.name for role in plan.logical_roles}
         if set(self.logical_role_mapping) != logical_names:
             raise SkillContractError("semantic adaptation logical role mapping is incomplete")

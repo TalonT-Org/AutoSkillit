@@ -457,6 +457,7 @@ from .types import SKILL_CAPABILITY_REGISTRY as SKILL_CAPABILITY_REGISTRY
 from .types import SKILL_COMMAND_DISPLAY_MAX as SKILL_COMMAND_DISPLAY_MAX
 from .types import SKILL_COMMAND_PREFIX as SKILL_COMMAND_PREFIX
 from .types import SKILL_FILE_ADVISORY_MAP as SKILL_FILE_ADVISORY_MAP
+from .types import SKILL_MODEL_CLASS_REGISTRY as SKILL_MODEL_CLASS_REGISTRY
 from .types import SKILL_MODEL_CLASSES as SKILL_MODEL_CLASSES
 from .types import SKILL_PROJECTION_VERSION as SKILL_PROJECTION_VERSION
 from .types import SKILL_REASONING_EFFORTS as SKILL_REASONING_EFFORTS
@@ -901,6 +902,7 @@ from .types import SkillExecutionRole as SkillExecutionRole
 from .types import SkillFamilyDef as SkillFamilyDef
 from .types import SkillFrontmatterAuthority as SkillFrontmatterAuthority
 from .types import SkillLister as SkillLister
+from .types import SkillModelClassDef as SkillModelClassDef
 from .types import SkillProjectionBinding as SkillProjectionBinding
 from .types import SkillProjectionContextAuthority as SkillProjectionContextAuthority
 from .types import SkillProjectionPreparation as SkillProjectionPreparation

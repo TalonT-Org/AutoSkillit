@@ -78,6 +78,29 @@ def test_semantic_operations_replace_lexical_routing_capabilities() -> None:
     } <= values
 
 
+def test_logical_model_class_registry_owns_portable_taxonomy_only() -> None:
+    from autoskillit.core import SKILL_MODEL_CLASS_REGISTRY, SkillModelClassDef
+
+    assert set(SKILL_MODEL_CLASS_REGISTRY) == {"haiku", "sonnet", "opus"}
+    assert set(SkillModelClassDef.__dataclass_fields__) == {"description"}
+    assert all(
+        isinstance(definition, SkillModelClassDef)
+        for definition in SKILL_MODEL_CLASS_REGISTRY.values()
+    )
+
+
+def test_every_backend_translates_every_registered_logical_model_class() -> None:
+    from autoskillit.core import (
+        CLAUDE_MODEL_ALIASES,
+        CODEX_MODEL_ALIASES,
+        SKILL_MODEL_CLASS_REGISTRY,
+    )
+
+    logical_classes = set(SKILL_MODEL_CLASS_REGISTRY)
+    assert set(CLAUDE_MODEL_ALIASES) == logical_classes
+    assert set(CODEX_MODEL_ALIASES) == logical_classes
+
+
 def test_every_capability_def_declares_exact_allowed_execution_roles() -> None:
     import ast
     import inspect

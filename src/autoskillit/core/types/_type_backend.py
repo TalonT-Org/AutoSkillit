@@ -18,6 +18,7 @@ from ._type_native_shell_capture import (
 from ._type_plugin_source import PluginLaunchBinding, normalize_inherited_fds
 from ._type_recipe_delivery import RecipeDeliveryBudgetDef
 from ._type_results import ValidatedAddDir
+from ._type_skill_semantics import SKILL_MODEL_CLASS_REGISTRY, SKILL_REASONING_EFFORTS
 
 __all__ = [
     "ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS",
@@ -256,14 +257,18 @@ CODEX_EFFORT_MAPPING: dict[str, str] = {
     "haiku": "medium",
 }
 
-# Portable skill semantics use the existing canonical alias keys as model
-# classes. Backend adapters remain the only authority that translates a class
+# Backend adapters remain the only authority that translates a logical class
 # to a physical model ID and effort setting.
-SKILL_MODEL_CLASSES: frozenset[str] = frozenset(CLAUDE_MODEL_ALIASES)
-assert SKILL_MODEL_CLASSES == frozenset(CODEX_MODEL_ALIASES), (
-    "backend model alias registries must expose the same semantic model classes"
+SKILL_MODEL_CLASSES: frozenset[str] = frozenset(SKILL_MODEL_CLASS_REGISTRY)
+assert SKILL_MODEL_CLASSES == frozenset(CLAUDE_MODEL_ALIASES), (
+    "Claude model aliases must cover every registered logical model class"
 )
-SKILL_REASONING_EFFORTS: frozenset[str] = frozenset(CODEX_EFFORT_MAPPING.values())
+assert SKILL_MODEL_CLASSES == frozenset(CODEX_MODEL_ALIASES), (
+    "Codex model aliases must cover every registered logical model class"
+)
+assert SKILL_REASONING_EFFORTS == frozenset(CODEX_EFFORT_MAPPING.values()), (
+    "Codex effort mappings must cover every registered semantic reasoning effort"
+)
 
 
 def _codex_unique_model_reverse(aliases: Mapping[str, str]) -> Mapping[str, str]:

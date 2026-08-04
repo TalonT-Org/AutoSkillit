@@ -71,6 +71,31 @@ def test_all_skill_sources_parse_the_same_semantic_plan(
     assert info.semantic_plan.operations == frozenset(SkillSemanticOperation)
 
 
+def test_child_model_policy_rejects_unregistered_logical_class(tmp_path: Path) -> None:
+    skill_md = tmp_path / "unknown-model-class" / "SKILL.md"
+    declarations = """semantic_version: 1
+semantic_requirements:
+  logical_roles:
+    - name: reviewer
+      purpose: review one independent concern
+  child_model_policies:
+    - role: reviewer
+      model_class: vendor-native-model
+"""
+    _write_skill(skill_md, declarations=declarations)
+
+    info = _skill_info_from_frontmatter(
+        "unknown-model-class",
+        SkillSource.PROJECT_LOCAL,
+        skill_md,
+    )
+
+    assert info.semantic_plan is None
+    assert info.invalid_reason is not None
+    assert "unknown semantic model class 'vendor-native-model'" in info.invalid_reason
+    assert "['haiku', 'opus', 'sonnet']" in info.invalid_reason
+
+
 @pytest.mark.parametrize(
     ("declarations", "offending", "replacement"),
     [

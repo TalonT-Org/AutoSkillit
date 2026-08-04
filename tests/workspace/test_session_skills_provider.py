@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -13,7 +14,10 @@ from autoskillit.core import (
     SESSION_ADD_DIR_SUBDIR,
     ClaudeDirectoryConventions,
     SessionSkillManager,
+    SkillContractError,
     SkillExecutionRole,
+    SkillSemanticAdaptationResult,
+    SkillSemanticOperation,
     SkillSource,
 )
 from autoskillit.core.io import load_yaml
@@ -25,9 +29,11 @@ from autoskillit.workspace import (
     SkillInfo,
     SkillProjectionContext,
     SkillsDirectoryProvider,
+    compile_session_skill_catalog,
     project_agent_skill_document,
     resolve_ephemeral_root,
 )
+from autoskillit.workspace.skills import _skill_info_from_frontmatter
 from tests.fakes import adapt_test_skill_semantics
 from tests.workspace._helpers import _CODEX_CAPABILITIES
 
@@ -76,6 +82,84 @@ def _codex_backend() -> MagicMock:
     backend.validate_session_layout.return_value = []
     backend.adapt_skill_semantics.side_effect = adapt_test_skill_semantics
     return backend
+
+
+def _child_spawn_skill(tmp_path: Path) -> SkillInfo:
+    skill_path = tmp_path / "semantic-skill" / "SKILL.md"
+    skill_path.parent.mkdir(parents=True)
+    skill_path.write_text(
+        "---\n"
+        "name: semantic-skill\n"
+        "description: semantic fixture\n"
+        "semantic_version: 1\n"
+        "semantic_requirements:\n"
+        "  logical_roles:\n"
+        "    - name: worker\n"
+        "      purpose: perform delegated work\n"
+        "  child_spawns:\n"
+        "    - role: worker\n"
+        "---\n"
+        "Delegate to the worker.\n",
+        encoding="utf-8",
+    )
+    return _skill_info_from_frontmatter(
+        "semantic-skill",
+        SkillSource.PROJECT_LOCAL,
+        skill_path,
+    )
+
+
+def _child_spawn_catalog(tmp_path: Path) -> EffectiveSkillCatalog:
+    skill = _child_spawn_skill(tmp_path)
+    return EffectiveSkillCatalog(
+        skills=(SkillCatalogEntry.from_skill_info(skill),),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+
+
+def test_session_catalog_uses_structured_operation_not_diagnostic_text_for_admission(
+    tmp_path: Path,
+) -> None:
+    catalog = _child_spawn_catalog(tmp_path)
+    diagnostic = "This backend cannot delegate child work in the current environment."
+    backend = SimpleNamespace(
+        name="limited",
+        adapt_skill_semantics=lambda _plan: SkillSemanticAdaptationResult(
+            unsupported_operation=SkillSemanticOperation.CHILD_SPAWN,
+            diagnostic=diagnostic,
+        ),
+    )
+
+    compilation = compile_session_skill_catalog(catalog, backend)
+
+    assert compilation.catalog.skills == ()
+    assert compilation.unavailability_payload == {
+        "backend": "limited",
+        "unavailable": (
+            {
+                "skill": "semantic-skill",
+                "backend": "limited",
+                "operation": "child_spawn",
+                "diagnostic": diagnostic,
+            },
+        ),
+    }
+
+
+def test_session_catalog_rejects_unsupported_operation_absent_from_skill_plan(
+    tmp_path: Path,
+) -> None:
+    catalog = _child_spawn_catalog(tmp_path)
+    backend = SimpleNamespace(
+        name="limited",
+        adapt_skill_semantics=lambda _plan: SkillSemanticAdaptationResult.unsupported(
+            backend="limited",
+            operation=SkillSemanticOperation.GIT_METADATA_WRITE,
+        ),
+    )
+
+    with pytest.raises(SkillContractError, match="not declared by the semantic plan"):
+        compile_session_skill_catalog(catalog, backend)
 
 
 def test_resolve_ephemeral_root_returns_writable_dir(

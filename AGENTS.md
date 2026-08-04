@@ -96,7 +96,7 @@ generic_automation_mcp/
 | `core/` | IL-0 | Foundation — types/, runtime/, paths, IO, feature flags (zero autoskillit imports) |
 | `config/` | IL-1 | `AutomationConfig` + Dynaconf loader + 29 leaf dataclasses |
 | `pipeline/` | IL-1 | Pipeline state — `ToolContext` DI, gate, audit log, telemetry |
-| `execution/` | IL-1 | Headless sessions (headless/, headless/_managed/, process/, merge_queue/, session/), backends/, CI/GitHub |
+| `execution/` | IL-1 | Headless sessions (headless/, headless/_managed/, github_review/, process/, merge_queue/, session/), backends/, CI/GitHub |
 | `workspace/` | IL-1 | Clone management, worktrees, skill resolution |
 | `workspace/_projected_artifact/` | IL-1 | Projected plugin publication, exact validation, and lease ownership |
 | `planner/` | IL-1 | Progressive resolution planner — phases, assignments, WPs, validation |

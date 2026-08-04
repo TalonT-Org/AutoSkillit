@@ -32,6 +32,7 @@ from autoskillit.core import (
     SubprocessRunner,
     WriteBehaviorSpec,
     get_logger,
+    github_review_ledger_path,
     is_feature_enabled,
     resolve_project_dir,
     resolve_temp_dir,
@@ -46,12 +47,16 @@ from autoskillit.execution import (
     DefaultCIWatcher,
     DefaultDatabaseReader,
     DefaultGitHubFetcher,
+    DefaultGitHubReviewGateway,
+    DefaultGitHubReviewPoster,
     DefaultHeadlessExecutor,
     DefaultManagedHeadlessSessionLineageStore,
     DefaultMergeQueueWatcher,
     DefaultSkillSessionContractStore,
     DefaultSubprocessRunner,
     DefaultTestRunner,
+    GitHubReviewLedger,
+    GitHubReviewMutationCoordinator,
     RecordingSubprocessRunner,
     build_replay_runner,
     get_backend,
@@ -355,6 +360,17 @@ def make_context(
     )
     audit_authority_materializer = DefaultAuditAuthorityMaterializer(audit_admission_ledger)
     committed_disposition_resolver = DefaultCommittedDispositionResolver(audit_admission_ledger)
+    github_review_ledger = GitHubReviewLedger(github_review_ledger_path())
+    github_review_gateway = DefaultGitHubReviewGateway(
+        token_factory=token_factory,
+        api_log=github_api_log,
+    )
+    github_review_poster = DefaultGitHubReviewPoster(
+        ledger=github_review_ledger,
+        coordinator=GitHubReviewMutationCoordinator(ledger=github_review_ledger),
+        gateway=github_review_gateway,
+        review_comment_cap=config.github.review_comment_cap,
+    )
     ctx = ToolContext(
         config=config,
         audit=audit,
@@ -374,6 +390,7 @@ def make_context(
         workspace_mgr=DefaultWorkspaceManager(),
         clone_mgr=DefaultCloneManager(),
         github_client=DefaultGitHubFetcher(token=token_factory, tracker=github_api_log),
+        github_review_poster=github_review_poster,
         ci_watcher=DefaultCIWatcher(token=token_factory, tracker=github_api_log),
         merge_queue_watcher=DefaultMergeQueueWatcher(token=token_factory, tracker=github_api_log),
         github_api_log=github_api_log,

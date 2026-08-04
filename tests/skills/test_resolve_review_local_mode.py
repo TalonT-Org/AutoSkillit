@@ -104,22 +104,13 @@ def test_resolve_review_local_mode_skips_thread_resolution():
 
 
 def test_resolve_review_local_mode_skips_inline_replies():
-    """Assert SKILL.md contains instruction to skip posting inline reply comments
-    when mode=local."""
+    """Raw inline replies are disabled in local and GitHub modes."""
     text = _skill_text()
     step65_idx = text.find("### Step 6.5")
     assert step65_idx >= 0
     step65_section = text[step65_idx : step65_idx + 1500]
-    local_mode_idx = step65_section.lower().find("mode=local")
-    assert local_mode_idx >= 0, "Step 6.5 must have a mode=local section"
-    after_local = step65_section[local_mode_idx : local_mode_idx + 300]
-    assert any(
-        phrase in after_local.lower()
-        for phrase in ["skip", "do not post", "no github", "no inline"]
-    ), (
-        "resolve-review/SKILL.md Step 6.5 mode=local section must skip "
-        "posting inline reply comments"
-    )
+    assert "In both modes" in step65_section
+    assert "do not post raw inline replies" in step65_section.lower()
 
 
 def test_resolve_review_local_mode_still_runs_tests():
@@ -147,19 +138,17 @@ def test_resolve_review_github_mode_posts_deferred_observations():
     text = _skill_text()
     # Step 1.5 is where deferred observations are posted in github mode
     step15_idx = text.find("### Step 1.5")
+    step2_idx = text.find("### Step 2")
     assert step15_idx >= 0, "SKILL.md must have Step 1.5 for posting deferred observations"
-    step15_section = text[step15_idx : step15_idx + 2500]
+    assert step2_idx > step15_idx, "Step 2 must follow the deferred-observation step"
+    step15_section = text[step15_idx:step2_idx]
     assert "deferred_observations" in step15_section, (
         "resolve-review/SKILL.md Step 1.5 must handle posting accumulated "
         "deferred_observations_{pr_number}.json when mode=github"
     )
-    # Should post when file exists
-    assert any(
-        phrase in step15_section.lower()
-        for phrase in ["post", "check for", "if the file exists", "batch review"]
-    ), (
-        "resolve-review/SKILL.md Step 1.5 must post deferred observations as a batch "
-        "review when mode=github"
+    assert step15_section.count("post_pr_review") == 1, (
+        "resolve-review/SKILL.md Step 1.5 must publish all deferred observations "
+        "through exactly one post_pr_review call in mode=github"
     )
 
 
@@ -227,6 +216,24 @@ def test_resolve_review_local_mode_skip_github_api_fetches():
         "resolve-review/SKILL.md Step 2 mode=local section must skip GitHub API fetching "
         "and read from local_findings JSON instead"
     )
+
+
+def test_resolve_review_local_mode_does_not_publish_a_review():
+    """mode=local must preserve local findings without invoking publication."""
+    text = _skill_text()
+    local_idx = text.lower().find("mode=local")
+    assert local_idx >= 0
+    local_section = text[local_idx : local_idx + 2500]
+    assert "local_findings" in local_section
+    assert any(
+        phrase in local_section.lower()
+        for phrase in (
+            "do not post",
+            "skip github",
+            "no github api",
+            "skip publication",
+        )
+    ), "resolve-review mode=local must explicitly skip GitHub review publication"
 
 
 def test_resolve_review_local_mode_transforms_local_findings():
@@ -307,7 +314,7 @@ def test_resolve_review_step15_filters_info_before_posting():
     )
     assert has_severity_gate, (
         "Step 1.5 must filter out info-severity entries before building "
-        "the comments[] array for the POST /repos/{owner}/{repo}/pulls/{pr_number}/reviews call"
+        "the complete comments[] array passed to post_pr_review"
     )
 
 

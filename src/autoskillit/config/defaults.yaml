@@ -89,6 +89,8 @@ quota_guard:
 github:
   token: null
   default_repo: null
+  # Project safety limit for one structured review; not a GitHub API limit.
+  review_comment_cap: 50
   in_progress_label: "in-progress"
   staged_label: "staged"
   fail_label: "fail"

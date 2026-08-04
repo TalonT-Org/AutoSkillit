@@ -1,7 +1,7 @@
 """Behavioral guards for review-research-pr/SKILL.md.
 
 Tests enforce research lens coverage, inconclusive-results contract,
-verdict mechanics, and GitHub Reviews API posting requirements.
+verdict mechanics, and guarded review publication requirements.
 """
 
 from pathlib import Path
@@ -94,15 +94,15 @@ def test_review_research_pr_has_lnnn_markers_in_subagent_prompt() -> None:
     )
 
 
-def test_review_research_pr_uses_reviews_api() -> None:
-    """SKILL.md must prescribe the GitHub Reviews API for inline comment posting."""
-    import re
-
+def test_review_research_pr_uses_guarded_review_publication() -> None:
+    """SKILL.md must delegate its single GitHub review write to post_pr_review."""
     text = _text()
-    assert re.search(r"pulls/[^/\s]+/reviews", text), (
-        "review-research-pr/SKILL.md must prescribe the GitHub Reviews API "
-        "(/repos/{owner}/{repo}/pulls/{n}/reviews) for inline comment posting."
+    assert text.count("post_pr_review") == 1, (
+        "review-research-pr/SKILL.md must call post_pr_review exactly once with the "
+        "complete summary body and comments array"
     )
+    assert "body" in text
+    assert "comments" in text
 
 
 def test_data_scope_dimension_exists() -> None:

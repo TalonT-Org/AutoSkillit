@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, patch
+from pathlib import Path
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+from autoskillit.core.types import (
+    GitHubReviewComment,
+    GitHubReviewPostResult,
+    GitHubReviewRequest,
+    ReviewOperationState,
+    ReviewResponseClass,
+)
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_pr_ops import (
     _close_issues_sequentially,
@@ -14,9 +22,25 @@ from autoskillit.server.tools.tools_pr_ops import (
     _map_pr_view_reviews,
     bulk_close_issues,
     get_pr_reviews,
+    post_pr_review,
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+
+class _FakeReviewPoster:
+    def __init__(self, result: GitHubReviewPostResult | None = None) -> None:
+        self.result = result
+        self.requests: list[GitHubReviewRequest] = []
+        self.error: Exception | None = None
+
+    async def post(self, request: GitHubReviewRequest) -> GitHubReviewPostResult:
+        self.requests.append(request)
+        if self.error is not None:
+            raise self.error
+        assert self.result is not None
+        return self.result
+
 
 # ---------------------------------------------------------------------------
 # Pure helper functions
@@ -233,3 +257,264 @@ async def test_bulk_close_issues_partial_failure(
     assert 1 in result["closed"]
     assert 2 in result["failed"]
     assert 3 in result["closed"]
+
+
+def _successful_review_result(receipt_path: str) -> GitHubReviewPostResult:
+    return GitHubReviewPostResult(
+        operation_key="f" * 64,
+        head_sha="a" * 40,
+        state=ReviewOperationState.COMMITTED_PENDING_VERIFICATION,
+        response_class=ReviewResponseClass.SUCCESS,
+        review_id=901,
+        comment_ids=(902,),
+        planned_comment_count=1,
+        executed_mutation_count=1,
+        executed_comment_count=1,
+        receipt_path=Path(receipt_path),
+    )
+
+
+@pytest.mark.anyio
+async def test_post_pr_review_uses_injected_poster_with_exact_typed_request(
+    tool_ctx,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """The headless tool delegates through _get_ctx without opening the kitchen gate."""
+    receipt_path = str(tmp_path / ".autoskillit" / "temp" / "batch_review_response_7.json")
+    expected = _successful_review_result(receipt_path)
+    poster = _FakeReviewPoster(expected)
+    monkeypatch.setattr(tool_ctx, "github_review_poster", poster)
+    get_ctx = Mock(return_value=tool_ctx)
+    notify = AsyncMock()
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_pr_ops._get_ctx",
+        get_ctx,
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_pr_ops._notify",
+        notify,
+    )
+    fastmcp_ctx = Mock()
+    comments = [
+        {
+            "path": "src/example.py",
+            "body": "This branch is unreachable.",
+            "line": 11,
+            "side": "RIGHT",
+            "start_line": 9,
+            "start_side": "RIGHT",
+        }
+    ]
+
+    result = json.loads(
+        await post_pr_review(
+            cwd=str(tmp_path),
+            receipt_path=receipt_path,
+            repository="o/r",
+            pr_number=7,
+            head_sha="a" * 40,
+            logical_iteration="review-pr:3",
+            event="REQUEST_CHANGES",
+            body="One blocking finding.",
+            comments=comments,
+            dry_run=False,
+            ctx=fastmcp_ctx,
+        )
+    )
+
+    assert result == expected.to_dict()
+    get_ctx.assert_called_once_with()
+    assert len(poster.requests) == 1
+    request = poster.requests[0]
+    assert isinstance(request, GitHubReviewRequest)
+    assert request.cwd == str(tmp_path)
+    assert request.receipt_path == receipt_path
+    assert request.repository == "o/r"
+    assert request.pr_number == 7
+    assert request.head_sha == "a" * 40
+    assert request.logical_iteration == "review-pr:3"
+    assert request.event == "REQUEST_CHANGES"
+    assert request.body == "One blocking finding."
+    assert request.dry_run is False
+    assert isinstance(request.comments, tuple)
+    assert len(request.comments) == 1
+    comment = request.comments[0]
+    assert isinstance(comment, GitHubReviewComment)
+    assert comment.path == "src/example.py"
+    assert comment.body == "This branch is unreachable."
+    assert comment.line == 11
+    assert comment.side == "RIGHT"
+    assert comment.start_line == 9
+    assert comment.start_side == "RIGHT"
+    assert notify.await_count >= 1
+    assert all(call.args[0] is fastmcp_ctx for call in notify.await_args_list)
+    assert tool_ctx.gate.enabled is False
+
+
+@pytest.mark.anyio
+async def test_post_pr_review_dry_run_is_delegated_without_gate(
+    tool_ctx,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    receipt_path = str(tmp_path / ".autoskillit" / "temp" / "batch_review_response_7.json")
+    expected = GitHubReviewPostResult(
+        operation_key="f" * 64,
+        head_sha="a" * 40,
+        state=ReviewOperationState.DRY_RUN,
+        planned_comment_count=0,
+    )
+    poster = _FakeReviewPoster(expected)
+    monkeypatch.setattr(tool_ctx, "github_review_poster", poster)
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_pr_ops._get_ctx",
+        lambda: tool_ctx,
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_pr_ops._notify",
+        AsyncMock(),
+    )
+
+    result = json.loads(
+        await post_pr_review(
+            cwd=str(tmp_path),
+            receipt_path=receipt_path,
+            repository="o/r",
+            pr_number=7,
+            head_sha="a" * 40,
+            logical_iteration="review-pr:3",
+            event="COMMENT",
+            body="Preview",
+            comments=[],
+            dry_run=True,
+            ctx=Mock(),
+        )
+    )
+
+    assert result == expected.to_dict()
+    assert poster.requests[0].dry_run is True
+    assert poster.requests[0].comments == ()
+    assert tool_ctx.gate.enabled is False
+
+
+@pytest.mark.anyio
+async def test_post_pr_review_missing_poster_returns_structured_error(
+    tool_ctx,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setattr(tool_ctx, "github_review_poster", None)
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_pr_ops._get_ctx",
+        lambda: tool_ctx,
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_pr_ops._notify",
+        AsyncMock(),
+    )
+
+    result = json.loads(
+        await post_pr_review(
+            cwd=str(tmp_path),
+            receipt_path=str(tmp_path / ".autoskillit" / "temp" / "batch_review_response_7.json"),
+            repository="o/r",
+            pr_number=7,
+            head_sha="a" * 40,
+            logical_iteration="review-pr:1",
+            event="COMMENT",
+            body="",
+            comments=[],
+            dry_run=False,
+            ctx=Mock(),
+        )
+    )
+
+    assert "success" not in result
+    assert result["state"] == ReviewOperationState.AMBIGUOUS.value
+    assert result["response_class"] == ReviewResponseClass.SERVER_ERROR.value
+    assert "github_review_poster" in result["error"]
+
+
+@pytest.mark.anyio
+async def test_post_pr_review_never_raises_when_poster_fails(
+    tool_ctx,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    poster = _FakeReviewPoster()
+    poster.error = RuntimeError("poster exploded")
+    monkeypatch.setattr(tool_ctx, "github_review_poster", poster)
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_pr_ops._get_ctx",
+        lambda: tool_ctx,
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_pr_ops._notify",
+        AsyncMock(),
+    )
+
+    result = json.loads(
+        await post_pr_review(
+            cwd=str(tmp_path),
+            receipt_path=str(tmp_path / ".autoskillit" / "temp" / "batch_review_response_7.json"),
+            repository="o/r",
+            pr_number=7,
+            head_sha="a" * 40,
+            logical_iteration="review-pr:1",
+            event="COMMENT",
+            body="",
+            comments=[],
+            dry_run=False,
+            ctx=Mock(),
+        )
+    )
+
+    assert "success" not in result
+    assert result["state"] == ReviewOperationState.AMBIGUOUS.value
+    assert result["response_class"] == ReviewResponseClass.SERVER_ERROR.value
+    assert result["error"] == "RuntimeError: poster exploded"
+
+
+@pytest.mark.anyio
+async def test_post_pr_review_never_raises_on_invalid_comment_shape(
+    tool_ctx,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    poster = _FakeReviewPoster(
+        _successful_review_result(
+            str(tmp_path / ".autoskillit" / "temp" / "batch_review_response_7.json")
+        )
+    )
+    monkeypatch.setattr(tool_ctx, "github_review_poster", poster)
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_pr_ops._get_ctx",
+        lambda: tool_ctx,
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_pr_ops._notify",
+        AsyncMock(),
+    )
+
+    result = json.loads(
+        await post_pr_review(
+            cwd=str(tmp_path),
+            receipt_path=str(tmp_path / ".autoskillit" / "temp" / "batch_review_response_7.json"),
+            repository="o/r",
+            pr_number=7,
+            head_sha="a" * 40,
+            logical_iteration="review-pr:1",
+            event="COMMENT",
+            body="",
+            comments=[{"path": "src/example.py"}],
+            dry_run=False,
+            ctx=Mock(),
+        )
+    )
+
+    assert "success" not in result
+    assert result["state"] == ReviewOperationState.TERMINAL.value
+    assert result["response_class"] == ReviewResponseClass.CLIENT_ERROR.value
+    assert result["error"]
+    assert poster.requests == []

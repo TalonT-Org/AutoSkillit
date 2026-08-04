@@ -44,6 +44,8 @@ from ._type_exceptions import *  # noqa: F401, F403
 from ._type_exceptions import __all__ as _exceptions_all
 from ._type_figure_spec import *  # noqa: F401, F403
 from ._type_figure_spec import __all__ as _figure_spec_all
+from ._type_github_review import *  # noqa: F401, F403
+from ._type_github_review import __all__ as _github_review_all
 from ._type_helpers import *  # noqa: F401, F403
 from ._type_helpers import __all__ as _helpers_all
 from ._type_inspector import *  # noqa: F401, F403
@@ -116,6 +118,7 @@ __all__ = (
     + _enums_all
     + _exceptions_all
     + _figure_spec_all
+    + _github_review_all
     + _helpers_all
     + _inspector_all
     + _intake_policy_all

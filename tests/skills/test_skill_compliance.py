@@ -18,10 +18,6 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.paths import pkg_root
-from autoskillit.recipe.rules.rules_skill_content import (
-    _REVIEWS_POST_RE,
-    _extract_subsections,
-)
 from autoskillit.workspace.skills import DefaultSkillResolver
 from tests._helpers import extract_always_block, extract_never_block
 from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
@@ -29,6 +25,13 @@ from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 _SKILLS_DIRS = [pkg_root() / "skills", pkg_root() / "skills_extended"]
+
+_CANONICAL_REVIEW_WRITERS = frozenset(
+    {"review-pr", "review-research-pr", "audit-claims", "resolve-review"}
+)
+_FENCED_BLOCK_RE = re.compile(r"```[^\n]*\n(.*?)```", re.DOTALL)
+_RAW_REVIEW_ENDPOINT_RE = re.compile(r"/pulls/(?:[^/\s]+|\{[^}]+\})/(?:reviews|comments)(?!/)")
+_POST_METHOD_RE = re.compile(r"(?:--method\s+POST|-X\s+POST|\bPOST\b)", re.IGNORECASE)
 
 # Patterns that detect instructions to output/emit/print plain text
 _TEXT_OUTPUT_PATTERNS = [
@@ -549,28 +552,33 @@ def test_implement_skills_have_read_before_editing_with_subagent_caveat(skill_di
 
 
 @pytest.mark.parametrize("skill_dir", _all_skill_dirs(), ids=lambda p: p.name)
-def test_reviews_post_requires_input_flag(skill_dir: Path) -> None:
-    """Any SKILL.md section that POSTs to the GitHub Reviews endpoint must use --input -.
-
-    The --field approach serializes JSON arrays as string literals, causing HTTP 422.
-    Catches any future skill that adds a POST /pulls/{N}/reviews endpoint without --input -,
-    regardless of which skill or which step.
-
-    To verify this test is effective: temporarily remove '--input -' from a reviews POST
-    section in any SKILL.md and confirm this test fails. Then restore it.
-    """
+def test_github_review_writes_use_only_the_guarded_tool(skill_dir: Path) -> None:
+    """Only canonical writers may call post_pr_review; no skill may write raw reviews."""
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.exists():
         pytest.skip(f"{skill_dir.name} has no SKILL.md")
     content = skill_md.read_text(encoding="utf-8")
-    for subsection in _extract_subsections(content):
-        if _REVIEWS_POST_RE.search(subsection):
-            assert "--input -" in subsection, (
-                f"{skill_dir.name}/SKILL.md: a section mentions POST to the GitHub Reviews "
-                f"endpoint but does not contain '--input -'. The --field approach serializes "
-                f"JSON arrays as string literals, causing HTTP 422. "
-                f"Use: jq -n ... | gh api .../reviews --method POST --input -"
-            )
+    fenced_blocks = _FENCED_BLOCK_RE.findall(content)
+    assert not any(
+        "gh api" in block
+        and _RAW_REVIEW_ENDPOINT_RE.search(block)
+        and _POST_METHOD_RE.search(block)
+        for block in fenced_blocks
+    ), (
+        f"{skill_dir.name}/SKILL.md must not issue raw Reviews API or individual "
+        "review-comment mutations; use post_pr_review"
+    )
+
+    call_count = content.count("post_pr_review")
+    if skill_dir.name in _CANONICAL_REVIEW_WRITERS:
+        assert call_count == 1, (
+            f"{skill_dir.name}/SKILL.md is a canonical review writer and must call "
+            "post_pr_review exactly once"
+        )
+    else:
+        assert call_count == 0, (
+            f"{skill_dir.name}/SKILL.md is not an allowed canonical review writer"
+        )
 
 
 # --- Fixture-based tests for parallel dispatch reinforcement detector ---

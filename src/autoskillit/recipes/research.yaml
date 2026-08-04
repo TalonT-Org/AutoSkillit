@@ -1203,9 +1203,50 @@ steps:
     action: route
     on_result:
     - when: "${{ context.pr_url }}"
-      route: review_research_pr
+      route: extract_pr_number
     - route: patch_token_summary
     note: Guard — skip review if pr_url is empty (graceful degradation from open_research_pr).
+
+  extract_pr_number:
+    tool: run_cmd
+    with:
+      cmd: "gh pr view '${{ context.pr_url }}' --json number -q .number"
+      cwd: "${{ context.worktree_path }}"
+      step_name: extract_pr_number
+    capture:
+      pr_number: "${{ result.stdout | trim }}"
+    on_success: capture_review_repository
+    on_failure: escalate_stop
+
+  capture_review_repository:
+    tool: run_cmd
+    with:
+      cmd: gh repo view --json nameWithOwner -q '.nameWithOwner | ascii_downcase'
+      cwd: "${{ context.worktree_path }}"
+      step_name: capture_review_repository
+    capture:
+      review_repository: "${{ result.stdout | trim }}"
+    on_success: annotate_pr_diff
+    on_failure: escalate_stop
+
+  annotate_pr_diff:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.annotate_pr_diff
+      pr_number: "${{ context.pr_number }}"
+      cwd: "${{ context.worktree_path }}"
+      output_dir: "{{AUTOSKILLIT_TEMP}}/review-research-pr/research"
+      base_branch: "${{ inputs.base_branch }}"
+      local_review_rounds: '0'
+      work_dir: "${{ context.worktree_path }}"
+    capture:
+      annotated_diff_path: "${{ result.annotated_diff_path }}"
+      hunk_ranges_path: "${{ result.hunk_ranges_path }}"
+      valid_lines_path: "${{ result.valid_lines_path }}"
+      review_mode: "${{ result.review_mode }}"
+      pr_head_sha: "${{ result.pr_head_sha }}"
+    on_success: review_research_pr
+    on_failure: escalate_stop
 
   review_research_pr:
     tool: run_skill
@@ -1216,17 +1257,30 @@ steps:
         base_branch: "${{ inputs.base_branch }}"
         worktree_path: "${{ context.worktree_path }}"
         pr_url: "${{ context.pr_url }}"
+        repository: "${{ context.review_repository }}"
+        pr_number: "${{ context.pr_number }}"
+        pr_head_sha: "${{ context.pr_head_sha }}"
+        logical_iteration: "review-research-pr:research"
+        receipt_path: "{{AUTOSKILLIT_TEMP}}/review-research-pr/research/batch_review_response_${{ context.pr_number }}.json"
+        mode: "${{ context.review_mode }}"
+        annotated_diff_path: "${{ context.annotated_diff_path }}"
+        hunk_ranges_path: "${{ context.hunk_ranges_path }}"
+        valid_lines_path: "${{ context.valid_lines_path }}"
       cwd: "${{ context.worktree_path }}"
       step_name: review_research_pr
-      output_dir: "{{AUTOSKILLIT_TEMP}}/review-research-pr"
+      output_dir: "{{AUTOSKILLIT_TEMP}}/review-research-pr/research"
     capture:
       review_verdict: "${{ result.verdict }}"
-    pass_through: [verdict]
+      review_operation_key: "${{ result.review_operation_key }}"
+      review_head_sha: "${{ result.review_head_sha }}"
+      review_post_state: "${{ result.review_post_state }}"
+      review_receipt_path: "${{ result.review_receipt_path }}"
+    pass_through: [verdict, review_post_state]
     skip_when_false: inputs.review_research_pr
-    on_context_limit: audit_claims
-    on_failure: audit_claims
+    on_context_limit: escalate_stop
+    on_failure: escalate_stop
     on_result:
-    - route: audit_claims
+    - route: check_review_posted
     note: >
       Optional research PR review step, gated by the review_research_pr ingredient.
       Verdict captured as review_verdict for deferred routing. All paths
@@ -1237,6 +1291,30 @@ steps:
       context variables as empty string in comparisons, so downstream
       route_review_resolve safely falls through to route_claims_resolve.
 
+  check_review_posted:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.check_review_posted
+      work_dir: "${{ context.worktree_path }}"
+      args:
+        cwd: "${{ context.worktree_path }}"
+        receipt_path: "${{ context.review_receipt_path }}"
+        mode: github
+        repository: "${{ context.review_repository }}"
+        pr_number: "${{ context.pr_number }}"
+        head_sha: "${{ context.review_head_sha }}"
+        logical_iteration: "review-research-pr:research"
+        operation_key: "${{ context.review_operation_key }}"
+        post_state: "${{ context.review_post_state }}"
+    skip_when_false: inputs.review_research_pr
+    on_result:
+    - when: "${{ result.reviews_posted }} == 'false'"
+      route: escalate_stop
+    - when: "${{ result.reviews_posted }} == 'true'"
+      route: audit_claims
+    - route: escalate_stop
+    on_failure: escalate_stop
+
   audit_claims:
     tool: run_skill
     model: ""
@@ -1246,24 +1324,57 @@ steps:
         base_branch: "${{ inputs.base_branch }}"
         worktree_path: "${{ context.worktree_path }}"
         pr_url: "${{ context.pr_url }}"
+        repository: "${{ context.review_repository }}"
+        pr_number: "${{ context.pr_number }}"
+        pr_head_sha: "${{ context.pr_head_sha }}"
+        logical_iteration: "audit-claims:research"
+        receipt_path: "{{AUTOSKILLIT_TEMP}}/audit-claims/batch_review_response_${{ context.pr_number }}.json"
       cwd: "${{ context.worktree_path }}"
       step_name: audit_claims
       output_dir: "{{AUTOSKILLIT_TEMP}}/audit-claims"
     capture:
       audit_verdict: "${{ result.verdict }}"
-    pass_through: [verdict]
+      audit_review_operation_key: "${{ result.review_operation_key }}"
+      audit_review_head_sha: "${{ result.review_head_sha }}"
+      audit_review_post_state: "${{ result.review_post_state }}"
+      audit_review_receipt_path: "${{ result.review_receipt_path }}"
+    pass_through: [verdict, review_post_state]
     skip_when_false: inputs.audit_claims
     retries: 1
-    on_exhausted: route_review_resolve
-    on_context_limit: route_review_resolve
-    on_failure: route_review_resolve
+    on_exhausted: escalate_stop
+    on_context_limit: escalate_stop
+    on_failure: escalate_stop
     on_result:
-    - route: route_review_resolve
+    - route: check_audit_review_posted
     note: >
       Optional citation-integrity gate, gated by the audit_claims ingredient.
       Runs after review_research_pr regardless of that step's verdict.
       All paths (skip, success, failure) route to route_review_resolve so both
       gates complete before resolution.
+
+  check_audit_review_posted:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.check_review_posted
+      work_dir: "${{ context.worktree_path }}"
+      args:
+        cwd: "${{ context.worktree_path }}"
+        receipt_path: "${{ context.audit_review_receipt_path }}"
+        mode: github
+        repository: "${{ context.review_repository }}"
+        pr_number: "${{ context.pr_number }}"
+        head_sha: "${{ context.audit_review_head_sha }}"
+        logical_iteration: "audit-claims:research"
+        operation_key: "${{ context.audit_review_operation_key }}"
+        post_state: "${{ context.audit_review_post_state }}"
+    skip_when_false: inputs.audit_claims
+    on_result:
+    - when: "${{ result.reviews_posted }} == 'false'"
+      route: escalate_stop
+    - when: "${{ result.reviews_posted }} == 'true'"
+      route: route_review_resolve
+    - route: escalate_stop
+    on_failure: escalate_stop
 
   route_review_resolve:
     action: route

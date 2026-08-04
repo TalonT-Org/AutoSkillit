@@ -1135,8 +1135,8 @@ def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, 
         for ingredients_only in (False, True)
     }
     assert maxima == {
-        "load_recipe": (170_972, "remediation", "all_truthy"),
-        "open_kitchen": (171_025, "remediation", "all_truthy"),
+        "load_recipe": (174_764, "remediation", "all_truthy"),
+        "open_kitchen": (174_817, "remediation", "all_truthy"),
     }
 
 

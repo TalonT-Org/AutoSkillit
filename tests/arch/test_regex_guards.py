@@ -207,6 +207,7 @@ COMMAND_CLASSIFYING_GUARDS = [
     SRC_ROOT / "hooks" / "guards" / "write_guard.py",
     SRC_ROOT / "hooks" / "guards" / "pr_create_guard.py",
     SRC_ROOT / "hooks" / "guards" / "planner_gh_discovery_guard.py",
+    SRC_ROOT / "hooks" / "guards" / "github_mutation_guard.py",
     SRC_ROOT / "hooks" / "guards" / "unsafe_install_guard.py",
     SRC_ROOT / "hooks" / "guards" / "artifact_download_guard.py",
 ]
@@ -237,6 +238,7 @@ def test_shared_command_classification_module_exists():
         ("write_guard.py", "interpreter_write"),
         ("pr_create_guard.py", "interpreter_subprocess"),
         ("planner_gh_discovery_guard.py", "interpreter_subprocess"),
+        ("github_mutation_guard.py", "github_mutation_analysis"),
         ("unsafe_install_guard.py", "interpreter_subprocess"),
     ],
 )
@@ -247,6 +249,8 @@ def test_guard_handles_bypass_family(guard_file: str, bypass_family: str) -> Non
         assert "has_interpreter_write" in source or "_command_classification" in source
     elif bypass_family == "interpreter_subprocess":
         assert "has_interpreter_wrapped_command" in source or "_command_classification" in source
+    elif bypass_family == "github_mutation_analysis":
+        assert "analyze_github_mutations" in source
 
 
 def test_write_guard_uses_tokenization() -> None:

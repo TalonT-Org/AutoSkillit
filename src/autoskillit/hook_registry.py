@@ -188,6 +188,12 @@ HOOK_REGISTRY: list[HookDef] = [
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
+        scripts=["guards/github_mutation_guard.py"],
+        mechanism="deny",
+        enforcement_strength={"claude_code": "hard", "codex": "works-as-is"},
+    ),
+    HookDef(
+        matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/pr_create_guard.py"],
         # Must stay in sync with _EXEMPT_SKILLS in guards/pr_create_guard.py —
         # stdlib-only boundary on hook scripts prevents a shared import.
@@ -497,6 +503,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "fleet_claim_guard.py",
         "reset_resume_gate.py",
         "recipe_read_guard.py",
+        "github_mutation_guard.py",
     }
 )
 

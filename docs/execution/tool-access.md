@@ -1,6 +1,6 @@
 # MCP Tool Access Control
 
-AutoSkillit provides 64 MCP tools organized into three access levels that control which
+AutoSkillit provides 65 MCP tools organized into three access levels that control which
 session types can see each tool.
 
 ## Three Access Levels
@@ -12,8 +12,8 @@ session types can see each tool.
 │  reload_session                                         │
 │  Always visible — no gating, no headless restriction    │
 ├─────────────────────────────────────────────────────────┤
-│  HEADLESS-TAGGED  (6 tools)                             │
-│  test/check, commit, and audit artifact worker tools    │
+│  HEADLESS-TAGGED  (7 tools)                             │
+│  test/check, commit, audit, and review worker tools     │
 │  Revealed in headless sessions via mcp.enable(headless) │
 │  Also carries the kitchen tag; hidden in plain sessions │
 ├─────────────────────────────────────────────────────────┤
@@ -49,7 +49,7 @@ to exact L2 `ORCHESTRATOR` sessions. L3 `FLEET` sessions create L2 food trucks t
 |-----|---------|
 | `autoskillit` | Identifies the tool as belonging to AutoSkillit. Present on every tool. |
 | `kitchen` | Tool is hidden at startup via `mcp.disable(tags={'kitchen'})`. 39 tools carry this tag. |
-| `headless` | Tool is revealed in headless sessions via `mcp.enable(tags={'headless'})`. Additive — also carries `kitchen`. |
+| `headless` | Tool is revealed in headless sessions via `mcp.enable(tags={'headless'})`. Most also carry `kitchen`; `post_pr_review` is headless-only and deliberately ungated. |
 | `github` | Functional category: GitHub-interacting tools. Can be disabled as a subset. |
 | `ci` | Functional category: CI/merge-queue polling tools. Can be disabled as a subset. |
 | `clone` | Functional category: Clone-based isolation tools. Can be disabled as a subset. |
@@ -68,7 +68,7 @@ Server startup sequence:
 
 3. If AUTOSKILLIT_HEADLESS=1:
    mcp.enable(tags={"headless"})
-   → reveals the six HEADLESS_TOOLS entries
+   → reveals the seven HEADLESS_TOOLS entries
 
 4. When open_kitchen is called:
    ctx.enable_components(tags={"kitchen"})   → reveals kitchen-tagged tools (not fleet)
@@ -92,7 +92,7 @@ missing kitchen visibility.
 
 ## Complete MCP Tool Access Control Map
 
-All 64 tools with their access level, tags, source file, and functional category.
+All 65 tools with their access level, tags, source file, and functional category.
 
 **Tag abbreviations**: AS = `autoskillit`, K = `kitchen`, HL = `headless`,
 GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`, FL = `fleet`

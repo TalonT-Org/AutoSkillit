@@ -69,9 +69,10 @@ def test_skill_logs_warning_on_resolve_failure(resolve_review_skill_md: str) -> 
     """Thread resolution failure must log a warning and continue, not fail."""
     # Narrow checks to the Step 6 (Resolve Addressed Review Threads) section,
     # anchored at resolveReviewThread, to avoid false positives from unrelated sections.
-    thread_start = resolve_review_skill_md.find("resolveReviewThread")
-    assert thread_start != -1, "SKILL.md must contain resolveReviewThread"
-    thread_context = resolve_review_skill_md[thread_start : thread_start + 600]
+    thread_start = resolve_review_skill_md.find("### Step 6:")
+    thread_end = resolve_review_skill_md.find("### Step 6.5", thread_start)
+    assert thread_start != -1 and thread_end != -1
+    thread_context = resolve_review_skill_md[thread_start:thread_end]
     thread_context_lower = thread_context.lower()
     assert "warn" in thread_context_lower or "log" in thread_context_lower, (
         "Step 6 must mention warning or logging on resolve failure"
@@ -112,6 +113,14 @@ def test_thread_resolver_uses_graphql_aliases(thread_resolver_skill_md: str) -> 
     )
 
 
-def test_thread_resolver_reply_loop_has_delay(thread_resolver_skill_md: str) -> None:
-    """Reply POST loop must include sleep 1 between calls."""
+def test_thread_resolver_chunks_have_delay(thread_resolver_skill_md: str) -> None:
+    """Multiple literal GraphQL chunks must retain mutation pacing."""
     assert "sleep 1" in thread_resolver_skill_md or "sleep(1)" in thread_resolver_skill_md
+
+
+def test_resolve_review_uses_literal_graphql_mutations(resolve_review_skill_md: str) -> None:
+    """The hard mutation guard cannot safely approve shell-generated GraphQL."""
+    assert "fully literal mutation" in resolve_review_skill_md
+    assert "do not construct it with shell" in resolve_review_skill_md
+    assert 'MUTATION_QUERY="mutation {' not in resolve_review_skill_md
+    assert 'query="${MUTATION_QUERY}"' not in resolve_review_skill_md

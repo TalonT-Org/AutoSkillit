@@ -4,7 +4,7 @@ How AutoSkillit runs a recipe end to end: orchestrator, kitchen gating, clone an
 
 ## Overview
 
-AutoSkillit is a Claude Code plugin that orchestrates automated workflows using headless sessions. It provides 64 MCP tools and 142 bundled skills, organized into a gated visibility system.
+AutoSkillit is a Claude Code plugin that orchestrates automated workflows using headless sessions. It provides 65 MCP tools and 142 bundled skills, organized into a gated visibility system.
 
 ## Core Concepts
 
@@ -22,11 +22,15 @@ When you run `autoskillit order`, Claude Code acts as a pipeline orchestrator. I
 AutoSkillit uses a three-tier tool visibility model:
 
 - **Free-range (4 tools)**: Always visible — `open_kitchen`, `close_kitchen`, `disable_quota_guard`, `reload_session`
-- **Headless tools (2 tools)**: Revealed in headless sessions via `mcp.enable({'headless'})` — `test_check`, `unlock_agent_pack`
+- **Headless tools (7 tools)**: Revealed in headless sessions via
+  `mcp.enable({'headless'})` — `test_check`, `unlock_agent_pack`, `commit_files`,
+  `write_audit_semantic_result`, `write_standalone_audit_evidence`,
+  `write_audit_disposition_bundle`, and `post_pr_review`.
 - **Kitchen-tagged tools (45 tools total)**: Gated behind `open_kitchen` — `run_skill`,
   `run_cmd`, `run_python`, `merge_worktree`, `clone_repo`, `push_to_remote`, and 40 more.
   Six kitchen tools also carry the `headless` tag and are
-  additionally pre-enabled in headless sessions.
+  additionally pre-enabled in headless sessions. `post_pr_review` is headless-only and
+  deliberately not application-gated.
 
 When you call `open_kitchen` (automatically done by `order`), all 45 kitchen-tagged tools become
 available for that session. This keeps normal Claude Code sessions clean — no pipeline tools
@@ -68,11 +72,11 @@ AutoSkillit supports four session modes with different tool and skill visibility
   `$ claude`); `/open-kitchen` reveals kitchen tools.
 
 - **`$ autoskillit order`**: Pipeline orchestrator session. Kitchen is pre-opened at startup —
-  all 64 MCP tools are available immediately. All skill tiers are accessible. The orchestrator
+  all 65 MCP tools are available immediately. All skill tiers are accessible. The orchestrator
   delegates work through `run_skill` (headless sessions) and `run_cmd` (shell commands).
 
-- **`run_skill` (headless)**: Worker sessions launched by the orchestrator. Sees 4 Free Range
-  tools plus the 6 headless-tagged worker tools. Cannot call `run_skill`, `run_cmd`, or `run_python`
+- **`run_skill` (headless)**: Worker sessions launched by the orchestrator. Sees 4 always-visible
+  tools plus the 7 headless-tagged tools listed above. Cannot call `run_skill`, `run_cmd`, or `run_python`
   — enforced by hooks and code guards. Has access to all native Claude Code tools (Read, Write,
   Bash, etc.) and all skill tiers via `--add-dir skills_extended/`.
 
@@ -227,6 +231,33 @@ reclassified as a startup transport failure.
 
 See [Claude startup readiness](claude-startup-readiness.md) for the pinned
 versions, exact environment values, trace contract, and resume boundary.
+
+## Authoritative pull-request review publication
+
+Headless review skills publish through `post_pr_review`; they do not issue raw
+GitHub review mutations. The server computes a deterministic operation key
+from canonical repository, PR, requested head, logical iteration, and sorted
+findings, then records preparation before network access. Non-dry operations
+use an owner-private SQLite ledger at the platform AutoSkillit state location
+(`$XDG_STATE_HOME/autoskillit/github-mutations/ledger.sqlite3` on Linux, with
+the standard state-directory fallback). The ledger stores operations,
+canonical findings, exact attempts, receipts, and salted credential/API-origin
+rate scopes, but never credentials.
+
+Every request is pinned to the supplied head SHA and carries server-generated
+operation/finding markers. Transport errors and 5xx responses are reconciled
+by read only; they are never blindly retried. Structured anchor-validation
+422 responses may produce at most one strict-subset attempt, while verified
+secondary-rate responses persist shared back-pressure. A capacity-one fenced
+lease enforces at least one second between review mutation starts across
+sessions.
+
+Final success requires a server-authored receipt with the operation identity,
+review/comment IDs, response and reconciliation classes, and an exhaustive
+posted/already-present/omitted disposition for every original finding. Dry-run
+performs validation, canonicalization, cap enforcement, identity computation,
+and planned counts without credentials, SQLite, sleeps, receipts, or network
+access.
 
 ## Safety
 

@@ -170,6 +170,7 @@ from .paths import claude_code_project_dir as claude_code_project_dir
 from .paths import default_log_dir as default_log_dir
 from .paths import destination_location as destination_location
 from .paths import find_latest_session_id as find_latest_session_id
+from .paths import github_review_ledger_path as github_review_ledger_path
 from .paths import is_generated_path as is_generated_path
 from .paths import is_git_main_checkout as is_git_main_checkout
 from .paths import is_git_worktree as is_git_worktree
@@ -199,6 +200,19 @@ from .runtime.kitchen_state import read_marker as read_marker
 from .runtime.kitchen_state import resolve_kitchen_id as resolve_kitchen_id
 from .runtime.kitchen_state import sweep_stale_markers as sweep_stale_markers
 from .runtime.kitchen_state import write_marker as write_marker
+from .runtime.private_file import PrivateFileIdentity as PrivateFileIdentity
+from .runtime.private_file import PrivateSidecarIssue as PrivateSidecarIssue
+from .runtime.private_file import fsync_directory as fsync_directory
+from .runtime.private_file import fsync_file as fsync_file
+from .runtime.private_file import private_file_identity as private_file_identity
+from .runtime.private_file import private_sidecar_issue as private_sidecar_issue
+from .runtime.private_file import publish_private_file as publish_private_file
+from .runtime.private_file import (
+    reconcile_initialization_links as reconcile_initialization_links,
+)
+from .runtime.private_file import (
+    unlink_sqlite_initialization_artifacts as unlink_sqlite_initialization_artifacts,
+)
 from .runtime.readiness import cleanup_readiness_sentinel as cleanup_readiness_sentinel
 from .runtime.readiness import readiness_sentinel_path as readiness_sentinel_path
 from .runtime.readiness import write_readiness_sentinel as write_readiness_sentinel
@@ -658,6 +672,12 @@ from .types import (
 from .types import GenerationState as GenerationState
 from .types import GitHubApiLog as GitHubApiLog
 from .types import GitHubFetcher as GitHubFetcher
+from .types import GitHubReviewComment as GitHubReviewComment
+from .types import GitHubReviewFindingDisposition as GitHubReviewFindingDisposition
+from .types import GitHubReviewPosterProtocol as GitHubReviewPosterProtocol
+from .types import GitHubReviewPostResult as GitHubReviewPostResult
+from .types import GitHubReviewReceipt as GitHubReviewReceipt
+from .types import GitHubReviewRequest as GitHubReviewRequest
 from .types import HardCapabilityMismatch as HardCapabilityMismatch
 from .types import HeadlessExecutor as HeadlessExecutor
 from .types import HeadlessSkillDispatchContract as HeadlessSkillDispatchContract
@@ -829,6 +849,10 @@ from .types import RetiringArtifactRecord as RetiringArtifactRecord
 from .types import RetiringCacheReadResult as RetiringCacheReadResult
 from .types import RetiringCacheState as RetiringCacheState
 from .types import RetryReason as RetryReason
+from .types import ReviewFindingDispositionKind as ReviewFindingDispositionKind
+from .types import ReviewOperationState as ReviewOperationState
+from .types import ReviewReconciliationResult as ReviewReconciliationResult
+from .types import ReviewResponseClass as ReviewResponseClass
 from .types import RollbackAdmissionEvent as RollbackAdmissionEvent
 from .types import RolloverEpochEvent as RolloverEpochEvent
 from .types import ServeOverridesSnapshot as ServeOverridesSnapshot
@@ -945,8 +969,15 @@ from .types import (
 from .types import (
     is_canonical_plugin_artifact_incarnation_id as is_canonical_plugin_artifact_incarnation_id,
 )
+from .types import is_final_github_review_state as is_final_github_review_state
 from .types import is_path_like_token as is_path_like_token
 from .types import is_valid_codex_model_id as is_valid_codex_model_id
+from .types import is_valid_github_review_head_sha as is_valid_github_review_head_sha
+from .types import (
+    is_valid_github_review_logical_iteration as is_valid_github_review_logical_iteration,
+)
+from .types import is_valid_github_review_operation_key as is_valid_github_review_operation_key
+from .types import is_valid_github_review_repository as is_valid_github_review_repository
 from .types import (
     make_stored_context_admission_envelope as make_stored_context_admission_envelope,
 )
@@ -971,6 +1002,7 @@ from .types import resolve_payload_field as resolve_payload_field
 from .types import resolve_skill_name as resolve_skill_name
 from .types import resolve_target_skill as resolve_target_skill
 from .types import resume_spec_from_cli as resume_spec_from_cli
+from .types import review_receipt_validation_error as review_receipt_validation_error
 from .types import session_type as session_type
 from .types import session_type_for_skill_execution_role as session_type_for_skill_execution_role
 from .types import strip_context_window_suffix as strip_context_window_suffix

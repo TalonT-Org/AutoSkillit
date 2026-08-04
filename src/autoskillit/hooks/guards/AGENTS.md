@@ -14,6 +14,10 @@ The package initializer remains import-free.
   kitchen open, `gh pr create` through `run_cmd` is blocked, and PR bodies must carry the
   required `Closes #N` reference. In headless skill sessions, git operations block
   `commit --amend`, `push --force`, `reset --hard`, `clean -f`, and `checkout .`.
+  Raw GitHub review publication is fail-closed across Bash and `run_cmd`: the guard denies
+  review/comment writes, multiple or dynamically unresolved mutations, ambiguous CWD or
+  input-file authority, and permits only proven single non-review operations such as a
+  fully literal `resolveReviewThread` mutation.
 - **Fleet lifecycle:** headless fleet dispatch is denied to prevent L3-to-L3 recursion.
   A fresh dispatch cannot claim an issue already marked `in-progress`; it must resume via
   `resume_session_id`. Reset requires an earlier resume attempt unless `force=true`, with
@@ -47,7 +51,7 @@ Each guard is a standalone Python script executed as a subprocess (not imported 
 All guards fail-**open** for malformed/unparseable input (JSON decode failure = exit 0 = approve).
 This prevents a broken hook from blocking the entire tool chain.
 
-Four guards additionally fail-**closed** for valid input with unrecognized values, as a
+Five guards additionally fail-**closed** for valid input with unrecognized values, as a
 defense-in-depth measure against privilege escalation:
 
 | Guard | Fail-closed condition | Rationale |
@@ -56,6 +60,7 @@ defense-in-depth measure against privilege escalation:
 | `open_kitchen_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not gain kitchen access |
 | `skill_orchestration_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not call orchestration tools (`run_skill`, `run_cmd`, `run_python`) |
 | `background_exec_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not bypass `run_in_background` prohibition |
+| `github_mutation_guard.py` | Ambiguous or unresolved GitHub mutation command | Unknown mutation scope must not bypass the structured review publisher |
 
 **Design principle:** Garbage-in (malformed hook input) = fail-open. Unknown-tier (valid input, unrecognized value) = fail-closed.
 

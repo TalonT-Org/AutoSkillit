@@ -1,17 +1,28 @@
-"""MCP tool handlers: get_pr_reviews, bulk_close_issues."""
+"""MCP tool handlers: PR review reads, authoritative writes, and issue closure."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import atomic_write, get_logger
+from autoskillit.core import (
+    GitHubReviewComment,
+    GitHubReviewPostResult,
+    GitHubReviewRequest,
+    ReviewOperationState,
+    ReviewResponseClass,
+    atomic_write,
+    destination_location,
+    get_logger,
+)
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._notify import _notify, track_response_size
@@ -19,6 +30,30 @@ from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
+
+
+def _review_post_error(
+    *,
+    head_sha: str,
+    error: str,
+    state: ReviewOperationState,
+    response_class: ReviewResponseClass,
+) -> str:
+    return json.dumps(
+        GitHubReviewPostResult(
+            operation_key="",
+            head_sha=head_sha,
+            state=state,
+            response_class=response_class,
+            error=error,
+        ).to_dict()
+    )
+
+
+def _get_ctx():
+    from autoskillit.server import _get_ctx as get_context  # circular-break
+
+    return get_context()
 
 
 def _map_api_reviews(raw: list) -> list:
@@ -171,6 +206,132 @@ async def get_pr_reviews(
         except Exception as exc:
             logger.error("get_pr_reviews unhandled exception", exc_info=True)
             return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+
+
+@mcp.tool(tags={"autoskillit", "headless", "github"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
+@track_response_size("post_pr_review")
+async def post_pr_review(
+    cwd: str,
+    receipt_path: str,
+    repository: str,
+    pr_number: int,
+    head_sha: str,
+    logical_iteration: str,
+    event: str,
+    body: str,
+    comments: list[dict[str, object]],
+    dry_run: bool,
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Publish one idempotent, server-authoritative pull-request review.
+
+    The handler is intentionally headless-visible and is not application-gated.
+    It delegates all identity, pacing, reconciliation, and response policy to
+    the injected review poster. Never raises.
+    """
+
+    structlog.contextvars.clear_contextvars()
+    with structlog.contextvars.bound_contextvars(
+        tool="post_pr_review", cwd=cwd, repository=repository, pr_number=pr_number
+    ):
+        try:
+            tool_ctx = _get_ctx()
+            poster = tool_ctx.github_review_poster
+            if poster is None:
+                return _review_post_error(
+                    head_sha=head_sha,
+                    error="github_review_poster is not configured",
+                    state=ReviewOperationState.AMBIGUOUS,
+                    response_class=ReviewResponseClass.SERVER_ERROR,
+                )
+            if not os.path.isdir(cwd):
+                return _review_post_error(
+                    head_sha=head_sha,
+                    error="cwd must be an existing directory",
+                    state=ReviewOperationState.TERMINAL,
+                    response_class=ReviewResponseClass.CLIENT_ERROR,
+                )
+            root = (Path(cwd) / ".autoskillit" / "temp").resolve()
+            destination = destination_location(Path(receipt_path))
+            if (
+                not Path(cwd).is_absolute()
+                or not destination.is_relative_to(root)
+                or destination.name != f"batch_review_response_{pr_number}.json"
+            ):
+                return _review_post_error(
+                    head_sha=head_sha,
+                    error=(
+                        "receipt_path must be an absolute contained path under "
+                        f"{root} named batch_review_response_{pr_number}.json"
+                    ),
+                    state=ReviewOperationState.TERMINAL,
+                    response_class=ReviewResponseClass.CLIENT_ERROR,
+                )
+            try:
+                typed_comments = tuple(map(GitHubReviewComment.from_wire, comments))
+            except (KeyError, TypeError, ValueError) as exc:
+                return _review_post_error(
+                    head_sha=head_sha,
+                    error=f"{type(exc).__name__}: {exc}",
+                    state=ReviewOperationState.TERMINAL,
+                    response_class=ReviewResponseClass.CLIENT_ERROR,
+                )
+            request = GitHubReviewRequest(
+                cwd=cwd,
+                receipt_path=receipt_path,
+                repository=repository,
+                pr_number=pr_number,
+                head_sha=head_sha,
+                logical_iteration=logical_iteration,
+                event=event,
+                body=body,
+                comments=typed_comments,
+                dry_run=dry_run,
+            )
+            await _notify(
+                ctx,
+                "info",
+                f"post_pr_review: #{pr_number}",
+                "autoskillit.post_pr_review",
+                extra={"repository": repository, "dry_run": dry_run},
+            )
+            result = await poster.post(request)
+            if (
+                result.state
+                in {
+                    ReviewOperationState.SUCCEEDED,
+                    ReviewOperationState.RECONCILED,
+                }
+                and result.receipt is not None
+            ):
+                atomic_write(
+                    destination,
+                    json.dumps(
+                        result.receipt.to_dict(),
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                    strict_durability=True,
+                )
+                os.chmod(destination, 0o600)
+                result = replace(result, receipt_path=destination)
+            await _notify(
+                ctx,
+                "info",
+                f"post_pr_review: {result.state}",
+                "autoskillit.post_pr_review.complete",
+                extra={"operation_key": result.operation_key},
+            )
+            return json.dumps(result.to_dict())
+        except Exception as exc:
+            logger.error("post_pr_review unhandled exception", exc_info=True)
+            return _review_post_error(
+                head_sha=head_sha,
+                error=f"{type(exc).__name__}: {exc}",
+                state=ReviewOperationState.AMBIGUOUS,
+                response_class=ReviewResponseClass.SERVER_ERROR,
+            )
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})

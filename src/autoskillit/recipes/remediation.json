@@ -1570,11 +1570,24 @@
       "capture": {
         "pr_number": "${{ result.stdout | trim }}"
       },
-      "on_success": "init_review_loop_count",
+      "on_success": "capture_review_repository",
       "on_failure": "release_issue_failure",
       "optional": true,
       "skip_when_false": "inputs.open_pr",
       "note": "Extracts the integer PR number from the feature branch opened by compose_pr. pr_number is required by the queue finale steps (enable_auto_merge, wait_for_queue).\n"
+    },
+    "capture_review_repository": {
+      "tool": "run_cmd",
+      "with": {
+        "cmd": "gh repo view --json nameWithOwner -q '.nameWithOwner | ascii_downcase'",
+        "cwd": "${{ context.work_dir }}",
+        "step_name": "capture_review_repository"
+      },
+      "capture": {
+        "review_repository": "${{ result.stdout | trim }}"
+      },
+      "on_success": "init_review_loop_count",
+      "on_failure": "release_issue_failure"
     },
     "init_review_loop_count": {
       "tool": "run_python",
@@ -1626,10 +1639,10 @@
         "valid_lines_path": "${{ result.valid_lines_path }}",
         "diff_metrics_path": "${{ result.diff_metrics_path }}",
         "review_mode": "${{ result.review_mode }}",
-        "pr_head_sha": "${{ result.head_sha }}"
+        "pr_head_sha": "${{ result.pr_head_sha }}"
       },
       "on_success": "review_pr",
-      "on_failure": "review_pr",
+      "on_failure": "release_issue_failure",
       "optional": true,
       "skip_when_false": "inputs.open_pr",
       "optional_context_refs": [
@@ -1650,15 +1663,26 @@
           "valid_lines_path": "${{ context.valid_lines_path }}",
           "diff_metrics_path": "${{ context.diff_metrics_path }}",
           "mode": "${{ context.review_mode }}",
-          "pr_head_sha": "${{ context.pr_head_sha }}"
+          "repository": "${{ context.review_repository }}",
+          "pr_number": "${{ context.pr_number }}",
+          "pr_head_sha": "${{ context.pr_head_sha }}",
+          "logical_iteration": "review-pr:${{ context.review_loop_count }}",
+          "receipt_path": "{{AUTOSKILLIT_TEMP}}/review-pr/iter_${{ context.review_loop_count }}/batch_review_response_${{ context.pr_number }}.json"
         },
         "cwd": "${{ context.work_dir }}",
         "step_name": "review_pr",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/review-pr/iter_${{ context.review_loop_count }}"
       },
       "capture": {
-        "review_verdict": "${{ result.verdict }}"
+        "review_verdict": "${{ result.verdict }}",
+        "review_operation_key": "${{ result.review_operation_key }}",
+        "review_head_sha": "${{ result.review_head_sha }}",
+        "review_post_state": "${{ result.review_post_state }}",
+        "review_receipt_path": "${{ result.review_receipt_path }}"
       },
+      "pass_through": [
+        "review_post_state"
+      ],
       "on_result": [
         {
           "when": "${{ result.verdict }} == stale_snapshot",
@@ -1684,16 +1708,16 @@
           "route": "check_review_posted"
         }
       ],
-      "on_failure": "check_repo_ci_event",
-      "on_context_limit": "check_repo_ci_event",
-      "on_rate_limit": "check_repo_ci_event",
+      "on_failure": "release_issue_failure",
+      "on_context_limit": "release_issue_failure",
+      "on_rate_limit": "release_issue_failure",
       "optional": true,
       "skip_when_false": "inputs.open_pr",
       "optional_context_refs": [
         "review_loop_count",
         "review_mode"
       ],
-      "note": "Runs after compose_pr creates the PR. Invokes the review-pr skill as a headless session to leave inline review comments on the PR. The skill finds the open PR by feature branch name (context.merge_target). Captures verdict as review_verdict and routes via on_result: changes_requested/approved_with_comments → resolve_review; all other verdicts (including approved, needs_human) → check_review_posted (effect verification gate) → check_review_loop (mandatory waypoint to increment review_loop_count). On tool-level failure (MCP error, gh unavailable), routes to check_repo_ci_event (no review to resolve). Skipped when open_pr=false.\n"
+      "note": "Runs after compose_pr creates the PR. Invokes the review-pr skill as a headless session to leave inline review comments on the PR. The skill finds the open PR by feature branch name (context.merge_target). Captures verdict as review_verdict and routes via on_result: changes_requested/approved_with_comments → resolve_review; all other verdicts (including approved, needs_human) → check_review_posted (effect verification gate) → check_review_loop (mandatory waypoint to increment review_loop_count). On tool-level failure (MCP error, gh unavailable) or context exhaustion, routes to release_issue_failure because no authoritative review receipt exists. Skipped when open_pr=false.\n"
     },
     "resolve_review": {
       "tool": "run_skill",
@@ -1703,7 +1727,12 @@
         "skill_inputs": {
           "base_branch": "${{ inputs.base_branch }}",
           "feature_branch": "${{ context.merge_target }}",
-          "mode": "${{ context.review_mode }}"
+          "mode": "${{ context.review_mode }}",
+          "repository": "${{ context.review_repository }}",
+          "pr_number": "${{ context.pr_number }}",
+          "pr_head_sha": "${{ context.pr_head_sha }}",
+          "logical_iteration": "resolve-review:${{ context.review_loop_count }}",
+          "receipt_path": "{{AUTOSKILLIT_TEMP}}/resolve-review/iter_${{ context.review_loop_count }}/batch_review_response_${{ context.pr_number }}.json"
         },
         "cwd": "${{ context.work_dir }}",
         "output_dir": ".",
@@ -1711,13 +1740,28 @@
       },
       "capture": {
         "verdict": "${{ result.verdict }}",
-        "fixes_applied": "${{ result.fixes_applied }}"
+        "fixes_applied": "${{ result.fixes_applied }}",
+        "resolve_review_operation_key": "${{ result.review_operation_key }}",
+        "resolve_review_head_sha": "${{ result.review_head_sha }}",
+        "resolve_review_post_state": "${{ result.review_post_state }}",
+        "resolve_review_receipt_path": "${{ result.review_receipt_path }}"
       },
+      "pass_through": [
+        "review_post_state"
+      ],
       "retries": 2,
       "on_exhausted": "release_issue_failure",
       "on_context_limit": "release_issue_failure",
       "on_rate_limit": "release_issue_failure",
       "on_result": [
+        {
+          "when": "${{ result.review_post_state }} == 'SUCCEEDED'",
+          "route": "check_resolve_review_posted"
+        },
+        {
+          "when": "${{ result.review_post_state }} == 'RECONCILED'",
+          "route": "check_resolve_review_posted"
+        },
         {
           "when": "${{ result.verdict }} == 'real_fix'",
           "route": "pre_review_rebase"
@@ -1742,6 +1786,37 @@
       "note": "Runs when review_pr reports issues (verdict=changes_requested). The clone (context.work_dir) has the feature branch (context.merge_target) checked out. resolve-review fetches inline and summary review comments via the GitHub API, applies fixes for each actionable finding (critical + warning severity), and commits each fix via the commit_files MCP tool.\n",
       "optional_context_refs": [
         "review_mode"
+      ]
+    },
+    "check_resolve_review_posted": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.check_review_posted",
+        "work_dir": "${{ context.work_dir }}",
+        "args": {
+          "cwd": "${{ context.work_dir }}",
+          "receipt_path": "${{ context.resolve_review_receipt_path }}",
+          "mode": "github",
+          "repository": "${{ context.review_repository }}",
+          "pr_number": "${{ context.pr_number }}",
+          "head_sha": "${{ context.resolve_review_head_sha }}",
+          "logical_iteration": "resolve-review:${{ context.review_loop_count }}",
+          "operation_key": "${{ context.resolve_review_operation_key }}",
+          "post_state": "${{ context.resolve_review_post_state }}"
+        }
+      },
+      "on_result": [
+        {
+          "when": "${{ result.reviews_posted }} == 'true'",
+          "route": "pre_review_rebase"
+        },
+        {
+          "route": "release_issue_failure"
+        }
+      ],
+      "on_failure": "release_issue_failure",
+      "optional_context_refs": [
+        "review_loop_count"
       ]
     },
     "pre_review_rebase": {
@@ -1814,9 +1889,18 @@
       "tool": "run_python",
       "with": {
         "callable": "autoskillit.smoke_utils.check_review_posted",
-        "pr_number": "${{ context.pr_number }}",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}/review-pr/iter_${{ context.review_loop_count }}",
-        "mode": "${{ context.review_mode }}"
+        "work_dir": "${{ context.work_dir }}",
+        "args": {
+          "cwd": "${{ context.work_dir }}",
+          "receipt_path": "${{ context.review_receipt_path }}",
+          "mode": "${{ context.review_mode }}",
+          "repository": "${{ context.review_repository }}",
+          "pr_number": "${{ context.pr_number }}",
+          "head_sha": "${{ context.review_head_sha }}",
+          "logical_iteration": "review-pr:${{ context.review_loop_count }}",
+          "operation_key": "${{ context.review_operation_key }}",
+          "post_state": "${{ context.review_post_state }}"
+        }
       },
       "on_result": [
         {

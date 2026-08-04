@@ -8,11 +8,16 @@ _INTERPRETER_LINE_RE.
 from __future__ import annotations
 
 import ast
+import json
 import os
 import re
 import shlex
+import stat
 from collections.abc import Sequence
-from typing import Protocol
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Any, Protocol
+from urllib.parse import urlsplit
 
 _INTERPRETER_RE = re.compile(
     r"(?:^|&&|\|\||;)\s*(?:env\s+)?(?:python3?|perl|ruby|node)\s+"
@@ -796,9 +801,8 @@ def extract_shell_command_payloads(command: str) -> list[str]:
 def tokenize_shell_payload_segments(command: str) -> list[list[str]] | None:
     """Return tokenized segments for every evaluated shell payload in *command*.
 
-    Walks the outer command and every extracted payload recursively with a
-    ``seen`` set so nested ``bash -c``, ``eval``, and active-substitution
-    payloads are tokenized once without loops. Each successfully parsed
+    Walks the outer command and every distinct extracted payload recursively.
+    Each successfully parsed
     segment of every payload is appended to the result so callers can apply
     verb-position policies like ``command_verb_and_args`` to each segment.
 
@@ -870,7 +874,7 @@ def _find_substitution_end(command: str, start: int) -> int:
 
 
 def _extract_substitution_payloads(command: str) -> list[str]:
-    """Quote/escape-aware state machine that returns active substitution bodies."""
+    """Quote/escape-aware state machine returning immediate substitution bodies."""
     payloads: list[str] = []
     i = 0
     n = len(command)
@@ -899,14 +903,12 @@ def _extract_substitution_payloads(command: str) -> list[str]:
                         inner_end += 1
                     inner = command[j + 1 : inner_end]
                     payloads.append(inner)
-                    payloads.extend(_extract_substitution_payloads(inner))
                     j = inner_end + 1
                     continue
                 if command[j] == "$" and j + 1 < n and command[j + 1] == "(":
                     k = _find_substitution_end(command, j + 2)
                     inner = command[j + 2 : k]
                     payloads.append(inner)
-                    payloads.extend(_extract_substitution_payloads(inner))
                     j = k + 1
                     continue
                 j += 1
@@ -921,14 +923,12 @@ def _extract_substitution_payloads(command: str) -> list[str]:
                 j += 1
             inner = command[i + 1 : j]
             payloads.append(inner)
-            payloads.extend(_extract_substitution_payloads(inner))
             i = j + 1
             continue
         if c == "$" and i + 1 < n and command[i + 1] == "(":
             j = _find_substitution_end(command, i + 2)
             inner = command[i + 2 : j]
             payloads.append(inner)
-            payloads.extend(_extract_substitution_payloads(inner))
             i = j + 1
             continue
         i += 1
@@ -1000,57 +1000,750 @@ def _literal_to_string(node: ast.AST) -> str | None:
     return None
 
 
-def extract_interpreter_command_payloads(command: str) -> tuple[list[str | list[str]], bool]:
-    """Return (literal command payloads, has_unresolved_subprocess).
+@dataclass(frozen=True, slots=True)
+class _InterpreterCommandSpec:
+    payload: str | list[str]
+    cwd: str | None
 
-    Each payload is either a shell-command string (for `shell=True` calls or
-    `os.system`) or an argv token list (for list/tuple literal subprocess
-    calls). has_unresolved_subprocess is True when a matching process-launch
-    call was present but its arguments could not be statically resolved.
-    """
-    payloads: list[str | list[str]] = []
+
+def _python_program_command_specs(
+    program: str,
+) -> tuple[list[_InterpreterCommandSpec], bool]:
+    specs: list[_InterpreterCommandSpec] = []
     has_unresolved = False
-    if not _INTERPRETER_RE.search(command):
-        return (payloads, has_unresolved)
-    if not _SUBPROCESS_APIS_RE.search(command):
-        return (payloads, has_unresolved)
+    for call in _parse_python_program_literals(program):
+        args = call.args
+        if not args:
+            continue
+        cwd_nodes = [keyword.value for keyword in call.keywords if keyword.arg == "cwd"]
+        if len(cwd_nodes) > 1:
+            has_unresolved = True
+            continue
+        cwd: str | None = None
+        if cwd_nodes:
+            cwd_node = cwd_nodes[0]
+            if isinstance(cwd_node, ast.Constant) and cwd_node.value is None:
+                cwd = None
+            else:
+                cwd = _literal_to_string(cwd_node)
+                if cwd is None:
+                    has_unresolved = True
+                    continue
+        first = args[0]
+        shell_arg = next((kw.value for kw in call.keywords if kw.arg == "shell"), None)
+        is_shell_true = bool(
+            shell_arg is not None
+            and isinstance(shell_arg, ast.Constant)
+            and shell_arg.value is True
+        )
+        if is_shell_true:
+            cmd_str = _literal_to_string(first)
+            if cmd_str is not None:
+                specs.append(_InterpreterCommandSpec(cmd_str, cwd))
+                continue
+            has_unresolved = True
+            continue
+        argv = _literal_to_argv(first)
+        if argv is not None:
+            specs.append(_InterpreterCommandSpec(argv, cwd))
+            continue
+        cmd_str = _literal_to_string(first)
+        if cmd_str is not None:
+            specs.append(_InterpreterCommandSpec(cmd_str, cwd))
+            continue
+        has_unresolved = True
+    return (specs, has_unresolved)
 
-    # Find each `python* -c "<payload>"` invocation.
+
+def _extract_interpreter_command_specs(
+    command: str,
+) -> tuple[list[_InterpreterCommandSpec], bool]:
+    specs: list[_InterpreterCommandSpec] = []
+    has_unresolved = False
+    if not _INTERPRETER_RE.search(command) or not _SUBPROCESS_APIS_RE.search(command):
+        return (specs, has_unresolved)
     py_re = re.compile(
         r"(?:^|&&|\|\||;)\s*(?:env\s+)?(?:python3?(?:\.\d+)?)\s+-c\s+(['\"])(.*?)\1",
         re.DOTALL,
     )
     for match in py_re.finditer(command):
-        program = match.group(2)
-        for call in _parse_python_program_literals(program):
-            args = call.args
-            if not args:
-                continue
-            first = args[0]
-            # shell=True with a string first argument
-            shell_arg = next((kw.value for kw in call.keywords if kw.arg == "shell"), None)
-            is_shell_true = bool(
-                shell_arg is not None
-                and isinstance(shell_arg, ast.Constant)
-                and shell_arg.value is True
+        found, unresolved = _python_program_command_specs(match.group(2))
+        specs.extend(found)
+        has_unresolved = has_unresolved or unresolved
+    return (specs, has_unresolved)
+
+
+def _extract_interpreter_segment_specs(
+    segment: Sequence[str],
+) -> tuple[list[_InterpreterCommandSpec], bool]:
+    verb, args = command_verb_and_args(list(segment))
+    executable = os.path.basename(verb).casefold()
+    if re.fullmatch(r"python(?:3(?:\.\d+)?)?", executable) is None:
+        return ([], False)
+    try:
+        command_index = args.index("-c")
+    except ValueError:
+        return ([], False)
+    if command_index + 1 >= len(args):
+        return ([], True)
+    return _python_program_command_specs(args[command_index + 1])
+
+
+def extract_interpreter_command_payloads(command: str) -> tuple[list[str | list[str]], bool]:
+    """Return literal subprocess payloads and whether any were unresolved."""
+    specs, has_unresolved = _extract_interpreter_command_specs(command)
+    return ([spec.payload for spec in specs], has_unresolved)
+
+
+class GitHubMutationStatus(StrEnum):
+    """Deterministic cardinality result for a shell command."""
+
+    NONE = "none"
+    SINGLE_RESOLVED = "single_resolved"
+    MULTIPLE = "multiple"
+    UNRESOLVED = "unresolved"
+
+
+class GitHubMutationKind(StrEnum):
+    """Closed mutation families relevant to GitHub review publication."""
+
+    PULL_REVIEW = "pull_review"
+    PULL_REVIEW_COMMENT = "pull_review_comment"
+    PULL_REVIEW_REPLY = "pull_review_reply"
+    GRAPHQL_REVIEW = "graphql_review"
+    OTHER = "other"
+
+
+@dataclass(frozen=True, slots=True)
+class GitHubMutationRecord:
+    method: str
+    route: str
+    kind: GitHubMutationKind
+    request_count: int
+    review_comment_count: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class GitHubMutationAnalysis:
+    status: GitHubMutationStatus
+    mutations: tuple[GitHubMutationRecord, ...]
+    request_count: int | None
+    review_comment_count: int | None
+    reason: str
+
+
+_GITHUB_WRITE_METHODS: frozenset[str] = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+_GITHUB_INPUT_LIMIT = 1024 * 1024
+_DYNAMIC_SHELL_TOKEN_RE = re.compile(r"\$|`|\*|\?|\[")
+_REPEATABLE_SHELL_RE = re.compile(
+    r"(?:^|[;&|]\s*)(?:for|while|until)\b"
+    r"|\b[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)\s*\{"
+)
+_UNRESOLVED_DISPATCH_RE = re.compile(r"(?:^|[;&|]\s*)(?:eval|xargs|source|\.)\b|[<>]\(")
+_POSSIBLE_GITHUB_EXEC_RE = re.compile(
+    r"""(?:^|[\s;&|()'"])(?:[^\s;&|()'"]*/)?(?:gh|curl)(?:[\s'"]|$)""",
+    re.IGNORECASE,
+)
+_PULL_REVIEW_ROUTE_RE = re.compile(
+    r"^/repos/[^/]+/[^/]+/pulls/\d+/reviews"
+    r"(?:/\d+(?:/events)?)?/?$",
+    re.IGNORECASE,
+)
+_PULL_REVIEW_REPLY_ROUTE_RE = re.compile(
+    r"^/repos/[^/]+/[^/]+/pulls/\d+/comments/\d+/replies/?$",
+    re.IGNORECASE,
+)
+_PULL_REVIEW_COMMENT_ROUTE_RE = re.compile(
+    r"^/repos/[^/]+/[^/]+/(?:pulls/\d+/comments(?:/\d+)?|pulls/comments/\d+)/?$",
+    re.IGNORECASE,
+)
+_GRAPHQL_REVIEW_MUTATIONS: frozenset[str] = frozenset(
+    {
+        "addPullRequestReview",
+        "submitPullRequestReview",
+        "dismissPullRequestReview",
+        "deletePullRequestReview",
+        "addPullRequestReviewComment",
+        "addPullRequestReviewThread",
+    }
+)
+
+
+def _none_github_analysis() -> GitHubMutationAnalysis:
+    return GitHubMutationAnalysis(
+        status=GitHubMutationStatus.NONE,
+        mutations=(),
+        request_count=0,
+        review_comment_count=None,
+        reason="",
+    )
+
+
+def _unresolved_github_analysis(
+    reason: str,
+    mutations: Sequence[GitHubMutationRecord] = (),
+) -> GitHubMutationAnalysis:
+    return GitHubMutationAnalysis(
+        status=GitHubMutationStatus.UNRESOLVED,
+        mutations=tuple(mutations),
+        request_count=None,
+        review_comment_count=None,
+        reason=reason,
+    )
+
+
+def _is_dynamic_shell_value(value: str) -> bool:
+    return bool(_DYNAMIC_SHELL_TOKEN_RE.search(value))
+
+
+def _normalize_github_route(route: str) -> str:
+    if route.startswith(("http://", "https://")):
+        parsed = urlsplit(route)
+        return parsed.path or "/"
+    if not route.startswith("/"):
+        return f"/{route}"
+    return route
+
+
+def _github_mutation_kind(route: str) -> GitHubMutationKind:
+    normalized = _normalize_github_route(route)
+    if _PULL_REVIEW_REPLY_ROUTE_RE.fullmatch(normalized):
+        return GitHubMutationKind.PULL_REVIEW_REPLY
+    if _PULL_REVIEW_COMMENT_ROUTE_RE.fullmatch(normalized):
+        return GitHubMutationKind.PULL_REVIEW_COMMENT
+    if _PULL_REVIEW_ROUTE_RE.fullmatch(normalized):
+        return GitHubMutationKind.PULL_REVIEW
+    return GitHubMutationKind.OTHER
+
+
+def _json_object_without_duplicate_keys(raw: bytes) -> dict[str, Any]:
+    def _pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate JSON key: {key}")
+            result[key] = value
+        return result
+
+    value = json.loads(raw.decode("utf-8"), object_pairs_hook=_pairs)
+    if not isinstance(value, dict):
+        raise ValueError("GitHub --input payload must be a JSON object")
+    return value
+
+
+def _load_literal_github_input(
+    value: str,
+    *,
+    cwd: str,
+) -> tuple[dict[str, Any] | None, str]:
+    if value == "-":
+        return (None, "GitHub --input stdin is unresolved")
+    if not value or _is_dynamic_shell_value(value):
+        return (None, "GitHub --input path is dynamic")
+    if os.path.isabs(value):
+        path = os.path.normpath(value)
+    else:
+        if not cwd or not os.path.isabs(cwd):
+            return (None, "relative GitHub --input requires an absolute cwd")
+        path = os.path.normpath(os.path.join(cwd, value))
+
+    try:
+        before = os.lstat(path)
+        if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
+            return (None, "GitHub --input must be a regular non-symlink file")
+        if before.st_size > _GITHUB_INPUT_LIMIT:
+            return (None, "GitHub --input exceeds the inspection limit")
+        flags = os.O_RDONLY
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        fd = os.open(path, flags)
+        try:
+            after = os.fstat(fd)
+            if not stat.S_ISREG(after.st_mode) or (before.st_dev, before.st_ino) != (
+                after.st_dev,
+                after.st_ino,
+            ):
+                return (None, "GitHub --input file identity changed")
+            chunks: list[bytes] = []
+            remaining = _GITHUB_INPUT_LIMIT + 1
+            while remaining:
+                chunk = os.read(fd, min(65536, remaining))
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            raw = b"".join(chunks)
+        finally:
+            os.close(fd)
+        if len(raw) > _GITHUB_INPUT_LIMIT:
+            return (None, "GitHub --input exceeds the inspection limit")
+        return (_json_object_without_duplicate_keys(raw), "")
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+        return (None, f"GitHub --input is not safely inspectable: {exc}")
+
+
+_INPUT_SAFE_PRIOR_COMMANDS: frozenset[str] = frozenset(
+    {"[", "cat", "echo", "false", "head", "ls", "printf", "pwd", "stat", "test", "true", "wc"}
+)
+
+
+def _segment_is_safe_before_literal_input(segment: Sequence[str], *, cwd: str) -> bool:
+    """Return whether *segment* is proven unable to rewrite a later input file."""
+    if extract_redirect_targets(list(segment), cwd):
+        return False
+    verb, _ = command_verb_and_args(list(segment))
+    executable = _normalize_executable(verb)
+    return executable in _INPUT_SAFE_PRIOR_COMMANDS
+
+
+def _comment_count_from_payload(payload: dict[str, Any]) -> tuple[int | None, str]:
+    if "comments" not in payload:
+        return (None, "")
+    comments = payload["comments"]
+    if not isinstance(comments, list):
+        return (None, "GitHub review comments must be a JSON array")
+    return (len(comments), "")
+
+
+def _flag_value(
+    args: Sequence[str],
+    index: int,
+    *,
+    long_name: str,
+    short_name: str | None = None,
+) -> tuple[str | None, int, bool]:
+    token = args[index]
+    if token == long_name or (short_name is not None and token == short_name):
+        if index + 1 >= len(args):
+            return (None, index + 1, False)
+        return (args[index + 1], index + 2, True)
+    if token.startswith(f"{long_name}="):
+        return (token.split("=", 1)[1], index + 1, True)
+    if short_name and token.startswith(short_name) and token != short_name:
+        return (token[len(short_name) :], index + 1, True)
+    return (None, index, False)
+
+
+def _analyze_gh_api(
+    args: Sequence[str],
+    *,
+    cwd: str,
+    input_context_safe: bool,
+) -> tuple[GitHubMutationRecord | None, str]:
+    method: str | None = None
+    route: str | None = None
+    input_value: str | None = None
+    field_values: list[str] = []
+    has_body_fields = False
+    paginate = False
+    graphql = False
+    i = 0
+
+    while i < len(args):
+        token = args[i]
+        if token == "graphql" and route is None:
+            graphql = True
+            route = "/graphql"
+            i += 1
+            continue
+
+        value, next_i, matched = _flag_value(args, i, long_name="--method", short_name="-X")
+        if matched or token in {"--method", "-X"}:
+            if not matched or value is None:
+                return (None, "GitHub API method is missing")
+            method = value.upper()
+            i = next_i
+            continue
+
+        value, next_i, matched = _flag_value(args, i, long_name="--input")
+        if matched or token == "--input":
+            if not matched or value is None:
+                return (None, "GitHub --input path is missing")
+            input_value = value
+            has_body_fields = True
+            i = next_i
+            continue
+
+        field_match = False
+        for long_name, short_name in (
+            ("--field", "-F"),
+            ("--raw-field", "-f"),
+        ):
+            value, next_i, matched = _flag_value(
+                args, i, long_name=long_name, short_name=short_name
             )
-            if is_shell_true:
-                cmd_str = _literal_to_string(first)
-                if cmd_str is not None:
-                    payloads.append(cmd_str)
-                    continue
-                has_unresolved = True
+            if matched or token in {long_name, short_name}:
+                if not matched or value is None:
+                    return (None, f"{long_name} value is missing")
+                field_values.append(value)
+                has_body_fields = True
+                i = next_i
+                field_match = True
+                break
+        if field_match:
+            continue
+
+        if token == "--paginate":
+            paginate = True
+            i += 1
+            continue
+        if token in {"-H", "--header", "--hostname", "--cache"}:
+            if i + 1 >= len(args):
+                return (None, f"{token} value is missing")
+            i += 2
+            continue
+        if token.startswith(("--header=", "--hostname=", "--cache=")):
+            i += 1
+            continue
+        if token.startswith("-"):
+            i += 1
+            continue
+        if route is None:
+            route = token
+            i += 1
+            continue
+        return (None, "multiple GitHub API routes are unresolved")
+
+    if route is None:
+        if method is not None or has_body_fields:
+            return (None, "GitHub API route is missing")
+        return (None, "")
+    if _is_dynamic_shell_value(route):
+        return (None, "GitHub API route is dynamic")
+    if method is not None and _is_dynamic_shell_value(method):
+        return (None, "GitHub API method is dynamic")
+
+    payload: dict[str, Any] = {}
+    if input_value is not None:
+        if not input_context_safe:
+            return (None, "a prior command may rewrite the inspected GitHub --input file")
+        loaded, reason = _load_literal_github_input(input_value, cwd=cwd)
+        if loaded is None:
+            return (None, reason)
+        payload = loaded
+
+    effective_method = method or ("POST" if has_body_fields else "GET")
+    normalized_route = _normalize_github_route(route)
+    if effective_method not in _GITHUB_WRITE_METHODS:
+        return (None, "")
+    if paginate:
+        return (None, "mutation request count is indeterminate with --paginate")
+
+    comment_count, reason = _comment_count_from_payload(payload)
+    if reason:
+        return (None, reason)
+
+    if graphql:
+        query = payload.get("query")
+        if query is None:
+            for field in field_values:
+                key, separator, value = field.partition("=")
+                if separator and key == "query":
+                    query = value
+                    break
+        if not isinstance(query, str) or _is_dynamic_shell_value(query):
+            return (None, "GraphQL mutation document is unresolved")
+        if not re.search(r"\bmutation\b", query):
+            return (None, "")
+        kind = (
+            GitHubMutationKind.GRAPHQL_REVIEW
+            if any(
+                re.search(rf"\b{re.escape(name)}\b", query) for name in _GRAPHQL_REVIEW_MUTATIONS
+            )
+            else GitHubMutationKind.OTHER
+        )
+    else:
+        kind = _github_mutation_kind(normalized_route)
+
+    return (
+        GitHubMutationRecord(
+            method=effective_method,
+            route=normalized_route,
+            kind=kind,
+            request_count=1,
+            review_comment_count=comment_count,
+        ),
+        "",
+    )
+
+
+def _analyze_gh_segment(
+    args: Sequence[str],
+    *,
+    cwd: str,
+    input_context_safe: bool,
+) -> tuple[GitHubMutationRecord | None, str]:
+    if not args:
+        return (None, "")
+    if args[:2] == ["pr", "review"]:
+        return (
+            GitHubMutationRecord(
+                method="POST",
+                route="/gh/pr/review",
+                kind=GitHubMutationKind.PULL_REVIEW,
+                request_count=1,
+                review_comment_count=None,
+            ),
+            "",
+        )
+    if args[0] != "api":
+        return (None, "")
+    return _analyze_gh_api(args[1:], cwd=cwd, input_context_safe=input_context_safe)
+
+
+def _analyze_curl_segment(
+    args: Sequence[str],
+) -> tuple[list[GitHubMutationRecord], str]:
+    method: str | None = None
+    has_data = False
+    force_get = False
+    urls: list[str] = []
+    saw_next = False
+    i = 0
+    data_flags = (
+        ("--data", "-d"),
+        ("--data-raw", None),
+        ("--data-binary", None),
+        ("--data-urlencode", None),
+        ("--form", "-F"),
+        ("--upload-file", "-T"),
+    )
+    value_flags = (("--header", "-H"), ("--user", "-u"), ("--output", "-o"))
+    while i < len(args):
+        token = args[i]
+        value, next_i, matched = _flag_value(args, i, long_name="--request", short_name="-X")
+        if matched or token in {"--request", "-X"}:
+            if not matched or value is None:
+                return ([], "curl method is missing")
+            method = value.upper()
+            i = next_i
+            continue
+        value, next_i, matched = _flag_value(args, i, long_name="--url")
+        if matched or token == "--url":
+            if not matched or value is None:
+                return ([], "curl URL is missing")
+            urls.append(value)
+            i = next_i
+            continue
+        if token in {"-G", "--get"}:
+            force_get = True
+            i += 1
+            continue
+        if token == "--next":
+            saw_next = True
+            i += 1
+            continue
+        matched_value_flag = False
+        for long_name, short_name in data_flags:
+            value, next_i, matched = _flag_value(
+                args,
+                i,
+                long_name=long_name,
+                short_name=short_name,
+            )
+            if matched or token == long_name or (short_name is not None and token == short_name):
+                if not matched or value is None:
+                    return ([], f"{token} value is missing")
+                has_data = True
+                i = next_i
+                matched_value_flag = True
+                break
+        if matched_value_flag:
+            continue
+        for long_name, short_name in value_flags:
+            value, next_i, matched = _flag_value(
+                args,
+                i,
+                long_name=long_name,
+                short_name=short_name,
+            )
+            if matched or token == long_name or token == short_name:
+                if not matched or value is None:
+                    return ([], f"{token} value is missing")
+                i = next_i
+                matched_value_flag = True
+                break
+        if matched_value_flag:
+            continue
+        if token.startswith("-"):
+            i += 1
+            continue
+        urls.append(token)
+        i += 1
+
+    if method is not None and _is_dynamic_shell_value(method):
+        return ([], "curl method is dynamic")
+    if any(_is_dynamic_shell_value(url) for url in urls):
+        return ([], "curl URL is dynamic")
+    github_urls = []
+    for url in urls:
+        hostname = urlsplit(url).hostname
+        if hostname is not None and hostname.lower() in {"api.github.com", "github.com"}:
+            github_urls.append(url)
+    if not github_urls:
+        return ([], "")
+    effective_method = method or ("GET" if force_get else ("POST" if has_data else "GET"))
+    if effective_method not in _GITHUB_WRITE_METHODS:
+        return ([], "")
+    if saw_next or len(github_urls) != 1 or len(urls) != 1:
+        return ([], "curl mutation request count is indeterminate")
+    route = urlsplit(github_urls[0]).path or "/"
+    return (
+        [
+            GitHubMutationRecord(
+                method=effective_method,
+                route=route,
+                kind=_github_mutation_kind(route),
+                request_count=1,
+                review_comment_count=None,
+            )
+        ],
+        "",
+    )
+
+
+def _segment_cwd(segment: Sequence[str], cwd: str) -> str:
+    current = cwd
+    for index, token in enumerate(segment):
+        if token in {"-C", "--chdir"} and index and segment[index - 1] == "env":
+            if index + 1 < len(segment):
+                value = segment[index + 1]
+                if os.path.isabs(value):
+                    current = value
+                elif current:
+                    current = os.path.normpath(os.path.join(current, value))
+        elif token.startswith("--chdir=") and "env" in segment[:index]:
+            value = token.split("=", 1)[1]
+            if os.path.isabs(value):
+                current = value
+            elif current:
+                current = os.path.normpath(os.path.join(current, value))
+    return current
+
+
+def _analyze_github_segment(
+    segment: Sequence[str],
+    *,
+    cwd: str,
+    input_context_safe: bool = True,
+) -> tuple[list[GitHubMutationRecord], str]:
+    verb, args = command_verb_and_args(list(segment))
+    executable = _normalize_executable(verb)
+    if executable == "gh":
+        record, reason = _analyze_gh_segment(
+            args,
+            cwd=_segment_cwd(segment, cwd),
+            input_context_safe=input_context_safe,
+        )
+        return (([record] if record is not None else []), reason)
+    if executable == "curl":
+        return _analyze_curl_segment(args)
+    return ([], "")
+
+
+def analyze_github_mutations(
+    command: str,
+    *,
+    cwd: str = "",
+) -> GitHubMutationAnalysis:
+    """Classify all reachable mutations, treating uncertainty as absorbing."""
+    if not isinstance(command, str) or not command.strip():
+        return _none_github_analysis()
+
+    records: list[GitHubMutationRecord] = []
+    reasons: list[str] = []
+    queue: list[tuple[str, str, int]] = [(command, cwd, 0)]
+    argv_payloads: list[tuple[list[str], str]] = []
+
+    while queue:
+        payload, payload_cwd, depth = queue.pop(0)
+        if depth > 32:
+            reasons.append("nested mutation command depth is unresolved")
+            continue
+        segments = tokenize_command_segments(payload)
+        if not segments and payload.strip():
+            if _POSSIBLE_GITHUB_EXEC_RE.search(payload):
+                reasons.append("mutation-bearing shell payload could not be parsed")
+            continue
+
+        current_cwd = payload_cwd
+        input_context_safe = True
+        for segment in segments:
+            verb, args = command_verb_and_args(segment)
+            if _normalize_executable(verb) == "cd":
+                if len(args) != 1 or _is_dynamic_shell_value(args[0]):
+                    reasons.append("shell cwd transition is unresolved")
+                elif os.path.isabs(args[0]):
+                    current_cwd = os.path.normpath(args[0])
+                elif current_cwd:
+                    current_cwd = os.path.normpath(os.path.join(current_cwd, args[0]))
+                else:
+                    reasons.append("relative shell cwd transition has no authority")
                 continue
-            # List/tuple argv literal
-            argv = _literal_to_argv(first)
-            if argv is not None:
-                payloads.append(argv)
-                continue
-            # String first argument interpreted as shell via shell=True not set;
-            # treat as shell-command string for os.system/Popen defaults too.
-            cmd_str = _literal_to_string(first)
-            if cmd_str is not None:
-                payloads.append(cmd_str)
-                continue
-            has_unresolved = True
-    return (payloads, has_unresolved)
+            found, reason = _analyze_github_segment(
+                segment,
+                cwd=current_cwd,
+                input_context_safe=input_context_safe,
+            )
+            records.extend(found)
+            if reason:
+                reasons.append(reason)
+
+            interpreter_specs, has_unresolved = _extract_interpreter_segment_specs(segment)
+            if has_unresolved and _POSSIBLE_GITHUB_EXEC_RE.search(payload):
+                reasons.append("interpreter subprocess command or cwd is unresolved")
+            for spec in interpreter_specs:
+                interpreter_cwd = current_cwd
+                if spec.cwd is not None:
+                    if os.path.isabs(spec.cwd):
+                        interpreter_cwd = os.path.normpath(spec.cwd)
+                    elif current_cwd:
+                        interpreter_cwd = os.path.normpath(os.path.join(current_cwd, spec.cwd))
+                    else:
+                        reasons.append("relative interpreter cwd has no authority")
+                        continue
+                if isinstance(spec.payload, str):
+                    queue.append((spec.payload, interpreter_cwd, depth + 1))
+                else:
+                    argv_payloads.append((spec.payload, interpreter_cwd))
+
+            input_context_safe = input_context_safe and _segment_is_safe_before_literal_input(
+                segment,
+                cwd=current_cwd,
+            )
+
+        for nested in extract_shell_command_payloads(payload):
+            queue.append((nested, current_cwd, depth + 1))
+
+        if (
+            _REPEATABLE_SHELL_RE.search(payload) or _UNRESOLVED_DISPATCH_RE.search(payload)
+        ) and _POSSIBLE_GITHUB_EXEC_RE.search(payload):
+            reasons.append("mutation cardinality is unresolved in a shell wrapper")
+
+    for argv, argv_cwd in argv_payloads:
+        found, reason = _analyze_github_segment(argv, cwd=argv_cwd)
+        records.extend(found)
+        if reason:
+            reasons.append(reason)
+
+    if reasons:
+        return _unresolved_github_analysis("; ".join(dict.fromkeys(reasons)), records)
+    request_count = sum(record.request_count for record in records)
+    if request_count == 0:
+        return _none_github_analysis()
+    if request_count != 1 or len(records) != 1:
+        return GitHubMutationAnalysis(
+            status=GitHubMutationStatus.MULTIPLE,
+            mutations=tuple(records),
+            request_count=request_count,
+            review_comment_count=None,
+            reason="",
+        )
+    record = records[0]
+    return GitHubMutationAnalysis(
+        status=GitHubMutationStatus.SINGLE_RESOLVED,
+        mutations=(record,),
+        request_count=1,
+        review_comment_count=record.review_comment_count,
+        reason="",
+    )

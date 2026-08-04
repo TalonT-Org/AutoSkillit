@@ -218,11 +218,20 @@ class QuotaGuardConfig:
 class GitHubConfig:
     token: str | None = None
     default_repo: str | None = None
+    review_comment_cap: int = 50
     in_progress_label: str = "in-progress"
     staged_label: str = "staged"
     fail_label: str = "fail"
     queued_label: str = "queued"
     allowed_labels: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.review_comment_cap, bool)
+            or not isinstance(self.review_comment_cap, int)
+            or self.review_comment_cap <= 0
+        ):
+            raise ValueError("github.review_comment_cap must be a positive integer")
 
     def check_label_allowed(self, label: str) -> str | None:
         """Return None if label is permitted, or an error message string if not.

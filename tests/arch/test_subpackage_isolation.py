@@ -945,7 +945,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
         "core": 30,  # +plugin identity authority + strict audit semantic codec
-        "core/types": 45,  # +audit admission and native shell capture contracts
+        # +audit admission ownership, native shell capture, protocols, and GitHub review types
+        "core/types": 46,
         "cli": 23,  # +_install_contract typed install process boundary (#4409)
         "cli/doctor": 11,  # +_doctor_skills capability declaration authenticity checks
         "workspace": 15,  # +_installed_artifact exact lease-protected authority (#4409);
@@ -963,7 +964,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # for direct headless executor callers — report_bug, prepare_issue, enrich_issues)
         # +tools_audit_artifacts.py (typed audit semantic/disposition producers, #4419;
         # replaces the retired generic audit-cycle writer)
-        "hooks/guards": 32,  # -output_budget_guard (#4286)
+        "hooks/guards": 33,  # +github_mutation_guard (#4432)
         # Three private Codex ownership modules keep lock, prelaunch transaction,
         # and per-attempt storage concerns out of the public backend gateway:
         # +_codex_config_lock, +_codex_prelaunch, +_codex_session_storage.
@@ -1033,12 +1034,13 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "circular imports; all enums/protocols/constants consolidated here",
     ),
     "hooks/_command_classification.py": (
-        1500,
+        1750,
         "REQ-CNST-010-E10: shared command-classification primitive consumed by all "
         "command-inspecting guards — tokenization, shell-payload extraction, "
         "interpreter-write detection, protected-path reads, recursive payload "
-        "segmentation, and descriptor-flow output-budget analysis; the stdlib-only "
-        "hook boundary and shared parser prevent policy drift across guard processes.",
+        "segmentation, descriptor-flow output-budget analysis, and #4432's recursive "
+        "GitHub mutation cardinality/route analysis; the stdlib-only hook boundary and "
+        "shared parser prevent policy drift across guard processes.",
     ),
     "session.py": (
         1060,

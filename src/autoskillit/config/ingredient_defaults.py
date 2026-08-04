@@ -70,6 +70,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "claim_issue",
             "release_issue",
             "get_pr_reviews",
+            "post_pr_review",
             "bulk_close_issues",
             "claim_and_resolve_issue",
         ),

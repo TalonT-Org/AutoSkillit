@@ -2,7 +2,7 @@
 
 Tests enforce that analysis runs before fixing, parallel sub-agents are used,
 ACCEPT/REJECT/DISCUSS classification gates code changes, git history is traced,
-inline replies are posted, and reject patterns are persisted for future mining.
+raw inline replies are prohibited, and reject patterns are persisted for future mining.
 """
 
 from pathlib import Path
@@ -128,58 +128,24 @@ def test_discuss_items_flagged_for_human_decision():
     ), "SKILL.md must describe DISCUSS items as flagged for human decision"
 
 
-# --- Inline replies ---
+# --- Publication boundary ---
 
 
-def test_inline_reply_posted_for_every_comment():
-    """The skill must describe posting an inline reply for every analyzed comment."""
+def test_raw_inline_reply_publication_is_prohibited():
+    """Review findings may be published only through the structured tool."""
     text = SKILL_TEXT
-    assert "reply" in text.lower() or "replies" in text.lower(), (
-        "SKILL.md must describe posting inline replies on review comments"
-    )
-    reply_idx = text.lower().find("inline repl")
-    if reply_idx == -1:
-        reply_idx = text.lower().find("repl")
-    assert reply_idx != -1, "SKILL.md must describe inline replies"
-    reply_context = text[reply_idx : reply_idx + 600].lower()
-    assert "every" in reply_context or "each" in reply_context or "all" in reply_context, (
-        "SKILL.md must indicate replies are posted for every (each/all) analyzed comment"
-    )
+    assert "Do Not Post Inline Replies" in text
+    assert "/replies" not in text
+    assert "post_pr_review" in text
 
 
-def test_accept_reply_references_commit_sha():
-    """ACCEPT replies must reference the commit SHA of the fix."""
-    text = SKILL_TEXT
-    assert "commit_sha" in text or "commit sha" in text.lower() or "fixed in" in text.lower(), (
-        "SKILL.md must state that ACCEPT replies reference the fixing commit SHA"
-    )
-
-
-def test_reject_reply_requires_specific_evidence():
-    """REJECT replies must include specific evidence (line numbers, API docs, etc.)."""
-    text = SKILL_TEXT
-    reject_idx = text.upper().find("REJECT")
-    assert reject_idx != -1
-    reject_context = text[reject_idx : reject_idx + 600].lower()
-    assert (
-        "evidence" in reject_context or "line" in reject_context or "intentional" in reject_context
-    ), (
-        "SKILL.md must require REJECT replies to include specific evidence "
-        "(line numbers, design contracts, API references, etc.)"
-    )
-
-
-def test_reply_api_endpoint_documented():
-    """The GitHub comment reply API endpoint must be referenced."""
-    text = SKILL_TEXT
-    assert (
-        "comments/{comment_id}/replies" in text
-        or "comments/{id}/replies" in text
-        or "/replies" in text
-    ), (
-        "SKILL.md must reference the GitHub comment reply API endpoint "
-        "(/pulls/{n}/comments/{id}/replies)"
-    )
+def test_structured_review_tool_is_the_sole_publication_path():
+    step65_idx = SKILL_TEXT.find("### Step 6.5")
+    step66_idx = SKILL_TEXT.find("### Step 6.6", step65_idx)
+    assert step65_idx != -1 and step66_idx != -1
+    step65 = SKILL_TEXT[step65_idx:step66_idx]
+    assert "sole review-publication path" in step65
+    assert "never creates" in step65
 
 
 # --- Reject pattern persistence ---

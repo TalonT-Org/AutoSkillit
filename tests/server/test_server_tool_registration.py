@@ -43,6 +43,7 @@ class TestToolRegistration:
 
         mcp.enable(tags={"fleet"})
         mcp.enable(tags={"fleet-dispatch"})
+        mcp.enable(tags={"headless"})
 
         async with Client(mcp) as client:
             all_tools = await client.list_tools()
@@ -91,6 +92,7 @@ class TestToolRegistration:
             "check_pr_mergeable",
             "write_telemetry_files",
             "get_pr_reviews",
+            "post_pr_review",
             "bulk_close_issues",
             "set_commit_status",
             "register_clone_status",
@@ -153,6 +155,7 @@ class TestToolRegistration:
 
         mcp.enable(tags={"fleet"})
         mcp.enable(tags={"fleet-dispatch"})
+        mcp.enable(tags={"headless"})
 
         all_tools = {t.name: t for t in await mcp.list_tools()}
         for name in GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS:
@@ -237,6 +240,7 @@ class TestToolRegistration:
 
         mcp.enable(tags={"fleet"})
         mcp.enable(tags={"fleet-dispatch"})
+        mcp.enable(tags={"headless"})
 
         all_gated = GATED_TOOLS | HEADLESS_TOOLS
         pack_tags = frozenset(PACK_REGISTRY.keys())

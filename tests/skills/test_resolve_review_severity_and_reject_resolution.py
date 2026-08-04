@@ -22,7 +22,7 @@ def test_info_findings_classified_as_verdict_info_not_discuss() -> None:
 
     The DISCUSS verdict is reserved for findings that require a human design decision
     (validated by Step 3.5 sub-agents). Info-severity findings are classified with
-    verdict=INFO at Step 3 and acknowledged via the Step 6.5 INFO reply template.
+    verdict=INFO at Step 3 and is not auto-published by Step 6.5.
     """
     step3_idx = SKILL_TEXT.find("### Step 3:")
     if step3_idx == -1:
@@ -91,8 +91,8 @@ def test_info_findings_do_not_enter_step_35() -> None:
     )
 
 
-def test_info_reply_template_uses_acknowledged() -> None:
-    """Step 6.5 must include a templated reply for info (auto-classified) findings."""
+def test_info_findings_are_not_auto_published() -> None:
+    """Step 6.5 must disable raw replies for every classification, including INFO."""
     step65_idx = SKILL_TEXT.find("### Step 6.5")
     assert step65_idx != -1, "SKILL.md must have a Step 6.5 section"
     step66_idx = SKILL_TEXT.find("### Step 6.6", step65_idx)
@@ -101,12 +101,9 @@ def test_info_reply_template_uses_acknowledged() -> None:
         if step66_idx != -1
         else SKILL_TEXT[step65_idx : step65_idx + 1200]
     )
-    assert "acknowledged" in step65_section.lower(), (
-        "Step 6.5 must include 'Acknowledged' template for info findings"
-    )
-    assert "minor suggestion" in step65_section.lower(), (
-        "Step 6.5 must include 'minor suggestion noted' in the info reply template"
-    )
+    assert "do not post raw inline replies" in step65_section.lower()
+    assert "structured tool call" in step65_section
+    assert "info reply" not in step65_section.lower()
 
 
 def test_reject_threads_added_to_addressed_thread_ids() -> None:
@@ -140,8 +137,8 @@ def test_discuss_threads_still_excluded_from_addressed_thread_ids() -> None:
     ), "DISCUSS findings must still be excluded from addressed_thread_ids"
 
 
-def test_step6_5_scope_includes_all_analyzed_comments() -> None:
-    """Step 6.5 must not restrict scope to 'critical+warning filter' — all analyzed findings."""
+def test_step6_5_disables_publication_for_all_analyzed_comments() -> None:
+    """Step 6.5 must not retain any severity-specific raw reply path."""
     assert "critical+warning\nfilter in Step 3" not in SKILL_TEXT
     assert "critical+warning filter in Step 3" not in SKILL_TEXT, (
         "Step 6.5 scope must not reference the removed critical+warning filter"
@@ -154,9 +151,8 @@ def test_step6_5_scope_includes_all_analyzed_comments() -> None:
         if step66_idx != -1
         else SKILL_TEXT[step65_idx : step65_idx + 800]
     )
-    assert "intent validation" in step65_section.lower() or "step 3.5" in step65_section, (
-        "Step 6.5 scope should reference intent validation / Step 3.5 instead of the old severity filter"  # noqa: E501
-    )
+    assert "In both modes" in step65_section
+    assert "review-comment mutation endpoint" in step65_section
 
 
 def test_report_does_not_mark_info_as_skipped() -> None:

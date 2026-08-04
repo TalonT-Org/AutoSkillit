@@ -27,6 +27,7 @@ from autoskillit.smoke_utils import (
     check_loop_iteration,
     check_loop_with_progress,
     check_review_loop,
+    check_review_posted,
     compile_eval_scorecard,
     consolidate_health_reports,
     determine_experimental_review_verdict,
@@ -3050,9 +3051,9 @@ def test_enrich_diff_context_missing_handoff_file(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 _DIFF_OUTPUT = "+++ b/src/app.py\n@@ -1,3 +1,4 @@\n line1\n+added\n"
-_SHA = "abc1234567890"
-_BASE_SHA = "def1234567890"
-_MERGE_BASE_SHA = "0123456789abc"
+_SHA = "a" * 40
+_BASE_SHA = "b" * 40
+_MERGE_BASE_SHA = "c" * 40
 
 
 def _annotation_run_side_effect(
@@ -3487,7 +3488,7 @@ def test_annotate_pr_diff_rejects_moving_github_refs(mock_run, tmp_path: Path) -
         nonlocal ref_reads
         if args[:2] == ["gh", "api"]:
             ref_reads += 1
-            head = _SHA if ref_reads == 1 else f"{_SHA}moved"
+            head = _SHA if ref_reads == 1 else "d" * 40
             payload = json.dumps({"headRefOid": head, "baseRefOid": _BASE_SHA})
             return subprocess.CompletedProcess(args, 0, payload.encode(), b"")
         if args[:3] == ["gh", "pr", "diff"]:
@@ -3502,7 +3503,7 @@ def test_annotate_pr_diff_rejects_moving_github_refs(mock_run, tmp_path: Path) -
 
 @patch("subprocess.run")
 def test_annotate_pr_diff_rejects_local_base_disagreement(mock_run, tmp_path: Path) -> None:
-    mock_run.side_effect = _annotation_run_side_effect(live_base_sha="live-base")
+    mock_run.side_effect = _annotation_run_side_effect(live_base_sha="d" * 40)
     with pytest.raises(RuntimeError, match="local base ref does not match"):
         annotate_pr_diff(
             pr_number="95",
@@ -3524,8 +3525,7 @@ def test_annotate_pr_diff_embeds_head_sha_in_metrics(mock_run, tmp_path: Path) -
     mock_run.side_effect = _annotation_run_side_effect()
     annotate_pr_diff(pr_number="999", cwd=str(tmp_path), output_dir=str(tmp_path))
     metrics = json.loads((tmp_path / "metrics_999.json").read_text())
-    assert "_head_sha" in metrics
-    assert len(metrics["_head_sha"]) >= 7
+    assert metrics["_head_sha"] == _SHA
 
 
 @patch("subprocess.run")
@@ -3534,7 +3534,7 @@ def test_annotate_pr_diff_embeds_sha_header_in_diff_text(mock_run, tmp_path: Pat
     mock_run.side_effect = _annotation_run_side_effect()
     annotate_pr_diff(pr_number="999", cwd=str(tmp_path), output_dir=str(tmp_path))
     first_line = (tmp_path / "annotated_diff_999.txt").read_text().split("\n")[0]
-    assert first_line.startswith("# sha:")
+    assert first_line == f"# sha: {_SHA}"
 
 
 @patch("subprocess.run")
@@ -3542,8 +3542,8 @@ def test_annotate_pr_diff_returns_head_sha(mock_run, tmp_path: Path) -> None:
     """T_SHA_3: Return dict must include head_sha for downstream capture."""
     mock_run.side_effect = _annotation_run_side_effect()
     result = annotate_pr_diff(pr_number="999", cwd=str(tmp_path), output_dir=str(tmp_path))
-    assert "head_sha" in result
-    assert len(result["head_sha"]) >= 7
+    assert result["pr_head_sha"] == _SHA
+    assert re.fullmatch(r"[0-9a-f]{40}", result["pr_head_sha"])
 
 
 @patch("subprocess.run")
@@ -5696,57 +5696,531 @@ def test_check_ref_state_missing_branch_returns_false(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# T_CRP1–T_CRP5: check_review_posted
+# T_CRP1–T_CRP25: check_review_posted
 # ---------------------------------------------------------------------------
 
-
-# T_CRP1
-def test_check_review_posted_no_receipt_returns_false(tmp_path):
-    """No receipt file → reviews_posted="false" with sentinel."""
-    from autoskillit.smoke_utils import check_review_posted
-
-    result = check_review_posted(pr_number=42, output_dir=str(tmp_path.resolve()), mode="github")
-    assert result["reviews_posted"] == "false"
-    assert result["sentinel"] == "no_reviews_posted"
+_REVIEW_REPOSITORY = "openai/autoskillit"
+_REVIEW_PR_NUMBER = 42
+_REVIEW_HEAD_SHA = "0123456789abcdef0123456789abcdef01234567"
+_REVIEW_LOGICAL_ITERATION = "review-pr:2"
+_REVIEW_OPERATION_KEY = "f" * 64
 
 
-# T_CRP2
-def test_check_review_posted_with_receipt_returns_true(tmp_path):
-    """Receipt file present → reviews_posted="true" with no sentinel."""
-    from autoskillit.smoke_utils import check_review_posted
+def test_check_review_posted_has_keyword_only_identity_signature() -> None:
+    import inspect
 
-    receipt = tmp_path / "batch_review_response_42.json"
-    receipt.write_text('{"id": 1}')
-    result = check_review_posted(pr_number=42, output_dir=str(tmp_path.resolve()), mode="github")
+    signature = inspect.signature(check_review_posted)
+    assert list(signature.parameters) == [
+        "cwd",
+        "receipt_path",
+        "mode",
+        "repository",
+        "pr_number",
+        "head_sha",
+        "logical_iteration",
+        "operation_key",
+        "post_state",
+    ]
+    assert all(
+        parameter.kind is inspect.Parameter.KEYWORD_ONLY
+        for parameter in signature.parameters.values()
+    )
+
+
+def _review_receipt_payload(
+    *,
+    state: str = "SUCCEEDED",
+    reconciliation_result: str = "NOT_NEEDED",
+) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "operation_key": _REVIEW_OPERATION_KEY,
+        "repository": _REVIEW_REPOSITORY,
+        "pr_number": _REVIEW_PR_NUMBER,
+        "head_sha": _REVIEW_HEAD_SHA,
+        "logical_iteration": _REVIEW_LOGICAL_ITERATION,
+        "state": state,
+        "review_id": 9001,
+        "comment_ids": [101, 102],
+        "canonical_finding_count": 3,
+        "finding_dispositions": [
+            {"original_index": 0, "kind": "POSTED", "remote_comment_id": 101},
+            {"original_index": 1, "kind": "ALREADY_PRESENT", "remote_comment_id": 102},
+            {
+                "original_index": 2,
+                "kind": "OMITTED_INVALID",
+                "reason": "line is outside the live diff",
+            },
+        ],
+        "reconciliation_result": reconciliation_result,
+        "dry_run": False,
+    }
+
+
+def _review_receipt_path(cwd: Path, pr_number: int = _REVIEW_PR_NUMBER) -> Path:
+    path = (
+        cwd
+        / ".autoskillit"
+        / "temp"
+        / "review-pr"
+        / _REVIEW_LOGICAL_ITERATION
+        / f"batch_review_response_{pr_number}.json"
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _invoke_review_receipt_check(
+    *,
+    cwd: Path,
+    receipt_path: Path,
+    mode: str = "github",
+    repository: str = _REVIEW_REPOSITORY,
+    pr_number: int = _REVIEW_PR_NUMBER,
+    head_sha: str = _REVIEW_HEAD_SHA,
+    logical_iteration: str = _REVIEW_LOGICAL_ITERATION,
+    operation_key: str = _REVIEW_OPERATION_KEY,
+    post_state: str = "SUCCEEDED",
+) -> dict[str, str]:
+    return check_review_posted(
+        cwd=str(cwd.resolve()),
+        receipt_path=str(receipt_path),
+        mode=mode,
+        repository=repository,
+        pr_number=pr_number,
+        head_sha=head_sha,
+        logical_iteration=logical_iteration,
+        operation_key=operation_key,
+        post_state=post_state,
+    )
+
+
+@pytest.mark.parametrize("state", ["SUCCEEDED", "RECONCILED"])
+@pytest.mark.parametrize("reconciliation_result", ["NOT_NEEDED", "MATCHED", "ENRICHED"])
+def test_check_review_posted_accepts_only_valid_final_receipt(
+    tmp_path: Path,
+    state: str,
+    reconciliation_result: str,
+) -> None:
+    """A contained, identity-matched, exhaustively accounted final receipt succeeds."""
+    cwd = tmp_path / "repo"
+    receipt = _review_receipt_path(cwd)
+    receipt.write_text(
+        json.dumps(
+            _review_receipt_payload(
+                state=state,
+                reconciliation_result=reconciliation_result,
+            )
+        )
+    )
+
+    result = _invoke_review_receipt_check(
+        cwd=cwd,
+        receipt_path=receipt,
+        post_state=state,
+    )
+
     assert result["reviews_posted"] == "true"
     assert result.get("sentinel", "") == ""
 
 
-# T_CRP3
-def test_check_review_posted_local_mode_always_true(tmp_path):
-    """local mode always returns reviews_posted="true" regardless of receipt file."""
-    from autoskillit.smoke_utils import check_review_posted
+def test_check_review_posted_missing_receipt_returns_false(tmp_path: Path) -> None:
+    """GitHub mode fails closed when the captured receipt does not exist."""
+    cwd = tmp_path / "repo"
+    receipt = _review_receipt_path(cwd)
 
-    result = check_review_posted(pr_number=42, output_dir=str(tmp_path.resolve()), mode="local")
+    result = _invoke_review_receipt_check(cwd=cwd, receipt_path=receipt)
+
+    assert result["reviews_posted"] == "false"
+
+
+def test_check_review_posted_local_mode_succeeds_without_reading_receipt(
+    tmp_path: Path,
+) -> None:
+    """Local review mode has no publication receipt and remains an explicit success."""
+    cwd = tmp_path / "repo"
+    missing_receipt = _review_receipt_path(cwd)
+
+    result = _invoke_review_receipt_check(
+        cwd=cwd,
+        receipt_path=missing_receipt,
+        mode="local",
+        repository="not/a-canonical identity",
+        head_sha="",
+        logical_iteration="",
+        operation_key="",
+        post_state="",
+    )
+
     assert result["reviews_posted"] == "true"
 
 
-# T_CRP4
+@pytest.mark.parametrize("mode", ["", "dry-run", "GITHUB", "unknown"])
+def test_check_review_posted_unknown_mode_fails(tmp_path: Path, mode: str) -> None:
+    cwd = tmp_path / "repo"
+    receipt = _review_receipt_path(cwd)
+    receipt.write_text(json.dumps(_review_receipt_payload()))
+
+    result = _invoke_review_receipt_check(cwd=cwd, receipt_path=receipt, mode=mode)
+
+    assert result["reviews_posted"] == "false"
+
+
+@pytest.mark.parametrize(
+    ("field", "bad_value"),
+    [
+        ("repository", "someone/else"),
+        ("pr_number", 43),
+        ("head_sha", "1" * 40),
+        ("logical_iteration", "review-pr:3"),
+        ("operation_key", "different-operation"),
+        ("state", "RECONCILED"),
+    ],
+)
+def test_check_review_posted_rejects_receipt_identity_mismatch(
+    tmp_path: Path,
+    field: str,
+    bad_value: object,
+) -> None:
+    cwd = tmp_path / "repo"
+    receipt = _review_receipt_path(cwd)
+    payload = _review_receipt_payload()
+    payload[field] = bad_value
+    receipt.write_text(json.dumps(payload))
+
+    result = _invoke_review_receipt_check(cwd=cwd, receipt_path=receipt)
+
+    assert result["reviews_posted"] == "false"
+
+
+@pytest.mark.parametrize(
+    ("field", "bad_value"),
+    [
+        ("repository", "OpenAI/autoskillit"),
+        ("head_sha", "ABCDEF0123456789ABCDEF0123456789ABCDEF01"),
+        ("head_sha", "abc123"),
+        ("logical_iteration", "2"),
+        ("operation_key", ""),
+        ("operation_key", "review-v1:approved"),
+    ],
+)
+def test_check_review_posted_rejects_noncanonical_requested_identity(
+    tmp_path: Path,
+    field: str,
+    bad_value: object,
+) -> None:
+    cwd = tmp_path / "repo"
+    receipt = _review_receipt_path(cwd)
+    receipt.write_text(json.dumps(_review_receipt_payload()))
+    assert isinstance(bad_value, str)
+    requested_identity = {
+        "repository": _REVIEW_REPOSITORY,
+        "head_sha": _REVIEW_HEAD_SHA,
+        "logical_iteration": _REVIEW_LOGICAL_ITERATION,
+        "operation_key": _REVIEW_OPERATION_KEY,
+    }
+    requested_identity[field] = bad_value
+
+    result = _invoke_review_receipt_check(
+        cwd=cwd,
+        receipt_path=receipt,
+        repository=requested_identity["repository"],
+        head_sha=requested_identity["head_sha"],
+        logical_iteration=requested_identity["logical_iteration"],
+        operation_key=requested_identity["operation_key"],
+    )
+
+    assert result["reviews_posted"] == "false"
+
+
+@pytest.mark.parametrize(
+    ("field", "bad_value"),
+    [
+        ("schema_version", 2),
+        ("schema_version", "1"),
+        ("state", "PENDING"),
+        ("state", "FAILED"),
+        ("state", "DRY_RUN"),
+        ("reconciliation_result", "UNKNOWN"),
+        ("dry_run", True),
+        ("review_id", 0),
+        ("review_id", -1),
+        ("review_id", "9001"),
+        ("comment_ids", [101, 101]),
+        ("comment_ids", [101, 0]),
+        ("comment_ids", [101, "102"]),
+        ("canonical_finding_count", -1),
+        ("canonical_finding_count", "3"),
+    ],
+)
+def test_check_review_posted_rejects_invalid_schema_or_nonfinal_state(
+    tmp_path: Path,
+    field: str,
+    bad_value: object,
+) -> None:
+    cwd = tmp_path / "repo"
+    receipt = _review_receipt_path(cwd)
+    payload = _review_receipt_payload()
+    payload[field] = bad_value
+    receipt.write_text(json.dumps(payload))
+
+    result = _invoke_review_receipt_check(cwd=cwd, receipt_path=receipt)
+
+    assert result["reviews_posted"] == "false"
+
+
+@pytest.mark.parametrize(
+    "missing_field",
+    [
+        "schema_version",
+        "operation_key",
+        "repository",
+        "pr_number",
+        "head_sha",
+        "logical_iteration",
+        "state",
+        "review_id",
+        "comment_ids",
+        "canonical_finding_count",
+        "finding_dispositions",
+        "reconciliation_result",
+    ],
+)
+def test_check_review_posted_requires_complete_receipt_schema(
+    tmp_path: Path,
+    missing_field: str,
+) -> None:
+    cwd = tmp_path / "repo"
+    receipt = _review_receipt_path(cwd)
+    payload = _review_receipt_payload()
+    del payload[missing_field]
+    receipt.write_text(json.dumps(payload))
+
+    result = _invoke_review_receipt_check(cwd=cwd, receipt_path=receipt)
+
+    assert result["reviews_posted"] == "false"
+
+
+@pytest.mark.parametrize(
+    "dispositions",
+    [
+        [
+            {"original_index": 0, "kind": "POSTED", "remote_comment_id": 101},
+            {"original_index": 0, "kind": "ALREADY_PRESENT", "remote_comment_id": 102},
+            {"original_index": 2, "kind": "OMITTED_INVALID", "reason": "invalid"},
+        ],
+        [
+            {"original_index": 0, "kind": "POSTED", "remote_comment_id": 101},
+            {"original_index": 2, "kind": "ALREADY_PRESENT", "remote_comment_id": 102},
+        ],
+        [
+            {"original_index": 0, "kind": "POSTED", "remote_comment_id": 101},
+            {"original_index": 1, "kind": "UNKNOWN", "remote_comment_id": 102},
+            {"original_index": 2, "kind": "OMITTED_INVALID", "reason": "invalid"},
+        ],
+        [
+            {"original_index": 0, "kind": "POSTED"},
+            {"original_index": 1, "kind": "ALREADY_PRESENT", "remote_comment_id": 102},
+            {"original_index": 2, "kind": "OMITTED_INVALID", "reason": "invalid"},
+        ],
+        [
+            {"original_index": 0, "kind": "POSTED", "remote_comment_id": 0},
+            {"original_index": 1, "kind": "ALREADY_PRESENT", "remote_comment_id": 102},
+            {"original_index": 2, "kind": "OMITTED_INVALID", "reason": "invalid"},
+        ],
+        [
+            {"original_index": 0, "kind": "POSTED", "remote_comment_id": 101},
+            {"original_index": 1, "kind": "ALREADY_PRESENT", "remote_comment_id": 101},
+            {"original_index": 2, "kind": "OMITTED_INVALID", "reason": "invalid"},
+        ],
+        [
+            {"original_index": 0, "kind": "POSTED", "remote_comment_id": 101},
+            {"original_index": 1, "kind": "ALREADY_PRESENT", "remote_comment_id": 102},
+            {"original_index": 2, "kind": "OMITTED_INVALID", "reason": ""},
+        ],
+        [
+            {"original_index": 0, "kind": "POSTED", "remote_comment_id": 101},
+            {"original_index": 1, "kind": "ALREADY_PRESENT", "remote_comment_id": 102},
+            {
+                "original_index": 2,
+                "kind": "OMITTED_INVALID",
+                "remote_comment_id": 103,
+                "reason": "invalid",
+            },
+        ],
+    ],
+)
+def test_check_review_posted_requires_exhaustive_unique_disposition_partition(
+    tmp_path: Path,
+    dispositions: list[dict[str, object]],
+) -> None:
+    cwd = tmp_path / "repo"
+    receipt = _review_receipt_path(cwd)
+    payload = _review_receipt_payload()
+    payload["finding_dispositions"] = dispositions
+    receipt.write_text(json.dumps(payload))
+
+    result = _invoke_review_receipt_check(cwd=cwd, receipt_path=receipt)
+
+    assert result["reviews_posted"] == "false"
+
+
+def test_check_review_posted_rejects_disposition_count_mismatch(tmp_path: Path) -> None:
+    cwd = tmp_path / "repo"
+    receipt = _review_receipt_path(cwd)
+    payload = _review_receipt_payload()
+    payload["canonical_finding_count"] = 4
+    receipt.write_text(json.dumps(payload))
+
+    result = _invoke_review_receipt_check(cwd=cwd, receipt_path=receipt)
+
+    assert result["reviews_posted"] == "false"
+
+
+@pytest.mark.parametrize(
+    "raw_content",
+    [
+        "{not valid JSON",
+        "[]",
+        "null",
+        '"string"',
+    ],
+)
+def test_check_review_posted_rejects_malformed_or_nonobject_json(
+    tmp_path: Path,
+    raw_content: str,
+) -> None:
+    cwd = tmp_path / "repo"
+    receipt = _review_receipt_path(cwd)
+    receipt.write_text(raw_content)
+
+    result = _invoke_review_receipt_check(cwd=cwd, receipt_path=receipt)
+
+    assert result["reviews_posted"] == "false"
+
+
+def test_check_review_posted_rejects_oversized_receipt(tmp_path: Path) -> None:
+    """A syntactically valid receipt over the bounded parser limit is rejected."""
+    cwd = tmp_path / "repo"
+    receipt = _review_receipt_path(cwd)
+    receipt.write_text(json.dumps(_review_receipt_payload()) + (" " * 1_048_577))
+
+    result = _invoke_review_receipt_check(cwd=cwd, receipt_path=receipt)
+
+    assert result["reviews_posted"] == "false"
+
+
+def test_check_review_posted_rejects_path_outside_managed_temp(tmp_path: Path) -> None:
+    cwd = tmp_path / "repo"
+    receipt = cwd / "outside" / f"batch_review_response_{_REVIEW_PR_NUMBER}.json"
+    receipt.parent.mkdir(parents=True)
+    receipt.write_text(json.dumps(_review_receipt_payload()))
+
+    result = _invoke_review_receipt_check(cwd=cwd, receipt_path=receipt)
+
+    assert result["reviews_posted"] == "false"
+
+
+def test_check_review_posted_rejects_traversal_path(tmp_path: Path) -> None:
+    cwd = tmp_path / "repo"
+    managed_temp = cwd / ".autoskillit" / "temp"
+    managed_temp.mkdir(parents=True)
+    outside = cwd / "outside" / f"batch_review_response_{_REVIEW_PR_NUMBER}.json"
+    outside.parent.mkdir()
+    outside.write_text(json.dumps(_review_receipt_payload()))
+    traversal = managed_temp / ".." / ".." / "outside" / outside.name
+
+    result = _invoke_review_receipt_check(cwd=cwd, receipt_path=traversal)
+
+    assert result["reviews_posted"] == "false"
+
+
+def test_check_review_posted_rejects_relative_receipt_path(tmp_path: Path) -> None:
+    cwd = tmp_path / "repo"
+    receipt = _review_receipt_path(cwd)
+    receipt.write_text(json.dumps(_review_receipt_payload()))
+    relative = receipt.relative_to(cwd)
+
+    result = _invoke_review_receipt_check(cwd=cwd, receipt_path=relative)
+
+    assert result["reviews_posted"] == "false"
+
+
+@pytest.mark.parametrize(
+    "basename",
+    [
+        "receipt.json",
+        "batch_review_response_41.json",
+        "batch_review_response_42.json.bak",
+    ],
+)
+def test_check_review_posted_requires_exact_receipt_basename(
+    tmp_path: Path,
+    basename: str,
+) -> None:
+    cwd = tmp_path / "repo"
+    receipt = _review_receipt_path(cwd).with_name(basename)
+    receipt.write_text(json.dumps(_review_receipt_payload()))
+
+    result = _invoke_review_receipt_check(cwd=cwd, receipt_path=receipt)
+
+    assert result["reviews_posted"] == "false"
+
+
+def test_check_review_posted_rejects_symlink_receipt(tmp_path: Path) -> None:
+    cwd = tmp_path / "repo"
+    receipt = _review_receipt_path(cwd)
+    target = receipt.with_name("target.json")
+    target.write_text(json.dumps(_review_receipt_payload()))
+    receipt.symlink_to(target)
+
+    result = _invoke_review_receipt_check(cwd=cwd, receipt_path=receipt)
+
+    assert result["reviews_posted"] == "false"
+
+
+def test_check_review_posted_rejects_symlinked_parent_escape(tmp_path: Path) -> None:
+    cwd = tmp_path / "repo"
+    managed_temp = cwd / ".autoskillit" / "temp"
+    managed_temp.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    receipt = outside / f"batch_review_response_{_REVIEW_PR_NUMBER}.json"
+    receipt.write_text(json.dumps(_review_receipt_payload()))
+    linked_namespace = managed_temp / "review-pr"
+    linked_namespace.symlink_to(outside, target_is_directory=True)
+
+    result = _invoke_review_receipt_check(
+        cwd=cwd,
+        receipt_path=linked_namespace / receipt.name,
+    )
+
+    assert result["reviews_posted"] == "false"
+
+
+def test_check_review_posted_rejects_hardlinked_receipt(tmp_path: Path) -> None:
+    cwd = tmp_path / "repo"
+    receipt = _review_receipt_path(cwd)
+    source = receipt.with_name("source.json")
+    source.write_text(json.dumps(_review_receipt_payload()))
+    os.link(source, receipt)
+
+    result = _invoke_review_receipt_check(cwd=cwd, receipt_path=receipt)
+
+    assert result["reviews_posted"] == "false"
+
+
 def test_check_review_posted_has_no_subprocess_calls(tmp_path):
     """check_review_posted must not invoke any subprocess."""
-    import subprocess
-    from unittest.mock import patch
-
-    from autoskillit.smoke_utils import check_review_posted
-
+    cwd = tmp_path / "repo"
+    receipt = _review_receipt_path(cwd)
     with patch.object(
         subprocess, "run", side_effect=AssertionError("unexpected subprocess")
     ) as mock_run:
-        check_review_posted(pr_number=1, output_dir=str(tmp_path.resolve()), mode="github")
+        _invoke_review_receipt_check(cwd=cwd, receipt_path=receipt)
     mock_run.assert_not_called()
 
 
-# T_CRP5
 def test_check_review_posted_in_smoke_utils_all():
     """check_review_posted must be exported from smoke_utils.__all__."""
     import autoskillit.smoke_utils as sm

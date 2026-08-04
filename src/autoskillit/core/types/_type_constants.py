@@ -343,10 +343,7 @@ GITHUB_API_SKILL_FAMILIES: tuple[SkillFamilyDef, ...] = (
         ),
         required_patterns=frozenset(
             {
-                "mutating-call-delay",
                 "unpostable-prefilter",
-                "response-body-guard",
-                "own-pr-guard",
             }
         ),
     ),

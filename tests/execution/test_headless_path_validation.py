@@ -557,6 +557,7 @@ class TestOutputPathTokensDerivedFromContracts:
             "report_plan_path",
             "results_path",
             "review_path",
+            "review_receipt_path",
             "revision_guidance",
             "scope_report",
             "scope_directions",

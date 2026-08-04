@@ -1,7 +1,7 @@
 ---
 name: review-pr
 categories: [github]
-uses_capabilities: [agent_model, agent_subagent, github_api_write]
+uses_capabilities: [agent_model, agent_subagent]
 description: Automated diff-scoped PR code review using parallel audit subagents. Posts inline GitHub review comments and submits a summary verdict. Use after a PR is opened to gate CI on review approval.
 hooks:
   PreToolUse:
@@ -30,7 +30,10 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - **diff_metrics_path** (optional) — absolute path to a pre-computed diff metrics JSON file (produced by `annotate_pr_diff` run_python step). Contains `dispatch_agents` list that determines which audit dimensions to spawn. When absent, all 6 standard agents are dispatched.
 - **mode** (optional, default: `github`) — Controls where findings are written:
   - `mode=github` (or absent/unrecognized): current behavior — post findings as GitHub inline review comments via the GitHub Reviews API.
-  - `mode=local`: write findings to a local JSON file instead of posting to GitHub. Skips all GitHub API calls for comment posting. Still writes `diff_context_{pr_number}.json`, `raw_findings_{pr_number}.json`, and `summary_{pr_number}_{timestamp}.md` as normal. Gate tokens (`%%REVIEW_GATE::*%%`) are emitted identically in both modes.
+  - `mode=local`: write `local_findings_{pr_number}.json` with `findings` and `iteration`
+    fields; skip all GitHub API calls for comment posting and skip publication. Still write
+    `diff_context_{pr_number}.json`, `raw_findings_{pr_number}.json`, and the summary. Gate
+    tokens are mode-independent.
 
 ## When to Use
 
@@ -1122,7 +1125,7 @@ else:
     REVIEW_GENERATION_ID = ""
 ```
 
-### Step 6: Post Inline Review Comments
+### Step 6: Publish the Complete Review
 
 **MODE BRANCHING:**
 
@@ -1183,271 +1186,70 @@ discarding opaque evidence or provenance fields.
 - `${REVIEW_OUTPUT_DIR}raw_findings_{pr_number}.json` (Step 8)
 - `${REVIEW_OUTPUT_DIR}summary_{pr_number}_{timestamp}.md` (Step 8)
 
-Then skip directly to Step 8 (verdict emission) — no GitHub API calls, no Step 6.5 confirmation, no Step 7 submission.
+Then skip directly to Step 8 (verdict emission).
 
 **Gate token emission is mode-independent:** `%%REVIEW_GATE::LOOP_REQUIRED%%` on `changes_requested`, `%%REVIEW_GATE::CLEAR%%` on `approved`/`needs_human` — emitted identically in both modes.
 
-**When `mode=github`:** Execute Steps 6, 6.5, and 7 as documented below (current behavior unchanged).
+**When `mode=github`:**
 
-Build review comment bodies for each critical and warning finding. Use the `line` and `side`
-fields (modern GitHub Reviews API — not the deprecated `position` field) so that file line
-numbers from audit findings map directly without diff-position counting.
+Resolve `repository` from the canonical `nameWithOwner` value supplied by the caller and
+require it to match `owner/repo`. Require a positive caller-supplied `pr_number`, and validate
+the caller-supplied `pr_head_sha` against `^[0-9a-f]{40}$` before publication. Require the
+caller-supplied `logical_iteration` to be namespaced and require `receipt_path` to be the
+contained `batch_review_response_${pr_number}.json` destination under
+`${REVIEW_OUTPUT_DIR}` for this invocation. Reject a logical iteration that does not start
+with `review-pr:`.
 
-For each finding, `line` is the finding's `line` value (the line number in the new file) and
-`side` is always `RIGHT` (referring to the right-hand side of the diff — additions and context
-in the updated file).
+Prepare one complete `comments` array from `FILTERED_FINDINGS`, filtering at the publication
+boundary to `severity == "critical"` or `severity == "warning"`. Preserve each validated
+repository-relative `path`, `line`, and `side: "RIGHT"` anchor. Do not place
+`UNPOSTABLE_FINDINGS` in `comments`; summarize those findings in the complete review `body`.
 
-Build `COMMENTS_JSON` from `FILTERED_FINDINGS` only (not `UNPOSTABLE_FINDINGS`). All findings
-in `FILTERED_FINDINGS` have been validated against `VALID_LINE_RANGES` in Step 4, so they are
-safe to post as inline comments.
+Map the verdict to the requested event:
 
-Build a proper JSON payload where each comment is a complete object, then post via `--input -`.
-The `--field` approach creates one array entry per flag (not one object per comment), so it must
-not be used for the `comments` array:
-
-```bash
-# Build comments JSON array from FILTERED_FINDINGS only (critical/warning only)
-COMMENTS_JSON=$(jq -n --argjson findings "$FILTERED_FINDINGS" '
-  $findings | map(select(.severity == "critical" or .severity == "warning")) | map({
-    path: .file,
-    line: .line,
-    side: "RIGHT",
-    body: .rendered_body
-  })
-')
-
-# Build and post the full review payload via stdin. --include makes the HTTP
-# status authoritative without relying on response-body shape.
-refresh_final_snapshot_state
-if [ "$FINAL_SNAPSHOT_STATE" != fresh ]; then
-  verdict=stale_snapshot
-  SNAPSHOT_IS_FRESH=false
-  RECEIPT_DOCUMENT=""
-fi
-if [ "$FINAL_SNAPSHOT_STATE" = fresh ]; then
-  REVIEW_EVENT="{APPROVE|COMMENT|REQUEST_CHANGES}"
-  if BATCH_RESPONSE_TMP="$(mktemp "${REVIEW_OUTPUT_DIR%/}/batch_review_response.XXXXXX")"; then
-    jq -n \
-      --arg body "AutoSkillit PR Review — Verdict: {verdict}" \
-      --arg event "$REVIEW_EVENT" \
-      --arg commit_id "$COMMIT_ID" \
-      --argjson comments "$COMMENTS_JSON" \
-      '{body: $body, event: $event, commit_id: $commit_id, comments: $comments}' | \
-    gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \
-      --method POST --include --input - > "$BATCH_RESPONSE_TMP"
-    HTTP_STATUS="$(
-      awk 'toupper($1) ~ /^HTTP\// {status=$2} END {print status}' "$BATCH_RESPONSE_TMP"
-    )"
-    POSTED_REVIEW_ID="$(
-      awk 'body || index($0, "{") == 1 {body=1; print}' "$BATCH_RESPONSE_TMP" |
-        jq -r '.id // empty' 2>/dev/null || true
-    )"
-  fi
-fi
-if [ "$HTTP_STATUS" = "200" ]; then
-  refresh_final_snapshot_state
-  if [ "$FINAL_SNAPSHOT_STATE" = fresh ]; then
-    RECEIPT_DOCUMENT="$(jq -cn \
-      --arg commit_id "$COMMIT_ID" \
-      --arg review_generation_id "$REVIEW_GENERATION_ID" \
-      '{posted:true,http_status:200,commit_id:$commit_id,
-        review_generation_id:$review_generation_id}')"
-  else
-    verdict=stale_snapshot
-    SNAPSHOT_IS_FRESH=false
-    RECEIPT_DOCUMENT=""
-    if [ -n "$POSTED_REVIEW_ID" ] && [ "$REVIEW_EVENT" != COMMENT ]; then
-      sleep 1
-      if ! gh api \
-        /repos/{owner}/{repo}/pulls/{pr_number}/reviews/"$POSTED_REVIEW_ID"/dismissals \
-        --method PUT \
-        --field message="Dismissed because the PR snapshot changed during review submission" \
-        >/dev/null
-      then
-        STALE_REVIEW_COMPENSATION_FAILED=true
-      fi
-    fi
-  fi
-fi
-rm -f -- "$BATCH_RESPONSE_TMP"
-```
-
-Step 6 constructs the receipt in memory only. It must not write the fixed receipt
-path. Step 8 passes the parsed `RECEIPT_DOCUMENT` to the sole atomic publisher, so
-raw findings and diff context are renamed before the receipt becomes visible.
-The post-submit refresh is part of the effect boundary. A moved snapshot immediately
-replaces the prior verdict with `stale_snapshot`, suppresses the receipt, and dismisses
-an authoritative approval or changes-requested review. Report
-`STALE_REVIEW_COMPENSATION_FAILED=true` as a needs-human operational failure while
-retaining the `stale_snapshot` verdict and diagnostic-only artifacts.
-
-Event mapping:
 - `approved` → `APPROVE`
 - `approved_with_comments` → `COMMENT`
 - `needs_human` → `COMMENT`
 - `changes_requested` → `REQUEST_CHANGES`
 
-**Success signal:** If the batch POST returns HTTP 200, treat the review as successfully
-posted regardless of response body content. Do NOT inspect the response body for a
-`comments` array — GitHub's review API does not echo back the submitted comments, so any
-length check would always read 0 and falsely trigger Tier 1 fallback.
+Call the structured publication tool once with the already-complete payload:
 
-**Own-PR guard:** If the batch POST returns HTTP 422 and the error message mentions
-"review" or "author", the PR is self-authored. Retry the same request with event
-`COMMENT` instead of `REQUEST_CHANGES`. GitHub does not allow a PR author to submit a
-`REQUEST_CHANGES` review on their own PR.
-
-**File-Level Comments for Critical Unpostable Findings:**
-
-After the batch review POST succeeds (or after Tier 1 individual posting completes),
-post file-level comments for each **critical-severity** finding in `UNPOSTABLE_FINDINGS`.
-These use the individual comments endpoint with `subject_type: "file"` — this parameter
-is NOT valid on the batch Reviews API `comments[]` array.
-
-```bash
-COMMIT_ID="$METRICS_HEAD_SHA"
-
-# For each CRITICAL finding in UNPOSTABLE_FINDINGS:
-# NOTE: Do NOT include a `line` field — `line` must be omitted (not set to null)
-# for subject_type: "file". The `gh api --field` syntax naturally omits unspecified
-# fields, so simply not including `--field line=...` is correct.
-gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
-  --method POST \
-  --field path="{finding.file}" \
-  --field subject_type="file" \
-  --field commit_id="$COMMIT_ID" \
-  --field body="{finding.rendered_body}"
-sleep 1  # Rate-limit discipline: 1s between mutating calls
+```text
+post_pr_review(
+  cwd: "$PWD",
+  receipt_path: "$receipt_path",
+  repository: "$repository",
+  pr_number: "$pr_number",
+  head_sha: "$pr_head_sha",
+  logical_iteration: "$logical_iteration",
+  event: "$REVIEW_EVENT",
+  body: "$REVIEW_BODY",
+  comments: "$COMMENTS_JSON",
+  dry_run: false
+)
 ```
 
-Only critical-severity findings are posted as file-level comments to control API call volume.
-Warning and info unpostable findings appear in the Step 7 review body only.
-
-If a file-level POST fails, log the failure and continue — file-level comments are
-best-effort supplementary visibility. Do not fall through to Tier 1/Tier 2 for these.
-
-**Fallback Tier 1 — Individual Comments (if batch POST fails):**
-
-Iterate only critical and warning findings from `FILTERED_FINDINGS`. Skip info-severity findings — they do not warrant individual GitHub comments.
-
-Attempt to post each critical/warning finding individually via:
-
-```bash
-COMMIT_ID="$METRICS_HEAD_SHA"
-
-# For each critical/warning finding in FILTERED_FINDINGS:
-gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
-  --method POST \
-  --field path="{finding.file}" \
-  --field line={finding.line} \
-  --field side="RIGHT" \
-  --field commit_id="$COMMIT_ID" \
-  --field body="{finding.rendered_body}"
-sleep 1  # Rate-limit discipline: 1s between mutating calls
-```
-
-Individual POSTs are not atomic — one failure does not block others.
-When an individual POST returns HTTP 422 (typically an invalid line number), retry that
-specific comment as a file-level comment using `subject_type: "file"` (no `line` field)
-on the `/repos/{owner}/{repo}/pulls/{pr_number}/comments` endpoint. If the file-level
-retry also fails, log the failure and continue to the next finding.
-If at least one per-finding comment succeeds (inline or file-level), proceed to Step 7.
-
-**Fallback Tier 2 — DEGRADED: Bullet-List Summary Dump (if all individual posts fail):**
-
-WARNING: If you reach Tier 2 fallback, the review has FAILED its primary purpose.
-Before posting the body dump, you MUST state:
-
-> "FALLBACK: I was unable to post inline comments. Posting summary as review body instead. This is a DEGRADED review."
-
-Tier 2 is a failure mode with a workaround, not an acceptable alternative to inline comments.
-
-Post ALL findings (`FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS`) via:
-
-```bash
-jq -n \
-  --arg body "{summary_markdown}" \
-  --arg commit_id "$COMMIT_ID" \
-  '{body:$body,event:"COMMENT",commit_id:$commit_id}' | \
-gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \
-  --method POST --input -
-```
-
-Format each file's findings as a bullet list (not a markdown table). Reuse
-`finding.rendered_body` verbatim for every bullet; it is the same compact renderer
-used by the primary batch, file-level comments, and Tier 1:
-
-```
-## AutoSkillit Review Findings
-
-**Verdict:** {verdict}
-
-### path/to/file.py
-- **L{line}** {finding.rendered_body}
-
-### path/to/other.py
-- **L{line}** {finding.rendered_body}
-```
-
-This bullet-list format avoids horizontal overflow from long message content.
+Capture the authoritative result fields as `review_operation_key`, `review_head_sha`,
+`review_post_state`, and `review_receipt_path`. Continue only for a confirmed or reconciled
+final-success state. Stop without emitting a success verdict when the state is ambiguous,
+throttled, terminal, posting, prepared, or verification-pending. The server owns identity,
+remote reconciliation, response classification, safe validation handling, receipts, and
+cross-session pacing.
 
 ### Step 6.5: Post-Completion Confirmation
 
-After completing Step 6, you MUST state:
-
-> "I confirm that I posted N inline comments on the following files: [list files]. If I posted 0 inline comments and had findings, this review has FAILED its primary purpose."
-
-If you find yourself writing "I posted 0 inline comments and had N findings" — STOP.
-Do not proceed to Step 7. Instead, investigate why zero comments were posted. Check
-whether the line numbers in your findings match `VALID_LINE_RANGES`. If they do not,
-attempt to map each finding to the nearest valid hunk line before falling back.
+Confirm the authoritative result identifies the requested repository, PR, head SHA, and
+logical iteration; contains a positive review ID; and accounts for every original finding.
+Do not infer publication from a local payload or from an HTTP response body.
 
 **CRITICAL — No Local File Paths in GitHub Output:**
 Never reference local file paths (e.g., `{{AUTOSKILLIT_TEMP}}/...`, `summary_*.md`, absolute paths) in the review body, inline comments, or any content posted to GitHub. The summary file is a local audit artifact only — GitHub readers cannot access local filesystem paths. Reference findings by file path and line number within the repository, not by local temp file locations.
 
 ### Step 7: Submit Summary Review
 
-```bash
-# Build the summary review against the same authoritative commit.
-jq -n \
-  --arg body "$BODY" \
-  --arg event "{APPROVE|COMMENT|REQUEST_CHANGES}" \
-  --arg commit_id "$COMMIT_ID" \
-  '{body:$body,event:$event,commit_id:$commit_id}' | \
-gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \
-  --method POST --input -
-```
-
-Use `APPROVE` for approved, `COMMENT` for approved-with-comments or needs-human,
-and `REQUEST_CHANGES` for changes-requested. Treat HTTP 200 as success without
-inspecting a returned `comments` array. Retain the one-second delay between every
-pair of consecutive POST/PATCH/PUT/DELETE calls.
-
-**Building the Outside Diff Range body section:**
-
-When `UNPOSTABLE_FINDINGS` is non-empty, construct the body by appending the following
-section after the verdict one-liner. Group unpostable findings by file, format as a
-bullet list reusing the Tier 2 `finding.rendered_body` format.
-
-**TRUNCATION GUARD:** Cap the Outside Diff Range section at ~40,000 characters.
-The GitHub review body has a hard 65,536-char limit (HTTP 422 on overflow,
-no graceful degradation). Reserve headroom for the verdict line and formatting.
-If truncated, append: "...and N more findings. See file-level comments for
-critical items."
-
-Template for the appended section:
-
-```
-### ⚠️ Outside Diff Range
-
-These findings target lines not in the diff and could not be posted as inline comments:
-
-**path/to/file.py**
-- **L42** {finding.rendered_body}
-
-**path/to/other.py**
-- **L99** {finding.rendered_body}
-```
+The complete summary was included in the Step 6 body. Preserve the structured publication
+fields for the recipe effect gate and continue to the local audit artifacts; make no
+additional GitHub review write.
 
 ### Step 8: Write Summary and Emit Verdict
 
@@ -1676,6 +1478,11 @@ a second write. Never redirect directly to the fixed destination. Do not use inl
 Python one-liners or heredoc scripts with `open()` — these are blocked by the
 sandbox.
 
+When the final freshness guard yields `stale_snapshot`, emit publication sentinels
+without calling the structured publication tool: use `review_operation_key = none`,
+`review_head_sha = ${METRICS_HEAD_SHA}`, `review_post_state = STALE_SNAPSHOT`, and
+`review_receipt_path = none`.
+
 Output the verdict as the final line:
 
 > **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
@@ -1685,6 +1492,10 @@ Output the verdict as the final line:
 > code fences cause match failure.
 
 ```
+review_operation_key = {authoritative operation key, local when mode=local, or none when stale}
+review_head_sha = {authoritative requested head, pr_head_sha when mode=local, or METRICS_HEAD_SHA when stale}
+review_post_state = {SUCCEEDED|RECONCILED|LOCAL|STALE_SNAPSHOT}
+review_receipt_path = {authoritative receipt path, or none when local/stale}
 verdict = {approved|approved_with_comments|changes_requested|needs_human|stale_snapshot}
 ```
 
@@ -1716,6 +1527,9 @@ The `needs_human` verdict is in `_SAFE_DEGRADATION_VERDICTS`, so the
 
 ## Output
 
+- `review_operation_key`, `review_head_sha`, `review_post_state`, and
+  `review_receipt_path` — authoritative publication identity in GitHub mode; explicit
+  `local`/`LOCAL`/`none` sentinels in local mode
 - `verdict=approved` → `%%REVIEW_GATE::CLEAR%%` — No blocking issues; CI can proceed
 - `verdict=approved_with_comments` — no gate tag — Warning-only findings; recipe routes to `resolve_review` but does not require a re-review cycle
 - `verdict=changes_requested` → `%%REVIEW_GATE::LOOP_REQUIRED%%` — Blocking issues found; recipe routes to `resolve_review`

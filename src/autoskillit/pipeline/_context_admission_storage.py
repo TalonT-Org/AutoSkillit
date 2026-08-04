@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import os
 import sqlite3
-import stat
 from pathlib import Path
 from typing import Any, cast
 
@@ -16,6 +14,18 @@ from autoskillit.core import (
     context_admission_envelope_header,
     context_admission_reducer_for_protocol,
     decode_stored_context_admission_envelope,
+    private_file_identity,
+    private_sidecar_issue,
+    unlink_sqlite_initialization_artifacts,
+)
+from autoskillit.core import (
+    fsync_directory as fsync_directory,
+)
+from autoskillit.core import (
+    fsync_file as fsync_file,
+)
+from autoskillit.core import (
+    reconcile_initialization_links as reconcile_initialization_links,
 )
 
 SCHEMA_SQL = """
@@ -172,87 +182,6 @@ def _envelope_header(value: bytes) -> tuple[int, int, str]:
         ) from None
 
 
-def reconcile_initialization_links(
-    path: Path,
-    *,
-    owner_id: int,
-    file_mode: int,
-    remove: bool,
-) -> bool:
-    """Find, and optionally remove, same-inode initialization link artifacts."""
-    directory_fd = os.open(
-        path.parent,
-        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-    )
-    try:
-        database_stat = os.stat(
-            path.name,
-            dir_fd=directory_fd,
-            follow_symlinks=False,
-        )
-        if (
-            not stat.S_ISREG(database_stat.st_mode)
-            or database_stat.st_uid != owner_id
-            or stat.S_IMODE(database_stat.st_mode) != file_mode
-            or database_stat.st_nlink <= 1
-        ):
-            return False
-        prefix = f".{path.name}."
-        suffix = ".tmp"
-        found = False
-        for name in os.listdir(directory_fd):
-            if not name.startswith(prefix) or not name.endswith(suffix):
-                continue
-            token = name[len(prefix) : -len(suffix)]
-            if len(token) != 24 or any(character not in "0123456789abcdef" for character in token):
-                continue
-            try:
-                candidate_stat = os.stat(
-                    name,
-                    dir_fd=directory_fd,
-                    follow_symlinks=False,
-                )
-            except FileNotFoundError:
-                continue
-            if (
-                stat.S_ISREG(candidate_stat.st_mode)
-                and candidate_stat.st_dev == database_stat.st_dev
-                and candidate_stat.st_ino == database_stat.st_ino
-                and candidate_stat.st_uid == owner_id
-                and stat.S_IMODE(candidate_stat.st_mode) == file_mode
-            ):
-                found = True
-                if remove:
-                    os.unlink(name, dir_fd=directory_fd)
-        return found
-    finally:
-        os.close(directory_fd)
-
-
-def private_file_identity(
-    path: Path,
-    *,
-    owner_id: int,
-    file_mode: int,
-) -> tuple[int, int] | None:
-    """Return a stable private-file identity, or None when validation fails."""
-    path_stat = path.lstat()
-    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-    try:
-        descriptor_stat = os.fstat(descriptor)
-    finally:
-        os.close(descriptor)
-    if (
-        not stat.S_ISREG(path_stat.st_mode)
-        or path_stat.st_uid != owner_id
-        or stat.S_IMODE(path_stat.st_mode) != file_mode
-        or path_stat.st_nlink != 1
-        or (path_stat.st_dev, path_stat.st_ino) != (descriptor_stat.st_dev, descriptor_stat.st_ino)
-    ):
-        return None
-    return path_stat.st_dev, path_stat.st_ino
-
-
 def require_private_file_identity(
     path: Path,
     *,
@@ -286,60 +215,27 @@ def validate_sidecars(
     file_mode: int,
     allow_regular: bool,
 ) -> None:
-    for suffix in ("-journal", "-wal", "-shm"):
-        sidecar = Path(f"{database_path}{suffix}")
-        try:
-            sidecar.lstat()
-        except FileNotFoundError:
-            continue
-        except OSError as exc:
-            raise _LedgerOpenError(
-                ContextAdmissionStorageFailureReason.IO,
-                "store-sidecar-unavailable",
-            ) from exc
-        if not allow_regular:
-            raise _LedgerOpenError(
-                ContextAdmissionStorageFailureReason.SECURITY_IDENTITY,
-                "orphan-store-sidecar",
-            )
-        try:
-            require_private_file_identity(
-                sidecar,
-                owner_id=owner_id,
-                file_mode=file_mode,
-                reason_code="insecure-store-sidecar",
-            )
-        except _LedgerOpenError as exc:
-            if isinstance(exc.__cause__, FileNotFoundError):
-                continue
-            raise
-
-
-def fsync_file(path: Path) -> None:
-    """Synchronize one no-follow regular file descriptor."""
-    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-
-
-def fsync_directory(path: Path) -> None:
-    """Synchronize one no-follow directory descriptor."""
-    descriptor = os.open(
-        path,
-        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+    issue = private_sidecar_issue(
+        database_path,
+        owner_id=owner_id,
+        file_mode=file_mode,
+        allow_regular=allow_regular,
+        identity_validator=private_file_identity,
     )
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
+    if issue is None:
+        return
+    if issue.kind == "unavailable":
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.IO,
+            "store-sidecar-unavailable",
+        )
+    reason_code = "orphan-store-sidecar" if issue.kind == "orphan" else "insecure-store-sidecar"
+    raise _LedgerOpenError(
+        ContextAdmissionStorageFailureReason.SECURITY_IDENTITY,
+        reason_code,
+    )
 
 
 def unlink_initialization_artifact(path: Path) -> None:
     """Best-effort cleanup for an unpublished temporary database and journal."""
-    for candidate in (path, Path(f"{path}-journal")):
-        try:
-            candidate.unlink(missing_ok=True)
-        except OSError:
-            pass
+    unlink_sqlite_initialization_artifacts(path)

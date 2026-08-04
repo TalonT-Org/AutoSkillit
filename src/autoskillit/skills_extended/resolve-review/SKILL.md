@@ -2,7 +2,7 @@
 name: resolve-review
 categories: [github]
 uses_capabilities: [agent_model, commit_files, github_api_write]
-description: Fetch PR review comments, run intent validation (ACCEPT/REJECT/DISCUSS) before applying fixes, and post inline replies. MCP-only — used exclusively by recipe orchestration via run_skill after review_pr reports changes_requested or needs_human verdict.
+description: Fetch PR review comments, run intent validation (ACCEPT/REJECT/DISCUSS) before applying fixes, publish deferred observations through the structured review tool, and resolve addressed threads. MCP-only — used exclusively by recipe orchestration via run_skill after review_pr reports changes_requested or needs_human verdict.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -24,8 +24,12 @@ for actionable findings, commit each fix, and verify tests still pass.
 - `feature_branch` — The PR's head branch (used to find the open PR)
 - `base_branch` — The PR's base branch (e.g., "main")
 - **mode** (optional, default: `github`) — Controls where findings are read from and how threads are handled:
-  - `mode=github` (or absent/unrecognized): current behavior — fetch findings from GitHub API, post deferred observations from prior local rounds, resolve threads and post inline replies.
-  - `mode=local`: read findings from local JSON (written by `review-pr` in `mode=local`), skip all GitHub API fetching, accumulate DISCUSS/REJECT to persistent local files, skip thread resolution and inline reply API calls, still run `task test-check`.
+  - `mode=github` (or absent/unrecognized): fetch findings from GitHub API, publish deferred
+    observations from prior local rounds through the structured review tool, and resolve
+    addressed threads.
+  - `mode=local`: read `local_findings_{pr_number}.json`; skip publication and all GitHub
+    API fetching; accumulate DISCUSS/REJECT to persistent local files; skip thread resolution
+    and all review-comment publication; still run `task test-check`.
 
 The `cwd` is provided by the recipe step's `cwd:` field — the clone with the feature
 branch already checked out.
@@ -116,83 +120,61 @@ PR_URL=$(echo "$PR_LIST_OUTPUT" | awk '{print $2}')
 
 Get owner/repo:
 ```bash
-gh repo view --json nameWithOwner -q .nameWithOwner
+gh repo view --json nameWithOwner -q '.nameWithOwner | ascii_downcase'
 ```
 
 If `gh` is unavailable or not authenticated, or no PR is found:
 - Log "No PR found or gh unavailable — skipping review resolution"
 - Exit 0 (graceful degradation — do not fail the pipeline)
 
-### Step 1.5: Post Accumulated Deferred Observations (github mode only)
+### Step 1.5: Publish Accumulated Deferred Observations (github mode only)
 
 **When `mode=github`:**
 
-Before fetching current findings from GitHub, check for any deferred observations
-accumulated from prior local review rounds:
+Before fetching current findings, check for `deferred_observations` accumulated from prior
+local rounds:
 
 ```bash
 DEFERRED_FILE="{{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_${PR_NUMBER}.json"
 ```
 
 If the file exists and contains entries:
-1. Load the deferred observations array from the file
-2. **Filter loaded entries:** exclude any entry where `severity == "info"`. This is a boundary guard — deferred_observations should never contain info entries (see Step 3.6), but the posting boundary enforces the invariant independently.
-3. Post the filtered entries as a single batch review via `POST /repos/{owner}/{repo}/pulls/{pr_number}/reviews`:
-   - `event`: `"COMMENT"` (not requesting changes — these are observations for discussion)
-   - `body`: `"Observations accumulated from {N} local review rounds:"`
-   - `commit_id`: current HEAD commit SHA (from `gh pr view {pr_number} --json headRefOid -q .headRefOid`)
-   - `comments[]` array where each entry has:
-     - `path`: from the deferred entry
-     - `line`: from the deferred entry (if `line` is null, omit `line` for a file-level comment)
-     - `side`: `"RIGHT"`
-     - `body`:
-       ```
-       **Observation from local review round {round}:**
 
-       {body}
+1. Load the array and filter out every entry with `severity == "info"`. The publication
+   boundary independently excludes info observations.
+2. Preserve each observation's `severity` and `dimension` in
+   `<!-- REVIEW-FLAG: severity={severity} dimension={dimension} -->`.
+3. Build one complete `comments` array. Include positive numeric `line` anchors; keep
+   observations whose line is null in the complete review `body` instead of inventing an
+   anchor.
+4. Resolve `repository` from the canonical caller-supplied `nameWithOwner`, require a
+   positive caller-supplied `pr_number`, and validate the caller-supplied `pr_head_sha` against
+   `^[0-9a-f]{40}$`.
+5. Require caller-supplied `logical_iteration` beginning with `resolve-review:` and a
+   caller-supplied `receipt_path` under `${AUTOSKILLIT_TEMP}` with the exact
+   `batch_review_response_${pr_number}.json` basename, then call the structured
+   publication tool once:
 
-       **Evidence:** {evidence}
+```text
+post_pr_review(
+  cwd: "$PWD",
+  receipt_path: "$receipt_path",
+  repository: "$repository",
+  pr_number: "$pr_number",
+  head_sha: "$pr_head_sha",
+  logical_iteration: "$logical_iteration",
+  event: "$REVIEW_EVENT",
+  body: "$REVIEW_BODY",
+  comments: "$COMMENTS_JSON",
+  dry_run: false
+)
+```
 
-       <!-- REVIEW-FLAG: severity={severity} dimension={dimension} -->
-       ```
-
-   Build the payload and post via stdin. The `--field` approach creates one array entry per flag (not one object per comment), so it must not be used for the `comments` array.
-
-   ```bash
-   # Guard: verify deferred file exists and is non-empty before processing
-   if [[ ! -s "$DEFERRED_FILE" ]]; then
-     echo "Deferred file missing or empty — skipping observation posting"
-     # Skip to Step 2
-   fi
-
-   # Build comments JSON array from deferred observations (exclude info severity)
-   COMMENTS_JSON=$(jq -n --argjson observations "$(cat "$DEFERRED_FILE")" '
-     $observations | map(select(.severity != "info")) | map({
-       path: .path,
-       line: (if .line then .line else null end),
-       side: "RIGHT",
-       body: ("**Observation from local review round \(.round):**\n\n\(.body)\n\n**Evidence:** \(.evidence)\n\n<!-- REVIEW-FLAG: severity=\(.severity) dimension=\(.dimension) -->")
-     }) | map(if .line == null then del(.line) else . end)
-   ')
-
-   COMMIT_SHA=$(gh pr view "${PR_NUMBER}" --json headRefOid -q .headRefOid)
-   ROUND_COUNT=$(jq -n --argjson obs "$(cat "$DEFERRED_FILE")" '$obs | map(.round) | unique | length')
-
-   # Build and post the full review payload via stdin
-   jq -n \
-     --arg body "Observations accumulated from ${ROUND_COUNT} local review rounds:" \
-     --arg event "COMMENT" \
-     --arg commit_id "$COMMIT_SHA" \
-     --argjson comments "$COMMENTS_JSON" \
-     '{body: $body, event: $event, commit_id: $commit_id, comments: $comments}' | \
-   gh api /repos/{owner}/{repo}/pulls/"${PR_NUMBER}"/reviews \
-     --method POST --input -
-   ```
-
-4. Use the batch review endpoint (never post individual comments unless the batch call fails)
-5. **Fallback:** If the batch POST returns HTTP 422 (e.g., stale line numbers), retry by posting each observation individually via `gh api repos/{owner}/{repo}/pulls/{pr_number}/comments --method POST` with 1s delay between calls
-6. After all deferred observations are posted successfully, rename the file to `deferred_observations_${PR_NUMBER}_posted.json` to prevent re-posting on retry
-7. These review threads are left UNRESOLVED (same behavior as DISCUSS in github mode)
+Capture `review_operation_key`, `review_head_sha`, `review_post_state`, and
+`review_receipt_path`. Continue only for a confirmed or reconciled final-success state.
+Stop on ambiguous, throttled, terminal, prepared, posting, or verification-pending results.
+Only after final success rename the source to
+`deferred_observations_${PR_NUMBER}_posted.json`. These discussion threads remain unresolved.
 
 If the file does not exist or is empty, skip this step and proceed to Step 2.
 
@@ -218,6 +200,7 @@ Matches the regex `<!--\s*REVIEW-FLAG:\s*severity=(\w+)\s+dimension=(\w+)\s*>`.
   `normalize_local_review_finding(entry)` from `autoskillit.smoke_utils`. The helper
   must copy the complete entry dictionary and add the canonical `path` and rendered
   `body` aliases without discarding proof or provenance fields.
+- Treat an entry whose `line` is null as a file-level finding and never invent a line anchor.
 - Load `diff_context_{pr_number}.json` as normal (mode-independent — same handoff file written by review-pr)
 - Set `comment_id_to_thread_id = {}` (no thread IDs in local mode)
 - Set `already_replied_ids = set()` (no prior replies in local mode)
@@ -610,13 +593,15 @@ pretty-printed JSON (indent 2).
 
 Log: `"Accumulated N new DISCUSS findings (M total)"`.
 
-Info-severity findings are acknowledged in the current round via Step 6.5's INFO reply template and are not carried forward to deferred observations. Only genuine DISCUSS verdicts from Step 3.5 sub-agent validation — representing findings that require a human design decision — are accumulated.
+Info-severity findings are assessed in the current round but are not published or carried
+forward to deferred observations. Only genuine DISCUSS verdicts from Step 3.5 sub-agent
+validation — representing findings that require a human design decision — are accumulated.
 
 The `round` value is the iteration number from `local_findings_{pr_number}.json` (written
 by review-pr with auto-incrementing logic).
 
-**When `mode=github`:** Skip this step. DISCUSS findings are handled by inline replies
-(with `REVIEW-FLAG` markers) in Step 6.5.
+**When `mode=github`:** Skip this step. DISCUSS findings accumulated during prior local
+rounds were published through the single structured review operation in Step 1.5.
 
 ---
 
@@ -692,17 +677,22 @@ Batch all thread resolutions into a single GraphQL request using aliased mutatio
 This reduces N requests (5 pts each = 5N pts) to 1 request (5 pts total).
 If `addressed_thread_ids` has more than 50 threads, chunk into batches of 50.
 
-```bash
-# Build aliased mutation query for all addressed threads
-MUTATION_QUERY="mutation {"
-for i in $(seq 0 $((${#ADDRESSED_THREAD_IDS[@]} - 1))); do
-    tid="${ADDRESSED_THREAD_IDS[$i]}"
-    MUTATION_QUERY="${MUTATION_QUERY} resolve${i}: resolveReviewThread(input: {threadId: \"${tid}\"}) { thread { isResolved } }"
-done
-MUTATION_QUERY="${MUTATION_QUERY} }"
-
-gh api graphql -f query="${MUTATION_QUERY}"
+```text
+gh api graphql -f query='mutation {
+  resolve0: resolveReviewThread(input: {threadId: "PRRT_literal_node_id_0"}) {
+    thread { isResolved }
+  }
+  resolve1: resolveReviewThread(input: {threadId: "PRRT_literal_node_id_1"}) {
+    thread { isResolved }
+  }
+}'
 ```
+
+Materialize the actual node IDs as literal values before issuing the command. The executed
+`gh api graphql` command must contain a fully literal mutation: do not construct it with shell
+variables, loops, command substitution, files written earlier in the command, or interpreter
+wrappers. Issue each chunk as one tool call containing exactly one literal GraphQL mutation.
+For more than 50 threads, issue the next literal chunk only after a separate `sleep 1` call.
 
 Parse the response: for each `resolve${i}` alias key, check `thread.isResolved`.
 - **Success** (`isResolved: true`): increment `resolved_count`.
@@ -715,62 +705,20 @@ Track:
 - `resolve_failed_count: int` — threads that could not be resolved (permissions, network)
 
 This step is best-effort — failure to resolve any thread never affects the exit code.
-The same applies to Step 6.5 (inline replies).
 
 **When `mode=local`:**
 - Skip all GitHub thread resolution API calls (no GraphQL mutation, no thread resolution)
 - Set `resolved_count = 0`, `resolve_failed_count = 0`
 - The `addressed_thread_ids` list is not populated (there are no thread IDs in local mode)
-- Proceed to Step 6.5 (inline replies — also skipped in local mode)
+- Proceed to Step 6.5
 
-### Step 6.5: Post Inline Replies
+### Step 6.5: Do Not Post Inline Replies
 
-**When `mode=local`:**
-- Skip all inline reply POST calls
-- Set `reply_posted_count = 0`, `reply_failed_count = 0`
-- Proceed to Step 6.6
-
-**When `mode=github`:** Execute the following inline reply steps (current behavior unchanged).
-
-For every finding (those classified via intent validation in Step 3.5 and info findings
-auto-classified as DISCUSS in Step 3), post an inline reply using the GitHub comment reply
-API. Each finding receives exactly one reply based on its classification.
-
-```bash
-# Build reply body based on classification:
-# ACCEPT:
-BODY="Agreed — fixed in ${commit_sha}. ${evidence}
-<!-- autoskillit:resolved comment_id=${comment_id} verdict=ACCEPT -->"
-# REJECT:
-BODY="Investigated — this is intentional. ${evidence}
-<!-- autoskillit:resolved comment_id=${comment_id} verdict=REJECT -->"
-# DISCUSS:
-BODY="Valid observation — flagged for design decision. ${evidence}
-<!-- REVIEW-FLAG: severity=${severity} dimension=${dimension} -->
-<!-- autoskillit:resolved comment_id=${comment_id} verdict=DISCUSS -->"
-# INFO (verdict=INFO from Step 3):
-BODY="Acknowledged — minor suggestion noted.
-<!-- REVIEW-FLAG: severity=info dimension=${dimension} -->
-<!-- autoskillit:resolved comment_id=${comment_id} verdict=INFO -->"
-
-gh api repos/{owner}/{repo}/pulls/{pr_number}/comments/{comment_id}/replies \
-  --method POST \
-  --field body="${BODY}"
-sleep 1  # Rate-limit discipline: 1s between mutating calls
-```
-
-For ACCEPT replies, use the `commit_sha` from the most recent commit made in Step 4
-(i.e., `git log --format="%H" -1` after committing the fix). If the comment was
-classified as ACCEPT but skipped in Step 4 (stale comment, etc.), omit the commit sha
-reference.
-
-For REJECT replies, include specific evidence (line numbers, design contracts, API
-references) from the sub-agent's `evidence` field so the reply is self-contained and
-suitable for future automated mining.
-
-Track:
-- `reply_posted_count: int` — successfully posted replies
-- `reply_failed_count: int` — replies that failed (log warning, continue)
+In both modes, do not post raw inline replies or call any review-comment mutation endpoint.
+The structured tool call in Step 1.5 is the sole review-publication path. Existing marker-bearing
+replies may be read for backward-compatible deduplication, but this skill never creates them.
+Set `reply_posted_count = 0` and `reply_failed_count = 0` for report compatibility, then
+proceed to Step 6.6.
 
 ### Step 6.6: Persist Reject Patterns
 
@@ -869,7 +817,7 @@ Fixes skipped: {n}
   - {file}:{line} — {reason}
 Threads resolved: {resolved_count}/{len(addressed_thread_ids)}
   - {resolve_failed_count} failed (warnings logged above)
-Inline replies: {reply_posted_count} posted / {reply_failed_count} failed
+Inline replies: disabled (structured review publication only)
 Reject patterns saved: {{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_{pr_number}_{ts}.json
 Test iterations: {n}
 Status: PASS
@@ -896,6 +844,10 @@ verdict = {verdict}
 fixes_applied = {accept_count - skipped_in_fix_phase}
 accept_count = {accept_count}
 fix_failures = {fix_failures}
+review_operation_key = {authoritative operation key when deferred observations were posted}
+review_head_sha = {authoritative requested head when deferred observations were posted}
+review_post_state = {SUCCEEDED|RECONCILED when deferred observations were posted}
+review_receipt_path = {authoritative receipt path when deferred observations were posted}
 ```
 
 Where:
@@ -920,6 +872,10 @@ verdict = real_fix|already_green
 fixes_applied = {N}
 accept_count = {N}
 fix_failures = {N}
+review_operation_key = {operation key, when publication occurred}
+review_head_sha = {head SHA, when publication occurred}
+review_post_state = {SUCCEEDED|RECONCILED, when publication occurred}
+review_receipt_path = {receipt path, when publication occurred}
 ```
 
 Where `fixes_applied` is the count of ACCEPT findings where code changes were

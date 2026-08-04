@@ -173,6 +173,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_json": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
     "artifact_lease": frozenset({"core", "workspace"}),
     "executable_binding": frozenset({"cli", "core", "execution"}),
+    "private_file": frozenset({"core", "execution", "pipeline"}),
     "feature_flags": frozenset(
         {"core", "cli", "config", "execution", "recipe", "server", "workspace"}
     ),
@@ -256,6 +257,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_audit_admission": frozenset({"core", "execution", "pipeline", "server"}),
     "_type_audit_admission_ledger": frozenset({"core", "pipeline", "server"}),
     "_type_audit_protocols": frozenset({"core", "pipeline", "recipe", "server"}),
+    "_type_github_review": frozenset({"core", "execution", "pipeline", "server", "smoke_utils"}),
     "_type_dispatch_identity": frozenset({"core", "fleet", "execution"}),
     "_type_figure_spec": frozenset({"core", "report"}),
     "_type_session_env": frozenset({"core", "cli"}),
@@ -893,7 +895,6 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "skills/test_skill_placeholder_contracts.py",
             "skills/test_make_campaign_compliance.py",
             "skills/test_review_design_guards.py",
-            "skills/test_skill_compliance.py",
             "skills/test_skill_tool_syntax_contracts.py",
             "skills/test_vis_lens_methodology_norms.py",
             "skills/test_audit_impl_diff_discipline.py",

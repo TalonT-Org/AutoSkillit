@@ -6,11 +6,10 @@ import errno
 import json
 import math
 import os
-import secrets
-import stat
 from dataclasses import dataclass
 from enum import StrEnum
 
+from . import _control_file, _ledger
 from ._module_identity import register_module_aliases
 from ._types import DueKey
 
@@ -23,7 +22,6 @@ _VERSION = 1
 _NOFOLLOW = os.O_NOFOLLOW
 _CLOEXEC = os.O_CLOEXEC
 _READ_FLAGS = os.O_RDONLY | _CLOEXEC | _NOFOLLOW
-_WRITE_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_EXCL | _CLOEXEC | _NOFOLLOW
 
 
 class CursorAuthorityError(OSError):
@@ -44,13 +42,10 @@ class CursorLoad:
 
 
 def _validate_file(value: os.stat_result) -> None:
-    if (
-        not stat.S_ISREG(value.st_mode)
-        or value.st_uid != os.geteuid()
-        or stat.S_IMODE(value.st_mode) != 0o600
-        or value.st_nlink != 1
-    ):
-        raise CursorAuthorityError(errno.ELOOP, "unsafe lifecycle sweep cursor")
+    _control_file.validate_private_file(
+        value,
+        CursorAuthorityError(errno.ELOOP, "unsafe lifecycle sweep cursor"),
+    )
 
 
 def _observe(root_fd: int) -> os.stat_result | None:
@@ -150,14 +145,14 @@ def load_cursor(
     return CursorLoad(CursorStatus.VALID, due_key)
 
 
-def _write_all(fd: int, payload: bytes) -> None:
-    view = memoryview(payload)
-    offset = 0
-    while offset < len(view):
-        written = os.write(fd, view[offset:])
-        if written <= 0:
-            raise CursorAuthorityError("lifecycle sweep cursor write made no progress")
-        offset += written
+def _write_payload(fd: int, payload: bytes) -> None:
+    try:
+        _ledger.write_all(fd, payload)
+    except _ledger.LedgerCodecError as exc:
+        raise CursorAuthorityError(
+            errno.EIO,
+            "lifecycle sweep cursor write made no progress",
+        ) from exc
 
 
 def write_cursor(
@@ -181,35 +176,14 @@ def write_cursor(
     )
     if len(payload) > _MAX_CURSOR_BYTES:
         raise CursorAuthorityError("lifecycle sweep cursor exceeds bound")
-    temp_name = f".capture-sweep-cursor-{secrets.token_hex(8)}"
-    fd = os.open(temp_name, _WRITE_FLAGS, 0o600, dir_fd=root_fd)
-    try:
-        _validate_file(os.fstat(fd))
-        _write_all(fd, payload)
-        os.fsync(fd)
-    except BaseException:
-        os.close(fd)
-        try:
-            os.unlink(temp_name, dir_fd=root_fd)
-        except OSError:
-            pass
-        raise
-    else:
-        os.close(fd)
-    try:
-        os.replace(
-            temp_name,
-            CURSOR_NAME,
-            src_dir_fd=root_fd,
-            dst_dir_fd=root_fd,
-        )
-    except BaseException:
-        try:
-            os.unlink(temp_name, dir_fd=root_fd)
-        except OSError:
-            pass
-        raise
-    os.fsync(root_fd)
+    _control_file.publish_private_file(
+        root_fd,
+        target_name=CURSOR_NAME,
+        temp_prefix=".capture-sweep-cursor-",
+        payload=payload,
+        validate_file=_validate_file,
+        write_all=_write_payload,
+    )
 
 
 def clear_cursor(root_fd: int) -> bool:

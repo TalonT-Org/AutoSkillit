@@ -2696,6 +2696,45 @@ def test_missing_cursor_is_rebuilt_from_future_ledger_state(tmp_path: Path) -> N
         anchor.close()
 
 
+def test_sweep_cursor_retries_interrupted_private_file_write(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    anchor, root, store = _open_store(project, _Clock())
+    real_write = sweep_cursor._ledger.os.write
+    interrupted = False
+
+    def interrupt_once(fd: int, payload: bytes) -> int:
+        nonlocal interrupted
+        if not interrupted:
+            interrupted = True
+            raise InterruptedError
+        return real_write(fd, payload)
+
+    monkeypatch.setattr(sweep_cursor._ledger.os, "write", interrupt_once)
+    try:
+        sweep_cursor.write_cursor(
+            root.fd,
+            project_identity=store._project_identity,
+            root_identity=store._root_identity,
+            compaction_epoch=1,
+            due_key=capture_lifecycle.DueKey(1_000_000.0, _CAPTURE_ID),
+        )
+
+        loaded = sweep_cursor.load_cursor(
+            root.fd,
+            project_identity=store._project_identity,
+            root_identity=store._root_identity,
+            compaction_epoch=1,
+        )
+        assert interrupted
+        assert loaded.status is sweep_cursor.CursorStatus.VALID
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_content_invalid_cursor_is_removed_for_empty_ledger(tmp_path: Path) -> None:
     project = tmp_path / "project"
     clock = _Clock()

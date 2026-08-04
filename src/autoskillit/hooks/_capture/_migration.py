@@ -7,12 +7,19 @@ import hashlib
 import json
 import os
 import secrets
-import stat
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
 
-from . import _capacity, _ledger, _ledger_view, _store_port, _sweep, _sweep_cursor
+from . import (
+    _capacity,
+    _control_file,
+    _ledger,
+    _ledger_view,
+    _store_port,
+    _sweep,
+    _sweep_cursor,
+)
 from ._failure_policy import CaptureFailureReason
 from ._module_identity import register_module_aliases
 from ._types import CaptureCapacitySpec, DueKey, SweepBudgetSpec
@@ -25,7 +32,6 @@ _VERSION = 1
 _MAX_ENTRIES = 4096
 _MAX_BYTES = 1024 * 1024
 _READ_FLAGS = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
-_WRITE_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW
 
 Record = _ledger.CaptureLifecycleRecord
 Records = dict[str, Record]
@@ -242,13 +248,10 @@ def _parse(payload: bytes) -> LegacyMigrationTxn:
 
 
 def _validate_file(value: os.stat_result) -> None:
-    if (
-        not stat.S_ISREG(value.st_mode)
-        or value.st_uid != os.geteuid()
-        or stat.S_IMODE(value.st_mode) != 0o600
-        or value.st_nlink != 1
-    ):
-        raise MigrationAuthorityError("unsafe legacy migration transaction")
+    _control_file.validate_private_file(
+        value,
+        MigrationAuthorityError("unsafe legacy migration transaction"),
+    )
 
 
 def load_transaction(root_fd: int) -> LegacyMigrationTxn | None:
@@ -306,30 +309,14 @@ def write_transaction(root_fd: int, txn: LegacyMigrationTxn) -> None:
     payload = _canonical(_primitive(txn))
     if len(payload) > _MAX_BYTES:
         raise MigrationIntegrityError("legacy migration transaction exceeds bound")
-    temp_name = f".capture-legacy-migration-{secrets.token_hex(8)}"
-    fd = os.open(temp_name, _WRITE_FLAGS, 0o600, dir_fd=root_fd)
-    try:
-        _validate_file(os.fstat(fd))
-        _ledger.write_all(fd, payload)
-        os.fsync(fd)
-    except BaseException:
-        os.close(fd)
-        try:
-            os.unlink(temp_name, dir_fd=root_fd)
-        except OSError:
-            pass
-        raise
-    else:
-        os.close(fd)
-    try:
-        os.replace(temp_name, MIGRATION_NAME, src_dir_fd=root_fd, dst_dir_fd=root_fd)
-    except BaseException:
-        try:
-            os.unlink(temp_name, dir_fd=root_fd)
-        except OSError:
-            pass
-        raise
-    os.fsync(root_fd)
+    _control_file.publish_private_file(
+        root_fd,
+        target_name=MIGRATION_NAME,
+        temp_prefix=".capture-legacy-migration-",
+        payload=payload,
+        validate_file=_validate_file,
+        write_all=_ledger.write_all,
+    )
 
 
 def remove_transaction(root_fd: int) -> None:

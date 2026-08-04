@@ -147,7 +147,6 @@ class SweepAttempt(StrEnum):
     NOT_DUE = "not_due"
     TAMPERED = "tampered"
     ERROR = "error"
-    STALE = "stale"
 
 
 class CleanupProgress(StrEnum):

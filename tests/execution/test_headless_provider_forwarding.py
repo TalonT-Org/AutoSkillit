@@ -608,7 +608,7 @@ async def test_dispatch_food_truck_derives_marker_dir_from_cwd(
 
 
 @pytest.mark.anyio
-async def test_dispatch_food_truck_marker_dir_none_without_channel_b(
+async def test_dispatch_food_truck_marker_dir_none_when_cwd_falsy(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
     execute_kwargs: dict = {}
@@ -639,12 +639,12 @@ async def test_dispatch_food_truck_marker_dir_none_without_channel_b(
     from autoskillit.execution.headless import DefaultHeadlessExecutor
 
     minimal_ctx.backend = _mock_backend(
-        food_truck_capable=True, pty_required=True, channel_b_capable=False
+        food_truck_capable=True, pty_required=True, channel_b_capable=True
     )
     executor = DefaultHeadlessExecutor(minimal_ctx)
     await executor.dispatch_food_truck(
         "prompt",
-        str(tmp_path),
+        "",
         completion_marker="%%DONE%%",
     )
 

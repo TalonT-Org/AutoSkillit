@@ -1,12 +1,31 @@
 ---
 name: promote-to-main
 categories: [github]
-uses_capabilities: [agent_model, cross_skill_ref, github_api_write]
+uses_capabilities: [github_api_write]
 description: >
   Promote integration to main with comprehensive changelog and PR creation. Use when
   user says "promote to main", "open promotion PR", "integration to main", or
   "create release PR to main". Runs pre-flight checks, change inventory, architecture
   diagrams, and creates a rich PR with release notes and traceability.
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+    - name: delegated-worker
+      purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+    - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+    - role: delegated-worker
+      model_class: sonnet
+  sibling_skills:
+    - name: arch-lens-module-dependency
 ---
 
 # Promote to Main
@@ -151,7 +170,8 @@ EOF
 
 ### Phase 1: Pre-flight Checks (parallel, blocking)
 
-Spawn three parallel subagents via `Agent(model="sonnet")` to validate promotion readiness.
+Spawn three parallel subagents via child delegation under the declared `sonnet` model-class
+policy to validate promotion readiness.
 All three must pass before analysis proceeds. If any fails, report the failure clearly
 and exit 1. Do NOT create a PR when pre-flight fails.
 #### Subagent 1A: CI and Branch Status
@@ -216,7 +236,7 @@ treat as a warning (non-blocking) and note it in the report.
 
 ### Phase 2: Change Inventory (parallel subagents)
 
-Spawn four parallel subagents via `Agent(model="sonnet")`.
+Spawn four parallel subagents via child delegation under the declared `sonnet` model-class policy.
 
 #### Subagent 2A: Commit Categorization
 
@@ -337,7 +357,8 @@ Return JSON:
 
 #### Step 3.1: Select Arch-Lens Lenses
 
-Spawn a subagent via `Agent(model="sonnet")` with the `changed_files` list and this lens menu:
+Spawn a subagent via child delegation under the declared `sonnet` model-class policy with the
+`changed_files` list and this lens menu:
 
 ```
 c4-container, concurrency, data-lineage, deployment, development,
@@ -407,7 +428,7 @@ new/modified nodes, add to `validated_diagrams`. Otherwise discard.
 
 #### Step 4.1: Release Notes Synthesis
 
-Spawn one subagent via `Agent(model="sonnet")` with results from Phase 2 ONLY (no domain
+Spawn one subagent via child delegation under the declared `sonnet` model-class policy with results from Phase 2 ONLY (no domain
 analysis or quality assessment data).
 The subagent receives:
 - Commit categorization from Subagent 2A

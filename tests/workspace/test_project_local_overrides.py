@@ -648,20 +648,23 @@ def test_project_local_internal_override_is_not_duplicated(tmp_path) -> None:
     assert '\nCall run_skill("child").\n' in override_path.read_text(encoding="utf-8")
 
 
-def test_prepare_skill_projection_separates_project_root_from_cwd(tmp_path, monkeypatch) -> None:
-    """L2 source selection is project-root-bound while execution stays cwd-bound."""
+def test_prepare_skill_projection_authenticates_project_root_not_managed_add_dir(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """Generated skill views are cwd data, never project override authority."""
     import hashlib
     from pathlib import Path
 
-    from autoskillit.core import PluginLoadMode
+    from autoskillit.core import PluginLoadMode, SkillContractError
     from autoskillit.execution.backends import get_backend
     from autoskillit.workspace import prepare_skill_projection
     from autoskillit.workspace.skills import DefaultSkillResolver
 
     project_root = tmp_path / "source-project"
-    cwd = tmp_path / "execution-worktree"
-    cwd.mkdir()
-    _write_effective_skill(
+    cwd = tmp_path / "generated-home" / "session" / "add-dir"
+    cwd.mkdir(parents=True)
+    project_override = _write_effective_skill(
         project_root / ".claude" / "skills",
         "process-issues",
         capabilities=("run_skill",),
@@ -672,12 +675,13 @@ def test_prepare_skill_projection_separates_project_root_from_cwd(tmp_path, monk
             'run_skill("/test child")'
         ),
     )
-    _write_effective_skill(
-        cwd / ".claude" / "skills",
-        "process-issues",
-        capabilities=("run_skill",),
-        execution_role="orchestrator",
-        body='wrong execution-cwd body\nrun_skill("/test child")',
+    managed_projection = cwd / ".claude" / "skills" / "process-issues" / "SKILL.md"
+    managed_projection.parent.mkdir(parents=True)
+    managed_projection.write_text(
+        "---\nname: process-issues\ndescription: invalid generated projection\n"
+        "semantic_version: 0\nsemantic_requirements: {}\n---\n"
+        "wrong execution-cwd body\n",
+        encoding="utf-8",
     )
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
@@ -712,6 +716,26 @@ def test_prepare_skill_projection_separates_project_root_from_cwd(tmp_path, monk
             == hashlib.sha256(projected.encode()).hexdigest()
         )
     assert binding.closed
+
+    project_override.write_text(
+        "---\nname: process-issues\ndescription: invalid user override\n"
+        "semantic_version: 0\nsemantic_requirements: {}\n---\n"
+        "invalid real project override\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        SkillContractError,
+        match="effective skill catalog contains invalid contracts",
+    ):
+        prepare_skill_projection(
+            project_root=project_root,
+            cwd=cwd,
+            resolver=DefaultSkillResolver(),
+            visibility=None,
+            default_base_branch=None,
+            recipe_packs=None,
+            recipe_features=None,
+        )
 
 
 def test_winning_override_identity_policy_projection_and_digests_are_atomic(

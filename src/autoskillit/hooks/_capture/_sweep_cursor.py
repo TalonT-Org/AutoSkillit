@@ -50,7 +50,7 @@ def _validate_file(value: os.stat_result) -> None:
         or stat.S_IMODE(value.st_mode) != 0o600
         or value.st_nlink != 1
     ):
-        raise CursorAuthorityError("unsafe lifecycle sweep cursor")
+        raise CursorAuthorityError(errno.ELOOP, "unsafe lifecycle sweep cursor")
 
 
 def _observe(root_fd: int) -> os.stat_result | None:
@@ -107,7 +107,10 @@ def load_cursor(
         current = os.fstat(fd)
         _validate_file(current)
         if (current.st_dev, current.st_ino) != (observed.st_dev, observed.st_ino):
-            raise CursorAuthorityError("lifecycle sweep cursor identity changed")
+            raise CursorAuthorityError(
+                errno.ELOOP,
+                "lifecycle sweep cursor identity changed",
+            )
         payload = _read_all(fd)
     finally:
         os.close(fd)

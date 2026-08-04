@@ -16,6 +16,7 @@ from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
 from dataclasses import FrozenInstanceError, asdict, replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -2714,8 +2715,9 @@ def test_sweep_cursor_symlink_is_fail_closed(tmp_path: Path) -> None:
     target.write_text("untrusted")
     (capture_dir / sweep_cursor.CURSOR_NAME).symlink_to(target.name)
     try:
-        with pytest.raises(sweep_cursor.CursorAuthorityError):
+        with pytest.raises(sweep_cursor.CursorAuthorityError) as caught:
             store.sweep(_sweep_budget(1, 1))
+        assert caught.value.errno == errno.ELOOP
         assert (_capture_dir(project) / artifact.name).exists()
     finally:
         root.close()
@@ -2739,6 +2741,64 @@ def test_sweep_cursor_preserves_wrapped_os_error_errno(
         )
 
     assert caught.value.errno == errno.EACCES
+
+
+def test_sweep_cursor_identity_change_preserves_authority_errno(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    anchor, root, _store = _open_store(project, _Clock())
+    cursor = _capture_dir(project) / sweep_cursor.CURSOR_NAME
+    cursor.write_bytes(b"")
+    cursor.chmod(0o600)
+    observed = cursor.stat()
+
+    monkeypatch.setattr(
+        sweep_cursor.os,
+        "fstat",
+        lambda _fd: SimpleNamespace(
+            st_mode=observed.st_mode,
+            st_uid=observed.st_uid,
+            st_nlink=observed.st_nlink,
+            st_dev=observed.st_dev,
+            st_ino=observed.st_ino + 1,
+        ),
+    )
+    try:
+        with pytest.raises(sweep_cursor.CursorAuthorityError) as caught:
+            sweep_cursor.load_cursor(
+                root.fd,
+                project_identity=(anchor.identity.device, anchor.identity.inode),
+                root_identity=(root.identity.device, root.identity.inode),
+                compaction_epoch=1,
+            )
+
+        assert caught.value.errno == errno.ELOOP
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_reconcile_cursor_unsafe_metadata_reports_filesystem_authority(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    anchor, root, _store = _open_store(project, _Clock())
+    cursor = _capture_dir(project) / sweep_cursor.CURSOR_NAME
+    cursor.write_bytes(b"{}\n")
+    cursor.chmod(0o644)
+    root.close()
+    anchor.close()
+
+    outcome = capture_reconcile.reconcile_capture_store(
+        str(project),
+        capture_reconcile.RUNNER_TAIL_BUDGET,
+    )
+
+    assert outcome.errors == 1
+    assert outcome.remaining_due == 1
+    assert outcome.blocker is CleanupBlocker.FILESYSTEM_AUTHORITY
 
 
 def test_cleanup_outcome_is_frozen_and_contains_no_identifiers(tmp_path: Path) -> None:

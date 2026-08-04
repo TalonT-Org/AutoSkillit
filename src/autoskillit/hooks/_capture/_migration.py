@@ -22,7 +22,13 @@ from . import (
 )
 from ._failure_policy import CaptureFailureReason
 from ._module_identity import register_module_aliases
-from ._types import CaptureCapacitySpec, DueKey, SweepBudgetSpec
+from ._types import (
+    CaptureCapacitySpec,
+    CleanupBlocker,
+    DueKey,
+    SweepBudgetExceeded,
+    SweepBudgetSpec,
+)
 
 register_module_aliases(__name__)
 
@@ -363,7 +369,7 @@ def load_ledger(
     max_ledger_bytes: int,
 ) -> tuple[Records, int, int]:
     spec = store._capacity
-    max_attempts = (store._sweep_budget or SweepBudgetSpec()).max_attempts
+    budget = store._sweep_budget or SweepBudgetSpec()
 
     def migrate(
         records: Mapping[str, Record],
@@ -378,7 +384,7 @@ def load_ledger(
             source_bytes=source_bytes,
             source_stat=source_stat,
             spec=spec,
-            max_attempts=max_attempts,
+            budget=budget,
         )
 
     loaded = view.load(
@@ -450,10 +456,8 @@ def _publish(
         if record.state not in {_ledger.CaptureState.DELETED, _ledger.CaptureState.TAMPERED}
     )
     if due:
-        _sweep_cursor.write_cursor(
-            store._root_fd,
-            project_identity=store._project_identity,
-            root_identity=store._root_identity,
+        _sweep.write_cursor_accounted(
+            store,
             compaction_epoch=txn.target_epoch,
             due_key=due[-1],
         )
@@ -468,7 +472,7 @@ def migrate_legacy(
     source_bytes: bytes,
     source_stat: os.stat_result,
     spec: CaptureCapacitySpec,
-    max_attempts: int,
+    budget: SweepBudgetSpec,
 ) -> None:
     txn = load_transaction(store._root_fd)
     if txn is None:
@@ -494,11 +498,25 @@ def migrate_legacy(
         and record.next_attempt_at <= store._wall_clock()
     )
     candidates = _sweep_cursor.rotate_after(candidates, txn.cursor)
+    started = store._monotonic()
     attempts = 0
     for due_key in candidates:
-        if attempts >= max_attempts:
+        active_budget = store._sweep_budget is not None
+        if attempts >= budget.max_attempts:
+            if active_budget:
+                raise SweepBudgetExceeded(CleanupBlocker.ATTEMPT_BUDGET)
+            break
+        if active_budget and store._sweep_records_inspected >= budget.max_records_inspected:
+            raise SweepBudgetExceeded(CleanupBlocker.RECORD_BUDGET)
+        if not active_budget and attempts >= budget.max_records_inspected:
+            break
+        if attempts > 0 and store._monotonic() - started >= budget.max_duration_seconds:
+            if active_budget:
+                raise SweepBudgetExceeded(CleanupBlocker.ELAPSED_DEADLINE)
             break
         attempts += 1
+        if active_budget:
+            store._sweep_records_inspected += 1
         entry = txn.entry_for(due_key.capture_id)
         if entry is None or entry.phase is MigrationPhase.PLANNED:
             entry = MigrationEntry(
@@ -579,10 +597,8 @@ def finish_published(
         if record.state not in {_ledger.CaptureState.DELETED, _ledger.CaptureState.TAMPERED}
     )
     if due:
-        _sweep_cursor.write_cursor(
-            store._root_fd,
-            project_identity=store._project_identity,
-            root_identity=store._root_identity,
+        _sweep.write_cursor_accounted(
+            store,
             compaction_epoch=epoch,
             due_key=due[-1],
         )

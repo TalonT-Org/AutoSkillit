@@ -163,6 +163,26 @@ def account_replay_bytes(store: _store_port.SweepStorePort, amount: int) -> None
         store._sweep_replay_bytes += amount
 
 
+def write_cursor_accounted(
+    store: _store_port.SweepStorePort,
+    *,
+    compaction_epoch: int,
+    due_key: DueKey,
+) -> None:
+    budget = store._sweep_budget
+    if budget is not None and store._sweep_cursor_writes >= budget.max_cursor_writes:
+        raise SweepBudgetExceeded(CleanupBlocker.CURSOR_WRITE_BUDGET)
+    _sweep_cursor.write_cursor(
+        store._root_fd,
+        project_identity=store._project_identity,
+        root_identity=store._root_identity,
+        compaction_epoch=compaction_epoch,
+        due_key=due_key,
+    )
+    if budget is not None:
+        store._sweep_cursor_writes += 1
+
+
 def validate_store_root(
     store: _store_port.SweepStorePort,
     lifecycle_error: type[RuntimeError],

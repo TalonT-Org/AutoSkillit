@@ -543,6 +543,7 @@ def test_mixed_legacy_history_migrates_once_without_manufacturing_final_authorit
             root,
             wall_clock=lambda: 1_000_000.0,
         )
+        outcome = store.sweep(capture_reconcile.RUNNER_TAIL_BUDGET)
         migrated = store.get_record(_CAPTURE_ID)
         preserved = store.get_record(other_id)
         first_bytes = ledger.read_bytes()
@@ -560,6 +561,7 @@ def test_mixed_legacy_history_migrates_once_without_manufacturing_final_authorit
         assert migrated.legacy_cleanup is not None
         assert migrated.legacy_cleanup.observed_size == len(b"captured")
         assert migrated.revision == 3
+        assert outcome.cursor_writes == 1
         assert preserved == reopened.get_record(other_id)
         assert ledger.read_bytes() == first_bytes
         decoded = capture_lifecycle._capture_ledger.decode_ledger(first_bytes)
@@ -646,6 +648,21 @@ def test_legacy_migration_retires_until_reduced_publication_capacity_fits(
     ledger.write_bytes(b"".join(frames))
     ledger.chmod(0o600)
     try:
+        bounded = store.sweep(
+            SweepBudgetSpec(
+                max_records_inspected=1,
+                max_replay_bytes=capture_lifecycle.MAX_LEDGER_BYTES,
+                max_attempts=8,
+                max_transitions=32,
+                max_cursor_writes=8,
+                max_duration_seconds=1.0,
+            )
+        )
+
+        assert bounded.blocker is CleanupBlocker.RECORD_BUDGET
+        assert bounded.records_inspected == 1
+        assert bounded.cursor_writes == 0
+
         store.get_record(_CAPTURE_ID)
         decoded = capture_lifecycle._capture_ledger.decode_ledger(ledger.read_bytes())
         assert {frame.format_version for frame in decoded.frames} == {2}

@@ -98,6 +98,7 @@ class SweepStorePort(TransitionStorePort, Protocol):
     _root_fd: int
     _project_identity: tuple[int, int]
     _root_identity: tuple[int, int]
+    _monotonic: Callable[[], float]
     _wall_clock: Callable[[], float]
     _sweep_budget: SweepBudgetSpec | None
     _sweep_records_inspected: int

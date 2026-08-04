@@ -687,7 +687,6 @@ from .types import GitHubReviewPostResult as GitHubReviewPostResult
 from .types import GitHubReviewReceipt as GitHubReviewReceipt
 from .types import GitHubReviewRequest as GitHubReviewRequest
 from .types import GitMetadataWriteSpec as GitMetadataWriteSpec
-from .types import HardCapabilityMismatch as HardCapabilityMismatch
 from .types import HeadlessExecutor as HeadlessExecutor
 from .types import HookTrustPolicy as HookTrustPolicy
 from .types import IdempotencyExpiredEffect as IdempotencyExpiredEffect

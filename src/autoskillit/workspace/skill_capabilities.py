@@ -1039,12 +1039,6 @@ def parse_skill_semantic_plan(
     return plan, ()
 
 
-# Concise aliases for consumers that already carry skill-capability context.
-classify_capability_evidence = classify_skill_capability_evidence
-detect_capabilities = detect_skill_capabilities
-validate_capability_declarations = validate_skill_capability_declarations
-
-
 _CLASSIFIED_CAPABILITIES = frozenset(_STATIC_PATTERNS) | frozenset(_SELF_INITIATED_TOOLS)
 if _CLASSIFIED_CAPABILITIES != frozenset(SKILL_CAPABILITY_REGISTRY):
     raise RuntimeError(
@@ -1060,12 +1054,9 @@ __all__ = [
     "CapabilitySourceClassification",
     "SkillCapabilityEvidence",
     "SkillCapabilityValidation",
-    "classify_capability_evidence",
     "classify_skill_capability_evidence",
-    "detect_capabilities",
     "detect_skill_capabilities",
     "parse_skill_semantic_plan",
-    "validate_capability_declarations",
     "validate_skill_capability_authenticity",
     "validate_skill_capability_declarations",
 ]

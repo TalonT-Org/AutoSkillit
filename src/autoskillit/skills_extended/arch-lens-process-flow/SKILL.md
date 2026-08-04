@@ -60,7 +60,7 @@ semantic_requirements:
 - Include static structure details (that's C4 lens)
 - Show data storage details (that's data lineage lens)
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Focus on BEHAVIOR and STATE TRANSITIONS

@@ -116,7 +116,7 @@ metadata:
 - Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-chart-select/`
 - Use `radar` or `pie` chart types — these are perceptually inferior and excluded from the controlled vocabulary
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Apply the Cleveland-McGill perceptual hierarchy when ranking chart alternatives: **position > length > angle > area > color saturation > color hue**

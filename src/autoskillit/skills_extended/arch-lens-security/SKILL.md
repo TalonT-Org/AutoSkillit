@@ -60,7 +60,7 @@ semantic_requirements:
 - Expose actual secrets or credentials
 - Show implementation details that could aid attacks
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Focus on TRUST BOUNDARIES

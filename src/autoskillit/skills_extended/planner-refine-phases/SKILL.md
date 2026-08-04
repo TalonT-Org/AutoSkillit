@@ -58,7 +58,7 @@ conflicts, applies field-level edits to the plan, and writes `refined_plan.json`
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts not passed as positional arguments
 - Detach child delegations instead of joining them (joining every child is required)
 - Spawn more than 6 L0s in a single parallel batch
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 

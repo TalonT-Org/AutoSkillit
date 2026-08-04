@@ -60,7 +60,7 @@ semantic_requirements:
 - Show happy path details (that's process flow lens)
 - Ignore validation and fail-fast patterns
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Focus on FAILURE paths and recovery

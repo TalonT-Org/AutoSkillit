@@ -54,7 +54,7 @@ Decompose a task, plan, roadmap, or feature description into a structured set of
 - Include implementation steps disguised as requirements ("Refactor X to use Y" is an instruction, not a requirement)
 - Write requirements that can only be verified by reading source code
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use subagents to understand the source material and relevant codebase context

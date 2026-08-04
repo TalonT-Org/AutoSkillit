@@ -56,7 +56,7 @@ semantic_requirements:
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-governance-risk/`
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Identify subgroups for whom the experimental evidence may not generalize

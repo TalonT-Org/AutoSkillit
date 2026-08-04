@@ -67,7 +67,7 @@ severities. The validated report carries a `validated: true` marker to signal do
 
 - Modify any source code files
 - Create files outside `$AUDIT_BASE_DIR/` (the per-run directory set in Step 5)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 - Write output files before synthesizing ALL subagent results
 - Subagents must NOT create their own files — they return findings in response text only
 - Do NOT include VALID BUT EXCEPTION WARRANTED findings in the validated report body — they belong in the validation summary only

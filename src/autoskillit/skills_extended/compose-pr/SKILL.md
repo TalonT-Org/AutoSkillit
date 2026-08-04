@@ -63,7 +63,7 @@ decomposed PR flow (prepare → run_arch_lenses → compose).
 - Invent mermaid classDef colors — when embedding validated diagrams, include them verbatim.
   Using ONLY classDef styles from the mermaid skill (no invented colors).
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 - Generate, fabricate, or create any diagrams or mermaid code blocks — the ONLY diagrams permitted in the PR body are those read from `all_diagram_paths` files that passed ★/● marker validation in Step 2. If no diagram paths are provided or all fail validation, the Architecture Impact section must not exist in the output.
 - NEVER re-derive, override, or substitute `task_title` from any source other than the prep file's `## Title` section. The title in the prep file is authoritative — do NOT use issue metadata, branch names, or ambient context to modify it.
 

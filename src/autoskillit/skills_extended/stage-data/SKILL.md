@@ -69,7 +69,7 @@ compute on doomed downloads.
 - Write files outside `{{AUTOSKILLIT_TEMP}}/stage-data/`
 - Emit a WARN or FAIL verdict without a specific, actionable explanation
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Read the `data_manifest` frontmatter section of the experiment plan

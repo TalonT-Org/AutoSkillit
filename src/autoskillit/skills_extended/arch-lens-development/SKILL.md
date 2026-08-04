@@ -58,7 +58,7 @@ semantic_requirements:
 - Include runtime architecture details
 - Show business logic
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Focus on BUILD and TEST infrastructure

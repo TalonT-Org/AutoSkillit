@@ -56,7 +56,7 @@ semantic_requirements:
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-validity-threats/`
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Apply Campbell & Stanley's full threat taxonomy — do not skip threats just because they seem unlikely

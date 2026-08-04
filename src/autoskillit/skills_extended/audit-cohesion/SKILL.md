@@ -50,7 +50,7 @@ Audit the codebase for internal cohesion: how well components integrate and main
 - Update an existing report — always generate new
 - Duplicate findings that belong in audit-arch (rule violations)
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use subagents for parallel exploration (one per cohesion dimension)

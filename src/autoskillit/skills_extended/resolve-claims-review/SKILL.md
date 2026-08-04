@@ -69,7 +69,7 @@ Called by the research recipe when `audit_claims` routes `changes_requested` via
 - Modify tests to suppress failures introduced by reviewer fixes
 - Use file-path-segment grouping — claim comments are grouped by **dimension**, not by file path
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not a hardcoded number)

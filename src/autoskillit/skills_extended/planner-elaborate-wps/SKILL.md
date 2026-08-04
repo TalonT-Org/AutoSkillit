@@ -57,7 +57,7 @@ is the sole writer for this phase's WPs — no concurrent write races.
 - Explore parent directories of your input paths (e.g., `ls $(dirname $1)/..`)
 - Read result files from other phases
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 

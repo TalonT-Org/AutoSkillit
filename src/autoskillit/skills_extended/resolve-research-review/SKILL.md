@@ -68,7 +68,7 @@ Bounded by `retries: 2` — on exhaustion routes to `research_complete`.
 - Modify tests to suppress failures introduced by reviewer fixes
 - Use file-path-segment grouping — research comments are grouped by **dimension**, not by file path
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not a hardcoded number)

@@ -56,7 +56,7 @@ semantic_requirements:
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-exploratory-confirmatory/`
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Map the full analytic timeline — what was decided before vs. after seeing data

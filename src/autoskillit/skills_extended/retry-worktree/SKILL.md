@@ -66,7 +66,7 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 - Pipe test output through `tail`, `head`, or other truncation commands — `tail -N` buffers the entire stream and produces no output if the process is killed before EOF
 - Default to `main` as the base branch — always discover it from git's upstream structure or the explicit base-branch store file
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 - Consider implementation complete with zero tracked source changes — if you cannot produce any tracked changes, report failure explicitly rather than completing with temp-only artifacts. Temp-only writes (`{{AUTOSKILLIT_TEMP}}/`, draft files) never authorizes finishing with zero tracked source changes.
 
 **ALWAYS:**

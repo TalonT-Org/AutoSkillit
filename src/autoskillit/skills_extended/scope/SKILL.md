@@ -70,7 +70,7 @@ text is supplementary context.
 - Skip the prior art survey — always check what already exists in the codebase
 - Fabricate research findings when external sources return no results — if web searches or literature searches yield nothing, state that explicitly and note what the codebase evidence shows instead
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`

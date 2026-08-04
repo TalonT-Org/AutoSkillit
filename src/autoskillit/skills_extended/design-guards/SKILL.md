@@ -50,7 +50,7 @@ Path to a bug pattern audit report (typically under `{{AUTOSKILLIT_TEMP}}/audit-
 - Propose bandaid fixes or direct-only patches
 - Create files outside `{{AUTOSKILLIT_TEMP}}/design-guards/` directory
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use subagents for parallel codebase exploration

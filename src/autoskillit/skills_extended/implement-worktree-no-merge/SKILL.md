@@ -65,7 +65,7 @@ The worktree is left intact for the orchestrator to test and merge separately.
 - Pipe test output through `tail`, `head`, or other truncation commands
 - **Execute `git merge` commands** (including `--no-ff`, `--no-commit`, or any variant). All branch content must be applied via `git cherry-pick <commit>` for individual commits or `git checkout <branch> -- <file>` for specific files. `merge_worktree` requires linear commit history — merge commits cannot be rebased and will cause `WORKTREE_INTACT_MERGE_COMMITS_DETECTED` failure.
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Create a new worktree from the current branch

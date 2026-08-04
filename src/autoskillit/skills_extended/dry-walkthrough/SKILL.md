@@ -75,7 +75,7 @@ The plan file must remain a **clean, self-contained implementation instruction s
 - Consider effort as a reason for choosing one approach over another
 - Detach child delegations instead of joining them (joining every child is required)
 - Write plan content, corrections, or the verification marker to any file other than the original plan file path provided as input. If the Edit tool is denied on the plan file, do NOT create a copy elsewhere — output a failure message instead.
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 - Discover a latest plan, audit cycle, inventory, or disposition report
 - Open audit-cycle artifacts directly in Step 4.7 or reinterpret the verified preflight result
 

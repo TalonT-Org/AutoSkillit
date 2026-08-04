@@ -58,7 +58,7 @@ semantic_requirements:
 - Accept default alpha=0.05 without checking whether it is appropriate for the decision context
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-error-budget/`
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Enumerate every statistical test and account for its error contribution

@@ -69,7 +69,7 @@ Explore a target project and generate tailored recipes and AutoSkillit config th
 - Include install instructions or "Getting Started" sections — user is already running the skill
 - Hardcode `base_branch = main` — detect the current branch
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Read the target project using Glob, Read, and Grep — no shell commands against target

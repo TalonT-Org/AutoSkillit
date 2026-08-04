@@ -51,7 +51,7 @@ Coordinator skill that reads session logs from a pipeline run, groups them by st
 - Create issues or PRs (findings are reported to the calling session only)
 - Write to `/tmp`, `/var/tmp`, or any system scratch directory — all intermediate and scratch files belong in `{{AUTOSKILLIT_TEMP}}/analyze-pipeline-health/`
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Filter sessions.jsonl by kitchen_id to scope to this pipeline run

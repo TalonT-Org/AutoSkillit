@@ -60,7 +60,7 @@ consumption. Does NOT invoke the vis-lens skills — that is handled by the
 - Fabricate lens recommendations or validation conclusions not supported by the data — report what the experiment plan and scope show, not what you assume they should show
 - Detach child delegations instead of joining them (joining every child is required)
 - Invoke vis-lens skills — that belongs to the `run_vis_lenses` recipe step
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`

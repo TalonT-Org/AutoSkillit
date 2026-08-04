@@ -44,7 +44,7 @@ Audit the codebase for adherence to architectural standards and rules.
 - Modify any source code files
 - Update an existing report - always generate new
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use subagents for parallel exploration

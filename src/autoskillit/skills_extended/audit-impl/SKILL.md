@@ -92,7 +92,7 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 - Create authority, inventory, lifecycle, execution-identity, or publication artifacts
 - Emit a GO verdict when any `MISSING` or `CONFLICT` finding exists
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use child delegations for file reads and diff retrieval in Steps 1, 2, and 2.5

@@ -77,7 +77,7 @@ The user may provide a "since" date (e.g., `2/7`, `2026-02-07`, `last month`). I
 - Have subagents write files — they return all findings in response text only
 - Analyze subagent log subdirectories (`*/subagents/`) — top-level session files only
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use subagents heavily for parallel log analysis

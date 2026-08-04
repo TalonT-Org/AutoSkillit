@@ -59,7 +59,7 @@ Does NOT invoke lens skills or other sub-skills.
 - Invent mermaid classDef colors — when embedding validated diagrams, include them verbatim.
   Using ONLY classDef styles from the mermaid skill when composing the PR body.
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Check `gh auth status` before attempting GitHub operations

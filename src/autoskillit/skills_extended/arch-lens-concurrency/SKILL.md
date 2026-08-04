@@ -60,7 +60,7 @@ semantic_requirements:
 - Conflate with general process flow (that's a different lens)
 - Ignore thread safety implications
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Focus on PARALLEL execution specifically

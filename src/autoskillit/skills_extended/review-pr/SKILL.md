@@ -72,7 +72,7 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - Let standard or deletion agents read outside the supplied PR diff content
 - Modify any source code
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 - Specify `subagent_type` for standard or deletion audit agents. The only permitted
   registered calls are the exact reachability and abstraction-surface calls in Step 3.
 - Give standard or deletion agents repository-read access. Only the two registered

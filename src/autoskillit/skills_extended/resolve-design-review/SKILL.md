@@ -65,7 +65,7 @@ MCP-only — not user-invocable directly.
 - Modify the evaluation dashboard, experiment plan, or any source file
 - Apply fixes — this skill triages fixability only
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Exit 0 in all cases — resolution=revised and resolution=failed are both normal outcomes

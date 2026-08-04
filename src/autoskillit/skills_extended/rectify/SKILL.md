@@ -85,7 +85,7 @@ Do not change any code.
 - Suggest backward compatibility shims
 - Create files outside `{{AUTOSKILLIT_TEMP}}/rectify/` directory
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use subagents for parallel exploration

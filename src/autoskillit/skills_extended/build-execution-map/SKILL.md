@@ -66,7 +66,7 @@ Space-separated issue numbers (required, minimum 2), plus optional flags:
 - Detach child delegations instead of joining them (joining every child is required)
 - Treat a medium-severity cross-assessment as grounds for deferral — only critical severity defers
 - Emit has_deferred / deferred_count / dispatched_count with markdown decorators
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use parallel subagents (up to 8) for issue fetching in Step 1

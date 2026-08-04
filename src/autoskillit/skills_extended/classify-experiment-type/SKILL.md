@@ -61,7 +61,7 @@ and before `apply-review-dimensions`. NOT invoked standalone — the recipe step
 - Modify files outside `{{AUTOSKILLIT_TEMP}}/classify-experiment-type/`
 - Emit verdict (verdict is not an output of this skill)
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use `child delegation under the declared `sonnet` model-class policy` for the triage subagent

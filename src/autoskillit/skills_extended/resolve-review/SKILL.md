@@ -69,7 +69,7 @@ branch already checked out.
 - Delete or discard the working directory on failure
 - Modify tests to suppress failures introduced by reviewer fixes
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 - Classify a finding as ACCEPT when the proposed change violates a project-wide
   architectural constraint listed in the Architectural Constraint Catalog
 

@@ -59,7 +59,7 @@ Implement a provided plan in an isolated git worktree branched from the current 
 - Blame test failures on "pre-existing issues" — ALL tests must pass
 - Re-run tests just to see failures — grep the saved output file instead
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Create a new worktree from the current branch

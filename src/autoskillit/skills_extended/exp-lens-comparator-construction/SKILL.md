@@ -58,7 +58,7 @@ semantic_requirements:
 - Accept at face value that baselines received symmetric treatment
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-comparator-construction/`
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Build a fairness matrix covering all treatment-vs-comparator pairs

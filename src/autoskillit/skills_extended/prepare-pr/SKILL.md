@@ -61,7 +61,7 @@ in the decomposed PR flow (prepare → run_arch_lenses → compose).
 - Create files outside `{{AUTOSKILLIT_TEMP}}/prepare-pr/`
 - Fail if closing_issue is absent or gh is unavailable — degrade gracefully
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 - Do NOT use the issue title, issue body, or any closing_issue metadata for `task_title` or `## Title`. These MUST come exclusively from plan file `# ` headings (Step 2). Step 1 output (`requirements_section`) must NOT influence the title derivation.
 
 **ALWAYS:**

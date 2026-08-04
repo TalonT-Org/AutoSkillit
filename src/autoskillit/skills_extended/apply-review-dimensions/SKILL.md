@@ -70,7 +70,7 @@ invoked standalone — the recipe step named `apply` with
 - Detach child delegations instead of joining them (joining every child is required)
 - Write outside `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/apply-review-dimensions}`
 - Proceed past L1 when any STRUCTURAL critical finding is present
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use `child delegation under the declared `sonnet` model-class policy` for all subagents

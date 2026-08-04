@@ -63,7 +63,7 @@ implemented. Identify review debt before it compounds.
 - Detach child delegations instead of joining them (joining every child is required)
 - Use `gh pr list` without `--limit` to avoid pagination truncation
 - Use `\|` in Grep patterns — use `|` for alternation (ERE, not BRE)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Save raw PR JSON to temp before any analysis (Step 1)

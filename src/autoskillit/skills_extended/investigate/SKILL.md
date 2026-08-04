@@ -111,7 +111,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Choose or accept approaches, solutions, and/or fixes that are chosen simply because they are easier
 - File GitHub issues automatically (issue filing is always a separate, user-directed action)
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use subagents for parallel exploration

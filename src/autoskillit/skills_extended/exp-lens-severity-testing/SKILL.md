@@ -56,7 +56,7 @@ semantic_requirements:
 - Accept a "pass" result without asking what a false result would have looked like under this design
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-severity-testing/`
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - For every positive claim, identify what error the test was capable of detecting

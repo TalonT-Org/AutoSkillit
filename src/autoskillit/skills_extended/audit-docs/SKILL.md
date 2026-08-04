@@ -48,7 +48,7 @@ Audit all documentation sources for drift, staleness, and inconsistency against 
 - Update an existing report — always generate a new one
 - Compare doc-to-doc without first grounding claims in actual code behavior
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Ground every cross-reference finding in what the code actually does (not what other docs say)

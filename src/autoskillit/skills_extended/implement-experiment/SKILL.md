@@ -76,7 +76,7 @@ tokens after the skill name for the first path-like token (starts with `/`,
   `git cherry-pick` or `git checkout <branch> -- <file>`)
 - Blame pre-commit or lint failures on "pre-existing issues" — ALL pre-commit checks must pass on the committed code
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 - Consider implementation complete with zero tracked source changes — if you cannot produce any tracked changes, report failure explicitly rather than completing with temp-only artifacts. Temp-only writes (`{{AUTOSKILLIT_TEMP}}/`, draft files) never authorizes finishing with zero tracked source changes.
 
 **ALWAYS:**

@@ -84,13 +84,13 @@ _ANTI_PROSE_GUARD_PATTERNS = [
 
 # Patterns for three-layer parallel dispatch reinforcement detection
 _PARALLEL_DISPATCH_NEVER_RE = re.compile(
-    r"(?i)sequentially.*single.*message|single.*parallel.*message",
+    r"(?i)delegations?.*sequentially|sequentially.*(?:single.*message|delegation)|single.*parallel.*message",
 )
 _PARALLEL_DISPATCH_ALWAYS_RE = re.compile(
-    r"(?i)single\s+message",
+    r"(?i)single\s+message|all independent child delegations before awaiting any result",
 )
 _PARALLEL_DISPATCH_STEP_RE = re.compile(
-    r"(?i)single\s+(?:message|batch)|SINGLE\s+MESSAGE",
+    r"(?i)single\s+(?:message|batch)|all independent child delegations before awaiting any result",
 )
 
 # Skills whose narration suppression is handled globally by _inject_narration_suppression()
@@ -231,13 +231,13 @@ def _check_loop_boundary(skill_text: str) -> list[str]:
 
 
 def _check_parallel_dispatch_reinforcement(skill_text: str) -> list[str]:
-    """Check for missing three-layer single-message dispatch reinforcement.
+    """Check for missing three-layer parallel-dispatch reinforcement.
 
     Returns a list of violation descriptions (empty if compliant).
     For skills that spawn parallel subagents, all three layers must be present:
     1. NEVER block prohibits sequential dispatch
-    2. ALWAYS block requires single-message dispatch
-    3. Step body containing spawn language includes single-message instruction
+    2. ALWAYS block requires concurrent dispatch before awaiting
+    3. Step body containing spawn language reinforces concurrent dispatch
     """
 
     violations: list[str] = []
@@ -248,21 +248,16 @@ def _check_parallel_dispatch_reinforcement(skill_text: str) -> list[str]:
     if not _PARALLEL_DISPATCH_NEVER_RE.search(never_block):
         violations.append(
             "NEVER block does not prohibit sequential dispatch "
-            "(expected: 'sequentially...single...message' or 'single...parallel...message')"
+            "(expected a sequential-delegation prohibition)"
         )
 
     if not _PARALLEL_DISPATCH_ALWAYS_RE.search(always_block):
-        violations.append(
-            "ALWAYS block does not require single-message dispatch (expected: 'single message')"
-        )
+        violations.append("ALWAYS block does not require concurrent dispatch before awaiting")
 
     step_blocks = re.split(r"(?m)^#{1,3}\s+Step\s+\d+", skill_text)
     spawning_steps = [b for b in step_blocks if _SPAWN_INDICATOR_RE.search(b)]
     if spawning_steps and not any(_PARALLEL_DISPATCH_STEP_RE.search(b) for b in spawning_steps):
-        violations.append(
-            "No step block containing spawn language has a single-message dispatch instruction "
-            "(expected: 'single message' or 'single batch' in a step with subagent spawning)"
-        )
+        violations.append("No step block containing spawn language reinforces concurrent dispatch")
 
     return violations
 
@@ -669,3 +664,6 @@ def test_parallel_dispatch_has_single_message_reinforcement(skill_dir: Path) -> 
         return
     assert plan.concurrency is not None and plan.concurrency.required
     assert plan.join is not None and plan.join.required
+    skill_text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    violations = _check_parallel_dispatch_reinforcement(skill_text)
+    assert not violations, f"{skill_dir.name}: {violations}"

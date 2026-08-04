@@ -60,7 +60,7 @@ Does NOT invoke any exp-lens skills or create a PR.
 - Create files outside `{{AUTOSKILLIT_TEMP}}/prepare-research-pr/` (relative to the current working directory)
 - Fail silently — always emit all three output tokens as your final output
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use child delegations (not slash commands) for reading and synthesis

@@ -80,7 +80,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Create groups that cannot be independently planned
 - Include implementation steps or technical approach in the group descriptions
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use subagents to verify codebase structure before finalizing groups

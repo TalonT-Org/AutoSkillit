@@ -61,7 +61,7 @@ conflicts from earlier merges in the queue.
 - Leave the git working tree in a dirty state
 - Create files outside `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/merge-prs}`
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Run `git status` before any operation to verify clean state

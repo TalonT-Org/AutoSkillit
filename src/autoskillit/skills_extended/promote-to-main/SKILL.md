@@ -66,7 +66,7 @@ and creates a comprehensive promotion PR.
 - Use the Bash tool for file reads — use Read, Grep, Glob for all codebase inspection
 - Use `gh pr create --body` inline — always use `--body-file`
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Run ALL pre-flight checks before any analysis work

@@ -60,7 +60,7 @@ semantic_requirements:
 - Show internal component details
 - Include all possible scenarios (pick key ones)
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Focus on END-TO-END journeys

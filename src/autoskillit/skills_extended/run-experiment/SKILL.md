@@ -71,7 +71,7 @@ plan, executes what the plan describes, and reports what happened.
 - Assume what kind of experiment this is — read the plan and follow it
 - Commit files under `{{AUTOSKILLIT_TEMP}}/` — this directory is gitignored working space, NOT for version control. Do not use `git add -f` or `git add --force` to bypass the gitignore.
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`

@@ -70,7 +70,7 @@ best available plan.
 - Include code snippets, shell commands, or specific tool invocations in findings or revision guidance — findings describe gaps and risks, not implementation instructions
 - Prescribe HOW to fix an issue — findings must describe WHAT is lacking or at risk; the fix is the plan author's responsibility
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`

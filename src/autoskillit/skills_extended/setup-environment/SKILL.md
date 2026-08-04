@@ -61,7 +61,7 @@ PASS and WARN proceed to `decompose_phases`; FAIL escalates immediately.
 - Write files outside `{{AUTOSKILLIT_TEMP}}/setup-environment/`
 - Skip the Docker availability probe before attempting a build
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Parse `environment.type` from the experiment plan first

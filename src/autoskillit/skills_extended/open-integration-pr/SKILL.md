@@ -76,7 +76,7 @@ PR, and output `pr_url=<url>`.
 - Fail the pipeline if `gh` is unavailable or not authenticated — output `pr_url=` (empty) and exit successfully
 - Close original PRs before the integration PR is successfully created
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Check `gh auth status` before attempting any GitHub operations

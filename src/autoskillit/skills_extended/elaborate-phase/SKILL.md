@@ -48,7 +48,7 @@ Elaborate a single phase from a high-level migration plan into a complete, self-
 - Make assumptions about codebase state without verifying
 - Read previous `Phase#.md` files unless you have a specific question that requires looking up a detail
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Assess current codebase state with subagents FIRST

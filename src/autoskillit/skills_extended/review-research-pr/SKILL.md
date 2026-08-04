@@ -64,7 +64,7 @@ a summary verdict. Called by the recipe pipeline after `open_research_pr` opens 
 - Flag the absence of a clear experimental conclusion as a deficiency — inconclusive
   results are valid outcomes for research PRs (do not flag them)
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 - Embed diff content inline in subagent prompts — always pass by path and instruct subagents to Read
 
 **ALWAYS:**

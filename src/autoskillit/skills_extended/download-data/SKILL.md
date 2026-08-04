@@ -67,7 +67,7 @@ immediately.
 - Write files outside `{{AUTOSKILLIT_TEMP}}/download-data/`
 - Fabricate or hallucinate download results — only report actual command output
 - Attribute a missing or partial file to a completed download
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Read the `data_manifest` frontmatter section of the experiment plan

@@ -65,7 +65,7 @@ Analyze open GitHub issues, classify each into a recipe route, group them into p
 - Use `--body` shell substitution (`--body "$(...)`) for `gh issue edit` — always write to
   `{{AUTOSKILLIT_TEMP}}/triage-issues/edit_body_{timestamp}.md` and use `--body-file`
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`

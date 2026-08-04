@@ -84,7 +84,7 @@ incorporate the feedback before writing the plan.
   any external dataset identifier) in the data_manifest without first confirming their
   existence via web search — accession patterns learned during training are frequently
   hallucinated
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`

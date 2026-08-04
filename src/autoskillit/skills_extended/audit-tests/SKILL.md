@@ -49,7 +49,7 @@ Audit the test suite to identify useless tests, consolidation opportunities, qua
 - Recommend removing tests that guard against real regressions
 - Recommend changes that would reduce meaningful coverage
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use subagents for parallel exploration

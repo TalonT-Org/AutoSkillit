@@ -62,7 +62,7 @@ signal downstream processing.
 
 - Modify any source code files
 - Create files outside the per-run output directory (`{{AUTOSKILLIT_TEMP}}/validate-audit-{YYYY-MM-DD_HHMMSS}/`)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 - Write output files before synthesizing ALL subagent results
 - Subagents must NOT create their own files — they return findings in response text only
 - Do NOT include VALID BUT EXCEPTION WARRANTED findings in the validated report body — they belong in the validation summary only

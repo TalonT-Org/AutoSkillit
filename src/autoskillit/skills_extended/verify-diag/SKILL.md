@@ -46,7 +46,7 @@ Verify an architecture diagram's factual accuracy against the actual codebase. A
 - Modify source code files
 - Modify the diagram during verification (report findings only)
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Verify every named component exists in the codebase

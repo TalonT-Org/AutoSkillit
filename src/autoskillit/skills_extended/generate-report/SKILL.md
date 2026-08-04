@@ -101,7 +101,7 @@ In addition to the arguments above, this skill reads from the worktree:
 - Frame inconclusive results as failures — they are valid findings
 - Create the report outside the worktree's `research/` directory
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`

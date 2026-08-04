@@ -63,7 +63,7 @@ issues upfront, load recipe, execute session, collect result, report.
 - Reimplement recipe steps inline — always use `load_recipe` to load the recipe YAML and
   follow it as an orchestrator
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Process batches in ascending order: batch 1 before batch 2 before batch 3

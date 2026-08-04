@@ -59,7 +59,7 @@ semantic_requirements:
 - Focus on runtime behavior (that's process flow lens)
 - Show static structure without data context
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Trace data from INPUT to STORAGE

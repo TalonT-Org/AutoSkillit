@@ -66,7 +66,7 @@ comments and emits a verdict for recipe routing.
 - Run deterministic diff annotation (claim positions are report-level, not line-level)
 - Generate findings for `experimental` claims — they are self-evidencing by definition
 - Detach child delegations instead of joining them (joining every child is required)
-- Start all independent child delegations before awaiting any result so they run concurrently
+- Start independent child delegations sequentially
 - Embed diff content inline in subagent prompts — always pass by path and instruct subagents to Read
 
 **ALWAYS:**

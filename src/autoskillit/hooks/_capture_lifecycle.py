@@ -67,7 +67,6 @@ LegacyCleanupOnly = _capture_types.LegacyCleanupOnly
 PublishedCaptureReference = _capture_snapshot.PublishedCaptureReference
 UnavailableCaptureReference = _capture_snapshot.UnavailableCaptureReference
 VerifiedCaptureSnapshot = _capture_snapshot.VerifiedCaptureSnapshot
-
 __all__ = [
     "CaptureCapacityError",
     "CaptureCapacityReason",
@@ -160,22 +159,6 @@ def _validate_successor(
 ) -> None:
     try:
         _capture_ledger.validate_successor(previous, candidate)
-    except _capture_ledger.LedgerCodecError as exc:
-        raise CaptureLedgerError(str(exc)) from exc
-
-
-def _legacy_record_from_dict(
-    value: object,
-    *,
-    revision: int,
-    compaction_epoch: int,
-) -> CaptureLifecycleRecord:
-    try:
-        return _capture_ledger.legacy_record_from_dict(
-            value,
-            revision=revision,
-            compaction_epoch=compaction_epoch,
-        )
     except _capture_ledger.LedgerCodecError as exc:
         raise CaptureLedgerError(str(exc)) from exc
 

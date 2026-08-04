@@ -98,16 +98,15 @@ class TestProjectionFreshness:
             _assert_projection_is_live(binding.plugin_dir)
         assert binding.closed
 
-    def test_prepare_catalog_skill_dispatch_matches_live_package(
+    def test_prepare_catalog_skill_projection_matches_live_package(
         self, isolated_home: Path
     ) -> None:
         from autoskillit.core import PluginLoadMode
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
-        from autoskillit.workspace import prepare_catalog_skill_dispatch
+        from autoskillit.workspace import prepare_catalog_skill_projection
 
         plant_stale_snapshot(isolated_home)
-        authority, preparation = prepare_catalog_skill_dispatch(
-            resolved_command="/investigate",
+        authority, preparation = prepare_catalog_skill_projection(
             cwd=isolated_home,
             catalog=session_catalog(),
             default_base_branch="main",
@@ -123,7 +122,7 @@ class TestProjectionFreshness:
                 backend=backend,
                 binding=binding,
             )
-            assert contract.artifact_paths == ()
+            assert contract.artifact_paths == (str(binding.plugin_dir),)
         assert binding.closed
 
     def test_make_context_matches_live_package(self, isolated_home: Path) -> None:

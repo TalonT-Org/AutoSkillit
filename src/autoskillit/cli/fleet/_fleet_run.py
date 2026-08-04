@@ -69,10 +69,7 @@ async def _execute_fleet_run(
         plugin_retirement_coordinator=default_plugin_retirement_coordinator(),
     )
 
-    from autoskillit.server import (  # noqa: PLC0415
-        _compute_effective_backend_map,
-        _provider_aware_capability_overrides,
-    )
+    from autoskillit.server import _compute_effective_backend_map  # noqa: PLC0415
 
     _recipe_info = ctx.recipes.find(recipe, ctx.project_dir) if ctx.recipes else None
     _raw_steps = (
@@ -80,23 +77,11 @@ async def _execute_fleet_run(
         if _recipe_info is not None and ctx.recipes is not None
         else None
     )
-    _prov_overrides, _ = _provider_aware_capability_overrides(
-        dispatch_backend,
-        recipe,
-        ctx.config.providers,
-        _raw_steps,
-        skill_resolver=ctx.skill_resolver,
-        config_backend=ctx.config.agent_backend,
-        project_root=ctx.project_dir,
-    )
     _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
         _raw_steps,
         dispatch_backend.name if dispatch_backend else None,
-        ctx.config.providers,
         recipe,
-        skill_resolver=ctx.skill_resolver,
         config_backend=ctx.config.agent_backend,
-        project_root=ctx.project_dir,
     )
 
     effective_backend = dispatch_backend or ctx.backend
@@ -165,7 +150,6 @@ async def _execute_fleet_run(
         resume_session_id=resume_session_id,
         prior_dispatch_id=prior_dispatch_id,
         dispatch_backend=dispatch_backend,
-        provider_capability_overrides=_prov_overrides,
         effective_backend_map=_effective_backend_map,
         native_shell_capture_mode=native_shell_capture_mode,
     )

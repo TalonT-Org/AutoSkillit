@@ -56,7 +56,7 @@ Grouping analysis is performed as in-context LLM reasoning. No parallel sessions
 - Apply `batch:N` labels to combined or original issues
 - Collapse issues with different `recipe:*` labels into one combined issue
 - Delegate grouping to parallel sessions — grouping analysis is in-context LLM reasoning only
-- Use parallel session spawning (Agent/Task) for grouping analysis — it is in-context LLM reasoning
+- Use parallel session spawning (backend-adapted child delegation) for grouping analysis — it is in-context LLM reasoning
 - Create files outside `{{AUTOSKILLIT_TEMP}}/collapse-issues/`
 - Skip emitting the `---collapse-issues-result---` block (emit even on error or no-collapse)
 - Summarize, paraphrase, truncate, or abbreviate the body of a source issue

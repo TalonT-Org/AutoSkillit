@@ -1,19 +1,39 @@
 ---
 name: resolve-research-review
-categories: [research]
-uses_capabilities: [agent_model, commit_files, github_api_write]
-description: >
-  Fetch PR review comments from review-research-pr, run research-aware intent
-  validation (ACCEPT/REJECT/DISCUSS), apply targeted fixes, escalate unrerunnable
-  findings, and post inline replies. Exit 0 drives recipe re_push_research; exit
+categories:
+- research
+uses_capabilities:
+- commit_files
+- github_api_write
+description: 'Fetch PR review comments from review-research-pr, run research-aware intent validation (ACCEPT/REJECT/DISCUSS),
+  apply targeted fixes, escalate unrerunnable findings, and post inline replies. Exit 0 drives recipe re_push_research; exit
   non-zero halts the cycle.
+
+  '
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: resolve-research-review] Resolving research review comments...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: resolve-research-review] Resolving research review comments...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Resolve Research Review Skill
@@ -47,8 +67,8 @@ Bounded by `retries: 2` — on exhaustion routes to `research_complete`.
 - Delete or discard the working directory on failure
 - Modify tests to suppress failures introduced by reviewer fixes
 - Use file-path-segment grouping — research comments are grouped by **dimension**, not by file path
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not a hardcoded number)
@@ -57,7 +77,7 @@ Bounded by `retries: 2` — on exhaustion routes to `research_complete`.
 - Gracefully degrade (exit 0, report skip) if `gh` is unavailable or no PR is found
 - Report a structured summary including escalation count
 - **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error. **Note:** Reads performed by subagents (Task/Agent) do NOT satisfy this requirement — they run in a child session whose reads are invisible to the parent. If a file was only read inside a subagent, you must Read it again in this main session before calling Edit.
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -190,7 +210,7 @@ Save `dimension_groups_{pr}.json` with findings keyed by group. Use `jq -n` or t
 
 ### Step 3.5: Intent Validation (Parallel Sub-Agents — BEFORE any code changes) (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
@@ -201,7 +221,7 @@ codebase and git history. This analysis phase runs entirely before code changes 
 (`statistical`, `methodology`, `reproducibility`, `reporting`, `hygiene`, `unknown`).
 This is dimension-based grouping, NOT file-path grouping.
 
-Launch one parallel subagent via `Agent(model="sonnet")` per non-empty dimension
+Launch one parallel subagent via `child delegation under the declared `sonnet` model-class policy` per non-empty dimension
 group. Each subagent receives:
 - Its list of findings (path, line, body, diff_hunk, dimension)
 - Instructions to read the actual code at each flagged line (±30 lines context)

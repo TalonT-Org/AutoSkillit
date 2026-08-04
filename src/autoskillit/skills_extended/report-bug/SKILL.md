@@ -1,14 +1,16 @@
 ---
 name: report-bug
-categories: [github]
-description: Investigate a bug from provided error context, write a structured markdown report to the given path, and output a deduplication fingerprint. Lightweight — no parallel subagents.
+categories:
+- github
+description: Investigate a bug from provided error context, write a structured markdown report to the given path, and output
+  a deduplication fingerprint. Lightweight — no parallel subagents.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: report-bug] Investigating bug...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: report-bug] Investigating bug...'''
+      once: true
 ---
 
 # Report Bug Skill
@@ -33,7 +35,7 @@ Report output path: /absolute/path/to/report.md
 
 - Modify any source code files
 - Create files other than the specified report output path
-- Spawn subagents or Agent tool calls
+- Spawn subagents or child delegations
 
 **ALWAYS:**
 - Write the completed report to the exact path specified in "Report output path"

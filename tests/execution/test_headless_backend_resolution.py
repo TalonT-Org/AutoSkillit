@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.execution.backends import CodexBackend
-from tests.execution.conftest import _mock_backend
+from tests.execution.conftest import _launch_preparation, _mock_backend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -102,14 +102,24 @@ class TestStepBackendPtyOverride:
         codex_step.result_parser.return_value = _mock_parser
 
         spec = CmdSpec(cmd=("codex", "--print", "do something"), env={})
-        with patch("autoskillit.execution.headless._headless_launch.assert_headless_cmd"):
+        launch_preparation = _launch_preparation(
+            minimal_ctx,
+            cwd=str(tmp_path),
+            backend="codex",
+        )
+        with patch.object(
+            minimal_ctx.launch_resolver,
+            "backend_for",
+            return_value=codex_step,
+        ):
             await _execute_claude_headless(
                 lambda _binding, _extras: spec,
                 cwd=str(tmp_path),
                 ctx=minimal_ctx,
                 timeout=10.0,
                 stale_threshold=60.0,
-                step_backend=codex_step,
+                launch_resolver=minimal_ctx.launch_resolver,
+                launch_preparation=launch_preparation,
             )
 
         assert runner.last_pty_mode is False, (

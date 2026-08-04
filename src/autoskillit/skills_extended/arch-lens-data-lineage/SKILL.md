@@ -1,17 +1,27 @@
 ---
 name: arch-lens-data-lineage
-categories: [arch-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-write_paths: ["{{AUTOSKILLIT_TEMP}}/arch-lens-data-lineage/"]
-description: Create Data Lineage architecture diagram showing information flow, transformations, and storage destinations. Data-centric lens answering "Where is the data?"
+categories:
+- arch-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/arch-lens-data-lineage/'
+description: Create Data Lineage architecture diagram showing information flow, transformations, and storage destinations.
+  Data-centric lens answering "Where is the data?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Data Lineage Lens - Tracing information flow...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Data Lineage Lens - Tracing information flow...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: arch-lens-c4-container
+  - name: make-arch-diag
+  - name: mermaid
 ---
 
 # Data Lineage Architecture Lens
@@ -48,8 +58,8 @@ hooks:
 - Modify any source code files
 - Focus on runtime behavior (that's process flow lens)
 - Show static structure without data context
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Trace data from INPUT to STORAGE
@@ -65,7 +75,7 @@ hooks:
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-data-lineage/arch_diag_data_lineage_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 
 ## Analysis Workflow
@@ -87,7 +97,7 @@ If no `context_path` is provided, skip this step and explore the full CWD in Ste
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn Explore subagents to investigate:
+Spawn child delegations to investigate:
 
 **Data Origins (Inputs)**
 - Find user input handling

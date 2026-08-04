@@ -1,16 +1,43 @@
 ---
 name: make-experiment-diag
-categories: [exp-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [exp-lens]
-description: Interactive selection of experimental design lens for visualizing experiment methodology. Routes to the appropriate exp-lens-* skill.
+categories:
+- exp-lens
+uses_capabilities: []
+activate_deps:
+- exp-lens
+description: Interactive selection of experimental design lens for visualizing experiment methodology. Routes to the appropriate
+  exp-lens-* skill.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'make-experiment-diag - Selecting experimental design lens...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'make-experiment-diag - Selecting experimental design lens...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: exp-lens-benchmark-representativeness
+  - name: exp-lens-causal-assumptions
+  - name: exp-lens-comparator-construction
+  - name: exp-lens-error-budget
+  - name: exp-lens-estimand-clarity
+  - name: exp-lens-exploratory-confirmatory
+  - name: exp-lens-fair-comparison
+  - name: exp-lens-governance-risk
+  - name: exp-lens-iterative-learning
+  - name: exp-lens-measurement-validity
+  - name: exp-lens-pipeline-integrity
+  - name: exp-lens-randomization-blocking
+  - name: exp-lens-reproducibility-artifacts
+  - name: exp-lens-sensitivity-robustness
+  - name: exp-lens-severity-testing
+  - name: exp-lens-unit-interference
+  - name: exp-lens-validity-threats
+  - name: exp-lens-variance-stability
+  - name: make-arch-diag
+  - name: mermaid
+  - name: verify-diag
 ---
 
 # Experimental Design Diagram Selection

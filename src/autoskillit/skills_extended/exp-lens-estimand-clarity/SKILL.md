@@ -1,16 +1,26 @@
 ---
 name: exp-lens-estimand-clarity
-categories: [exp-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: Create Estimand Clarity experimental design analysis decomposing the implicit estimand from code vs. explicit claims from prose. Evidential lens answering "What exactly is the claim?"
+categories:
+- exp-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Create Estimand Clarity experimental design analysis decomposing the implicit estimand from code vs. explicit
+  claims from prose. Evidential lens answering "What exactly is the claim?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Estimand Clarity Lens - Analyzing claim precision...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Estimand Clarity Lens - Analyzing claim precision...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: exp-lens-causal-assumptions
+  - name: exp-lens-measurement-validity
+  - name: make-experiment-diag
+  - name: mermaid
 ---
 
 # Estimand Clarity Experimental Design Lens
@@ -46,8 +56,8 @@ hooks:
 - Modify any source code or experiment files
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-estimand-clarity/`
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Decompose every stated claim into formal contrast notation (Treatment A vs Treatment B on Outcome Y in Population Z)
@@ -56,7 +66,7 @@ hooks:
 - Document how complications (missing data, failures, exclusions) are handled
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-estimand-clarity/exp_diag_estimand_clarity_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -83,7 +93,7 @@ exploration for these fields if the context file supplies them. For any field ab
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn Explore subagents to investigate:
+Spawn child delegations to investigate:
 
 **Stated Claims & Hypotheses**
 - Find hypothesis statements, research questions, README claims

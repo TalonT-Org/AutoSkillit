@@ -27,6 +27,7 @@ from ._type_native_shell_capture import (
 from ._type_plugin_source import PluginLaunchBinding
 from ._type_results import ValidatedAddDir
 from ._type_resume import NoResume, ResumeSpec
+from ._type_skill_semantics import SkillSemanticAdaptationResult, SkillSemanticPlan
 
 __all__ = [
     "StreamParser",
@@ -217,6 +218,8 @@ class CodingAgentBackend(Protocol):
     def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]: ...
 
     def validate_skill_content(self, content: str) -> list[str]: ...
+
+    def adapt_skill_semantics(self, plan: SkillSemanticPlan) -> SkillSemanticAdaptationResult: ...
 
     def version(self) -> str: ...
 

@@ -53,7 +53,10 @@ async def test_triage_staleness_non_claude_backend_returns_all_meaningful(
 
     skill_dir = tmp_path / ".claude" / "skills" / "my-skill"
     skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text("# dummy\nContent.")
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: my-skill\ndescription: Triage fixture.\nuses_capabilities: []\n---\n"
+        "# dummy\nContent."
+    )
 
     mock_run = AsyncMock()
     monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)

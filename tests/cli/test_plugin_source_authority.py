@@ -198,13 +198,12 @@ class TestAllEntrypointsAgree:
         from autoskillit.config import AutomationConfig
         from autoskillit.core import PluginLoadMode
         from autoskillit.server._factory import make_context
-        from autoskillit.workspace import prepare_catalog_skill_dispatch
+        from autoskillit.workspace import prepare_catalog_skill_projection
         from tests.contracts._projection_helpers import session_catalog
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         ctx = make_context(AutomationConfig(), runner=None, project_dir=tmp_path)
-        dispatched_authority, _preparation = prepare_catalog_skill_dispatch(
-            resolved_command="/investigate",
+        dispatched_authority, _preparation = prepare_catalog_skill_projection(
             cwd=tmp_path,
             catalog=session_catalog(),
             default_base_branch=ctx.config.branching.default_base_branch,

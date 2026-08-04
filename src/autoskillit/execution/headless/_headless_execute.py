@@ -21,12 +21,15 @@ from autoskillit.core import (
     CmdSpec,
     CodingAgentBackend,
     KillReason,
+    LaunchPreparation,
+    LaunchResolver,
     ModelIdentity,
     PluginArtifactAuthority,
     PluginLaunchBinding,
     PluginLoadMode,
     ProviderOutcome,
     RecipeIdentity,
+    ResolvedLaunchContract,
     RetryReason,
     SkillResult,
     WriteBehaviorSpec,
@@ -123,11 +126,13 @@ async def _execute_claude_headless(
     max_extension_seconds: float = 7200,
     marker_dir: Path | None = None,
     session_id: str | None = None,
-    step_backend: CodingAgentBackend | None = None,
+    launch_resolver: LaunchResolver,
+    launch_preparation: LaunchPreparation,
+    resume_launch_contract: ResolvedLaunchContract | None = None,
     model_identity: ModelIdentity = ModelIdentity.unknown(),
     inspector_eligible: bool = False,
     inspector_model: str = "",
-    backend_override_source: str | None = None,
+    on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
     on_session_id_resolved: Callable[[str], None] | None = None,
     closure_spec: ClosureAuthoritySpec | None = None,
     closure_report_root: Path | None = None,
@@ -172,7 +177,9 @@ async def _execute_claude_headless(
         raise RuntimeError("No subprocess runner configured")
 
     _step_backend: CodingAgentBackend = (
-        step_backend if step_backend is not None else cast(CodingAgentBackend, ctx.backend)
+        ctx.backend
+        if ctx.backend is not None and ctx.backend.name == launch_preparation.selected_backend
+        else launch_resolver.backend_for(launch_preparation)
     )
 
     linux_tracing_cfg = ctx.config.linux_tracing
@@ -269,6 +276,14 @@ async def _execute_claude_headless(
     lineage_callbacks = _LineageCallbacks(managed_lineage_observer, on_session_id_resolved)
     launch_logged = False
     spec: CmdSpec | None = None
+    current_launch_contract: ResolvedLaunchContract | None = None
+
+    def observe_launch(contract: ResolvedLaunchContract) -> None:
+        nonlocal current_launch_contract
+        current_launch_contract = contract
+        if on_launch_resolved is not None:
+            on_launch_resolved(contract)
+
     while True:
         try:
             managed_attempt_id = (
@@ -281,9 +296,11 @@ async def _execute_claude_headless(
                 launch_logged = True
             _result, spec = await _run_headless_attempt(
                 build_spec,
-                cwd=cwd,
                 runner=runner,
                 backend=_step_backend,
+                launch_resolver=launch_resolver,
+                launch_preparation=launch_preparation,
+                expected_launch_contract=resume_launch_contract,
                 plugin_authority=plugin_authority,
                 plugin_load_mode=plugin_load_mode,
                 provider_extras=current_provider_extras or None,
@@ -303,6 +320,7 @@ async def _execute_claude_headless(
                 session_id=session_id,
                 on_session_id_resolved=lineage_callbacks.on_candidate,
                 stream_parser=_stream_parser,
+                on_launch_resolved=observe_launch,
                 managed_attempt_id=managed_attempt_id,
                 **lineage_callbacks.attempt_kwargs,
             )
@@ -395,6 +413,10 @@ async def _execute_claude_headless(
                     plugin_authority=plugin_authority,
                     plugin_load_mode=plugin_load_mode,
                     session_env=spec.env,
+                    launch_resolver=launch_resolver,
+                    launch_preparation=launch_preparation,
+                    expected_launch_contract=resume_launch_contract,
+                    on_launch_resolved=observe_launch,
                     **lineage_callbacks.attempt_kwargs,
                 )
             except BaseException as exc:
@@ -544,7 +566,14 @@ async def _execute_claude_headless(
             "channel_b_capable": _step_backend.capabilities.channel_b_capable,
             "comm_aliases": _step_backend.capabilities.process_name_aliases,
             "telemetry": terminal_telemetry,
-            "backend_override_source": backend_override_source,
+            "backend_authority": dict(
+                current_launch_contract.backend_authority.to_payload()
+                if current_launch_contract is not None
+                else launch_preparation.backend_authority.to_payload()
+            ),
+            "launch_contract_digest": (
+                current_launch_contract.digest if current_launch_contract is not None else ""
+            ),
             "native_shell_capture": terminal_capture_diagnostic,
         }
         if result is not None:

@@ -20,11 +20,11 @@ from autoskillit.core import (
     SkillContractError,
     SkillExecutionRole,
     SkillResolver,
+    SkillSemanticPlan,
     SkillSource,
     SkillSourceIdentity,
     SkillSourceRef,
     SkillVisibilitySpec,
-    derive_backend_requirements,
     get_logger,
     is_feature_enabled,
     pkg_root,
@@ -77,6 +77,7 @@ class SkillInfo:
     source_ref: SkillSourceRef | None = None
     categories: frozenset[str] = frozenset()
     uses_capabilities: frozenset[str] = frozenset()
+    semantic_plan: SkillSemanticPlan | None = None
     execution_role: SkillExecutionRole | None = SkillExecutionRole.SESSION
     activate_deps: tuple[str, ...] = ()
     canonical_content: str = ""
@@ -137,11 +138,6 @@ class SkillInfo:
         assert self.source_ref is not None
         return self.source_ref.identity
 
-    @property
-    def backend_requirements(self) -> frozenset[str]:
-        """Backend requirements derived solely from the declared capability set."""
-        return derive_backend_requirements(self.uses_capabilities)
-
 
 @dataclass(frozen=True, slots=True)
 class SkillCatalogEntry:
@@ -152,6 +148,7 @@ class SkillCatalogEntry:
     source_identity: SkillSourceIdentity
     categories: frozenset[str]
     uses_capabilities: frozenset[str]
+    semantic_plan: SkillSemanticPlan | None
     execution_role: SkillExecutionRole
     activate_deps: tuple[str, ...]
     canonical_content: str
@@ -178,17 +175,13 @@ class SkillCatalogEntry:
             source_identity=skill.source_ref.identity,
             categories=skill.categories,
             uses_capabilities=skill.uses_capabilities,
+            semantic_plan=skill.semantic_plan,
             execution_role=skill.execution_role,
             activate_deps=skill.activate_deps,
             canonical_content=skill.canonical_content,
             canonical_digest=skill.canonical_digest,
             frontmatter=skill.frontmatter,
         )
-
-    @property
-    def backend_requirements(self) -> frozenset[str]:
-        """Backend requirements derived solely from the declared capability set."""
-        return derive_backend_requirements(self.uses_capabilities)
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,9 +252,11 @@ class EffectiveSkillInvocation:
             )
 
     @property
-    def backend_requirements(self) -> frozenset[str]:
-        """Derive backend constraints once from the invocation capability union."""
-        return derive_backend_requirements(self.capability_union)
+    def semantic_plans(self) -> tuple[SkillSemanticPlan, ...]:
+        """Portable semantic plans retained by the exact invocation closure."""
+        return tuple(
+            member.semantic_plan for member in self.closure if member.semantic_plan is not None
+        )
 
 
 def _build_pack_index(skills: Iterable[SkillInfo]) -> dict[str, set[str]]:
@@ -418,6 +413,16 @@ def _skill_info_from_frontmatter(
         caps_raw = []
     uses_capabilities = frozenset(str(c) for c in caps_raw)
 
+    from autoskillit.workspace.skill_capabilities import parse_skill_semantic_plan
+
+    semantic_plan, semantic_diagnostics = parse_skill_semantic_plan(
+        data,
+        path=skill_path,
+        content=parsed.content,
+        uses_capabilities=uses_capabilities,
+    )
+    invalid_reasons.extend(semantic_diagnostics)
+
     execution_role = parsed.execution_role
 
     activate_deps_raw = data.get("activate_deps", [])
@@ -456,6 +461,7 @@ def _skill_info_from_frontmatter(
         source_ref=source_ref,
         categories=categories,
         uses_capabilities=uses_capabilities,
+        semantic_plan=semantic_plan,
         execution_role=execution_role,
         activate_deps=activate_deps,
         canonical_content=parsed.content,
@@ -673,7 +679,7 @@ class DefaultSkillResolver:
                 )
                 if skill_path is None:
                     continue
-                return _skill_info_from_frontmatter(
+                candidate = _skill_info_from_frontmatter(
                     name,
                     SkillSource.PROJECT_LOCAL,
                     skill_path,
@@ -685,6 +691,14 @@ class DefaultSkillResolver:
                         precedence=precedence,
                     ),
                 )
+                if candidate.invalid_reason is not None:
+                    logger.warning(
+                        "project_local_skill_rejected",
+                        skill=name,
+                        path=str(skill_path),
+                        reason=candidate.invalid_reason,
+                    )
+                return candidate
         return self.resolve(name)
 
     def _list_effective_unfiltered(self, project_root: Path | None) -> tuple[SkillInfo, ...]:
@@ -712,8 +726,7 @@ class DefaultSkillResolver:
                     )
                     if skill_path is None:
                         continue
-                    selected.add(entry.name)
-                    by_name[entry.name] = _skill_info_from_frontmatter(
+                    candidate = _skill_info_from_frontmatter(
                         entry.name,
                         SkillSource.PROJECT_LOCAL,
                         skill_path,
@@ -725,6 +738,17 @@ class DefaultSkillResolver:
                             precedence=precedence,
                         ),
                     )
+                    selected.add(entry.name)
+                    if candidate.invalid_reason is not None:
+                        logger.warning(
+                            "project_local_skill_rejected",
+                            skill=entry.name,
+                            path=str(skill_path),
+                            reason=candidate.invalid_reason,
+                        )
+                        if entry.name not in by_name:
+                            continue
+                    by_name[entry.name] = candidate
         return tuple(sorted(by_name.values(), key=lambda skill: skill.name))
 
     def list_effective(

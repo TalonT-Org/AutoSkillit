@@ -64,12 +64,6 @@
     "min_breadth": {
       "description": "Minimum number of directions to select when scope reports 3 or more directions. Enforced by the select_directions step. Set to 0 to disable breadth enforcement.\n",
       "default": "2"
-    },
-    "backend_supports_git_write": {
-      "description": "Whether the session backend supports .git/ metadata writes (git commit, rebase, worktree add). Resolved from backend capabilities at load time.",
-      "default": "true",
-      "hidden": true,
-      "authority": "config"
     }
   },
   "kitchen_rules": [
@@ -638,7 +632,6 @@
       "on_failure": "check_implement_fix_loop",
       "on_exhausted": "audit_impl",
       "on_context_limit": "audit_impl",
-      "skip_when_false": "inputs.backend_supports_git_write",
       "note": "Implements the current phase plan in an isolated worktree via implement-experiment. Context exhaustion routes to audit_impl for implementation completeness verification before proceeding to run_experiment. Failures route to troubleshoot for classification before re-planning or escalation.\n"
     },
     "troubleshoot_implement_failure": {
@@ -1112,7 +1105,6 @@
       "on_success": "test",
       "on_failure": "escalate_stop",
       "on_context_limit": "test",
-      "skip_when_false": "inputs.backend_supports_git_write",
       "note": "Writes a conclusive research report to research/ in the worktree."
     },
     "generate_report_inconclusive": {
@@ -1144,7 +1136,6 @@
       "on_success": "test",
       "on_failure": "escalate_stop",
       "on_context_limit": "test",
-      "skip_when_false": "inputs.backend_supports_git_write",
       "note": "Writes an inconclusive research report. Experiments could not prove or disprove the hypothesis. This is a valid outcome.\n"
     },
     "test": {
@@ -1200,8 +1191,7 @@
         }
       ],
       "on_failure": "escalate_stop",
-      "on_context_limit": "escalate_stop",
-      "skip_when_false": "inputs.backend_supports_git_write"
+      "on_context_limit": "escalate_stop"
     },
     "retest": {
       "tool": "test_check",
@@ -1557,8 +1547,7 @@
       "on_exhausted": "route_claims_resolve",
       "on_context_limit": "route_claims_resolve",
       "on_success": "route_claims_resolve",
-      "on_failure": "route_claims_resolve",
-      "skip_when_false": "inputs.backend_supports_git_write"
+      "on_failure": "route_claims_resolve"
     },
     "route_claims_resolve": {
       "action": "route",
@@ -1593,8 +1582,7 @@
       "on_exhausted": "merge_escalations",
       "on_context_limit": "merge_escalations",
       "on_success": "merge_escalations",
-      "on_failure": "merge_escalations",
-      "skip_when_false": "inputs.backend_supports_git_write"
+      "on_failure": "merge_escalations"
     },
     "merge_escalations": {
       "action": "route",
@@ -1679,7 +1667,6 @@
       "on_success": "re_stage_bundle",
       "on_failure": "re_push_research",
       "on_context_limit": "re_push_research",
-      "skip_when_false": "inputs.backend_supports_git_write",
       "note": "Re-generate the research report with updated benchmark results from the re-validation run. Passes context.experiment_results which was updated by re_run_experiment to point to the new results file. Falls through to push on failure.\n"
     },
     "re_stage_bundle": {

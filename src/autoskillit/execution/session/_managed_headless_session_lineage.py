@@ -240,6 +240,30 @@ class DefaultManagedHeadlessSessionLineageStore:
             mutate=mutate,
         )
 
+    def bind_launch_contract_digest(
+        self,
+        *,
+        lineage_anchor: Path,
+        launch_id: str,
+        launch_contract_digest: str,
+        expected_generation: int,
+        expected_record_digest: str,
+    ) -> ManagedHeadlessSessionLineage:
+        """Persist the exact physical contract digest before child spawn."""
+
+        def mutate(current: ManagedHeadlessSessionLineage) -> ManagedHeadlessSessionLineage:
+            if current.launch_contract_digest == launch_contract_digest:
+                return current
+            return replace(current, launch_contract_digest=launch_contract_digest)
+
+        return self._mutate(
+            lineage_anchor=lineage_anchor,
+            launch_id=launch_id,
+            expected_generation=expected_generation,
+            expected_record_digest=expected_record_digest,
+            mutate=mutate,
+        )
+
     def bind_final_native_session_id(
         self,
         *,

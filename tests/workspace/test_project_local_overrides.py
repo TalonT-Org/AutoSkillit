@@ -195,6 +195,13 @@ def _write_effective_skill(
     execution_role: str,
     body: str,
 ):
+    evidence = {
+        "github_api_write": "Run `gh issue edit 1 --body-file issue.md`.",
+        "open_kitchen": "Call `open_kitchen()`.",
+        "run_skill": "Call `run_skill('/autoskillit:child', '.')`.",
+        "test_check": "Call `test_check()`.",
+    }
+    evidence_body = "\n".join(evidence[cap] for cap in capabilities if cap in evidence)
     skill_path = root / name / "SKILL.md"
     skill_path.parent.mkdir(parents=True, exist_ok=True)
     skill_path.write_text(
@@ -207,6 +214,7 @@ def _write_effective_skill(
                 f"execution_role: {execution_role}",
                 "---",
                 body,
+                evidence_body,
                 "",
             )
         )
@@ -229,7 +237,7 @@ def test_resolve_effective_observes_new_override_without_cross_dispatch_cache(
     bundled_path = _write_effective_skill(
         bundled,
         "target",
-        capabilities=("github_api_write", "agent_model"),
+        capabilities=("github_api_write", "open_kitchen"),
         execution_role="session",
         body="bundled body",
     )
@@ -241,12 +249,12 @@ def test_resolve_effective_observes_new_override_without_cross_dispatch_cache(
     first = resolver.resolve_effective("target", project)
     assert first is not None
     assert first.path == bundled_path
-    assert first.uses_capabilities == frozenset({"github_api_write", "agent_model"})
+    assert first.uses_capabilities == frozenset({"github_api_write", "open_kitchen"})
 
     override_path = _write_effective_skill(
         project / ".claude" / "skills",
         "target",
-        capabilities=("git_metadata_write", "run_skill"),
+        capabilities=("test_check", "run_skill"),
         execution_role="orchestrator",
         body="fresh override body",
     )
@@ -256,7 +264,7 @@ def test_resolve_effective_observes_new_override_without_cross_dispatch_cache(
     assert second is not first
     assert second.path == override_path
     assert second.source.value == "project_local"
-    assert second.uses_capabilities == frozenset({"git_metadata_write", "run_skill"})
+    assert second.uses_capabilities == frozenset({"test_check", "run_skill"})
     assert second.execution_role.value == "orchestrator"
 
 
@@ -294,9 +302,9 @@ def test_project_local_rewrite_reclassifies_with_process_cache(tmp_path, monkeyp
     skill_path = _write_effective_skill(
         skill_root,
         "cache-rewrite-target",
-        capabilities=("git_metadata_write",),
+        capabilities=("test_check",),
         execution_role="session",
-        body='git commit -m "first sentinel"',
+        body="Call `test_check()` for the first sentinel.",
     )
     resolver = DefaultSkillResolver()
 
@@ -308,15 +316,15 @@ def test_project_local_rewrite_reclassifies_with_process_cache(tmp_path, monkeyp
         first.canonical_content,
         first.name,
     )
-    assert first_evidence[0].source == 'git commit -m "first sentinel"'
+    assert first_evidence[0].source == "Call `test_check()` for the first sentinel."
     assert first.canonical_digest == hashlib.sha256(skill_path.read_bytes()).hexdigest()
 
     _write_effective_skill(
         skill_root,
         "cache-rewrite-target",
-        capabilities=("agent_model",),
+        capabilities=("test_check",),
         execution_role="session",
-        body='git commit -m "second sentinel"',
+        body="Call `test_check()` for the second sentinel.",
     )
     second = resolver.resolve_effective("cache-rewrite-target", project)
 
@@ -329,12 +337,9 @@ def test_project_local_rewrite_reclassifies_with_process_cache(tmp_path, monkeyp
         second.canonical_content,
         second.name,
     )
-    assert second_evidence[0].source == 'git commit -m "second sentinel"'
+    assert second_evidence[0].source == "Call `test_check()` for the second sentinel."
     assert second_evidence[0].source_span == (7, 7)
-    assert second.invalid_reason is not None
-    assert "missing declaration for 'git_metadata_write'" in second.invalid_reason
-    assert "second sentinel" in second.invalid_reason
-    assert "first sentinel" not in second.invalid_reason
+    assert second.invalid_reason is None
     assert scan_keys == [
         (first.canonical_content, "cache-rewrite-target"),
         (second.canonical_content, "cache-rewrite-target"),
@@ -354,14 +359,14 @@ def test_resolve_effective_observes_removed_override_and_falls_back(tmp_path, mo
     bundled_path = _write_effective_skill(
         bundled,
         "target",
-        capabilities=("github_api_write", "agent_model"),
+        capabilities=("github_api_write", "open_kitchen"),
         execution_role="session",
         body="fallback bundled body",
     )
     override_path = _write_effective_skill(
         project / ".claude" / "skills",
         "target",
-        capabilities=("git_metadata_write", "run_skill"),
+        capabilities=("test_check", "run_skill"),
         execution_role="orchestrator",
         body="temporary override body",
     )
@@ -545,7 +550,7 @@ def test_resolve_effective_uses_one_first_match_for_policy_and_identity(tmp_path
     _write_effective_skill(
         bundled,
         "target",
-        capabilities=("agent_model",),
+        capabilities=("open_kitchen",),
         execution_role="session",
         body="bundled",
     )
@@ -559,7 +564,7 @@ def test_resolve_effective_uses_one_first_match_for_policy_and_identity(tmp_path
     _write_effective_skill(
         project / ".autoskillit" / "skills",
         "target",
-        capabilities=("git_metadata_write",),
+        capabilities=("test_check",),
         execution_role="session",
         body="lower priority",
     )
@@ -571,7 +576,7 @@ def test_resolve_effective_uses_one_first_match_for_policy_and_identity(tmp_path
 
     assert effective is not None
     assert effective.path == claude_path
-    assert effective.path.read_text().endswith("first match\n")
+    assert "\nfirst match\n" in effective.path.read_text()
     assert effective.uses_capabilities == frozenset({"github_api_write"})
 
 
@@ -590,7 +595,7 @@ def test_backend_rendering_uses_the_selected_effective_source(tmp_path, monkeypa
     _write_effective_skill(
         bundled,
         "target",
-        capabilities=("agent_model",),
+        capabilities=("open_kitchen",),
         execution_role="session",
         body="bundled",
     )
@@ -640,22 +645,26 @@ def test_project_local_internal_override_is_not_duplicated(tmp_path) -> None:
     assert len(matches) == 1
     assert matches[0].source.value == "project_local"
     assert matches[0].canonical_digest
-    assert override_path.read_text(encoding="utf-8").endswith('Call run_skill("child").\n')
+    assert '\nCall run_skill("child").\n' in override_path.read_text(encoding="utf-8")
 
 
-def test_prepare_effective_dispatch_separates_project_root_from_cwd(tmp_path, monkeypatch) -> None:
-    """L2 source selection is project-root-bound while execution stays cwd-bound."""
+def test_prepare_skill_projection_authenticates_project_root_not_managed_add_dir(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """Generated skill views are cwd data, never project override authority."""
+    import hashlib
     from pathlib import Path
 
-    from autoskillit.core import PluginLoadMode
+    from autoskillit.core import PluginLoadMode, SkillContractError
     from autoskillit.execution.backends import get_backend
-    from autoskillit.workspace import prepare_effective_skill_dispatch
+    from autoskillit.workspace import prepare_skill_projection
     from autoskillit.workspace.skills import DefaultSkillResolver
 
     project_root = tmp_path / "source-project"
-    cwd = tmp_path / "execution-worktree"
-    cwd.mkdir()
-    _write_effective_skill(
+    cwd = tmp_path / "generated-home" / "session" / "add-dir"
+    cwd.mkdir(parents=True)
+    project_override = _write_effective_skill(
         project_root / ".claude" / "skills",
         "process-issues",
         capabilities=("run_skill",),
@@ -666,18 +675,18 @@ def test_prepare_effective_dispatch_separates_project_root_from_cwd(tmp_path, mo
             'run_skill("/test child")'
         ),
     )
-    _write_effective_skill(
-        cwd / ".claude" / "skills",
-        "process-issues",
-        capabilities=("run_skill",),
-        execution_role="orchestrator",
-        body='wrong execution-cwd body\nrun_skill("/test child")',
+    managed_projection = cwd / ".claude" / "skills" / "process-issues" / "SKILL.md"
+    managed_projection.parent.mkdir(parents=True)
+    managed_projection.write_text(
+        "---\nname: process-issues\ndescription: invalid generated projection\n"
+        "semantic_version: 0\nsemantic_requirements: {}\n---\n"
+        "wrong execution-cwd body\n",
+        encoding="utf-8",
     )
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
     backend = get_backend("codex")
-    plugin_authority, preparation = prepare_effective_skill_dispatch(
-        resolved_command="dispatch",
+    plugin_authority, preparation = prepare_skill_projection(
         project_root=project_root,
         cwd=cwd,
         resolver=DefaultSkillResolver(),
@@ -695,14 +704,38 @@ def test_prepare_effective_dispatch_separates_project_root_from_cwd(tmp_path, mo
         contract = preparation.finalize(backend=backend, binding=binding)
         assert contract.project_root == str(project_root.resolve())
         assert contract.cwd == str(cwd.resolve())
-        assert "winning project-root body" in contract.projected_artifacts["process-issues"]
-        assert "wrong execution-cwd body" not in contract.projected_artifacts["process-issues"]
-        assert "{{DEFAULT_BASE_BRANCH}}" not in contract.projected_artifacts["process-issues"]
-        assert "{{AUTOSKILLIT_TEMP}}" not in contract.projected_artifacts["process-issues"]
-        assert contract.projected_artifacts["process-issues"] == (
-            binding.plugin_dir / "skills" / "process-issues" / "SKILL.md"
-        ).read_text(encoding="utf-8")
+        projected = (binding.plugin_dir / "skills" / "process-issues" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        assert "winning project-root body" in projected
+        assert "wrong execution-cwd body" not in projected
+        assert "{{DEFAULT_BASE_BRANCH}}" not in projected
+        assert "{{AUTOSKILLIT_TEMP}}" not in projected
+        assert (
+            contract.projected_digests["process-issues"]
+            == hashlib.sha256(projected.encode()).hexdigest()
+        )
     assert binding.closed
+
+    project_override.write_text(
+        "---\nname: process-issues\ndescription: invalid user override\n"
+        "semantic_version: 0\nsemantic_requirements: {}\n---\n"
+        "invalid real project override\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        SkillContractError,
+        match="effective skill catalog contains invalid contracts",
+    ):
+        prepare_skill_projection(
+            project_root=project_root,
+            cwd=cwd,
+            resolver=DefaultSkillResolver(),
+            visibility=None,
+            default_base_branch=None,
+            recipe_packs=None,
+            recipe_features=None,
+        )
 
 
 def test_winning_override_identity_policy_projection_and_digests_are_atomic(
@@ -713,9 +746,10 @@ def test_winning_override_identity_policy_projection_and_digests_are_atomic(
 
     import autoskillit.workspace.skills as skills_module
     from autoskillit.core import SkillExecutionRole, render_target_skill_command
+    from autoskillit.execution.backends import ClaudeCodeBackend
     from autoskillit.workspace import (
         SkillProjectionContext,
-        build_effective_skill_dispatch_contract,
+        build_skill_projection_binding,
         project_agent_skill_document,
     )
     from autoskillit.workspace.skills import DefaultSkillResolver
@@ -729,17 +763,17 @@ def test_winning_override_identity_policy_projection_and_digests_are_atomic(
     _write_effective_skill(
         bundled,
         "target",
-        capabilities=("agent_model",),
+        capabilities=("open_kitchen",),
         execution_role="session",
         body="bundled sentinel body",
     )
     override_path = _write_effective_skill(
         project / ".claude" / "skills",
         "target",
-        capabilities=("github_api_write", "git_metadata_write"),
+        capabilities=("github_api_write", "test_check"),
         execution_role="session",
         body=(
-            'winning override body\ngh issue edit 42 --body-file report.md\ngit commit -m "test"'
+            "winning override body\ngh issue edit 42 --body-file report.md\nCall `test_check()`."
         ),
     )
     source_before = override_path.read_bytes()
@@ -760,17 +794,18 @@ def test_winning_override_identity_policy_projection_and_digests_are_atomic(
         project,
         SkillExecutionRole.SESSION,
     )
-    context = SkillProjectionContext(cwd=tmp_path, invocation=invocation)
+    backend = ClaudeCodeBackend()
+    context = SkillProjectionContext(cwd=tmp_path, invocation=invocation, backend=backend)
     document = project_agent_skill_document(invocation.root, context)
-    contract = build_effective_skill_dispatch_contract("/target", context)
+    contract = build_skill_projection_binding(context)
 
     assert invocation.root.path == override_path
     assert invocation.root.execution_role is SkillExecutionRole.SESSION
-    assert invocation.capability_union == frozenset({"github_api_write", "git_metadata_write"})
+    assert invocation.capability_union == frozenset({"github_api_write", "test_check"})
     assert "winning override body" in invocation.root.canonical_content
     assert "bundled sentinel body" not in invocation.root.canonical_content
     assert "winning override body" in document.content
-    assert contract.source_identities["target"].origin.value == "project_local"
+    assert contract.source_identities["target"]["origin"] == "project_local"
     assert contract.canonical_digests["target"] == hashlib.sha256(source_before).hexdigest()
     assert (
         contract.projected_digests["target"]

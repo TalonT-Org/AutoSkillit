@@ -18,6 +18,7 @@ from ._type_native_shell_capture import (
 from ._type_plugin_source import PluginLaunchBinding, normalize_inherited_fds
 from ._type_recipe_delivery import RecipeDeliveryBudgetDef
 from ._type_results import ValidatedAddDir
+from ._type_skill_semantics import SKILL_MODEL_CLASS_REGISTRY, SKILL_REASONING_EFFORTS
 
 __all__ = [
     "ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS",
@@ -29,6 +30,8 @@ __all__ = [
     "CODEX_MODEL_ALIASES",
     "CODEX_MODEL_ALIASES_LAST_VERIFIED",
     "CODEX_VALID_MODEL_IDS",
+    "SKILL_MODEL_CLASSES",
+    "SKILL_REASONING_EFFORTS",
     "CmdOrigin",
     "CmdSpec",
     "CookSessionHandle",
@@ -171,7 +174,6 @@ class BackendCapabilities:
     # Gates backend-specific prompt supplements that warn against reading raw package files
     has_unguarded_filesystem_access: bool = field(default=False)
     # True when backend's git metadata directories (.git/worktrees/) are writable
-    git_metadata_writable: bool = field(default=True)
     # True when the backend can make outbound GitHub API write calls without sandbox restriction
     github_api_callable: bool = field(default=False)
     # Native skill invocation prefix character used by this backend's model/CLI.
@@ -254,6 +256,19 @@ CODEX_EFFORT_MAPPING: dict[str, str] = {
     "opus": "xhigh",
     "haiku": "medium",
 }
+
+# Backend adapters remain the only authority that translates a logical class
+# to a physical model ID and effort setting.
+SKILL_MODEL_CLASSES: frozenset[str] = frozenset(SKILL_MODEL_CLASS_REGISTRY)
+assert SKILL_MODEL_CLASSES == frozenset(CLAUDE_MODEL_ALIASES), (
+    "Claude model aliases must cover every registered logical model class"
+)
+assert SKILL_MODEL_CLASSES == frozenset(CODEX_MODEL_ALIASES), (
+    "Codex model aliases must cover every registered logical model class"
+)
+assert SKILL_REASONING_EFFORTS == frozenset(CODEX_EFFORT_MAPPING.values()), (
+    "Codex effort mappings must cover every registered semantic reasoning effort"
+)
 
 
 def _codex_unique_model_reverse(aliases: Mapping[str, str]) -> Mapping[str, str]:
@@ -338,7 +353,6 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     inspector_capable=False,
     supports_context_window_suffix=True,
     has_unguarded_filesystem_access=False,
-    git_metadata_writable=True,
     github_api_callable=True,
     skill_sigil="/",
     session_dir_persistent=False,
@@ -435,7 +449,6 @@ class SkillSessionConfig:
     resume_checkpoint: SessionCheckpoint | None = None
     resume_message: str | None = None
     sandbox_mode: str = "workspace-write"
-    backend_override: str | None = None
     network_access: bool = False
     native_shell_capture_decision: NativeShellCaptureDecision | None = None
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None

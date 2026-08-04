@@ -1,16 +1,41 @@
 ---
 name: audit-impl
-categories: [audit]
+categories:
+- audit
 uses_capabilities:
-  [agent_model, agent_subagent, write_audit_semantic_result, write_standalone_audit_evidence]
-description: Audit a completed implementation against its originating plan(s). Returns GO (merge approved) or NO GO (generates remediation file for retry). Final gate before merge in any implementation pipeline.
+- write_audit_semantic_result
+- write_standalone_audit_evidence
+description: Audit a completed implementation against its originating plan(s). Returns GO (merge approved) or NO GO (generates
+  remediation file for retry). Final gate before merge in any implementation pipeline.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: audit-impl] Auditing implementation against plan...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: audit-impl] Auditing implementation against plan...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: audit-impl-deviation-evaluator
+    purpose: perform the named independent responsibility and return bounded evidence
+  - name: audit-impl-slice-auditor
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: audit-impl-deviation-evaluator
+  - role: audit-impl-slice-auditor
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: audit-impl-deviation-evaluator
+    model_class: sonnet
+  - role: audit-impl-slice-auditor
+    model_class: sonnet
 ---
 
 # Implementation Audit Skill
@@ -66,15 +91,15 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 - Run tests — this skill audits, it does not fix
 - Create authority, inventory, lifecycle, execution-identity, or publication artifacts
 - Emit a GO verdict when any `MISSING` or `CONFLICT` finding exists
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
-- Use Explore subagents for file reads and diff retrieval in Steps 1, 2, and 2.5
-- Use `Agent(subagent_type="autoskillit:audit-impl-slice-auditor")` for Step 3 audit slices
-- Spawn all subagents via `Agent(model="sonnet")`
+- Use child delegations for file reads and diff retrieval in Steps 1, 2, and 2.5
+- Use a child assigned logical role `audit-impl-slice-auditor` under its declared model policy for Step 3 audit slices
+- Spawn all subagents via child delegation under the declared `sonnet` model-class policy
 - Resolve all plan files before starting (abort early if any are missing)
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - On every verdict in an attested invocation, read the opaque `reservation_handle` and exact
   ordered `audited_plan_refs` from `audit_semantic_submission` in
   `AUTOSKILLIT_BOUND_INVOCATION_V1`. Call `write_audit_semantic_result(...)` with that handle,
@@ -209,7 +234,7 @@ verified `ClosureReport` as evidence rather than duplicating it.
 
 ### Step 1 — Load Plans via Parallel Subagents (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
@@ -218,11 +243,11 @@ timestamp, inventory, output namespace, or execution identity. The server has al
 reserved those values before dispatch. Treat `prior_audit_cycle_path`, when present, only
 as plan/remediation context already admitted by the parent. Never scan for a latest file.
 
-**Union extraction (new scope only):** Launch ≥2 independent Explore subagents per plan file
+**Union extraction (new scope only):** Launch ≥2 independent child delegations per plan file
 (not 1). Each extracts requirements independently. Take the union of all extracted
 requirements (deduplicate by semantic equivalence).
 
-Each Explore subagent returns:
+Each child delegation returns:
 
 - Plan title and stated scope
 - All files the plan said it would create, modify, or delete
@@ -274,7 +299,7 @@ fi
   O(1), unambiguous, and distinguishes the stale-fast-forward case from legitimate no-op
   branches (empty diff is an unreliable guard; `--is-ancestor` is the correct tool).
 
-Launch one Explore subagent to retrieve the diff using the command form determined in
+Launch one child delegation to retrieve the diff using the command form determined in
 Step 0 — do NOT bypass the command form determined in Step 0:
 
 - **SHA ref:** `git diff {implementation_ref}..HEAD --stat` — file-level summary
@@ -336,7 +361,7 @@ logic (Step 4).
 
 ### Step 3 — Audit via Parallel Subagents (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
@@ -349,7 +374,7 @@ content is needed beyond the diff, subagents use `git show {implementation_ref}:
 Slice the inventory verified or written for this exact cycle into up to 3 slices. For a
 remediation descendant, use only the inventory `ArtifactRef` from the verified prior
 authority. Each slice receives a subset of `requirements[].id` values. Launch parallel
-subagents using `Agent(subagent_type="autoskillit:audit-impl-slice-auditor")`, each receiving
+subagents using `a child assigned logical role `audit-impl-slice-auditor` under its declared model policy`, each receiving
 its slice, the full diff, and the `implementation_ref`. Each subagent checks:
 
 1. **Coverage** — Is every file and function the plan named present in the diff?
@@ -375,7 +400,7 @@ Each subagent returns structured findings:
 Read the deviation manifest JSON file. For each entry in the `deviations` array, spawn one evaluator subagent in parallel:
 
 ```
-Agent(subagent_type="autoskillit:audit-impl-deviation-evaluator", model="sonnet",
+portable child delegation (logical role "autoskillit:audit-impl-deviation-evaluator", model="sonnet",
       prompt="<include: deviation note fields wrapped in <deviation_note>...</deviation_note>
               XML delimiters, ALL MISSING/CONFLICT findings from Step 3,
               implementation_ref value>")

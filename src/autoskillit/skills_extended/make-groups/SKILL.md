@@ -1,14 +1,33 @@
 ---
 name: make-groups
-uses_capabilities: [agent_model]
-description: Break a large plan, architecture proposal, or feature document into sequenced implementation groups for the make-plan pipeline. Use when user says "make groups", "group requirements", "sequence groups", or wants to decompose a large document into ordered implementation units.
+uses_capabilities: []
+description: Break a large plan, architecture proposal, or feature document into sequenced implementation groups for the make-plan
+  pipeline. Use when user says "make groups", "group requirements", "sequence groups", or wants to decompose a large document
+  into ordered implementation units.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Decomposing into sequenced implementation groups...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Decomposing into sequenced implementation groups...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Implementation Group Decomposition Skill
@@ -60,12 +79,12 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Drop, split, or rewrite requirements — reference them by original ID
 - Create groups that cannot be independently planned
 - Include implementation steps or technical approach in the group descriptions
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use subagents to verify codebase structure before finalizing groups
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Include every requirement from the source document in exactly one group
 - Assign each group a sequential suffix: groupA, groupB, ... groupZ
 - State dependencies between groups explicitly
@@ -79,7 +98,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
   group_files = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/make-groups/{groups_filename}.md
   ```
   These tokens are MANDATORY — the pipeline cannot proceed without them.
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -89,11 +108,11 @@ Read the full document. Inventory every requirement (REQ-*), feature, and delive
 
 ### Step 2: Verify Against Codebase (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Launch **parallel Explore subagents** to understand:
+Launch **parallel child delegations** to understand:
 
 - What exists today that the requirements relate to
 - Module boundaries and dependency directions

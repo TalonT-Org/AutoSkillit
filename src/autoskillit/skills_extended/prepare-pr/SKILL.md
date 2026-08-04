@@ -1,15 +1,34 @@
 ---
 name: prepare-pr
-categories: [github]
-uses_capabilities: [agent_model]
-description: Preparation executor for pull-request metadata. ALWAYS invoke this skill when instructed to prepare PR metadata. Do not read plans or classify files directly — use this skill first to load the preparation workflow.
+categories:
+- github
+uses_capabilities: []
+description: Preparation executor for pull-request metadata. ALWAYS invoke this skill when instructed to prepare PR metadata.
+  Do not read plans or classify files directly — use this skill first to load the preparation workflow.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: prepare-pr] Preparing PR metadata and arch-lens context...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: prepare-pr] Preparing PR metadata and arch-lens context...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Prepare PR
@@ -41,14 +60,14 @@ in the decomposed PR flow (prepare → run_arch_lenses → compose).
 - Invoke arch-lens skills or any other sub-skills
 - Create files outside `{{AUTOSKILLIT_TEMP}}/prepare-pr/`
 - Fail if closing_issue is absent or gh is unavailable — degrade gracefully
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 - Do NOT use the issue title, issue body, or any closing_issue metadata for `task_title` or `## Title`. These MUST come exclusively from plan file `# ` headings (Step 2). Step 1 output (`requirements_section`) must NOT influence the title derivation.
 
 **ALWAYS:**
 - Emit all three output tokens (`prep_path`, `selected_lenses`, `lens_context_paths`)
 - Classify changed files as new (★) vs modified (●)
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Context Limit Behavior
 
@@ -100,7 +119,7 @@ Read all plan files and extract the first `# ` heading line from each, strip the
 and strip any trailing `— PART [A-Z] ONLY` suffix.
 
 - **Single plan:** Use the heading directly as `task_title`.
-- **Multiple plans:** Spawn a subagent via `Agent(model="sonnet")` with all extracted
+- **Multiple plans:** Spawn a subagent via `child delegation under the declared `sonnet` model-class policy` with all extracted
   headings. Instruct it to synthesize a single concise PR title (under 70 characters).
 
 **PR Title Prefix (derived from run_name):**

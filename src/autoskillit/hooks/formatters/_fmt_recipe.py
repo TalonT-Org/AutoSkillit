@@ -64,8 +64,6 @@ _FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
         "deferred_guards",  # internal deferral metadata; not displayed to agent
         "post_prune_step_names",  # internal preflight field; not displayed to agent
         "post_prune_routing_edges",  # internal preflight field; not displayed to agent
-        "dispatch_feasible",  # internal admission control signal; surfaced via refusal envelopes
-        "infeasible_steps",  # internal admission control detail; surfaced via refusal envelopes
         "_finalized_projection",  # internal host-attested finalized recipe carrier
     }
 )
@@ -226,8 +224,6 @@ _FMT_OPEN_KITCHEN_SUPPRESSED: frozenset[str] = frozenset(
         "deferred_guards",  # internal deferral metadata; not displayed to agent
         "post_prune_step_names",  # internal preflight field; not displayed to agent
         "post_prune_routing_edges",  # internal preflight field; not displayed to agent
-        "dispatch_feasible",  # internal admission control signal; surfaced via refusal envelopes
-        "infeasible_steps",  # internal admission control detail; surfaced via refusal envelopes
     }
 )
 

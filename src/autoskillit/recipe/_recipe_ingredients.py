@@ -130,8 +130,6 @@ class LoadRecipeResult(TypedDict, total=False):
     deferred_guards: list[DeferredGuard]
     post_prune_step_names: list[str]
     post_prune_routing_edges: list[str]
-    dispatch_feasible: bool
-    infeasible_steps: list[str]
     finalized_recipe_projection: dict[str, Any]
     flow_records: list[str]
     recipe_flow: dict[str, str | int]
@@ -173,8 +171,6 @@ class OpenKitchenResult(TypedDict, total=False):
     deferred_guards: list[DeferredGuard]
     post_prune_step_names: list[str]
     post_prune_routing_edges: list[str]
-    dispatch_feasible: bool
-    infeasible_steps: list[str]
     finalized_recipe_projection: dict[str, Any]
     flow_records: list[str]
     recipe_flow: dict[str, str | int]

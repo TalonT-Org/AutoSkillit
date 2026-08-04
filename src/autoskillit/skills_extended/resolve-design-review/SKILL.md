@@ -1,19 +1,37 @@
 ---
 name: resolve-design-review
-categories: [research]
-uses_capabilities: [agent_model]
-description: >
-  Triage STOP verdict findings from review-design, classifying each as
-  ADDRESSABLE/STRUCTURAL/DISCUSS using parallel subagents. If any are ADDRESSABLE
-  or DISCUSS, generate revision_guidance and emit resolution=revised. If all are
-  STRUCTURAL, emit resolution=failed for terminal stop.
+categories:
+- research
+uses_capabilities: []
+description: 'Triage STOP verdict findings from review-design, classifying each as ADDRESSABLE/STRUCTURAL/DISCUSS using parallel
+  subagents. If any are ADDRESSABLE or DISCUSS, generate revision_guidance and emit resolution=revised. If all are STRUCTURAL,
+  emit resolution=failed for terminal stop.
+
+  '
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: resolve-design-review] Triaging design review STOP findings...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: resolve-design-review] Triaging design review STOP findings...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Resolve Design Review Skill
@@ -46,14 +64,14 @@ MCP-only — not user-invocable directly.
 - Create files outside `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/resolve-design-review}`
 - Modify the evaluation dashboard, experiment plan, or any source file
 - Apply fixes — this skill triages fixability only
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Exit 0 in all cases — resolution=revised and resolution=failed are both normal outcomes
 - Emit revision_guidance ONLY when resolution=revised
-- Use model: "sonnet" for all subagents
-- Issue all Task calls in a single message to maximize parallelism
+- Use the declared `sonnet` model-class policy for all children
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Context Limit Behavior
 
@@ -86,13 +104,13 @@ Resolve relative output paths from the current working directory before writing.
 
 ### Step 1: Feasibility Validation (Parallel Subagents — BEFORE any guidance is written) (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 This is the analysis phase. It runs entirely before any guidance is generated.
 
-Group findings; launch one parallel subagent per finding via `Agent(model="sonnet")`.
+Group findings; launch one parallel subagent per finding via `child delegation under the declared `sonnet` model-class policy`.
 Each subagent receives: finding metadata + full plan text.
 Each subagent classifies the finding as:
 
@@ -131,7 +149,7 @@ A finding is **goalposts-moving** when:
 - The pattern is: the plan improved to satisfy the prior concern, but the reviewer
   raised the bar on the same theme
 
-Detection heuristic — launch one subagent via `Agent(model="sonnet")` per ADDRESSABLE finding.
+Detection heuristic — launch one subagent via `child delegation under the declared `sonnet` model-class policy` per ADDRESSABLE finding.
 Each subagent receives: current finding + all prior guidance entries. It returns:
 
 ```json

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -372,7 +373,13 @@ def test_terminal_diagnostic_preserves_policy_precedence_and_attribution(
         store=store,
         decision=lineage.decision,
         reference=lineage.reference,
-        backend="codex",
+        backend=SimpleNamespace(
+            name="codex",
+            capabilities=SimpleNamespace(
+                session_resume_capable=True,
+                channel_b_capable=False,
+            ),
+        ),
         session_kind=ManagedHeadlessSessionKind.SKILL,
     )
     assert observer is not None

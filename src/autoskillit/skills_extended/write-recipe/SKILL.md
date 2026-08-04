@@ -82,7 +82,7 @@ Every generated script MUST follow the workflow YAML schema:
 
 ```yaml
 name: {script-name}
-uses_capabilities: [claude_dir, cross_skill_ref, run_skill, test_check]
+uses_capabilities: [claude_dir, run_skill, test_check]
 autoskillit_version: "{version}"  # from kitchen_status.package_version
 description: {One line description.}
 summary: {Concise pipeline chain, e.g. "plan > verify > implement > test > merge"}
@@ -297,7 +297,7 @@ This is the reference format. All generated scripts should match this style:
 
 ```yaml
 name: implementation
-uses_capabilities: [claude_dir, cross_skill_ref, run_skill, test_check]
+uses_capabilities: [claude_dir, run_skill, test_check]
 description: Plan, verify, implement, test, and merge a task.
 summary: make-plan > dry-walk > implement > test > merge
 
@@ -390,7 +390,7 @@ A condensed bugfix loop showing retry, classify, and routing patterns:
 
 ```yaml
 name: example-loop
-uses_capabilities: [claude_dir, cross_skill_ref, run_skill, test_check]
+uses_capabilities: [claude_dir, run_skill, test_check]
 description: Test, fix, and merge with automatic retry.
 summary: test > investigate > plan > implement > verify > merge
 

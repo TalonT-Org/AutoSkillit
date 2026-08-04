@@ -41,6 +41,7 @@ def _key(**overrides) -> ProjectionCacheKey:
         "projection_version": 2,
         "default_base_branch": "main",
         "skill_identity": "a:deadbeef",
+        "adaptation_identity": "a:adapted",
         "namespace_identity": "a:bundled",
         "asset_digest": "0" * 64,
     }
@@ -58,6 +59,7 @@ class TestEveryFieldChangesTheKey:
             ("projection_version", 99),
             ("default_base_branch", "develop"),
             ("skill_identity", "a:cafebabe"),
+            ("adaptation_identity", "a:changed-adaptation"),
             ("namespace_identity", "a:project_local"),
             ("asset_digest", "1" * 64),
         ],
@@ -81,6 +83,7 @@ class TestEveryFieldChangesTheKey:
             "projection_version",
             "default_base_branch",
             "skill_identity",
+            "adaptation_identity",
             "namespace_identity",
             "asset_digest",
         }

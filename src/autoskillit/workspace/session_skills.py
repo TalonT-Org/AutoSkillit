@@ -16,7 +16,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from autoskillit.core import (
     SESSION_ADD_DIR_SUBDIR,
@@ -33,12 +33,14 @@ from autoskillit.core import (
     SkillFrontmatterAuthority,
     SkillProjectionContextAuthority,
     SkillResolver,
+    SkillSemanticOperation,
     SkillSource,
     SkillSourceRef,
     ValidatedAddDir,
     get_logger,
     pkg_root,
     validate_skill_capability_roles,
+    write_versioned_json,
 )
 from autoskillit.workspace.skill_projection import (
     SkillProjectionContext,
@@ -69,6 +71,7 @@ _CANDIDATE_ROOTS: list[Path] = [
 logger = get_logger(__name__)
 
 _SESSION_LEASES_SUBDIR = ".session-leases"
+_SKILL_UNAVAILABILITY_SCHEMA_VERSION = 1
 
 
 def _raise_failures(message: str, failures: list[BaseException]) -> None:
@@ -156,9 +159,103 @@ class _InitializedSession:
     lease: _SessionLease | None
 
 
-def _codex_profile_skill_infos(
+@dataclass(frozen=True, slots=True)
+class SkillUnavailableMetadata:
+    """Deterministic SESSION omission with supplemental backend detail."""
+
+    skill: str
+    backend: str
+    operation: SkillSemanticOperation
+    diagnostic: str
+
+    def to_payload(self) -> dict[str, str]:
+        return {
+            "skill": self.skill,
+            "backend": self.backend,
+            "operation": self.operation.value,
+            "diagnostic": self.diagnostic,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class CompiledSessionSkillCatalog:
+    backend: str
+    catalog: EffectiveSkillCatalog
+    unavailable: tuple[SkillUnavailableMetadata, ...]
+
+    @property
+    def unavailability_payload(self) -> dict[str, object]:
+        return {
+            "backend": self.backend,
+            "unavailable": tuple(item.to_payload() for item in self.unavailable),
+        }
+
+
+def compile_session_skill_catalog(
+    catalog: EffectiveSkillCatalogAuthority,
     backend: CodingAgentBackend,
-) -> tuple[SkillInfo, ...]:
+) -> CompiledSessionSkillCatalog:
+    """Publish only skills whose mandatory semantics adapt on the selected backend."""
+    supported: list[SkillCatalogEntry] = []
+    unavailable: list[SkillUnavailableMetadata] = []
+    for skill in catalog.skills:
+        plan = skill.semantic_plan
+        if plan is None:
+            supported.append(cast(SkillCatalogEntry, skill))
+            continue
+        adaptation = backend.adapt_skill_semantics(plan)
+        unsupported_operation = adaptation.validate_refusal_for(
+            plan,
+            backend=backend.name,
+        )
+        if unsupported_operation is not None:
+            unavailable.append(
+                SkillUnavailableMetadata(
+                    skill=skill.name,
+                    backend=backend.name,
+                    operation=unsupported_operation,
+                    diagnostic=adaptation.diagnostic or "unsupported skill semantics",
+                )
+            )
+            continue
+        adaptation.validate_for(plan, backend=backend.name)
+        supported.append(cast(SkillCatalogEntry, skill))
+    filtered_names = {skill.name for skill in supported}
+    namespace_sources = {
+        name: source
+        for name, source in catalog.namespace_sources.items()
+        if name in filtered_names
+    }
+    return CompiledSessionSkillCatalog(
+        backend=backend.name,
+        catalog=EffectiveSkillCatalog(
+            skills=tuple(supported),
+            execution_role=catalog.execution_role,
+            namespace_sources=namespace_sources,
+        ),
+        unavailable=tuple(sorted(unavailable, key=lambda item: item.skill)),
+    )
+
+
+def write_skill_unavailability_metadata(
+    add_dir: Path,
+    *,
+    backend: str | None,
+    unavailable: tuple[SkillUnavailableMetadata, ...],
+) -> None:
+    """Publish deterministic machine-readable SESSION catalog omissions."""
+    metadata = {
+        "backend": backend,
+        "unavailable": tuple(item.to_payload() for item in unavailable),
+    }
+    write_versioned_json(
+        add_dir / "skill-unavailability.json",
+        metadata,
+        schema_version=_SKILL_UNAVAILABILITY_SCHEMA_VERSION,
+    )
+
+
+def _codex_profile_skill_infos() -> tuple[SkillInfo, ...]:
     profile_skills_root = Path.home() / ".codex" / "skills"
     if not profile_skills_root.is_dir():
         return ()
@@ -193,13 +290,6 @@ def _codex_profile_skill_infos(
                 reason=info.invalid_reason or "non-session execution role",
             )
             continue
-        if info.backend_requirements and backend.name not in info.backend_requirements:
-            logger.debug(
-                "codex_profile_skill_backend_skip",
-                skill=entry.name,
-                backend=backend.name,
-            )
-            continue
         result.append(info)
     return tuple(result)
 
@@ -211,11 +301,12 @@ def _materialize_codex_profile_skill_infos(
     profile_skills_root = Path.home() / ".codex" / "skills"
     if not profile_skills_root.is_dir():
         return ()
-    infos = _codex_profile_skill_infos(backend)
+    infos = _codex_profile_skill_infos()
     catalog = EffectiveSkillCatalog(
         skills=tuple(SkillCatalogEntry.from_skill_info(info) for info in infos),
         execution_role=SkillExecutionRole.SESSION,
     )
+    catalog = compile_session_skill_catalog(catalog, backend).catalog
     materialize_agent_skill_tree(
         session_dir / backend.conventions.skills_subdir,
         catalog,
@@ -226,7 +317,8 @@ def _materialize_codex_profile_skill_infos(
             conventions=backend.conventions,
         ),
     )
-    return infos
+    published_names = {skill.name for skill in catalog.skills}
+    return tuple(info for info in infos if info.name in published_names)
 
 
 def materialize_codex_profile_skills(
@@ -727,6 +819,27 @@ class DefaultSessionSkillManager:
         skills_base = add_dir / skills_subdir
         skills_base.mkdir(parents=True, exist_ok=True)
 
+        unavailable: tuple[SkillUnavailableMetadata, ...] = ()
+        effective_catalog = projection_context.catalog
+        if backend is not None and effective_catalog is not None:
+            compilation = compile_session_skill_catalog(effective_catalog, backend)
+            effective_catalog = compilation.catalog
+            records = tuple(effective_catalog.skills)
+            unavailable = compilation.unavailable
+        elif backend is not None and projection_context.invocation is not None:
+            for record in records:
+                plan = record.semantic_plan
+                if plan is None:
+                    continue
+                adaptation = backend.adapt_skill_semantics(plan)
+                adaptation.validate_for(plan, backend=backend.name)
+
+        write_skill_unavailability_metadata(
+            add_dir,
+            backend=backend.name if backend is not None else None,
+            unavailable=unavailable,
+        )
+
         if backend is not None and backend.capabilities.mcp_config_capable:
             pre_launch_errors = backend.ensure_pre_launch(session_dir=generated_home)
             if pre_launch_errors:
@@ -737,7 +850,7 @@ class DefaultSessionSkillManager:
         ungated_context = SkillProjectionContext(
             cwd=projection_context.cwd,
             project_root=projection_context.project_root,
-            catalog=projection_context.catalog,
+            catalog=effective_catalog,
             invocation=projection_context.invocation,
             backend=projection_context.backend,
             conventions=projection_context.conventions,

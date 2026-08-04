@@ -192,7 +192,6 @@ class TestCodexSmokeRecipeComposition:
             "implementation",
             project_dir=_PROJECT_ROOT,
             backend_name="codex",
-            ingredient_overrides={"backend_supports_git_write": "false"},
         )
         assert result["valid"] is True, "implementation recipe invalid on codex: " + "; ".join(
             f"[{s.get('rule')}] {s.get('message', '')[:80]}"
@@ -213,7 +212,6 @@ class TestCodexSmokeRecipeComposition:
             "planner",
             project_dir=_PROJECT_ROOT,
             backend_name="codex",
-            ingredient_overrides={"backend_supports_git_write": "false"},
         )
         assert result["valid"] is True
         assert len(result.get("content", "")) > 0

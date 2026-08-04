@@ -1,17 +1,28 @@
 ---
 name: arch-lens-process-flow
-categories: [arch-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-write_paths: ["{{AUTOSKILLIT_TEMP}}/arch-lens-process-flow/"]
-description: Create Process/Execution Flow architecture diagram showing runtime behavior, state transitions, and decision points. Physiological lens answering "How does it behave?"
+categories:
+- arch-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/arch-lens-process-flow/'
+description: Create Process/Execution Flow architecture diagram showing runtime behavior, state transitions, and decision
+  points. Physiological lens answering "How does it behave?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Process Flow Lens - Analyzing runtime behavior...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Process Flow Lens - Analyzing runtime behavior...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: arch-lens-concurrency
+  - name: arch-lens-error-resilience
+  - name: make-arch-diag
+  - name: mermaid
 ---
 
 # Process Flow Architecture Lens
@@ -48,8 +59,8 @@ hooks:
 - Modify any source code files
 - Include static structure details (that's C4 lens)
 - Show data storage details (that's data lineage lens)
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Focus on BEHAVIOR and STATE TRANSITIONS
@@ -64,7 +75,7 @@ hooks:
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-process-flow/arch_diag_process_flow_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 
 ## Analysis Workflow
@@ -86,7 +97,7 @@ If no `context_path` is provided, skip this step and explore the full CWD in Ste
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn Explore subagents to investigate:
+Spawn child delegations to investigate:
 
 **State Machines & Workflows**
 - Find state definitions and transitions

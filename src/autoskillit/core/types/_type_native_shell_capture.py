@@ -349,6 +349,7 @@ class ManagedHeadlessSessionLineage:
     lineage_digest: str
     generation: int
     record_digest: str
+    launch_contract_digest: str = ""
     attempt_ids: tuple[str, ...] = ()
     candidate_native_session_ids: tuple[str, ...] = ()
     final_native_session_id: str | None = None
@@ -373,6 +374,8 @@ class ManagedHeadlessSessionLineage:
         _validate_digest(self.lineage_digest, "lineage_digest")
         _validate_nonnegative_int(self.generation, "generation")
         _validate_digest(self.record_digest, "record_digest")
+        if self.launch_contract_digest:
+            _validate_digest(self.launch_contract_digest, "launch_contract_digest")
         if len(set(self.attempt_ids)) != len(self.attempt_ids):
             raise ValueError("attempt_ids must be unique")
         for attempt_id in self.attempt_ids:
@@ -460,6 +463,16 @@ class ManagedHeadlessSessionLineageStore(Protocol):
         lineage_anchor: Path,
         launch_id: str,
         attempt_id: str,
+        expected_generation: int,
+        expected_record_digest: str,
+    ) -> ManagedHeadlessSessionLineage: ...
+
+    def bind_launch_contract_digest(
+        self,
+        *,
+        lineage_anchor: Path,
+        launch_id: str,
+        launch_contract_digest: str,
         expected_generation: int,
         expected_record_digest: str,
     ) -> ManagedHeadlessSessionLineage: ...

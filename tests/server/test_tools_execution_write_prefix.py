@@ -167,7 +167,8 @@ async def test_pass_when_scope_covers_cwd(tool_ctx_kitchen_open, monkeypatch, tm
     assert len(executor.calls) == 1
     call = executor.calls[0]
     assert call.capability_contract is not None
-    assert call.capability_contract.resolved_command == call.skill_command
+    assert not hasattr(call.capability_contract, "resolved_command")
+    assert call.skill_command == f"/implement-worktree-no-merge {plan_path}"
     assert call.capability_contract.cwd == str(worktree.resolve())
     assert call.cwd == str(worktree.resolve())
 

@@ -9,6 +9,23 @@ hooks:
         - type: command
           command: "echo '[SKILL: planner-refine] Refining plan...'"
           once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # planner-refine
@@ -39,12 +56,14 @@ retries) before escalation.
 - Attempt to auto-fix missing assignments or missing WPs — these require human review
 - Remove a deliverable without reassigning it to another WP
 - Introduce new WP IDs — the skill never creates WPs; it repairs or escalates existing ones
+- Start independent child delegations sequentially
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
 **ALWAYS:**
 - Load `validation.json` before reading any artifact
 - Fix all addressable finding types in a single pass
+- Start all independent child delegations before awaiting any result
 - Update `wp_manifest.json` and `wp_index.json` whenever WP structure changes
 - Escalate sizing violations, missing structural elements, malformed WP IDs, and DAG cycles as CRITICAL (write to stdout; do not count toward issues_fixed)
 - Emit both `refinement_complete` and `issues_fixed` output tokens
@@ -74,9 +93,10 @@ dicts). Extract the `message` field from each finding for classification. Group 
 ### Step 3: Fix each finding type
 
 **Failed WPs** (including `elaboration_failed` and `stub_consistency` findings) — re-elaborate:
+- Start all independent child delegations before awaiting any result.
 - For each failed WP ID, read its `{id}_result.json` from `{$2}/work_packages/` (provides
   `name`, `scope`, `estimated_files`) and its entry from `wp_manifest.json` for status context
-- Spawn a sub-agent with `model: "sonnet"` per failed WP. Provide: WP name, scope,
+- Spawn a sub-agent under the declared `sonnet` model-class policy per failed WP. Provide: WP name, scope,
   estimated_files, and the relevant portion of `wp_index.json` for context
 - Sub-agent writes a corrected `{$2}/work_packages/{id}_result.json`
 - Sub-agent appends corrected compact entry to `wp_index.json`

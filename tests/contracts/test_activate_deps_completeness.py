@@ -39,7 +39,6 @@ _INVOCATION_PATTERNS = (
 )
 
 _FM_PATTERN = re.compile(r"^---\n(.*?)\n?---\n?(.*)", re.DOTALL)
-_ACTIVATE_DEPS_LINE_RE = re.compile(r"^activate_deps:\s*\[([^\]]*)\]", re.MULTILINE)
 
 
 def _strip_frontmatter(content: str) -> str:
@@ -48,14 +47,12 @@ def _strip_frontmatter(content: str) -> str:
 
 
 def _get_activate_deps(skill_md: Path) -> list[str]:
-    """Parse activate_deps from a SKILL.md frontmatter (bracket list format)."""
-    content = skill_md.read_text()
-    m = _FM_PATTERN.match(content)
-    frontmatter = m.group(1) if m else content
-    deps_m = _ACTIVATE_DEPS_LINE_RE.search(frontmatter)
-    if not deps_m:
+    """Parse activate_deps independent of YAML list presentation."""
+    parsed = read_skill_frontmatter(skill_md)
+    if parsed.data is None:
         return []
-    return [d.strip() for d in deps_m.group(1).split(",") if d.strip()]
+    deps = parsed.data.get("activate_deps", [])
+    return [str(dep) for dep in deps]
 
 
 def _find_skill_md(skill_name: str) -> Path | None:
@@ -94,9 +91,13 @@ def test_planning_skill_frontmatter_and_closures(
     assert rectify_md is not None
     rectify_frontmatter = read_skill_frontmatter(rectify_md)
     assert rectify_frontmatter.data is not None
-    assert set(rectify_frontmatter.data.get("uses_capabilities", [])) == {
-        "agent_model",
-        "agent_subagent",
+    assert set(rectify_frontmatter.data.get("uses_capabilities", [])) == set()
+    semantic_requirements = rectify_frontmatter.data["semantic_requirements"]
+    roles = {role["name"] for role in semantic_requirements["logical_roles"]}
+    assert roles == {
+        "plan-foundation-auditor",
+        "plan-interface-mapper",
+        "plan-registry-tracer",
     }
     assert "activate_deps" not in rectify_frontmatter.data
     assert compute_skill_closure("rectify", provider) == frozenset({"rectify"})

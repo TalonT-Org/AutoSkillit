@@ -1,18 +1,24 @@
 ---
 name: resolve-merge-conflicts
-categories: [github]
-uses_capabilities: [git_metadata_write]
-description: >
-  Goal-aware resolution of rebase conflicts when merging a conflict-resolution worktree
-  back into the integration branch. Analyzes the intent of each side of a conflict,
-  resolves it in-place when confidence is HIGH or MEDIUM, and escalates when LOW.
+categories:
+- github
+uses_capabilities: []
+description: 'Goal-aware resolution of rebase conflicts when merging a conflict-resolution worktree back into the integration
+  branch. Analyzes the intent of each side of a conflict, resolves it in-place when confidence is HIGH or MEDIUM, and escalates
+  when LOW.
+
+  '
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: resolve-merge-conflicts] Resolving merge conflicts...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: resolve-merge-conflicts] Resolving merge conflicts...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  git_metadata_writes:
+  - purpose: perform the repository metadata update required by this skill
 ---
 
 # Resolve Merge Conflicts Skill

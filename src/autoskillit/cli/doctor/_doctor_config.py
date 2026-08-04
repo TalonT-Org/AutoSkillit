@@ -196,19 +196,15 @@ def _iter_backend_pins(data: dict[str, Any]) -> list[tuple[str, str, str]]:
 def _check_standing_backend_pins_feasibility(
     project_dir: Path | None = None,
 ) -> list[DoctorResult]:
-    """Check that every standing agent_backend pin targets a capability-feasible backend.
+    """Check that every standing agent_backend pin can adapt skill semantics.
 
     Re-reads each config.yaml layer individually (mirrors
     ``_check_config_layers_for_secrets``) and resolves every ``recipe_overrides``
-    and ``step_overrides`` pin against the step's skill capabilities. A pin that
-    forces a backend lacking a hard capability the step's skill requires is
-    reported as an ERROR since it would fail at dispatch time.
+    and ``step_overrides`` pin against the step's versioned semantic plan.
     """
     from autoskillit.core import (
         YAMLError,
-        describe_capability_mismatches,
         load_yaml,
-        unsatisfied_backend_capabilities,
     )
     from autoskillit.execution import get_backend
     from autoskillit.recipe import find_recipe_by_name, load_recipe
@@ -319,19 +315,19 @@ def _check_standing_backend_pins_feasibility(
                     )
                     continue
 
-                mismatches = unsatisfied_backend_capabilities(
-                    skill_info.uses_capabilities, backend.capabilities
-                )
-                if mismatches:
+                if skill_info.semantic_plan is None:
+                    continue
+                adaptation = backend.adapt_skill_semantics(skill_info.semantic_plan)
+                if adaptation.diagnostic is not None:
                     results.append(
                         DoctorResult(
                             Severity.ERROR,
                             "standing_backend_pins_feasibility",
                             f"{config_path}: {dotted_key} pins backend {backend_name!r} "
                             f"for step {target_step.name!r}, but "
-                            f"{describe_capability_mismatches(mismatches)}. "
+                            f"{adaptation.diagnostic}. "
                             "Remove or update this pin, or choose a backend that "
-                            "satisfies the step's required capabilities.",
+                            "supports the skill's semantic requirements.",
                         )
                     )
 
@@ -340,7 +336,7 @@ def _check_standing_backend_pins_feasibility(
             DoctorResult(
                 Severity.OK,
                 "standing_backend_pins_feasibility",
-                "All standing agent_backend pins are capability-feasible.",
+                "All standing agent_backend pins can adapt declared skill semantics.",
             )
         )
     return results

@@ -13,11 +13,13 @@ import signal
 import sys
 import textwrap
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 from autoskillit.core.types import TerminationReason
 from autoskillit.execution.process import DefaultSubprocessRunner
+from tests.execution.conftest import _launch_preparation
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -103,15 +105,26 @@ class TestBoundaryPtyDispatch:
 
         backend = _mock_backend(pty_required=True)
         spec = CmdSpec(cmd=(sys.executable, str(shim)), env={})
-
-        result = await _execute_claude_headless(
-            lambda _binding, _extras: spec,
+        launch_preparation = _launch_preparation(
+            tool_ctx,
             cwd=str(tmp_path),
-            ctx=tool_ctx,
-            timeout=10.0,
-            stale_threshold=60.0,
-            step_backend=backend,
+            backend=backend.name,
         )
+
+        with patch.object(
+            tool_ctx.launch_resolver,
+            "backend_for",
+            return_value=backend,
+        ):
+            result = await _execute_claude_headless(
+                lambda _binding, _extras: spec,
+                cwd=str(tmp_path),
+                ctx=tool_ctx,
+                timeout=10.0,
+                stale_threshold=60.0,
+                launch_resolver=tool_ctx.launch_resolver,
+                launch_preparation=launch_preparation,
+            )
 
         assert result.success is False
         assert result.lifespan_started is False

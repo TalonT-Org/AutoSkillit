@@ -1,15 +1,33 @@
 ---
 name: merge-pr
-categories: [github]
-uses_capabilities: [github_api_write]
-description: Merge a single PR into the integration branch. For simple PRs, uses gh pr merge --squash --auto to enforce GitHub's required status checks. For needs_check PRs, re-assesses complexity and returns needs_plan=true with a conflict report when conflicts are detected. Use inside the merge-prs loop.
+categories:
+- github
+uses_capabilities:
+- github_api_write
+description: Merge a single PR into the integration branch. For simple PRs, uses gh pr merge --squash --auto to enforce GitHub's
+  required status checks. For needs_check PRs, re-assesses complexity and returns needs_plan=true with a conflict report when
+  conflicts are detected. Use inside the merge-prs loop.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Processing PR merge...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Processing PR merge...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # PR Merge Skill
@@ -42,8 +60,8 @@ conflicts from earlier merges in the queue.
 - Close or comment on the PR
 - Leave the git working tree in a dirty state
 - Create files outside `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/merge-prs}`
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Run `git status` before any operation to verify clean state
@@ -52,7 +70,7 @@ conflicts from earlier merges in the queue.
 - Use `gh pr merge {pr_number} --squash` when `autoMergeAllowed=false` — GitHub merges synchronously without waiting for checks
 - Poll `gh pr view {pr_number} --json state,mergedAt` to confirm the merge completed
 - Fetch the PR branch from remote before the deletion regression scan and conflict analysis
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -226,13 +244,13 @@ Do NOT fall back to local git merge regardless of `AUTO_MERGE_ALLOWED`.
 
 ### Step 3: Complexity Path — `needs_check` (Re-assessment) (SINGLE MESSAGE)
 
-**Issue ALL Task/Explore subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Issue ALL backend-adapted child-delegation calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Before attempting any merge, re-assess complexity against the current integration branch state.
 
-Launch an Explore subagent to:
+Launch an child delegation to:
 
 1. Determine `base_branch` from the PR: extract `baseRefName` from the `gh pr view` result in Step 1 (this is the branch the PR targets, e.g. `main`).
 

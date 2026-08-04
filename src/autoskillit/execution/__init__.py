@@ -93,6 +93,7 @@ from autoskillit.execution.headless import (
     assert_interactive_ordering,
     run_headless_core,
 )
+from autoskillit.execution.launch_resolution import DefaultLaunchResolver
 from autoskillit.execution.linux_tracing import (
     LINUX_TRACING_AVAILABLE,
     LinuxTracingHandle,
@@ -227,6 +228,7 @@ __all__ = [
     # headless
     "run_headless_core",
     "DefaultHeadlessExecutor",
+    "DefaultLaunchResolver",
     "assert_interactive_ordering",
     # testing
     "parse_pytest_summary",

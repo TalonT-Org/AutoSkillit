@@ -1,19 +1,34 @@
 ---
 name: audit-docs
-categories: [audit]
-description: >
-  Audit documentation for drift, staleness, and inconsistency against the actual
-  codebase. Use when user says "audit docs", "check documentation", "docs audit",
-  or "documentation review". Spawns parallel subagents to explore codebase subsystems,
-  then cross-references all documentation sources against findings.
+categories:
+- audit
+description: 'Audit documentation for drift, staleness, and inconsistency against the actual codebase. Use when user says
+  "audit docs", "check documentation", "docs audit", or "documentation review". Spawns parallel subagents to explore codebase
+  subsystems, then cross-references all documentation sources against findings.
+
+  '
 tier: 2
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: audit-docs] Auditing documentation for staleness and drift...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: audit-docs] Auditing documentation for staleness and drift...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Documentation Audit Skill
@@ -32,12 +47,12 @@ Audit all documentation sources for drift, staleness, and inconsistency against 
 - Modify any source files
 - Update an existing report — always generate a new one
 - Compare doc-to-doc without first grounding claims in actual code behavior
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Ground every cross-reference finding in what the code actually does (not what other docs say)
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Use subagents for parallel exploration
 - Write report to `{{AUTOSKILLIT_TEMP}}/audit-docs/docs_audit_{YYYY-MM-DD_HHMMSS}.md`
 - Provide file:line references for every finding
@@ -79,7 +94,7 @@ Flag findings in these categories (maps to REQ-SKILL-004):
 
 2. **Familiarization wave (SINGLE MESSAGE)** — spawn 6 parallel subagents, one per subsystem group. Each subagent reports: actual module/component names, exported symbols, behavioral summary (2–5 sentences per module). If any subagent fails, record the gap and continue.
 
-   **Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+   **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
    Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 

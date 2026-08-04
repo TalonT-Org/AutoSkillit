@@ -1,18 +1,37 @@
 ---
 name: stage-data
-categories: [research]
-uses_capabilities: [agent_model]
-description: >
-  Pre-flight resource gate for the research recipe. Reads the experiment plan's
-  data_manifest, checks disk space and network connectivity for external/gitignored
-  entries, creates data directory structure, and emits a PASS/WARN/FAIL feasibility verdict.
+categories:
+- research
+uses_capabilities: []
+description: 'Pre-flight resource gate for the research recipe. Reads the experiment plan''s data_manifest, checks disk space
+  and network connectivity for external/gitignored entries, creates data directory structure, and emits a PASS/WARN/FAIL feasibility
+  verdict.
+
+  '
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: stage-data] Checking resource feasibility...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: stage-data] Checking resource feasibility...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Stage Data Skill
@@ -49,8 +68,8 @@ compute on doomed downloads.
 - Modify any source files
 - Write files outside `{{AUTOSKILLIT_TEMP}}/stage-data/`
 - Emit a WARN or FAIL verdict without a specific, actionable explanation
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Read the `data_manifest` frontmatter section of the experiment plan
@@ -60,8 +79,8 @@ compute on doomed downloads.
 - Create data directories for every entry whose `location` field is non-null,
   using `mkdir -p`
 - Write the resource feasibility report before emitting the verdict token
-- Spawn all subagents via `Agent(model="sonnet")`
-- Issue all Task calls in a single message to maximize parallelism
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -80,7 +99,7 @@ Create any data directories for entries with non-null `location`. Emit
 
 ### Step 3 — Launch Parallel Resource Probe Subagents (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 

@@ -7,9 +7,15 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from autoskillit.core.types import RetryReason, SkillResult, SubprocessResult, TerminationReason
+from autoskillit.core.types import (
+    LaunchContractError,
+    RetryReason,
+    SkillResult,
+    SubprocessResult,
+    TerminationReason,
+)
 
-from .conftest import _mock_backend
+from .conftest import _backend_authority, _launch_preparation, _mock_backend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -145,7 +151,7 @@ class TestStepBackendOverride:
         assert mock_build.call_args.kwargs["backend"] is backend
 
     @pytest.mark.anyio
-    async def test_step_backend_override_routes_through_get_backend(self, minimal_ctx):
+    async def test_backend_authority_routes_through_launch_resolver(self, minimal_ctx):
         backend = _mock_backend(pty_required=True, channel_b_capable=True)
         minimal_ctx.backend = backend
         minimal_ctx.runner = AsyncMock(
@@ -161,10 +167,13 @@ class TestStepBackendOverride:
             pty_required=False, channel_b_capable=False, process_name="codex"
         )
         codex_backend.name = "codex"
+        authority = _backend_authority("codex")
         with (
-            patch(
-                "autoskillit.execution.headless.get_backend", return_value=codex_backend
-            ) as mock_get,
+            patch.object(
+                minimal_ctx.launch_resolver,
+                "backend_for",
+                return_value=codex_backend,
+            ) as mock_backend_for,
             patch("autoskillit.execution.headless._execute_claude_headless") as mock_exec,
         ):
             mock_exec.return_value = SkillResult(
@@ -185,10 +194,11 @@ class TestStepBackendOverride:
                 "/tmp/cwd",
                 minimal_ctx,
                 completion_marker="%%DONE%%",
-                backend_override="codex",
+                backend_authority=authority,
             )
-            mock_get.assert_called_once_with("codex")
-            assert mock_exec.call_args.kwargs["step_backend"] is codex_backend
+            preparation = mock_backend_for.call_args.args[0]
+            assert preparation.backend_authority == authority
+            assert mock_exec.call_args.kwargs["launch_preparation"].backend_authority == authority
 
     @pytest.mark.anyio
     async def test_step_backend_flows_to_stream_parser_and_build_result(self, minimal_ctx):
@@ -207,9 +217,21 @@ class TestStepBackendOverride:
                 pid=12345,
             )
         )
-        with patch(
-            "autoskillit.execution.headless._headless_execute._build_skill_result"
-        ) as mock_build:
+        launch_preparation = _launch_preparation(
+            minimal_ctx,
+            cwd="/tmp/cwd",
+            backend="codex",
+        )
+        with (
+            patch.object(
+                minimal_ctx.launch_resolver,
+                "backend_for",
+                return_value=step_backend_mock,
+            ),
+            patch(
+                "autoskillit.execution.headless._headless_execute._build_skill_result"
+            ) as mock_build,
+        ):
             mock_build.return_value = SkillResult(
                 success=True,
                 result="",
@@ -231,26 +253,27 @@ class TestStepBackendOverride:
                 timeout=60.0,
                 stale_threshold=30.0,
                 completion_marker="%%DONE%%",
-                step_backend=step_backend_mock,
+                launch_resolver=minimal_ctx.launch_resolver,
+                launch_preparation=launch_preparation,
             )
         step_backend_mock.stream_parser.assert_called_once()
         ctx_backend.stream_parser.assert_not_called()
         assert mock_build.call_args.kwargs["backend"] is step_backend_mock
 
     @pytest.mark.anyio
-    async def test_backend_override_unknown_name_raises_valueerror(self, minimal_ctx):
+    async def test_unknown_backend_authority_fails_closed(self, minimal_ctx):
         backend = _mock_backend(pty_required=True, channel_b_capable=True)
         minimal_ctx.backend = backend
         minimal_ctx.runner = AsyncMock()
         from autoskillit.execution.headless import run_headless_core
 
-        with pytest.raises(ValueError, match="Unknown backend"):
+        with pytest.raises(LaunchContractError, match="unknown backend"):
             await run_headless_core(
                 "/autoskillit:test",
                 "/tmp/cwd",
                 minimal_ctx,
                 completion_marker="%%DONE%%",
-                backend_override="nonexistent",
+                backend_authority=_backend_authority("nonexistent"),
             )
 
     def test_resolve_pty_mode_accepts_backend_directly(self):
@@ -266,12 +289,13 @@ class TestStepBackendOverride:
         assert _resolve_session_log_dir("/tmp/cwd", backend) is None
 
     @pytest.mark.anyio
-    async def test_protocol_accepts_backend_override(self):
+    async def test_protocol_accepts_backend_authority(self):
         from tests.fakes import InMemoryHeadlessExecutor
 
         executor = InMemoryHeadlessExecutor()
-        await executor.run("/test", "/tmp", backend_override="codex")
-        assert executor.calls[0].backend_override == "codex"
+        authority = _backend_authority("codex")
+        await executor.run("/test", "/tmp", backend_authority=authority)
+        assert executor.calls[0].backend_authority == authority
 
 
 def _patch_for_flush(monkeypatch, tmp_path, skill_result):
@@ -343,15 +367,26 @@ class TestCodexLogDispatch:
         fake_runner, flush_calls = _patch_for_flush(monkeypatch, tmp_path, result)
         minimal_ctx.runner = fake_runner  # type: ignore[assignment]
         minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
-
-        await _execute_claude_headless(
-            lambda _binding, _extras: CmdSpec(cmd=("codex", "--quiet", "test"), env={}),
-            str(tmp_path),
+        launch_preparation = _launch_preparation(
             minimal_ctx,
-            timeout=30.0,
-            stale_threshold=5.0,
-            step_backend=backend,
+            cwd=str(tmp_path),
+            backend="codex",
         )
+
+        with patch.object(
+            minimal_ctx.launch_resolver,
+            "backend_for",
+            return_value=backend,
+        ):
+            await _execute_claude_headless(
+                lambda _binding, _extras: CmdSpec(cmd=("codex", "--quiet", "test"), env={}),
+                str(tmp_path),
+                minimal_ctx,
+                timeout=30.0,
+                stale_threshold=5.0,
+                launch_resolver=minimal_ctx.launch_resolver,
+                launch_preparation=launch_preparation,
+            )
 
         assert "codex_log_path" not in flush_calls[0]
         assert flush_calls[0]["backend"] == "codex"
@@ -376,6 +411,10 @@ class TestCodexLogDispatch:
         fake_runner, flush_calls = _patch_for_flush(monkeypatch, tmp_path, result)
         minimal_ctx.runner = fake_runner  # type: ignore[assignment]
         minimal_ctx.backend = backend
+        launch_preparation = _launch_preparation(
+            minimal_ctx,
+            cwd=str(tmp_path),
+        )
 
         await _execute_claude_headless(
             lambda _binding, _extras: CmdSpec(cmd=("claude", "--print", "test"), env={}),
@@ -383,7 +422,8 @@ class TestCodexLogDispatch:
             minimal_ctx,
             timeout=30.0,
             stale_threshold=5.0,
-            step_backend=backend,
+            launch_resolver=minimal_ctx.launch_resolver,
+            launch_preparation=launch_preparation,
         )
 
         assert "codex_log_path" not in flush_calls[0]

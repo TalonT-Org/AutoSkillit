@@ -324,6 +324,8 @@ def test_backend_module_all_exhaustive():
         "ExecutableLaunchBinding",
         "ModelTranslation",
         "SessionSummary",
+        "SKILL_MODEL_CLASSES",
+        "SKILL_REASONING_EFFORTS",
         "SkillSessionConfig",
         "ClaudeEventData",
         "CodexEventData",
@@ -425,7 +427,6 @@ def test_skill_session_config_fields_exhaustive():
         "resume_checkpoint",
         "resume_message",
         "sandbox_mode",
-        "backend_override",
         "network_access",
         "native_shell_capture_decision",
         "managed_lineage_ref",
@@ -454,7 +455,6 @@ def test_skill_session_config_defaults():
     assert cfg.resume_checkpoint is None
     assert cfg.resume_message is None
     assert cfg.sandbox_mode == "workspace-write"
-    assert cfg.backend_override is None
 
 
 def test_skill_session_config_field_types():
@@ -487,4 +487,3 @@ def test_skill_session_config_field_types():
     assert hints["resume_checkpoint"] == SessionCheckpoint | None
     assert hints["resume_message"] == str | None
     assert hints["sandbox_mode"] is str
-    assert hints["backend_override"] == str | None

@@ -33,6 +33,7 @@ from autoskillit.core._plugin_ids import (
     detect_autoskillit_mcp_prefix as _production_mcp_prefix,
 )
 from autoskillit.execution.backends.codex import CodexBackend
+from tests.fakes import adapt_test_skill_semantics
 from tests.fixtures.plugin_artifact_state import (
     INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
     PluginArtifactState,
@@ -64,6 +65,7 @@ _CODEX_IGNORED_CLAUDE_ARTIFACT_STATES = (
 
 class _RecordingBackend:
     conventions = BackendConventions()
+    adapt_skill_semantics = staticmethod(adapt_test_skill_semantics)
 
     def __init__(self, name: str) -> None:
         self.name = name

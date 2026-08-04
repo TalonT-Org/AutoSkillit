@@ -1,16 +1,26 @@
 ---
 name: exp-lens-exploratory-confirmatory
-categories: [exp-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: Assess whether analytic decisions were pre-specified or post-hoc and whether exploratory/confirmatory norms are aligned. Boundary lens answering "Is this discovery or test, and are norms aligned?"
+categories:
+- exp-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Assess whether analytic decisions were pre-specified or post-hoc and whether exploratory/confirmatory norms are
+  aligned. Boundary lens answering "Is this discovery or test, and are norms aligned?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Exploratory-Confirmatory Lens - Analyzing boundary integrity...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Exploratory-Confirmatory Lens - Analyzing boundary integrity...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: exp-lens-sensitivity-robustness
+  - name: exp-lens-severity-testing
+  - name: make-experiment-diag
+  - name: mermaid
 ---
 
 # Exploratory-Confirmatory Experimental Design Lens
@@ -45,8 +55,8 @@ hooks:
 
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-exploratory-confirmatory/`
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Map the full analytic timeline — what was decided before vs. after seeing data
@@ -55,7 +65,7 @@ hooks:
 - Flag absent preregistration as a finding without assuming bad faith
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-exploratory-confirmatory/exp_diag_exploratory_confirmatory_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -82,7 +92,7 @@ exploration for these fields if the context file supplies them. For any field ab
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn Explore subagents to investigate:
+Spawn child delegations to investigate:
 
 **Pre-specified Plans**
 - Find pre-registration documents, analysis plans, hypothesis files

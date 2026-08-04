@@ -349,7 +349,7 @@ def test_recipe_repository_validate_from_path_records_call():
 def test_recipe_repository_validate_from_path_records_call_with_overrides():
     repo = InMemoryRecipeRepository()
     script_path = Path("/proj/recipe.yaml")
-    overrides = {"backend_supports_git_write": "false"}
+    overrides = {"open_pr": "false"}
     repo.validate_from_path(script_path, ".autoskillit/temp", ingredient_overrides=overrides)
     assert len(repo.calls) == 1
     call = repo.calls[0]

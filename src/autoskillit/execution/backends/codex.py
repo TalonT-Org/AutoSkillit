@@ -67,6 +67,8 @@ from autoskillit.core import (
     SessionCheckpoint,
     SessionLocator,
     SessionSummary,
+    SkillSemanticAdaptationResult,
+    SkillSemanticPlan,
     SkillSessionConfig,
     ValidatedAddDir,
     atomic_write,
@@ -823,6 +825,19 @@ def _validate_inert_rollout_paths(
 _READ_ONLY_AGENT_TOOLS = frozenset({"Read", "Grep", "Glob"})
 
 
+def _canonical_codex_model_effort(
+    model_class: str | None,
+    reasoning_effort: str | None = None,
+) -> tuple[str, str | None]:
+    """Translate the one canonical semantic policy used by agents and call sites."""
+    if model_class is None:
+        return "", reasoning_effort
+    return (
+        CODEX_MODEL_ALIASES[model_class],
+        reasoning_effort or CODEX_EFFORT_MAPPING.get(model_class),
+    )
+
+
 def _generate_agent_tomls(session_dir: Path) -> int:
     agents_src = pkg_root() / "agents"
     out_dir = session_dir / "agents"
@@ -874,8 +889,8 @@ def _generate_agent_tomls(session_dir: Path) -> int:
         ]
         model_key = meta.get("model")
         if model_key and model_key in CODEX_MODEL_ALIASES:
-            lines.append(f"model = {_format_toml_value(CODEX_MODEL_ALIASES[model_key])}")
-            effort = CODEX_EFFORT_MAPPING.get(model_key)
+            physical_model, effort = _canonical_codex_model_effort(model_key)
+            lines.append(f"model = {_format_toml_value(physical_model)}")
             if effort:
                 lines.append(f"model_reasoning_effort = {_format_toml_value(effort)}")
         body = f"{body}\n\n{codex_discipline_suffix()}"
@@ -1045,14 +1060,6 @@ class CodexBackend(BackendCmdBuilderBase):
             inspector_capable=False,
             supports_context_window_suffix=False,
             has_unguarded_filesystem_access=True,
-            # Codex workspace-write sandbox mounts .git/ read-only.
-            # Evidence: codex-rs/protocol/src/permissions.rs hardcodes
-            # .git in PROTECTED_METADATA_PATH_NAMES; enforced via
-            # Seatbelt (macOS) and bwrap/landlock (Linux).
-            # Consumers: _auto_overrides.py, fleet/_api.py gate on this
-            # field; rules_backend_compat.py emits ERROR for
-            # git_metadata_write skills on backends where this is False.
-            git_metadata_writable=False,  # sandbox excludes .git metadata path
             github_api_callable=False,
             skill_sigil="$",
             session_dir_persistent=True,
@@ -1739,6 +1746,68 @@ class CodexBackend(BackendCmdBuilderBase):
 
     def validate_skill_content(self, content: str) -> list[str]:
         return []
+
+    def adapt_skill_semantics(self, plan: SkillSemanticPlan) -> SkillSemanticAdaptationResult:
+        """Adapt portable skill requirements to Codex collaboration instructions."""
+        role_mapping = {
+            role.name: (
+                role.name.removeprefix("autoskillit:")
+                if role.name.startswith("autoskillit:")
+                else "worker"
+                if role.name == "delegated-worker"
+                else role.name
+            )
+            for role in plan.logical_roles
+        }
+        sibling_targets = {sibling.name: f"${sibling.name}" for sibling in plan.sibling_skills}
+        model_policy: dict[str, tuple[str, str | None]] = {}
+        fragments = [
+            f"Logical role {role.name!r} maps to registered Codex agent "
+            f"{role_mapping[role.name]!r}: {role.purpose}."
+            for role in plan.logical_roles
+        ]
+        for policy in plan.child_model_policies:
+            native_role = role_mapping[policy.role]
+            model_policy[native_role] = _canonical_codex_model_effort(
+                policy.model_class,
+                policy.reasoning_effort,
+            )
+        for spawn in plan.child_spawns:
+            native_role = role_mapping[spawn.role]
+            model_id, effort = model_policy.get(native_role, ("", None))
+            policy_text = ""
+            if model_id:
+                policy_text += f", model={model_id!r}"
+            if effort:
+                policy_text += f", reasoning_effort={effort!r}"
+            fragments.append(
+                f"Call spawn_agent {spawn.count} time{'s' if spawn.count != 1 else ''} "
+                f"with agent_type={native_role!r}, fork_turns='none'{policy_text}; "
+                "retain every returned child ID."
+            )
+        if plan.concurrency is not None and plan.concurrency.required:
+            fragments.append("Spawn all independent children before awaiting any result.")
+        if plan.join is not None and plan.join.required:
+            fragments.append(
+                "Use wait_agent with the exact returned child IDs; deliver every independent "
+                "successful child terminal result before parent synthesis."
+            )
+        if plan.evidence is not None and plan.evidence.required:
+            boundary = "independent " if plan.evidence.independent else ""
+            fragments.append(f"Require {boundary}evidence from each child result.")
+        fragments.extend(f"Invoke sibling skill {target}." for target in sibling_targets.values())
+        fragments.extend(
+            f"Use the server-owned git metadata writer for: {write.purpose}."
+            for write in plan.git_metadata_writes
+        )
+        result = SkillSemanticAdaptationResult(
+            instruction_fragments=tuple(fragments),
+            logical_role_mapping=role_mapping,
+            sibling_skill_targets=sibling_targets,
+            model_effort_policy=model_policy,
+        )
+        result.validate_for(plan, backend=self.name)
+        return result
 
     def version(self) -> str:
         try:

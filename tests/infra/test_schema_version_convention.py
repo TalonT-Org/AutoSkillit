@@ -119,10 +119,10 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _lifespan.py — hooks.json self-heal on startup drift (co-owned with Claude plugin system)
     ("src/autoskillit/server/_lifespan.py", 96),
     # tools_kitchen.py — hook config, quota guard, git_ops_policy, ingredient locks overlay
-    ("src/autoskillit/server/tools/tools_kitchen.py", 585),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 604),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 638),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 2008),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 536),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 555),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 589),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 1905),
     # tools_pipeline_tracker.py — tracker_data dict (init) and mark_step_complete write
     # (same tracker file schema as init — not a new format, grandfathered alongside it)
     ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 256),

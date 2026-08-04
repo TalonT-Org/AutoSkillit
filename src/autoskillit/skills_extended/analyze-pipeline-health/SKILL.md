@@ -1,15 +1,34 @@
 ---
 name: analyze-pipeline-health
 uses_capabilities: []
-categories: [diagnostics]
-description: Analyze pipeline session logs for anomalies and regressions. Spawns parallel Haiku scanner subagents per step group, each investigating its batch of sessions and reporting findings with evidence.
+categories:
+- diagnostics
+description: Analyze pipeline session logs for anomalies and regressions. Spawns parallel Haiku scanner subagents per step
+  group, each investigating its batch of sessions and reporting findings with evidence.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: analyze-pipeline-health] Analyzing pipeline health...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: analyze-pipeline-health] Analyzing pipeline health...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: pipeline-health-scanner
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: pipeline-health-scanner
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: pipeline-health-scanner
+    model_class: haiku
 ---
 
 # Pipeline Health Analysis Skill
@@ -31,16 +50,16 @@ Coordinator skill that reads session logs from a pipeline run, groups them by st
 - Modify any source code files
 - Create issues or PRs (findings are reported to the calling session only)
 - Write to `/tmp`, `/var/tmp`, or any system scratch directory — all intermediate and scratch files belong in `{{AUTOSKILLIT_TEMP}}/analyze-pipeline-health/`
-- Run subagents in the background (run_in_background: true is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Filter sessions.jsonl by kitchen_id to scope to this pipeline run
 - Spawn scanner subagents in parallel (one per step group)
-- Use model: "haiku" for scanner subagents
+- Use the declared `haiku` model-class policy for scanner children
 - Cap each scanner's investigation budget: set `maxTurns` to the limit in the agent definition and include a wall-clock soft-deadline instruction in the scanner prompt (e.g. "complete your analysis within 15 minutes; report partial findings if you reach the limit")
 - Report "no issues found" clearly when the pipeline is clean
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -74,11 +93,11 @@ No special grouping is needed — Codex and Claude Code sessions for the same st
 
 ### Step 3: Spawn scanner subagents (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-For each step group, spawn a scanner subagent via the Agent tool with subagent_type: "autoskillit:pipeline-health-scanner".
+For each step group, spawn a scanner subagent via the child delegation with subagent_type: "autoskillit:pipeline-health-scanner".
 
 Each scanner receives in its prompt:
 - The sessions.jsonl entries for its batch (JSON array — includes `claude_code_log`, `codex_log`, and `backend` fields)

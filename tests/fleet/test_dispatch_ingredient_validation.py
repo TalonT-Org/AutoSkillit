@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
-
 import pytest
 
 from tests.fleet._helpers import (
     _make_recipe_info,
-    _mock_backend_with_locator,
     _no_sleep_quota_checker,
     _noop_quota_refresher,
     _run,
@@ -486,60 +483,6 @@ class TestConfigAuthoritativeIngredientInjection:
         assert not any("config-authority key" in e.get("event", "") for e in cap_logs)
 
     @pytest.mark.anyio
-    async def test_non_writable_backend_forces_git_write_false_at_dispatch(self, tool_ctx):
-        """When tool_ctx.backend has git_metadata_writable=False, the dispatched
-        ingredients must contain backend_supports_git_write='false', regardless of
-        LLM-supplied ingredients."""
-        from types import SimpleNamespace
-        from unittest.mock import patch
-
-        from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
-
-        _setup_config_authority_recipe(
-            tool_ctx,
-            Recipe(
-                name="test-recipe",
-                description="test",
-                kind=RecipeKind.STANDARD,
-                ingredients={
-                    "backend_supports_git_write": RecipeIngredient(
-                        description="Capability", default="true", authority="config"
-                    )
-                },
-            ),
-        )
-        captured: dict = {}
-
-        def _capture_prompt_builder(**kwargs):
-            captured.update(kwargs)
-            return "prompt"
-
-        _mock_backend = _mock_backend_with_locator(project_log_dir=None, session_log_path=None)
-        _mock_backend.name = "test-backend"
-        _mock_backend.capabilities = SimpleNamespace(git_metadata_writable=False)
-        tool_ctx.backend = _mock_backend
-
-        from autoskillit.fleet._api import execute_dispatch
-
-        with patch(
-            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
-            return_value={},
-        ):
-            await execute_dispatch(
-                tool_ctx=tool_ctx,
-                recipe="test-recipe",
-                task="t",
-                ingredients={"backend_supports_git_write": "true"},
-                dispatch_name=None,
-                timeout_sec=None,
-                prompt_builder=_capture_prompt_builder,
-                quota_checker=_no_sleep_quota_checker,
-                quota_refresher=_noop_quota_refresher,
-            )
-
-        assert captured["ingredients"]["backend_supports_git_write"] == "false"
-
-    @pytest.mark.anyio
     async def test_apply_config_authoritative_overrides_source_dir_preserves_caller_local_path(
         self, tool_ctx
     ):
@@ -617,100 +560,3 @@ class TestConfigAuthoritativeIngredientInjection:
             )
 
         assert "source_dir" not in result
-
-    def test_apply_config_authoritative_overrides_only_mutates_enforcement_keys(self, tmp_path):
-        """For a recipe that declares ALL CONFIG_AUTHORITY_KEYS as authority='config',
-        the function must only mutate keys in SERVER_AUTHORITATIVE_INGREDIENTS |
-        BACKEND_CAPABILITY_INGREDIENTS. source_dir is caller-sovereign and must not
-        appear in the changed-key set."""
-        from types import SimpleNamespace
-        from unittest.mock import patch
-
-        from autoskillit.config import apply_config_authoritative_overrides
-        from autoskillit.config.ingredient_defaults import (
-            BACKEND_CAPABILITY_INGREDIENTS,
-            SERVER_AUTHORITATIVE_INGREDIENTS,
-        )
-        from autoskillit.core import CONFIG_AUTHORITY_KEYS
-
-        recipe_ingredients = {
-            key: SimpleNamespace(authority="config") for key in CONFIG_AUTHORITY_KEYS
-        }
-        resolved_values = {key: f"resolved-{key}" for key in CONFIG_AUTHORITY_KEYS}
-        capability_values = {key: f"cap-{key}" for key in BACKEND_CAPABILITY_INGREDIENTS}
-
-        with patch(
-            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
-            return_value=resolved_values,
-        ):
-            result = apply_config_authoritative_overrides(
-                {},
-                recipe_ingredients,
-                tmp_path,
-                capability_overrides=capability_values,
-            )
-
-        changed_keys = set(result.keys())
-        assert changed_keys <= (
-            SERVER_AUTHORITATIVE_INGREDIENTS | BACKEND_CAPABILITY_INGREDIENTS
-        ), (
-            f"apply_config_authoritative_overrides mutated caller-sovereign keys: "
-            f"{changed_keys - (SERVER_AUTHORITATIVE_INGREDIENTS | BACKEND_CAPABILITY_INGREDIENTS)}"
-        )
-
-
-def test_capability_overrides_dict_covers_registry_keys():
-    """Structural test: every key in BACKEND_CAPABILITY_INGREDIENTS must appear in the
-    capability_overrides dict that fleet dispatch passes to apply_config_authoritative_overrides.
-    Adding a key to the registry without dispatch-site enforcement fails this test."""
-    from autoskillit.config import BACKEND_CAPABILITY_INGREDIENTS
-    from autoskillit.fleet._api import _build_capability_overrides
-
-    capability_overrides = _build_capability_overrides(backend=None)
-    missing = BACKEND_CAPABILITY_INGREDIENTS - set(capability_overrides)
-    assert not missing, (
-        f"Capability registry keys missing from dispatch capability_overrides: {missing}"
-    )
-
-
-@pytest.mark.anyio
-async def test_run_dispatch_rejects_dispatch_infeasible(tool_ctx):
-    """When _run_dispatch's inner load_and_validate returns dispatch_feasible=False,
-    it must return DispatchRejected without proceeding to subprocess launch."""
-    from unittest.mock import patch
-
-    tool_ctx.recipes = MagicMock()
-    tool_ctx.recipes.load_and_validate.return_value = {
-        "valid": True,
-        "dispatch_feasible": False,
-        "infeasible_steps": ["gate_backend_write"],
-    }
-    tool_ctx.recipes.find.return_value = MagicMock()
-    tool_ctx.recipes.load.return_value = MagicMock()
-
-    with patch(
-        "autoskillit.fleet._api.execute_dispatch",
-        new_callable=AsyncMock,
-    ) as mock_exec:
-        from autoskillit.fleet._api import _run_dispatch
-
-        result = await _run_dispatch(
-            tool_ctx=tool_ctx,
-            recipe="test-recipe",
-            task="test task",
-            ingredients={},
-            dispatch_name=None,
-            timeout_sec=None,
-            prompt_builder=lambda **kw: "prompt",
-            quota_checker=_no_sleep_quota_checker,
-            quota_refresher=_noop_quota_refresher,
-        )
-
-    mock_exec.assert_not_called()
-    from autoskillit.fleet.state_types import DispatchRejected
-
-    assert isinstance(result.outcome, DispatchRejected)
-    assert (
-        "gate_backend_write" in result.outcome.message
-        or "dispatch" in result.outcome.message.lower()
-    )

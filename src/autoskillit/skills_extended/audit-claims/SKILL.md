@@ -1,18 +1,35 @@
 ---
 name: audit-claims
-categories: [research]
-uses_capabilities: [agent_model]
+categories:
+- research
 description: >
   Parallel subagent-driven claim extraction and citation integrity audit for
   research PRs. Extracts claims by section, matches against available evidence,
   classifies unsupported claims as findings, and emits a verdict for recipe routing.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: audit-claims] Auditing research claims for citation integrity...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: audit-claims] Auditing research claims for citation integrity...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Audit Claims Skill
@@ -49,8 +66,8 @@ comments and emits a verdict for recipe routing.
 - Modify any source code
 - Run deterministic diff annotation (claim positions are report-level, not line-level)
 - Generate findings for `experimental` claims — they are self-evidencing by definition
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 - Embed diff content inline in subagent prompts — always pass by path and instruct subagents to Read
 
 **ALWAYS:**
@@ -58,9 +75,9 @@ comments and emits a verdict for recipe routing.
 - Output `verdict=` on the final line
 - Exit 0 in all normal cases; verdict drives recipe routing via on_result, not exit code
 - Exit non-zero only for unrecoverable errors (e.g., gh CLI truly unavailable after graceful degradation has already output verdict=needs_human)
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Deduplicate findings by (file, line) pairs before posting
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -113,7 +130,7 @@ line-level. Subagents use section structure, not line markers.
 
 #### Phase 1 — Claim Extraction (parallel subagents by report section) (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
@@ -128,7 +145,7 @@ inline Python one-liners or heredoc scripts with `open()` (these are blocked by 
 per the existing convention at Step 1 of this file). Then bind `{section_diff_path}` to that
 section's file path when building each subagent's prompt.
 
-Launch one subagent via `Agent(model="sonnet")` per section containing `+` diff lines.
+Launch one subagent via `child delegation under the declared `sonnet` model-class policy` per section containing `+` diff lines.
 Each subagent returns a JSON array of extracted claims:
 
 ```json
@@ -170,11 +187,11 @@ Aggregate all extracted claims from all subagents. Save to
 
 #### Phase 2 — Evidence Matching (parallel subagents by claim type) (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Group extracted claims by `claim_type`. Launch one subagent via `Agent(model="sonnet")`
+Group extracted claims by `claim_type`. Launch one subagent via `child delegation under the declared `sonnet` model-class policy`
 per non-empty group. Each subagent receives the claim list and the full PR diff, and
 returns findings:
 

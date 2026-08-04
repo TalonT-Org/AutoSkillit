@@ -31,7 +31,6 @@ from autoskillit.config import (
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     PIPELINE_FORBIDDEN_TOOLS,
-    CapabilityResolutionDetail,
     ProcessStaleError,
     RecipeDeliveryRequest,
     _collect_disabled_feature_tags,
@@ -114,8 +113,6 @@ from autoskillit.server.tools._authority_feedback import (
 )
 from autoskillit.server.tools._auto_overrides import (
     _compute_effective_backend_map,
-    _promote_capability_keys,
-    _provider_aware_capability_overrides,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._pipeline_deps import _derive_phase_a_deps
@@ -467,52 +464,6 @@ def _recipe_validation_error_response(name: str, result: dict[str, Any]) -> str:
             "suggestions": result.get("suggestions", []),
         }
     )
-
-
-async def _dispatch_infeasible_response(
-    result: dict[str, Any],
-    backend: Any,
-    gate: Any,
-    ctx: Context,
-    capability_detail: CapabilityResolutionDetail | None = None,
-) -> str:
-    """Refuse a dead-on-arrival pipeline before the gate is enabled.
-
-    Used by the open_kitchen (both normal and deferred-recall) paths when
-    load_and_validate reports dispatch_feasible=False. When ``capability_detail``
-    is provided and indicates a none_pass, the response carries
-    ``missing_provider_steps`` and an ``escape_hatch`` key with actionable
-    guidance, instead of blaming the backend generically.
-    """
-    gate.disable()
-    await ctx.disable_components(tags={"kitchen"})
-    _infeasible = result.get("infeasible_steps", [])
-    _backend_name = backend.name if backend is not None else "unknown"
-    _envelope: dict[str, Any] = {
-        "success": False,
-        "kitchen": "dispatch_infeasible",
-        "infeasible_steps": _infeasible,
-        "ingredients_table": result.get("ingredients_table"),
-        "user_visible_message": (
-            f"Cannot dispatch recipe: backend {_backend_name!r} "
-            f"causes steps {_infeasible} to route to terminal failure. "
-            f"Use a backend with git_metadata_writable=True (e.g. claude-code)."
-        ),
-    }
-    if capability_detail is not None and capability_detail.resolution_path == "none_pass":
-        _missing = list(capability_detail.missing_provider_steps)
-        _envelope["missing_provider_steps"] = _missing
-        _envelope["escape_hatch"] = (
-            f"Add provider overrides with ANTHROPIC_BASE_URL for steps: "
-            f"{_missing}. Example config: "
-            f"providers.recipe_overrides.<recipe>.*: <profile>"
-        )
-        _envelope["user_visible_message"] = (
-            f"Cannot dispatch recipe: backend {_backend_name!r} "
-            f"lacks provider overrides for {_missing}. "
-            f"{_envelope['escape_hatch']}"
-        )
-    return json.dumps(_envelope)
 
 
 class QuotaGuardHookPayload(TypedDict):
@@ -1043,23 +994,11 @@ def get_recipe(name: str) -> str:
     }
     try:
         _raw_recipe = ctx.recipes.load(match.path)
-        _backend_overrides, _cap_detail = _provider_aware_capability_overrides(
-            ctx.backend,
-            name,
-            ctx.config.providers,
-            _raw_recipe.steps,
-            skill_resolver=ctx.skill_resolver,
-            config_backend=ctx.config.agent_backend,
-            project_root=ctx.project_dir,
-        )
         _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
             _raw_recipe.steps,
             ctx.backend.name if ctx.backend else None,
-            ctx.config.providers,
             name,
-            skill_resolver=ctx.skill_resolver,
             config_backend=ctx.config.agent_backend,
-            project_root=ctx.project_dir,
         )
         _backend_capabilities_map = build_backend_capabilities_map(
             _effective_backend_map, ctx.backend
@@ -1072,7 +1011,6 @@ def get_recipe(name: str) -> str:
             config_default=_config_default,
             session_overrides=_session_overrides,
             config_layer=_config_layer,
-            backend_overrides=_backend_overrides,
             resolved_defaults=_defaults,
             effective_backend_map=_effective_backend_map,
             backend_name=ctx.backend.name if ctx.backend else None,
@@ -1099,14 +1037,6 @@ def get_recipe(name: str) -> str:
         )
     if _resource_finalized_projection is None:
         return json.dumps({"error": f"Recipe '{name}' has no finalized projection."})
-    if not result.get("dispatch_feasible", True):
-        return json.dumps(
-            {
-                "error": "Recipe is infeasible on current backend",
-                "dispatch_feasible": False,
-                "infeasible_steps": result.get("infeasible_steps", []),
-            }
-        )
     prepared_generation = prepare_recipe_delivery_generation(
         result,
         recipe_name=name,
@@ -1418,27 +1348,13 @@ async def open_kitchen(
                 "kitchen_id": tool_ctx.kitchen_id,
                 "diagnostics_log_dir": str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
             }
-            _provider_overrides, _cap_detail = _provider_aware_capability_overrides(
-                tool_ctx.backend,
-                name,
-                tool_ctx.config.providers,
-                _raw_recipe.steps if _raw_recipe is not None else None,
-                skill_resolver=tool_ctx.skill_resolver,
-                config_backend=tool_ctx.config.agent_backend,
-                project_root=tool_ctx.project_dir,
-            )
-            _session_overrides.update(_provider_overrides)
             _config_layer = build_config_authoritative_layer(_defaults)
             _config_default = build_config_default_layer(_defaults)
-            _promote_capability_keys(_config_layer, _session_overrides)
             _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
                 _raw_recipe.steps if _raw_recipe is not None else None,
                 tool_ctx.backend.name if tool_ctx.backend else None,
-                tool_ctx.config.providers,
                 name,
-                skill_resolver=tool_ctx.skill_resolver,
                 config_backend=tool_ctx.config.agent_backend,
-                project_root=tool_ctx.project_dir,
             )
             _backend_capabilities_map = build_backend_capabilities_map(
                 _effective_backend_map, tool_ctx.backend
@@ -1534,15 +1450,6 @@ async def open_kitchen(
                     tool_ctx.gate.disable()
                     tool_ctx.gate_infrastructure_ready = False
                     return _recipe_validation_error_response(name, result)
-                if not result.get("dispatch_feasible", True):
-                    transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
-                    return await _dispatch_infeasible_response(
-                        result,
-                        tool_ctx.backend,
-                        tool_ctx.gate,
-                        ctx,
-                        capability_detail=_cap_detail,
-                    )
                 # Dispatch-feasibility preflight: verify the backend can enforce
                 # all fix-required hooks for the recipe's run_skill steps.
                 if tool_ctx.active_recipe_steps is not None:
@@ -1709,16 +1616,6 @@ async def open_kitchen(
                 tool_ctx.gate.disable()
                 tool_ctx.gate_infrastructure_ready = False
                 return _recipe_validation_error_response(name, result)
-
-            if not result.get("dispatch_feasible", True):
-                transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
-                return await _dispatch_infeasible_response(
-                    result,
-                    tool_ctx.backend,
-                    tool_ctx.gate,
-                    ctx,
-                    capability_detail=_cap_detail,
-                )
 
             # Dispatch-feasibility preflight: verify the backend can enforce
             # all fix-required hooks for the recipe's run_skill steps.

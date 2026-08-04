@@ -1,15 +1,34 @@
 ---
 name: classify-experiment-type
-categories: [research]
-uses_capabilities: [agent_model]
-description: Classify an experiment plan into a type, build the dimension weight matrix, and emit dialing interface tokens for the apply-review-dimensions step.
+categories:
+- research
+uses_capabilities: []
+description: Classify an experiment plan into a type, build the dimension weight matrix, and emit dialing interface tokens
+  for the apply-review-dimensions step.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: classify-experiment-type] Classifying experiment type...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: classify-experiment-type] Classifying experiment type...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Classify Experiment Type Skill
@@ -41,11 +60,11 @@ and before `apply-review-dimensions`. NOT invoked standalone — the recipe step
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 - Modify files outside `{{AUTOSKILLIT_TEMP}}/classify-experiment-type/`
 - Emit verdict (verdict is not an output of this skill)
-- Spawn subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
-- Use `Agent(model="sonnet")` for the triage subagent
+- Use `child delegation under the declared `sonnet` model-class policy` for the triage subagent
 - Emit `is_silent_type=true|false`
 - Emit `dimensions_manifest_path` as an absolute path
 - Write output to `{{AUTOSKILLIT_TEMP}}/classify-experiment-type/`

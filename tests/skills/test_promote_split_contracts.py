@@ -26,6 +26,32 @@ class TestPromoteToMainProjectLocal:
         """promote-to-main must exist as a project-local skill in .claude/skills/."""
         assert (_LOCAL_SKILLS / "promote-to-main" / "SKILL.md").exists()
 
+    def test_promote_to_main_is_portable_project_local_catalog_member(self) -> None:
+        """The real override remains authoritative and admissible after semantic parsing."""
+        from autoskillit.core import SkillExecutionRole, SkillSource
+        from autoskillit.workspace import EffectiveSkillCatalog, SkillCatalogEntry
+        from autoskillit.workspace.skills import DefaultSkillResolver
+
+        skill_path = _LOCAL_SKILLS / "promote-to-main" / "SKILL.md"
+        selected = DefaultSkillResolver().resolve_effective("promote-to-main", _REPO_ROOT)
+
+        assert selected is not None
+        assert selected.source is SkillSource.PROJECT_LOCAL
+        assert selected.path == skill_path.resolve()
+        assert selected.invalid_reason is None
+        assert selected.semantic_plan is not None
+        assert selected.frontmatter is not None
+        assert selected.frontmatter.data["semantic_version"] == 1
+
+        entry = SkillCatalogEntry.from_skill_info(selected)
+        catalog = EffectiveSkillCatalog(
+            skills=(entry,),
+            execution_role=SkillExecutionRole.SESSION,
+            namespace_sources={selected.name: selected.source},
+        )
+        assert catalog.skills == (entry,)
+        assert catalog.namespace_sources == {"promote-to-main": SkillSource.PROJECT_LOCAL}
+
     def test_promote_to_main_has_no_domain_analysis(self):
         """Streamlined promote-to-main must not perform domain risk analysis."""
         content = self._content()

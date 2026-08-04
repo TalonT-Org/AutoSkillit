@@ -1,15 +1,32 @@
 ---
 name: audit-defense-standards
-categories: [audit]
+categories:
+- audit
 uses_capabilities: []
-description: Audit the codebase against defense standards derived from historical bug patterns. Standards accumulate over time as new patterns are discovered via audit-bugs and design-guards. Use when user says "audit defenses", "audit defense standards", "check defenses", or "defense audit".
+description: Audit the codebase against defense standards derived from historical bug patterns. Standards accumulate over
+  time as new patterns are discovered via audit-bugs and design-guards. Use when user says "audit defenses", "audit defense
+  standards", "check defenses", or "defense audit".
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: audit-defense-standards] Auditing defense standards compliance...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: audit-defense-standards] Auditing defense standards compliance...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Defense Standards Audit Skill
@@ -31,8 +48,8 @@ Standards are added here when `/autoskillit:design-guards` recommends them and t
 
 - Modify any source code files
 - Update an existing report - always generate new
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use subagents for parallel exploration (one per standard or group)
@@ -41,7 +58,7 @@ Standards are added here when `/autoskillit:design-guards` recommends them and t
 - Subagents must NOT create their own files - they return findings in their response text only
 - Provide file paths and line numbers for violations
 - Categorize by severity
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ---
 
@@ -124,7 +141,7 @@ Defense standards come from the `/autoskillit:design-guards` pipeline:
 
 ## Audit Workflow (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 

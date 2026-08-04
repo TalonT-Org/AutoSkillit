@@ -1,14 +1,32 @@
 ---
 name: planner-extract-domain
-categories: [planner]
+categories:
+- planner
 description: Extract domain knowledge and naming conventions for planning context
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: planner-extract-domain] Extracting domain knowledge...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: planner-extract-domain] Extracting domain knowledge...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # planner-extract-domain
@@ -32,17 +50,17 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 
 - Modify any target project files
 - Abort the calling recipe on failure — log a warning and return gracefully
-- Run subagents in the background (`run_in_background: true` is prohibited)
+- Detach child delegations instead of joining them (joining every child is required)
 - If `$1` is empty or the file does not exist, STOP immediately and report failure
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Start independent child delegations sequentially
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
 **ALWAYS:**
 - Read the analysis file from argument $1 before spawning subagents
-- Use Explore subagents for all file reads
+- Use child delegations for all file reads
 - Spawn subagents in parallel
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -50,9 +68,9 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 
 Read the `analysis.json` file from argument $1. Use its `language`, `framework`, `architecture_style`, and `key_patterns` fields to focus subagent queries.
 
-### Step 2: Launch 3–5 parallel Explore subagents (SINGLE MESSAGE)
+### Step 2: Launch 3–5 parallel child delegations (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
@@ -62,7 +80,7 @@ If the task description is available, include it in each subagent's prompt: "Foc
 domain vocabulary, abstractions, and integration points relevant to this task: {task}.
 Prioritize areas the task will touch over exhaustive full-codebase coverage."
 
-Spawn all concurrently with `model: "sonnet"`. Always spawn agents 1–3; spawn agents 4–5 only when the project has >20 modules or architecture_style is layered/hexagonal:
+Spawn all concurrently under the declared `sonnet` model-class policy. Always spawn agents 1–3; spawn agents 4–5 only when the project has >20 modules or architecture_style is layered/hexagonal:
 
 1. **Domain Vocabulary** — Extract domain-specific terms, entity names, and verb patterns used in identifiers. Look for: class names, function names, docstrings, README files, ADR documents.
 

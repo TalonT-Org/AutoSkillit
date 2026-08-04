@@ -1,17 +1,27 @@
 ---
 name: arch-lens-module-dependency
-categories: [arch-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-write_paths: ["{{AUTOSKILLIT_TEMP}}/arch-lens-module-dependency/"]
-description: Create Module Dependency architecture diagram showing package coupling, layering, and fan-in/fan-out. Structural lens answering "How are modules coupled?"
+categories:
+- arch-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/arch-lens-module-dependency/'
+description: Create Module Dependency architecture diagram showing package coupling, layering, and fan-in/fan-out. Structural
+  lens answering "How are modules coupled?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Module Dependency Lens - Analyzing coupling patterns...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Module Dependency Lens - Analyzing coupling patterns...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: arch-lens-c4-container
+  - name: make-arch-diag
+  - name: mermaid
 ---
 
 # Module Dependency Architecture Lens
@@ -48,8 +58,8 @@ hooks:
 - Modify any source code files
 - Include runtime behavior details
 - Show external system integrations in detail
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Focus on IMPORT relationships between modules
@@ -65,7 +75,7 @@ hooks:
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-module-dependency/arch_diag_module_dependency_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 
 ## Analysis Workflow
@@ -87,7 +97,7 @@ If no `context_path` is provided, skip this step and explore the full CWD in Ste
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn Explore subagents to investigate:
+Spawn child delegations to investigate:
 
 **Layer Identification**
 - Find top-level directories and their purposes

@@ -51,12 +51,6 @@ def resolve_dispatch_timeout(
     return float(default_timeout_sec)
 
 
-def build_capability_overrides(backend: Any) -> dict[str, str]:
-    """Compute capability-derived ingredient overrides for a backend."""
-    backend_writable = backend is None or backend.capabilities.git_metadata_writable
-    return {"backend_supports_git_write": "true" if backend_writable else "false"}
-
-
 @dataclass(frozen=True, slots=True)
 class DispatchIdentityPreparation:
     """State identity and prior resume evidence resolved before lineage validation."""

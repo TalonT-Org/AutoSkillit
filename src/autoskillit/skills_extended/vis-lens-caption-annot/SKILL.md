@@ -1,16 +1,28 @@
 ---
 name: vis-lens-caption-annot
-categories: [vis-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: "Create Annotative Caption visualization planning spec showing declarative titles, axis labels with units, error definition in legend, baseline references, sample sizes, and venue-specific caption format. Annotative lens answering \"Are figure captions and axis labels fully self-contained?\""
+categories:
+- vis-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Create Annotative Caption visualization planning spec showing declarative titles, axis labels with units, error
+  definition in legend, baseline references, sample sizes, and venue-specific caption format. Annotative lens answering "Are
+  figure captions and axis labels fully self-contained?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Caption Annotation Lens - Auditing caption completeness...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Caption Annotation Lens - Auditing caption completeness...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: mermaid
+  - name: plan-visualization
+  - name: vis-lens-always-on
+  - name: vis-lens-color-access
+  - name: vis-lens-figure-table
 ---
 
 # Annotative Caption Visualization Lens

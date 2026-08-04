@@ -1,16 +1,26 @@
 ---
 name: exp-lens-iterative-learning
-categories: [exp-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: Create Iterative Learning experimental design diagram showing factor space exploration, adaptive allocation, and next-experiment recommendations. Decision-Theoretic lens answering "How does this maximize learning per cost?"
+categories:
+- exp-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Create Iterative Learning experimental design diagram showing factor space exploration, adaptive allocation,
+  and next-experiment recommendations. Decision-Theoretic lens answering "How does this maximize learning per cost?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Iterative Learning Lens - Analyzing learning efficiency and design space...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Iterative Learning Lens - Analyzing learning efficiency and design space...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: exp-lens-error-budget
+  - name: exp-lens-sensitivity-robustness
+  - name: make-experiment-diag
+  - name: mermaid
 ---
 
 # Iterative Learning Experimental Design Lens
@@ -46,8 +56,8 @@ hooks:
 - Modify any source code files
 - Recommend one-factor-at-a-time exploration when interactions are plausible
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-iterative-learning/`
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Evaluate exploration efficiency against the key uncertainty being reduced
@@ -56,7 +66,7 @@ hooks:
 - Surface interaction structure that one-factor-at-a-time designs would miss
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-iterative-learning/exp_diag_iterative_learning_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -83,7 +93,7 @@ exploration for these fields if the context file supplies them. For any field ab
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn Explore subagents to investigate:
+Spawn child delegations to investigate:
 
 **Factor Space**
 - Find all factors being varied across experiments

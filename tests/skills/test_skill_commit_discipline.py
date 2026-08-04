@@ -69,17 +69,15 @@ def test_skill_commit_prohibits_amend(skill_dir: Path) -> None:
 
 @pytest.mark.parametrize("skill_dir", _SKILL_DIRS, ids=lambda d: d.name)
 def test_git_commit_skills_declare_metadata_write(skill_dir: Path) -> None:
-    """Skills with 'git commit -m' instructions must declare git_metadata_write."""
+    """Skills with commit instructions must declare the semantic git-write operation."""
     content = (skill_dir / "SKILL.md").read_text()
     body = _strip_doc_fenced_blocks(_strip_frontmatter(content))
     if not _GIT_COMMIT_INSTRUCTION_RE.search(body):
         return
     parsed = read_skill_frontmatter(skill_dir / "SKILL.md")
     assert parsed.data is not None
-    caps = set(parsed.data.get("uses_capabilities", []))
-    assert "git_metadata_write" in caps, (
+    requirements = parsed.data.get("semantic_requirements", {})
+    assert requirements.get("git_metadata_writes"), (
         f"Skill {skill_dir.name!r} contains 'git commit -m' instructions but does not "
-        "declare 'git_metadata_write' in uses_capabilities. "
-        "Any skill that commits in a worktree must declare this capability "
-        "to prevent dispatch to backends where .git/ metadata is read-only."
+        "declare semantic_requirements.git_metadata_writes."
     )

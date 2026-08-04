@@ -1,14 +1,29 @@
 ---
 name: planner-refine-wps
-categories: [planner]
+categories:
+- planner
 description: Refine elaborated work packages with cross-phase visibility via per-phase L0 subagents (L1+L0 pattern)
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: planner-refine-wps] Refining WPs with cross-phase visibility...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: planner-refine-wps] Refining WPs with cross-phase visibility...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # planner-refine-wps
@@ -47,8 +62,8 @@ directory.
 - Spawn more than 6 L0s in a single parallel batch
 - Spawn one L0 per WP — L0s operate per PHASE
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts not passed as positional arguments
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
@@ -59,7 +74,7 @@ directory.
 - Log `CRITICAL` to stdout for any L0 subagent that fails entirely (proceed with N-1 suggestions)
 - When two WPs claim the same deliverable file, assign ownership to the WP with the numerically earlier ID using natural sort (e.g., `P1-A1-WP1` beats `P2-A1-WP1`)
 - Emit: `phase_wp_refined_path = <absolute path to $3/wp_refine_contexts/{phase_id}_result.json>`
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -130,11 +145,11 @@ For each phase (one context file = one phase), build a context packet containing
 
 ### Step 3: Spawn parallel L0 subagents (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-If phase count ≤ 6: spawn all in one parallel batch via Agent/Task.
+If phase count ≤ 6: spawn all in one parallel batch via backend-adapted child delegation.
 If phase count > 6: spawn sequential batches of 6. Between batches, emit
 anti-prose guard line: `--- next batch ---`.
 

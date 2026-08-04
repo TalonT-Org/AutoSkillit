@@ -1370,82 +1370,9 @@ steps:
 # ---------------------------------------------------------------------------
 
 
-def test_load_and_validate_produces_valid_content_after_step_pruning(tmp_path: Path) -> None:
-    """After structural repair (when=None catch-alls on resolve_review), pruning
-    skip_when_false steps must produce a recipe with non-empty content and no
-    structural errors from dangling routes.
-
-    This is the post-fix state: dangling routes that the pre-fix YAML produced
-    are now repaired by the computable redirect catch-alls.
-    """
-    from autoskillit.recipe._api import load_and_validate
-
-    result = load_and_validate(
-        "implementation",
-        project_dir=tmp_path,
-        ingredient_overrides={
-            "backend_supports_git_write": "false",
-            "open_pr": "false",
-        },
-        backend_name="codex",
-    )
-    schema_errors = result.get("errors", [])
-    assert not any("dangling" in e.lower() for e in schema_errors), (
-        f"Post-fix pruning should not produce dangling route errors, got: {schema_errors}"
-    )
-    assert result["content"], (
-        "Content must be non-empty after pruning — empty content indicates "
-        "unrepaired dangling routes after step pruning"
-    )
-    assert result["valid"] is True, (
-        f"Post-prune recipe must be valid=True; got valid={result.get('valid')}. "
-        f"Error findings: "
-        + "; ".join(
-            f"[{s.get('rule')}] {s.get('message', '')[:80]}"
-            for s in result.get("suggestions", [])
-            if s.get("severity") == Severity.ERROR
-        )
-    )
-
-
 # ---------------------------------------------------------------------------
 # Pre-prune validity guard: validate_from_path with codex backend
 # ---------------------------------------------------------------------------
-
-
-def test_validate_from_path_codex_backend_valid_after_pruning(tmp_path: Path) -> None:
-    """validate_from_path must prune steps when ingredient_overrides are provided.
-
-    Pre-fix: validate_from_path ran semantic rules on the raw unpruned recipe → ERROR
-    findings for codex-incompatible steps → valid=False.
-    Post-fix: validate_from_path prunes first, then runs semantic rules → valid=True.
-    """
-    from autoskillit.core import pkg_root
-    from autoskillit.recipe._api_listing import validate_from_path
-    from autoskillit.recipe.io import find_recipe_by_name
-
-    recipe_info = find_recipe_by_name("implementation", pkg_root() / "recipes")
-    assert recipe_info is not None, "Implementation recipe must exist for this test"
-
-    result = validate_from_path(
-        recipe_info.path,
-        temp_dir_relpath=".autoskillit/temp",
-        backend_name="codex",
-        ingredient_overrides={
-            "backend_supports_git_write": "false",
-            "open_pr": "false",
-        },
-    )
-    assert result.get("valid") is True, (
-        f"Codex backend validate_from_path must be valid=True after pruning; "
-        f"got valid={result.get('valid')}. "
-        f"Error findings: "
-        + "; ".join(
-            f"[{s.get('rule')}] {s.get('message', '')[:80]}"
-            for s in result.get("findings", [])
-            if s.get("severity") == Severity.ERROR
-        )
-    )
 
 
 # ---------------------------------------------------------------------------

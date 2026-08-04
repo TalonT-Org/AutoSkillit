@@ -67,16 +67,6 @@ def _resolve_pty_mode(backend: CodingAgentBackend) -> bool:
     return backend.capabilities.pty_required
 
 
-def assert_headless_cmd(spec: CmdSpec) -> None:
-    binary = Path(spec.cmd[0]).name if spec.cmd else ""
-    if binary != "claude":
-        return
-    if "-p" not in spec.cmd and "--print" not in spec.cmd:
-        raise ValueError(
-            f"CmdSpec for claude is missing -p flag — would enter TUI mode. cmd={spec.cmd!r}"
-        )
-
-
 def assert_interactive_ordering(
     spec: CmdSpec,
     *,

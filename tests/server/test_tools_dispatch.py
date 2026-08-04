@@ -153,9 +153,8 @@ class TestDispatchFoodTruckExecution:
         assert result["l3_parse_source"] == "stdout"
         dispatch_call = tool_ctx.executor.dispatch_calls[0]
         assert dispatch_call.capability_preparation is not None
-        assert dispatch_call.capability_preparation.resolved_command == (
-            dispatch_call.orchestrator_prompt
-        )
+        assert not hasattr(dispatch_call.capability_preparation, "resolved_command")
+        assert dispatch_call.orchestrator_prompt
         assert dispatch_call.capability_preparation.cwd == tool_ctx.project_dir.resolve()
 
     @pytest.mark.anyio

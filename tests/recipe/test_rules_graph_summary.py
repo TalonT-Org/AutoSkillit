@@ -72,35 +72,6 @@ class TestMissingWaypoint:
             f"Got: {[f.message for f in findings]}"
         )
 
-    def test_hidden_capability_gate_is_not_a_candidate(self) -> None:
-        """A step gated by a hidden/authority:config ingredient is not user-configurable."""
-        recipe = _make_recipe(
-            summary="start > done",
-            ingredients={
-                "backend_supports_git_write": RecipeIngredient(
-                    description="capability", default="true", hidden=True, authority="config"
-                )
-            },
-            steps={
-                "start": RecipeStep(
-                    tool="run_skill",
-                    with_args={"skill_command": "/autoskillit:start x"},
-                    on_success="implement",
-                    on_failure="fail",
-                ),
-                "implement": RecipeStep(
-                    tool="run_skill",
-                    with_args={"skill_command": "/autoskillit:implement x"},
-                    skip_when_false="inputs.backend_supports_git_write",
-                    on_success="done",
-                    on_failure="fail",
-                ),
-                "done": RecipeStep(action="stop", message="done"),
-                "fail": RecipeStep(action="stop", message="fail"),
-            },
-        )
-        assert _skill_findings(recipe) == []
-
 
 class TestOptionalMarkerAgreement:
     def test_hyphen_underscore_normalization_satisfies_gated_phase(self) -> None:

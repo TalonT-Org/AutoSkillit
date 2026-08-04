@@ -1,14 +1,29 @@
 ---
 name: planner-refine-phases
-categories: [planner]
+categories:
+- planner
 description: Refine elaborated phases with cross-phase visibility via parallel L0 subagents (L1+L0 pattern)
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: planner-refine-phases] Refining phases with cross-visibility...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: planner-refine-phases] Refining phases with cross-visibility...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # planner-refine-phases
@@ -41,9 +56,9 @@ conflicts, applies field-level edits to the plan, and writes `refined_plan.json`
 - Emit `refined_plan_path` before writing `refined_plan.json`
 - Skip emitting `refined_plan_path` even if all L0s fail (write unchanged plan, still emit)
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts not passed as positional arguments
-- Run subagents in the background (`run_in_background: true` is prohibited)
+- Detach child delegations instead of joining them (joining every child is required)
 - Spawn more than 6 L0s in a single parallel batch
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Start independent child delegations sequentially
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
@@ -53,7 +68,7 @@ conflicts, applies field-level edits to the plan, and writes `refined_plan.json`
 - Log `CRITICAL` to stdout for any L0 subagent that fails entirely (proceed with N-1)
 - Log each conflict resolution to stdout before applying it
 - Emit: `refined_plan_path = <absolute path to refined_plan.json>`
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -86,7 +101,7 @@ Input schema (PlanDocument with PhaseElaborated phases):
 
 ### Step 2: Spawn parallel L0 subagents (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 

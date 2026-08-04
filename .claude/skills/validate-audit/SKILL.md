@@ -1,7 +1,7 @@
 ---
 name: validate-audit
 categories: [audit]
-uses_capabilities: [agent_model, github_api_write]
+uses_capabilities: [github_api_write]
 description: Validate audit findings from audit-arch, audit-tests, or audit-cohesion against actual code, git history, and design intent using 9–10 parallel subagents. Removes contested findings, documents exceptions, adjusts severities. Use when user says "validate audit", "validate findings", "validate report", or "check audit results".
 hooks:
   PreToolUse:
@@ -10,6 +10,23 @@ hooks:
         - type: command
           command: "echo '[SKILL: validate-audit] Validating audit findings against code...'"
           once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+    - name: delegated-worker
+      purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+    - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+    - role: delegated-worker
+      model_class: sonnet
 ---
 
 # Validate Audit Findings Skill
@@ -42,14 +59,14 @@ signal downstream processing.
 **NEVER:**
 - Modify any source code files
 - Create files outside the per-run output directory (`{{AUTOSKILLIT_TEMP}}/validate-audit-{YYYY-MM-DD_HHMMSS}/`)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Start independent child delegations sequentially — ALL must be launched concurrently
 - Write output files before synthesizing ALL subagent results
 - Subagents must NOT create their own files — they return findings in response text only
 - Do NOT include VALID BUT EXCEPTION WARRANTED findings in the validated report body — they belong in the validation summary only
 
 **ALWAYS:**
-- Spawn all subagents via `Agent(model="sonnet")`
-- Issue all Task calls in a single message to maximize parallelism
+- Spawn all subagents via child delegation under the declared `sonnet` model-class policy
+- Launch all independent child delegations concurrently
 - Write `validated: true` as the **first line** of the validated report file
 - Respect interactive vs headless mode for the approval step (Step 6)
 
@@ -128,11 +145,13 @@ by the top-level package touched (e.g., `pipeline/`, `execution/`, `server/`, `c
 - More than 9 distinct areas: merge smallest clusters until ≤ 9 groups remain.
 - The 10th slot is reserved for the history research agent (runs against ALL findings).
 
-### Step 3 — Launch Parallel Subagents (SINGLE MESSAGE)
+### Step 3 — Launch Parallel Child Delegations
 
-**Issue ALL Task calls in a single message.** Do not output any prose between tool calls.
+**Start ALL independent child delegations concurrently.** Join every delegation before
+synthesizing their evidence.
 
-Spawn the following agents simultaneously using `model: "sonnet"`:
+Start the following delegated workers concurrently under the declared `delegated-worker`
+role and `sonnet` model-class policy:
 
 **Code Validation Agents (8–9 agents)**
 

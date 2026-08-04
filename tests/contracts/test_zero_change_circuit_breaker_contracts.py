@@ -18,18 +18,11 @@ def _load(name: str) -> dict:
 
 
 def test_implementation_recipe_has_change_check_after_implement() -> None:
-    """implement must route on_success to gate_backend_write, which routes to check_changes."""
+    """implement must route directly to the zero-change check."""
     data = _load("implementation")
     implement_step = data["steps"]["implement"]
-    assert implement_step.get("on_success") == "gate_backend_write", (
+    assert implement_step.get("on_success") == "check_changes", (
         f"got {implement_step.get('on_success')!r}"
-    )
-
-    gate_step = data["steps"]["gate_backend_write"]
-    gate_on_result = gate_step.get("on_result", [])
-    gate_routes = [r.get("route") for r in gate_on_result if not r.get("when")]
-    assert "check_changes" in gate_routes, (
-        f"gate_backend_write catch-all must route to check_changes, got: {gate_on_result}"
     )
 
 
@@ -67,8 +60,8 @@ def test_remediation_recipe_has_same_circuit_breaker() -> None:
     data = _load("remediation")
 
     implement_step = data["steps"]["implement"]
-    assert implement_step.get("on_success") == "gate_backend_write", (
-        f"remediation implement.on_success must be 'gate_backend_write', "
+    assert implement_step.get("on_success") == "check_changes", (
+        f"remediation implement.on_success must be 'check_changes', "
         f"got {implement_step.get('on_success')!r}"
     )
 

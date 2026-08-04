@@ -297,6 +297,7 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
         DefaultCommittedDispositionResolver,
     )
     from tests.fakes import (
+        FakeLaunchResolver,
         FakeManagedHeadlessSessionLineageStore,
         FakePluginArtifactAuthority,
         FakeSkillSessionContractStore,
@@ -321,6 +322,7 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
         gate=DefaultGateState(enabled=False),
         plugin_authority=FakePluginArtifactAuthority(tmp_path),
         runner=None,
+        launch_resolver=FakeLaunchResolver(),
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=different_dir,
         recipes=real_repo,
@@ -478,7 +480,6 @@ def test_recipe_resource_returns_composed_content():
         ingredient_overrides={
             "kitchen_id": ANY,
             "diagnostics_log_dir": ANY,
-            "backend_supports_git_write": "true",
         },
         defer_unresolved=True,
         resolved_defaults={},

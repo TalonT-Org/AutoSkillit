@@ -1,19 +1,19 @@
 name: research-implement
-recipe_version: "1.0.0"
+recipe_version: 1.0.0
 kind: food-truck
-categories: [research-family]
-requires_packs: [research]
-description: >
-  Execute experiment phases and push results
-  worktree and experiment plan from a campaign dispatch, then runs the full 20-step
-  implementation pipeline: stage data, decompose into phases, iteratively plan and
-  implement each phase, troubleshoot failures, run the experiment, generate a report,
-  test, and push. Terminates with sentinel emission of output paths.
+categories:
+- research-family
+requires_packs:
+- research
+description: 'Execute experiment phases and push results worktree and experiment plan from a campaign dispatch, then runs
+  the full 20-step implementation pipeline: stage data, decompose into phases, iteratively plan and implement each phase,
+  troubleshoot failures, run the experiment, generate a report, test, and push. Terminates with sentinel emission of output
+  paths.
+
+  '
 dispatch_only: true
 summary: stage > decompose > [plan > implement]* > experiment > report > test > push > complete
-
 ingredients:
-  # --- user-input ---
   task:
     description: Research question or topic to investigate
     required: true
@@ -23,24 +23,25 @@ ingredients:
     authority: config
   base_branch:
     description: Branch to target for the research PR
-    default: "main"
+    default: main
     authority: config
   output_mode:
-    description: >
-      Where research outputs land. 'local' (default) produces a self-contained
-      bundle. 'pr' opens a GitHub PR alongside the bundle.
-    default: "local"
+    description: 'Where research outputs land. ''local'' (default) produces a self-contained bundle. ''pr'' opens a GitHub
+      PR alongside the bundle.
+
+      '
+    default: local
   issue_url:
-    description: >
-      Optional URL to an existing GitHub issue describing the research goal.
+    description: 'Optional URL to an existing GitHub issue describing the research goal.
+
+      '
     required: false
-  # --- campaign-passed ---
   worktree_path:
     description: Path to the pre-created worktree (passed by campaign dispatch)
     required: true
     type: absolute_path
   research_dir_rel:
-    description: "Repo-relative path to the research directory (e.g. research/2026-05-10-slug)"
+    description: Repo-relative path to the research directory (e.g. research/2026-05-10-slug)
     required: true
     type: worktree_relative_path
   research_dir:
@@ -55,59 +56,51 @@ ingredients:
     required: true
     hidden: true
   test_check_enabled:
-    description: >
-      When 'true' (the default), run test_check after report generation.
-      Set to 'false' for de novo worktrees without test infrastructure.
-    default: "true"
+    description: 'When ''true'' (the default), run test_check after report generation. Set to ''false'' for de novo worktrees
+      without test infrastructure.
+
+      '
+    default: 'true'
   audit_impl:
-    description: >
-      When 'true' (the default), run audit-impl after phase iteration to verify
-      all decomposed phases have corresponding implementation commits.
-      Catches silent group abandonment when context_limit fires mid-iteration.
-    default: "true"
+    description: 'When ''true'' (the default), run audit-impl after phase iteration to verify all decomposed phases have corresponding
+      implementation commits. Catches silent group abandonment when context_limit fires mid-iteration.
+
+      '
+    default: 'true'
   closure_authority_path:
     description: Absolute path to frozen requirements authority JSON for closure-mode audit
-    default: ""
+    default: ''
   closure_authority_hash:
     description: SHA-256 lowercase hex hash of the authority file content
-    default: ""
-  backend_supports_git_write:
-    description: Whether the session backend supports .git/ metadata writes (git commit, rebase, worktree add). Resolved from backend capabilities at load time.
-    default: 'true'
-    hidden: true
-    authority: config
-
+    default: ''
 kitchen_rules:
-- >
-  NEVER use native Claude Code tools from the orchestrator: Read, Grep, Glob,
-  Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit are ALL forbidden.
-  All work is delegated through run_skill, run_cmd, run_python.
-- >
-  PHASE ITERATION: decompose_phases always runs. The agent maintains
-  a phase queue from group_files. For each phase, run plan_phase then
-  implement_phase. When all phases complete (or on context exhaustion),
-  route to audit_impl for implementation completeness verification
-  before advancing to run_experiment.
-- >
-  SENTINEL EMISSION: When reaching implement_complete, emit the L3 result
-  sentinel JSON block exactly as instructed in the step message — include
-  worktree_path, research_dir, report_path, and experiment_results (when available).
+- 'NEVER use native Claude Code tools from the orchestrator: Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch,
+  NotebookEdit are ALL forbidden. All work is delegated through run_skill, run_cmd, run_python.
 
+  '
+- 'PHASE ITERATION: decompose_phases always runs. The agent maintains a phase queue from group_files. For each phase, run
+  plan_phase then implement_phase. When all phases complete (or on context exhaustion), route to audit_impl for implementation
+  completeness verification before advancing to run_experiment.
+
+  '
+- 'SENTINEL EMISSION: When reaching implement_complete, emit the L3 result sentinel JSON block exactly as instructed in the
+  step message — include worktree_path, research_dir, report_path, and experiment_results (when available).
+
+  '
 steps:
-  # --- Pre-Flight ---
   stage_data:
     tool: run_skill
-    model: ""
+    model: ''
     with:
-      skill_command: "/autoskillit:stage-data"
+      skill_command: /autoskillit:stage-data
       skill_inputs:
-        experiment_plan: "${{ inputs.experiment_plan }}"
-      cwd: "${{ inputs.worktree_path }}"
+        experiment_plan: ${{ inputs.experiment_plan }}
+      cwd: ${{ inputs.worktree_path }}
       step_name: stage_data
-      output_dir: "{{AUTOSKILLIT_TEMP}}/stage-data"
+      output_dir: '{{AUTOSKILLIT_TEMP}}/stage-data'
     capture:
-      verdict: "${{ result.verdict }}"
-      resource_report: "${{ result.resource_report }}"
+      verdict: ${{ result.verdict }}
+      resource_report: ${{ result.resource_report }}
     on_result:
       field: verdict
       routes:
@@ -115,31 +108,29 @@ steps:
         WARN: download_data
         FAIL: escalate_stop
     on_failure: escalate_stop
-    note: >
-      Pre-flight resource gate. Reads the experiment plan's data_manifest, checks
-      available disk space and network connectivity for external/gitignored data
-      entries, and creates the required directory structure in the worktree. PASS
-      and WARN proceed to download_data. FAIL escalates immediately with a
-      detailed resource feasibility report rather than wasting compute on doomed
-      downloads.
+    note: 'Pre-flight resource gate. Reads the experiment plan''s data_manifest, checks available disk space and network connectivity
+      for external/gitignored data entries, and creates the required directory structure in the worktree. PASS and WARN proceed
+      to download_data. FAIL escalates immediately with a detailed resource feasibility report rather than wasting compute
+      on doomed downloads.
 
+      '
   download_data:
     tool: run_skill
-    model: ""
+    model: ''
     stale_threshold: 14400
     idle_output_timeout: 0
     retries: 1
     on_exhausted: escalate_stop
     with:
-      skill_command: "/autoskillit:download-data"
+      skill_command: /autoskillit:download-data
       skill_inputs:
-        experiment_plan: "${{ inputs.experiment_plan }}"
-      cwd: "${{ inputs.worktree_path }}"
+        experiment_plan: ${{ inputs.experiment_plan }}
+      cwd: ${{ inputs.worktree_path }}
       step_name: download_data
-      output_dir: "{{AUTOSKILLIT_TEMP}}/download-data"
+      output_dir: '{{AUTOSKILLIT_TEMP}}/download-data'
     capture:
-      verdict: "${{ result.verdict }}"
-      download_report: "${{ result.download_report }}"
+      verdict: ${{ result.verdict }}
+      download_report: ${{ result.download_report }}
     on_result:
       field: verdict
       routes:
@@ -147,618 +138,566 @@ steps:
         WARN: decompose_phases
         FAIL: escalate_stop
     on_failure: escalate_stop
-    note: >
-      Downloads external and gitignored datasets declared in the experiment
-      plan's data_manifest. Executes acquisition commands sequentially into
-      the directories pre-created by stage_data. Uses a 4-hour stale threshold
-      to accommodate multi-GB downloads. PASS and WARN proceed to decompose_phases.
-      FAIL escalates immediately.
+    note: 'Downloads external and gitignored datasets declared in the experiment plan''s data_manifest. Executes acquisition
+      commands sequentially into the directories pre-created by stage_data. Uses a 4-hour stale threshold to accommodate multi-GB
+      downloads. PASS and WARN proceed to decompose_phases. FAIL escalates immediately.
 
-  # --- Phase Iteration ---
+      '
   decompose_phases:
     tool: run_skill
-    model: ""
+    model: ''
     with:
-      skill_command: "/autoskillit:make-groups"
+      skill_command: /autoskillit:make-groups
       skill_inputs:
-        source_doc: "${{ inputs.experiment_plan }}"
-      cwd: "${{ inputs.worktree_path }}"
+        source_doc: ${{ inputs.experiment_plan }}
+      cwd: ${{ inputs.worktree_path }}
       step_name: decompose
-      output_dir: "{{AUTOSKILLIT_TEMP}}/make-groups"
+      output_dir: '{{AUTOSKILLIT_TEMP}}/make-groups'
     capture:
-      group_files: "${{ result.group_files }}"
+      group_files: ${{ result.group_files }}
     on_success: capture_impl_base
     on_failure: escalate_stop
-    note: >
-      Decomposes the experiment plan into sequenced phases. Each phase
-      becomes an independently plannable implementation unit. Typical
-      decomposition: infrastructure/logging -> data generators ->
-      plotting/analysis scripts -> experiment implementation.
+    note: 'Decomposes the experiment plan into sequenced phases. Each phase becomes an independently plannable implementation
+      unit. Typical decomposition: infrastructure/logging -> data generators -> plotting/analysis scripts -> experiment implementation.
 
+      '
   capture_impl_base:
     tool: run_cmd
     with:
-      cmd: "git rev-parse HEAD"
-      cwd: "${{ inputs.worktree_path }}"
+      cmd: git rev-parse HEAD
+      cwd: ${{ inputs.worktree_path }}
       step_name: capture_impl_base
     capture:
-      impl_base_sha: "${{ result.stdout | trim }}"
+      impl_base_sha: ${{ result.stdout | trim }}
     on_success: plan_phase
     on_failure: escalate_stop
-    note: >
-      Captures the worktree HEAD SHA before phase implementation begins.
-      Used by audit_impl to diff pre-implementation state against post-implementation
-      state, detecting phases that produced no commits.
+    note: 'Captures the worktree HEAD SHA before phase implementation begins. Used by audit_impl to diff pre-implementation
+      state against post-implementation state, detecting phases that produced no commits.
 
+      '
   plan_phase:
     tool: run_skill
-    model: ""
+    model: ''
     with:
-      skill_command: "/autoskillit:make-plan"
+      skill_command: /autoskillit:make-plan
       skill_inputs:
-        task: "FIRST REMAINING phase file path from ${{ context.group_files }}"
-        audit_cycle_path: "${{ context.audit_cycle_path }}"
-      cwd: "${{ inputs.worktree_path }}"
+        task: FIRST REMAINING phase file path from ${{ context.group_files }}
+        audit_cycle_path: ${{ context.audit_cycle_path }}
+      cwd: ${{ inputs.worktree_path }}
       step_name: plan_phase
-      output_dir: '.'
+      output_dir: .
     capture:
-      phase_plan_path: "${{ result.plan_path }}"
-      verdict: "${{ result.verdict }}"
-      plan_disposition_path: "${{ result.plan_disposition_path }}"
+      phase_plan_path: ${{ result.plan_path }}
+      verdict: ${{ result.verdict }}
+      plan_disposition_path: ${{ result.plan_disposition_path }}
     capture_list:
-      plan_parts: "${{ result.plan_parts }}"
+      plan_parts: ${{ result.plan_parts }}
     retries: 0
     on_result:
-    - when: "${{ result.verdict }} == plan"
+    - when: ${{ result.verdict }} == plan
       route: implement_phase
     on_failure: escalate_stop
     on_context_limit: salvage_plan_phase
-    note: >
-      Plans the current setup phase. Set skill_inputs.task to the FIRST REMAINING phase
-      file path selected from context.group_files — do NOT pass the entire list. Pass the
-      path directly to the skill (do not read it).
-      Glob plan_dir for *_part_*.md or single plan file.
-      ITERATION: After each implement_phase cycle, advance to the next entry in
-      context.group_files for the following plan_phase iteration.
-      REMEDIATION MODE: consume the exact audit_cycle_path from the NO GO producer
-      and emit its plan_disposition_path. verdict=plan is the only success.
+    note: 'Plans the current setup phase. Set skill_inputs.task to the FIRST REMAINING phase file path selected from context.group_files
+      — do NOT pass the entire list. Pass the path directly to the skill (do not read it). Glob plan_dir for *_part_*.md or
+      single plan file. ITERATION: After each implement_phase cycle, advance to the next entry in context.group_files for
+      the following plan_phase iteration. REMEDIATION MODE: consume the exact audit_cycle_path from the NO GO producer and
+      emit its plan_disposition_path. verdict=plan is the only success.
+
+      '
     optional_context_refs:
     - audit_cycle_path
-
   salvage_plan_phase:
     tool: run_python
     with:
-      callable: "autoskillit.recipe._cmd_rpc.verify_plan_artifacts"
-      plan_parts: "${{ context.plan_parts }}"
-      audit_cycle_path: "${{ context.audit_cycle_path }}"
+      callable: autoskillit.recipe._cmd_rpc.verify_plan_artifacts
+      plan_parts: ${{ context.plan_parts }}
+      audit_cycle_path: ${{ context.audit_cycle_path }}
     capture:
-      phase_plan_path: "${{ result.plan_path }}"
-      plan_disposition_path: "${{ result.plan_disposition_path }}"
+      phase_plan_path: ${{ result.plan_path }}
+      plan_disposition_path: ${{ result.plan_disposition_path }}
     capture_list:
-      plan_parts: "${{ result.plan_parts }}"
+      plan_parts: ${{ result.plan_parts }}
     optional_context_refs:
     - audit_cycle_path
     retries: 0
     on_result:
-    - when: "${{ result.verdict }} == salvaged"
+    - when: ${{ result.verdict }} == salvaged
       route: implement_phase
     - route: escalate_stop
     on_failure: escalate_stop
-    note: >
-      Deterministic salvage for plan_phase context-limit stumbles: verifies
-      captured plan_parts artifacts exist on disk. salvaged routes onward as
-      if plan_phase succeeded; unsalvageable falls through to plan_phase's
-      original on_failure destination. Substitute the captured
-      ${{ context.plan_parts }} value into the plan_parts argument verbatim,
-      unmodified — do not reformat, quote, or re-derive it; the callable's
-      input grammar absorbs rendering variance.
+    note: 'Deterministic salvage for plan_phase context-limit stumbles: verifies captured plan_parts artifacts exist on disk.
+      salvaged routes onward as if plan_phase succeeded; unsalvageable falls through to plan_phase''s original on_failure
+      destination. Substitute the captured ${{ context.plan_parts }} value into the plan_parts argument verbatim, unmodified
+      — do not reformat, quote, or re-derive it; the callable''s input grammar absorbs rendering variance.
 
+      '
   implement_phase:
     tool: run_skill
-    model: ""
+    model: ''
     stale_threshold: 2400
     idle_output_timeout: 0
     with:
-      skill_command: "/autoskillit:implement-experiment"
+      skill_command: /autoskillit:implement-experiment
       skill_inputs:
-        plan_path: "${{ context.phase_plan_path }}"
-      cwd: "${{ inputs.worktree_path }}"
+        plan_path: ${{ context.phase_plan_path }}
+      cwd: ${{ inputs.worktree_path }}
       step_name: implement_phase
-      output_dir: '.'
+      output_dir: .
     capture:
-      worktree_path: "${{ result.worktree_path }}"
+      worktree_path: ${{ result.worktree_path }}
     retries: 0
     on_success: next_phase_or_experiment
     on_failure: check_implement_fix_loop
     on_exhausted: audit_impl
     on_context_limit: audit_impl
-    skip_when_false: "inputs.backend_supports_git_write"
-    note: >
-      Implements the current phase plan in an isolated worktree via implement-experiment.
-      Context exhaustion routes to audit_impl for implementation completeness verification
-      before proceeding to run_experiment. Failures route to troubleshoot for
-      classification before re-planning or escalation.
+    note: 'Implements the current phase plan in an isolated worktree via implement-experiment. Context exhaustion routes to
+      audit_impl for implementation completeness verification before proceeding to run_experiment. Failures route to troubleshoot
+      for classification before re-planning or escalation.
 
+      '
   troubleshoot_implement_failure:
     tool: run_skill
-    model: ""
+    model: ''
     stale_threshold: 2400
     idle_output_timeout: 0
     with:
-      skill_command: "/autoskillit:troubleshoot-experiment"
+      skill_command: /autoskillit:troubleshoot-experiment
       skill_inputs:
-        worktree_path: "${{ context.worktree_path }}"
-        step_name: "implement_phase"
-      cwd: "${{ inputs.source_dir }}"
+        worktree_path: ${{ context.worktree_path }}
+        step_name: implement_phase
+      cwd: ${{ inputs.source_dir }}
       step_name: troubleshoot_implement_failure
-      output_dir: "{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment/implement_${{ context.implement_fix_count }}"
-    optional_context_refs: [implement_fix_count]
+      output_dir: '{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment/implement_${{ context.implement_fix_count }}'
+    optional_context_refs:
+    - implement_fix_count
     capture:
-      is_fixable: "${{ result.is_fixable }}"
-      retry_delay: "${{ result.retry_delay }}"
+      is_fixable: ${{ result.is_fixable }}
+      retry_delay: ${{ result.retry_delay }}
     on_success: route_implement_failure
     on_failure: escalate_stop
-
   route_implement_failure:
     action: route
     on_result:
-    - when: "${{ context.is_fixable }} == true"
+    - when: ${{ context.is_fixable }} == true
       route: route_implement_retry_delay
     - route: escalate_stop
-
   check_implement_fix_loop:
     tool: run_python
     with:
-      callable: "autoskillit.smoke_utils.check_loop_iteration"
-      current_iteration: "${{ context.implement_fix_count }}"
-      max_iterations: "3"
+      callable: autoskillit.smoke_utils.check_loop_iteration
+      current_iteration: ${{ context.implement_fix_count }}
+      max_iterations: '3'
     capture:
-      implement_fix_count: "${{ result.next_iteration }}"
+      implement_fix_count: ${{ result.next_iteration }}
     on_result:
-    - when: "${{ result.max_exceeded }} == true"
+    - when: ${{ result.max_exceeded }} == true
       route: audit_impl
     - route: troubleshoot_implement_failure
     on_failure: audit_impl
     optional_context_refs:
     - implement_fix_count
     - retry_delay
-    note: >
-      Iteration guard for implement_phase → troubleshoot → plan_phase cycle.
-      Caps fix-and-retry loops at 3 iterations. On exhaustion, routes to
-      audit_impl to verify implementation completeness before run_experiment.
+    note: 'Iteration guard for implement_phase → troubleshoot → plan_phase cycle. Caps fix-and-retry loops at 3 iterations.
+      On exhaustion, routes to audit_impl to verify implementation completeness before run_experiment.
 
+      '
   route_implement_retry_delay:
     action: route
     on_result:
-    - when: "${{ context.retry_delay }}"
+    - when: ${{ context.retry_delay }}
       route: implement_retry_delay
     - route: plan_phase
-
   implement_retry_delay:
     tool: run_cmd
     with:
-      cmd: "sleep ${{ context.retry_delay }}"
-      cwd: "${{ inputs.source_dir }}"
+      cmd: sleep ${{ context.retry_delay }}
+      cwd: ${{ inputs.source_dir }}
       step_name: implement_retry_delay
     on_success: plan_phase
     on_failure: plan_phase
     optional_context_refs:
     - retry_delay
-    note: >
-      Backoff delay for transient API errors. Sleeps for the number of seconds
-      specified by troubleshoot-experiment (typically 120s) before re-entering
-      the plan_phase retry cycle.
+    note: 'Backoff delay for transient API errors. Sleeps for the number of seconds specified by troubleshoot-experiment (typically
+      120s) before re-entering the plan_phase retry cycle.
 
+      '
   next_phase_or_experiment:
     action: route
     on_result:
-    - when: "remaining phases exist in context.group_files"
+    - when: remaining phases exist in context.group_files
       route: check_phase_loop
     - route: audit_impl
-    note: >
-      Routing step. The agent evaluates remaining phases:
-      1. If more phases remain in group_files -> route to check_phase_loop.
+    note: 'Routing step. The agent evaluates remaining phases: 1. If more phases remain in group_files -> route to check_phase_loop.
       2. If all phases complete -> route to audit_impl for completeness verification.
 
+      '
   check_phase_loop:
     tool: run_python
     with:
-      callable: "autoskillit.smoke_utils.check_loop_iteration"
-      current_iteration: "${{ context.phase_loop_count }}"
-      max_iterations: "15"
+      callable: autoskillit.smoke_utils.check_loop_iteration
+      current_iteration: ${{ context.phase_loop_count }}
+      max_iterations: '15'
     capture:
-      phase_loop_count: "${{ result.next_iteration }}"
+      phase_loop_count: ${{ result.next_iteration }}
     on_result:
-    - when: "${{ result.max_exceeded }} == true"
+    - when: ${{ result.max_exceeded }} == true
       route: audit_impl
     - route: cleanup_phase_worktree
     on_failure: audit_impl
     optional_context_refs:
     - phase_loop_count
-    note: >
-      Guards the plan_phase → implement_phase → next_phase_or_experiment cycle.
-      The loop is data-bounded by the finite group_files list; this provides a
-      structural bound. 15 iterations allows complex multi-phase setups.
+    note: 'Guards the plan_phase → implement_phase → next_phase_or_experiment cycle. The loop is data-bounded by the finite
+      group_files list; this provides a structural bound. 15 iterations allows complex multi-phase setups.
 
+      '
   cleanup_phase_worktree:
     tool: run_cmd
     with:
-      cmd: "git worktree remove --force \"${{ context.worktree_path }}\""
+      cmd: git worktree remove --force "${{ context.worktree_path }}"
       step_name: cleanup_phase_worktree
     on_success: plan_phase
     on_failure: plan_phase
-    note: >
-      Removes the previous phase worktree before implement_phase creates a new
-      one. Each phase gets its own timestamped worktree via implement-experiment;
-      this prevents orphaning the old worktree when the loop re-enters.
+    note: 'Removes the previous phase worktree before implement_phase creates a new one. Each phase gets its own timestamped
+      worktree via implement-experiment; this prevents orphaning the old worktree when the loop re-enters.
 
+      '
   audit_impl:
     tool: run_skill
-    model: ""
+    model: ''
     with:
-      skill_command: "/autoskillit:audit-impl"
+      skill_command: /autoskillit:audit-impl
       skill_inputs:
-        all_plan_paths: "${{ context.group_files }}"
-        branch_name: "${{ context.impl_base_sha }}"
-        base_branch: "${{ inputs.base_branch }}"
-        prior_audit_cycle_path: "${{ context.audit_cycle_path }}"
-      cwd: "${{ context.worktree_path }}"
+        all_plan_paths: ${{ context.group_files }}
+        branch_name: ${{ context.impl_base_sha }}
+        base_branch: ${{ inputs.base_branch }}
+        prior_audit_cycle_path: ${{ context.audit_cycle_path }}
+      cwd: ${{ context.worktree_path }}
       step_name: audit_impl
-      output_dir: "{{AUTOSKILLIT_TEMP}}/audit-impl"
-      retry_after_audit_attempt_id: "${{ context.audit_attempt_id }}"
-      closure_authority_path: "${{ inputs.closure_authority_path }}"
-      closure_authority_hash: "${{ inputs.closure_authority_hash }}"
-      closure_plan_paths: "${{ context.group_files }}"
-      closure_base_sha: "${{ context.impl_base_sha }}"
-      closure_diff_sha: ""
-      closure_target_sha: ""
+      output_dir: '{{AUTOSKILLIT_TEMP}}/audit-impl'
+      retry_after_audit_attempt_id: ${{ context.audit_attempt_id }}
+      closure_authority_path: ${{ inputs.closure_authority_path }}
+      closure_authority_hash: ${{ inputs.closure_authority_hash }}
+      closure_plan_paths: ${{ context.group_files }}
+      closure_base_sha: ${{ context.impl_base_sha }}
+      closure_diff_sha: ''
+      closure_target_sha: ''
     capture:
-      remediation_path: "${{ result.remediation_path }}"
-      audit_cycle_path: "${{ result.audit_cycle_path }}"
-      audit_status: "${{ result.audit_status }}"
-      audit_verdict: "${{ result.audit_verdict }}"
-      audit_attempt_id: "${{ result.audit_attempt_id }}"
+      remediation_path: ${{ result.remediation_path }}
+      audit_cycle_path: ${{ result.audit_cycle_path }}
+      audit_status: ${{ result.audit_status }}
+      audit_verdict: ${{ result.audit_verdict }}
+      audit_attempt_id: ${{ result.audit_attempt_id }}
     on_result:
-    - when: "${{ result.audit_status }} == SEMANTIC_REJECTED"
+    - when: ${{ result.audit_status }} == SEMANTIC_REJECTED
       route: remediate
-    - when: "${{ result.audit_status }} == CONFLICT"
+    - when: ${{ result.audit_status }} == CONFLICT
       route: escalate_stop
-    - when: "${{ result.audit_status }} == STORAGE_FAILURE"
+    - when: ${{ result.audit_status }} == STORAGE_FAILURE
       route: escalate_stop
-    - when: "${{ result.audit_status }} == QUARANTINED"
+    - when: ${{ result.audit_status }} == QUARANTINED
       route: escalate_stop
-    - when: "${{ result.audit_status }} == NON_PUBLISHED_STANDALONE"
+    - when: ${{ result.audit_status }} == NON_PUBLISHED_STANDALONE
       route: escalate_stop
-    - when: "${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }} == GO"
+    - when: ${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }} == GO
       route: run_experiment
-    - when: "${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == GO"
+    - when: ${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == GO
       route: run_experiment
-    - when: "${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }} == NO GO"
+    - when: ${{ result.audit_status }} == PUBLISHED and ${{ result.audit_verdict }} == NO GO
       route: remediate
-    - when: "${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == NO GO"
+    - when: ${{ result.audit_status }} == EXACT_REPLAY and ${{ result.audit_verdict }} == NO GO
       route: remediate
-    - when: "result.error"
+    - when: result.error
       route: escalate_stop
     - route: escalate_stop
     on_failure: escalate_stop
     on_context_limit: escalate_stop
-    skip_when_false: "inputs.audit_impl"
+    skip_when_false: inputs.audit_impl
     optional_context_refs:
     - audit_cycle_path
     - audit_attempt_id
-    note: >
-      Diffs impl_base_sha..HEAD (two-dot SHA-mode) and verifies all decomposed phases
-      from group_files have corresponding implementation commits. impl_base_sha is
-      captured by capture_impl_base before phase implementation begins. Catches silent
-      group abandonment when on_context_limit fires mid-iteration — reports exactly which
-      phases were completed vs. skipped. On GO, proceeds to run_experiment. On error,
-      escalates immediately. On NO GO, routes to remediate which re-enters plan_phase
-      via check_audit_retry_loop (max 2 cycles).
-      If false (inputs.audit_impl=false), skip directly to run_experiment.
+    note: 'Diffs impl_base_sha..HEAD (two-dot SHA-mode) and verifies all decomposed phases from group_files have corresponding
+      implementation commits. impl_base_sha is captured by capture_impl_base before phase implementation begins. Catches silent
+      group abandonment when on_context_limit fires mid-iteration — reports exactly which phases were completed vs. skipped.
+      On GO, proceeds to run_experiment. On error, escalates immediately. On NO GO, routes to remediate which re-enters plan_phase
+      via check_audit_retry_loop (max 2 cycles). If false (inputs.audit_impl=false), skip directly to run_experiment.
 
+      '
   remediate:
     action: route
     with:
-      audit_cycle_path: "${{ context.audit_cycle_path }}"
+      audit_cycle_path: ${{ context.audit_cycle_path }}
     on_success: check_audit_retry_loop
-    note: >
-      Carries the exact current NO GO authority into the bounded retry. The
-      successor audit receives it as prior_audit_cycle_path; GO replaces it.
+    note: 'Carries the exact current NO GO authority into the bounded retry. The successor audit receives it as prior_audit_cycle_path;
+      GO replaces it.
 
+      '
   check_audit_retry_loop:
     tool: run_python
     with:
-      callable: "autoskillit.smoke_utils.check_loop_iteration"
-      current_iteration: "${{ context.audit_retry_count }}"
-      max_iterations: "2"
+      callable: autoskillit.smoke_utils.check_loop_iteration
+      current_iteration: ${{ context.audit_retry_count }}
+      max_iterations: '2'
     capture:
-      audit_retry_count: "${{ result.next_iteration }}"
+      audit_retry_count: ${{ result.next_iteration }}
     on_result:
-    - when: "${{ result.max_exceeded }} == true"
+    - when: ${{ result.max_exceeded }} == true
       route: escalate_stop
     - route: pre_remediation_cleanup
     on_failure: escalate_stop
     optional_context_refs:
     - audit_retry_count
-    note: >
-      Guards the audit_impl → remediate → plan_phase remediation cycle.
-      Allows up to 2 remediation attempts before escalating. This prevents
-      unbounded re-planning when audit_impl repeatedly returns NO GO.
+    note: 'Guards the audit_impl → remediate → plan_phase remediation cycle. Allows up to 2 remediation attempts before escalating.
+      This prevents unbounded re-planning when audit_impl repeatedly returns NO GO.
 
+      '
   pre_remediation_cleanup:
     tool: run_cmd
     with:
-      cmd: "git worktree remove --force \"${{ context.worktree_path }}\""
+      cmd: git worktree remove --force "${{ context.worktree_path }}"
       step_name: pre_remediation_cleanup
     on_success: plan_phase
     on_failure: plan_phase
-    note: >
-      Removes the old worktree before the remediation cycle creates a new one
-      via implement_phase. on_failure routes to plan_phase regardless — if the
-      worktree is already gone (e.g., context_limit cleanup), the new worktree
-      creation will still succeed.
+    note: 'Removes the old worktree before the remediation cycle creates a new one via implement_phase. on_failure routes
+      to plan_phase regardless — if the worktree is already gone (e.g., context_limit cleanup), the new worktree creation
+      will still succeed.
 
-  # --- Experiment + Report ---
+      '
   run_experiment:
     tool: run_skill
-    model: ""
+    model: ''
     stale_threshold: 2400
     idle_output_timeout: 0
     with:
-      skill_command: "/autoskillit:run-experiment"
+      skill_command: /autoskillit:run-experiment
       skill_inputs:
-        worktree_path: "${{ context.worktree_path }}"
-      cwd: "${{ context.worktree_path }}"
+        worktree_path: ${{ context.worktree_path }}
+      cwd: ${{ context.worktree_path }}
       step_name: run_experiment
-      output_dir: '.'
+      output_dir: .
     capture:
-      experiment_results: "${{ result.results_path }}"
-      experiment_verdict: "${{ result.verdict }}"
-      blocked_hypotheses: "${{ result.blocked_hypotheses }}"
+      experiment_results: ${{ result.results_path }}
+      experiment_verdict: ${{ result.verdict }}
+      blocked_hypotheses: ${{ result.blocked_hypotheses }}
     retries: 2
     on_result:
-    - when: "${{ result.verdict }} == CONCLUSIVE"
+    - when: ${{ result.verdict }} == CONCLUSIVE
       route: generate_report
-    - when: "${{ result.verdict }} == BLOCKED"
+    - when: ${{ result.verdict }} == BLOCKED
       route: escalate_stop
-    - when: "${{ result.verdict }} == INCONCLUSIVE"
+    - when: ${{ result.verdict }} == INCONCLUSIVE
       route: ensure_results
     on_failure: check_run_fix_loop
     on_exhausted: ensure_results
     on_context_limit: escalate_stop
-
   troubleshoot_run_failure:
     tool: run_skill
-    model: ""
+    model: ''
     stale_threshold: 2400
     idle_output_timeout: 0
     with:
-      skill_command: "/autoskillit:troubleshoot-experiment"
+      skill_command: /autoskillit:troubleshoot-experiment
       skill_inputs:
-        worktree_path: "${{ context.worktree_path }}"
-        step_name: "run_experiment"
-      cwd: "${{ inputs.source_dir }}"
+        worktree_path: ${{ context.worktree_path }}
+        step_name: run_experiment
+      cwd: ${{ inputs.source_dir }}
       step_name: troubleshoot_run_failure
-      output_dir: "{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment/run_${{ context.run_fix_count }}"
-    optional_context_refs: [run_fix_count]
+      output_dir: '{{AUTOSKILLIT_TEMP}}/troubleshoot-experiment/run_${{ context.run_fix_count }}'
+    optional_context_refs:
+    - run_fix_count
     capture:
-      run_is_fixable: "${{ result.is_fixable }}"
-      run_retry_delay: "${{ result.retry_delay }}"
+      run_is_fixable: ${{ result.is_fixable }}
+      run_retry_delay: ${{ result.retry_delay }}
     on_success: route_run_failure
     on_failure: escalate_stop
-
   route_run_failure:
     action: route
     on_result:
-    - when: "${{ context.run_is_fixable }} == true"
+    - when: ${{ context.run_is_fixable }} == true
       route: adjust_experiment
     - route: escalate_stop
-
   adjust_experiment:
     tool: run_skill
-    model: ""
+    model: ''
     stale_threshold: 2400
     idle_output_timeout: 0
     with:
-      skill_command: "/autoskillit:run-experiment"
+      skill_command: /autoskillit:run-experiment
       skill_inputs:
-        worktree_path: "${{ context.worktree_path }}"
+        worktree_path: ${{ context.worktree_path }}
         adjust: true
-      cwd: "${{ context.worktree_path }}"
+      cwd: ${{ context.worktree_path }}
       step_name: adjust
-      output_dir: '.'
+      output_dir: .
     capture:
-      experiment_results: "${{ result.results_path }}"
-      experiment_verdict: "${{ result.verdict }}"
-      blocked_hypotheses: "${{ result.blocked_hypotheses }}"
+      experiment_results: ${{ result.results_path }}
+      experiment_verdict: ${{ result.verdict }}
+      blocked_hypotheses: ${{ result.blocked_hypotheses }}
     on_result:
-    - when: "${{ result.verdict }} == CONCLUSIVE"
+    - when: ${{ result.verdict }} == CONCLUSIVE
       route: route_run_retry_delay
-    - when: "${{ result.verdict }} == INCONCLUSIVE"
+    - when: ${{ result.verdict }} == INCONCLUSIVE
       route: route_run_retry_delay
-    - when: "${{ result.verdict }} == BLOCKED"
+    - when: ${{ result.verdict }} == BLOCKED
       route: escalate_stop
     on_failure: ensure_results
     on_context_limit: escalate_stop
-
   check_run_fix_loop:
     tool: run_python
     with:
-      callable: "autoskillit.smoke_utils.check_loop_iteration"
-      current_iteration: "${{ context.run_fix_count }}"
-      max_iterations: "3"
+      callable: autoskillit.smoke_utils.check_loop_iteration
+      current_iteration: ${{ context.run_fix_count }}
+      max_iterations: '3'
     capture:
-      run_fix_count: "${{ result.next_iteration }}"
+      run_fix_count: ${{ result.next_iteration }}
     on_result:
-    - when: "${{ result.max_exceeded }} == true"
+    - when: ${{ result.max_exceeded }} == true
       route: ensure_results
     - route: troubleshoot_run_failure
     on_failure: ensure_results
     optional_context_refs:
     - run_fix_count
     - run_retry_delay
-    note: >
-      Iteration guard for the adjust_experiment → check_run_fix_loop → run_experiment
-      sub-loop (entered via troubleshoot_run_failure → route_run_failure → adjust_experiment).
-      Caps experiment fix loops at 3 iterations. On exhaustion, proceeds to
-      ensure_results to salvage whatever data exists.
+    note: 'Iteration guard for the adjust_experiment → check_run_fix_loop → run_experiment sub-loop (entered via troubleshoot_run_failure
+      → route_run_failure → adjust_experiment). Caps experiment fix loops at 3 iterations. On exhaustion, proceeds to ensure_results
+      to salvage whatever data exists.
 
+      '
   route_run_retry_delay:
     action: route
     on_result:
-    - when: "${{ context.run_retry_delay }}"
+    - when: ${{ context.run_retry_delay }}
       route: run_retry_delay
     - route: run_experiment
-
   run_retry_delay:
     tool: run_cmd
     with:
-      cmd: "sleep ${{ context.run_retry_delay }}"
-      cwd: "${{ inputs.source_dir }}"
+      cmd: sleep ${{ context.run_retry_delay }}
+      cwd: ${{ inputs.source_dir }}
       step_name: run_retry_delay
     on_success: run_experiment
     on_failure: run_experiment
     optional_context_refs:
     - run_retry_delay
-    note: >
-      Backoff delay for transient API errors before re-entering
-      the run_experiment retry cycle.
+    note: 'Backoff delay for transient API errors before re-entering the run_experiment retry cycle.
 
+      '
   ensure_results:
     tool: run_python
     with:
-      callable: "autoskillit.recipe._cmd_rpc.ensure_results"
-      experiment_results: "${{ context.experiment_results }}"
-      worktree_path: "${{ context.worktree_path }}"
-      temp_subdir: "{{AUTOSKILLIT_TEMP}}"
+      callable: autoskillit.recipe._cmd_rpc.ensure_results
+      experiment_results: ${{ context.experiment_results }}
+      worktree_path: ${{ context.worktree_path }}
+      temp_subdir: '{{AUTOSKILLIT_TEMP}}'
     capture:
-      experiment_results: "${{ result.experiment_results }}"
+      experiment_results: ${{ result.experiment_results }}
     on_success: generate_report_inconclusive
     on_failure: escalate_stop
-    note: >
-      Ensures context.experiment_results is a valid file path before calling
-      generate_report_inconclusive. Creates a minimal placeholder results file when
-      run-experiment never produced output (retries exhausted or adjust failed).
+    note: 'Ensures context.experiment_results is a valid file path before calling generate_report_inconclusive. Creates a
+      minimal placeholder results file when run-experiment never produced output (retries exhausted or adjust failed).
 
+      '
   generate_report:
     tool: run_skill
-    model: ""
+    model: ''
     with:
-      skill_command: "/autoskillit:generate-report"
+      skill_command: /autoskillit:generate-report
       skill_inputs:
-        worktree_path: "${{ context.worktree_path }}"
-        results_path: "${{ context.experiment_results }}"
-        output_mode: "${{ inputs.output_mode }}"
-        issue_url: "${{ inputs.issue_url }}"
-      cwd: "${{ context.worktree_path }}"
+        worktree_path: ${{ context.worktree_path }}
+        results_path: ${{ context.experiment_results }}
+        output_mode: ${{ inputs.output_mode }}
+        issue_url: ${{ inputs.issue_url }}
+      cwd: ${{ context.worktree_path }}
       step_name: generate_report
-      output_dir: "{{AUTOSKILLIT_TEMP}}/generate-report"
+      output_dir: '{{AUTOSKILLIT_TEMP}}/generate-report'
     capture:
-      report_path: "${{ result.report_path }}"
+      report_path: ${{ result.report_path }}
     on_success: test
     on_failure: escalate_stop
     on_context_limit: test
-    skip_when_false: "inputs.backend_supports_git_write"
-    note: "Writes a conclusive research report to research/ in the worktree."
-
+    note: Writes a conclusive research report to research/ in the worktree.
   generate_report_inconclusive:
     tool: run_skill
-    model: ""
+    model: ''
     with:
-      skill_command: "/autoskillit:generate-report"
+      skill_command: /autoskillit:generate-report
       skill_inputs:
-        worktree_path: "${{ context.worktree_path }}"
-        results_path: "${{ context.experiment_results }}"
+        worktree_path: ${{ context.worktree_path }}
+        results_path: ${{ context.experiment_results }}
         inconclusive: true
-        output_mode: "${{ inputs.output_mode }}"
-        issue_url: "${{ inputs.issue_url }}"
-      cwd: "${{ context.worktree_path }}"
+        output_mode: ${{ inputs.output_mode }}
+        issue_url: ${{ inputs.issue_url }}
+      cwd: ${{ context.worktree_path }}
       step_name: generate_report_inconclusive
-      output_dir: "{{AUTOSKILLIT_TEMP}}/generate-report"
+      output_dir: '{{AUTOSKILLIT_TEMP}}/generate-report'
     capture:
-      report_path: "${{ result.report_path }}"
+      report_path: ${{ result.report_path }}
     on_success: test
     on_failure: escalate_stop
     on_context_limit: test
-    skip_when_false: "inputs.backend_supports_git_write"
-    note: >
-      Writes an inconclusive research report. Experiments could not
-      prove or disprove the hypothesis. This is a valid outcome.
+    note: 'Writes an inconclusive research report. Experiments could not prove or disprove the hypothesis. This is a valid
+      outcome.
 
-  # --- Test + Push ---
+      '
   test:
     tool: test_check
     with:
-      worktree_path: "${{ context.worktree_path }}"
+      worktree_path: ${{ context.worktree_path }}
     skip_when_false: inputs.test_check_enabled
     on_success: push_branch
     on_failure: fix_tests
-
   fix_tests:
     tool: run_skill
-    model: ""
+    model: ''
     with:
-      skill_command: "/autoskillit:resolve-failures"
+      skill_command: /autoskillit:resolve-failures
       skill_inputs:
-        plan_path: "${{ inputs.experiment_plan }}"
-        base_branch: "${{ inputs.base_branch }}"
-        worktree_path: "${{ context.worktree_path }}"
-      cwd: "${{ inputs.source_dir }}"
+        plan_path: ${{ inputs.experiment_plan }}
+        base_branch: ${{ inputs.base_branch }}
+        worktree_path: ${{ context.worktree_path }}
+      cwd: ${{ inputs.source_dir }}
       step_name: fix
-      output_dir: '.'
+      output_dir: .
     capture:
-      verdict: "${{ result.verdict }}"
-      fixes_applied: "${{ result.fixes_applied }}"
+      verdict: ${{ result.verdict }}
+      fixes_applied: ${{ result.fixes_applied }}
     on_result:
-    - when: "${{ context.verdict }} == 'real_fix'"
+    - when: ${{ context.verdict }} == 'real_fix'
       route: retest
-    - when: "${{ context.verdict }} == 'already_green'"
+    - when: ${{ context.verdict }} == 'already_green'
       route: retest
-    - when: "${{ context.verdict }} == 'flake_suspected'"
+    - when: ${{ context.verdict }} == 'flake_suspected'
       route: retest
-    - when: "${{ context.verdict }} == 'ci_only_failure'"
+    - when: ${{ context.verdict }} == 'ci_only_failure'
       route: retest
-    - when: "${{ context.verdict }} == 'no_test_infrastructure'"
+    - when: ${{ context.verdict }} == 'no_test_infrastructure'
       route: escalate_stop
     - route: escalate_stop
     on_failure: escalate_stop
     on_context_limit: escalate_stop
-    skip_when_false: "inputs.backend_supports_git_write"
-
   retest:
     tool: test_check
     with:
-      worktree_path: "${{ context.worktree_path }}"
+      worktree_path: ${{ context.worktree_path }}
     on_success: push_branch
     on_failure: escalate_stop
-
   push_branch:
     tool: run_cmd
     with:
-      cmd: "bash {{AUTOSKILLIT_SCRIPTS}}/push_branch.sh '${{ inputs.output_mode }}' '${{ context.worktree_path }}'"
-      cwd: "${{ context.worktree_path }}"
+      cmd: bash {{AUTOSKILLIT_SCRIPTS}}/push_branch.sh '${{ inputs.output_mode }}' '${{ context.worktree_path }}'
+      cwd: ${{ context.worktree_path }}
       step_name: push_branch
     on_success: implement_complete
     on_failure: escalate_stop
-
-  # --- Terminal Stops ---
   escalate_stop:
     action: stop
-    message: >-
-      Implementation pipeline failed — human intervention needed. Check the latest step output for details.
-      Emit the L3 result sentinel JSON block now with success=false.
-      Example sentinel: {"success": false, "reason": "implementation pipeline failed"}
-
+    message: 'Implementation pipeline failed — human intervention needed. Check the latest step output for details. Emit the
+      L3 result sentinel JSON block now with success=false. Example sentinel: {"success": false, "reason": "implementation
+      pipeline failed"}'
   implement_complete:
     action: stop
-    message: >-
-      Implementation phase complete. Emit the L3 result sentinel JSON block now.
-      The sentinel must include the following fields:
-      success=true, worktree_path=${{ context.worktree_path }},
-      research_dir_rel=${{ inputs.research_dir_rel }},
-      research_dir=${{ inputs.research_dir }},
-      report_path=${{ context.report_path }},
-      experiment_results=${{ context.experiment_results }}.
-      Example sentinel:
-      {"success": true, "worktree_path": "<path>", "research_dir_rel": "<rel>",
-      "research_dir": "<path>", "report_path": "<path>", "experiment_results": "<path>"}
+    message: 'Implementation phase complete. Emit the L3 result sentinel JSON block now. The sentinel must include the following
+      fields: success=true, worktree_path=${{ context.worktree_path }}, research_dir_rel=${{ inputs.research_dir_rel }}, research_dir=${{
+      inputs.research_dir }}, report_path=${{ context.report_path }}, experiment_results=${{ context.experiment_results }}.
+      Example sentinel: {"success": true, "worktree_path": "<path>", "research_dir_rel": "<rel>", "research_dir": "<path>",
+      "report_path": "<path>", "experiment_results": "<path>"}'

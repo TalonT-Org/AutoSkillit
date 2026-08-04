@@ -1,14 +1,31 @@
 ---
 name: audit-arch
-categories: [audit]
-description: Audit codebase for adherence to architectural standards, practices, and rules. Use when user says "audit arch", "audit architecture", "check architecture", or "architectural review". Spawns parallel subagents to examine multiple architectural aspects and generates a structured report.
+categories:
+- audit
+description: Audit codebase for adherence to architectural standards, practices, and rules. Use when user says "audit arch",
+  "audit architecture", "check architecture", or "architectural review". Spawns parallel subagents to examine multiple architectural
+  aspects and generates a structured report.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Auditing codebase architecture...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Auditing codebase architecture...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Architectural Audit Skill
@@ -26,12 +43,12 @@ Audit the codebase for adherence to architectural standards and rules.
 
 - Modify any source code files
 - Update an existing report - always generate new
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use subagents for parallel exploration
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Write report to `{{AUTOSKILLIT_TEMP}}/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - Provide file paths and line numbers
 - Categorize by severity (CRITICAL, HIGH, MEDIUM, LOW)
@@ -242,7 +259,7 @@ These apply across all principles when evaluating architectural decisions:
 
 2. **Launch parallel subagents (SINGLE MESSAGE)** for each principle
 
-   **Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+   **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
    Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 3. **Consolidate findings** by principle and severity

@@ -35,6 +35,64 @@ def _parse_frontmatter(content: str) -> dict:
     return load_yaml(fm_text) or {}
 
 
+def test_validate_audit_is_portable_project_local_catalog_member() -> None:
+    """The real override remains authoritative and admissible after semantic parsing."""
+    from autoskillit.core import SkillExecutionRole, SkillSource
+    from autoskillit.workspace import EffectiveSkillCatalog, SkillCatalogEntry
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    skill_path = SKILLS_DIR / "validate-audit" / "SKILL.md"
+    selected = DefaultSkillResolver().resolve_effective("validate-audit", REPO_ROOT)
+
+    assert selected is not None
+    assert selected.source is SkillSource.PROJECT_LOCAL
+    assert selected.path == skill_path.resolve()
+    assert selected.invalid_reason is None
+    assert selected.semantic_plan is not None
+    assert selected.frontmatter is not None
+    assert selected.frontmatter.data["semantic_version"] == 1
+
+    entry = SkillCatalogEntry.from_skill_info(selected)
+    catalog = EffectiveSkillCatalog(
+        skills=(entry,),
+        execution_role=SkillExecutionRole.SESSION,
+        namespace_sources={selected.name: selected.source},
+    )
+    assert catalog.skills == (entry,)
+    assert catalog.namespace_sources == {"validate-audit": SkillSource.PROJECT_LOCAL}
+
+
+@pytest.mark.parametrize("skill_name", ["promote-to-main", "validate-audit"])
+def test_migrated_project_local_skill_body_has_no_backend_native_delegation_syntax(
+    skill_name: str,
+) -> None:
+    """Project overrides obey the bundled semantic-authenticity contract."""
+    from autoskillit.core import CODEX_VALID_MODEL_IDS
+    from autoskillit.workspace import read_skill_frontmatter
+
+    forbidden = {
+        "Agent(",
+        "Agent/Task",
+        "Agent subagent",
+        "Explore subagent",
+        "Task(",
+        "Task calls",
+        'model: "',
+        "run_in_background",
+        "spawn_agent",
+        "send_message",
+        "wait_agent",
+        "subagent_type=",
+        *CODEX_VALID_MODEL_IDS,
+    }
+    path = SKILLS_DIR / skill_name / "SKILL.md"
+    parsed = read_skill_frontmatter(path)
+
+    assert parsed.is_valid, path
+    violations = sorted(token for token in forbidden if token in parsed.body)
+    assert not violations, f"{skill_name} contains backend-native syntax: {violations}"
+
+
 # ---------------------------------------------------------------------------
 # Test 1: categories: [audit] in frontmatter
 # ---------------------------------------------------------------------------

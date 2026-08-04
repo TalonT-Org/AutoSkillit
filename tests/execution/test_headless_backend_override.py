@@ -1,4 +1,4 @@
-"""Tests verifying run_headless_core delegates to backend from backend_override."""
+"""Tests verifying typed backend authority controls headless dispatch."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from autoskillit.core.types import (
 )
 from autoskillit.execution.backends import CodexBackend
 
-from .conftest import _mock_backend
+from .conftest import _backend_authority, _mock_backend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -57,7 +57,11 @@ class TestBackendOverrideCommandRouting:
         claude_code_backend.name = "claude-code"
 
         with (
-            patch("autoskillit.execution.headless.get_backend", return_value=claude_code_backend),
+            patch.object(
+                minimal_ctx.launch_resolver,
+                "backend_for",
+                return_value=claude_code_backend,
+            ),
             patch("autoskillit.execution.headless._execute_claude_headless") as mock_exec,
         ):
             mock_exec.return_value = _stub_result()
@@ -68,7 +72,7 @@ class TestBackendOverrideCommandRouting:
                 "/tmp/cwd",
                 minimal_ctx,
                 completion_marker="%%DONE%%",
-                backend_override="claude-code",
+                backend_authority=_backend_authority("claude-code"),
             )
 
             build_spec = mock_exec.call_args.args[0]
@@ -126,7 +130,11 @@ class TestBackendOverrideCommandRouting:
         codex_backend.name = "codex"
 
         with (
-            patch("autoskillit.execution.headless.get_backend", return_value=codex_backend),
+            patch.object(
+                minimal_ctx.launch_resolver,
+                "backend_for",
+                return_value=codex_backend,
+            ),
             patch("autoskillit.execution.headless._execute_claude_headless") as mock_exec,
         ):
             mock_exec.return_value = _stub_result()
@@ -137,7 +145,7 @@ class TestBackendOverrideCommandRouting:
                 "/tmp/cwd",
                 minimal_ctx,
                 completion_marker="%%DONE%%",
-                backend_override="codex",
+                backend_authority=_backend_authority("codex"),
             )
 
             build_spec = mock_exec.call_args.args[0]
@@ -169,7 +177,11 @@ class TestBackendOverrideCommandRouting:
             return _stub_result()
 
         with (
-            patch("autoskillit.execution.headless.get_backend", return_value=CodexBackend()),
+            patch.object(
+                minimal_ctx.launch_resolver,
+                "backend_for",
+                return_value=CodexBackend(),
+            ),
             patch(
                 "autoskillit.execution.headless._execute_claude_headless", side_effect=capture_exec
             ),
@@ -181,7 +193,7 @@ class TestBackendOverrideCommandRouting:
                 "/tmp/cwd",
                 minimal_ctx,
                 completion_marker="%%DONE%%",
-                backend_override="codex",
+                backend_authority=_backend_authority("codex"),
                 readonly_skill=readonly_skill,
             )
 
@@ -230,7 +242,11 @@ class TestBackendOverrideEnvPolicy:
             return _stub_result()
 
         with (
-            patch("autoskillit.execution.headless.get_backend", return_value=claude_code_backend),
+            patch.object(
+                minimal_ctx.launch_resolver,
+                "backend_for",
+                return_value=claude_code_backend,
+            ),
             patch(
                 "autoskillit.execution.headless._execute_claude_headless", side_effect=capture_exec
             ),
@@ -242,7 +258,7 @@ class TestBackendOverrideEnvPolicy:
                 "/tmp/cwd",
                 minimal_ctx,
                 completion_marker="%%DONE%%",
-                backend_override="claude-code",
+                backend_authority=_backend_authority("claude-code"),
             )
 
         assert captured_spec is not None
@@ -282,7 +298,11 @@ class TestBackendOverrideEnvPolicy:
             return _stub_result()
 
         with (
-            patch("autoskillit.execution.headless.get_backend", return_value=codex_backend),
+            patch.object(
+                minimal_ctx.launch_resolver,
+                "backend_for",
+                return_value=codex_backend,
+            ),
             patch(
                 "autoskillit.execution.headless._execute_claude_headless", side_effect=capture_exec
             ),
@@ -294,7 +314,7 @@ class TestBackendOverrideEnvPolicy:
                 "/tmp/cwd",
                 minimal_ctx,
                 completion_marker="%%DONE%%",
-                backend_override="codex",
+                backend_authority=_backend_authority("codex"),
             )
 
         assert captured_spec is not None
@@ -323,7 +343,11 @@ class TestBackendOverrideParserSelection:
         )
 
         with (
-            patch("autoskillit.execution.headless.get_backend", return_value=step_backend),
+            patch.object(
+                minimal_ctx.launch_resolver,
+                "backend_for",
+                return_value=step_backend,
+            ),
             patch(
                 "autoskillit.execution.headless._headless_execute._build_skill_result"
             ) as mock_build,
@@ -336,7 +360,7 @@ class TestBackendOverrideParserSelection:
                 "/tmp/cwd",
                 minimal_ctx,
                 completion_marker="%%DONE%%",
-                backend_override="claude-code",
+                backend_authority=_backend_authority("claude-code"),
             )
 
             step_backend.stream_parser.assert_called_once()

@@ -1,17 +1,26 @@
 ---
 name: arch-lens-development
-categories: [arch-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-write_paths: ["{{AUTOSKILLIT_TEMP}}/arch-lens-development/"]
-description: Create Development architecture diagram showing project structure, build tools, and quality gates. Development lens answering "How is it built and tested?"
+categories:
+- arch-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/arch-lens-development/'
+description: Create Development architecture diagram showing project structure, build tools, and quality gates. Development
+  lens answering "How is it built and tested?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Development Lens - Analyzing build and test tooling...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Development Lens - Analyzing build and test tooling...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: make-arch-diag
+  - name: mermaid
 ---
 
 # Development Architecture Lens
@@ -48,8 +57,8 @@ hooks:
 - Modify any source code files
 - Include runtime architecture details
 - Show business logic
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Focus on BUILD and TEST infrastructure
@@ -65,7 +74,7 @@ hooks:
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-development/arch_diag_development_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 
 ## Analysis Workflow
@@ -87,7 +96,7 @@ If no `context_path` is provided, skip this step and explore the full CWD in Ste
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn Explore subagents to investigate:
+Spawn child delegations to investigate:
 
 **Project Structure**
 - Find top-level directory organization

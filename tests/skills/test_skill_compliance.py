@@ -84,13 +84,13 @@ _ANTI_PROSE_GUARD_PATTERNS = [
 
 # Patterns for three-layer parallel dispatch reinforcement detection
 _PARALLEL_DISPATCH_NEVER_RE = re.compile(
-    r"(?i)sequentially.*single.*message|single.*parallel.*message",
+    r"(?i)delegations?.*sequentially|sequentially.*(?:single.*message|delegation)|single.*parallel.*message",
 )
 _PARALLEL_DISPATCH_ALWAYS_RE = re.compile(
-    r"(?i)single\s+message",
+    r"(?i)single\s+message|all independent child delegations before awaiting any result",
 )
 _PARALLEL_DISPATCH_STEP_RE = re.compile(
-    r"(?i)single\s+(?:message|batch)|SINGLE\s+MESSAGE",
+    r"(?i)single\s+(?:message|batch)|all independent child delegations before awaiting any result",
 )
 
 # Skills whose narration suppression is handled globally by _inject_narration_suppression()
@@ -231,13 +231,13 @@ def _check_loop_boundary(skill_text: str) -> list[str]:
 
 
 def _check_parallel_dispatch_reinforcement(skill_text: str) -> list[str]:
-    """Check for missing three-layer single-message dispatch reinforcement.
+    """Check for missing three-layer parallel-dispatch reinforcement.
 
     Returns a list of violation descriptions (empty if compliant).
     For skills that spawn parallel subagents, all three layers must be present:
     1. NEVER block prohibits sequential dispatch
-    2. ALWAYS block requires single-message dispatch
-    3. Step body containing spawn language includes single-message instruction
+    2. ALWAYS block requires concurrent dispatch before awaiting
+    3. Step body containing spawn language reinforces concurrent dispatch
     """
 
     violations: list[str] = []
@@ -248,21 +248,16 @@ def _check_parallel_dispatch_reinforcement(skill_text: str) -> list[str]:
     if not _PARALLEL_DISPATCH_NEVER_RE.search(never_block):
         violations.append(
             "NEVER block does not prohibit sequential dispatch "
-            "(expected: 'sequentially...single...message' or 'single...parallel...message')"
+            "(expected a sequential-delegation prohibition)"
         )
 
     if not _PARALLEL_DISPATCH_ALWAYS_RE.search(always_block):
-        violations.append(
-            "ALWAYS block does not require single-message dispatch (expected: 'single message')"
-        )
+        violations.append("ALWAYS block does not require concurrent dispatch before awaiting")
 
     step_blocks = re.split(r"(?m)^#{1,3}\s+Step\s+\d+", skill_text)
     spawning_steps = [b for b in step_blocks if _SPAWN_INDICATOR_RE.search(b)]
     if spawning_steps and not any(_PARALLEL_DISPATCH_STEP_RE.search(b) for b in spawning_steps):
-        violations.append(
-            "No step block containing spawn language has a single-message dispatch instruction "
-            "(expected: 'single message' or 'single batch' in a step with subagent spawning)"
-        )
+        violations.append("No step block containing spawn language reinforces concurrent dispatch")
 
     return violations
 
@@ -450,42 +445,28 @@ For each issue in the batch (process sequentially):
     assert len(violations) >= 1, "Detector failed to catch unguarded MCP loop"
 
 
-# Detects skills that instruct Agent/Task subagent spawning.
-# Any such skill MUST contain the run_in_background prohibition.
 _SPAWN_INDICATOR_RE = re.compile(
-    r"Task tool|Explore subagent"
-    r"|spawn.*subagent|subagent.*spawn|launch.*subagent"
-    r"|parallel.*subagent|subagent.*parallel",
+    r"child delegation|spawn.*(?:subagent|child)|(?:subagent|child).*spawn"
+    r"|launch.*(?:subagent|child)|parallel.*(?:subagent|child)"
+    r"|(?:subagent|child).*parallel",
     re.IGNORECASE,
-)
-_BACKGROUND_PROHIBITION_RE = re.compile(r"run_in_background.*prohibited", re.IGNORECASE)
-
-# Skills whose SKILL.md mentions subagents only in a negative/prohibitive context
-# (e.g., "rather than spawning subagents", "do not spawn subagents"). The spawn
-# indicator regex matches these descriptively — they are not spawning skills.
-_NON_SPAWNING_SKILL_DIRS: frozenset[str] = frozenset(
-    {
-        "report-bug",  # "rather than spawning parallel subagents" — describes non-spawning
-        "issue-splitter",  # "do not spawn subagents" — prohibits spawning inline
-    }
 )
 
 
 @pytest.mark.parametrize("skill_dir", _all_skill_dirs(), ids=lambda p: p.name)
 def test_no_background_subagent_in_spawning_skills(skill_dir: Path) -> None:
-    if skill_dir.name in _NON_SPAWNING_SKILL_DIRS:
-        return  # Skill mentions subagents only descriptively/negatively — rule does not apply.
+    from autoskillit.workspace import read_skill_frontmatter
+
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.exists():
         return
-    content = skill_md.read_text(encoding="utf-8")
-    if not _SPAWN_INDICATOR_RE.search(content):
-        return  # Skill does not spawn subagents — rule does not apply.
-    assert _BACKGROUND_PROHIBITION_RE.search(content), (
-        f"{skill_dir.name}/SKILL.md contains subagent-spawning instructions "
-        "but lacks the background-execution prohibition. "
-        "Add to its NEVER block: "
-        "'- Run subagents in the background (`run_in_background: true` is prohibited)'"
+    parsed = read_skill_frontmatter(skill_md)
+    assert parsed.is_valid
+    requirements = (parsed.data or {}).get("semantic_requirements", {})
+    if not requirements.get("child_spawns"):
+        return
+    assert requirements.get("join") == {"required": True}, (
+        f"{skill_dir.name}/SKILL.md declares child spawning without the required semantic join"
     )
 
 
@@ -668,15 +649,21 @@ For each dimension name in the list, spawn the corresponding subagent using the 
 
 @pytest.mark.parametrize("skill_dir", _all_skill_dirs(), ids=lambda d: d.name)
 def test_parallel_dispatch_has_single_message_reinforcement(skill_dir: Path) -> None:
-    """Skills that spawn parallel subagents must include three-layer
-    single-message dispatch reinforcement (NEVER + ALWAYS + step body)."""
-    text = (skill_dir / "SKILL.md").read_text()
-    if skill_dir.name in _NON_SPAWNING_SKILL_DIRS:
-        return
-    if not _SPAWN_INDICATOR_RE.search(text):
-        return
-    violations = _check_parallel_dispatch_reinforcement(text)
-    assert not violations, (
-        f"{skill_dir.name}/SKILL.md spawns parallel subagents but lacks "
-        f"single-message dispatch reinforcement:\n" + "\n".join(f"  - {v}" for v in violations)
+    """Portable child dispatch declares concurrency and join semantics."""
+    from autoskillit.core import SkillSource
+    from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+    info = _skill_info_from_frontmatter(
+        skill_dir.name,
+        SkillSource.BUNDLED,
+        skill_dir / "SKILL.md",
     )
+    assert info.invalid_reason is None, info.invalid_reason
+    plan = info.semantic_plan
+    if plan is None or not plan.child_spawns:
+        return
+    assert plan.concurrency is not None and plan.concurrency.required
+    assert plan.join is not None and plan.join.required
+    skill_text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    violations = _check_parallel_dispatch_reinforcement(skill_text)
+    assert not violations, f"{skill_dir.name}: {violations}"

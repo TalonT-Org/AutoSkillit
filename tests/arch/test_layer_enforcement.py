@@ -1520,6 +1520,9 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
         Path("cli/session/_session_order.py"): {
             "DefaultSkillResolver"
         },  # interactive order launch composition
+        Path("cli/session/_session_backend.py"): {
+            "DefaultLaunchResolver"
+        },  # interactive backend-authority composition root
         Path("cli/session/_session_cook.py"): {
             "DefaultSessionSkillManager",
             "DefaultSkillResolver",
@@ -1671,22 +1674,10 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
         {"autoskillit.workspace"}
     ),
     "tests/recipe/test_rules_skill_content.py": frozenset({"autoskillit.workspace"}),
-    "tests/recipe/test_rules_backend_compat.py": frozenset(
-        {"autoskillit.server", "autoskillit.workspace"}
-    ),
     "tests/recipe/test_rules_stamp_ownership.py": frozenset({"autoskillit.workspace"}),
-    # backend reachability tests cross into server (overrides), execution (backends),
-    # and workspace (resolver) to exercise the full pruning + validation pipeline
-    "tests/recipe/test_backend_reachability.py": frozenset(
-        {"autoskillit.server", "autoskillit.execution", "autoskillit.workspace"}
-    ),
     # composition matrix crosses the same packages as reachability — full pipeline
     "tests/recipe/test_recipe_backend_composition_matrix.py": frozenset(
-        {"autoskillit.server", "autoskillit.execution", "autoskillit.workspace"}
-    ),
-    # vacuous gate capability-route test crosses server (overrides) + workspace (resolver)
-    "tests/recipe/test_recipe_composition_vacuous_gate.py": frozenset(
-        {"autoskillit.server", "autoskillit.workspace"}
+        {"autoskillit.execution", "autoskillit.workspace"}
     ),
     # review loop routing integration imports root-level smoke_utils
     "tests/recipe/test_review_loop_routing_integration.py": frozenset({"autoskillit.smoke_utils"}),

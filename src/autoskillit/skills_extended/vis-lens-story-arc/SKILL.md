@@ -1,16 +1,28 @@
 ---
 name: vis-lens-story-arc
-categories: [vis-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: "Create Narrative Story Arc visualization planning spec showing visual consistency across the report (same color = same model everywhere), logical figure progression, redundant figure detection, and narrative dependency between figures. Narrative lens answering \"Do the figures tell a coherent story across the report?\""
+categories:
+- vis-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Create Narrative Story Arc visualization planning spec showing visual consistency across the report (same color
+  = same model everywhere), logical figure progression, redundant figure detection, and narrative dependency between figures.
+  Narrative lens answering "Do the figures tell a coherent story across the report?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Story Arc Lens - Analyzing figure narrative flow...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Story Arc Lens - Analyzing figure narrative flow...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: mermaid
+  - name: plan-visualization
+  - name: vis-lens-figure-table
+  - name: vis-lens-multi-compare
+  - name: vis-lens-temporal
 ---
 
 # Narrative Story Arc Visualization Lens

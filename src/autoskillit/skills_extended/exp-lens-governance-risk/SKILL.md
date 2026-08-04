@@ -1,16 +1,26 @@
 ---
 name: exp-lens-governance-risk
-categories: [exp-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: Create a risk register and stakeholder impact assessment for experiments with deployment implications. Governance lens answering "What risks arise from acting on this result?"
+categories:
+- exp-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Create a risk register and stakeholder impact assessment for experiments with deployment implications. Governance
+  lens answering "What risks arise from acting on this result?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Governance Risk Lens - Analyzing deployment risks and stakeholder impacts...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Governance Risk Lens - Analyzing deployment risks and stakeholder impacts...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: exp-lens-measurement-validity
+  - name: exp-lens-validity-threats
+  - name: make-experiment-diag
+  - name: mermaid
 ---
 
 # Governance Risk Experimental Design Lens
@@ -45,8 +55,8 @@ hooks:
 
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-governance-risk/`
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Identify subgroups for whom the experimental evidence may not generalize
@@ -55,7 +65,7 @@ hooks:
 - Distinguish risks that are monitored from risks that are merely acknowledged
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-governance-risk/exp_diag_governance_risk_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -82,7 +92,7 @@ exploration for these fields if the context file supplies them. For any field ab
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn Explore subagents to investigate:
+Spawn child delegations to investigate:
 
 **Intended Use & Deployment Context**
 - Find intended deployment scenario and audience

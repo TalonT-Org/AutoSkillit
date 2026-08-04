@@ -20,12 +20,12 @@ from autoskillit.core import (
 )
 from autoskillit.server.tools._preflight import (
     _get_fix_required_hook_matchers,
-    check_hard_capability_feasibility,
+    check_skill_semantic_feasibility,
 )
 from autoskillit.workspace import (
-    EffectiveSkillDispatchContract,
+    SkillProjectionBinding,
     SkillProjectionContext,
-    build_effective_skill_dispatch_contract,
+    build_skill_projection_binding,
 )
 
 if TYPE_CHECKING:
@@ -38,34 +38,18 @@ class DirectSkillDispatch:
 
     add_dirs: tuple[ValidatedAddDir, ...]
     session_id: str
-    capability_contract: EffectiveSkillDispatchContract
+    capability_contract: SkillProjectionBinding
+    resolved_command: str
+    invocation: object
+    projection_context: SkillProjectionContext
 
     def __post_init__(self) -> None:
-        if self.capability_contract.invocation is None:
+        if not self.resolved_command:
             raise SkillContractError("direct skill dispatch must bind an invocation")
-
-    @property
-    def resolved_command(self) -> str:
-        return self.capability_contract.resolved_command
-
-    @property
-    def invocation(self) -> object:
-        assert self.capability_contract.invocation is not None
-        return self.capability_contract.invocation
-
-    @property
-    def projection_context(self) -> SkillProjectionContext:
-        return self.capability_contract.projection_context
 
     def cleanup(self, tool_ctx: ToolContext) -> None:
         if tool_ctx.session_skill_manager is not None:
             tool_ctx.session_skill_manager.cleanup_session(self.session_id)
-
-
-def _is_backend_incompatible(skill_invocation: object, effective_backend: str) -> bool:
-    """Return True if the closure's derived requirements exclude the backend."""
-    reqs = getattr(skill_invocation, "backend_requirements", None)
-    return bool(reqs and effective_backend not in reqs)
 
 
 def _check_backend_compat(
@@ -106,30 +90,17 @@ def _check_backend_compat(
     if skill_info is None:
         return None
     effective_backend = effective_backend_obj.name
-    if _is_backend_incompatible(skill_info, effective_backend):
+    semantic_plans = getattr(skill_info, "semantic_plans", ())
+    semantic_error = check_skill_semantic_feasibility(semantic_plans, effective_backend_obj)
+    if semantic_error:
         return SkillResult.crashed(
             exception=RuntimeError(
-                f"Skill {target_name!r} requires backend "
-                f"{sorted(getattr(skill_info, 'backend_requirements', []))} but session "
-                f"backend is {effective_backend!r}."
+                f"Skill {target_name!r} is not feasible on backend "
+                f"{effective_backend!r}: {semantic_error}"
             ),
             skill_command=resolved_command,
             order_id=effective_order_id,
         ).to_json()
-    skill_capabilities: frozenset[str] = getattr(skill_info, "capability_union", frozenset())
-    if skill_capabilities:
-        hard_capability_error = check_hard_capability_feasibility(
-            skill_capabilities, effective_backend_obj
-        )
-        if hard_capability_error:
-            return SkillResult.crashed(
-                exception=RuntimeError(
-                    f"Skill {target_name!r} is not feasible on backend "
-                    f"{effective_backend!r}: {hard_capability_error}"
-                ),
-                skill_command=resolved_command,
-                order_id=effective_order_id,
-            ).to_json()
     fix_required_matchers = _get_fix_required_hook_matchers(
         effective_backend_obj.capabilities.applicable_guards,
     )
@@ -271,8 +242,7 @@ def _prepare_direct_skill_dispatch(
         invocation.root.source_ref or invocation.root.source,
         backend.conventions if backend is not None else None,
     )
-    capability_contract = build_effective_skill_dispatch_contract(
-        resolved_command,
+    capability_contract = build_skill_projection_binding(
         projection_context,
         artifact_paths=(add_dir.path,),
     )
@@ -280,4 +250,7 @@ def _prepare_direct_skill_dispatch(
         add_dirs=(add_dir,),
         session_id=session_id,
         capability_contract=capability_contract,
+        resolved_command=resolved_command,
+        invocation=invocation,
+        projection_context=projection_context,
     ), None

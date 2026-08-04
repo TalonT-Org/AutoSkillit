@@ -1,16 +1,26 @@
 ---
 name: exp-lens-randomization-blocking
-categories: [exp-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: Create Randomization & Blocking experimental design diagram showing assignment mechanisms, blocking factors, and comparability sources. Design-Structural lens answering "Where does comparability come from?"
+categories:
+- exp-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Create Randomization & Blocking experimental design diagram showing assignment mechanisms, blocking factors,
+  and comparability sources. Design-Structural lens answering "Where does comparability come from?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Randomization & Blocking Lens - Analyzing assignment and comparability...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Randomization & Blocking Lens - Analyzing assignment and comparability...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: exp-lens-causal-assumptions
+  - name: exp-lens-unit-interference
+  - name: make-experiment-diag
+  - name: mermaid
 ---
 
 # Randomization & Blocking Experimental Design Lens
@@ -46,8 +56,8 @@ hooks:
 - Modify any source code files
 - Assume comparability without tracing its source
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-randomization-blocking/`
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Trace the exact mechanism that creates comparability between treatment groups
@@ -56,7 +66,7 @@ hooks:
 - Verify that replication is adequate for the claimed inferential precision
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-randomization-blocking/exp_diag_randomization_blocking_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -83,7 +93,7 @@ exploration for these fields if the context file supplies them. For any field ab
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn Explore subagents to investigate:
+Spawn child delegations to investigate:
 
 **Assignment Mechanism**
 - Find how experimental units are assigned to conditions

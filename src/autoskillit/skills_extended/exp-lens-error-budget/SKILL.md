@@ -1,16 +1,26 @@
 ---
 name: exp-lens-error-budget
-categories: [exp-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: Analyze statistical error budget showing Type I/II errors, power, minimum detectable effect, multiplicity corrections, and sequential monitoring. Statistical lens answering "Are error risks sized and controlled?"
+categories:
+- exp-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Analyze statistical error budget showing Type I/II errors, power, minimum detectable effect, multiplicity corrections,
+  and sequential monitoring. Statistical lens answering "Are error risks sized and controlled?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Error Budget Lens - Analyzing statistical error risks...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Error Budget Lens - Analyzing statistical error risks...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: exp-lens-severity-testing
+  - name: exp-lens-variance-stability
+  - name: make-experiment-diag
+  - name: mermaid
 ---
 
 # Error Budget Experimental Design Lens
@@ -47,8 +57,8 @@ hooks:
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Accept default alpha=0.05 without checking whether it is appropriate for the decision context
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-error-budget/`
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Enumerate every statistical test and account for its error contribution
@@ -57,7 +67,7 @@ hooks:
 - Evaluate whether the minimum detectable effect is practically meaningful, not just statistically chosen
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-error-budget/exp_diag_error_budget_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -84,7 +94,7 @@ exploration for these fields if the context file supplies them. For any field ab
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn Explore subagents to investigate:
+Spawn child delegations to investigate:
 
 **Sample Size & Power**
 - Find power calculations or sample size justifications

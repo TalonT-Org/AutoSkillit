@@ -27,4 +27,4 @@ Call the `open_kitchen` MCP tool to reveal all 24 kitchen tools for this session
 2. Confirm the kitchen is open by displaying the list of newly available tools.
 3. Inform the user that all kitchen tools are now available for this session.
 
-The kitchen state is session-scoped. Each new Claude Code session starts with kitchen tools hidden. Use `/autoskillit:open-kitchen` to reveal them at the start of each session.
+The kitchen state is session-scoped. Each new coding-agent session starts with kitchen tools hidden. Use `/autoskillit:open-kitchen` to reveal them at the start of each session.

@@ -214,6 +214,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_protocols_backend": frozenset(
         {"_llm_triage", "cli", "core", "execution", "fleet", "pipeline", "server", "workspace"}
     ),
+    "_type_skill_semantics": frozenset(
+        {"cli", "core", "execution", "fleet", "pipeline", "server", "workspace"}
+    ),
     "_type_inspector": frozenset({"core", "execution"}),
     "_type_intake_policy": frozenset({"core", "execution"}),
     "_type_invariant_registry": frozenset({"core"}),
@@ -250,6 +253,12 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     ),
     "_type_results_execution": frozenset({"core", "execution", "server", "pipeline"}),
     "_type_backend": frozenset({"core", "execution", "cli", "recipe", "server", "workspace"}),
+    "_type_launch": frozenset(
+        {"core", "execution", "pipeline", "server", "fleet", "cli", "recipe", "workspace"}
+    ),
+    "_type_launch_projection": frozenset(
+        {"core", "execution", "pipeline", "server", "fleet", "cli", "recipe", "workspace"}
+    ),
     "_type_recipe_delivery": frozenset({"core", "execution", "pipeline", "server"}),
     "_type_recipe_sections": frozenset({"core", "execution", "server"}),
     "_type_context_admission": frozenset({"core", "pipeline", "server"}),
@@ -766,10 +775,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "workspace",
             # recipe direct-import entries (import autoskillit.workspace at AST level):
             "recipe/test_contracts.py",
-            "recipe/test_backend_reachability.py",
             "recipe/test_recipe_backend_composition_matrix.py",
-            "recipe/test_recipe_composition_vacuous_gate.py",
-            "recipe/test_rules_backend_compat.py",
             "recipe/test_skill_capability_cache_integration.py",
             "recipe/test_rules_skill_content.py",
             "recipe/test_rules_stamp_ownership.py",
@@ -805,21 +811,19 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "recipe/test_sub_recipe_loading.py",
             "recipe/test_sub_recipe_validation.py",
             # Server file-level entries:
-            "server/test_backend_ingredient_injection.py",
             "server/test_explicit_backend_override.py",
-            "server/test_preflight_explicit_backend.py",
             "server/test_factory.py",
+            "server/test_tools_agents.py",
             "server/test_tools_issue_lifecycle.py",
             "server/test_tools_report_bug.py",
             "server/test_tools_kitchen_envelope.py",
             "server/test_tools_kitchen_visibility.py",
             "server/test_tools_clone.py",
+            "server/test_tools_execution_provider.py",
             "server/test_tools_execution_routing.py",
             "server/test_run_skill_add_dirs.py",
-            "server/test_run_skill_backend_compat.py",
             "server/test_tools_execution_backend_mixing.py",
             "server/test_tools_workspace.py",
-            "server/test_admission_dispatch_agreement.py",
             "cli",
             "fleet",
             "skills",
@@ -838,7 +842,6 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_serve_idempotence.py",
             "server/test_attestation_delivery_reachability.py",
             "server/test_open_kitchen_deferred_recall.py",
-            "server/test_backend_ingredient_injection.py",
             "server/test_factory.py",
             "server/test_tools_dispatch_validation.py",
             "server/test_tools_kitchen_gate_features.py",
@@ -856,8 +859,6 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_execution_step_resolution.py",
             "server/test_tools_execution_input_gates.py",
             "server/test_tools_execution_input_gates_file_path_list.py",
-            "server/test_capability_admission_e2e.py",
-            "server/test_admission_dispatch_agreement.py",
             "server/test_pipeline_deps_derivation.py",
             "server/test_pipeline_tracker.py",
             # CLI file-level entries (6 of 38 import autoskillit.recipe):
@@ -987,7 +988,6 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_preflight_explicit_backend.py",
             "server/test_tools_fleet_dispatch_preflight.py",
             "server/test_lifespan.py",
-            "server/test_run_skill_backend_compat.py",
             # file-level: live output-budget E2E imports the hook registry directly
             "server/test_output_budget_e2e.py",
             # infra/ narrowed to 7 files
@@ -1083,7 +1083,6 @@ _IMPORT_GUARD_TRANSITIVE_OVERRIDES: dict[str, frozenset[str]] = {
             "recipe/test_recipe_temp_substitution.py",
             "recipe/test_repository.py",
             "recipe/test_research_campaign.py",
-            "recipe/test_rules_backend_compat.py",
             "recipe/test_rules_contracts.py",
             "recipe/test_rules_dataflow_handoff.py",
             "recipe/test_rules_skill_routing.py",
@@ -1095,7 +1094,6 @@ _IMPORT_GUARD_TRANSITIVE_OVERRIDES: dict[str, frozenset[str]] = {
             "recipe/test_staleness_cache.py",
             "recipe/test_sub_recipe_loading.py",
             "recipe/test_sub_recipe_validation.py",
-            "server/test_backend_ingredient_injection.py",
         }
     ),
     "planner": frozenset(

@@ -24,7 +24,6 @@ T = TypeVar("T")
 
 __all__ = [
     "AuditResultOutcome",
-    "CapabilityResolutionDetail",
     "ClosureAuthoritySpec",
     "closure_authority_spec_from_args",
     "ContaminationOutcome",
@@ -405,53 +404,6 @@ class ProviderOutcome:
     def none_used(cls) -> ProviderOutcome:
         """Sentinel for paths where no provider selection occurred."""
         return cls(provider_used="", fallback_activated=False)
-
-
-@dataclass(frozen=True, slots=True)
-class CapabilityResolutionDetail:
-    """Diagnostic metadata for per-step capability override resolution.
-
-    Carries the resolution path and per-step data through the capability
-    admission chain so downstream consumers (infeasibility response
-    formatters) can surface the actual cause of capability resolution failure
-    rather than blaming the backend generically.
-
-    resolution_path values:
-        "any_pass" — at least one guarded step resolved with ANTHROPIC_BASE_URL;
-            capability flipped to "true".
-        "none_pass" — no guarded step had ANTHROPIC_BASE_URL;
-            capability remains "false".
-        "no_guarded_steps" — recipe has no run_skill steps gated by
-            backend_supports_git_write; nothing to flip.
-        "claude_backend" — backend is anthropic_provider_capable=True;
-            no provider override needed.
-        "graceful_degradation" — backend, config_providers, or recipe_steps
-            was None; no resolution attempted.
-        "baseline_already_true" — backend_supports_git_write was already "true"
-            from the baseline capability; no provider override needed.
-        "capability_route" — skill capability scan detected a step requiring
-            ``git_metadata_write``; capability flipped to "true" without
-            requiring provider config (REQ-ADMIT-002).
-        "capability_route_no_binary" — skill capability scan detected a step
-            requiring ``git_metadata_write`` but ``shutil.which("claude")``
-            returned ``None``; capability remains "false" (fail-closed, REQ-ROUTE-004).
-        "no_providers_configured" — ``config_providers`` was ``None`` and no
-            skill capability route applied; capability remains "false".
-    """
-
-    resolved_steps: tuple[tuple[str, str, bool], ...]
-    bail_step: str | None
-    resolution_path: str
-
-    @property
-    def missing_provider_steps(self) -> tuple[str, ...]:
-        """Step names whose resolved provider profile lacked ANTHROPIC_BASE_URL."""
-        return tuple(name for name, _, has_base_url in self.resolved_steps if not has_base_url)
-
-    @classmethod
-    def empty(cls, resolution_path: str) -> CapabilityResolutionDetail:
-        """Construct a detail with no resolved-step data."""
-        return cls(resolved_steps=(), bail_step=None, resolution_path=resolution_path)
 
 
 @dataclass(frozen=True, slots=True)
@@ -855,9 +807,8 @@ class SessionIndexEntry(TypedDict):
     claude_code_log: str | None  # path to Claude Code JSONL, or None for non-Claude-Code sessions
     codex_log: str | None  # path to Codex rollout NDJSON, or None for non-Codex sessions
     backend: str  # "claude-code" or "codex" — unambiguous backend identifier
-    backend_override_source: (
-        str | None
-    )  # "explicit_config" | "skill_requirement" | "provider_profile" | None
+    backend_authority: dict[str, object] | None
+    launch_contract_digest: str
     skill_command: str
     success: bool
     subtype: str

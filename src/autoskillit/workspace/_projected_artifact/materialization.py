@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import tempfile
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, assert_never
@@ -69,6 +70,18 @@ class AgentSkillDocument:
     projected_digest: str
     canonical_digest: str
     source_identity: SkillSourceIdentity
+    semantic_payload: Mapping[str, object] = field(default_factory=dict)
+    adaptation_payload: Mapping[str, object] = field(default_factory=dict)
+    semantic_digest: str = ""
+    adaptation_digest: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "semantic_payload", MappingProxyType(dict(self.semantic_payload)))
+        object.__setattr__(
+            self,
+            "adaptation_payload",
+            MappingProxyType(dict(self.adaptation_payload)),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,6 +222,39 @@ def project_agent_skill_document(
 
     content = _SKILL_NAMESPACE_REF_RE.sub(_rewrite_namespace, content)
 
+    semantic_payload: Mapping[str, object] = MappingProxyType({})
+    adaptation_payload: Mapping[str, object] = MappingProxyType({})
+    semantic_digest = ""
+    adaptation_digest = ""
+    if skill_info.semantic_plan is not None:
+        semantic_payload = skill_info.semantic_plan.canonical_payload
+        semantic_digest = skill_info.semantic_plan.digest
+    if skill_info.semantic_plan is not None and context.backend is not None:
+        adaptation = context.backend.adapt_skill_semantics(skill_info.semantic_plan)
+        adaptation.validate_for(skill_info.semantic_plan, backend=context.backend.name)
+        adaptation_payload = adaptation.canonical_payload
+        adaptation_digest = adaptation.digest
+        if adaptation.instruction_fragments:
+            rendered = "\n".join(
+                f"- {instruction}" for instruction in adaptation.instruction_fragments
+            )
+            content = (
+                content.rstrip("\n")
+                + "\n\n## Backend-adapted semantic execution contract\n\n"
+                + rendered
+                + "\n\n```json\n"
+                + json.dumps(
+                    {
+                        "semantic_digest": semantic_digest,
+                        "adaptation_digest": adaptation_digest,
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                + "\n```"
+                + "\n"
+            )
+
     projected_digest = hashlib.sha256(content.encode()).hexdigest()
     canonical_digest = (
         skill_info.canonical_digest
@@ -219,6 +265,10 @@ def project_agent_skill_document(
         projected_digest=projected_digest,
         canonical_digest=canonical_digest,
         source_identity=_source_identity(skill_info),
+        semantic_payload=semantic_payload,
+        adaptation_payload=adaptation_payload,
+        semantic_digest=semantic_digest,
+        adaptation_digest=adaptation_digest,
     )
 
 
@@ -510,10 +560,10 @@ def validate_sanitized_plugin_artifact(
             ),
             "activate_deps": list(info.activate_deps),
         }
-        for field, value in expected_entry.items():
-            if entry.get(field) != value:
+        for field_name, value in expected_entry.items():
+            if entry.get(field_name) != value:
                 errors.append(
-                    f"manifest {field} mismatch for {name}: "
-                    f"expected {value!r}, got {entry.get(field)!r}"
+                    f"manifest {field_name} mismatch for {name}: "
+                    f"expected {value!r}, got {entry.get(field_name)!r}"
                 )
     return tuple(errors)

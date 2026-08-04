@@ -1,12 +1,30 @@
 ---
 name: setup-environment
-categories: [research]
-uses_capabilities: [agent_model]
-description: >
-  Pre-flight environment gate for the research recipe. Reads the experiment
-  plan, detects the required environment type, builds a Docker image or creates
-  a host micromamba environment, and emits an env_mode verdict consumed by
-  downstream steps.
+categories:
+- research
+uses_capabilities: []
+description: 'Pre-flight environment gate for the research recipe. Reads the experiment plan, detects the required environment
+  type, builds a Docker image or creates a host micromamba environment, and emits an env_mode verdict consumed by downstream
+  steps.
+
+  '
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Environment Setup
@@ -42,15 +60,15 @@ PASS and WARN proceed to `decompose_phases`; FAIL escalates immediately.
 - Modify the experiment plan
 - Write files outside `{{AUTOSKILLIT_TEMP}}/setup-environment/`
 - Skip the Docker availability probe before attempting a build
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Parse `environment.type` from the experiment plan first
 - Try Docker before falling back to micromamba
 - Write the environment setup report before emitting the verdict token
-- Spawn all subagents via `Agent(model="sonnet")`
-- Issue all Task calls in a single message to maximize parallelism
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 

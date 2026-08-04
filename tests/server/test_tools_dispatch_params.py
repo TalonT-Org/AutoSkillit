@@ -5,7 +5,11 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.fleet import FleetSemaphore
-from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
+from tests.fakes import (
+    InMemoryHeadlessExecutor,
+    InMemoryRecipeRepository,
+    adapt_test_skill_semantics,
+)
 from tests.fleet._helpers import _mock_backend_with_locator
 from tests.server._helpers import (
     _make_recipe_info,
@@ -42,6 +46,7 @@ async def test_dispatch_food_truck_missing_lineage_does_not_pass_resume_session_
         project_log_dir=tmp_path,
         session_log_path=jsonl_file,
     )
+    tool_ctx_kitchen_open.backend.adapt_skill_semantics.side_effect = adapt_test_skill_semantics
 
     await dispatch_food_truck(
         recipe="test-recipe",
@@ -76,6 +81,7 @@ async def test_dispatch_food_truck_missing_lineage_drops_resume_message(
         project_log_dir=tmp_path,
         session_log_path=jsonl_file,
     )
+    tool_ctx_kitchen_open.backend.adapt_skill_semantics.side_effect = adapt_test_skill_semantics
 
     await dispatch_food_truck(
         recipe="test-recipe",

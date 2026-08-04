@@ -259,6 +259,7 @@ def build_ctx(tmp_path):
         DefaultCommittedDispositionResolver,
     )
     from tests.fakes import (
+        FakeLaunchResolver,
         FakeManagedHeadlessSessionLineageStore,
         FakePluginArtifactAuthority,
         FakeSkillSessionContractStore,
@@ -296,6 +297,7 @@ def build_ctx(tmp_path):
             gate=DefaultGateState(enabled=False),
             plugin_authority=plugin_authority,
             runner=None,
+            launch_resolver=FakeLaunchResolver(),
             temp_dir=tmp_path / ".autoskillit" / "temp",
             project_dir=tmp_path,
             skill_session_contract_store=FakeSkillSessionContractStore(),

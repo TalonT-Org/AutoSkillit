@@ -12,6 +12,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tests.fakes import adapt_test_skill_semantics
+
 pytestmark = [
     pytest.mark.layer("cli"),
     pytest.mark.small,
@@ -128,6 +130,7 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
             session_dir_persistent=False,
             skill_injection_capable=True,
         )
+        adapt_skill_semantics = staticmethod(adapt_test_skill_semantics)
 
         def binary_name(self) -> str:
             return "claude"
@@ -350,6 +353,7 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
             session_dir_persistent=False,
             skill_injection_capable=True,
         )
+        adapt_skill_semantics = staticmethod(adapt_test_skill_semantics)
 
         def binary_name(self) -> str:
             return "claude"

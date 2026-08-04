@@ -271,7 +271,7 @@ async def test_run_skill_idle_output_timeout_defaults_to_none(
 async def test_run_skill_passes_backend_to_projection_context(
     tool_ctx_kitchen_open, monkeypatch
 ) -> None:
-    """run_skill forwards tool_ctx.backend to invocation materialization."""
+    """run_skill forwards the resolved global backend to materialization."""
     from unittest.mock import MagicMock
 
     from autoskillit.execution.backends import get_backend
@@ -291,64 +291,7 @@ async def test_run_skill_passes_backend_to_projection_context(
 
     mock_ssm.materialize_invocation.assert_called_once()
     projection_context = mock_ssm.materialize_invocation.call_args.args[2]
-    assert projection_context.backend is fake_backend
-
-
-@pytest.mark.anyio
-async def test_run_skill_incompatible_backend_rejects_before_init_session(
-    tool_ctx_kitchen_open, tmp_path, monkeypatch
-) -> None:
-    """When skill requires claude-code and effective backend is codex (no provider override),
-    the incompatibility gate rejects before init_session is called."""
-    import json
-    from unittest.mock import MagicMock
-
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
-    from tests.fakes import InMemoryHeadlessExecutor
-
-    mock_ssm = MagicMock()
-    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
-
-    fake_backend = MagicMock(spec=CodingAgentBackend)
-    fake_backend.name = "codex"
-    fake_backend.capabilities.anthropic_provider_capable = False
-    tool_ctx_kitchen_open.backend = fake_backend
-
-    from pathlib import Path
-
-    from autoskillit.core import SkillExecutionRole
-    from autoskillit.core.types import SkillSource
-    from autoskillit.workspace.skills import EffectiveSkillInvocation, SkillInfo
-
-    skill_info = SkillInfo(
-        name="test-skill",
-        source=SkillSource.BUNDLED,
-        path=Path("/fake/SKILL.md"),
-        uses_capabilities=frozenset({"open_kitchen"}),
-        canonical_content=("---\nname: test-skill\ndescription: Test skill.\n---\n# Test\n"),
-    )
-    invocation = EffectiveSkillInvocation(
-        root=skill_info,
-        closure=(skill_info,),
-        capability_union=frozenset({"open_kitchen"}),
-        project_root=tmp_path,
-        execution_role=SkillExecutionRole.SESSION,
-    )
-    mock_resolver = MagicMock()
-    mock_resolver.resolve_invocation.return_value = invocation
-    tool_ctx_kitchen_open.skill_resolver = mock_resolver
-
-    tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
-        lambda *a, **kw: ("default", {}),
-    )
-    result = await run_skill("/autoskillit:test-skill", str(tmp_path))
-    data = json.loads(result)
-    assert data.get("subtype") == "crashed"
-    assert "requires backend" in data.get("result", "")
-    mock_ssm.materialize_invocation.assert_not_called()
+    assert projection_context.backend.name == fake_backend.name
 
 
 class TestOutputDirParameter:
@@ -548,9 +491,7 @@ async def test_run_skill_empty_closure_not_expanded_to_unrestricted(
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
 
     mock_resolver = MagicMock()
-    mock_resolver.resolve.return_value = MagicMock(
-        source=MagicMock(value="bundled_extended"), backend_requirements=frozenset()
-    )
+    mock_resolver.resolve.return_value = MagicMock(source=MagicMock(value="bundled_extended"))
     tool_ctx_kitchen_open.skill_resolver = mock_resolver
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 

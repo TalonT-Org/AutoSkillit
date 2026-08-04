@@ -941,6 +941,7 @@ def test_recover_filters_healthy_failed_unresolved_unknown_and_store_failure(
         expected_owner_id=os.getuid(),
     )
     failed_authority.database_path.parent.mkdir(mode=0o755)
+    failed_authority.database_path.parent.chmod(0o755)
     store_failed = DefaultContextAdmissionLedger(failed_authority).recover(unknown_key)
     assert store_failed.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
     assert store_failed.stream_healths == ()

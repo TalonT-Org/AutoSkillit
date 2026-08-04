@@ -1,17 +1,38 @@
 ---
 name: prepare-research-pr
-categories: [research]
-description: >
-  Reads a research report and experiment plan, synthesizes a recommendation,
-  selects 1-2 exp-lens lenses, writes a context file per lens, and writes a
-  PR prep file. Does NOT open a PR. Part 1 of 3 in the decomposed research-PR flow.
+categories:
+- research
+description: 'Reads a research report and experiment plan, synthesizes a recommendation, selects 1-2 exp-lens lenses, writes
+  a context file per lens, and writes a PR prep file. Does NOT open a PR. Part 1 of 3 in the decomposed research-PR flow.
+
+  '
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: prepare-research-pr] Preparing research PR metadata...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: prepare-research-pr] Preparing research PR metadata...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: research-source-reader
+    purpose: read one research source and return bounded evidence
+  - name: research-synthesizer
+    purpose: synthesize research evidence and recommend lenses
+  child_spawns:
+  - role: research-source-reader
+  - role: research-synthesizer
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: research-synthesizer
+    model_class: sonnet
 ---
 
 # Prepare Research PR
@@ -38,14 +59,14 @@ Does NOT invoke any exp-lens skills or create a PR.
 - Invoke exp-lens skills — they are run in separate sessions by the recipe orchestrator
 - Create files outside `{{AUTOSKILLIT_TEMP}}/prepare-research-pr/` (relative to the current working directory)
 - Fail silently — always emit all three output tokens as your final output
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
-- Use Agent subagents (not slash commands) for reading and synthesis
+- Use child delegations (not slash commands) for reading and synthesis
 - Emit `prep_path`, `selected_lenses`, and `lens_context_paths` as your final output
 - Write all output paths as absolute paths
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Lens Selection Table
 
@@ -93,9 +114,9 @@ Create temp directory:
 
 Generate a timestamp `ts` (format: `YYYY-MM-DD_HHMMSS`) for unique file naming.
 
-### Step 1: Read report via Agent subagent (SINGLE MESSAGE)
+### Step 1: Read report via child delegation (SINGLE MESSAGE)
 
-**Issue ALL Task/Explore subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Issue ALL backend-adapted child-delegation calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
@@ -109,7 +130,7 @@ Spawn an **Explore** subagent to read `{report_path}` and extract:
 
 Store extracted content as `report_content`.
 
-### Step 2: Read experiment plan via Agent subagent
+### Step 2: Read experiment plan via child delegation
 
 Spawn an **Explore** subagent to read `{experiment_plan_path}` and extract:
 - `experiment_type` (benchmark / configuration_study / causal_inference / robustness_audit / exploratory)
@@ -123,15 +144,15 @@ Spawn an **Explore** subagent to read `{experiment_plan_path}` and extract:
 
 Store extracted content as `plan_content`.
 
-### Step 3: Synthesize recommendation via sonnet subagent
+### Step 3: Synthesize recommendation via child under the declared `sonnet` model-class policy
 
-Spawn a **sonnet** subagent with the report's Conclusions, Recommendations, and
+Spawn a child under the declared `sonnet` model-class policy with the report's Conclusions, Recommendations, and
 experiment status. Produce a 1-3 sentence directional recommendation (inverted pyramid —
 most important finding first). Store as `recommendation`.
 
-### Step 4: Select lenses via sonnet subagent
+### Step 4: Select lenses via child under the declared `sonnet` model-class policy
 
-Spawn a **sonnet** subagent with `experiment_type` and the plan's IV/DV structure.
+Spawn a child under the declared `sonnet` model-class policy with `experiment_type` and the plan's IV/DV structure.
 Select 1-2 exp-lens slugs using the Lens Selection Table above.
 
 Output: a list of 1-2 slugs, e.g. `["fair-comparison", "estimand-clarity"]`.

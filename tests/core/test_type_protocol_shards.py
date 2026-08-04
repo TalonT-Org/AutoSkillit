@@ -22,11 +22,12 @@ def test_execution_shard_all():
 
     assert set(__all__) == {
         "CompletionRequiredResolver",
-        "HeadlessSkillDispatchContract",
-        "HeadlessSkillDispatchPreparation",
+        "SkillProjectionPreparation",
         "InputContractResolver",
         "TestRunner",
         "HeadlessExecutor",
+        "LaunchAdapter",
+        "LaunchResolver",
         "OutputPatternResolver",
         "SkillContractView",
         "SkillSessionContractStore",
@@ -34,13 +35,12 @@ def test_execution_shard_all():
     }
 
 
-def test_headless_skill_dispatch_preparation_runtime_protocol(tmp_path):
+def test_skill_projection_preparation_runtime_protocol(tmp_path):
     from autoskillit.core.types._type_protocols_execution import (
-        HeadlessSkillDispatchPreparation,
+        SkillProjectionPreparation,
     )
 
     class _Preparation:
-        resolved_command = "/autoskillit:investigate"
         cwd = tmp_path
         project_root = tmp_path
         catalog = object()
@@ -51,26 +51,25 @@ def test_headless_skill_dispatch_preparation_runtime_protocol(tmp_path):
             del backend, binding
             return object()
 
-    assert isinstance(_Preparation(), HeadlessSkillDispatchPreparation)
+    assert isinstance(_Preparation(), SkillProjectionPreparation)
 
 
 def test_headless_skill_dispatch_preparation_finalize_contract():
     import inspect
     from typing import get_type_hints
 
-    from autoskillit.core import CodingAgentBackend, PluginLaunchBinding
+    from autoskillit.core import CodingAgentBackend, PluginLaunchBinding, SkillProjectionBinding
     from autoskillit.core.types._type_protocols_execution import (
-        HeadlessSkillDispatchContract,
-        HeadlessSkillDispatchPreparation,
+        SkillProjectionPreparation,
     )
 
-    signature = inspect.signature(HeadlessSkillDispatchPreparation.finalize)
+    signature = inspect.signature(SkillProjectionPreparation.finalize)
     assert signature.parameters["backend"].kind is inspect.Parameter.KEYWORD_ONLY
     assert signature.parameters["binding"].kind is inspect.Parameter.KEYWORD_ONLY
-    assert get_type_hints(HeadlessSkillDispatchPreparation.finalize) == {
+    assert get_type_hints(SkillProjectionPreparation.finalize) == {
         "backend": CodingAgentBackend,
         "binding": PluginLaunchBinding,
-        "return": HeadlessSkillDispatchContract,
+        "return": SkillProjectionBinding,
     }
 
 
@@ -184,7 +183,7 @@ def test_all_protocols_reachable_via_types():
         "GateState",
         "AuditLog",
         "HeadlessExecutor",
-        "HeadlessSkillDispatchPreparation",
+        "SkillProjectionPreparation",
         "GitHubFetcher",
         "RecipeRepository",
         "WorkspaceManager",

@@ -1,11 +1,43 @@
 ---
 name: plan-visualization
-categories: [research, vis-lens]
-uses_capabilities: [agent_model, cross_skill_ref]
-description: >
-  Orchestrates 2–4 vis-lens skills in parallel to produce a figure inventory
-  (visualization-plan.md) and a report-placement outline (report-plan.md).
-  Runs after design review GO, before worktree creation.
+categories:
+- research
+- vis-lens
+uses_capabilities: []
+description: 'Orchestrates 2–4 vis-lens skills in parallel to produce a figure inventory (visualization-plan.md) and a report-placement
+  outline (report-plan.md). Runs after design review GO, before worktree creation.
+
+  '
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
+  sibling_skills:
+  - name: vis-lens-always-on
+  - name: vis-lens-antipattern
+  - name: vis-lens-caption-annot
+  - name: vis-lens-chart-select
+  - name: vis-lens-color-access
+  - name: vis-lens-figure-table
+  - name: vis-lens-methodology-norms
+  - name: vis-lens-multi-compare
+  - name: vis-lens-reproducibility
+  - name: vis-lens-story-arc
+  - name: vis-lens-temporal
+  - name: vis-lens-uncertainty
 ---
 
 # Plan Visualization Skill
@@ -38,15 +70,15 @@ outputs, and synthesizes a complete visualization plan.
   appear in a SINGLE assistant message to execute in parallel
 - Write outputs outside `{{AUTOSKILLIT_TEMP}}/plan-visualization/`
 - Fabricate lens recommendations or validation conclusions not supported by the data — report what the experiment plan and scope show, not what you assume they should show
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Write a vis-lens context file for each selected lens before invoking it
 - Log every conflict resolution decision in the Conflict Resolution Log table
 - Emit `visualization_plan_path` and `report_plan_path` tokens as your final output
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -191,7 +223,7 @@ routing_triple:
 
 ### Step 3 — Run Vis-Lens Skills in Parallel (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 

@@ -1,4 +1,4 @@
-"""Tests for per-dispatch backend override (heterogeneous routing R1)."""
+"""Tests for per-dispatch typed backend authority."""
 
 from __future__ import annotations
 
@@ -18,7 +18,6 @@ def _mock_backend(name: str = "claude-code", *, food_truck_capable: bool = True)
     backend.name = name
     backend.capabilities.food_truck_capable = food_truck_capable
     backend.capabilities.anthropic_provider_capable = True
-    backend.capabilities.git_metadata_writable = True
     backend.capabilities.has_unguarded_filesystem_access = False
     backend.capabilities.process_name = "claude"
     backend.session_locator.return_value = Mock(
@@ -75,7 +74,8 @@ class TestDispatchBackendOverrideThreadsToExecutor:
 
         assert len(tool_ctx.executor.dispatch_calls) == 1
         dispatch_call = tool_ctx.executor.dispatch_calls[0]
-        assert dispatch_call.backend_override == "codex"
+        assert dispatch_call.backend_authority.backend == "codex"
+        assert dispatch_call.backend_authority.kind.value == "caller"
         assert dispatch_call.plugin_authority is not None
         assert dispatch_call.capability_preparation is not None
 
@@ -89,25 +89,7 @@ class TestDispatchBackendOverrideOmittedUsesCtxBackend:
         await _run_with_backend(tool_ctx)
 
         assert len(tool_ctx.executor.dispatch_calls) == 1
-        assert tool_ctx.executor.dispatch_calls[0].backend_override is None
-
-
-class TestDispatchBackendOverrideCapabilityOverridesUseDispatchBackend:
-    @pytest.mark.anyio
-    async def test_dispatch_backend_override_capability_overrides_use_dispatch_backend(
-        self, tool_ctx, monkeypatch
-    ):
-        _setup(tool_ctx, monkeypatch)
-        ctx_backend = _mock_backend("claude-code")
-        ctx_backend.capabilities.git_metadata_writable = False
-        tool_ctx.backend = ctx_backend
-
-        dispatch_be = _mock_backend("codex")
-        dispatch_be.capabilities.git_metadata_writable = True
-
-        await _run_with_backend(tool_ctx, dispatch_backend=dispatch_be)
-
-        assert len(tool_ctx.executor.dispatch_calls) == 1
+        assert tool_ctx.executor.dispatch_calls[0].backend_authority is None
 
 
 class TestDispatchBackendOverrideFoodTruckIncapableRaises:
@@ -122,7 +104,8 @@ class TestDispatchBackendOverrideFoodTruckIncapableRaises:
         original_dispatch = tool_ctx.executor.dispatch_food_truck
 
         async def _raising_dispatch(*args, **kwargs):
-            if kwargs.get("backend_override") == "incapable":
+            authority = kwargs.get("backend_authority")
+            if authority is not None and authority.backend == "incapable":
                 raise RuntimeError(
                     "backend does not support food truck dispatch "
                     "(food_truck_capable=False); got 'incapable'"

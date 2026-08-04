@@ -285,12 +285,6 @@ def test_review_pr_experimental_dispatch_is_separate_and_exact() -> None:
         "### Step 2.9: Diff-Size Adaptive Agent Selection",
         "### Step 3: Run Parallel Audit Subagents",
     )
-    step_3 = _heading_slice(
-        skill_text,
-        "### Step 3: Run Parallel Audit Subagents",
-        "### Step 4: Aggregate and Deduplicate Findings",
-    )
-
     assert "STANDARD_DISPATCH_AGENTS" in step_2_9
     assert "EXPERIMENTAL_DISPATCH_AGENTS" in step_2_9
     assert "select_experimental_review_dispatch" in step_2_9
@@ -301,8 +295,16 @@ def test_review_pr_experimental_dispatch_is_separate_and_exact() -> None:
         "pr-review-auditor-reachability",
         "pr-review-auditor-abstraction-surface",
     ):
-        registered_call = f'Agent(subagent_type="autoskillit:{agent_name}", model="sonnet")'
-        assert step_3.count(registered_call) == 1
+        requirements = load_yaml(skill_text.split("---\n", maxsplit=2)[1])["semantic_requirements"]
+        assert sum(role["name"] == agent_name for role in requirements["logical_roles"]) == 1
+        assert sum(spawn["role"] == agent_name for spawn in requirements["child_spawns"]) == 1
+        assert (
+            sum(
+                policy["role"] == agent_name and policy["model_class"] == "sonnet"
+                for policy in requirements["child_model_policies"]
+            )
+            == 1
+        )
         assert (
             agent_name
             not in step_2_9.split('STANDARD_AGENT_ALLOWLIST="', maxsplit=1)[1].split(

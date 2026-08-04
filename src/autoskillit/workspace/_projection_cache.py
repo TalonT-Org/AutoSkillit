@@ -297,6 +297,7 @@ class ProjectionCacheKey:
     projection_version: int
     default_base_branch: str
     skill_identity: str
+    adaptation_identity: str
     namespace_identity: str
     asset_digest: str
 
@@ -308,6 +309,7 @@ class ProjectionCacheKey:
                 str(self.projection_version),
                 self.default_base_branch,
                 self.skill_identity,
+                self.adaptation_identity,
                 self.namespace_identity,
                 self.asset_digest,
             )
@@ -325,7 +327,7 @@ PROJECTION_CACHE_KEY_EXCLUSIONS: Mapping[str, str] = MappingProxyType(
             "_direct_install_projection_context are {{AUTOSKILLIT_TEMP}} (process-wide), "
             "{{AUTOSKILLIT_SCRIPTS}} (derived from `destination`, which is derived from "
             "this key) and {{DEFAULT_BASE_BRANCH}} (keyed). `cwd` reaches only "
-            "EffectiveSkillDispatchContract, which is rebuilt per invocation and never "
+            "SkillProjectionBinding, which is rebuilt per invocation and never "
             "cached, so two invocations differing only in cwd may safely share a projection."
         ),
         "project_root": (

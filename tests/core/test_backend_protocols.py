@@ -181,6 +181,8 @@ def test_stub_class_satisfies_coding_agent_backend():
         ResultParser,
         ResumeSpec,
         SessionLocator,
+        SkillSemanticAdaptationResult,
+        SkillSemanticPlan,
         SkillSessionConfig,
         StreamParser,
         ValidatedAddDir,
@@ -302,6 +304,10 @@ def test_stub_class_satisfies_coding_agent_backend():
             )
 
         def translate_model(self, model: str) -> str: ...
+
+        def adapt_skill_semantics(
+            self, plan: SkillSemanticPlan
+        ) -> SkillSemanticAdaptationResult: ...
 
         def model_config_overrides(self, model: str) -> tuple[str, ...]:
             return ()

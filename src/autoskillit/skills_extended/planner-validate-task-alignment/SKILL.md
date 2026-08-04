@@ -1,15 +1,33 @@
 ---
 name: planner-validate-task-alignment
-categories: [planner]
-uses_capabilities: [agent_model]
+categories:
+- planner
+uses_capabilities: []
 description: Validate that plan phases and WPs align with the stated task
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: planner-validate-task-alignment] Validating task alignment...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: planner-validate-task-alignment] Validating task alignment...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # planner-validate-task-alignment
@@ -34,8 +52,8 @@ zero findings.
 - Write output outside `$3/`
 - Read files not passed as arguments
 - Modify input files
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
@@ -44,7 +62,7 @@ zero findings.
 - Compare every phase goal and every WP description against the task
 - Write `$3/task_alignment.json` with findings array
 - Emit: `alignment_findings_path = <absolute path to task_alignment.json>`; also emit `alignment_finding_count`
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -57,11 +75,11 @@ Read `refined_wps.json` from $1 and `refined_plan.json` from $2. Extract:
 
 ### Step 2: Spawn alignment-check subagents (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn 1-2 subagents via `Agent(model="sonnet")`:
+Spawn 1-2 subagents via `child delegation under the declared `sonnet` model-class policy`:
 
 **Subagent A — Phase alignment:**
 Provide the task description and all phase goals/scopes. Ask: "For each phase, does its

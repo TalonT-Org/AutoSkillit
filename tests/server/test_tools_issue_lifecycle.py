@@ -9,8 +9,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from autoskillit.core import (
-    CLAUDE_CODE_CAPABILITIES,
-    BackendCapabilities,
     RetryReason,
     SkillExecutionRole,
     SkillResult,
@@ -457,7 +455,6 @@ async def test_prepare_issue_dispatches_only_projected_skill_documents(
         assert "uses_capabilities:" not in content
         assert "execution_role:" not in content
         assert "activate_deps:" not in content
-        assert "backend_requirements:" not in content
     root = captured["root"]
     assert isinstance(root, Path)
     assert not root.exists()
@@ -522,9 +519,18 @@ async def test_issue_launchers_deliver_winning_override_identity_and_projection(
         _cwd: str,
         *,
         capability_contract,
+        add_dirs=(),
         **_kwargs,
     ) -> SkillResult:
+        assert len(add_dirs) == 1
+        projected_paths = [
+            path
+            for path in Path(add_dirs[0].path).rglob("SKILL.md")
+            if path.parent.name == skill_name
+        ]
+        assert len(projected_paths) == 1
         captured["contract"] = capability_contract
+        captured["projected_digest"] = hashlib.sha256(projected_paths[0].read_bytes()).hexdigest()
         return _make_skill_result(success=True, result=output)
 
     tool_ctx_kitchen_open.project_dir = tmp_path
@@ -536,67 +542,13 @@ async def test_issue_launchers_deliver_winning_override_identity_and_projection(
 
     assert result["success"] is True
     contract = captured["contract"]
-    assert contract.source_identities[skill_name].origin is SkillSource.PROJECT_LOCAL
-    assert contract.execution_role is SkillExecutionRole.SESSION
+    assert contract.source_identities[skill_name]["origin"] == SkillSource.PROJECT_LOCAL.value
+    assert contract.execution_role == SkillExecutionRole.SESSION.value
     assert contract.capability_union == frozenset({"github_api_write"})
     assert contract.canonical_digests[skill_name] == hashlib.sha256(source_before).hexdigest()
-    projected = contract.projected_artifacts[skill_name]
-    assert f"winning {skill_name} override body" in projected
-    assert "uses_capabilities:" not in projected
-    assert "execution_role:" not in projected
-    assert contract.projected_digests[skill_name] == hashlib.sha256(projected.encode()).hexdigest()
+    assert contract.projected_digests[skill_name] == captured["projected_digest"]
+    assert not hasattr(contract, "projected_artifacts")
     assert override.read_bytes() == source_before
-
-
-@pytest.mark.anyio
-@pytest.mark.parametrize(
-    ("handler", "args"),
-    [
-        (prepare_issue, ("Title", "Body")),
-        (enrich_issues, ()),
-    ],
-    ids=("prepare-issue", "enrich-issues"),
-)
-async def test_issue_headless_handlers_reject_incompatible_backend_before_executor(
-    tool_ctx_kitchen_open,
-    handler,
-    args,
-) -> None:
-    """Direct lifecycle handlers must fail closed before executor dispatch."""
-    from autoskillit.workspace.skills import EffectiveSkillInvocation, SkillInfo
-
-    skill_name = "prepare-issue" if args else "enrich-issues"
-    skill_info = SkillInfo(
-        name=skill_name,
-        source=SkillSource.BUNDLED_EXTENDED,
-        path=Path(f"/fake/{skill_name}/SKILL.md"),
-        uses_capabilities=frozenset({"open_kitchen"}),
-        canonical_content=(f"---\nname: {skill_name}\ndescription: Test skill.\n---\n# Test\n"),
-    )
-    invocation = EffectiveSkillInvocation(
-        root=skill_info,
-        closure=(skill_info,),
-        capability_union=frozenset({"open_kitchen"}),
-        project_root=Path(tool_ctx_kitchen_open.project_dir),
-        execution_role=SkillExecutionRole.SESSION,
-    )
-    resolver = MagicMock()
-    resolver.resolve_invocation.return_value = invocation
-    backend = MagicMock()
-    backend.name = "incompatible-backend"
-    backend.capabilities = BackendCapabilities(
-        applicable_guards=CLAUDE_CODE_CAPABILITIES.applicable_guards
-    )
-    tool_ctx_kitchen_open.skill_resolver = resolver
-    tool_ctx_kitchen_open.backend = backend
-    tool_ctx_kitchen_open.executor = AsyncMock()
-
-    result = json.loads(await handler(*args))
-
-    assert result["success"] is False
-    assert result["subtype"] == "crashed"
-    assert "claude-code" in result["result"]
-    tool_ctx_kitchen_open.executor.run.assert_not_awaited()
 
 
 @pytest.mark.anyio

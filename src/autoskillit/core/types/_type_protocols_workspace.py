@@ -21,6 +21,7 @@ from ._type_plugin_source import (
 from ._type_protocols_backend import CodingAgentBackend
 from ._type_results import CleanupResult, CloneResult, ManagedSessionHome, ValidatedAddDir
 from ._type_skill_contract import SkillSourceIdentity, SkillSourceRef, SkillVisibilitySpec
+from ._type_skill_semantics import SkillSemanticPlan
 
 __all__ = [
     "WorkspaceManager",
@@ -121,6 +122,9 @@ class SkillAuthority(Protocol):
     def uses_capabilities(self) -> frozenset[str]: ...
 
     @property
+    def semantic_plan(self) -> SkillSemanticPlan | None: ...
+
+    @property
     def execution_role(self) -> SkillExecutionRole | None: ...
 
     @property
@@ -137,9 +141,6 @@ class SkillAuthority(Protocol):
 
     @property
     def invalid_reason(self) -> str | None: ...
-
-    @property
-    def backend_requirements(self) -> frozenset[str]: ...
 
 
 @runtime_checkable
@@ -187,7 +188,7 @@ class EffectiveSkillInvocationAuthority(Protocol):
     def execution_role(self) -> SkillExecutionRole: ...
 
     @property
-    def backend_requirements(self) -> frozenset[str]: ...
+    def semantic_plans(self) -> tuple[SkillSemanticPlan, ...]: ...
 
 
 @runtime_checkable

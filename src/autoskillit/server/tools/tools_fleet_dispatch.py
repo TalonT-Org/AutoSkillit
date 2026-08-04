@@ -23,7 +23,6 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
-    CapabilityResolutionDetail,
     CodingAgentBackend,
     FleetErrorCode,
     NativeShellCaptureMode,
@@ -69,7 +68,6 @@ from autoskillit.server._misc import (
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.tools._auto_overrides import (
     _compute_effective_backend_map,
-    _provider_aware_capability_overrides,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._preflight import (
@@ -597,8 +595,6 @@ async def dispatch_food_truck(
         # all fix-required hooks for the recipe's run_skill steps before
         # spawning a subprocess.
         _fleet_load_result: dict[str, Any] = {}
-        _capability_overrides: dict[str, str] = {}
-        _cap_detail: CapabilityResolutionDetail | None = None
         _effective_backend_map: dict[str, str] | None = None
         if tool_ctx.recipes is not None:
             try:
@@ -608,24 +604,11 @@ async def dispatch_food_truck(
                     if _preflight_recipe_info is not None
                     else None
                 )
-                _capability_overrides, _cap_detail = _provider_aware_capability_overrides(
-                    _override_backend,
-                    recipe,
-                    tool_ctx.config.providers,
-                    _preflight_raw_steps,
-                    skill_resolver=tool_ctx.skill_resolver,
-                    config_backend=tool_ctx.config.agent_backend,
-                    project_root=tool_ctx.project_dir,
-                )
-                _merged_ingredients = {**(ingredients or {}), **_capability_overrides}
                 _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
                     _preflight_raw_steps,
                     _override_backend.name if _override_backend else None,
-                    tool_ctx.config.providers,
                     recipe,
-                    skill_resolver=tool_ctx.skill_resolver,
                     config_backend=tool_ctx.config.agent_backend,
-                    project_root=tool_ctx.project_dir,
                 )
                 _preflight_backend_capabilities_map = build_backend_capabilities_map(
                     _effective_backend_map, _override_backend
@@ -634,7 +617,7 @@ async def dispatch_food_truck(
                     recipe,
                     tool_ctx.project_dir,
                     suppressed=tool_ctx.config.migration.suppressed if tool_ctx.config else None,
-                    ingredient_overrides=_merged_ingredients,
+                    ingredient_overrides=ingredients,
                     temp_dir=tool_ctx.temp_dir,
                     backend_name=_override_backend.name if _override_backend else None,
                     effective_backend_map=_effective_backend_map,
@@ -642,41 +625,6 @@ async def dispatch_food_truck(
                 )
             except Exception:
                 logger.warning("dispatch_food_truck_preflight_load_failed", exc_info=True)
-
-        if not _fleet_load_result.get("dispatch_feasible", True):
-            _infeasible_steps = _fleet_load_result.get("infeasible_steps", [])
-            _infeasible_msg = (
-                f"Recipe '{recipe}' is dispatch-infeasible: capability gate(s) "
-                f"blocked at preflight. Infeasible steps: {_infeasible_steps}"
-            )
-            if _cap_detail is not None and _cap_detail.resolution_path == "none_pass":
-                _missing = list(_cap_detail.missing_provider_steps)
-                _escape_hatch = (
-                    f"Add provider overrides with ANTHROPIC_BASE_URL for steps: "
-                    f"{_missing}. Example config: "
-                    f"providers.recipe_overrides.<recipe>.*: <profile>"
-                )
-                _infeasible_msg = (
-                    f"Recipe '{recipe}' is dispatch-infeasible: steps {_missing} "
-                    f"lack ANTHROPIC_BASE_URL provider overrides. {_escape_hatch}"
-                )
-                logger.warning(
-                    "dispatch_food_truck_capability_infeasible",
-                    recipe=recipe,
-                    infeasible_steps=_infeasible_steps,
-                )
-                _err_envelope = json.loads(
-                    fleet_error(FleetErrorCode.FLEET_RECIPE_INVALID, _infeasible_msg)
-                )
-                _err_envelope["missing_provider_steps"] = _missing
-                _err_envelope["escape_hatch"] = _escape_hatch
-                return json.dumps(_err_envelope)
-            logger.warning(
-                "dispatch_food_truck_capability_infeasible",
-                recipe=recipe,
-                infeasible_steps=_infeasible_steps,
-            )
-            return fleet_error(FleetErrorCode.FLEET_RECIPE_INVALID, _infeasible_msg)
 
         _active_recipe_steps: dict[str, Any] | None = None
         if _fleet_load_result and tool_ctx.recipes is not None:
@@ -749,7 +697,6 @@ async def dispatch_food_truck(
                     prior_dispatch_id=prior_dispatch_id,
                     resume_message=resume_message,
                     caller_instructions=caller_instructions,
-                    provider_capability_overrides=_capability_overrides,
                     dispatch_backend=dispatch_backend,
                     effective_backend_map=_effective_backend_map,
                     provenance=provenance,

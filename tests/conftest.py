@@ -358,9 +358,9 @@ def minimal_ctx(tmp_path):
     """Lightweight ToolContext using only L0+L1 imports (core, pipeline, config).
 
     Use for tests that only need gate, audit, token_log, timing_log, or config —
-    no server factory, no L2/L3 service wiring. Importing this fixture does NOT
-    pull in autoskillit.server, autoskillit.execution, autoskillit.recipe,
-    autoskillit.migration, or autoskillit.workspace.
+    no server factory or L2/L3 service wiring. The execution-layer launch resolver
+    is included so tests that promote this context into a physical runner still
+    cross the production authority boundary.
 
     Tests that need full service wiring (executor, tester, recipes, etc.) should
     use tool_ctx instead.
@@ -372,6 +372,7 @@ def minimal_ctx(tmp_path):
         CommittedDispositionResolver,
         ContextAdmissionStoreAuthority,
     )
+    from autoskillit.execution.launch_resolution import DefaultLaunchResolver
     from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.audit_admission_ledger import DefaultAuditAdmissionLedger
     from autoskillit.pipeline.context import ToolContext
@@ -405,6 +406,7 @@ def minimal_ctx(tmp_path):
         gate=DefaultGateState(enabled=False),
         plugin_authority=plugin_authority,
         runner=None,
+        launch_resolver=DefaultLaunchResolver(),
         temp_dir=tmp_path / ".autoskillit" / "temp",
         project_dir=tmp_path,
         skill_session_contract_store=FakeSkillSessionContractStore(),
@@ -518,6 +520,15 @@ def bind_test_skill_resume_contract(
     from pathlib import Path
 
     from autoskillit.core import (
+        BackendAuthority,
+        BackendAuthorityKind,
+        BackendAuthorityTier,
+        CmdSpec,
+        LaunchResolutionRequest,
+        LaunchSurface,
+        LaunchValueSource,
+        LaunchValueSourceKind,
+        SemanticLaunchPlan,
         SkillExecutionRole,
         SkillSource,
         SkillSourceRef,
@@ -526,9 +537,68 @@ def bind_test_skill_resume_contract(
         DefaultSkillSessionContractStore,
         SkillSessionContract,
     )
+    from autoskillit.execution.headless._headless_launch import _HeadlessLaunchAdapter
 
     text = f"---\nname: {skill_name}\n---\n# Test resume snapshot\n"
     digest = hashlib.sha256(text.encode()).hexdigest()
+    resolved_cwd = str(Path(cwd).resolve())
+    launch_source = LaunchValueSource(
+        LaunchValueSourceKind.DEFAULT,
+        "tests.resume.default",
+    )
+    launch_preparation = tool_ctx.launch_resolver.prepare(
+        LaunchResolutionRequest(
+            surface=LaunchSurface.HEADLESS_SKILL,
+            authority_candidates=(
+                BackendAuthority(
+                    backend=tool_ctx.backend.name,
+                    kind=BackendAuthorityKind.GLOBAL,
+                    tier=BackendAuthorityTier.GLOBAL,
+                    key_path="agent_backend.backend",
+                ),
+            ),
+            semantic_plan=SemanticLaunchPlan(
+                surface=LaunchSurface.HEADLESS_SKILL,
+                semantic_digest="test-resume-semantic",
+                projection_digest="test-resume-projection",
+            ),
+            command=resolved_command or f"/{skill_name}",
+            arguments=(),
+            cwd=resolved_cwd,
+            requested_model=None,
+            requested_model_source=launch_source,
+            configured_model=None,
+            configured_model_source=launch_source,
+            effort=None,
+            effort_source=launch_source,
+            sandbox_mode="test",
+            network_access=False,
+            pty_required=False,
+            inherited_fd_policy="test",
+            branch_identity={},
+            worktree_identity={"cwd": resolved_cwd},
+            executable_identity={"backend": tool_ctx.backend.name},
+            plugin_identity={},
+            projection_identity={"digest": "test-resume-projection"},
+            artifact_paths=(),
+            quota_identity={},
+            non_authority_metadata={"fixture": True},
+        )
+    )
+    launch_contract = tool_ctx.launch_resolver.finalize(
+        launch_preparation,
+        _HeadlessLaunchAdapter(
+            build_spec=lambda _binding, _extras: CmdSpec(
+                cmd=(tool_ctx.backend.name, "--test-resume"),
+                cwd=resolved_cwd,
+                env={},
+            ),
+            binding=None,
+            provider_extras=None,
+            observer=None,
+            managed_attempt_id=None,
+        ),
+    )
     relative_path = (
         Path(tool_ctx.backend.conventions.skills_subdir) / skill_name / "SKILL.md"
     ).as_posix()
@@ -550,13 +620,14 @@ def bind_test_skill_resume_contract(
         projected_digests={skill_name: digest},
         projection_version=SKILL_PROJECTION_VERSION,
         project_root=str(Path(tool_ctx.project_dir).resolve()),
-        cwd=str(Path(cwd).resolve()),
+        cwd=resolved_cwd,
         backend=tool_ctx.backend.name,
         resolved_command=resolved_command or f"/{skill_name}",
         member_roles={skill_name: SkillExecutionRole.SESSION},
         member_capabilities={skill_name: frozenset()},
         member_activate_deps={skill_name: ()},
         canonical_contents={skill_name: text},
+        launch_contract=launch_contract,
     )
     store = DefaultSkillSessionContractStore(root=Path(tool_ctx.temp_dir) / "test-skill-contracts")
     correlation_key = store.create_provisional(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -49,44 +50,36 @@ def _run_interactive_session(
     from autoskillit.execution import read_session_state
 
     if backend is None:
+        from autoskillit.cli.session._session_backend import resolve_global_backend
         from autoskillit.config import load_config
-        from autoskillit.execution import get_backend
 
         config = load_config()
-        backend = get_backend(config.agent_backend.backend)
+        backend = resolve_global_backend(config.agent_backend.backend)
         configured_base_branch = config.branching.default_base_branch
         if isinstance(configured_base_branch, str):
             default_base_branch = configured_base_branch
-
-        from autoskillit.core import FEATURE_REGISTRY, is_feature_enabled
-
-        for feat_name, feat_def in FEATURE_REGISTRY.items():
-            if (
-                feat_def.requires_backend_alignment
-                and config.agent_backend.backend != "claude-code"
-                and not is_feature_enabled(
-                    feat_name,
-                    config.features,
-                    experimental_enabled=config.experimental_enabled,
-                )
-            ):
-                from autoskillit.core import get_logger
-
-                get_logger(__name__).warning(
-                    "feature_gate_blocked",
-                    extra={
-                        "feature": feat_name,
-                        "backend": config.agent_backend.backend,
-                    },
-                )
-                backend = get_backend("claude-code")
-                break
 
     from autoskillit.cli.session._session_reload import consume_reload_sentinel
     from autoskillit.cli.ui._terminal import terminal_guard
     from autoskillit.core import InfraExitCategory
 
     _project_dir = project_dir if project_dir is not None else Path.cwd()
+    if skill_catalog is not None:
+        from autoskillit.workspace import compile_session_skill_catalog
+
+        compilation = compile_session_skill_catalog(skill_catalog, backend)
+        skill_catalog = compilation.catalog
+        if compilation.unavailable:
+            unavailable_json = json.dumps(
+                compilation.unavailability_payload,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            system_prompt = (
+                f"{system_prompt.rstrip()}\n\n"
+                f"<autoskillit_skill_unavailability>{unavailable_json}"
+                "</autoskillit_skill_unavailability>"
+            )
     from autoskillit.cli._plugin_artifact import interactive_plugin_authority
 
     artifact_authority, load_mode = interactive_plugin_authority(

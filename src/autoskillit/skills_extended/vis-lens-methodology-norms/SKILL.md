@@ -1,16 +1,27 @@
 ---
 name: vis-lens-methodology-norms
-categories: [vis-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: "Create Methodology Norms visualization planning spec showing ML sub-area mandatory figures, community conventions, and coverage gaps. Methodology-Normative lens answering \"Which domain-specific figures are expected by reviewers?\""
+categories:
+- vis-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Create Methodology Norms visualization planning spec showing ML sub-area mandatory figures, community conventions,
+  and coverage gaps. Methodology-Normative lens answering "Which domain-specific figures are expected by reviewers?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Domain Norms Lens - Checking ML sub-area figure requirements...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Domain Norms Lens - Checking ML sub-area figure requirements...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: mermaid
+  - name: synthesize-vis-plan
+  - name: vis-lens-chart-select
+  - name: vis-lens-multi-compare
+  - name: vis-lens-reproducibility
 ---
 
 # Domain Norms Visualization Lens

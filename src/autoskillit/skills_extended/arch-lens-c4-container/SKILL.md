@@ -1,17 +1,28 @@
 ---
 name: arch-lens-c4-container
-categories: [arch-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-write_paths: ["{{AUTOSKILLIT_TEMP}}/arch-lens-c4-container/"]
-description: Create C4 Container architecture diagram showing static structure, building blocks, and technology choices. Anatomical lens answering "How is it built?"
+categories:
+- arch-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+write_paths:
+- '{{AUTOSKILLIT_TEMP}}/arch-lens-c4-container/'
+description: Create C4 Container architecture diagram showing static structure, building blocks, and technology choices. Anatomical
+  lens answering "How is it built?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'C4 Container Lens - Analyzing static structure...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'C4 Container Lens - Analyzing static structure...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: arch-lens-deployment
+  - name: arch-lens-module-dependency
+  - name: make-arch-diag
+  - name: mermaid
 ---
 
 # C4 Container Architecture Lens
@@ -49,8 +60,8 @@ hooks:
 - Modify any source code files
 - Include internal implementation details (that's for other lenses)
 - Show runtime behavior or state transitions
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Focus on CONTAINERS (deployable units, not classes)
@@ -65,7 +76,7 @@ hooks:
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-c4-container/arch_diag_c4_container_{YYYY-MM-DD_HHMMSS}.md
   ```
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 
 ## Analysis Workflow
@@ -87,7 +98,7 @@ If no `context_path` is provided, skip this step and explore the full CWD in Ste
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn Explore subagents to investigate:
+Spawn child delegations to investigate:
 
 **Application Layer**
 - Find CLI entry points and commands

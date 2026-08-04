@@ -1,15 +1,40 @@
 ---
 name: setup-project
-uses_capabilities: [agent_model, claude_dir, cross_skill_ref]
-activate_deps: [write-recipe]
-description: Explore a target project and generate tailored recipes and config through an interactive workflow. Use when user wants to onboard a new project to AutoSkillit, says "setup project", or wants a starting point config.
+uses_capabilities:
+- claude_dir
+activate_deps:
+- write-recipe
+description: Explore a target project and generate tailored recipes and config through an interactive workflow. Use when user
+  wants to onboard a new project to AutoSkillit, says "setup project", or wants a starting point config.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: setup-project] Exploring target project...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: setup-project] Exploring target project...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
+  sibling_skills:
+  - name: implement-worktree
+  - name: investigate
+  - name: rectify
+  - name: write-recipe
 ---
 
 # Setup Project Skill
@@ -43,17 +68,17 @@ Explore a target project and generate tailored recipes and AutoSkillit config th
 - Suggest `reset_guard_marker` config — that's a workspace concern, not project setup
 - Include install instructions or "Getting Started" sections — user is already running the skill
 - Hardcode `base_branch = main` — detect the current branch
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Read the target project using Glob, Read, and Grep — no shell commands against target
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Detect language, test framework, build system, and CI from actual files
 - Present candidate workflows one by one for user approval before generating scripts
 - Show a summary confirmation gate before writing anything to disk
 - Use the two-directory model (project_dir + work_dir) in generated recipes
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -81,11 +106,11 @@ Store the answer for Step 1.
 
 ### Step 1: Explore Target Project (Parallel Subagents) (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Launch parallel Explore subagents against `project_dir`. If the user opted into history mining, include Subagent E in the same parallel launch:
+Launch parallel child delegations against `project_dir`. If the user opted into history mining, include Subagent E in the same parallel launch:
 
 **Subagent A — Language & Build System:**
 - Read `pyproject.toml`, `setup.py`, `package.json`, `go.mod`, `Cargo.toml`, `build.gradle`, `pom.xml`

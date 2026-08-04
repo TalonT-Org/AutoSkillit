@@ -1,4 +1,4 @@
-"""Bridge from fleet progress sources to core SessionCheckpoint.
+"""Bridge fleet progress and launch evidence to core contracts.
 
 Two progress sources feed into SessionCheckpoint:
 - Sidecar (issue-level): completed issue URLs from IssueSidecarEntry
@@ -11,13 +11,69 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.core import SessionCheckpoint, get_logger
+from autoskillit.core import ResolvedLaunchContract, SessionCheckpoint, get_logger
 from autoskillit.fleet.sidecar import IssueSidecarEntry, read_sidecar_from_path
+from autoskillit.fleet.state import CampaignStateMutator
+from autoskillit.fleet.state_types import DispatchStatus
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
 
 logger = get_logger(__name__)
+
+
+def bind_dispatch_launch_contract(
+    state_path: Path,
+    dispatch_name: str,
+    launch_contract: ResolvedLaunchContract,
+) -> None:
+    """Persist exact pre-spawn launch evidence for one dispatch attempt."""
+    with CampaignStateMutator(state_path) as mutator:
+        if mutator.state is None:
+            raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
+        for dispatch in mutator.state.dispatches:
+            if dispatch.name != dispatch_name:
+                continue
+            if dispatch.status not in {DispatchStatus.PENDING, DispatchStatus.RUNNING}:
+                raise ValueError(
+                    f"cannot bind launch contract while dispatch {dispatch.name!r} "
+                    f"is {dispatch.status.value!r}"
+                )
+            previous = dispatch.launch_contract
+            if previous is not None:
+                stable_fields = (
+                    ("launch_contract_digest", previous.digest, launch_contract.digest),
+                    ("surface", previous.surface, launch_contract.surface),
+                    (
+                        "backend_authority",
+                        previous.backend_authority,
+                        launch_contract.backend_authority,
+                    ),
+                    ("backend", previous.effective_backend, launch_contract.effective_backend),
+                    (
+                        "semantic_digest",
+                        previous.semantic_digest,
+                        launch_contract.semantic_digest,
+                    ),
+                    (
+                        "projection_digest",
+                        previous.projection_digest,
+                        launch_contract.projection_digest,
+                    ),
+                    ("cwd", previous.cwd, launch_contract.cwd),
+                )
+                for field_name, old_value, new_value in stable_fields:
+                    if old_value != new_value:
+                        raise ValueError(
+                            f"fleet launch {field_name} drifted across physical attempts"
+                        )
+            dispatch.backend_name = launch_contract.effective_backend
+            dispatch.backend_authority = launch_contract.backend_authority
+            dispatch.launch_contract = launch_contract
+            dispatch.launch_contract_digest = launch_contract.digest
+            mutator.mark_dirty()
+            return
+        raise ValueError(f"Dispatch '{dispatch_name}' not found in state")
 
 
 def checkpoint_from_sidecar(

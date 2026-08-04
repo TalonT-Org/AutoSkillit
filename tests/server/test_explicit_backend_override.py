@@ -16,7 +16,6 @@ def _make_recipe_step(step_name: str, skill_command: str = "/dry-walkthrough"):
         provider="",
         with_args={"skill_command": skill_command},
         skip_when_false="",
-        backend_requirements=None,
     )
 
 
@@ -28,15 +27,6 @@ def _make_backend(**kwargs):
     from autoskillit.config.settings import AgentBackendConfig
 
     return AgentBackendConfig(**kwargs)
-
-
-def _make_resolver(skill_name: str, caps=("agent_model",)):
-    cap_reg = MagicMock()
-    cap_reg.get = lambda c: MagicMock(worker_routable=True) if c in caps else None
-    resolved = MagicMock(uses_capabilities=frozenset(caps))
-    resolver = MagicMock(resolve=MagicMock(return_value=resolved))
-    resolver.resolve_invocation.return_value = SimpleNamespace(capability_union=frozenset(caps))
-    return resolver
 
 
 class TestExplicitBackendOverrideAdmissionDispatchAgreement:
@@ -52,7 +42,7 @@ class TestExplicitBackendOverrideAdmissionDispatchAgreement:
         )
         # Admission side
         admission_map, _ = _compute_effective_backend_map(
-            cast(Any, steps), "codex", None, "remediation", config_backend=cfg
+            cast(Any, steps), "codex", "remediation", config_backend=cfg
         )
         assert admission_map == {"dry_walkthrough": "codex"}
 
@@ -84,32 +74,6 @@ class TestExplicitBackendOverrideAdmissionDispatchAgreement:
             f"Expected 'opus' to produce {expected_effort!r} effort on Codex, "
             f"got {config_overrides!r}"
         )
-
-    def test_explicit_override_suppresses_capability_routing(self) -> None:
-        """A step pinned to codex with a worker_routable capability must NOT
-        be rerouted to claude-code by capability routing."""
-        from autoskillit.server.tools._auto_overrides import (
-            AGENT_BACKEND_CLAUDE_CODE,
-            _compute_effective_backend_map,
-        )
-
-        steps = _make_recipe_steps("dry_walkthrough")
-        cfg = _make_backend(
-            backend="codex",
-            recipe_overrides={"remediation": {"dry_walkthrough": "codex"}},
-        )
-        resolver = _make_resolver("dry-walkthrough")
-        admission_map, _ = _compute_effective_backend_map(
-            cast(Any, steps),
-            "codex",
-            None,
-            "remediation",
-            skill_resolver=resolver,
-            config_backend=cfg,
-        )
-        assert admission_map is not None
-        assert admission_map["dry_walkthrough"] != AGENT_BACKEND_CLAUDE_CODE
-        assert admission_map["dry_walkthrough"] == "codex"
 
 
 class TestExplicitOverrideProviderPrecedence:
@@ -153,8 +117,13 @@ class TestExplicitOverrideProviderPrecedence:
             persistent_root=tmp_path / "persistent-sessions",
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_execution._get_backend",
-            lambda _name: fake_backend,
+            tool_ctx_kitchen_open.launch_resolver,
+            "backend_for_authority",
+            lambda _authority: fake_backend,
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_execution.shutil.which",
+            lambda binary: f"/test-bin/{binary}",
         )
 
         # Explicit backend override: pin this step to codex
@@ -187,8 +156,7 @@ class TestExplicitOverrideProviderPrecedence:
         resolver.resolve_invocation.return_value = invocation
         tool_ctx_kitchen_open.skill_resolver = resolver
 
-        # Provider profile returns ANTHROPIC_BASE_URL — normally this would
-        # trigger _provider_override=True and set backend_override="claude-code"
+        # Provider profile metadata cannot compete with explicit backend authority.
         monkeypatch.setattr(
             "autoskillit.server._guards._resolve_provider_profile",
             lambda *a, **kw: (
@@ -204,7 +172,7 @@ class TestExplicitOverrideProviderPrecedence:
             lambda *a, **kw: True,
         )
 
-        # Spy on executor.run to capture backend_override kwarg. run_skill calls
+        # Spy on executor.run to capture the typed authority. run_skill calls
         # executor.run(resolved_command, cwd, model=..., ...) — resolved_command
         # and cwd are positional, so spy_run must accept them positionally.
         captured = {}
@@ -223,13 +191,11 @@ class TestExplicitOverrideProviderPrecedence:
                 step_name="investigate",
             )
         )
-        # Explicit override must win — backend_override should be "codex",
-        # NOT "claude-code" from the provider routing
-        assert captured.get("backend_override") == "codex", (
-            f"Expected explicit override 'codex' to beat provider routing, "
-            f"got backend_override={captured.get('backend_override')!r}; "
-            f"response={response!r}"
-        )
+        authority = captured.get("backend_authority")
+        assert authority is not None, response
+        assert authority.backend == "codex"
+        assert authority.kind.value == "recipe"
+        assert authority.key_path == "agent_backend.recipe_overrides.remediation.investigate"
 
 
 class TestBothRoutingDirections:
@@ -254,64 +220,3 @@ class TestBothRoutingDirections:
         result = _resolve_backend_override("implement", "any_recipe", cfg)
         assert result is not None
         assert result.backend == "codex"
-
-    def test_dry_walkthrough_codex_pin(self) -> None:
-        """The exact scenario from issue #4242: backend=codex + recipe override to codex +
-        capability worker_routable=True → resolves to codex (no reroute)."""
-        from autoskillit.config.settings import ProvidersConfig
-        from autoskillit.server.tools._auto_overrides import (
-            AGENT_BACKEND_CLAUDE_CODE,
-            _compute_effective_backend_map,
-        )
-
-        steps = _make_recipe_steps("dry_walkthrough")
-        providers = ProvidersConfig()
-        cfg = _make_backend(
-            backend="codex",
-            recipe_overrides={"remediation": {"dry_walkthrough": "codex"}},
-        )
-        resolver = _make_resolver("dry-walkthrough")
-        admission_map, _ = _compute_effective_backend_map(
-            cast(Any, steps),
-            "codex",
-            providers,
-            "remediation",
-            skill_resolver=resolver,
-            config_backend=cfg,
-        )
-        assert admission_map is not None
-        assert admission_map["dry_walkthrough"] != AGENT_BACKEND_CLAUDE_CODE
-        assert admission_map["dry_walkthrough"] == "codex"
-
-    def test_explicit_codex_pin_skips_claude_binary_check(self, monkeypatch) -> None:
-        """When explicit override pins to codex on a worker_routable step, the
-        ``_skill_requires_claude`` claude binary check must NOT fire — the
-        explicit pin keeps the step on codex even when the claude binary is
-        absent (simulated at the _provider_aware_capability_overrides level
-        where shutil.which is actually called)."""
-        from autoskillit.server.tools._auto_overrides import (
-            AGENT_BACKEND_CLAUDE_CODE,
-            _compute_effective_backend_map,
-        )
-
-        monkeypatch.setattr(
-            "autoskillit.server.tools._auto_overrides.shutil.which",
-            lambda name: None if name == "claude" else f"/usr/bin/{name}",
-        )
-        steps = _make_recipe_steps("dry_walkthrough")
-        cfg = _make_backend(
-            backend="codex",
-            recipe_overrides={"remediation": {"dry_walkthrough": "codex"}},
-        )
-        resolver = _make_resolver("dry-walkthrough")
-        admission_map, _ = _compute_effective_backend_map(
-            cast(Any, steps),
-            "codex",
-            None,
-            "remediation",
-            skill_resolver=resolver,
-            config_backend=cfg,
-        )
-        assert admission_map is not None
-        assert admission_map["dry_walkthrough"] != AGENT_BACKEND_CLAUDE_CODE
-        assert admission_map["dry_walkthrough"] == "codex"

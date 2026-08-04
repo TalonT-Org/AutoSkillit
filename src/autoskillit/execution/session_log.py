@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import shutil
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -162,7 +162,8 @@ def flush_session_log(
     session_locator: SessionLocator | None = None,
     backend: Literal["claude-code", "codex"] = "claude-code",
     channel_b_capable: bool = True,
-    backend_override_source: str | None = None,
+    backend_authority: Mapping[str, object] | None = None,
+    launch_contract_digest: str = "",
     telemetry: SessionTelemetry,
     outcome_fields: dict[str, int | str] | None = None,
     outcome_invariant_violated: bool = False,
@@ -455,7 +456,8 @@ def flush_session_log(
         "tracked_comm_drift": _tracked_comm_drift,
         "tracer_target_resolution_version": 2,
         "backend": backend,
-        "backend_override_source": backend_override_source,
+        "backend_authority": dict(backend_authority) if backend_authority is not None else None,
+        "launch_contract_digest": launch_contract_digest,
         "orphaned_tool_result": orphaned_tool_result,
         "last_stop_reason": last_stop_reason,
         "request_ids": _cb_request_ids,
@@ -584,7 +586,8 @@ def flush_session_log(
         "tracked_comm": _effective_tracked_comm,
         "tracked_comm_drift": _tracked_comm_drift,
         "backend": backend,
-        "backend_override_source": backend_override_source,
+        "backend_authority": dict(backend_authority) if backend_authority is not None else None,
+        "launch_contract_digest": launch_contract_digest,
         "autoskillit_version": versions.get("autoskillit_version", "") if versions else "",
         "claude_code_version": versions.get("claude_code_version", "") if versions else "",
         "codex_version": versions.get("codex_version", "") if versions else "",
@@ -610,7 +613,7 @@ def flush_session_log(
         "model_identifier": effective_model_id,
         "configured_model": model_identity.configured_model,
         "profile_name": model_identity.profile_name,
-        "schema_version": 6,
+        "schema_version": 7,
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:

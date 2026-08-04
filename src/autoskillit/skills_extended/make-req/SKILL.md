@@ -1,13 +1,29 @@
 ---
 name: make-req
-description: Decompose a task, plan, roadmap, or feature description into a structured set of requirements grouped for independent planning. Use when user says "make req", "make requirements", "decompose requirements", "extract requirements", or wants to break down a task into what needs to be true.
+description: Decompose a task, plan, roadmap, or feature description into a structured set of requirements grouped for independent
+  planning. Use when user says "make req", "make requirements", "decompose requirements", "extract requirements", or wants
+  to break down a task into what needs to be true.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Decomposing into requirements...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Decomposing into requirements...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # Requirements Decomposition Skill
@@ -37,8 +53,8 @@ Decompose a task, plan, roadmap, or feature description into a structured set of
 - Prescribe implementation approaches or libraries in requirements
 - Include implementation steps disguised as requirements ("Refactor X to use Y" is an instruction, not a requirement)
 - Write requirements that can only be verified by reading source code
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use subagents to understand the source material and relevant codebase context
@@ -46,7 +62,7 @@ Decompose a task, plan, roadmap, or feature description into a structured set of
 - Provide background and context for each group
 - State requirements as verifiable conditions
 - Write to `{{AUTOSKILLIT_TEMP}}/make-req/` directory (relative to the current working directory)
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -54,7 +70,7 @@ Decompose a task, plan, roadmap, or feature description into a structured set of
 
 Identify the input: a task description, plan document, roadmap, conversation context, or file reference. Read it fully.
 
-If the input references existing systems or codebases, launch parallel Explore subagents (SINGLE MESSAGE — issue ALL Task calls at once) to understand:
+If the input references existing systems or codebases, launch parallel child delegations (SINGLE MESSAGE — issue ALL child delegations at once) to understand:
 
 - What exists today that the requirements relate to
 - Current capabilities and boundaries

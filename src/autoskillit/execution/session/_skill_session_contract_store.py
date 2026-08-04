@@ -9,6 +9,7 @@ import secrets
 import shutil
 import tempfile
 from collections.abc import Iterable, Mapping
+from dataclasses import replace
 from pathlib import Path, PurePosixPath
 from threading import RLock
 from typing import Any
@@ -19,6 +20,7 @@ from autoskillit.core import (
     SKILL_PROJECTION_VERSION,
     SKILL_SESSION_CONTRACT_SCHEMA_VERSION,
     ManagedHeadlessSessionLineageRef,
+    ResolvedLaunchContract,
     SkillContractError,
     SkillExecutionRole,
     SkillSessionContract,
@@ -131,6 +133,43 @@ class DefaultSkillSessionContractStore:
                 )
                 raise FileExistsError(f"Session contract already finalized: {session_id!r}")
             os.replace(provisional, destination)
+
+    def bind_launch(
+        self,
+        correlation_key: str,
+        launch_contract: ResolvedLaunchContract,
+    ) -> None:
+        """Bind the exact secret-free physical authority before the child spawn."""
+        provisional = self._provisional_path(correlation_key)
+        with self._lock:
+            manifest = self._read_manifest(provisional)
+            contract = self._validate_entry(
+                provisional,
+                manifest,
+                expected_raw_session_id=None,
+            )
+            if contract.launch_contract is not None:
+                previous = contract.launch_contract
+                if (
+                    previous.surface is not launch_contract.surface
+                    or previous.effective_backend != launch_contract.effective_backend
+                    or previous.backend_authority != launch_contract.backend_authority
+                    or previous.semantic_digest != launch_contract.semantic_digest
+                    or previous.projection_digest != launch_contract.projection_digest
+                ):
+                    raise ValueError("Skill session launch authority drifted between attempts")
+                if previous.digest == launch_contract.digest:
+                    return
+            bound_contract = replace(
+                contract,
+                launch_contract=launch_contract,
+                launch_contract_digest=launch_contract.digest,
+            )
+            _validate_contract(bound_contract)
+            contract_data = _contract_to_dict(bound_contract)
+            manifest["contract"] = contract_data
+            manifest["contract_digest"] = _digest_json(contract_data)
+            self._write_manifest(provisional, manifest)
 
     def rebind_final_session(
         self,
@@ -345,6 +384,13 @@ def _validate_digest_map(
 def _validate_contract(contract: SkillSessionContract) -> None:
     if contract.schema_version != SKILL_SESSION_CONTRACT_SCHEMA_VERSION:
         raise SkillContractError("Unsupported skill session contract schema")
+    if contract.launch_contract is not None:
+        if contract.launch_contract_digest != contract.launch_contract.digest:
+            raise SkillContractError("Skill session launch contract digest mismatch")
+        if contract.launch_contract.effective_backend != contract.backend:
+            raise SkillContractError("Skill session launch backend mismatch")
+        if contract.launch_contract.cwd != contract.cwd:
+            raise SkillContractError("Skill session launch cwd mismatch")
     if not contract.root_name or not contract.closure:
         raise SkillContractError("Skill session contract requires a root and closure")
     closure = set(contract.closure)
@@ -495,6 +541,12 @@ def _contract_to_dict(contract: SkillSessionContract) -> dict[str, Any]:
         "projection_substitutions": [list(item) for item in contract.projection_substitutions],
         "projection_gating": contract.projection_gating,
         "projection_namespace": contract.projection_namespace,
+        "launch_contract": (
+            json.loads(contract.launch_contract.canonical_json)
+            if contract.launch_contract is not None
+            else None
+        ),
+        "launch_contract_digest": contract.launch_contract_digest,
     }
 
 
@@ -517,6 +569,20 @@ def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
             not isinstance(item, list) or len(item) != 2 for item in projection_substitutions
         ):
             raise ValueError("projection_substitutions entries must be two-element lists")
+        launch_payload = data.get("launch_contract")
+        launch_digest = data.get("launch_contract_digest", "")
+        if launch_payload is not None and not isinstance(launch_payload, dict):
+            raise ValueError("launch_contract must be an object or null")
+        if not isinstance(launch_digest, str):
+            raise ValueError("launch_contract_digest must be a string")
+        launch_contract = (
+            ResolvedLaunchContract.from_payload(
+                launch_payload,
+                expected_digest=launch_digest,
+            )
+            if launch_payload is not None
+            else None
+        )
         return SkillSessionContract(
             root_name=str(data["root_name"]),
             execution_role=SkillExecutionRole(str(data["execution_role"])),
@@ -579,6 +645,8 @@ def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
                 if data.get("projection_namespace") is not None
                 else None
             ),
+            launch_contract=launch_contract,
+            launch_contract_digest=launch_digest,
             schema_version=int(data["schema_version"]),
         )
     except (KeyError, TypeError, ValueError, AttributeError) as exc:

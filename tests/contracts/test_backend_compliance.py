@@ -23,6 +23,18 @@ def _create_inert_rollout_links(generated_home: Path) -> None:
 
 
 class TestBackendCompliance:
+    def test_all_registered_backends_implement_semantic_adapter(self):
+        import inspect
+
+        from autoskillit.core import CodingAgentBackend
+        from autoskillit.execution.backends import BACKEND_REGISTRY
+
+        protocol_signature = inspect.signature(CodingAgentBackend.adapt_skill_semantics)
+        for backend_name, backend_cls in BACKEND_REGISTRY.items():
+            implementation = backend_cls.__dict__.get("adapt_skill_semantics")
+            assert implementation is not None, backend_name
+            assert inspect.signature(implementation) == protocol_signature, backend_name
+
     def test_all_backends_build_cmd_returns_cmdspec(self):
         from autoskillit.core import CmdSpec
         from autoskillit.execution.backends import BACKEND_REGISTRY

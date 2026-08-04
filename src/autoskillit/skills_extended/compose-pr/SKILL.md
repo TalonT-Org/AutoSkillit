@@ -1,15 +1,38 @@
 ---
 name: compose-pr
-uses_capabilities: [github_api_write]
-categories: [github]
-description: Composition executor for pull requests. ALWAYS invoke this skill when instructed to compose a PR. Do not read prep files or create PRs directly — use this skill first to load the composition workflow.
+uses_capabilities:
+- github_api_write
+categories:
+- github
+description: Composition executor for pull requests. ALWAYS invoke this skill when instructed to compose a PR. Do not read
+  prep files or create PRs directly — use this skill first to load the composition workflow.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: compose-pr] Composing and opening PR...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: compose-pr] Composing and opening PR...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: pr-source-reader
+    purpose: read one PR source artifact and return bounded evidence
+  - name: pr-synthesizer
+    purpose: synthesize the overall PR summary from collected evidence
+  child_spawns:
+  - role: pr-source-reader
+  - role: pr-synthesizer
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: pr-synthesizer
+    model_class: sonnet
 ---
 
 # Compose PR
@@ -39,8 +62,8 @@ decomposed PR flow (prepare → run_arch_lenses → compose).
 - Create files outside `{{AUTOSKILLIT_TEMP}}/compose-pr/`
 - Invent mermaid classDef colors — when embedding validated diagrams, include them verbatim.
   Using ONLY classDef styles from the mermaid skill (no invented colors).
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 - Generate, fabricate, or create any diagrams or mermaid code blocks — the ONLY diagrams permitted in the PR body are those read from `all_diagram_paths` files that passed ★/● marker validation in Step 2. If no diagram paths are provided or all fail validation, the Architecture Impact section must not exist in the output.
 - NEVER re-derive, override, or substitute `task_title` from any source other than the prep file's `## Title` section. The title in the prep file is authoritative — do NOT use issue metadata, branch names, or ambient context to modify it.
 
@@ -52,7 +75,7 @@ decomposed PR flow (prepare → run_arch_lenses → compose).
   (omit Architecture Impact section; do not include a placeholder)
 - Handle `no diagrams` case: when `all_diagram_paths is empty` or every path fails
   marker check, set `validated_diagrams = []` and omit the Architecture Impact section
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Context Limit Behavior
 
@@ -118,7 +141,7 @@ If `all_diagram_paths` is empty or all diagrams fail → `validated_diagrams = [
 
 ### Step 3: Compose PR Body (SINGLE MESSAGE)
 
-**Issue ALL Task/Explore subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Issue ALL backend-adapted child-delegation calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
@@ -169,7 +192,7 @@ Plan file: `{plan_path}`
 ```markdown
 ## Summary
 
-{Synthesized overall summary — 2-3 sentences. Spawn a sonnet subagent if needed.}
+{Synthesized overall summary — 2-3 sentences. Spawn a child under the declared `sonnet` model-class policy if needed.}
 
 <details>
 <summary>Individual Group Plans</summary>

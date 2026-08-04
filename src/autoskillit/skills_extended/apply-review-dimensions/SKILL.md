@@ -1,15 +1,34 @@
 ---
 name: apply-review-dimensions
-categories: [research]
-uses_capabilities: [agent_model]
-description: Evaluate experiment design across weighted dimensions using multi-level subagent analysis with adversarial red-team, producing a findings manifest and evaluation dashboard.
+categories:
+- research
+uses_capabilities: []
+description: Evaluate experiment design across weighted dimensions using multi-level subagent analysis with adversarial red-team,
+  producing a findings manifest and evaluation dashboard.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: apply-review-dimensions] Evaluating review dimensions...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: apply-review-dimensions] Evaluating review dimensions...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Apply Review Dimensions Skill
@@ -48,13 +67,13 @@ invoked standalone — the recipe step named `apply` with
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 - Emit verdict (verdict is computed by `aggregate_review_verdict` in the synthesize step)
-- Spawn background subagents (`run_in_background: true` is prohibited)
+- Detach child delegations instead of joining them (joining every child is required)
 - Write outside `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/apply-review-dimensions}`
 - Proceed past L1 when any STRUCTURAL critical finding is present
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Start independent child delegations sequentially
 
 **ALWAYS:**
-- Use `Agent(model="sonnet")` for all subagents
+- Use `child delegation under the declared `sonnet` model-class policy` for all subagents
 - Write `findings_manifest` and `evaluation_dashboard` before emitting tokens
 - Emit both output tokens as absolute paths
 - Write output to `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/apply-review-dimensions}`

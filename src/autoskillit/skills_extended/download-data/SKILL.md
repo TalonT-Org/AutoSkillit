@@ -1,18 +1,36 @@
 ---
 name: download-data
-categories: [research]
-uses_capabilities: [agent_model]
-description: >
-  Download external and gitignored datasets declared in the experiment plan's
-  data_manifest. Executes acquisition commands sequentially into pre-created
-  directories, verifies each download, and emits a PASS/WARN/FAIL verdict.
+categories:
+- research
+uses_capabilities: []
+description: 'Download external and gitignored datasets declared in the experiment plan''s data_manifest. Executes acquisition
+  commands sequentially into pre-created directories, verifies each download, and emits a PASS/WARN/FAIL verdict.
+
+  '
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: download-data] Downloading external datasets...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: download-data] Downloading external datasets...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Download Data Skill
@@ -43,13 +61,13 @@ immediately.
 
 **NEVER:**
 - Modify the experiment plan or any source files
-- Run subagents in the background (`run_in_background: true` is prohibited)
+- Detach child delegations instead of joining them (joining every child is required)
 - Skip the `depends_on` command when it is specified for an entry
 - Proceed with a failed download without escalating
 - Write files outside `{{AUTOSKILLIT_TEMP}}/download-data/`
 - Fabricate or hallucinate download results — only report actual command output
 - Attribute a missing or partial file to a completed download
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Read the `data_manifest` frontmatter section of the experiment plan
@@ -59,8 +77,8 @@ immediately.
 - Execute `depends_on` before `acquisition` for the same entry
 - Verify each download using the entry's `verification` criteria
 - Write the download report before emitting the verdict token
-- Spawn all subagents via `Agent(model="sonnet")`
-- Issue all Task calls in a single message to maximize parallelism
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 

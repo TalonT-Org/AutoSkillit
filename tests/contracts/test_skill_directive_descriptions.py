@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core.io import load_yaml
+
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -32,10 +34,10 @@ def _get_description(skill_name: str) -> str:
     content = skill_md.read_text()
     m = _FM_PATTERN.match(content)
     assert m, f"{skill_name}/SKILL.md must have YAML frontmatter"
-    for line in m.group(1).splitlines():
-        if line.startswith("description:"):
-            return line[len("description:") :].strip()
-    pytest.fail(f"{skill_name}/SKILL.md frontmatter missing description field")
+    frontmatter = load_yaml(m.group(1))
+    description = frontmatter.get("description")
+    assert isinstance(description, str)
+    return description
 
 
 @pytest.mark.parametrize("skill_name", _HEADLESS_RECIPE_SKILLS)

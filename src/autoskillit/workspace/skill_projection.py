@@ -18,10 +18,9 @@ currently point at?", which is a different and wrong question.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from types import MappingProxyType
 
 from autoskillit.core import (
     CodingAgentBackend,
@@ -31,8 +30,8 @@ from autoskillit.core import (
     PluginLaunchBinding,
     SkillContractError,
     SkillExecutionRole,
+    SkillProjectionBinding,
     SkillResolver,
-    SkillSourceIdentity,
     SkillVisibilitySpec,
     temp_dir_display_str,
 )
@@ -52,17 +51,17 @@ from autoskillit.workspace._projected_artifact.materialization import _default_b
 
 __all__ = [
     "AgentSkillDocument",
-    "EffectiveSkillDispatchContract",
-    "EffectiveSkillDispatchPreparation",
+    "SkillProjectionBinding",
+    "SkillProjectionPreparation",
     "ProjectedPluginArtifactAuthority",
     "ProjectedPluginRetirementOwner",
     "SkillProjectionContext",
-    "build_effective_skill_dispatch_contract",
-    "finalize_effective_skill_dispatch",
+    "build_skill_projection_binding",
+    "finalize_skill_projection_binding",
     "materialize_agent_skill_tree",
     "materialize_sanitized_plugin_root",
-    "prepare_catalog_skill_dispatch",
-    "prepare_effective_skill_dispatch",
+    "prepare_catalog_skill_projection",
+    "prepare_skill_projection",
     "project_agent_skill_document",
     "project_default_plugin_authority",
     "project_direct_install_authority",
@@ -71,56 +70,9 @@ __all__ = [
 
 
 @dataclass(frozen=True, slots=True)
-class EffectiveSkillDispatchContract:
-    """Immutable execution-bound contract carried through headless dispatch."""
-
-    resolved_command: str
-    projection_context: SkillProjectionContext
-    invocation: EffectiveSkillInvocationAuthority | None
-    catalog: EffectiveSkillCatalogAuthority | None
-    root_name: str | None
-    member_names: tuple[str, ...]
-    execution_role: SkillExecutionRole
-    capability_union: frozenset[str]
-    source_identities: Mapping[str, SkillSourceIdentity]
-    canonical_digests: Mapping[str, str]
-    projected_digests: Mapping[str, str]
-    projected_artifacts: Mapping[str, str]
-    projection_version: int
-    project_root: str | None
-    cwd: str
-    backend: str | None
-    artifact_paths: tuple[str, ...] = ()
-
-    def __post_init__(self) -> None:
-        if not self.resolved_command:
-            raise SkillContractError("effective dispatch requires a resolved command")
-        if (self.invocation is None) == (self.catalog is None):
-            raise SkillContractError(
-                "effective dispatch must bind exactly one invocation or catalog"
-            )
-        expected_names = tuple(skill.name for skill in self.projection_context.skills)
-        if self.member_names != expected_names:
-            raise SkillContractError("effective dispatch member order does not match projection")
-        expected_set = set(expected_names)
-        for field_name, mapping in (
-            ("source identities", self.source_identities),
-            ("canonical digests", self.canonical_digests),
-            ("projected digests", self.projected_digests),
-            ("projected artifacts", self.projected_artifacts),
-        ):
-            if set(mapping) != expected_set:
-                raise SkillContractError(
-                    f"effective dispatch {field_name} do not match its members"
-                )
-            object.__setattr__(self, field_name.replace(" ", "_"), MappingProxyType(dict(mapping)))
-
-
-@dataclass(frozen=True, slots=True)
-class EffectiveSkillDispatchPreparation:
+class SkillProjectionPreparation:
     """Backend-neutral semantic inputs awaiting one exact launch binding."""
 
-    resolved_command: str
     cwd: Path
     project_root: Path | None
     default_base_branch: str
@@ -128,8 +80,6 @@ class EffectiveSkillDispatchPreparation:
     invocation: EffectiveSkillInvocationAuthority | None = None
 
     def __post_init__(self) -> None:
-        if not self.resolved_command:
-            raise SkillContractError("dispatch preparation requires a resolved command")
         if (self.catalog is None) == (self.invocation is None):
             raise SkillContractError(
                 "dispatch preparation must bind exactly one catalog or invocation"
@@ -143,21 +93,23 @@ class EffectiveSkillDispatchPreparation:
         *,
         backend: CodingAgentBackend,
         binding: PluginLaunchBinding,
-    ) -> EffectiveSkillDispatchContract:
-        return _finalize_effective_skill_dispatch(
+    ) -> SkillProjectionBinding:
+        return _finalize_skill_projection_binding(
             self,
             backend=backend,
             binding=binding,
         )
 
 
-def build_effective_skill_dispatch_contract(
-    resolved_command: str,
+def build_skill_projection_binding(
     projection_context: SkillProjectionContext,
     *,
     artifact_paths: Iterable[str] = (),
-) -> EffectiveSkillDispatchContract:
-    """Freeze role, identity, digests, and projected bytes for executor handoff."""
+) -> SkillProjectionBinding:
+    """Freeze backend-adapted projection evidence without owning an executable."""
+    backend = projection_context.backend
+    if backend is None:
+        raise SkillContractError("skill projection binding requires an effective backend")
     documents = {
         skill.name: project_agent_skill_document(skill, projection_context)
         for skill in projection_context.skills
@@ -172,24 +124,30 @@ def build_effective_skill_dispatch_contract(
     capability_union = frozenset().union(
         *(skill.uses_capabilities for skill in projection_context.skills)
     )
-    backend = projection_context.backend
-    return EffectiveSkillDispatchContract(
-        resolved_command=resolved_command,
-        projection_context=projection_context,
-        invocation=invocation,
-        catalog=catalog,
+    return SkillProjectionBinding(
         root_name=invocation.root.name if invocation is not None else None,
         member_names=tuple(skill.name for skill in projection_context.skills),
-        execution_role=execution_role,
+        execution_role=execution_role.value,
         capability_union=capability_union,
-        source_identities={name: document.source_identity for name, document in documents.items()},
+        source_identities={
+            name: {
+                "origin": document.source_identity.origin.value,
+                "logical_name": document.source_identity.logical_name,
+                "search_dir": document.source_identity.search_dir,
+                "precedence": document.source_identity.precedence,
+            }
+            for name, document in documents.items()
+        },
         canonical_digests={
             name: document.canonical_digest for name, document in documents.items()
         },
         projected_digests={
             name: document.projected_digest for name, document in documents.items()
         },
-        projected_artifacts={name: document.content for name, document in documents.items()},
+        semantic_digests={name: document.semantic_digest for name, document in documents.items()},
+        adaptation_digests={
+            name: document.adaptation_digest for name, document in documents.items()
+        },
         projection_version=projection_context.projection_version,
         project_root=(
             str(projection_context.project_root)
@@ -197,17 +155,17 @@ def build_effective_skill_dispatch_contract(
             else None
         ),
         cwd=str(projection_context.cwd),
-        backend=backend.name if backend is not None else None,
+        backend=backend.name,
         artifact_paths=tuple(artifact_paths),
     )
 
 
-def _finalize_effective_skill_dispatch(
-    preparation: EffectiveSkillDispatchPreparation,
+def _finalize_skill_projection_binding(
+    preparation: SkillProjectionPreparation,
     *,
     backend: CodingAgentBackend,
     binding: PluginLaunchBinding,
-) -> EffectiveSkillDispatchContract:
+) -> SkillProjectionBinding:
     """Bind backend conventions only after the launch artifact is reader-owned."""
     if binding.closed:
         raise PluginArtifactValidationError(
@@ -231,31 +189,26 @@ def _finalize_effective_skill_dispatch(
             "{{DEFAULT_BASE_BRANCH}}": preparation.default_base_branch,
         },
     )
-    return build_effective_skill_dispatch_contract(
-        preparation.resolved_command,
-        context,
-        artifact_paths=(),
-    )
+    return build_skill_projection_binding(context, artifact_paths=(str(destination),))
 
 
-def finalize_effective_skill_dispatch(
-    preparation: EffectiveSkillDispatchPreparation,
+def finalize_skill_projection_binding(
+    preparation: SkillProjectionPreparation,
     *,
     backend: CodingAgentBackend,
     binding: PluginLaunchBinding,
-) -> EffectiveSkillDispatchContract:
+) -> SkillProjectionBinding:
     """Workspace convenience wrapper around preparation-owned finalization."""
     return preparation.finalize(backend=backend, binding=binding)
 
 
-def prepare_catalog_skill_dispatch(
+def prepare_catalog_skill_projection(
     *,
-    resolved_command: str,
     cwd: Path,
     catalog: EffectiveSkillCatalogAuthority,
     default_base_branch: str,
     project_root: Path | None = None,
-) -> tuple[ProjectedPluginArtifactAuthority, EffectiveSkillDispatchPreparation]:
+) -> tuple[ProjectedPluginArtifactAuthority, SkillProjectionPreparation]:
     """Prepare semantic dispatch state without acquiring or publishing an artifact."""
     default_base_branch = _default_base_branch(default_base_branch)
     authority = project_default_plugin_authority(
@@ -263,8 +216,7 @@ def prepare_catalog_skill_dispatch(
         base_branch=default_base_branch,
         catalog=catalog,
     )
-    preparation = EffectiveSkillDispatchPreparation(
-        resolved_command=resolved_command,
+    preparation = SkillProjectionPreparation(
         cwd=cwd,
         project_root=project_root,
         default_base_branch=default_base_branch,
@@ -273,9 +225,8 @@ def prepare_catalog_skill_dispatch(
     return authority, preparation
 
 
-def prepare_effective_skill_dispatch(
+def prepare_skill_projection(
     *,
-    resolved_command: str,
     project_root: Path,
     cwd: Path,
     resolver: SkillResolver,
@@ -283,7 +234,7 @@ def prepare_effective_skill_dispatch(
     default_base_branch: str | None,
     recipe_packs: frozenset[str] | None,
     recipe_features: frozenset[str] | None,
-) -> tuple[ProjectedPluginArtifactAuthority, EffectiveSkillDispatchPreparation]:
+) -> tuple[ProjectedPluginArtifactAuthority, SkillProjectionPreparation]:
     """Resolve visible orchestrator skills into a backend-neutral preparation."""
     catalog = resolver.list_effective(
         project_root,
@@ -292,8 +243,7 @@ def prepare_effective_skill_dispatch(
         recipe_packs=recipe_packs,
         recipe_features=recipe_features,
     )
-    return prepare_catalog_skill_dispatch(
-        resolved_command=resolved_command,
+    return prepare_catalog_skill_projection(
         cwd=cwd,
         catalog=catalog,
         default_base_branch=_default_base_branch(default_base_branch),

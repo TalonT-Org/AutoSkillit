@@ -1,14 +1,30 @@
 ---
 name: planner-refine-assignments
-categories: [planner]
-description: Refine elaborated assignments for a single phase via parallel L0 subagents (L1+L0 pattern), using per-phase context file with peer_summaries for cross-phase visibility
+categories:
+- planner
+description: Refine elaborated assignments for a single phase via parallel L0 subagents (L1+L0 pattern), using per-phase context
+  file with peer_summaries for cross-phase visibility
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: planner-refine-assignments] Refining phase assignments with cross-visibility...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: planner-refine-assignments] Refining phase assignments with cross-visibility...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
 ---
 
 # planner-refine-assignments
@@ -49,11 +65,11 @@ file to `$3/refine_contexts/{phase_id}_result.json`.
 - Skip emitting `phase_refined_path` even if all L0s fail (write unchanged assignments, still emit)
 - Spawn more than 6 L0s in a single parallel batch
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts not passed as positional arguments
-- Run subagents in the background (`run_in_background: true` is prohibited)
+- Detach child delegations instead of joining them (joining every child is required)
 - Write L0 prompts to intermediate `l0_prompts/` files and read them back into the L1 context — spawn L0 subagents directly from in-memory context packets
 - Read source code files, test files, or recipe YAML files directly — codebase exploration is the L0 subagents' responsibility
 - Run Bash, Grep, or Glob commands for codebase exploration between L0 spawns
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Start independent child delegations sequentially
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
@@ -64,7 +80,7 @@ file to `$3/refine_contexts/{phase_id}_result.json`.
 - Log `CRITICAL` to stdout for any L0 subagent that fails entirely (proceed with N-1, partial result)
 - When two assignments propose WPs covering the same files, assign ownership to the numerically earlier assignment_id using natural sort on numeric suffixes (e.g. `P1-A1` beats `P1-A2`; `P1-A2` beats `P1-A10`); log each resolution
 - Emit: `phase_refined_path = <absolute path to $3/refine_contexts/{phase_id}_result.json>`
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -115,12 +131,12 @@ For each assignment in `assignments`, build a context packet containing:
 
 ### Step 3: Spawn parallel L0 subagents (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Since each phase has 3–5 assignments (always within the 6-L0 ceiling), spawn all in one
-parallel batch via Agent/Task. Do not spawn more than 6 L0s in a single parallel batch:
+parallel batch via backend-adapted child delegation. Do not spawn more than 6 L0s in a single parallel batch:
 if assignment count > 6 (unexpected), spawn sequential batches of 6. Between batches, emit
 anti-prose guard line: `--- next batch ---`.
 

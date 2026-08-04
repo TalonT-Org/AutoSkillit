@@ -1,6 +1,6 @@
 """Integration tests for per-step backend mixing in the execution layer.
 
-Verifies that when backend_override='claude-code' is active, the Codex ctx.backend
+Verifies that when typed Claude authority is active, the Codex ctx.backend
 is bypassed and ClaudeCodeBackend handles command construction and env policy.
 """
 
@@ -18,7 +18,7 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 
-from .conftest import _mock_backend
+from .conftest import _backend_authority, _mock_backend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -38,7 +38,7 @@ def _stub_result() -> SkillResult:
 
 
 class TestBackendMixingCommandRouting:
-    """Codex ctx.backend bypassed when backend_override='claude-code'."""
+    """Codex ctx.backend is bypassed by typed Claude authority."""
 
     @pytest.mark.anyio
     async def test_codex_ctx_backend_not_called_when_override_claude_code(self, minimal_ctx):
@@ -59,8 +59,9 @@ class TestBackendMixingCommandRouting:
         claude_code_backend.name = "claude-code"
 
         with (
-            patch(
-                "autoskillit.execution.headless.get_backend",
+            patch.object(
+                minimal_ctx.launch_resolver,
+                "backend_for",
                 return_value=claude_code_backend,
             ),
             patch(
@@ -75,7 +76,7 @@ class TestBackendMixingCommandRouting:
                 "/tmp/cwd",
                 minimal_ctx,
                 completion_marker="%%DONE%%",
-                backend_override="claude-code",
+                backend_authority=_backend_authority("claude-code"),
             )
 
             build_spec = mock_exec.call_args.args[0]
@@ -122,8 +123,9 @@ class TestBackendMixingEnvPolicy:
             return _stub_result()
 
         with (
-            patch(
-                "autoskillit.execution.headless.get_backend",
+            patch.object(
+                minimal_ctx.launch_resolver,
+                "backend_for",
                 return_value=claude_code_backend,
             ),
             patch(
@@ -138,7 +140,7 @@ class TestBackendMixingEnvPolicy:
                 "/tmp/cwd",
                 minimal_ctx,
                 completion_marker="%%DONE%%",
-                backend_override="claude-code",
+                backend_authority=_backend_authority("claude-code"),
             )
 
         assert captured_spec is not None
@@ -146,7 +148,7 @@ class TestBackendMixingEnvPolicy:
 
 
 class TestDefaultExecutorBackendMixing:
-    """DefaultHeadlessExecutor.run() end-to-end with backend_override."""
+    """DefaultHeadlessExecutor.run() honors typed backend authority."""
 
     @pytest.mark.anyio
     async def test_default_executor_end_to_end_backend_override(self, minimal_ctx):
@@ -167,10 +169,11 @@ class TestDefaultExecutorBackendMixing:
         claude_code_backend.name = "claude-code"
 
         with (
-            patch(
-                "autoskillit.execution.headless.get_backend",
+            patch.object(
+                minimal_ctx.launch_resolver,
+                "backend_for",
                 return_value=claude_code_backend,
-            ) as mock_get_backend,
+            ) as mock_backend_for,
             patch(
                 "autoskillit.execution.headless._execute_claude_headless",
             ) as mock_exec,
@@ -182,10 +185,10 @@ class TestDefaultExecutorBackendMixing:
             await executor.run(
                 "/autoskillit:test",
                 "/tmp/cwd",
-                backend_override="claude-code",
+                backend_authority=_backend_authority("claude-code"),
             )
 
-            mock_get_backend.assert_called_once_with("claude-code")
+            mock_backend_for.assert_called_once()
             build_spec = mock_exec.call_args.args[0]
             build_spec(None, None)
             claude_code_backend.build_skill_session_cmd.assert_called_once()

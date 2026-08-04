@@ -162,7 +162,7 @@ def _write_invocation_skill(
         frontmatter.append(f"categories: [{', '.join(categories)}]")
     evidence = {
         "github_api_write": "Run `gh issue edit 1 --body-file issue.md`.",
-        "git_metadata_write": "Run `git commit -m test`.",
+        "test_check": "Call `test_check()`.",
         "run_skill": 'Call run_skill("child").',
     }
     body = "\n".join(evidence[capability] for capability in capabilities)
@@ -229,7 +229,7 @@ class TestEffectiveInvocationClosurePolicy:
                 "root": {"deps": ("direct", "audit")},
                 "direct": {"capabilities": ("github_api_write",)},
                 "pack-member": {
-                    "capabilities": ("git_metadata_write",),
+                    "capabilities": ("test_check",),
                     "categories": ("audit",),
                 },
             },
@@ -245,7 +245,7 @@ class TestEffectiveInvocationClosurePolicy:
             "direct",
             "pack-member",
         }
-        assert invocation.capability_union == frozenset({"github_api_write", "git_metadata_write"})
+        assert invocation.capability_union == frozenset({"github_api_write", "test_check"})
         assert invocation.project_root == project_root.resolve()
 
     @pytest.mark.parametrize(

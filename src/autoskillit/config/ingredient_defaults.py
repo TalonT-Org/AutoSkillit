@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Protocol
 
 from autoskillit.core import (
-    BACKEND_CAPABILITY_INGREDIENTS,
     CONFIG_AUTHORITY_KEYS,
     DISPATCH_ID_ENV_VAR,
     FLEET_MENU_TOOLS,
@@ -134,12 +133,7 @@ _REMOTE_PRECEDENCE = ("upstream", "origin")
 # Keys from resolve_ingredient_defaults() that the server must inject as authoritative
 # overrides, preventing LLM-supplied values from winning. source_dir is excluded because
 # it is project-identity (the clone URL) and is legitimately caller-supplied in fleet dispatch.
-# backend_supports_git_write is excluded because it is a backend capability flag, not a
-# config-derived override.
-SERVER_AUTHORITATIVE_INGREDIENTS: frozenset[str] = CONFIG_AUTHORITY_KEYS - {
-    "source_dir",
-    "backend_supports_git_write",
-}
+SERVER_AUTHORITATIVE_INGREDIENTS: frozenset[str] = CONFIG_AUTHORITY_KEYS - {"source_dir"}
 
 SERVER_AUTHORITATIVE_CONFIG_PATHS: dict[str, str] = {
     "base_branch": "branching.default_base_branch",
@@ -206,8 +200,6 @@ def apply_config_authoritative_overrides(
     effective_ingredients: dict[str, str],
     recipe_ingredients: Mapping[str, _HasAuthority],
     project_dir: Path,
-    *,
-    capability_overrides: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Prevent LLM-supplied values from winning for config-authoritative keys at fleet dispatch."""
     config_keys = [
@@ -228,15 +220,6 @@ def apply_config_authoritative_overrides(
                 logger.warning(
                     "config-authority key %r not found in resolved defaults — "
                     "caller-supplied value retained (config-authoritative contract not enforced)",
-                    key,
-                )
-        elif key in BACKEND_CAPABILITY_INGREDIENTS:
-            if capability_overrides and key in capability_overrides:
-                result[key] = capability_overrides[key]
-            else:
-                logger.warning(
-                    "capability-based key %r not found in capability_overrides — "
-                    "caller-supplied value retained (capability contract not enforced)",
                     key,
                 )
         # else: key is caller-sovereign (e.g., source_dir) — leave result unchanged

@@ -143,9 +143,9 @@ def order(
 
     project_dir = Path.cwd()
     config = load_config(project_dir)
-    from autoskillit.execution import get_backend
+    from autoskillit.cli.session._session_backend import resolve_global_backend
 
-    backend = get_backend(config.agent_backend.backend)
+    backend = resolve_global_backend(config.agent_backend.backend)
     backend_caps = backend.capabilities
     mcp_prefix = detect_autoskillit_mcp_prefix(backend_caps)
     skill_resolver = DefaultSkillResolver()

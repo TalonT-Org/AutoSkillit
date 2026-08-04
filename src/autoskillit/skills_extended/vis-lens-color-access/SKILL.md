@@ -1,16 +1,28 @@
 ---
 name: vis-lens-color-access
-categories: [vis-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: "Create Chromatic Accessibility visualization planning spec showing colorblind safety (Okabe-Ito, Paul Tol palettes), perceptual uniformity checks (viridis/cividis pass; jet/rainbow fail), non-color redundant encoding (shape + line-style), and text size minimums. Chromatic lens answering \"Is the color encoding accessible and perceptually uniform?\""
+categories:
+- vis-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Create Chromatic Accessibility visualization planning spec showing colorblind safety (Okabe-Ito, Paul Tol palettes),
+  perceptual uniformity checks (viridis/cividis pass; jet/rainbow fail), non-color redundant encoding (shape + line-style),
+  and text size minimums. Chromatic lens answering "Is the color encoding accessible and perceptually uniform?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Color Access Lens - Auditing chromatic accessibility...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Color Access Lens - Auditing chromatic accessibility...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: mermaid
+  - name: plan-visualization
+  - name: vis-lens-always-on
+  - name: vis-lens-antipattern
+  - name: vis-lens-caption-annot
 ---
 
 # Chromatic Accessibility Visualization Lens

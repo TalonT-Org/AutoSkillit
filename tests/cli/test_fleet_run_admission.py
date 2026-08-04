@@ -62,7 +62,6 @@ def _make_rejection_result(
 def _make_codex_backend() -> MagicMock:
     backend = MagicMock()
     backend.name = "codex"
-    backend.capabilities.git_metadata_writable = False
     backend.capabilities.has_unguarded_filesystem_access = True
     backend.capabilities.anthropic_provider_capable = False
     return backend
@@ -153,36 +152,6 @@ class TestFleetRunCliAdmission:
             "per-step routing context, causing backend-incompatible-skill false positives."
         )
 
-    def test_fleet_run_cli_codex_passes_provider_capability_overrides(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        tmp_path: Path,
-    ) -> None:
-        """_execute_fleet_run must pass provider_capability_overrides to execute_dispatch."""
-        captured: dict[str, object] = {}
-
-        async def fake_dispatch(**kwargs: object) -> DispatchResult:
-            captured.update(kwargs)
-            return _make_success_result()
-
-        codex_backend = _make_codex_backend()
-        asyncio.run(
-            _run_execute_fleet_run(
-                monkeypatch=monkeypatch,
-                tmp_path=tmp_path,
-                dispatch_backend=codex_backend,
-                execute_dispatch_fn=fake_dispatch,
-            )
-        )
-
-        assert "provider_capability_overrides" in captured, (
-            "_execute_fleet_run must pass provider_capability_overrides to execute_dispatch — "
-            "without this, backend capability signals are not merged into ingredients."
-        )
-        assert captured["provider_capability_overrides"] is not None, (
-            "provider_capability_overrides must not be None"
-        )
-
     def test_fleet_run_cli_codex_fails_closed_on_invalid_recipe(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -232,114 +201,6 @@ class TestFleetRunCliAdmission:
             "fleet_recipe_invalid must appear in the output envelope when recipe is rejected"
         )
 
-    def test_fleet_run_cli_codex_fails_without_claude_binary(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture, tmp_path: Path
-    ) -> None:
-        """_execute_fleet_run with codex backend fails closed when claude binary is absent.
-
-        Exercises the real admission path: fleet_run CLI → _execute_fleet_run (real, not
-        mocked) → execute_dispatch (real) → _run_dispatch → load_and_validate (real fake,
-        not MagicMock). shutil.which=None in the _auto_overrides namespace triggers the
-        no-claude-binary scenario; InMemoryRecipeRepository returns backend-incompatible-skill.
-        """
-        from tests.fakes import InMemoryRecipeRepository
-
-        # Configure InMemoryRecipeRepository to return a backend-incompatible rejection.
-        # load_and_validate is NOT a MagicMock — it runs the real InMemoryRecipeRepository
-        # logic (records calls, checks _validated, raises RecipeNotFoundError if absent).
-        repo = InMemoryRecipeRepository()
-        repo.set_validated(
-            "test-recipe",
-            {
-                "valid": False,
-                "errors": ["backend-incompatible-skill: step-1 requires claude-code"],
-            },
-        )
-
-        # Build ctx. Use MagicMock for find/load (pre-dispatch recipe lookups in
-        # _execute_fleet_run); wire load_and_validate to the real InMemoryRecipeRepository
-        # method so the dispatch path exercises real fake logic.
-        codex_backend = _make_codex_backend()
-        ctx = MagicMock()
-        ctx.project_dir = tmp_path
-        ctx.skill_resolver = None
-        ctx.config.providers = None
-        ctx.config.migration.suppressed = None
-        ctx.temp_dir = tmp_path / ".autoskillit" / "temp"
-        ctx.backend = codex_backend
-
-        # fleet_lock: execute_dispatch awaits lock.acquire() then calls lock.release() sync.
-        ctx.fleet_lock.at_capacity.return_value = False
-        ctx.fleet_lock.acquire = AsyncMock(return_value=None)
-
-        # Pre-dispatch recipe lookups in _execute_fleet_run (find/load for steps computation)
-        recipe_info = MagicMock()
-        recipe_info.path = tmp_path / "test-recipe.yaml"
-        ctx.recipes.find.return_value = recipe_info
-        ctx.recipes.load.return_value.steps = {}
-
-        # Override load_and_validate on the MagicMock to use the real InMemoryRecipeRepository
-        # method — this is a real fake, not a predetermined return-value mock.
-        ctx.recipes.load_and_validate = repo.load_and_validate
-
-        monkeypatch.setattr(
-            "autoskillit.config.load_config",
-            lambda path=None: type(
-                "C",
-                (),
-                {
-                    "features": {"fleet": True, "fleet_headless_run": True},
-                    "experimental_enabled": True,
-                },
-            )(),
-        )
-        monkeypatch.setattr(
-            "autoskillit.server.resolve_backend_override",
-            lambda name: codex_backend,
-        )
-        # shutil.which=None in the _auto_overrides namespace: no claude binary.
-        # This exercises the real _provider_aware_capability_overrides and
-        # _compute_effective_backend_map code paths inside _execute_fleet_run.
-        monkeypatch.setattr(
-            "autoskillit.server.tools._auto_overrides.shutil.which",
-            lambda cmd: None,
-        )
-        monkeypatch.setattr(
-            "autoskillit.server.make_context",
-            lambda _cfg, project_dir=None, plugin_retirement_coordinator=None: ctx,
-        )
-
-        from autoskillit.cli.fleet import fleet_run
-
-        with pytest.raises(SystemExit) as exc_info:
-            fleet_run("test-recipe", backend="codex")
-
-        assert exc_info.value.code == 3, (
-            "Exit code must be 3 (FLEET_RECIPE_INVALID) when admission fails"
-        )
-        captured_out = capsys.readouterr()
-        envelope = json.loads(captured_out.out)
-        assert envelope.get("error") == "fleet_recipe_invalid", (
-            "fleet_recipe_invalid must appear in the output envelope"
-        )
-        rejection_message = envelope.get("user_visible_message", "")
-        assert "backend-incompatible-skill" in rejection_message, (
-            f"backend-incompatible-skill must be present in the rejection message; "
-            f"got: {rejection_message!r}"
-        )
-
-        # Verify the real dispatch path was exercised: load_and_validate was called with
-        # the effective_backend_map kwarg from the real _execute_fleet_run computation.
-        lav_calls = [c for c in repo.calls if c["method"] == "load_and_validate"]
-        assert lav_calls, (
-            "load_and_validate must be called through the real dispatch path — "
-            "if this assertion fails, execute_dispatch was not reached"
-        )
-        assert "effective_backend_map" in lav_calls[0], (
-            "load_and_validate call must include effective_backend_map kwarg — "
-            "REQ-004: effective_backend_map must be threaded to load_and_validate"
-        )
-
     @pytest.mark.parametrize("backend_name", ["codex", "claude-code"])
     def test_admission_agreement_cli_matches_kitchen_path(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, backend_name: str
@@ -367,7 +228,6 @@ class TestFleetRunCliAdmission:
         else:
             backend = MagicMock()
             backend.name = "claude-code"
-            backend.capabilities.git_metadata_writable = True
             backend.capabilities.has_unguarded_filesystem_access = False
             backend.capabilities.anthropic_provider_capable = True
 
@@ -387,16 +247,13 @@ class TestFleetRunCliAdmission:
         cli_map = captured.get("effective_backend_map")
 
         # Kitchen path: compute what dispatch_food_truck passes to execute_dispatch.
-        # dispatch_food_truck calls _compute_effective_backend_map(recipe_steps, backend_name,
-        # config_providers, recipe_name, skill_resolver=skill_resolver) with the same recipe
+        # dispatch_food_truck calls _compute_effective_backend_map with the same recipe
         # steps that _make_mock_ctx returns (empty dict).
         recipe_steps: dict[str, Any] = {}
         kitchen_map, _ = _compute_effective_backend_map(
             recipe_steps,
             backend_name,
-            None,  # config_providers
             "test-recipe",
-            skill_resolver=None,
         )
 
         assert cli_map == kitchen_map, (

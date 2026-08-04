@@ -1,14 +1,32 @@
 ---
 name: review-approach
-uses_capabilities: [agent_model]
-description: Research modern solutions and approaches for issues or features proposed in a report or plan. Use when user says "review approach", "review approaches", "research solutions", or wants external validation of a proposed direction.
+uses_capabilities: []
+description: Research modern solutions and approaches for issues or features proposed in a report or plan. Use when user says
+  "review approach", "review approaches", "research solutions", or wants external validation of a proposed direction.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '🌐 [SKILL: review-approach] Researching modern approaches...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''🌐 [SKILL: review-approach] Researching modern approaches...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # Review Approach Skill
@@ -39,12 +57,12 @@ failure, not something to work around.
 
 - Modify any source code files
 - Create files outside `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/review-approach}`
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use subagents with web search for parallel research
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Keep findings concise and actionable
 - Present options with trade-offs
 - Make recommendations based on technical merit and project fit
@@ -57,7 +75,7 @@ failure, not something to work around.
   review_path = /absolute/cwd/temp/review-approach/{filename}.md
   ```
   This token is MANDATORY — the pipeline cannot proceed without it.
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -67,7 +85,7 @@ From the plan file path argument (or, outside pipeline context, the report/conve
 
 ### Step 2: Launch Parallel Web Search Subagents (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 

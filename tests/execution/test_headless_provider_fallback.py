@@ -7,6 +7,7 @@ no fallback_env suppresses retry, and empty provider (Anthropic) never falls bac
 from __future__ import annotations
 
 from collections import deque
+from types import SimpleNamespace
 
 import pytest
 
@@ -18,7 +19,7 @@ from autoskillit.core import (
 from autoskillit.core.types import PluginLoadMode, RetryReason, SkillResult
 from autoskillit.execution.commands import ClaudeHeadlessCmd
 from autoskillit.execution.headless._managed import _ManagedLineageObserver
-from tests.execution.conftest import _mock_backend
+from tests.execution.conftest import _launch_preparation, _mock_backend
 from tests.fakes import FakeManagedHeadlessSessionLineageStore
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -90,11 +91,13 @@ def _managed_observer(tmp_path):
         backend="codex",
         session_kind=ManagedHeadlessSessionKind.SKILL,
     )
+    backend = _mock_backend(channel_b_capable=False, process_name="codex")
+    backend.name = "codex"
     observer = _ManagedLineageObserver.create(
         store=store,
         decision=decision,
         reference=lineage.reference,
-        backend="codex",
+        backend=backend,
         session_kind=ManagedHeadlessSessionKind.SKILL,
     )
     assert observer is not None
@@ -103,6 +106,16 @@ def _managed_observer(tmp_path):
 
 class _Binding:
     inherited_fds = (77,)
+    load_mode = PluginLoadMode.EXPLICIT_PLUGIN_DIR
+    plugin_dir = None
+    identity = SimpleNamespace(
+        semantic_key="test-binding",
+        incarnation_id="test-incarnation",
+        manifest_schema_version=1,
+        artifact_digest="test-artifact-digest",
+        managed_path="/tmp/test-managed-plugin",
+        manifest_path="/tmp/test-managed-plugin/manifest.json",
+    )
 
     def __init__(self) -> None:
         self.closed = False
@@ -214,6 +227,11 @@ class TestProviderFallbackLoop:
             plugin_authority=authority,
             plugin_load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
             managed_lineage_observer=lineage_observer,
+            launch_resolver=minimal_ctx.launch_resolver,
+            launch_preparation=_launch_preparation(
+                minimal_ctx,
+                cwd=str(tmp_path),
+            ),
         )
 
         assert call_count[0] == 2
@@ -238,6 +256,7 @@ class TestProviderFallbackLoop:
         persisted_lineage = lineage_store.load_reference(lineage_observer.reference)
         assert persisted_lineage.attempt_ids == attempt_ids
         assert persisted_lineage.final_native_session_id == "s2"
+        assert len(persisted_lineage.launch_contract_digest) == 64
 
     @pytest.mark.anyio
     async def test_budget_exhausted_triggers_fallback(self, minimal_ctx, tmp_path, monkeypatch):
@@ -261,6 +280,11 @@ class TestProviderFallbackLoop:
             provider_name="minimax",
             provider_fallback_env={"ANTHROPIC_API_KEY": "sk-test"},
             provider_fallback_name="anthropic",
+            launch_resolver=minimal_ctx.launch_resolver,
+            launch_preparation=_launch_preparation(
+                minimal_ctx,
+                cwd=str(tmp_path),
+            ),
         )
 
         assert call_count[0] == 2
@@ -286,6 +310,11 @@ class TestProviderFallbackLoop:
             timeout=30.0,
             stale_threshold=5.0,
             provider_name="minimax",
+            launch_resolver=minimal_ctx.launch_resolver,
+            launch_preparation=_launch_preparation(
+                minimal_ctx,
+                cwd=str(tmp_path),
+            ),
         )
 
         assert call_count[0] == 1
@@ -313,6 +342,11 @@ class TestProviderFallbackLoop:
             provider_name="",
             provider_fallback_env={"ANTHROPIC_API_KEY": "sk-test"},
             provider_fallback_name="anthropic",
+            launch_resolver=minimal_ctx.launch_resolver,
+            launch_preparation=_launch_preparation(
+                minimal_ctx,
+                cwd=str(tmp_path),
+            ),
         )
 
         assert call_count[0] == 1

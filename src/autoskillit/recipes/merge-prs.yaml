@@ -1,13 +1,11 @@
 name: merge-prs
 description: Merge open PRs into an integration branch
-summary: 'clone > setup_remote > analyze_prs > create_batch_branch > [loop per PR:
-  merge_pr or (plan > verify > implement > test > push_worktree_branch > create_conflict_pr
-  > wait_for_conflict_ci > merge_conflict_pr)] > push_batch_branch > collect_artifacts
-  > check_impl_plans > (audit_impl?) > open_integration_pr > wait_for_review_pr_mergeability
-  > check_mergeability > (resolve_integration_conflicts > force_push_after_rebase)?
-  > review_pr_integration > (resolve_review_integration > re_push_review_integration)?
-  > ci_watch_pr > cleanup'
-recipe_version: "1.0.0"
+summary: 'clone > setup_remote > analyze_prs > create_batch_branch > [loop per PR: merge_pr or (plan > verify > implement
+  > test > push_worktree_branch > create_conflict_pr > wait_for_conflict_ci > merge_conflict_pr)] > push_batch_branch > collect_artifacts
+  > check_impl_plans > (audit_impl?) > open_integration_pr > wait_for_review_pr_mergeability > check_mergeability > (resolve_integration_conflicts
+  > force_push_after_rebase)? > review_pr_integration > (resolve_review_integration > re_push_review_integration)? > ci_watch_pr
+  > cleanup'
+recipe_version: 1.0.0
 requires_packs:
 - github
 - ci
@@ -61,60 +59,42 @@ ingredients:
     description: Resolved diagnostics log directory path (auto-injected)
     default: ''
     hidden: true
-  backend_supports_git_write:
-    description: Whether the session backend supports .git/ metadata writes (git commit, rebase, worktree add). Resolved from backend capabilities at load time.
-    default: 'true'
-    hidden: true
-    authority: config
 kitchen_rules:
-- NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent,
-  WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated
-  through run_skill and run_cmd.
+- NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent, WebFetch, WebSearch, NotebookEdit) from
+  the orchestrator. All work is delegated through run_skill and run_cmd.
 - Route to on_failure when a step fails — do not investigate or fix directly.
-- 'SEQUENTIAL LOOP: Process one PR at a time through the full merge cycle before advancing
-  to the next PR. Never batch-assess all PRs before starting merges.'
-- 'SEQUENTIAL EXECUTION: complete full cycle (verify → implement → test → push_worktree_branch
-  → create_conflict_pr → wait_for_conflict_ci → merge_conflict_pr) per plan part before
-  advancing to the next part or PR.'
-- 'INTEGRATION BRANCH: Two distinct branches exist. inputs.base_branch is the target
-  branch that PRs point to (e.g. main, develop). context.batch_branch is the per-run
-  batch branch (e.g. pr-batch/pr-merge-{ts}) created from base_branch for this pipeline
-  run. All PR merges and worktree merges target context.batch_branch. The final review
-  PR opens from context.batch_branch into inputs.base_branch.'
-- 'PR QUEUE: The agent reads context.pr_order_file once at analyze_prs and maintains
-  an ordered queue. context.current_pr_number tracks the current PR. advance_queue_pr
-  captures the next PR number at the recipe level after each successful merge.'
-- 'COMPLEX PR PATH: When merge_pr returns needs_plan=true, context.task is set to
-  the conflict_report_path. Pass context.task to make-plan. The plan+implement cycle
-  creates a worktree from the integration branch; the worktree branch is then pushed
-  to origin and merged into the integration batch branch via GitHub PR (push_worktree_branch
-  → create_conflict_pr → wait_for_conflict_ci → merge_conflict_pr).'
-- 'SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly off-limits.
-  Never run any command in source_dir — no git checkout, git fetch, git reset, git
-  pull, run_cmd, run_skill, or any other operation. All work — skill invocations,
-  git operations, file reads — happens exclusively in the clone (work_dir). source_dir
-  is used ONLY to read the remote URL inside push_to_remote.'
-- 'GITHUB API MERGE: All PR merges into the integration branch go through GitHub''s
-  merge interface (gh pr merge --squash). This enforces the branch ruleset required
-  status checks. Never use merge_worktree or local git merge to merge into the integration
+- 'SEQUENTIAL LOOP: Process one PR at a time through the full merge cycle before advancing to the next PR. Never batch-assess
+  all PRs before starting merges.'
+- 'SEQUENTIAL EXECUTION: complete full cycle (verify → implement → test → push_worktree_branch → create_conflict_pr → wait_for_conflict_ci
+  → merge_conflict_pr) per plan part before advancing to the next part or PR.'
+- 'INTEGRATION BRANCH: Two distinct branches exist. inputs.base_branch is the target branch that PRs point to (e.g. main,
+  develop). context.batch_branch is the per-run batch branch (e.g. pr-batch/pr-merge-{ts}) created from base_branch for this
+  pipeline run. All PR merges and worktree merges target context.batch_branch. The final review PR opens from context.batch_branch
+  into inputs.base_branch.'
+- 'PR QUEUE: The agent reads context.pr_order_file once at analyze_prs and maintains an ordered queue. context.current_pr_number
+  tracks the current PR. advance_queue_pr captures the next PR number at the recipe level after each successful merge.'
+- 'COMPLEX PR PATH: When merge_pr returns needs_plan=true, context.task is set to the conflict_report_path. Pass context.task
+  to make-plan. The plan+implement cycle creates a worktree from the integration branch; the worktree branch is then pushed
+  to origin and merged into the integration batch branch via GitHub PR (push_worktree_branch → create_conflict_pr → wait_for_conflict_ci
+  → merge_conflict_pr).'
+- 'SOURCE ISOLATION: After clone_repo returns, the source_dir is strictly off-limits. Never run any command in source_dir
+  — no git checkout, git fetch, git reset, git pull, run_cmd, run_skill, or any other operation. All work — skill invocations,
+  git operations, file reads — happens exclusively in the clone (work_dir). source_dir is used ONLY to read the remote URL
+  inside push_to_remote.'
+- 'GITHUB API MERGE: All PR merges into the integration branch go through GitHub''s merge interface (gh pr merge --squash).
+  This enforces the branch ruleset required status checks. Never use merge_worktree or local git merge to merge into the integration
   batch branch.'
-- 'PUSH DISCIPLINE: push_worktree_branch (inside the complex PR cycle), publish_batch_branch
-  / push_batch_branch, force_push_and_wait_mergeability (authorized for conflict-resolution
-  rebases), and push_rebased_next_pr (authorized for proactive pre-enqueue rebase)
-  are the only authorized push steps. Never add ad-hoc run_cmd git push calls elsewhere
-  in the loop.'
-- 'QUEUE MODE: When context.queue_mode == true, PRs merge directly into base_branch
-  via the merge queue. The batch branch (context.batch_branch) is the same as base_branch.
-  Never invoke create_batch_branch, publish_batch_branch, merge_pr, or push_batch_branch
-  in queue mode.'
-- 'QUEUE LOOP: In queue mode, context.current_pr_number tracks the current PR being
-  waited on. Initialized by get_first_pr_number from pr_order_file[0]. advance_queue_pr
-  looks up the current number in pr_order_file and captures the next entry''s number.'
-- 'CONFLICT REPORT PATHS: context.all_conflict_report_paths accumulates conflict_report_path
-  values from resolve_ejected_conflicts and resolve_integration_conflicts via capture_list.
-  Pass it as the 5th argument to open_integration_pr and 4th argument to audit_impl.
-  It is empty string when no conflict resolution occurred — downstream skills treat
-  empty string as absent.'
+- 'PUSH DISCIPLINE: push_worktree_branch (inside the complex PR cycle), publish_batch_branch / push_batch_branch, force_push_and_wait_mergeability
+  (authorized for conflict-resolution rebases), and push_rebased_next_pr (authorized for proactive pre-enqueue rebase) are
+  the only authorized push steps. Never add ad-hoc run_cmd git push calls elsewhere in the loop.'
+- 'QUEUE MODE: When context.queue_mode == true, PRs merge directly into base_branch via the merge queue. The batch branch
+  (context.batch_branch) is the same as base_branch. Never invoke create_batch_branch, publish_batch_branch, merge_pr, or
+  push_batch_branch in queue mode.'
+- 'QUEUE LOOP: In queue mode, context.current_pr_number tracks the current PR being waited on. Initialized by get_first_pr_number
+  from pr_order_file[0]. advance_queue_pr looks up the current number in pr_order_file and captures the next entry''s number.'
+- 'CONFLICT REPORT PATHS: context.all_conflict_report_paths accumulates conflict_report_path values from resolve_ejected_conflicts
+  and resolve_integration_conflicts via capture_list. Pass it as the 5th argument to open_integration_pr and 4th argument
+  to audit_impl. It is empty string when no conflict resolution occurred — downstream skills treat empty string as absent.'
 steps:
   clone:
     python: autoskillit.workspace.clone.clone_repo
@@ -126,9 +106,8 @@ steps:
       remote_url: ${{ result.remote_url }}
     on_success: setup_remote
     on_failure: escalate_stop
-    note: 'Clones source_dir into ../autoskillit-runs/<run_name>-<timestamp>/. Captures
-      work_dir used as cwd by all subsequent steps. On failure, escalate_stop is reached
-      immediately — no clone to remove.
+    note: 'Clones source_dir into ../autoskillit-runs/<run_name>-<timestamp>/. Captures work_dir used as cwd by all subsequent
+      steps. On failure, escalate_stop is reached immediately — no clone to remove.
 
       '
   setup_remote:
@@ -139,12 +118,10 @@ steps:
       step_name: setup_remote
     on_success: check_repo_ci_event
     on_failure: register_clone_failure
-    note: 'The clone''s origin initially points to a file:// URL (set by clone_repo
-      for isolation). This step replaces it with the actual GitHub remote URL so that
-      gh CLI commands (gh pr merge, gh pr view, etc.) can identify the correct GitHub
-      repository. Skills that contact remotes (resolve-merge-conflicts, retry-worktree,
-      implement-worktree) now use REMOTE=$(upstream || origin) internally and do not
-      depend on this step.
+    note: 'The clone''s origin initially points to a file:// URL (set by clone_repo for isolation). This step replaces it
+      with the actual GitHub remote URL so that gh CLI commands (gh pr merge, gh pr view, etc.) can identify the correct GitHub
+      repository. Skills that contact remotes (resolve-merge-conflicts, retry-worktree, implement-worktree) now use REMOTE=$(upstream
+      || origin) internally and do not depend on this step.
 
       '
   check_repo_ci_event:
@@ -160,20 +137,17 @@ steps:
       auto_merge_available: ${{ result.auto_merge_available }}
     on_success: check_integration_exists
     on_failure: check_integration_exists
-    note: 'Detects whether the repository''s CI triggers on push or merge_group events
-      for the base branch. Each downstream wait_for_ci step re-derives ci_event for
-      its own watched branch via a dedicated derive_*_ci_event step. The global ci_event
-      captured here is used by diagnostic skill invocations. ci_applicable is captured
-      per-branch by derive_conflict_ci_event instead. Routes to check_integration_exists
-      regardless of outcome — non-blocking gate: ci_event defaults to null (match-any)
+    note: 'Detects whether the repository''s CI triggers on push or merge_group events for the base branch. Each downstream
+      wait_for_ci step re-derives ci_event for its own watched branch via a dedicated derive_*_ci_event step. The global ci_event
+      captured here is used by diagnostic skill invocations. ci_applicable is captured per-branch by derive_conflict_ci_event
+      instead. Routes to check_integration_exists regardless of outcome — non-blocking gate: ci_event defaults to null (match-any)
       on failure.
 
       '
   check_integration_exists:
     tool: run_cmd
     with:
-      cmd: 'REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://"
-        && echo upstream || echo origin)
+      cmd: 'REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin)
 
         git ls-remote --exit-code --heads "$REMOTE" "${{ inputs.base_branch }}"
 
@@ -182,22 +156,19 @@ steps:
       step_name: check_integration_exists
     on_success: fetch_merge_queue_data
     on_failure: confirm_create_integration
-    note: 'Checks whether base_branch exists on the remote. Exit code 0 means the
-      branch exists — proceed to analyze_prs. Non-zero exit means the branch is absent
-      — route to user confirmation before creating it. Idempotent: re-running after
+    note: 'Checks whether base_branch exists on the remote. Exit code 0 means the branch exists — proceed to analyze_prs.
+      Non-zero exit means the branch is absent — route to user confirmation before creating it. Idempotent: re-running after
       the branch is created skips through on_success.
 
       '
   confirm_create_integration:
     action: confirm
-    message: The branch '${{ inputs.base_branch }}' does not exist on the remote.
-      Create it now from the repository's default branch? Type yes to create it or
-      no to abort.
+    message: The branch '${{ inputs.base_branch }}' does not exist on the remote. Create it now from the repository's default
+      branch? Type yes to create it or no to abort.
     on_success: create_persistent_integration
     on_failure: escalate_stop
-    note: 'User approval gate. On yes: create_persistent_integration creates and pushes
-      the branch. On no: escalate_stop — the pipeline cannot proceed without the target
-      branch.
+    note: 'User approval gate. On yes: create_persistent_integration creates and pushes the branch. On no: escalate_stop —
+      the pipeline cannot proceed without the target branch.
 
       '
   create_persistent_integration:
@@ -209,9 +180,8 @@ steps:
         base_branch: ${{ inputs.base_branch }}
     on_success: fetch_merge_queue_data
     on_failure: register_clone_failure
-    note: 'Creates base_branch from the repository''s default branch (auto-detected
-      via origin/HEAD, falls back to main). Only executes when the user confirmed
-      branch creation in confirm_create_integration. Once created, subsequent pipeline
+    note: 'Creates base_branch from the repository''s default branch (auto-detected via origin/HEAD, falls back to main).
+      Only executes when the user confirmed branch creation in confirm_create_integration. Once created, subsequent pipeline
       runs skip directly from check_integration_exists to analyze_prs.
 
       '
@@ -227,9 +197,8 @@ steps:
       merge_queue_data_path: ${{ result.merge_queue_data_path }}
     on_success: analyze_prs
     on_failure: analyze_prs
-    note: 'Pre-fetches GitHub merge queue data server-side (where autoskillit is always
-      installed). Writes parsed queue entries to disk as JSON. On failure, falls through
-      to analyze_prs which uses the fallback empty QUEUE_ENTRIES path (QUEUE_MODE=false).
+    note: 'Pre-fetches GitHub merge queue data server-side (where autoskillit is always installed). Writes parsed queue entries
+      to disk as JSON. On failure, falls through to analyze_prs which uses the fallback empty QUEUE_ENTRIES path (QUEUE_MODE=false).
       Eliminates the autoskillit import in analyze-prs SKILL.md.
 
       '
@@ -237,10 +206,10 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:analyze-prs"
+      skill_command: /autoskillit:analyze-prs
       skill_inputs:
-        base_branch: "${{ inputs.base_branch }}"
-        merge_queue_data_path: "${{ context.merge_queue_data_path }}"
+        base_branch: ${{ inputs.base_branch }}
+        merge_queue_data_path: ${{ context.merge_queue_data_path }}
       cwd: ${{ context.work_dir }}
       step_name: analyze_prs
       output_dir: '{{AUTOSKILLIT_TEMP}}/analyze-prs'
@@ -251,12 +220,10 @@ steps:
     on_success: route_by_queue_mode
     on_failure: register_clone_failure
     on_rate_limit: register_clone_failure
-    note: 'Captures pr_order_file (path to JSON with ordered PRs + complexity tags),
-      batch_branch (e.g. integration/pr-merge-20250228-143052), and queue_mode ("true"
-      when a GitHub merge queue with MERGEABLE entries is active on base_branch; "false"
-      otherwise). If the skill reports pr_count=0 (no open PRs), skip directly to
-      cleanup_success — no integration branch is needed. merge_queue_data_path is
-      pre-computed by fetch_merge_queue_data step.
+    note: 'Captures pr_order_file (path to JSON with ordered PRs + complexity tags), batch_branch (e.g. integration/pr-merge-20250228-143052),
+      and queue_mode ("true" when a GitHub merge queue with MERGEABLE entries is active on base_branch; "false" otherwise).
+      If the skill reports pr_count=0 (no open PRs), skip directly to cleanup_success — no integration branch is needed. merge_queue_data_path
+      is pre-computed by fetch_merge_queue_data step.
 
       '
   route_by_queue_mode:
@@ -265,9 +232,8 @@ steps:
     - when: ${{ context.queue_mode }} == true
       route: get_first_pr_number
     - route: create_batch_branch
-    note: 'Routes to queue mode (get_first_pr_number) when analyze-prs detected a
-      merge queue on the target branch. Falls back to the classic batch-branch path
-      otherwise. context.queue_mode is captured from analyze_prs result.
+    note: 'Routes to queue mode (get_first_pr_number) when analyze-prs detected a merge queue on the target branch. Falls
+      back to the classic batch-branch path otherwise. context.queue_mode is captured from analyze_prs result.
 
       '
   get_first_pr_number:
@@ -280,8 +246,8 @@ steps:
       current_pr_number: ${{ result.stdout | trim }}
     on_success: get_current_pr_branch
     on_failure: register_clone_failure
-    note: 'Queue mode only. Extracts the first PR''s number from pr_order_file to
-      initialize context.current_pr_number before the sequential enqueue loop.
+    note: 'Queue mode only. Extracts the first PR''s number from pr_order_file to initialize context.current_pr_number before
+      the sequential enqueue loop.
 
       '
   get_current_pr_branch:
@@ -294,9 +260,8 @@ steps:
       current_pr_branch: ${{ result.stdout | trim }}
     on_success: capture_pr_head_sha
     on_failure: register_clone_failure
-    note: 'Fetches the headRefName for the current PR to be enqueued. Captured as
-      current_pr_branch for use by wait_ci_pre_enqueue. Follows the same pattern as
-      get_ejected_pr_branch and get_next_pr_branch.
+    note: 'Fetches the headRefName for the current PR to be enqueued. Captured as current_pr_branch for use by wait_ci_pre_enqueue.
+      Follows the same pattern as get_ejected_pr_branch and get_next_pr_branch.
 
       '
   capture_pr_head_sha:
@@ -320,11 +285,10 @@ steps:
       pre_enqueue_ci_event: ${{ result.ci_event }}
     on_success: wait_ci_pre_enqueue
     on_failure: wait_ci_pre_enqueue
-    note: 'Re-derives ci_event for the actual PR branch before the pre-enqueue CI
-      wait. The global check_repo_ci_event evaluates CI triggers against inputs.base_branch
-      (main), but wait_ci_pre_enqueue watches context.current_pr_branch where different
-      CI rules may apply. Non-blocking: on_failure routes to wait_ci_pre_enqueue with
-      pre_enqueue_ci_event=null (match-any fallback).
+    note: 'Re-derives ci_event for the actual PR branch before the pre-enqueue CI wait. The global check_repo_ci_event evaluates
+      CI triggers against inputs.base_branch (main), but wait_ci_pre_enqueue watches context.current_pr_branch where different
+      CI rules may apply. Non-blocking: on_failure routes to wait_ci_pre_enqueue with pre_enqueue_ci_event=null (match-any
+      fallback).
 
       '
   wait_ci_pre_enqueue:
@@ -349,9 +313,8 @@ steps:
       route: register_clone_failure
     - route: register_clone_failure
     on_failure: register_clone_failure
-    note: 'Waits for CI to pass on the PR branch before attempting queue enrollment.
-      Prevents premature enqueue rejection by GitHub when required status checks have
-      not yet completed.
+    note: 'Waits for CI to pass on the PR branch before attempting queue enrollment. Prevents premature enqueue rejection
+      by GitHub when required status checks have not yet completed.
 
       '
   enqueue_current_pr:
@@ -363,11 +326,9 @@ steps:
       auto_merge_available: ${{ context.auto_merge_available }}
     on_success: wait_queue_pr
     on_failure: verify_queue_enrollment
-    note: 'Queue mode only. Submits a single PR to the merge queue via the unified
-      enqueue_pr tool. Called once per PR in the sequential enqueue loop: get_first_pr_number
-      → get_current_pr_branch → wait_ci_pre_enqueue → enqueue_current_pr → wait_queue_pr
-      → (merged) → advance_queue_pr → get_current_pr_branch → wait_ci_pre_enqueue
-      → enqueue_current_pr → ...
+    note: 'Queue mode only. Submits a single PR to the merge queue via the unified enqueue_pr tool. Called once per PR in
+      the sequential enqueue loop: get_first_pr_number → get_current_pr_branch → wait_ci_pre_enqueue → enqueue_current_pr
+      → wait_queue_pr → (merged) → advance_queue_pr → get_current_pr_branch → wait_ci_pre_enqueue → enqueue_current_pr → ...
 
       '
   wait_queue_pr:
@@ -401,9 +362,8 @@ steps:
       route: register_clone_failure
     - route: register_clone_failure
     on_failure: register_clone_failure
-    note: 'Queue mode monitor. All non-error PRState values are explicitly routed.
-      ejected_ci_failure and dropped_merge_group_ci both route to diagnose_queue_ci;
-      ejected_ci_failure must precede ejected (both match CLOSED state).
+    note: 'Queue mode monitor. All non-error PRState values are explicitly routed. ejected_ci_failure and dropped_merge_group_ci
+      both route to diagnose_queue_ci; ejected_ci_failure must precede ejected (both match CLOSED state).
 
       '
   check_eject_limit:
@@ -417,8 +377,8 @@ steps:
       route: register_clone_failure
     - route: get_ejected_pr_branch
     on_failure: register_clone_failure
-    note: 'Circuit breaker for the queue ejection loop. After 3 ejections, routes
-      to register_clone_failure to prevent infinite re-enqueue cycles.
+    note: 'Circuit breaker for the queue ejection loop. After 3 ejections, routes to register_clone_failure to prevent infinite
+      re-enqueue cycles.
 
       '
   check_dropped_healthy_loop:
@@ -432,11 +392,10 @@ steps:
       route: register_clone_failure
     - route: reenter_queue
     on_failure: register_clone_failure
-    note: 'Circuit breaker for the dropped_healthy re-enrollment loop. After 2 consecutive
-      unexplained drops with healthy PR-branch CI, escalates to register_clone_failure
-      instead of looping. Matches the check_eject_limit pattern used for the ejected
-      path. DROPPED_MERGE_GROUP_CI (confirmed merge-group CI failure) is routed directly
-      to diagnose_queue_ci and never reaches this step.
+    note: 'Circuit breaker for the dropped_healthy re-enrollment loop. After 2 consecutive unexplained drops with healthy
+      PR-branch CI, escalates to register_clone_failure instead of looping. Matches the check_eject_limit pattern used for
+      the ejected path. DROPPED_MERGE_GROUP_CI (confirmed merge-group CI failure) is routed directly to diagnose_queue_ci
+      and never reaches this step.
 
       '
   get_ejected_pr_branch:
@@ -462,9 +421,8 @@ steps:
       route: push_ejected_fix
     - route: resolve_ejected_conflicts
     on_failure: resolve_ejected_conflicts
-    note: 'Attempts a trivial rebase before invoking the full resolve-merge-conflicts
-      skill. Uses ejected_pr_branch captured by get_ejected_pr_branch. On clean rebase,
-      skips the skill and proceeds directly to push_ejected_fix. On conflict, aborts
+    note: 'Attempts a trivial rebase before invoking the full resolve-merge-conflicts skill. Uses ejected_pr_branch captured
+      by get_ejected_pr_branch. On clean rebase, skips the skill and proceeds directly to push_ejected_fix. On conflict, aborts
       the rebase and routes to resolve_ejected_conflicts for goal-aware resolution.
 
       '
@@ -472,13 +430,13 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:resolve-merge-conflicts"
+      skill_command: /autoskillit:resolve-merge-conflicts
       skill_inputs:
-        worktree_path: "${{ context.ejected_pr_branch }}"
-        plan_path: "${{ context.pr_plan_path }}"
-        base_branch: "${{ inputs.base_branch }}"
+        worktree_path: ${{ context.ejected_pr_branch }}
+        plan_path: ${{ context.pr_plan_path }}
+        base_branch: ${{ inputs.base_branch }}
       cwd: ${{ context.work_dir }}
-      output_dir: '.'
+      output_dir: .
       step_name: resolve_ejected_conflicts
     capture:
       conflict_escalation_required: ${{ result.escalation_required }}
@@ -495,10 +453,8 @@ steps:
     on_exhausted: register_clone_failure
     on_context_limit: register_clone_failure
     on_rate_limit: register_clone_failure
-    skip_when_false: inputs.backend_supports_git_write
-    note: 'Resolves git-level rebase conflicts between the ejected PR''s branch and
-      the current base_branch HEAD. Uses the same resolve-merge-conflicts skill as
-      the classic path''s integration conflict resolution.
+    note: 'Resolves git-level rebase conflicts between the ejected PR''s branch and the current base_branch HEAD. Uses the
+      same resolve-merge-conflicts skill as the classic path''s integration conflict resolution.
 
       '
   push_ejected_fix:
@@ -525,11 +481,10 @@ steps:
       post_queue_ci_event: ${{ result.ci_event }}
     on_success: ci_watch_post_queue_fix
     on_failure: ci_watch_post_queue_fix
-    note: 'Re-derives ci_event for the actual ejected PR branch before the post-queue-fix
-      CI wait. The global check_repo_ci_event evaluates CI triggers against inputs.base_branch
-      (main), but ci_watch_post_queue_fix watches context.ejected_pr_branch where
-      different CI rules may apply. Non-blocking: on_failure routes to ci_watch_post_queue_fix
-      with post_queue_ci_event=null (match-any fallback).
+    note: 'Re-derives ci_event for the actual ejected PR branch before the post-queue-fix CI wait. The global check_repo_ci_event
+      evaluates CI triggers against inputs.base_branch (main), but ci_watch_post_queue_fix watches context.ejected_pr_branch
+      where different CI rules may apply. Non-blocking: on_failure routes to ci_watch_post_queue_fix with post_queue_ci_event=null
+      (match-any fallback).
 
       '
   classify_push_failure:
@@ -587,12 +542,10 @@ steps:
       route: check_ci_post_queue_loop
     - route: register_clone_failure
     on_failure: register_clone_failure
-    note: 'Validates CI passes on the rebased branch before re-entering the merge
-      queue. Prevents re-enqueue of a broken branch that would be ejected again. Routes
-      on result.conclusion: success → reenter_queue, no_runs → register_clone_failure
-      (auto_trigger fires first: empty commit + force-push + re-poll; no_runs reached
-      only when trigger recovery fails), timed_out → check_ci_post_queue_loop, failure
-      → register_clone_failure.
+    note: 'Validates CI passes on the rebased branch before re-entering the merge queue. Prevents re-enqueue of a broken branch
+      that would be ejected again. Routes on result.conclusion: success → reenter_queue, no_runs → register_clone_failure
+      (auto_trigger fires first: empty commit + force-push + re-poll; no_runs reached only when trigger recovery fails), timed_out
+      → check_ci_post_queue_loop, failure → register_clone_failure.
 
       '
   check_ci_post_queue_loop:
@@ -610,8 +563,8 @@ steps:
     on_failure: register_clone_failure
     optional_context_refs:
     - ci_post_queue_loop_count
-    note: 'Iteration guard for the ci_watch_post_queue_fix timed_out self-loop. Caps
-      at 2 iterations. On budget exhaustion, routes to register_clone_failure.
+    note: 'Iteration guard for the ci_watch_post_queue_fix timed_out self-loop. Caps at 2 iterations. On budget exhaustion,
+      routes to register_clone_failure.
 
       '
   verify_queue_enrollment:
@@ -645,9 +598,8 @@ steps:
       route: register_clone_failure
     - route: register_clone_failure
     on_failure: register_clone_failure
-    note: 'Short probe (60s) after enqueue_current_pr failure. Distinguishes transient
-      enqueue errors from actual configuration failures. Recoverable states route
-      to wait_queue_pr; terminal failures route to register_clone_failure.
+    note: 'Short probe (60s) after enqueue_current_pr failure. Distinguishes transient enqueue errors from actual configuration
+      failures. Recoverable states route to wait_queue_pr; terminal failures route to register_clone_failure.
 
       '
   reenter_queue:
@@ -659,8 +611,8 @@ steps:
       auto_merge_available: ${{ context.auto_merge_available }}
     on_success: wait_queue_pr
     on_failure: verify_queue_enrollment
-    note: 'Re-submits the fixed PR to the merge queue after conflict resolution. Routes
-      back to wait_queue_pr to continue monitoring.
+    note: 'Re-submits the fixed PR to the merge queue after conflict resolution. Routes back to wait_queue_pr to continue
+      monitoring.
 
       '
   advance_queue_pr:
@@ -676,18 +628,15 @@ steps:
       route: collect_and_check_impl_plans
     - route: get_next_pr_branch
     on_failure: register_clone_failure
-    note: 'Advances to the next PR by looking up the current PR number in pr_order_file
-      and returning the next entry. Outputs the next PR number (or "done"). The capture
-      block sets current_pr_number at the recipe level — no agent-managed variable
-      updates. Routes to get_next_pr_branch for proactive rebase, or collect_and_check_impl_plans
-      when done.
+    note: 'Advances to the next PR by looking up the current PR number in pr_order_file and returning the next entry. Outputs
+      the next PR number (or "done"). The capture block sets current_pr_number at the recipe level — no agent-managed variable
+      updates. Routes to get_next_pr_branch for proactive rebase, or collect_and_check_impl_plans when done.
 
       '
   get_next_pr_branch:
     tool: run_cmd
     with:
-      cmd: 'gh pr view ''${{ context.current_pr_number }}'' --json headRefName -q
-        .headRefName
+      cmd: 'gh pr view ''${{ context.current_pr_number }}'' --json headRefName -q .headRefName
 
         '
       cwd: ${{ context.work_dir }}
@@ -696,9 +645,8 @@ steps:
       next_pr_branch: ${{ result.stdout | trim }}
     on_success: proactive_rebase_next_pr
     on_failure: get_current_pr_branch
-    note: 'Fetches the headRefName for the next PR to be enqueued. Captured as next_pr_branch
-      for use by proactive_rebase_next_pr. On failure (e.g. transient gh CLI error),
-      falls through to get_current_pr_branch to enforce the CI gate before enqueue.
+    note: 'Fetches the headRefName for the next PR to be enqueued. Captured as next_pr_branch for use by proactive_rebase_next_pr.
+      On failure (e.g. transient gh CLI error), falls through to get_current_pr_branch to enforce the CI gate before enqueue.
 
       '
   proactive_rebase_next_pr:
@@ -714,24 +662,22 @@ steps:
       route: push_rebased_next_pr
     - route: resolve_proactive_rebase_conflicts
     on_failure: get_current_pr_branch
-    note: 'Attempts a proactive rebase of the next PR branch onto the current base_branch
-      HEAD before submitting to the merge queue. On clean rebase, skips conflict resolution
-      entirely and proceeds to push. On conflict, routes to resolve_proactive_rebase_conflicts.
-      On git command failure, falls through to get_current_pr_branch to enforce the
-      CI gate.
+    note: 'Attempts a proactive rebase of the next PR branch onto the current base_branch HEAD before submitting to the merge
+      queue. On clean rebase, skips conflict resolution entirely and proceeds to push. On conflict, routes to resolve_proactive_rebase_conflicts.
+      On git command failure, falls through to get_current_pr_branch to enforce the CI gate.
 
       '
   resolve_proactive_rebase_conflicts:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:resolve-merge-conflicts"
+      skill_command: /autoskillit:resolve-merge-conflicts
       skill_inputs:
-        worktree_path: "${{ context.next_pr_branch }}"
-        plan_path: "${{ context.pr_plan_path }}"
-        base_branch: "${{ inputs.base_branch }}"
+        worktree_path: ${{ context.next_pr_branch }}
+        plan_path: ${{ context.pr_plan_path }}
+        base_branch: ${{ inputs.base_branch }}
       cwd: ${{ context.work_dir }}
-      output_dir: '.'
+      output_dir: .
       step_name: resolve_proactive_rebase_conflicts
     capture:
       conflict_escalation_required: ${{ result.escalation_required }}
@@ -749,12 +695,10 @@ steps:
     on_exhausted: get_current_pr_branch
     on_context_limit: register_clone_failure
     on_rate_limit: register_clone_failure
-    skip_when_false: inputs.backend_supports_git_write
-    note: 'Resolves git-level rebase conflicts between the next PR''s branch and the
-      current base_branch HEAD. Similar to resolve_ejected_conflicts but operates
-      proactively before queue submission. Unresolvable conflicts (escalation_required=true)
-      hard-stop at register_clone_failure. Retry exhaustion falls through to get_current_pr_branch
-      to enforce the CI gate before enqueue.
+    note: 'Resolves git-level rebase conflicts between the next PR''s branch and the current base_branch HEAD. Similar to
+      resolve_ejected_conflicts but operates proactively before queue submission. Unresolvable conflicts (escalation_required=true)
+      hard-stop at register_clone_failure. Retry exhaustion falls through to get_current_pr_branch to enforce the CI gate
+      before enqueue.
 
       '
   push_rebased_next_pr:
@@ -766,19 +710,18 @@ steps:
       force: 'true'
     on_success: get_current_pr_branch
     on_failure: register_clone_failure
-    note: 'Force-pushes the proactively rebased next PR branch. force=true is required
-      because rebase rewrites SHAs (non-fast-forward). Routes to get_current_pr_branch
-      to enforce the CI gate before enqueue.
+    note: 'Force-pushes the proactively rebased next PR branch. force=true is required because rebase rewrites SHAs (non-fast-forward).
+      Routes to get_current_pr_branch to enforce the CI gate before enqueue.
 
       '
   diagnose_queue_ci:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:diagnose-ci"
+      skill_command: /autoskillit:diagnose-ci
       skill_inputs:
-        event: "${{ context.ci_event }}"
-        branch: "${{ context.current_pr_number }}"
+        event: ${{ context.ci_event }}
+        branch: ${{ context.current_pr_number }}
       cwd: ${{ context.work_dir }}
       step_name: diagnose_queue_ci
       output_dir: '{{AUTOSKILLIT_TEMP}}/diagnose-ci'
@@ -787,9 +730,8 @@ steps:
     on_success: register_clone_failure
     on_failure: register_clone_failure
     on_rate_limit: register_clone_failure
-    note: 'Best-effort CI diagnosis for ejected_ci_failure state. The PR was ejected
-      due to CI failure in the merge queue, not a conflict. After diagnosis, routes
-      to register_clone_failure — CI failures in queue mode are not auto-recoverable
+    note: 'Best-effort CI diagnosis for ejected_ci_failure state. The PR was ejected due to CI failure in the merge queue,
+      not a conflict. After diagnosis, routes to register_clone_failure — CI failures in queue mode are not auto-recoverable
       without human intervention.
 
       '
@@ -802,9 +744,8 @@ steps:
       auto_merge_available: ${{ context.auto_merge_available }}
     on_success: check_queue_stall_loop
     on_failure: register_clone_failure
-    note: 'Uses the unified enqueue_pr tool to re-enroll a stalled PR in the merge
-      queue. Routes back to check_queue_stall_loop (bounded iteration guard) instead
-      of directly to wait_queue_pr.
+    note: 'Uses the unified enqueue_pr tool to re-enroll a stalled PR in the merge queue. Routes back to check_queue_stall_loop
+      (bounded iteration guard) instead of directly to wait_queue_pr.
 
       '
   check_queue_stall_loop:
@@ -822,22 +763,19 @@ steps:
     on_failure: register_clone_failure
     optional_context_refs:
     - queue_stall_loop_count
-    note: 'Iteration guard for the wait_queue_pr / reenroll_stalled_queue_pr cycle.
-      Caps stall re-enrollment at 3 attempts. On budget exhaustion, routes to register_clone_failure
-      (merge outcome unconfirmed).
+    note: 'Iteration guard for the wait_queue_pr / reenroll_stalled_queue_pr cycle. Caps stall re-enrollment at 3 attempts.
+      On budget exhaustion, routes to register_clone_failure (merge outcome unconfirmed).
 
       '
   create_batch_branch:
     tool: run_cmd
     with:
-      cmd: git checkout ${{ inputs.base_branch }} && git pull && git checkout -b ${{
-        context.batch_branch }}
+      cmd: git checkout ${{ inputs.base_branch }} && git pull && git checkout -b ${{ context.batch_branch }}
       cwd: ${{ context.work_dir }}
       step_name: create_batch_branch
     on_success: publish_batch_branch
     on_failure: register_clone_failure
-    note: 'Creates the integration branch from the latest base_branch HEAD. context.batch_branch
-      was computed by analyze_prs.
+    note: 'Creates the integration branch from the latest base_branch HEAD. context.batch_branch was computed by analyze_prs.
 
       '
   publish_batch_branch:
@@ -848,24 +786,24 @@ steps:
       branch: ${{ context.batch_branch }}
     on_success: check_pr_merge_loop
     on_failure: register_clone_failure
-    note: 'Publishes the integration branch to origin immediately after creation so
-      that merge_worktree can verify refs/remotes/origin/batch_branch exists before
-      rebasing. The branch is re-pushed at push_batch_branch after all merges complete
-      to update the remote with accumulated merge commits.
+    note: 'Publishes the integration branch to origin immediately after creation so that merge_worktree can verify refs/remotes/origin/batch_branch
+      exists before rebasing. The branch is re-pushed at push_batch_branch after all merges complete to update the remote
+      with accumulated merge commits.
 
       '
   merge_pr:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:merge-pr"
+      skill_command: /autoskillit:merge-pr
       skill_inputs:
-        complexity: "{complexity}"
-        pr_number: "{pr_number}"
+        complexity: '{complexity}'
+        pr_number: '{pr_number}'
       cwd: ${{ context.work_dir }}
       step_name: merge_pr
       output_dir: '{{AUTOSKILLIT_TEMP}}/merge-prs/iter_${{ context.pr_merge_loop_count }}'
-    optional_context_refs: [pr_merge_loop_count]
+    optional_context_refs:
+    - pr_merge_loop_count
     capture:
       needs_plan: ${{ result.needs_plan }}
       escalation_required: ${{ result.escalation_required }}
@@ -886,24 +824,22 @@ steps:
     on_exhausted: register_clone_failure
     on_context_limit: register_clone_failure
     on_rate_limit: register_clone_failure
-    note: "The agent reads context.pr_order_file at context.current_pr_number to get\
-      \ the current PR's complexity. Appends number and complexity to skill_command:\n\
-      \  /autoskillit:merge-pr {pr_number} {complexity}\nescalation_required=true\
-      \ → ambiguous conflict, human intervention needed → escalate_stop. needs_plan=true\
-      \ → conflict_report_path set as context.task → plan. merged=false (timeout/conflict)\
-      \ → register_clone_failure. merged=true + fallthrough → PR merged directly →\
+    note: "The agent reads context.pr_order_file at context.current_pr_number to get the current PR's complexity. Appends\
+      \ number and complexity to skill_command:\n  /autoskillit:merge-pr {pr_number} {complexity}\nescalation_required=true\
+      \ → ambiguous conflict, human intervention needed → escalate_stop. needs_plan=true → conflict_report_path set as context.task\
+      \ → plan. merged=false (timeout/conflict) → register_clone_failure. merged=true + fallthrough → PR merged directly →\
       \ next_part_or_next_pr.\n"
   plan:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:make-plan"
+      skill_command: /autoskillit:make-plan
       skill_inputs:
-        task: "${{ context.task }}"
-        audit_cycle_path: "${{ context.audit_cycle_path }}"
+        task: ${{ context.task }}
+        audit_cycle_path: ${{ context.audit_cycle_path }}
       cwd: ${{ context.work_dir }}
       step_name: plan
-      output_dir: '.'
+      output_dir: .
     capture:
       pr_plan_path: ${{ result.plan_path }}
       verdict: ${{ result.verdict }}
@@ -918,11 +854,10 @@ steps:
     on_failure: register_clone_failure
     on_rate_limit: register_clone_failure
     on_context_limit: salvage_plan
-    note: 'Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically
-      into plan_parts[]. For a single-part plan, plan_parts has one entry equal to
-      plan_path. PRIMARY PATH: context.task = conflict_report_path from merge_pr.
-      REMEDIATION MODE: consume the exact current audit_cycle_path and emit the
-      matching plan_disposition_path; make-plan cannot close the NO GO lineage.
+    note: 'Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically into plan_parts[]. For a single-part plan,
+      plan_parts has one entry equal to plan_path. PRIMARY PATH: context.task = conflict_report_path from merge_pr. REMEDIATION
+      MODE: consume the exact current audit_cycle_path and emit the matching plan_disposition_path; make-plan cannot close
+      the NO GO lineage.
 
       '
     optional_context_refs:
@@ -947,21 +882,19 @@ steps:
       route: verify
     - route: register_clone_failure
     on_failure: register_clone_failure
-    note: 'Deterministic salvage for plan context-limit stumbles: verifies captured
-      plan_parts artifacts exist on disk. salvaged routes onward as if plan succeeded;
-      unsalvageable falls through to plan''s original on_failure destination. Substitute
-      the captured ${{ context.plan_parts }} value into the plan_parts argument verbatim,
-      unmodified — do not reformat, quote, or re-derive it; the callable''s input grammar
-      absorbs rendering variance.'
+    note: 'Deterministic salvage for plan context-limit stumbles: verifies captured plan_parts artifacts exist on disk. salvaged
+      routes onward as if plan succeeded; unsalvageable falls through to plan''s original on_failure destination. Substitute
+      the captured ${{ context.plan_parts }} value into the plan_parts argument verbatim, unmodified — do not reformat, quote,
+      or re-derive it; the callable''s input grammar absorbs rendering variance.'
   verify:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:dry-walkthrough"
+      skill_command: /autoskillit:dry-walkthrough
       skill_inputs:
-        plan_path: "${{ context.pr_plan_path }}"
-        audit_cycle_path: "${{ context.audit_cycle_path }}"
-        plan_disposition_path: "${{ context.plan_disposition_path }}"
+        plan_path: ${{ context.pr_plan_path }}
+        audit_cycle_path: ${{ context.audit_cycle_path }}
+        plan_disposition_path: ${{ context.plan_disposition_path }}
       cwd: ${{ context.work_dir }}
       step_name: verify
       output_dir: '{{AUTOSKILLIT_TEMP}}'
@@ -974,9 +907,8 @@ steps:
     optional_context_refs:
     - audit_cycle_path
     - plan_disposition_path
-    note: 'SEQUENTIAL: For each plan_part, run the full cycle (verify → implement
-      → test → push_worktree_branch → create_conflict_pr → wait_for_conflict_ci →
-      merge_conflict_pr) before advancing.
+    note: 'SEQUENTIAL: For each plan_part, run the full cycle (verify → implement → test → push_worktree_branch → create_conflict_pr
+      → wait_for_conflict_ci → merge_conflict_pr) before advancing.
 
       '
   implement:
@@ -984,12 +916,12 @@ steps:
     model: ''
     stale_threshold: 2400
     with:
-      skill_command: "/autoskillit:implement-worktree-no-merge"
+      skill_command: /autoskillit:implement-worktree-no-merge
       skill_inputs:
-        plan_path: "${{ context.pr_plan_path }}"
+        plan_path: ${{ context.pr_plan_path }}
       cwd: ${{ context.work_dir }}
       step_name: implement
-      output_dir: '.'
+      output_dir: .
     capture:
       worktree_path: ${{ result.worktree_path }}
       worktree_branch_name: ${{ result.branch_name }}
@@ -999,26 +931,24 @@ steps:
     on_exhausted: retry_worktree
     on_context_limit: retry_worktree
     on_rate_limit: retry_worktree
-    skip_when_false: inputs.backend_supports_git_write
   retry_worktree:
     tool: run_skill
     model: ''
     stale_threshold: 2400
     with:
-      skill_command: "/autoskillit:retry-worktree"
+      skill_command: /autoskillit:retry-worktree
       skill_inputs:
-        plan_path: "${{ context.pr_plan_path }}"
-        worktree_path: "${{ context.worktree_path }}"
+        plan_path: ${{ context.pr_plan_path }}
+        worktree_path: ${{ context.worktree_path }}
       cwd: ${{ context.worktree_path }}
       step_name: retry_worktree
-      output_dir: '.'
+      output_dir: .
     capture:
       worktree_path: ${{ result.worktree_path }}
       worktree_branch_name: ${{ result.branch_name }}
     on_success: test
     on_failure: register_clone_failure
     retries: 3
-    skip_when_false: inputs.backend_supports_git_write
     on_exhausted: register_clone_failure
     on_context_limit: register_clone_failure
     on_rate_limit: register_clone_failure
@@ -1031,8 +961,7 @@ steps:
   push_worktree_branch:
     tool: run_cmd
     with:
-      cmd: 'REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://"
-        && echo upstream || echo origin)
+      cmd: 'REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo origin)
 
         git push "$REMOTE" HEAD:${{ context.worktree_branch_name }} --force-with-lease
 
@@ -1041,21 +970,18 @@ steps:
       step_name: push_worktree_branch
     on_success: create_conflict_pr
     on_failure: register_clone_failure
-    note: 'Pushes the conflict-resolution worktree branch to origin so GitHub can
-      run CI. Uses --force-with-lease to prevent clobbering concurrent updates. context.worktree_branch_name
-      is captured from implement step output (result.branch_name). Both a lease violation
-      (concurrent push) and a network failure route to register_clone_failure — the
-      recipe cannot distinguish between the two, so no safe retry is possible without
-      re-evaluating the worktree state.
+    note: 'Pushes the conflict-resolution worktree branch to origin so GitHub can run CI. Uses --force-with-lease to prevent
+      clobbering concurrent updates. context.worktree_branch_name is captured from implement step output (result.branch_name).
+      Both a lease violation (concurrent push) and a network failure route to register_clone_failure — the recipe cannot distinguish
+      between the two, so no safe retry is possible without re-evaluating the worktree state.
 
       '
   create_conflict_pr:
     tool: run_cmd
     with:
-      cmd: 'gh pr create --base "${{ context.batch_branch }}" --head "${{ context.worktree_branch_name
-        }}" --title "chore: conflict resolution for PR ${{ context.current_pr_number
-        }}" --body "Auto-generated conflict resolution branch. Closes after merge."
-        --json number --jq ''.number''
+      cmd: 'gh pr create --base "${{ context.batch_branch }}" --head "${{ context.worktree_branch_name }}" --title "chore:
+        conflict resolution for PR ${{ context.current_pr_number }}" --body "Auto-generated conflict resolution branch. Closes
+        after merge." --json number --jq ''.number''
 
         '
       cwd: ${{ context.work_dir }}
@@ -1064,12 +990,10 @@ steps:
       conflict_pr_number: ${{ result.stdout | trim }}
     on_success: derive_conflict_ci_event
     on_failure: register_clone_failure
-    note: 'Creates a GitHub PR from the worktree branch into the integration batch
-      branch. Captures conflict_pr_number for the subsequent gh pr merge call. The
-      --json number --jq ''.number'' flags constrain gh output to a bare integer,
-      but if gh emits unexpected warnings to stdout the trimmed value may be malformed
-      and propagate silently to merge_conflict_pr. Verify conflict_pr_number is a
-      non-empty integer before use.
+    note: 'Creates a GitHub PR from the worktree branch into the integration batch branch. Captures conflict_pr_number for
+      the subsequent gh pr merge call. The --json number --jq ''.number'' flags constrain gh output to a bare integer, but
+      if gh emits unexpected warnings to stdout the trimmed value may be malformed and propagate silently to merge_conflict_pr.
+      Verify conflict_pr_number is a non-empty integer before use.
 
       '
   derive_conflict_ci_event:
@@ -1085,11 +1009,9 @@ steps:
       conflict_ci_applicable: ${{ result.ci_applicable }}
     on_success: route_conflict_ci
     on_failure: route_conflict_ci
-    note: 'Re-derives ci_event for the ACTUAL conflict resolution branch, not inputs.base_branch.
-      The original check_repo_ci_event evaluates CI triggers against main, but conflict
-      PRs target pr-batch/* branches where different CI rules may apply. Non-blocking:
-      on_failure routes to route_conflict_ci with conflict_ci_event=null (match-any
-      fallback).
+    note: 'Re-derives ci_event for the ACTUAL conflict resolution branch, not inputs.base_branch. The original check_repo_ci_event
+      evaluates CI triggers against main, but conflict PRs target pr-batch/* branches where different CI rules may apply.
+      Non-blocking: on_failure routes to route_conflict_ci with conflict_ci_event=null (match-any fallback).
 
       '
   route_conflict_ci:
@@ -1098,9 +1020,9 @@ steps:
     - when: ${{ context.conflict_ci_applicable }} == false
       route: guard_ci_skip_conflict
     - route: wait_for_conflict_ci
-    note: 'Short-circuits CI wait when no workflow trigger matches the conflict resolution
-      branch. ci_applicable=false means neither push nor pull_request triggers apply to this
-      branch/base combination, so wait_for_ci would exhaust its timeout budget with zero CI runs.
+    note: 'Short-circuits CI wait when no workflow trigger matches the conflict resolution branch. ci_applicable=false means
+      neither push nor pull_request triggers apply to this branch/base combination, so wait_for_ci would exhaust its timeout
+      budget with zero CI runs.
 
       '
   guard_ci_skip_conflict:
@@ -1118,11 +1040,10 @@ steps:
     on_failure: register_clone_failure
     optional_context_refs:
     - ci_skip_conflict_count
-    note: 'Structural bound for the ci_applicable=false shortcut path. Uses check_loop_iteration
-      to satisfy the unbounded-cycle semantic rule — the on_result exit to register_clone_failure
-      provides a structural termination guarantee. Cap of 50 matches check_pr_merge_loop
-      budget; in practice never exceeded because the PR merge loop terminates when
-      all PRs are processed.
+    note: 'Structural bound for the ci_applicable=false shortcut path. Uses check_loop_iteration to satisfy the unbounded-cycle
+      semantic rule — the on_result exit to register_clone_failure provides a structural termination guarantee. Cap of 50
+      matches check_pr_merge_loop budget; in practice never exceeded because the PR merge loop terminates when all PRs are
+      processed.
 
       '
   wait_for_conflict_ci:
@@ -1143,12 +1064,10 @@ steps:
       route: check_conflict_ci_loop
     - route: register_clone_failure
     on_failure: register_clone_failure
-    note: 'Waits for CI to pass on the worktree branch before merging. 600 second
-      timeout matches the merge-pr skill poll timeout. Uses conflict_ci_event (derived
-      for the actual worktree branch) instead of the global ci_event (derived for
-      inputs.base_branch). Routes on result.conclusion: success → merge_conflict_pr,
-      no_runs → handle_conflict_no_runs (recovery path), timed_out → check_conflict_ci_loop
-      (iteration guard), failure → register_clone_failure.
+    note: 'Waits for CI to pass on the worktree branch before merging. 600 second timeout matches the merge-pr skill poll
+      timeout. Uses conflict_ci_event (derived for the actual worktree branch) instead of the global ci_event (derived for
+      inputs.base_branch). Routes on result.conclusion: success → merge_conflict_pr, no_runs → handle_conflict_no_runs (recovery
+      path), timed_out → check_conflict_ci_loop (iteration guard), failure → register_clone_failure.
 
       '
   check_conflict_ci_loop:
@@ -1166,9 +1085,8 @@ steps:
     on_failure: register_clone_failure
     optional_context_refs:
     - conflict_ci_loop_count
-    note: 'Caps the wait_for_conflict_ci re-poll loop at 2 iterations. After 2 timed_out
-      results (1200s total), routes to register_clone_failure instead of spinning
-      indefinitely.
+    note: 'Caps the wait_for_conflict_ci re-poll loop at 2 iterations. After 2 timed_out results (1200s total), routes to
+      register_clone_failure instead of spinning indefinitely.
 
       '
   handle_conflict_no_runs:
@@ -1186,13 +1104,11 @@ steps:
     on_failure: register_clone_failure
     retries: 1
     on_exhausted: register_clone_failure
-    note: 'Intercepts no_runs from wait_for_conflict_ci. Re-derives ci_event for the
-      worktree branch. Since this step is reached only after auto_trigger has already
-      attempted to trigger CI (empty commit + force-push) and wait_for_conflict_ci
-      still saw no_runs, the branch genuinely has no applicable CI. Routes unconditionally
-      to merge_conflict_pr on tool success — skipping CI is correct because all recovery
-      options have been exhausted. retries: 1 bounds the tool-call retry for transient
-      API failures.
+    note: 'Intercepts no_runs from wait_for_conflict_ci. Re-derives ci_event for the worktree branch. Since this step is reached
+      only after auto_trigger has already attempted to trigger CI (empty commit + force-push) and wait_for_conflict_ci still
+      saw no_runs, the branch genuinely has no applicable CI. Routes unconditionally to merge_conflict_pr on tool success
+      — skipping CI is correct because all recovery options have been exhausted. retries: 1 bounds the tool-call retry for
+      transient API failures.
 
       '
   merge_conflict_pr:
@@ -1203,25 +1119,23 @@ steps:
       step_name: merge_conflict_pr
     on_success: next_part_or_next_pr
     on_failure: register_clone_failure
-    note: 'Merges the conflict-resolution PR into the integration batch branch via
-      GitHub API. Uses --squash to keep integration history linear. Uses --delete-branch
-      to clean up the temporary worktree branch on GitHub. Non-auto merge (explicit
-      --squash without --auto) is correct here because wait_for_conflict_ci already
-      confirmed CI has passed.
+    note: 'Merges the conflict-resolution PR into the integration batch branch via GitHub API. Uses --squash to keep integration
+      history linear. Uses --delete-branch to clean up the temporary worktree branch on GitHub. Non-auto merge (explicit --squash
+      without --auto) is correct here because wait_for_conflict_ci already confirmed CI has passed.
 
       '
   fix:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:resolve-failures"
+      skill_command: /autoskillit:resolve-failures
       skill_inputs:
-        plan_path: "${{ context.pr_plan_path }}"
-        base_branch: "${{ inputs.base_branch }}"
-        worktree_path: "${{ context.worktree_path }}"
+        plan_path: ${{ context.pr_plan_path }}
+        base_branch: ${{ inputs.base_branch }}
+        worktree_path: ${{ context.worktree_path }}
       cwd: ${{ context.worktree_path }}
       step_name: fix
-      output_dir: '.'
+      output_dir: .
     capture:
       verdict: ${{ result.verdict }}
       fixes_applied: ${{ result.fixes_applied }}
@@ -1238,15 +1152,13 @@ steps:
       route: register_clone_failure
     - route: register_clone_failure
     on_failure: register_clone_failure
-    skip_when_false: inputs.backend_supports_git_write
     retries: 3
     on_exhausted: register_clone_failure
     on_context_limit: register_clone_failure
     on_rate_limit: register_clone_failure
-    note: 'Fixes test failures without merging. Routes to test for verification;
-      test failure increments check_test_fix_loop before retrying.
-      The base_branch with: key is present for contract compatibility only; the merge
-      target is always the integration branch.
+    note: 'Fixes test failures without merging. Routes to test for verification; test failure increments check_test_fix_loop
+      before retrying. The base_branch with: key is present for contract compatibility only; the merge target is always the
+      integration branch.
 
       '
   check_test_fix_loop:
@@ -1264,9 +1176,8 @@ steps:
     on_failure: register_clone_failure
     optional_context_refs:
     - test_fix_loop_count
-    note: 'Guards the test → fix → test cycle. Caps at 3 fix-retest iterations.
-      Counter increments after test failure, so the last fix attempt always gets
-      verified before the budget is exhausted.
+    note: 'Guards the test → fix → test cycle. Caps at 3 fix-retest iterations. Counter increments after test failure, so
+      the last fix attempt always gets verified before the budget is exhausted.
 
       '
   next_part_or_next_pr:
@@ -1277,10 +1188,9 @@ steps:
         more_parts: verify
         more_prs: check_pr_merge_loop
         all_done: push_batch_branch
-    note: 'Routing step — no tool call. The agent evaluates what comes next: 1. If
-      more plan_parts remain for the current PR → verify (next part). 2. If all parts
-      done, advance current_pr_number. If more PRs remain → check_pr_merge_loop. 3.
-      If all PRs processed → push_batch_branch.
+    note: 'Routing step — no tool call. The agent evaluates what comes next: 1. If more plan_parts remain for the current
+      PR → verify (next part). 2. If all parts done, advance current_pr_number. If more PRs remain → check_pr_merge_loop.
+      3. If all PRs processed → push_batch_branch.
 
       '
   check_pr_merge_loop:
@@ -1298,12 +1208,10 @@ steps:
     on_failure: register_clone_failure
     optional_context_refs:
     - pr_merge_loop_count
-    note: 'Guards the merge_pr → next_part_or_next_pr outer loop. The loop is data-bounded
-      by the finite pr_order_file list; this provides a structural bound for the cycle
-      validator. 50 iterations allows large batch runs. Unlike retry loops (capped
-      at 3–15 attempts), this cap is an outer iteration over data items (PRs to merge),
-      not a retry count — hence the higher bound is safe: it tracks distinct work
-      units, not repeated attempts on the same operation.
+    note: 'Guards the merge_pr → next_part_or_next_pr outer loop. The loop is data-bounded by the finite pr_order_file list;
+      this provides a structural bound for the cycle validator. 50 iterations allows large batch runs. Unlike retry loops
+      (capped at 3–15 attempts), this cap is an outer iteration over data items (PRs to merge), not a retry count — hence
+      the higher bound is safe: it tracks distinct work units, not repeated attempts on the same operation.
 
       '
   push_batch_branch:
@@ -1314,19 +1222,18 @@ steps:
       branch: ${{ context.batch_branch }}
     on_success: collect_and_check_impl_plans
     on_failure: register_clone_failure
-    note: 'Single push after ALL PR merges complete. Uses push_to_remote MCP tool
-      (consistent with all other push steps) rather than run_cmd git push.
+    note: 'Single push after ALL PR merges complete. Uses push_to_remote MCP tool (consistent with all other push steps) rather
+      than run_cmd git push.
 
       '
   collect_and_check_impl_plans:
     tool: run_cmd
     with:
-      cmd: 'mkdir -p ${{ inputs.plans_dir }} && find {{AUTOSKILLIT_TEMP}}/make-plan/
-        -name ''*_plan_*.md'' -exec cp {} ${{ inputs.plans_dir }}/ \; 2>/dev/null
-        || true
+      cmd: 'mkdir -p ${{ inputs.plans_dir }} && find {{AUTOSKILLIT_TEMP}}/make-plan/ -name ''*_plan_*.md'' -exec cp {} ${{
+        inputs.plans_dir }}/ \; 2>/dev/null || true
 
-        find ${{ inputs.plans_dir }} -maxdepth 1 -name ''*_plan_*.md'' ! -name ''pr_analysis_plan_*.md''
-        2>/dev/null | wc -l | tr -d '' \n''
+        find ${{ inputs.plans_dir }} -maxdepth 1 -name ''*_plan_*.md'' ! -name ''pr_analysis_plan_*.md'' 2>/dev/null | wc
+        -l | tr -d '' \n''
 
         '
       cwd: ${{ context.work_dir }}
@@ -1336,36 +1243,34 @@ steps:
       route: compute_domain_partitions
     - route: audit_impl
     on_failure: audit_impl
-    note: 'Copies plan files from {{AUTOSKILLIT_TEMP}}/make-plan/ into plans_dir,
-      then counts implementation plan files (excluding pr_analysis_plan_*.md). The
-      copy uses || true so the count always runs even if no source files exist. The
-      final stdout line is the count, used for on_result routing: 0 → compute_domain_partitions
-      (no plans generated, all PRs merged cleanly), non-zero → audit_impl (conflict
-      reports or make-plan outputs are present). Replaces the former collect_artifacts
-      + check_impl_plans two-step pair.
+    note: 'Copies plan files from {{AUTOSKILLIT_TEMP}}/make-plan/ into plans_dir, then counts implementation plan files (excluding
+      pr_analysis_plan_*.md). The copy uses || true so the count always runs even if no source files exist. The final stdout
+      line is the count, used for on_result routing: 0 → compute_domain_partitions (no plans generated, all PRs merged cleanly),
+      non-zero → audit_impl (conflict reports or make-plan outputs are present). Replaces the former collect_artifacts + check_impl_plans
+      two-step pair.
 
       '
   audit_impl:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:audit-impl"
+      skill_command: /autoskillit:audit-impl
       skill_inputs:
-        all_plan_paths: "${{ context.all_plan_paths }}"
-        all_conflict_report_paths: "${{ context.all_conflict_report_paths }}"
-        branch_name: "${{ context.batch_branch }}"
-        base_branch: "${{ inputs.base_branch }}"
-        prior_audit_cycle_path: "${{ context.audit_cycle_path }}"
+        all_plan_paths: ${{ context.all_plan_paths }}
+        all_conflict_report_paths: ${{ context.all_conflict_report_paths }}
+        branch_name: ${{ context.batch_branch }}
+        base_branch: ${{ inputs.base_branch }}
+        prior_audit_cycle_path: ${{ context.audit_cycle_path }}
       cwd: ${{ context.work_dir }}
       step_name: audit_impl
       output_dir: '{{AUTOSKILLIT_TEMP}}/audit-impl'
-      retry_after_audit_attempt_id: "${{ context.audit_attempt_id }}"
-      closure_authority_path: "${{ inputs.closure_authority_path }}"
-      closure_authority_hash: "${{ inputs.closure_authority_hash }}"
-      closure_plan_paths: "${{ context.all_plan_paths }}"
-      closure_base_sha: "${{ context.batch_branch }}"
-      closure_diff_sha: ""
-      closure_target_sha: ""
+      retry_after_audit_attempt_id: ${{ context.audit_attempt_id }}
+      closure_authority_path: ${{ inputs.closure_authority_path }}
+      closure_authority_hash: ${{ inputs.closure_authority_hash }}
+      closure_plan_paths: ${{ context.all_plan_paths }}
+      closure_base_sha: ${{ context.batch_branch }}
+      closure_diff_sha: ''
+      closure_target_sha: ''
     capture:
       remediation_path: ${{ result.remediation_path }}
       audit_cycle_path: ${{ result.audit_cycle_path }}
@@ -1402,17 +1307,14 @@ steps:
     optional_context_refs:
     - audit_cycle_path
     - audit_attempt_id
-    note: 'DEPENDENCY: context.all_plan_paths is only populated if the plan step executed
-      at least once. The check_impl_plans gate ensures this step is only reached when
-      implementation plan files exist (i.e. make-plan was invoked), so all_plan_paths
-      is guaranteed to be set when audit_impl runs. Gated by check_impl_plans — only
-      reached when implementation plan files exist in plans_dir. Only execute if inputs.audit_impl
-      is ''true''; if false, skip directly to open_integration_pr. Passes context.all_plan_paths
-      (comma-separated list of plan file paths accumulated across the PR loop) as
-      plans_input. audit-impl splits on commas and audits each plan file. implementation_ref
-      is context.batch_branch (no worktree remains). GO → open_integration_pr. NO
-      GO replaces the prior authority before completion. NO GO re-enters plan with
-      the exact current authority and the successor audit consumes it as prior.
+    note: 'DEPENDENCY: context.all_plan_paths is only populated if the plan step executed at least once. The check_impl_plans
+      gate ensures this step is only reached when implementation plan files exist (i.e. make-plan was invoked), so all_plan_paths
+      is guaranteed to be set when audit_impl runs. Gated by check_impl_plans — only reached when implementation plan files
+      exist in plans_dir. Only execute if inputs.audit_impl is ''true''; if false, skip directly to open_integration_pr. Passes
+      context.all_plan_paths (comma-separated list of plan file paths accumulated across the PR loop) as plans_input. audit-impl
+      splits on commas and audits each plan file. implementation_ref is context.batch_branch (no worktree remains). GO → open_integration_pr.
+      NO GO replaces the prior authority before completion. NO GO re-enters plan with the exact current authority and the
+      successor audit consumes it as prior.
 
       '
   remediate:
@@ -1433,9 +1335,8 @@ steps:
       domain_partitions_path: ${{ result.domain_partitions_path }}
     on_success: open_integration_pr
     on_failure: open_integration_pr
-    note: 'Pre-computes domain partitions for open-integration-pr server-side (where
-      autoskillit is always installed). Writes the JSON result to disk. On failure,
-      falls through to open_integration_pr which uses an empty domain_partitions_path
+    note: 'Pre-computes domain partitions for open-integration-pr server-side (where autoskillit is always installed). Writes
+      the JSON result to disk. On failure, falls through to open_integration_pr which uses an empty domain_partitions_path
       fallback. Eliminates the autoskillit import in open-integration-pr SKILL.md.
 
       '
@@ -1443,14 +1344,14 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:open-integration-pr"
+      skill_command: /autoskillit:open-integration-pr
       skill_inputs:
-        audit_verdict: "${{ context.verdict }}"
-        batch_branch: "${{ context.batch_branch }}"
-        domain_partitions_path: "${{ context.domain_partitions_path }}"
-        base_branch: "${{ inputs.base_branch }}"
-        conflict_report_paths: "${{ context.all_conflict_report_paths }}"
-        pr_order_file: "${{ context.pr_order_file }}"
+        audit_verdict: ${{ context.verdict }}
+        batch_branch: ${{ context.batch_branch }}
+        domain_partitions_path: ${{ context.domain_partitions_path }}
+        base_branch: ${{ inputs.base_branch }}
+        conflict_report_paths: ${{ context.all_conflict_report_paths }}
+        pr_order_file: ${{ context.pr_order_file }}
       cwd: ${{ context.work_dir }}
       step_name: open_integration_pr
       output_dir: '{{AUTOSKILLIT_TEMP}}/open-integration-pr'
@@ -1470,10 +1371,9 @@ steps:
       review_pr_number: ${{ result.pr_number }}
     on_success: capture_review_repository
     on_failure: register_clone_failure
-    note: 'Extracts the review PR number from context.pr_url and polls GitHub until
-      the mergeable field is no longer UNKNOWN (GitHub computes this asynchronously
-      after PR creation). Polls up to 12 times with 15-second intervals (3 minutes
-      maximum). Captures review_pr_number for use by check_mergeability and check_mergeability_post_rebase.
+    note: 'Extracts the review PR number from context.pr_url and polls GitHub until the mergeable field is no longer UNKNOWN
+      (GitHub computes this asynchronously after PR creation). Polls up to 12 times with 15-second intervals (3 minutes maximum).
+      Captures review_pr_number for use by check_mergeability and check_mergeability_post_rebase.
 
       '
   capture_review_repository:
@@ -1498,24 +1398,23 @@ steps:
       route: resolve_integration_conflicts
     - route: register_clone_failure
     on_failure: register_clone_failure
-    note: 'Authoritative mergeability check via check_pr_mergeable MCP tool (REQ-MERGE-001).
-      Routes MERGEABLE directly to review cycle. Routes CONFLICTING to automated conflict
-      resolution. Any other state (UNKNOWN after timeout, tool error) escalates to
-      register_clone_failure (REQ-MERGE-005).
+    note: 'Authoritative mergeability check via check_pr_mergeable MCP tool (REQ-MERGE-001). Routes MERGEABLE directly to
+      review cycle. Routes CONFLICTING to automated conflict resolution. Any other state (UNKNOWN after timeout, tool error)
+      escalates to register_clone_failure (REQ-MERGE-005).
 
       '
   resolve_integration_conflicts:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:resolve-merge-conflicts"
+      skill_command: /autoskillit:resolve-merge-conflicts
       skill_inputs:
-        worktree_path: "${{ context.batch_branch }}"
-        plan_path: "${{ context.pr_plan_path }}"
-        base_branch: "${{ inputs.base_branch }}"
+        worktree_path: ${{ context.batch_branch }}
+        plan_path: ${{ context.pr_plan_path }}
+        base_branch: ${{ inputs.base_branch }}
       cwd: ${{ context.work_dir }}
       step_name: resolve_integration_conflicts
-      output_dir: '.'
+      output_dir: .
     capture:
       conflict_escalation_required: ${{ result.escalation_required }}
       conflict_escalation_reason: ${{ result.escalation_reason }}
@@ -1529,11 +1428,9 @@ steps:
     on_failure: register_clone_failure
     on_context_limit: register_clone_failure
     on_rate_limit: register_clone_failure
-    skip_when_false: inputs.backend_supports_git_write
-    note: 'Automated conflict resolution when the integration PR is CONFLICTING (REQ-MERGE-003).
-      Rebases context.batch_branch onto inputs.base_branch and resolves merge conflicts.
-      Single attempt only — no retries — to prevent looping on unresolvable conflicts.
-      On failure, escalates to register_clone_failure with diagnostics (REQ-MERGE-004).
+    note: 'Automated conflict resolution when the integration PR is CONFLICTING (REQ-MERGE-003). Rebases context.batch_branch
+      onto inputs.base_branch and resolves merge conflicts. Single attempt only — no retries — to prevent looping on unresolvable
+      conflicts. On failure, escalates to register_clone_failure with diagnostics (REQ-MERGE-004).
 
       '
   force_push_and_wait_mergeability:
@@ -1548,12 +1445,10 @@ steps:
         poll_interval: '15'
     on_success: check_mergeability_post_rebase
     on_failure: register_clone_failure
-    note: 'Force-pushes the rebased integration branch (--force-with-lease rejects
-      if remote diverged), then polls GitHub until the PR''s mergeable field is no
-      longer UNKNOWN. Polls up to 12 times with 15-second intervals (3 minutes maximum).
-      The && chaining preserves causal ordering: the poll loop only runs after a successful
-      push. Any failure (push rejected or mergeability timeout) routes to register_clone_failure.
-      Replaces the former force_push_after_rebase + wait_for_post_rebase_mergeability
+    note: 'Force-pushes the rebased integration branch (--force-with-lease rejects if remote diverged), then polls GitHub
+      until the PR''s mergeable field is no longer UNKNOWN. Polls up to 12 times with 15-second intervals (3 minutes maximum).
+      The && chaining preserves causal ordering: the poll loop only runs after a successful push. Any failure (push rejected
+      or mergeability timeout) routes to register_clone_failure. Replaces the former force_push_after_rebase + wait_for_post_rebase_mergeability
       two-step pair. Satisfies REQ-MERGE-002.
 
       '
@@ -1567,9 +1462,8 @@ steps:
       route: clear_review_annotation_context
     - route: register_clone_failure
     on_failure: register_clone_failure
-    note: 'Re-checks mergeability after the rebase and force-push. MERGEABLE proceeds
-      to the review cycle. Any other state means automated resolution did not succeed
-      — escalates to register_clone_failure for human intervention (REQ-MERGE-004).
+    note: 'Re-checks mergeability after the rebase and force-push. MERGEABLE proceeds to the review cycle. Any other state
+      means automated resolution did not succeed — escalates to register_clone_failure for human intervention (REQ-MERGE-004).
       No second conflict resolution attempt — one cycle only.
 
       '
@@ -1585,12 +1479,10 @@ steps:
       pr_head_sha: ${{ result.pr_head_sha }}
     on_success: annotate_pr_diff
     on_failure: annotate_pr_diff
-    note: 'Invalidates every previously captured annotation path before the
-      one-shot integration review attempt, so annotation failure cannot reuse
-      an older authority. This one-shot recipe intentionally omits the looped
-      recipes'' review_mode capture and routes stale_snapshot directly to
-      register_clone_failure; looped review recipes retain review_mode and
-      route stale snapshots through check_review_loop before release cleanup.
+    note: 'Invalidates every previously captured annotation path before the one-shot integration review attempt, so annotation
+      failure cannot reuse an older authority. This one-shot recipe intentionally omits the looped recipes'' review_mode capture
+      and routes stale_snapshot directly to register_clone_failure; looped review recipes retain review_mode and route stale
+      snapshots through check_review_loop before release cleanup.
 
       '
   annotate_pr_diff:
@@ -1621,7 +1513,7 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:review-pr"
+      skill_command: /autoskillit:review-pr
       skill_inputs:
         feature_branch: "${{ context.batch_branch }}"
         base_branch: "${{ inputs.base_branch }}"
@@ -1696,7 +1588,7 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:resolve-review"
+      skill_command: /autoskillit:resolve-review
       skill_inputs:
         base_branch: "${{ inputs.base_branch }}"
         feature_branch: "${{ context.batch_branch }}"
@@ -1736,12 +1628,10 @@ steps:
       route: pre_review_rebase_integration
     - route: register_clone_failure
     on_failure: register_clone_failure
-    note: 'Resolves review findings on the integration PR (REQ-REVIEW-002). Fetches
-      inline and summary review comments from GitHub and applies fixes. Retries up
-      to 2 times (3 total attempts) before escalating to register_clone_failure (REQ-REVIEW-005).
-      Routes via on_result: verdict dispatch — real_fix/already_green route through
-      pre_review_rebase_integration (fetch+rebase before push); flake_suspected/
-      ci_only_failure escalate to register_clone_failure.
+    note: 'Resolves review findings on the integration PR (REQ-REVIEW-002). Fetches inline and summary review comments from
+      GitHub and applies fixes. Retries up to 2 times (3 total attempts) before escalating to register_clone_failure (REQ-REVIEW-005).
+      Routes via on_result: verdict dispatch — real_fix/already_green route through pre_review_rebase_integration (fetch+rebase
+      before push); flake_suspected/ ci_only_failure escalate to register_clone_failure.
 
       '
   check_resolve_review_posted:
@@ -1780,13 +1670,13 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:resolve-merge-conflicts"
+      skill_command: /autoskillit:resolve-merge-conflicts
       skill_inputs:
-        worktree_path: "${{ context.work_dir }}"
-        plan_path: "${{ context.pr_plan_path }}"
-        base_branch: "${{ inputs.base_branch }}"
+        worktree_path: ${{ context.work_dir }}
+        plan_path: ${{ context.pr_plan_path }}
+        base_branch: ${{ inputs.base_branch }}
       cwd: ${{ context.work_dir }}
-      output_dir: '.'
+      output_dir: .
       step_name: resolve_pre_review_integration_conflicts
     capture:
       conflict_escalation_required: ${{ result.escalation_required }}
@@ -1799,7 +1689,6 @@ steps:
     on_exhausted: register_clone_failure
     on_context_limit: register_clone_failure
     on_rate_limit: register_clone_failure
-    skip_when_false: inputs.backend_supports_git_write
   re_push_review_integration:
     tool: push_to_remote
     with:
@@ -1809,10 +1698,9 @@ steps:
       force: 'true'
     on_success: check_review_posted
     on_failure: register_clone_failure
-    note: 'Pushes the review-fixed integration branch to the remote (REQ-REVIEW-003).
-      Routes to check_review_posted (the effect-verification gate), which in turn
-      routes to derive_batch_ci_event when reviews_posted == ''true''. On push
-      failure, escalates to register_clone_failure.
+    note: 'Pushes the review-fixed integration branch to the remote (REQ-REVIEW-003). Routes to check_review_posted (the effect-verification
+      gate), which in turn routes to derive_batch_ci_event when reviews_posted == ''true''. On push failure, escalates to
+      register_clone_failure.
 
       '
   derive_batch_ci_event:
@@ -1826,11 +1714,9 @@ steps:
       batch_ci_event: ${{ result.ci_event }}
     on_success: ci_watch_pr
     on_failure: ci_watch_pr
-    note: 'Re-derives ci_event for the actual batch branch before the final CI watch.
-      The global check_repo_ci_event evaluates CI triggers against inputs.base_branch
-      (main), but ci_watch_pr watches context.batch_branch where different CI rules
-      may apply. Non-blocking: on_failure routes to ci_watch_pr with batch_ci_event=null
-      (match-any fallback).
+    note: 'Re-derives ci_event for the actual batch branch before the final CI watch. The global check_repo_ci_event evaluates
+      CI triggers against inputs.base_branch (main), but ci_watch_pr watches context.batch_branch where different CI rules
+      may apply. Non-blocking: on_failure routes to ci_watch_pr with batch_ci_event=null (match-any fallback).
 
       '
   ci_watch_pr:
@@ -1849,11 +1735,9 @@ steps:
       route: check_ci_watch_pr_loop
     - route: register_clone_failure
     on_failure: diagnose_ci
-    note: 'Waits for the GitHub Actions CI run on context.batch_branch to complete
-      using the wait_for_ci MCP tool (timeout: 300 s). Routes on result.conclusion:
-      success → patch_token_summary, timed_out → check_ci_watch_pr_loop (iteration
-      guard), no_runs/failure → register_clone_failure. Tool-level failure routes
-      to diagnose_ci for log capture.
+    note: 'Waits for the GitHub Actions CI run on context.batch_branch to complete using the wait_for_ci MCP tool (timeout:
+      300 s). Routes on result.conclusion: success → patch_token_summary, timed_out → check_ci_watch_pr_loop (iteration guard),
+      no_runs/failure → register_clone_failure. Tool-level failure routes to diagnose_ci for log capture.
 
       '
   check_ci_watch_pr_loop:
@@ -1878,10 +1762,10 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: "/autoskillit:diagnose-ci"
+      skill_command: /autoskillit:diagnose-ci
       skill_inputs:
-        event: "${{ context.ci_event }}"
-        branch: "${{ context.batch_branch }}"
+        event: ${{ context.ci_event }}
+        branch: ${{ context.batch_branch }}
       cwd: ${{ context.work_dir }}
       step_name: diagnose_ci
       output_dir: '{{AUTOSKILLIT_TEMP}}/diagnose-ci'
@@ -1890,15 +1774,13 @@ steps:
     on_success: register_clone_failure
     on_failure: register_clone_failure
     on_rate_limit: register_clone_failure
-    note: 'Runs when ci_watch_pr reports CI failure on the integration branch. Fetches
-      logs and writes a diagnosis to {{AUTOSKILLIT_TEMP}}/diagnose-ci/ for human inspection.
-      diagnosis_path is captured for observability — no automated remediation for
-      integration CI, so always routes to register_clone_failure.
+    note: 'Runs when ci_watch_pr reports CI failure on the integration branch. Fetches logs and writes a diagnosis to {{AUTOSKILLIT_TEMP}}/diagnose-ci/
+      for human inspection. diagnosis_path is captured for observability — no automated remediation for integration CI, so
+      always routes to register_clone_failure.
 
       '
   patch_token_summary:
-    description: Collect all pipeline token data and patch the PR body with complete
-      summary
+    description: Collect all pipeline token data and patch the PR body with complete summary
     tool: run_python
     with:
       callable: autoskillit.smoke_utils.patch_pr_token_summary
@@ -1907,8 +1789,7 @@ steps:
       cwd: ${{ context.work_dir }}
     on_success: register_clone_success
     on_failure: register_clone_success
-    note: 'Patches PR body with complete token summary; failure never blocks pipeline
-      completion.
+    note: 'Patches PR body with complete token summary; failure never blocks pipeline completion.
 
       '
   register_clone_success:
@@ -1937,19 +1818,19 @@ steps:
     optional: true
     skip_when_false: inputs.pipeline_health
     with:
-      skill_command: "/autoskillit:analyze-pipeline-health"
+      skill_command: /autoskillit:analyze-pipeline-health
       skill_inputs:
-        kitchen_id: "${{ inputs.kitchen_id }}"
-        dispatch_id: "${{ inputs.dispatch_id }}"
-        diagnostics_log_dir: "${{ inputs.diagnostics_log_dir }}"
+        kitchen_id: ${{ inputs.kitchen_id }}
+        dispatch_id: ${{ inputs.dispatch_id }}
+        diagnostics_log_dir: ${{ inputs.diagnostics_log_dir }}
       cwd: ${{ context.work_dir }}
       step_name: analyze_pipeline_health
     on_success: done
     on_failure: done
     on_context_limit: done
     on_rate_limit: done
-    note: 'Execute this diagnostic step. Failures are logged but do not alter pipeline
-      routing. Both on_failure and on_context_limit route to the same terminal as on_success.
+    note: 'Execute this diagnostic step. Failures are logged but do not alter pipeline routing. Both on_failure and on_context_limit
+      route to the same terminal as on_success.
 
       '
   analyze_pipeline_health_error:
@@ -1960,33 +1841,30 @@ steps:
     optional: true
     skip_when_false: inputs.pipeline_health
     with:
-      skill_command: "/autoskillit:analyze-pipeline-health"
+      skill_command: /autoskillit:analyze-pipeline-health
       skill_inputs:
-        kitchen_id: "${{ inputs.kitchen_id }}"
-        dispatch_id: "${{ inputs.dispatch_id }}"
-        diagnostics_log_dir: "${{ inputs.diagnostics_log_dir }}"
+        kitchen_id: ${{ inputs.kitchen_id }}
+        dispatch_id: ${{ inputs.dispatch_id }}
+        diagnostics_log_dir: ${{ inputs.diagnostics_log_dir }}
       cwd: ${{ context.work_dir }}
       step_name: analyze_pipeline_health
     on_success: escalate_stop
     on_failure: escalate_stop
     on_context_limit: escalate_stop
     on_rate_limit: escalate_stop
-    note: 'Execute this diagnostic step. Failures are logged but do not alter pipeline
-      routing.
+    note: 'Execute this diagnostic step. Failures are logged but do not alter pipeline routing.
 
       '
   done:
     action: stop
-    message: 'PR consolidation complete. Emit the L3 result sentinel JSON block now
-      with success=true. Example sentinel: {"success": true, "reason": "merge complete"}'
+    message: 'PR consolidation complete. Emit the L3 result sentinel JSON block now with success=true. Example sentinel: {"success":
+      true, "reason": "merge complete"}'
   escalate_stop:
     action: stop
-    message: 'Pipeline failed — human intervention needed. Check the integration branch
-      and {{AUTOSKILLIT_TEMP}}/merge-prs/ for details. Emit the L3 result sentinel
-      JSON block now with success=false. Example sentinel: {"success": false, "reason":
+    message: 'Pipeline failed — human intervention needed. Check the integration branch and {{AUTOSKILLIT_TEMP}}/merge-prs/
+      for details. Emit the L3 result sentinel JSON block now with success=false. Example sentinel: {"success": false, "reason":
       "merge-prs pipeline failed"}'
-    note: 'context.task may be null when reached via escalation_required=true from
-      merge_pr (merge-pr does not set conflict_report_path on escalation paths). Do
-      not rely on context.task being populated when handling this stop.
+    note: 'context.task may be null when reached via escalation_required=true from merge_pr (merge-pr does not set conflict_report_path
+      on escalation paths). Do not rely on context.task being populated when handling this stop.
 
       '

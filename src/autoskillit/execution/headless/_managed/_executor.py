@@ -7,11 +7,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
+    BackendAuthority,
     ClosureAuthoritySpec,
-    HeadlessSkillDispatchContract,
     ManagedHeadlessSessionLineageRef,
     NativeShellCaptureDecision,
+    ResolvedLaunchContract,
     SessionCheckpoint,
+    SkillProjectionBinding,
     SkillResult,
     ValidatedAddDir,
     WriteBehaviorSpec,
@@ -59,10 +61,10 @@ class _DefaultHeadlessExecutorBase:
         provider_fallback_env: dict[str, str] | None = None,
         provider_fallback_name: str = "",
         resume_session_id: str = "",
+        resume_launch_contract: ResolvedLaunchContract | None = None,
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
-        backend_override: str | None = None,
-        backend_override_source: str | None = None,
+        backend_authority: BackendAuthority | None = None,
         marker_dir: Path | None = None,
         caller_session_id: str | None = None,
         inspector_eligible: bool = False,
@@ -72,9 +74,10 @@ class _DefaultHeadlessExecutorBase:
         closure_report_root: Path | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
         skill_contract: SkillContract | None = None,
-        capability_contract: HeadlessSkillDispatchContract | None = None,
+        capability_contract: SkillProjectionBinding | None = None,
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
+        on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
     ) -> SkillResult:
         from autoskillit.execution.headless import run_headless_core
 
@@ -111,10 +114,10 @@ class _DefaultHeadlessExecutorBase:
             provider_fallback_env=provider_fallback_env,
             provider_fallback_name=provider_fallback_name,
             resume_session_id=resume_session_id,
+            resume_launch_contract=resume_launch_contract,
             resume_checkpoint=resume_checkpoint,
             resume_message=resume_message,
-            backend_override=backend_override,
-            backend_override_source=backend_override_source,
+            backend_authority=backend_authority,
             marker_dir=marker_dir,
             caller_session_id=caller_session_id,
             inspector_eligible=inspector_eligible,
@@ -127,6 +130,7 @@ class _DefaultHeadlessExecutorBase:
             capability_contract=capability_contract,
             native_shell_capture_decision=native_shell_capture_decision,
             managed_lineage_ref=managed_lineage_ref,
+            on_launch_resolved=on_launch_resolved,
         )
 
 

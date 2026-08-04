@@ -1,16 +1,26 @@
 ---
 name: exp-lens-variance-stability
-categories: [exp-lens]
-uses_capabilities: [cross_skill_ref]
-activate_deps: [mermaid]
-description: Create a variance analysis profile assessing whether signals exceed noise and whether results are stable across random seeds. Stability lens answering "Is the signal larger than the noise?"
+categories:
+- exp-lens
+uses_capabilities: []
+activate_deps:
+- mermaid
+description: Create a variance analysis profile assessing whether signals exceed noise and whether results are stable across
+  random seeds. Stability lens answering "Is the signal larger than the noise?"
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo 'Variance Stability Lens - Analyzing signal vs noise...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: echo 'Variance Stability Lens - Analyzing signal vs noise...'
+      once: true
+semantic_version: 1
+semantic_requirements:
+  sibling_skills:
+  - name: exp-lens-error-budget
+  - name: exp-lens-reproducibility-artifacts
+  - name: make-experiment-diag
+  - name: mermaid
 ---
 
 # Variance Stability Experimental Design Lens
@@ -46,8 +56,8 @@ hooks:
 - Modify any source code files
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-variance-stability/`
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Count the actual number of independent runs — single-run results must be flagged prominently
@@ -56,7 +66,7 @@ hooks:
 - Report when confidence intervals are absent — absence is a finding, not an omission
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-variance-stability/exp_diag_variance_stability_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -83,7 +93,7 @@ exploration for these fields if the context file supplies them. For any field ab
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn Explore subagents to investigate:
+Spawn child delegations to investigate:
 
 **Random Seed Management**
 - Find how seeds are set and varied

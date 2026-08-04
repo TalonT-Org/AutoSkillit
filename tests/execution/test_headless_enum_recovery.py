@@ -23,7 +23,7 @@ from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.recipe._contracts_types import SkillContract, SkillOutput
 from autoskillit.recipe.contracts import get_skill_contract, load_bundled_manifest
 from tests.conftest import _make_result
-from tests.execution.conftest import _mock_backend, _success_session_json
+from tests.execution.conftest import _launch_inputs, _mock_backend, _success_session_json
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -329,6 +329,10 @@ class TestEnumNudgeIntegration:
 
         contract = _make_plan_contract()
         backend = _mock_backend(session_resume_capable=True)
+        launch_resolver, launch_preparation = _launch_inputs(
+            backend,
+            cwd=str(tmp_path),
+        )
 
         skill_result = SkillResult(
             success=False,
@@ -358,6 +362,8 @@ class TestEnumNudgeIntegration:
             backend=backend,
             result_parser=ClaudeResultParser(),
             skill_contract=contract,
+            launch_resolver=launch_resolver,
+            launch_preparation=launch_preparation,
         )
         assert patched is not None
         assert patched.success is True
@@ -377,6 +383,8 @@ class TestEnumNudgeIntegration:
             backend=backend,
             result_parser=ClaudeResultParser(),
             skill_contract=contract,
+            launch_resolver=launch_resolver,
+            launch_preparation=launch_preparation,
         )
         assert rejected is None
 

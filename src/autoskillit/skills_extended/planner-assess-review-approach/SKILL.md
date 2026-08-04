@@ -1,17 +1,36 @@
 ---
 name: planner-assess-review-approach
-categories: [planner]
-uses_capabilities: [agent_model]
-description: >
-  Assess each work package for review-approach benefit before implementation.
-  Writes review_approach_assessment.json; does NOT invoke review-approach.
+categories:
+- planner
+uses_capabilities: []
+description: 'Assess each work package for review-approach benefit before implementation. Writes review_approach_assessment.json;
+  does NOT invoke review-approach.
+
+  '
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: planner-assess-review-approach] Assessing review-approach benefit...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: planner-assess-review-approach] Assessing review-approach benefit...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: delegated-worker
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: delegated-worker
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: delegated-worker
+    model_class: sonnet
 ---
 
 # planner-assess-review-approach
@@ -34,8 +53,8 @@ writes `review_approach_assessment.json` to the planner directory. Does NOT invo
 - Invoke `review-approach` — this skill performs assessment only
 - Write output outside `$2/`
 - Modify input files
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
@@ -45,7 +64,7 @@ writes `review_approach_assessment.json` to the planner directory. Does NOT invo
 - Read `$2/analysis.json` for codebase technology context
 - Write `$2/review_approach_assessment.json`
 - Emit: `review_approach_assessment_path = <absolute path to review_approach_assessment.json>`
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Workflow
 
@@ -64,11 +83,11 @@ established conventions. This context informs whether a WP is "following establi
 
 ### Step 3: Evaluate each WP (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn 1–2 subagents via `Agent(model="sonnet")` to evaluate WPs in parallel batches. For each WP,
+Spawn 1–2 subagents via `child delegation under the declared `sonnet` model-class policy` to evaluate WPs in parallel batches. For each WP,
 evaluate against these signals:
 
 **Benefit signals (recommend: true):**

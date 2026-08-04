@@ -2,33 +2,41 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import anyio
 import structlog
 
 from autoskillit.core import (
-    FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     SKILL_COMMAND_DISPLAY_MAX,
+    BackendAuthority,
+    BackendAuthorityKind,
+    BackendAuthorityTier,
     ClosureAuthoritySpec,
-    CodingAgentBackend,
-    HeadlessSkillDispatchContract,
-    HeadlessSkillDispatchPreparation,
+    LaunchResolutionRequest,
+    LaunchSurface,
+    LaunchValueSource,
+    LaunchValueSourceKind,
     ManagedHeadlessSessionKind,
     ManagedHeadlessSessionLineageRef,
     ManagedHeadlessSessionTerminalState,
     NativeShellCaptureDecision,
-    PluginArtifactAuthority,
+    ProviderBinding,
+    ResolvedLaunchContract,
+    SemanticLaunchPlan,
     SessionCheckpoint,  # noqa: F401, TC001
+    SkillProjectionBinding,
     SkillResult,
     ValidatedAddDir,
     WriteBehaviorSpec,
     get_logger,
     temp_dir_display_str,
 )
-from autoskillit.execution.backends import get_backend  # noqa: F401
 from autoskillit.execution.headless._headless_evidence import (
     _adapt_agent_result,  # noqa: F401
     _apply_budget_guard,  # noqa: F401
@@ -59,7 +67,6 @@ from autoskillit.execution.headless._headless_helpers import (
 from autoskillit.execution.headless._headless_launch import (
     _NUDGE_TIMEOUT,  # noqa: F401
     _attempt_contract_nudge,  # noqa: F401
-    _food_truck_launch_spec_builder,
     _skill_launch_spec_builder,
 )
 from autoskillit.execution.headless._headless_outcome import validated_dispatch_cwd
@@ -97,9 +104,11 @@ from autoskillit.execution.headless._headless_result import (
     _resolve_skill_session_id,  # noqa: F401
 )
 from autoskillit.execution.headless._managed import (
-    _DefaultHeadlessExecutorBase,
     _headless_plugin_load_mode,
     _ManagedLineageObserver,
+)
+from autoskillit.execution.headless._managed._food_truck_executor import (
+    DefaultHeadlessExecutor,
 )
 from autoskillit.execution.recording import RecordingSubprocessRunner
 
@@ -151,10 +160,10 @@ async def run_headless_core(
     provider_fallback_env: dict[str, str] | None = None,
     provider_fallback_name: str = "",
     resume_session_id: str = "",
+    resume_launch_contract: ResolvedLaunchContract | None = None,
     resume_checkpoint: SessionCheckpoint | None = None,
     resume_message: str | None = None,
-    backend_override: str | None = None,
-    backend_override_source: str | None = None,
+    backend_authority: BackendAuthority | None = None,
     marker_dir: Path | None = None,
     caller_session_id: str | None = None,
     inspector_eligible: bool = False,
@@ -164,9 +173,10 @@ async def run_headless_core(
     closure_report_root: Path | None = None,
     on_session_id_resolved: Callable[[str], None] | None = None,
     skill_contract: SkillContract | None = None,
-    capability_contract: HeadlessSkillDispatchContract | None = None,
+    capability_contract: SkillProjectionBinding | None = None,
     native_shell_capture_decision: NativeShellCaptureDecision | None = None,
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
+    on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -195,24 +205,164 @@ async def run_headless_core(
             profile_name=profile_name,
         )
         add_dirs_tuple = tuple(add_dirs)
-        assert ctx.backend is not None, (
-            "ctx.backend must be set before run_headless_core is called"
-        )
-        step_backend: CodingAgentBackend | None = None
-        if backend_override is not None:
-            step_backend = get_backend(backend_override)
-            logger.info(
-                "step_backend_override_resolved",
-                override=backend_override,
-                step_backend=step_backend.name,
-                ctx_backend=ctx.backend.name,
+        if backend_authority is None:
+            if ctx.backend is None:
+                raise RuntimeError("global backend authority is not configured")
+            backend_authority = BackendAuthority(
+                backend=ctx.backend.name,
+                kind=BackendAuthorityKind.GLOBAL,
+                tier=BackendAuthorityTier.GLOBAL,
+                key_path="agent_backend.backend",
             )
-        _cmd_backend = step_backend if step_backend is not None else ctx.backend
+        value_source_kind = LaunchValueSourceKind(backend_authority.kind.value)
+        authority_source = LaunchValueSource(value_source_kind, backend_authority.key_path)
+        default_source = LaunchValueSource(LaunchValueSourceKind.DEFAULT, "run_skill.defaults")
+        provider_values = dict(provider_extras or {})
+        secret_provider_keys = tuple(
+            sorted(
+                key
+                for key in provider_values
+                if any(
+                    token in key.upper()
+                    for token in (
+                        "API_KEY",
+                        "ACCESS_KEY",
+                        "TOKEN",
+                        "SECRET",
+                        "PASSWORD",
+                        "CREDENTIAL",
+                    )
+                )
+            )
+        )
+        provider_binding = (
+            ProviderBinding(
+                provider=provider_name or profile_name or backend_authority.backend,
+                profile=profile_name or "default",
+                required_backend=backend_authority.backend,
+                normalized_endpoint=(
+                    provider_values.get("ANTHROPIC_BASE_URL")
+                    or provider_values.get("OPENAI_BASE_URL")
+                    or ""
+                ),
+                key_path="run_skill.provider",
+                provider_source=authority_source,
+                profile_source=authority_source,
+                endpoint_source=authority_source,
+                environment={},
+                secret_environment_keys=secret_provider_keys,
+            )
+            if provider_name or profile_name or provider_values
+            else None
+        )
+        projection_payload = (
+            dict(sorted(capability_contract.projected_digests.items()))
+            if capability_contract is not None
+            else {"command": skill_command}
+        )
+        projection_digest = (
+            capability_contract.projection_digest
+            if capability_contract is not None
+            else hashlib.sha256(
+                json.dumps(projection_payload, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+        )
+        semantic_digest = (
+            hashlib.sha256(
+                json.dumps(
+                    dict(sorted(capability_contract.semantic_digests.items())),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode()
+            ).hexdigest()
+            if capability_contract is not None
+            else hashlib.sha256(skill_command.encode()).hexdigest()
+        )
+        launch_request = LaunchResolutionRequest(
+            surface=LaunchSurface.HEADLESS_SKILL,
+            authority_candidates=(backend_authority,),
+            semantic_plan=SemanticLaunchPlan(
+                surface=LaunchSurface.HEADLESS_SKILL,
+                semantic_digest=semantic_digest,
+                projection_digest=projection_digest,
+            ),
+            command=skill_command,
+            arguments=(),
+            cwd=cwd,
+            requested_model=model or None,
+            requested_model_source=authority_source if model else default_source,
+            configured_model=model_identity.configured_model or None,
+            configured_model_source=authority_source
+            if model_identity.configured_model
+            else default_source,
+            effort=None,
+            effort_source=default_source,
+            sandbox_mode="pending-adapter",
+            network_access=network_access,
+            pty_required=False,
+            inherited_fd_policy="attempt-scoped-plugin-binding",
+            branch_identity={},
+            worktree_identity={"cwd": cwd},
+            executable_identity={"backend": backend_authority.backend},
+            plugin_identity={},
+            projection_identity={
+                "digest": projection_digest,
+                "version": str(
+                    capability_contract.projection_version
+                    if capability_contract is not None
+                    else 0
+                ),
+            },
+            artifact_paths=(
+                capability_contract.artifact_paths if capability_contract is not None else ()
+            ),
+            quota_identity={"provider": provider_name or profile_name or "default"},
+            provider_binding=provider_binding,
+            skill_projection_binding=capability_contract,
+            non_authority_metadata={"entrypoint": "headless"},
+        )
+        if resume_launch_contract is not None:
+            if not resume_session_id:
+                raise RuntimeError("persisted launch contract requires a resume session ID")
+            if backend_authority != resume_launch_contract.backend_authority:
+                raise RuntimeError(
+                    "resume backend authority drifted from persisted launch contract"
+                )
+            launch_preparation = ctx.launch_resolver.prepare_resume(
+                resume_launch_contract,
+                command=skill_command,
+                cwd=cwd,
+            )
+        else:
+            launch_preparation = ctx.launch_resolver.prepare(launch_request)
+        _cmd_backend = (
+            ctx.backend
+            if ctx.backend is not None and ctx.backend.name == launch_preparation.selected_backend
+            else ctx.launch_resolver.backend_for(launch_preparation)
+        )
+        if capability_contract is not None and capability_contract.backend not in {
+            None,
+            _cmd_backend.name,
+        }:
+            raise RuntimeError("skill projection backend drifted from launch authority")
+        launch_preparation = replace(
+            launch_preparation,
+            sandbox_mode=(
+                "read-only"
+                if readonly_skill
+                else _cmd_backend.capabilities.default_skill_sandbox_mode
+            ),
+            pty_required=_resolve_pty_mode(_cmd_backend),
+            executable_identity={
+                "backend": _cmd_backend.name,
+                "process_name": _cmd_backend.capabilities.process_name,
+            },
+        )
         managed_lineage_observer = _ManagedLineageObserver.create(
             store=ctx.managed_headless_session_lineage_store,
             decision=native_shell_capture_decision,
             reference=managed_lineage_ref,
-            backend=_cmd_backend.name,
+            backend=_cmd_backend,
             session_kind=ManagedHeadlessSessionKind.SKILL,
         )
         plugin_load_mode = _headless_plugin_load_mode(
@@ -224,7 +374,7 @@ async def run_headless_core(
             skill_command=skill_command,
             cwd=cwd,
             completion_marker=effective_marker,
-            configured_model=model_identity.configured_model or None,
+            configured_model=launch_preparation.configured_model,
             output_format=cfg.output_format,
             add_dirs=add_dirs_tuple,
             exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
@@ -288,215 +438,19 @@ async def run_headless_core(
                 provider_fallback_env=provider_fallback_env,
                 provider_fallback_name=provider_fallback_name,
                 provider_extras=provider_extras,
-                step_backend=step_backend,
+                launch_resolver=ctx.launch_resolver,
+                launch_preparation=launch_preparation,
+                resume_launch_contract=resume_launch_contract,
                 model_identity=model_identity,
                 marker_dir=marker_dir,
                 session_id=caller_session_id,
                 inspector_eligible=inspector_eligible,
                 inspector_model=inspector_model,
-                backend_override_source=backend_override_source,
+                on_launch_resolved=on_launch_resolved,
                 closure_spec=closure_spec,
                 closure_report_root=closure_report_root,
                 on_session_id_resolved=on_session_id_resolved,
                 skill_contract=skill_contract,
-                managed_lineage_observer=managed_lineage_observer,
-            )
-        except anyio.get_cancelled_exc_class():
-            if managed_lineage_observer is not None:
-                managed_lineage_observer.close(ManagedHeadlessSessionTerminalState.CANCELLED)
-            raise
-        except Exception:
-            if managed_lineage_observer is not None:
-                managed_lineage_observer.close(ManagedHeadlessSessionTerminalState.FAILED)
-            raise
-        if managed_lineage_observer is not None and not skill_result.needs_retry:
-            managed_lineage_observer.close(
-                ManagedHeadlessSessionTerminalState.SUCCEEDED
-                if skill_result.success
-                else ManagedHeadlessSessionTerminalState.FAILED
-            )
-        return skill_result
-
-
-class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
-    """Concrete HeadlessExecutor backed by run_headless_core."""
-
-    async def dispatch_food_truck(
-        self,
-        orchestrator_prompt: str,
-        cwd: str,
-        *,
-        completion_marker: str,
-        plugin_authority: PluginArtifactAuthority | None = None,
-        prior_completion_markers: Sequence[str] | None = None,
-        resume_session_id: str | None = None,
-        resume_checkpoint: SessionCheckpoint | None = None,
-        model: str = "",
-        step_name: str = "",
-        kitchen_id: str = "",
-        order_id: str = "",
-        campaign_id: str = "",
-        dispatch_id: str = "",
-        caller_session_id: str = "",
-        project_dir: str = "",
-        timeout: float | None = None,
-        stale_threshold: float | None = None,
-        idle_output_timeout: float | None = None,
-        env_extras: Mapping[str, str] | None = None,
-        requires_packs: Sequence[str] = (),
-        on_spawn: Callable[[int, int], None] | None = None,
-        allowed_write_prefix: str = "",
-        allowed_write_prefixes: tuple[str, ...] = (),
-        provider_name: str = "",
-        provider_fallback_env: dict[str, str] | None = None,
-        provider_fallback_name: str = "",
-        profile_name: str = "",
-        sentinel_contract: str = "",
-        marker_dir: Path | None = None,
-        session_id: str | None = None,
-        resume_message: str | None = None,
-        backend_override: str | None = None,
-        on_session_id_resolved: Callable[[str], None] | None = None,
-        capability_preparation: HeadlessSkillDispatchPreparation | None = None,
-        native_shell_capture_decision: NativeShellCaptureDecision | None = None,
-        managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
-    ) -> SkillResult:
-        import autoskillit.execution.headless as headless_facade
-
-        cwd = validated_dispatch_cwd(
-            None,
-            resolved_command=orchestrator_prompt,
-            cwd=cwd,
-        )
-        dispatch_backend: CodingAgentBackend | None
-        if backend_override is not None:
-            dispatch_backend = headless_facade.get_backend(backend_override)
-        else:
-            dispatch_backend = self._ctx.backend
-        if dispatch_backend is not None and not dispatch_backend.capabilities.food_truck_capable:
-            raise RuntimeError(
-                f"backend does not support food truck dispatch "
-                f"(food_truck_capable=False); got {dispatch_backend.name!r}"
-            )
-        if backend_override is not None:
-            assert dispatch_backend is not None
-            pre_launch_errors = dispatch_backend.ensure_pre_launch()
-            if pre_launch_errors:
-                raise RuntimeError(
-                    f"Pre-launch check failed for dispatch backend "
-                    f"{dispatch_backend.name!r}: {'; '.join(pre_launch_errors)}"
-                )
-        cfg = self._ctx.config
-        model_identity = resolve_model_identity(
-            model, cfg, step_name=step_name, profile_name=profile_name
-        )
-        fleet_cfg = cfg.fleet
-        merged_extras: dict[str, str] = dict(env_extras) if env_extras else {}
-        if requires_packs:
-            if FOOD_TRUCK_TOOL_TAGS_ENV_VAR in merged_extras:
-                raise ValueError(
-                    f"dispatch_food_truck: requires_packs and env_extras both specify "
-                    f"{FOOD_TRUCK_TOOL_TAGS_ENV_VAR} — use requires_packs exclusively"
-                )
-            merged_extras[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] = ",".join(sorted(requires_packs))
-        fleet_idle = fleet_cfg.idle_output_timeout
-        if idle_output_timeout is not None:
-            merged_extras["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] = str(idle_output_timeout)
-        elif fleet_idle > 0:
-            merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(fleet_idle))
-        else:
-            idle_cfg_val = cfg.run_skill.idle_output_timeout
-            if idle_cfg_val > 0:
-                merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(idle_cfg_val))
-        if dispatch_backend is None:
-            raise RuntimeError(
-                "dispatch_backend must be resolved before dispatch_food_truck execution"
-            )
-        backend = dispatch_backend
-        managed_lineage_observer = _ManagedLineageObserver.create(
-            store=self._ctx.managed_headless_session_lineage_store,
-            decision=native_shell_capture_decision,
-            reference=managed_lineage_ref,
-            backend=backend.name,
-            session_kind=ManagedHeadlessSessionKind.FOOD_TRUCK,
-        )
-        plugin_load_mode = _headless_plugin_load_mode(backend)
-        build_spec = _food_truck_launch_spec_builder(
-            backend=backend,
-            orchestrator_prompt=orchestrator_prompt,
-            cwd=cwd,
-            capability_preparation=capability_preparation,
-            completion_marker=completion_marker,
-            resume_session_id=resume_session_id,
-            resume_checkpoint=resume_checkpoint,
-            configured_model=model_identity.configured_model or None,
-            output_format=cfg.run_skill.output_format,
-            exit_after_stop_delay_ms=cfg.run_skill.exit_after_stop_delay_ms,
-            stream_idle_timeout_ms=cfg.run_skill.stream_idle_timeout_ms,
-            step_name=step_name,
-            temp_dir_relpath=temp_dir_display_str(cfg.workspace.temp_dir),
-            allowed_write_prefix=allowed_write_prefix,
-            allowed_write_prefixes=allowed_write_prefixes,
-            sentinel_contract=sentinel_contract,
-            resume_message=resume_message,
-            native_shell_capture_decision=native_shell_capture_decision,
-            managed_lineage_ref=managed_lineage_ref,
-        )
-
-        effective_timeout = timeout if timeout is not None else fleet_cfg.default_timeout_sec
-        effective_stale = (
-            stale_threshold if stale_threshold is not None else cfg.run_skill.stale_threshold
-        )
-        effective_deadline_ext = fleet_cfg.enable_deadline_extension
-        effective_max_ext = float(fleet_cfg.max_extension_seconds)
-        effective_idle_out: float | None = (
-            idle_output_timeout
-            if idle_output_timeout is not None
-            else float(fleet_idle)
-            if fleet_idle > 0
-            else None
-        )
-        effective_marker_dir: Path | None = marker_dir or (
-            headless_facade._resolve_session_log_dir(
-                cwd, cast(CodingAgentBackend, dispatch_backend)
-            )
-            if cwd
-            else None
-        )
-        try:
-            skill_result = await headless_facade._execute_claude_headless(
-                build_spec,
-                cwd,
-                self._ctx,
-                skill_command="",
-                step_name=step_name,
-                kitchen_id=kitchen_id,
-                caller_session_id=caller_session_id,
-                order_id=order_id,
-                campaign_id=campaign_id,
-                dispatch_id=dispatch_id,
-                project_dir=project_dir,
-                timeout=float(effective_timeout),
-                stale_threshold=float(effective_stale),
-                idle_output_timeout=effective_idle_out,
-                completion_marker=completion_marker,
-                prior_completion_markers=prior_completion_markers,
-                on_spawn=on_spawn,
-                skip_clone_guard=True,
-                pty_override=False,
-                provider_name=provider_name,
-                provider_extras=merged_extras or None,
-                provider_fallback_env=provider_fallback_env,
-                provider_fallback_name=provider_fallback_name,
-                enable_deadline_extension=effective_deadline_ext,
-                max_extension_seconds=effective_max_ext,
-                marker_dir=effective_marker_dir,
-                session_id=session_id,
-                model_identity=model_identity,
-                on_session_id_resolved=on_session_id_resolved,
-                step_backend=dispatch_backend,
-                plugin_authority=plugin_authority or self._ctx.plugin_authority,
-                plugin_load_mode=plugin_load_mode,
                 managed_lineage_observer=managed_lineage_observer,
             )
         except anyio.get_cancelled_exc_class():

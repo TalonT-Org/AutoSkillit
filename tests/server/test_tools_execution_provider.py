@@ -452,15 +452,21 @@ async def test_run_skill_no_provider_profile_injected_for_default_step(
 
 
 @pytest.mark.anyio
-async def test_run_skill_backend_override_codex_with_anthropic_base_url(
+async def test_anthropic_base_url_cannot_override_codex_backend_authority(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
     from autoskillit.execution.backends import get_backend
+    from autoskillit.workspace import DefaultSessionSkillManager, SkillsDirectoryProvider
     from tests.fakes import InMemoryHeadlessExecutor
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
     tool_ctx_kitchen_open.backend = get_backend("codex")
+    tool_ctx_kitchen_open.session_skill_manager = DefaultSessionSkillManager(
+        SkillsDirectoryProvider(),
+        ephemeral_root=tmp_path / "ephemeral-sessions",
+        persistent_root=tmp_path / "persistent-sessions",
+    )
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
@@ -486,7 +492,9 @@ async def test_run_skill_backend_override_codex_with_anthropic_base_url(
 
     await run_skill("/autoskillit:probe", str(tmp_path))
 
-    assert captured.get("backend_override") == "claude-code"
+    authority = captured["backend_authority"]
+    assert authority.backend == "codex"
+    assert authority.kind.value == "global"
 
 
 @pytest.mark.anyio

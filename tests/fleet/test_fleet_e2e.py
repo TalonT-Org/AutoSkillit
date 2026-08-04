@@ -1028,6 +1028,8 @@ async def test_end_to_end_unverified_resume_does_not_use_resume_flag(
 
     spy_backend = Mock(wraps=real_backend)
     spy_backend.name = real_backend.name
+    spy_backend.capabilities = real_backend.capabilities
+    spy_backend.conventions = real_backend.conventions
 
     def _spy_build(**kwargs: Any) -> Any:
         spec = original_build(**kwargs)
@@ -1036,6 +1038,16 @@ async def test_end_to_end_unverified_resume_does_not_use_resume_flag(
 
     spy_backend.build_food_truck_cmd = _spy_build
     rt.tool_ctx.backend = spy_backend
+    monkeypatch.setattr(
+        rt.tool_ctx.launch_resolver,
+        "backend_for_authority",
+        lambda _authority: spy_backend,
+    )
+    monkeypatch.setattr(
+        rt.tool_ctx.launch_resolver,
+        "backend_for",
+        lambda _preparation: spy_backend,
+    )
     rt.configure_shim("success")
     jsonl_file = tmp_path / "test-session-id.jsonl"
     jsonl_file.touch()
@@ -1045,7 +1057,7 @@ async def test_end_to_end_unverified_resume_does_not_use_resume_flag(
         project_log_dir=tmp_path, session_log_path=jsonl_file
     ).session_locator.return_value
 
-    await execute_dispatch(
+    dispatch_result = await execute_dispatch(
         tool_ctx=rt.tool_ctx,
         recipe="recipe-a",
         task="test-task",
@@ -1058,7 +1070,7 @@ async def test_end_to_end_unverified_resume_does_not_use_resume_flag(
         resume_session_id="test-session-id",
     )
 
-    assert captured_cmds, "build_food_truck_cmd was never called"
+    assert captured_cmds, dispatch_result.outcome.to_envelope()
     cmd = captured_cmds[0]
     assert "--resume" not in cmd
 

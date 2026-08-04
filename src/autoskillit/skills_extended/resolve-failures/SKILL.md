@@ -1,14 +1,20 @@
 ---
 name: resolve-failures
-uses_capabilities: [git_metadata_write, test_check]
-description: Failure resolution executor. ALWAYS invoke this skill when instructed to fix test failures in a worktree. Do not read test output or edit code directly — use this skill first to load the failure resolution workflow.
+uses_capabilities:
+- test_check
+description: Failure resolution executor. ALWAYS invoke this skill when instructed to fix test failures in a worktree. Do
+  not read test output or edit code directly — use this skill first to load the failure resolution workflow.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '[SKILL: resolve-failures] Resolving test failures...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''[SKILL: resolve-failures] Resolving test failures...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  git_metadata_writes:
+  - purpose: perform the repository metadata update required by this skill
 ---
 
 # Resolve Failures Skill

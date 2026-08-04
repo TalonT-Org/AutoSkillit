@@ -33,12 +33,15 @@ class _ReleaseFailure(Exception):
 
 
 def _make_codex_backend() -> MagicMock:
+    from autoskillit.execution.backends import CodexBackend
+
     b = MagicMock()
     b.name = "codex"
     b.capabilities = _CODEX_CAPABILITIES
     b.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
     b.ensure_pre_launch.return_value = []
     b.validate_session_layout.return_value = []
+    b.adapt_skill_semantics.side_effect = CodexBackend().adapt_skill_semantics
     return b
 
 
@@ -226,11 +229,18 @@ def test_profile_skills_are_projected_into_session_dir(tmp_path, monkeypatch) ->
         "---\n"
         "name: my-skill\n"
         "description: Public profile description.\n"
-        "uses_capabilities: [agent_model]\n"
+        "uses_capabilities: []\n"
         "execution_role: session\n"
-        "backend_requirements: [codex]\n"
+        "semantic_version: 1\n"
+        "semantic_requirements:\n"
+        "  logical_roles:\n"
+        "  - name: helper\n"
+        "    purpose: perform the delegated task\n"
+        "  child_model_policies:\n"
+        "  - role: helper\n"
+        "    model_class: sonnet\n"
         "---\n"
-        'Invoke a worker via `Agent(model="sonnet")`.\n'
+        "Delegate the work to the helper role.\n"
         "# MY SKILL\n"
     )
 
@@ -249,10 +259,10 @@ def test_profile_skills_are_projected_into_session_dir(tmp_path, monkeypatch) ->
         "activate_deps",
         "uses_capabilities",
         "execution_role",
-        "backend_requirements",
     }.isdisjoint(frontmatter)
     assert frontmatter["description"] == "Public profile description."
-    assert content.endswith("# MY SKILL\n")
+    assert "# MY SKILL\n" in content
+    assert "## Backend-adapted semantic execution contract" in content
     assert count == 1
 
 
@@ -680,6 +690,5 @@ def test_session_projection_is_agent_safe_for_each_backend(
         "activate_deps",
         "uses_capabilities",
         "execution_role",
-        "backend_requirements",
     }.isdisjoint(frontmatter)
     assert frontmatter["name"] == "make-arch-diag"

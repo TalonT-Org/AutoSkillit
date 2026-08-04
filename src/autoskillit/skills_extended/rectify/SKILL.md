@@ -1,14 +1,43 @@
 ---
 name: rectify
-uses_capabilities: [agent_model, agent_subagent]
-description: Deep investigation of test gaps and architectural weaknesses following an investigation, then devise a plan for architectural immunity rather than direct fixes. Use when user says "rectify", "rectify this", or wants to address root architectural causes after an investigation.
+uses_capabilities: []
+description: Deep investigation of test gaps and architectural weaknesses following an investigation, then devise a plan for
+  architectural immunity rather than direct fixes. Use when user says "rectify", "rectify this", or wants to address root
+  architectural causes after an investigation.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '🏗️ [SKILL: rectify] Investigating architectural gaps and devising immunity plan...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''🏗️ [SKILL: rectify] Investigating architectural gaps and devising immunity plan...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: plan-foundation-auditor
+    purpose: perform the named independent responsibility and return bounded evidence
+  - name: plan-interface-mapper
+    purpose: perform the named independent responsibility and return bounded evidence
+  - name: plan-registry-tracer
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: plan-foundation-auditor
+  - role: plan-interface-mapper
+  - role: plan-registry-tracer
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: plan-foundation-auditor
+    model_class: sonnet
+  - role: plan-interface-mapper
+    model_class: sonnet
+  - role: plan-registry-tracer
+    model_class: sonnet
 ---
 
 # Rectify Skill
@@ -55,17 +84,17 @@ Do not change any code.
 - Propose bandaid fixes, fallbacks, or direct-only fixes
 - Suggest backward compatibility shims
 - Create files outside `{{AUTOSKILLIT_TEMP}}/rectify/` directory
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use subagents for parallel exploration
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Focus on architectural immunity over direct fixes
 - Identify how tests missed the issue and similar/related bugs
 - Map the components and their connections thoroughly
 - Write the plan as markdown to `{{AUTOSKILLIT_TEMP}}/rectify/` directory (relative to the current working directory)
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - After writing the plan file, emit the **absolute path** as a structured output token
   as your final output. The save path is relative (`{{AUTOSKILLIT_TEMP}}/rectify/...`) but
   the token **must** use the absolute path (prepend the full CWD):
@@ -108,7 +137,7 @@ sibling parallel-call cancellations.
 
 ### Step 2: Deep Exploration with Subagents (SINGLE MESSAGE)
 
-**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
@@ -147,13 +176,13 @@ Draft the complete immunity plan from Step 3's selected approach using the Outpu
 
 ### Step 4: Foundation Audit
 
-Spawn 1 Foundation Auditor via `Agent(subagent_type="autoskillit:plan-foundation-auditor")`. Pass the full draft immunity plan text and the codebase root. Prepend the contrastive frame to the prompt:
+Spawn 1 Foundation Auditor via `a child assigned logical role `plan-foundation-auditor` under its declared model policy`. Pass the full draft immunity plan text and the codebase root. Prepend the contrastive frame to the prompt:
 
 > "A junior engineer reviewed this immunity plan and found no structural flaws. What did they miss?"
 
 The Foundation Auditor performs step-by-step control-flow analysis: enumerates functions, draws control flow with scope levels, builds reachability tables, audits guard coverage, and applies exploit-first verification. It must NOT suggest scope expansion — only identify gaps in what the plan already claims to do.
 
-**SendMessage continuation protocol:** If the subagent returns with a continuation hint (truncated at maxTurns), use `SendMessage` to resume it:
+**Child continuation protocol:** If the subagent returns with a continuation hint (truncated at maxTurns), use `child continuation message` to resume it:
 - `to`: the `agentId` from the continuation hint
 - `message`: `"Finalize your analysis and provide your complete findings report."`
 - `summary`: `"Continue rectify subagent to finalize findings"`
@@ -164,7 +193,7 @@ After reading the agent's findings, revise the draft plan by incorporating all v
 
 ### Step 5: Interface Mapping
 
-Spawn 1 Interface Mapper via `Agent(subagent_type="autoskillit:plan-interface-mapper")`. Pass the **revised** draft plan text (from Step 4) and the codebase root. Prepend the contrastive frame to the prompt:
+Spawn 1 Interface Mapper via `a child assigned logical role `plan-interface-mapper` under its declared model policy`. Pass the **revised** draft plan text (from Step 4) and the codebase root. Prepend the contrastive frame to the prompt:
 
 > "A junior engineer reviewed this plan's variable usage and found it correct. What did they miss?"
 
@@ -172,7 +201,7 @@ The Interface Mapper traces variable SET/READ points with full hop-by-hop proven
 
 **RULES FOR APPLYING INTERFACE MAPPING FINDINGS:** When the interface mapper identifies the correct variable for a step, apply the correction to ALL fields that consume that variable — cwd, skill_command arguments, branch references, SHA captures, output paths. Do not split the correct variable across some fields while leaving other fields on the wrong variable.
 
-**SendMessage continuation protocol:** If the subagent returns with a continuation hint (truncated at maxTurns), use `SendMessage` to resume it:
+**Child continuation protocol:** If the subagent returns with a continuation hint (truncated at maxTurns), use `child continuation message` to resume it:
 - `to`: the `agentId` from the continuation hint
 - `message`: `"Finalize your analysis and provide your complete findings report."`
 - `summary`: `"Continue rectify subagent to finalize findings"`
@@ -183,7 +212,7 @@ After reading the agent's findings, revise the draft plan by incorporating all v
 
 ### Step 6: Registry Trace
 
-Spawn 1 Registry Tracer via `Agent(subagent_type="autoskillit:plan-registry-tracer")`. Pass the **revised** draft plan text (from Step 5) and the codebase root. Prepend the contrastive frame to the prompt:
+Spawn 1 Registry Tracer via `a child assigned logical role `plan-registry-tracer` under its declared model policy`. Pass the **revised** draft plan text (from Step 5) and the codebase root. Prepend the contrastive frame to the prompt:
 
 > "A junior engineer reviewed this plan's registry coverage and found it complete. What did they miss?"
 
@@ -191,7 +220,7 @@ The Registry Tracer uses three-layer tracing (LSP primary, tree-sitter structura
 
 **RULES FOR APPLYING REGISTRY TRACE FINDINGS:** Verify BOTH fixture/test completeness AND registry completeness before finalizing. A plan that addresses only one interpretation of a rename (manifest-focused OR workspace-focused) and misses the cross-cutting update is incomplete. Apply the two-family check: if references appear in only one layer (source-code or test/fixture), perform targeted follow-up searches in the other layer before concluding.
 
-**SendMessage continuation protocol:** If the subagent returns with a continuation hint (truncated at maxTurns), use `SendMessage` to resume it:
+**Child continuation protocol:** If the subagent returns with a continuation hint (truncated at maxTurns), use `child continuation message` to resume it:
 - `to`: the `agentId` from the continuation hint
 - `message`: `"Finalize your analysis and provide your complete findings report."`
 - `summary`: `"Continue rectify subagent to finalize findings"`

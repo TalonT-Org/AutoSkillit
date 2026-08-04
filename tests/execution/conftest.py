@@ -7,13 +7,28 @@ import pathlib
 import textwrap
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import Mock
 
 import pytest
 
-from autoskillit.core import BackendCapabilities, CmdSpec
+from autoskillit.core import (
+    BackendAuthority,
+    BackendAuthorityKind,
+    BackendAuthorityTier,
+    BackendCapabilities,
+    CmdSpec,
+    LaunchPreparation,
+    LaunchResolutionRequest,
+    LaunchSurface,
+    LaunchValueSource,
+    LaunchValueSourceKind,
+    ResolvedLaunchContract,
+    SemanticLaunchPlan,
+)
 from autoskillit.core.types import SubprocessResult, TerminationReason
+from autoskillit.execution.launch_resolution import DefaultLaunchResolver
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.session._exit_classification import _CODEX_API_ERROR_PATTERNS
 from tests._helpers import make_tracing_config
@@ -52,6 +67,96 @@ def _mock_backend(**kw: Any) -> Mock:
     backend.validate_session_layout.return_value = []
     backend.setup_session_dir.return_value = None
     return backend
+
+
+def _backend_authority(backend: str) -> BackendAuthority:
+    """Build a typed caller authority for headless execution tests."""
+    return BackendAuthority(
+        backend=backend,
+        kind=BackendAuthorityKind.CALLER,
+        tier=BackendAuthorityTier.CALLER,
+        key_path="test.backend",
+    )
+
+
+def _launch_preparation(
+    ctx: Any,
+    *,
+    cwd: str,
+    backend: str | None = None,
+    command: str = "/autoskillit:test",
+) -> LaunchPreparation:
+    """Prepare the smallest complete typed launch contract used by direct tests."""
+    backend_name = backend or ctx.backend.name
+    default_source = LaunchValueSource(LaunchValueSourceKind.DEFAULT, "test.default")
+    return ctx.launch_resolver.prepare(
+        LaunchResolutionRequest(
+            surface=LaunchSurface.HEADLESS_SKILL,
+            authority_candidates=(_backend_authority(backend_name),),
+            semantic_plan=SemanticLaunchPlan(
+                surface=LaunchSurface.HEADLESS_SKILL,
+                semantic_digest="test-semantic-digest",
+                projection_digest="test-projection-digest",
+            ),
+            command=command,
+            arguments=(),
+            cwd=cwd,
+            requested_model=None,
+            requested_model_source=default_source,
+            configured_model=None,
+            configured_model_source=default_source,
+            effort=None,
+            effort_source=default_source,
+            sandbox_mode="test",
+            network_access=False,
+            pty_required=False,
+            inherited_fd_policy="test",
+            branch_identity={},
+            worktree_identity={"cwd": cwd},
+            executable_identity={"backend": backend_name},
+            plugin_identity={},
+            projection_identity={"digest": "test-projection-digest"},
+            artifact_paths=(),
+            quota_identity={},
+            non_authority_metadata={"test": True},
+        )
+    )
+
+
+def _launch_inputs(
+    backend: Any,
+    *,
+    cwd: str,
+    command: str = "/autoskillit:test",
+) -> tuple[DefaultLaunchResolver, LaunchPreparation]:
+    """Build an isolated resolver/preparation pair for direct launch-unit tests."""
+    resolver = DefaultLaunchResolver()
+    ctx = SimpleNamespace(backend=backend, launch_resolver=resolver)
+    return resolver, _launch_preparation(ctx, cwd=cwd, command=command)
+
+
+def _resolved_launch_contract(
+    backend: Any,
+    *,
+    cwd: str,
+    command: str = "/autoskillit:test",
+) -> ResolvedLaunchContract:
+    """Finalize one deterministic physical contract for persistence tests."""
+    from autoskillit.execution.headless._headless_launch import _HeadlessLaunchAdapter
+
+    resolver, preparation = _launch_inputs(backend, cwd=cwd, command=command)
+    adapter = _HeadlessLaunchAdapter(
+        build_spec=lambda _binding, _extras: CmdSpec(
+            cmd=(backend.name, "--test"),
+            cwd=cwd,
+            env={},
+        ),
+        binding=None,
+        provider_extras=None,
+        observer=None,
+        managed_attempt_id=None,
+    )
+    return resolver.finalize(preparation, adapter)
 
 
 def _success_session_json(result_text: str) -> str:

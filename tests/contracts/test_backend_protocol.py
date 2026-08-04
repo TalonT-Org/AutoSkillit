@@ -50,6 +50,92 @@ def test_coding_agent_backend_is_runtime_checkable():
     )
 
 
+def test_backend_protocol_consumes_il0_skill_semantic_plan() -> None:
+    import inspect
+    import typing
+
+    from autoskillit.core import (
+        CodingAgentBackend,
+        SkillSemanticAdaptationResult,
+        SkillSemanticPlan,
+    )
+
+    signature = inspect.signature(CodingAgentBackend.adapt_skill_semantics)
+    assert tuple(signature.parameters) == ("self", "plan")
+    hints = typing.get_type_hints(CodingAgentBackend.adapt_skill_semantics)
+    assert hints["plan"] is SkillSemanticPlan
+    assert hints["return"] is SkillSemanticAdaptationResult
+
+
+def test_registered_backends_adapt_every_skill_semantic_operation() -> None:
+    from autoskillit.core import (
+        ChildModelPolicySpec,
+        ChildSpawnSpec,
+        ConcurrencySpec,
+        EvidenceSpec,
+        GitMetadataWriteSpec,
+        JoinSpec,
+        LogicalRoleSpec,
+        SiblingSkillSpec,
+        SkillSemanticPlan,
+    )
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    plan = SkillSemanticPlan(
+        schema_version=1,
+        child_spawns=(ChildSpawnSpec(role="reviewer"),),
+        concurrency=ConcurrencySpec(required=True),
+        join=JoinSpec(required=True),
+        evidence=EvidenceSpec(required=True, independent=True),
+        child_model_policies=(
+            ChildModelPolicySpec(
+                role="reviewer",
+                model_class="opus",
+                reasoning_effort="high",
+            ),
+        ),
+        logical_roles=(LogicalRoleSpec(name="reviewer", purpose="review one concern"),),
+        sibling_skills=(SiblingSkillSpec(name="investigate"),),
+        git_metadata_writes=(GitMetadataWriteSpec(purpose="create a commit"),),
+    )
+
+    for backend_name, backend_cls in BACKEND_REGISTRY.items():
+        result = backend_cls().adapt_skill_semantics(plan)
+        assert result.diagnostic is None, backend_name
+        assert result.unsupported_operation is None, backend_name
+        assert result.instruction_fragments, backend_name
+        assert result.logical_role_mapping["reviewer"], backend_name
+        assert result.sibling_skill_targets["investigate"].endswith("investigate"), backend_name
+        assert result.model_effort_policy["reviewer"][0], backend_name
+        assert result.model_effort_policy["reviewer"][1] == "high", backend_name
+
+
+def test_codex_adaptation_maps_namespaced_role_to_registered_agent() -> None:
+    from autoskillit.core import (
+        ChildModelPolicySpec,
+        ChildSpawnSpec,
+        LogicalRoleSpec,
+        SkillSemanticPlan,
+    )
+    from autoskillit.execution.backends import CodexBackend
+
+    logical_role = "autoskillit:pr-review-auditor-reachability"
+    plan = SkillSemanticPlan(
+        schema_version=1,
+        child_spawns=(ChildSpawnSpec(role=logical_role),),
+        child_model_policies=(ChildModelPolicySpec(role=logical_role, model_class="sonnet"),),
+        logical_roles=(LogicalRoleSpec(name=logical_role, purpose="prove reachability"),),
+    )
+
+    adaptation = CodexBackend().adapt_skill_semantics(plan)
+
+    native_role = "pr-review-auditor-reachability"
+    assert adaptation.logical_role_mapping[logical_role] == native_role
+    assert native_role in "\n".join(adaptation.instruction_fragments)
+    assert logical_role not in adaptation.model_effort_policy
+    assert adaptation.model_effort_policy[native_role][0]
+
+
 # -- isinstance conformance: ClaudeCodeBackend ------------------------------
 
 

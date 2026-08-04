@@ -5,8 +5,11 @@ for Deep Analysis Mode: Steps D1–D6, activation conditions, subagent
 templates, and enhanced report template fields.
 """
 
+from pathlib import Path
+
 import pytest
 
+from autoskillit.workspace.skill_format import read_skill_frontmatter
 from tests.skills.conftest import extract_step_section
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
@@ -70,10 +73,20 @@ def test_deep_mode_not_default(deep_mode_section: str) -> None:
 
 
 def test_deep_mode_subagents_use_sonnet(deep_mode_section: str) -> None:
-    """Deep mode section must specify that subagents use Agent(model="sonnet")."""
-    assert 'Agent(model="sonnet")' in deep_mode_section, (
-        "Deep Analysis Mode section must specify 'Agent(model=\"sonnet\")' for all subagents"
+    """Deep-mode children must use the portable sonnet model-class policy."""
+    skill_path = (
+        Path(__file__).parents[2]
+        / "src"
+        / "autoskillit"
+        / "skills_extended"
+        / "investigate"
+        / "SKILL.md"
     )
+    parsed = read_skill_frontmatter(skill_path)
+    assert parsed.data is not None
+    requirements = parsed.data["semantic_requirements"]
+    assert {policy["model_class"] for policy in requirements["child_model_policies"]} == {"sonnet"}
+    assert "declared `sonnet` model-class policy" in deep_mode_section
 
 
 def test_investigation_spawn_ceiling_is_sixteen(skill_text: str) -> None:

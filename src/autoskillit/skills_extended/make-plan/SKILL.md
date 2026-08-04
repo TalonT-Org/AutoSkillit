@@ -1,15 +1,45 @@
 ---
 name: make-plan
-uses_capabilities: [agent_model, agent_subagent, write_audit_disposition_bundle]
-activate_deps: [write-recipe]
-description: Planning executor. ALWAYS invoke this skill when instructed to create, devise, or write an implementation plan. Do not explore the codebase or draft a plan directly — use this skill first to load the planning workflow.
+uses_capabilities:
+- write_audit_disposition_bundle
+activate_deps:
+- write-recipe
+description: Planning executor. ALWAYS invoke this skill when instructed to create, devise, or write an implementation plan.
+  Do not explore the codebase or draft a plan directly — use this skill first to load the planning workflow.
 hooks:
   PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: "echo '📋 [SKILL: plan] Creating implementation plan...'"
-          once: true
+  - matcher: '*'
+    hooks:
+    - type: command
+      command: 'echo ''📋 [SKILL: plan] Creating implementation plan...'''
+      once: true
+semantic_version: 1
+semantic_requirements:
+  logical_roles:
+  - name: plan-foundation-auditor
+    purpose: perform the named independent responsibility and return bounded evidence
+  - name: plan-interface-mapper
+    purpose: perform the named independent responsibility and return bounded evidence
+  - name: plan-registry-tracer
+    purpose: perform the named independent responsibility and return bounded evidence
+  child_spawns:
+  - role: plan-foundation-auditor
+  - role: plan-interface-mapper
+  - role: plan-registry-tracer
+  concurrency:
+    required: true
+  join:
+    required: true
+  evidence:
+    required: true
+    independent: true
+  child_model_policies:
+  - role: plan-foundation-auditor
+    model_class: sonnet
+  - role: plan-interface-mapper
+    model_class: sonnet
+  - role: plan-registry-tracer
+    model_class: sonnet
 ---
 
 # Implementation Plan Skill
@@ -77,7 +107,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 
 ## Planning Steps
 
-1. **Understand related systems and validate details** (SINGLE MESSAGE) — **Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.** Do not output any prose between subagent dispatches. Use subagents to study the architecture, how components work together, their purpose, patterns, and standards. Validate any details provided in the task description. When the plan involves adding tests that call mutating methods on singleton or module-level objects (enable/disable, register/unregister, connect/disconnect), use a subagent to read the target test directory's existing isolation patterns (conftest fixtures, setup_method/teardown_method, autouse fixtures) before proceeding to Step 3.
+1. **Understand related systems and validate details** (SINGLE MESSAGE) — **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.** Do not output any prose between subagent dispatches. Use subagents to study the architecture, how components work together, their purpose, patterns, and standards. Validate any details provided in the task description. When the plan involves adding tests that call mutating methods on singleton or module-level objects (enable/disable, register/unregister, connect/disconnect), use a subagent to read the target test directory's existing isolation patterns (conftest fixtures, setup_method/teardown_method, autouse fixtures) before proceeding to Step 3.
 
 2. **Explore and design approaches** - Use subagents to investigate different ways to solve the problem. Use subagents with web search to research modern solutions, approaches, designs, and architectures relevant to the problem. For each approach, focus on:
    - Does it solve the problem correctly?
@@ -136,20 +166,20 @@ a `## Adversarial Review` heading:
 > Complexity classification: {level} ({loc} LoC, {files} files, {modules} modules).
 > Adversarial agents: {list of agents to spawn, or "none"}.
 
-6. **Foundation Audit** - Spawn 1 Foundation Auditor via `Agent(subagent_type="autoskillit:plan-foundation-auditor")`. Pass the full draft plan text and the codebase root. Prepend the contrastive frame to the prompt:
+6. **Foundation Audit** - Spawn 1 Foundation Auditor via `a child assigned logical role `plan-foundation-auditor` under its declared model policy`. Pass the full draft plan text and the codebase root. Prepend the contrastive frame to the prompt:
 
    > "A junior reviewer found this plan's control flow acceptable — what did they miss?"
 
    The Foundation Auditor performs step-by-step control-flow analysis: enumerates functions, draws control flow with scope levels, builds reachability tables, audits guard coverage, and applies exploit-first verification. It must NOT suggest scope expansion — only identify gaps in what the plan already claims to do.
 
-**SendMessage continuation protocol:** If the subagent returns with a continuation hint (truncated at maxTurns), use `SendMessage` to resume it:
+**Child continuation protocol:** If the subagent returns with a continuation hint (truncated at maxTurns), use `child continuation message` to resume it:
 - `to`: the `agentId` from the continuation hint
 - `message`: `"Finalize your analysis and provide your complete findings report."`
 - `summary`: `"Continue plan review subagent to finalize findings"`
 
 The `summary` field is **required** when `message` is a string — omitting it causes `InputValidationError`. If the resumed agent still returns truncated, proceed without its findings rather than retrying further.
 
-7. **Interface Mapping** - Spawn 1 Interface Mapper via `Agent(subagent_type="autoskillit:plan-interface-mapper")`. Pass the full draft plan text and the codebase root. Prepend the contrastive frame to the prompt:
+7. **Interface Mapping** - Spawn 1 Interface Mapper via `a child assigned logical role `plan-interface-mapper` under its declared model policy`. Pass the full draft plan text and the codebase root. Prepend the contrastive frame to the prompt:
 
    > "A junior reviewer found this plan's variable usage correct — what did they miss?"
 
@@ -157,14 +187,14 @@ The `summary` field is **required** when `message` is a string — omitting it c
 
    **RULES FOR APPLYING INTERFACE MAPPING FINDINGS:** When the interface mapper identifies the correct variable for a step, apply the correction to ALL fields that consume that variable — cwd, skill_command arguments, branch references, SHA captures, output paths. Do not split the correct variable across some fields while leaving other fields on the wrong variable.
 
-**SendMessage continuation protocol:** If the subagent returns with a continuation hint (truncated at maxTurns), use `SendMessage` to resume it:
+**Child continuation protocol:** If the subagent returns with a continuation hint (truncated at maxTurns), use `child continuation message` to resume it:
 - `to`: the `agentId` from the continuation hint
 - `message`: `"Finalize your analysis and provide your complete findings report."`
 - `summary`: `"Continue plan review subagent to finalize findings"`
 
 The `summary` field is **required** when `message` is a string — omitting it causes `InputValidationError`. If the resumed agent still returns truncated, proceed without its findings rather than retrying further.
 
-8. **Registry Trace** - Spawn 1 Registry Tracer via `Agent(subagent_type="autoskillit:plan-registry-tracer")`. Pass the full draft plan text and the codebase root. Prepend the contrastive frame to the prompt:
+8. **Registry Trace** - Spawn 1 Registry Tracer via `a child assigned logical role `plan-registry-tracer` under its declared model policy`. Pass the full draft plan text and the codebase root. Prepend the contrastive frame to the prompt:
 
    > "A junior reviewer found this plan's registry coverage complete — what did they miss?"
 
@@ -172,7 +202,7 @@ The `summary` field is **required** when `message` is a string — omitting it c
 
    **RULES FOR APPLYING REGISTRY TRACE FINDINGS:** Verify BOTH fixture/test completeness AND registry completeness before finalizing. A plan that addresses only one interpretation of a rename (manifest-focused OR workspace-focused) and misses the cross-cutting update is incomplete. Apply the two-family check: if references appear in only one layer (source-code or test/fixture), perform targeted follow-up searches in the other layer before concluding.
 
-**SendMessage continuation protocol:** If the subagent returns with a continuation hint (truncated at maxTurns), use `SendMessage` to resume it:
+**Child continuation protocol:** If the subagent returns with a continuation hint (truncated at maxTurns), use `child continuation message` to resume it:
 - `to`: the `agentId` from the continuation hint
 - `message`: `"Finalize your analysis and provide your complete findings report."`
 - `summary`: `"Continue plan review subagent to finalize findings"`
@@ -252,8 +282,8 @@ handles correctly.
 - Emit `false_positive` or otherwise close an active `NO GO`; only a successor audit-impl
   authority may close that lineage
 - **Use `git merge` in implementation plans.** When a plan needs to bring in changes from another branch, use `git cherry-pick <commit>` for individual commits or `git checkout <branch> -- <file>` for specific files. `merge_worktree` requires linear commit history — merge commits cannot be rebased and will cause `WORKTREE_INTACT_MERGE_COMMITS_DETECTED` failure. See "Conflict-Resolution Plan Requirements" section for full guidance.
-- Run subagents in the background (`run_in_background: true` is prohibited)
-- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Detach child delegations instead of joining them (joining every child is required)
+- Start independent child delegations sequentially
 
 **ALWAYS:**
 - Write to `{{AUTOSKILLIT_TEMP}}/make-plan/` directory (relative to the current working directory)
@@ -267,12 +297,12 @@ handles correctly.
   ```
   `plan_path` and `plan_parts` are mandatory for every run. In remediation mode,
   `plan_disposition_path` is also mandatory.
-- Spawn all subagents via `Agent(model="sonnet")`
+- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
 - Recommend the single best technical solution
 - Ground decisions in design quality and correctness
 - Include verification steps
 - Be willing to recommend significant refactoring if that's the right answer
-- Issue all Task calls in a single message to maximize parallelism
+- Start all independent child delegations before awaiting any result to maximize concurrency
 - The plan must cover every remediation item enumerated in the source issue; if an item cannot be delivered, stop and surface it — do not descope it in the plan
 - Every new component, class, or function is wired into the call chain — nothing is created but left unconnected
 

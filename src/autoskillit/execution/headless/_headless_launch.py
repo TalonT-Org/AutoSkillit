@@ -11,39 +11,39 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.core import (
     CmdSpec,
     CodingAgentBackend,
-    HeadlessSkillDispatchPreparation,
-    ManagedHeadlessSessionLineageRef,
-    NativeShellCaptureDecision,
+    LaunchPreparation,
+    LaunchResolver,
     OutputFormat,
     PluginArtifactAuthority,
     PluginLaunchBinding,
     PluginLoadMode,
+    ResolvedLaunchContract,
     RetryReason,
-    SessionCheckpoint,
     SkillContractView,
     SkillResult,
-    SkillSessionConfig,
     StreamParser,
-    ValidatedAddDir,
     get_logger,
     plugin_launch_binding_scope,
 )
 from autoskillit.execution.headless._headless_helpers import (
     _resolve_pty_mode,
     _resolve_session_log_dir,
-    assert_headless_cmd,
 )
-from autoskillit.execution.headless._headless_outcome import validated_dispatch_cwd
 from autoskillit.execution.headless._headless_recovery import (
     _EnumHint,
     _extract_missing_token_hints,
     _merge_token_usage,
 )
 from autoskillit.execution.headless._managed import (
-    _build_attempt_spec,
     _BuildSpec,
     _headless_plugin_load_mode,
     _ManagedLineageObserver,
+)
+from autoskillit.execution.headless._managed._launch_adapter import (
+    _binding_identity,
+    _food_truck_launch_spec_builder,
+    _HeadlessLaunchAdapter,
+    _skill_launch_spec_builder,
 )
 from autoskillit.execution.session import _check_expected_patterns
 
@@ -53,135 +53,6 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _NUDGE_TIMEOUT: float = 60.0
-
-
-def _skill_launch_spec_builder(
-    *,
-    backend: CodingAgentBackend,
-    skill_command: str,
-    cwd: str,
-    completion_marker: str,
-    configured_model: str | None,
-    output_format: OutputFormat,
-    add_dirs: tuple[ValidatedAddDir, ...],
-    exit_after_stop_delay_ms: int,
-    stream_idle_timeout_ms: int,
-    step_name: str,
-    temp_dir_relpath: str,
-    allowed_write_prefix: str,
-    allowed_write_prefixes: tuple[str, ...],
-    profile_name: str,
-    resume_session_id: str,
-    resume_checkpoint: SessionCheckpoint | None,
-    resume_message: str | None,
-    readonly_skill: bool,
-    network_access: bool,
-    native_shell_capture_decision: NativeShellCaptureDecision | None,
-    managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
-) -> _BuildSpec:
-    """Bind stable skill-command inputs while leaving attempt identity late-bound."""
-
-    def build(
-        plugin_binding: PluginLaunchBinding | None,
-        provider_extras: Mapping[str, str] | None,
-        managed_attempt_id: str | None = None,
-    ) -> CmdSpec:
-        config = SkillSessionConfig(
-            completion_marker=completion_marker,
-            model=configured_model,
-            plugin_binding=plugin_binding,
-            output_format=output_format,
-            add_dirs=add_dirs,
-            exit_after_stop_delay_ms=exit_after_stop_delay_ms,
-            stream_idle_timeout_ms=stream_idle_timeout_ms,
-            scenario_step_name=step_name,
-            temp_dir_relpath=temp_dir_relpath,
-            allowed_write_prefix=allowed_write_prefix,
-            allowed_write_prefixes=allowed_write_prefixes,
-            provider_extras=provider_extras,
-            profile_name=profile_name,
-            resume_session_id=resume_session_id,
-            resume_checkpoint=resume_checkpoint,
-            resume_message=resume_message,
-            sandbox_mode=(
-                "read-only" if readonly_skill else backend.capabilities.default_skill_sandbox_mode
-            ),
-            network_access=network_access,
-            native_shell_capture_decision=native_shell_capture_decision,
-            managed_lineage_ref=managed_lineage_ref,
-            managed_attempt_id=managed_attempt_id,
-        )
-        return backend.build_skill_session_cmd(skill_command, cwd, config)
-
-    return build
-
-
-def _food_truck_launch_spec_builder(
-    *,
-    backend: CodingAgentBackend,
-    orchestrator_prompt: str,
-    cwd: str,
-    capability_preparation: HeadlessSkillDispatchPreparation | None,
-    completion_marker: str,
-    resume_session_id: str | None,
-    resume_checkpoint: SessionCheckpoint | None,
-    configured_model: str | None,
-    output_format: OutputFormat,
-    exit_after_stop_delay_ms: int,
-    stream_idle_timeout_ms: int,
-    step_name: str,
-    temp_dir_relpath: str,
-    allowed_write_prefix: str,
-    allowed_write_prefixes: tuple[str, ...],
-    sentinel_contract: str,
-    resume_message: str | None,
-    native_shell_capture_decision: NativeShellCaptureDecision | None,
-    managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
-) -> _BuildSpec:
-    """Bind food-truck inputs while finalizing semantic capability per binding."""
-
-    def build(
-        plugin_binding: PluginLaunchBinding | None,
-        provider_extras: Mapping[str, str] | None,
-        managed_attempt_id: str | None = None,
-    ) -> CmdSpec:
-        attempt_cwd = cwd
-        if capability_preparation is not None:
-            if plugin_binding is None:
-                raise RuntimeError("semantic food-truck dispatch requires a plugin launch binding")
-            capability_contract = capability_preparation.finalize(
-                backend=backend,
-                binding=plugin_binding,
-            )
-            attempt_cwd = validated_dispatch_cwd(
-                capability_contract,
-                resolved_command=orchestrator_prompt,
-                cwd=cwd,
-            )
-        return backend.build_food_truck_cmd(
-            orchestrator_prompt=orchestrator_prompt,
-            plugin_binding=plugin_binding,
-            cwd=attempt_cwd,
-            completion_marker=completion_marker,
-            resume_session_id=resume_session_id,
-            resume_checkpoint=resume_checkpoint,
-            model=configured_model,
-            env_extras=provider_extras,
-            output_format=output_format,
-            exit_after_stop_delay_ms=exit_after_stop_delay_ms,
-            stream_idle_timeout_ms=stream_idle_timeout_ms,
-            scenario_step_name=step_name,
-            temp_dir_relpath=temp_dir_relpath,
-            allowed_write_prefix=allowed_write_prefix,
-            allowed_write_prefixes=allowed_write_prefixes,
-            sentinel_contract=sentinel_contract,
-            resume_message=resume_message,
-            native_shell_capture_decision=native_shell_capture_decision,
-            managed_lineage_ref=managed_lineage_ref,
-            managed_attempt_id=managed_attempt_id,
-        )
-
-    return build
 
 
 def _report_plugin_binding_close_failure(
@@ -213,9 +84,11 @@ def _plugin_launch_binding(
 async def _run_headless_attempt(
     build_spec: _BuildSpec,
     *,
-    cwd: str,
     runner: SubprocessRunner,
     backend: CodingAgentBackend,
+    launch_resolver: LaunchResolver,
+    launch_preparation: LaunchPreparation,
+    expected_launch_contract: ResolvedLaunchContract | None,
     plugin_authority: PluginArtifactAuthority | None,
     plugin_load_mode: PluginLoadMode,
     provider_extras: Mapping[str, str] | None,
@@ -235,6 +108,7 @@ async def _run_headless_attempt(
     session_id: str | None,
     on_session_id_resolved: Callable[[str], None] | None,
     stream_parser: StreamParser,
+    on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
     managed_lineage_observer: _ManagedLineageObserver | None = None,
     managed_attempt_id: str | None = None,
 ) -> tuple[SubprocessResult, CmdSpec]:
@@ -244,26 +118,35 @@ async def _run_headless_attempt(
         backend=backend,
         load_mode=plugin_load_mode,
     ) as binding:
-        spec = _build_attempt_spec(
-            build_spec,
+        plugin_identity = _binding_identity(binding)
+        artifact_paths = tuple(
+            [*launch_preparation.artifact_paths]
+            + ([str(binding.plugin_dir)] if binding is not None and binding.plugin_dir else [])
+        )
+        attempt_preparation = dataclasses.replace(
+            launch_preparation,
+            plugin_identity=plugin_identity,
+            artifact_paths=artifact_paths,
+        )
+        adapter = _HeadlessLaunchAdapter(
+            build_spec=build_spec,
             binding=binding,
             provider_extras=provider_extras,
             observer=managed_lineage_observer,
             managed_attempt_id=managed_attempt_id,
         )
-        if spec.cmd:
-            binary = Path(spec.cmd[0]).stem
-            expected = backend.capabilities.process_name
-            if isinstance(expected, str) and expected and binary != expected:
-                from autoskillit.execution.backends import BACKEND_REGISTRY
-
-                known = {item().capabilities.process_name for item in BACKEND_REGISTRY.values()}
-                if binary in known:
-                    raise RuntimeError(
-                        f"Backend coherence violation: expected process_name="
-                        f"{expected!r} but binary is {binary!r}"
-                    )
-        assert_headless_cmd(spec)
+        launch_contract = launch_resolver.finalize(attempt_preparation, adapter)
+        if expected_launch_contract is not None:
+            launch_resolver.validate_resume(expected_launch_contract, launch_contract)
+        if managed_lineage_observer is not None:
+            managed_lineage_observer.bind_launch_contract_digest(launch_contract.digest)
+        if on_launch_resolved is not None:
+            on_launch_resolved(launch_contract)
+        spec = launch_resolver.rehydrate_secret_environment(
+            launch_contract,
+            adapter.secret_environment,
+            inherited_fds=adapter.inherited_fds,
+        )
         effective_idle = idle_output_timeout
         if spec.process_idle_timeout_ms > 0:
             spec_idle = spec.process_idle_timeout_ms / 1000.0
@@ -271,11 +154,11 @@ async def _run_headless_attempt(
                 effective_idle = spec_idle
         result = await runner(
             list(spec.cmd),
-            cwd=Path(cwd),
+            cwd=Path(spec.cwd),
             timeout=timeout,
             env=spec.env,
             pty_mode=(pty_override if pty_override is not None else _resolve_pty_mode(backend)),
-            session_log_dir=_resolve_session_log_dir(cwd, backend),
+            session_log_dir=_resolve_session_log_dir(spec.cwd, backend),
             completion_marker=completion_marker,
             stale_threshold=stale_threshold,
             completion_drain_timeout=completion_drain_timeout,
@@ -317,11 +200,17 @@ async def _attempt_contract_nudge(
     plugin_load_mode: PluginLoadMode = PluginLoadMode.NONE,
     session_env: Mapping[str, str] | None = None,
     managed_lineage_observer: _ManagedLineageObserver | None = None,
+    launch_resolver: LaunchResolver | None = None,
+    launch_preparation: LaunchPreparation | None = None,
+    expected_launch_contract: ResolvedLaunchContract | None = None,
+    on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
 ) -> SkillResult | None:
     """Resume once to recover omitted structured tokens or the completion marker."""
     if backend is None or not backend.capabilities.session_resume_capable:
         return None
     if result_parser is None:
+        return None
+    if launch_resolver is None or launch_preparation is None:
         return None
 
     if retry_reason == RetryReason.EARLY_STOP:
@@ -388,28 +277,72 @@ async def _attempt_contract_nudge(
                 if managed_lineage_observer is not None
                 else None
             )
-            spec = backend.build_resume_cmd(
-                resume_session_id=skill_result.session_id,
-                prompt=prompt,
-                output_format=OutputFormat.JSON,
-                plugin_binding=binding,
-                env_extras=effective_extras or None,
-                native_shell_capture_decision=(
-                    managed_lineage_observer.decision
-                    if managed_lineage_observer is not None
-                    else None
+
+            def build_nudge_spec(
+                plugin_binding: PluginLaunchBinding | None,
+                extras: Mapping[str, str] | None,
+                attempt_id: str | None = None,
+            ) -> CmdSpec:
+                return backend.build_resume_cmd(
+                    resume_session_id=skill_result.session_id,
+                    prompt=prompt,
+                    output_format=OutputFormat.JSON,
+                    plugin_binding=plugin_binding,
+                    env_extras=extras,
+                    native_shell_capture_decision=(
+                        managed_lineage_observer.decision
+                        if managed_lineage_observer is not None
+                        else None
+                    ),
+                    managed_lineage_ref=(
+                        managed_lineage_observer.reference
+                        if managed_lineage_observer is not None
+                        else None
+                    ),
+                    managed_attempt_id=attempt_id,
+                )
+
+            plugin_identity = _binding_identity(binding)
+            nudge_preparation = dataclasses.replace(
+                launch_preparation,
+                command=prompt,
+                arguments=(),
+                cwd=cwd,
+                plugin_identity=plugin_identity,
+                artifact_paths=tuple(
+                    [*launch_preparation.artifact_paths]
+                    + (
+                        [str(binding.plugin_dir)]
+                        if binding is not None and binding.plugin_dir
+                        else []
+                    )
                 ),
-                managed_lineage_ref=(
-                    managed_lineage_observer.reference
-                    if managed_lineage_observer is not None
-                    else None
-                ),
+            )
+            adapter = _HeadlessLaunchAdapter(
+                build_spec=build_nudge_spec,
+                binding=binding,
+                provider_extras=effective_extras or None,
+                observer=managed_lineage_observer,
                 managed_attempt_id=managed_attempt_id,
             )
-            assert_headless_cmd(spec)
+            launch_contract = launch_resolver.finalize(nudge_preparation, adapter)
+            if expected_launch_contract is not None:
+                launch_resolver.validate_resume(
+                    expected_launch_contract,
+                    launch_contract,
+                )
+            if managed_lineage_observer is not None:
+                managed_lineage_observer.bind_launch_contract_digest(launch_contract.digest)
+            if on_launch_resolved is not None:
+                on_launch_resolved(launch_contract)
+            spec = launch_resolver.rehydrate_secret_environment(
+                launch_contract,
+                adapter.secret_environment,
+                inherited_fds=adapter.inherited_fds,
+            )
             nudge_result = await runner(
                 list(spec.cmd),
-                cwd=Path(cwd),
+                cwd=Path(spec.cwd),
                 timeout=_NUDGE_TIMEOUT,
                 env=spec.env,
                 pty_mode=(

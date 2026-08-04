@@ -21,7 +21,25 @@ class TestStandingBackendPinsFeasibility:
         from autoskillit.cli.doctor._doctor_config import (
             _check_standing_backend_pins_feasibility,
         )
-        from autoskillit.core import Severity
+        from autoskillit.core import (
+            Severity,
+            SkillSemanticAdaptationResult,
+            SkillSemanticOperation,
+        )
+
+        backend = type(
+            "UnsupportedBackend",
+            (),
+            {
+                "adapt_skill_semantics": lambda self, plan: (
+                    SkillSemanticAdaptationResult.unsupported(
+                        backend="codex",
+                        operation=SkillSemanticOperation.GIT_METADATA_WRITE,
+                    )
+                )
+            },
+        )()
+        monkeypatch.setattr("autoskillit.execution.get_backend", lambda _name: backend)
 
         monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
         config_dir = tmp_path / "home" / ".autoskillit"

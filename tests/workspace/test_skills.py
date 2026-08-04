@@ -860,92 +860,6 @@ def test_resolve_instance_cache_caches_none(monkeypatch: pytest.MonkeyPatch) -> 
 # ---------------------------------------------------------------------------
 
 
-class TestBackendRequirements:
-    def test_backend_requirements_derived_from_capabilities(self, tmp_path) -> None:
-        from autoskillit.workspace.skills import _skill_info_from_frontmatter
-
-        skill_md = tmp_path / "SKILL.md"
-        skill_md.write_text("---\nname: test\nuses_capabilities: [open_kitchen]\n---\n# content")
-        info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
-        assert info.backend_requirements == frozenset({"claude-code"})
-
-    def test_empty_capabilities_yields_empty_backend_requirements(self, tmp_path) -> None:
-        from autoskillit.workspace.skills import _skill_info_from_frontmatter
-
-        skill_md = tmp_path / "SKILL.md"
-        skill_md.write_text("---\nname: test\n---\n# content")
-        info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
-        assert info.backend_requirements == frozenset()
-
-    def test_non_mcp_capabilities_yield_empty_backend_requirements(self, tmp_path) -> None:
-        from autoskillit.workspace.skills import _skill_info_from_frontmatter
-
-        skill_md = tmp_path / "SKILL.md"
-        skill_md.write_text(
-            "---\nname: test\nuses_capabilities: [agent_subagent, claude_dir]\n---\n# content"
-        )
-        info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
-        assert info.backend_requirements == frozenset()
-
-    def test_unknown_capability_pruned_with_warning(self, tmp_path) -> None:
-        import structlog.testing
-
-        from autoskillit.workspace.skills import _skill_info_from_frontmatter
-
-        skill_md = tmp_path / "SKILL.md"
-        skill_md.write_text(
-            "---\nname: test\nuses_capabilities: [nonexistent_cap]\n---\n# content"
-        )
-        with structlog.testing.capture_logs() as logs:
-            info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
-        assert info.backend_requirements == frozenset()
-        assert info.invalid_reason is not None
-        assert "nonexistent_cap" in info.invalid_reason
-        assert any(log["event"] == "unrecognized_uses_capabilities" for log in logs)
-
-    def test_mixed_capabilities_derive_backend_requirements(self, tmp_path) -> None:
-        from autoskillit.workspace.skills import _skill_info_from_frontmatter
-
-        skill_md = tmp_path / "SKILL.md"
-        skill_md.write_text(
-            "---\nname: test\nuses_capabilities: [agent_subagent, run_skill]\n---\n# content"
-        )
-        info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
-        assert info.backend_requirements == frozenset()
-        assert info.invalid_reason is not None
-        assert "run_skill" in info.invalid_reason
-        assert "session" in info.invalid_reason
-
-    def test_investigate_skill_has_no_backend_requirement(self) -> None:
-        info = DefaultSkillResolver().resolve("investigate")
-        assert info is not None
-        assert info.backend_requirements == frozenset()
-
-    def test_skill_info_default_backend_requirements(self) -> None:
-        from autoskillit.workspace.skills import SkillInfo
-
-        info = SkillInfo(name="test", source=SkillSource.BUNDLED, path=Path("/fake/SKILL.md"))
-        assert info.backend_requirements == frozenset()
-
-    def test_backend_requirements_derived_not_read_from_yaml(self, tmp_path) -> None:
-        """backend_requirements in SKILL.md YAML is ignored — derived from uses_capabilities."""
-        from autoskillit.workspace.skills import _skill_info_from_frontmatter
-
-        skill_dir = tmp_path / "test-skill"
-        skill_dir.mkdir()
-        (skill_dir / "SKILL.md").write_text(
-            "---\nname: test-skill\nbackend_requirements: [claude-code]\n"
-            "uses_capabilities: [claude_dir]\n---\nTest skill.\n"
-        )
-        info = _skill_info_from_frontmatter(
-            "test-skill", SkillSource.BUNDLED, skill_dir / "SKILL.md"
-        )
-        assert info.backend_requirements == frozenset(), (
-            "backend_requirements should be derived from uses_capabilities "
-            "(claude_dir → frozenset()), not read from YAML"
-        )
-
-
 class TestSkillExecutionRoleParsing:
     def test_valid_omission_defaults_to_session(self, tmp_path: Path) -> None:
         from autoskillit.workspace.skills import _skill_info_from_frontmatter
@@ -1032,10 +946,10 @@ class TestSkillInfoSchemaExhaustiveness:
         dc_fields = {f.name for f in dataclasses.fields(SkillInfo)}
         constructor_only = {"name", "source", "path", "source_ref"}
         derived_fields = {
-            "backend_requirements",
             "execution_role",
             "frontmatter",
             "invalid_reason",
+            "semantic_plan",
         }
         parseable_fields = dc_fields - constructor_only - derived_fields
 
@@ -1119,17 +1033,53 @@ def test_effective_catalog_applies_pack_and_recipe_visibility(tmp_path: Path) ->
     assert "research-skill" in recipe_catalog.namespace_sources
 
 
-def test_invalid_project_override_fails_effective_catalog_admission(tmp_path: Path) -> None:
+def test_invalid_project_override_fails_closed_without_bundled_fallback(
+    tmp_path: Path,
+) -> None:
     resolver = _resolver_with_visibility_skills(tmp_path)
     override_dir = tmp_path / ".claude" / "skills" / "core-skill"
     override_dir.mkdir(parents=True)
-    (override_dir / "SKILL.md").write_text(
+    override_path = override_dir / "SKILL.md"
+    override_path.write_text(
         '---\nname: core-skill\n---\nSpawn the worker via `Agent(model="sonnet")`.\n',
         encoding="utf-8",
     )
 
-    with pytest.raises(SkillContractError, match="missing declaration for 'agent_model'"):
+    selected = resolver.resolve_effective("core-skill", tmp_path)
+
+    assert selected is not None
+    assert selected.source is SkillSource.PROJECT_LOCAL
+    assert selected.path == override_path
+    assert selected.invalid_reason is not None
+    with pytest.raises(SkillContractError) as exc_info:
         resolver.list_effective(tmp_path, SkillExecutionRole.SESSION)
+    assert str(exc_info.value) == (
+        "effective skill catalog contains invalid contracts: "
+        f"'core-skill': {selected.invalid_reason}"
+    )
+
+
+def test_invalid_project_only_skill_is_excluded_without_poisoning_catalog(
+    tmp_path: Path,
+) -> None:
+    resolver = _resolver_with_visibility_skills(tmp_path)
+    skill_dir = tmp_path / ".claude" / "skills" / "project-only"
+    skill_dir.mkdir(parents=True)
+    skill_path = skill_dir / "SKILL.md"
+    skill_path.write_text(
+        '---\nname: project-only\n---\nSpawn via `Agent(model="sonnet")`.\n',
+        encoding="utf-8",
+    )
+
+    selected = resolver.resolve_effective("project-only", tmp_path)
+    catalog = resolver.list_effective(tmp_path, SkillExecutionRole.SESSION)
+
+    assert selected is not None
+    assert selected.source is SkillSource.PROJECT_LOCAL
+    assert selected.path == skill_path
+    assert selected.invalid_reason is not None
+    assert "project-only" not in {skill.name for skill in catalog.skills}
+    assert "project-only" not in catalog.namespace_sources
 
 
 def test_effective_catalog_applies_subsets_and_recipe_features(tmp_path: Path) -> None:
@@ -1449,7 +1399,6 @@ def test_projection_strips_all_machine_authority_and_preserves_private_deps(
     expected_machine_keys = frozenset(
         {
             "activate_deps",
-            "backend_requirements",
             "execution_role",
             "uses_capabilities",
         }
@@ -1463,7 +1412,6 @@ def test_projection_strips_all_machine_authority_and_preserves_private_deps(
         "uses_capabilities: []\n"
         "execution_role: session\n"
         "activate_deps: [dependency]\n"
-        "backend_requirements: [claude-code]\n"
         "---\n"
         "public body\n",
         encoding="utf-8",
@@ -1569,10 +1517,10 @@ def test_projection_never_mutates_external_canonical_sources(
         "---\n"
         "name: external\n"
         "description: External source.\n"
-        "uses_capabilities: [agent_model]\n"
+        "uses_capabilities: []\n"
         "execution_role: session\n"
         "---\n"
-        'external body\nAgent(model="sonnet")\n',
+        "external body\n",
         encoding="utf-8",
     )
     before = skill_md.read_bytes()

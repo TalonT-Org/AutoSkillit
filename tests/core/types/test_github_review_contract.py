@@ -15,7 +15,6 @@ from typing import get_type_hints
 import pytest
 
 from autoskillit.core import (
-    GitHubReviewAttempt,
     GitHubReviewComment,
     GitHubReviewFindingDisposition,
     GitHubReviewPosterProtocol,
@@ -41,7 +40,6 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 _CONTRACT_TYPES = (
     GitHubReviewComment,
     GitHubReviewRequest,
-    GitHubReviewAttempt,
     GitHubReviewPostResult,
     GitHubReviewReceipt,
     GitHubReviewFindingDisposition,
@@ -50,7 +48,6 @@ _CONTRACT_TYPES = (
 _PUBLIC_NAMES = {
     "GitHubReviewComment",
     "GitHubReviewRequest",
-    "GitHubReviewAttempt",
     "GitHubReviewPostResult",
     "GitHubReviewReceipt",
     "GitHubReviewFindingDisposition",
@@ -258,15 +255,8 @@ def test_classification_vocabularies_are_nonempty_unique_str_enums(
     assert all(isinstance(value, str) and value for value in values)
 
 
-def test_attempt_result_receipt_and_disposition_expose_identity_fields() -> None:
+def test_result_receipt_and_disposition_expose_identity_fields() -> None:
     expected_fields = {
-        GitHubReviewAttempt: {
-            "attempt_number",
-            "response_class",
-            "status_code",
-            "error",
-            "retry_after_seconds",
-        },
         GitHubReviewPostResult: {
             "operation_key",
             "head_sha",

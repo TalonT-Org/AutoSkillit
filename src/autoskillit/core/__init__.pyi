@@ -672,7 +672,6 @@ from .types import (
 from .types import GenerationState as GenerationState
 from .types import GitHubApiLog as GitHubApiLog
 from .types import GitHubFetcher as GitHubFetcher
-from .types import GitHubReviewAttempt as GitHubReviewAttempt
 from .types import GitHubReviewComment as GitHubReviewComment
 from .types import GitHubReviewFindingDisposition as GitHubReviewFindingDisposition
 from .types import GitHubReviewPosterProtocol as GitHubReviewPosterProtocol

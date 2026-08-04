@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any, TypeGuard
 
 __all__ = [
-    "GitHubReviewAttempt",
     "GitHubReviewComment",
     "GitHubReviewFindingDisposition",
     "GitHubReviewPostResult",
@@ -142,19 +141,6 @@ class GitHubReviewRequest:
     cwd: str = ""
     receipt_path: Path | str | None = None
     dry_run: bool = False
-
-
-@dataclass(frozen=True, slots=True)
-class GitHubReviewAttempt:
-    attempt_number: int
-    response_class: ReviewResponseClass
-    attempt_digest: str = ""
-    effective_event: str = ""
-    effective_body_digest: str = ""
-    canonical_indexes: tuple[int, ...] = ()
-    status_code: int | None = None
-    error: str | None = None
-    retry_after_seconds: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

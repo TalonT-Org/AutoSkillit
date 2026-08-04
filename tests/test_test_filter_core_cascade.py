@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-import tests._test_filter as tf_mod
 from autoskillit._test_filter import apply_manifest as manifest_apply_manifest
 from autoskillit._test_filter import load_manifest as manifest_load_manifest
 from tests._test_filter import (
@@ -812,8 +811,6 @@ class TestBuildTestScopeCoreCascade:
             assert excluded not in dir_names, (
                 f"_step_context cascade should not include {excluded}"
             )
-
-
 class TestClosureCoreNarrowCascade:
     """Closure-added core/__init__.py uses MODULE_CASCADE_CORE when all causes are narrow."""
 

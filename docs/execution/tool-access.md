@@ -1,6 +1,6 @@
 # MCP Tool Access Control
 
-AutoSkillit provides 67 MCP tools organized into three access levels that control which
+AutoSkillit provides 68 MCP tools organized into three access levels that control which
 session types can see each tool.
 
 ## Three Access Levels
@@ -92,7 +92,7 @@ missing kitchen visibility.
 
 ## Complete MCP Tool Access Control Map
 
-All 67 tools with their access level, tags, source file, and functional category.
+All 68 tools with their access level, tags, source file, and functional category.
 
 **Tag abbreviations**: AS = `autoskillit`, K = `kitchen`, HL = `headless`,
 GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`, FL = `fleet`

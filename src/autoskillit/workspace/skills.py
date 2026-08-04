@@ -738,6 +738,7 @@ class DefaultSkillResolver:
                             precedence=precedence,
                         ),
                     )
+                    selected.add(entry.name)
                     if candidate.invalid_reason is not None:
                         logger.warning(
                             "project_local_skill_rejected",
@@ -745,7 +746,8 @@ class DefaultSkillResolver:
                             path=str(skill_path),
                             reason=candidate.invalid_reason,
                         )
-                    selected.add(entry.name)
+                        if entry.name not in by_name:
+                            continue
                     by_name[entry.name] = candidate
         return tuple(sorted(by_name.values(), key=lambda skill: skill.name))
 

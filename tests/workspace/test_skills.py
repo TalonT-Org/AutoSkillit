@@ -1059,6 +1059,29 @@ def test_invalid_project_override_fails_closed_without_bundled_fallback(
     )
 
 
+def test_invalid_project_only_skill_is_excluded_without_poisoning_catalog(
+    tmp_path: Path,
+) -> None:
+    resolver = _resolver_with_visibility_skills(tmp_path)
+    skill_dir = tmp_path / ".claude" / "skills" / "project-only"
+    skill_dir.mkdir(parents=True)
+    skill_path = skill_dir / "SKILL.md"
+    skill_path.write_text(
+        '---\nname: project-only\n---\nSpawn via `Agent(model="sonnet")`.\n',
+        encoding="utf-8",
+    )
+
+    selected = resolver.resolve_effective("project-only", tmp_path)
+    catalog = resolver.list_effective(tmp_path, SkillExecutionRole.SESSION)
+
+    assert selected is not None
+    assert selected.source is SkillSource.PROJECT_LOCAL
+    assert selected.path == skill_path
+    assert selected.invalid_reason is not None
+    assert "project-only" not in {skill.name for skill in catalog.skills}
+    assert "project-only" not in catalog.namespace_sources
+
+
 def test_effective_catalog_applies_subsets_and_recipe_features(tmp_path: Path) -> None:
     resolver = _resolver_with_visibility_skills(tmp_path)
     visibility = SkillVisibilitySpec(

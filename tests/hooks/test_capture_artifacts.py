@@ -1222,7 +1222,7 @@ def test_runner_tail_still_sweeps_after_unexpected_dispatch_exception(
     assert "capture runner failed" in capfd.readouterr().err
 
 
-def test_malformed_runner_invocation_does_not_trigger_sweep(
+def test_malformed_runner_invocation_reconciles_only_with_absolute_cwd(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     reconciled: list[str] = []

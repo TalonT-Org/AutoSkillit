@@ -2660,6 +2660,25 @@ def test_sweep_cursor_symlink_is_fail_closed(tmp_path: Path) -> None:
         anchor.close()
 
 
+def test_sweep_cursor_preserves_wrapped_os_error_errno(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def deny_stat(*_args, **_kwargs):
+        raise OSError(errno.EACCES, "denied")
+
+    monkeypatch.setattr(sweep_cursor.os, "stat", deny_stat)
+
+    with pytest.raises(sweep_cursor.CursorAuthorityError) as caught:
+        sweep_cursor.load_cursor(
+            1,
+            project_identity=(1, 2),
+            root_identity=(3, 4),
+            compaction_epoch=1,
+        )
+
+    assert caught.value.errno == errno.EACCES
+
+
 def test_cleanup_outcome_is_frozen_and_contains_no_identifiers(tmp_path: Path) -> None:
     project = tmp_path / "project"
     clock = _Clock()

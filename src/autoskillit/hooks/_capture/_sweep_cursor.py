@@ -59,7 +59,10 @@ def _observe(root_fd: int) -> os.stat_result | None:
     except FileNotFoundError:
         return None
     except OSError as exc:
-        raise CursorAuthorityError("cannot inspect lifecycle sweep cursor") from exc
+        raise CursorAuthorityError(
+            exc.errno,
+            "cannot inspect lifecycle sweep cursor",
+        ) from exc
     _validate_file(value)
     return value
 
@@ -92,8 +95,14 @@ def load_cursor(
         fd = os.open(CURSOR_NAME, _READ_FLAGS, dir_fd=root_fd)
     except OSError as exc:
         if exc.errno == errno.ELOOP:
-            raise CursorAuthorityError("unsafe lifecycle sweep cursor") from exc
-        raise CursorAuthorityError("cannot open lifecycle sweep cursor") from exc
+            raise CursorAuthorityError(
+                exc.errno,
+                "unsafe lifecycle sweep cursor",
+            ) from exc
+        raise CursorAuthorityError(
+            exc.errno,
+            "cannot open lifecycle sweep cursor",
+        ) from exc
     try:
         current = os.fstat(fd)
         _validate_file(current)
@@ -206,7 +215,10 @@ def clear_cursor(root_fd: int) -> bool:
     try:
         os.unlink(CURSOR_NAME, dir_fd=root_fd)
     except OSError as exc:
-        raise CursorAuthorityError("cannot remove lifecycle sweep cursor") from exc
+        raise CursorAuthorityError(
+            exc.errno,
+            "cannot remove lifecycle sweep cursor",
+        ) from exc
     os.fsync(root_fd)
     return True
 

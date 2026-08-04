@@ -2695,6 +2695,34 @@ def test_reconcile_adapter_opens_existing_store_without_creation(tmp_path: Path)
     assert outcome.remaining_due == 0
 
 
+@pytest.mark.parametrize(
+    ("reason", "blocker"),
+    (
+        (CaptureFailureReason.PERMISSION_DENIED, CleanupBlocker.PERMISSION_DENIED),
+        (CaptureFailureReason.FILESYSTEM_IO, CleanupBlocker.FILESYSTEM_IO),
+        (CaptureFailureReason.LEDGER_INTEGRITY, CleanupBlocker.LEDGER_INTEGRITY),
+        (CaptureFailureReason.MIGRATION_BLOCKED, CleanupBlocker.MIGRATION_BLOCKED),
+    ),
+)
+def test_reconcile_adapter_preserves_closed_setup_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    reason: CaptureFailureReason,
+    blocker: CleanupBlocker,
+) -> None:
+    def fail_open(*_args, **_kwargs):
+        raise CaptureSetupError(reason, "capture setup failed")
+
+    monkeypatch.setattr(capture_reconcile._authority, "open_capture_lifecycle", fail_open)
+
+    outcome = capture_reconcile.reconcile_capture_store(
+        "/project",
+        capture_reconcile.RUNNER_TAIL_BUDGET,
+    )
+
+    assert outcome.blocker is blocker
+    assert outcome.errors == 1
+
+
 def test_incomplete_final_ledger_frame_is_recovered(tmp_path: Path) -> None:
     project = tmp_path / "project"
     clock = _Clock()

@@ -6,6 +6,7 @@ import errno
 from collections.abc import Callable
 
 from . import _authority, _migration
+from ._failure_policy import CaptureFailureReason
 from ._module_identity import register_module_aliases
 from ._types import (
     CaptureCleanupOutcome,
@@ -59,10 +60,14 @@ def reconcile_capture_store(
         return CaptureCleanupOutcome(blocker=CleanupBlocker.STORE_ABSENT)
     except _authority.CaptureSetupError as exc:
         reason = exc.reason
-        if reason.value == "PERMISSION_DENIED":
+        if reason is CaptureFailureReason.PERMISSION_DENIED:
             return _failure_outcome(CleanupBlocker.PERMISSION_DENIED)
-        if reason.value == "FILESYSTEM_IO":
+        if reason is CaptureFailureReason.FILESYSTEM_IO:
             return _failure_outcome(CleanupBlocker.FILESYSTEM_IO)
+        if reason is CaptureFailureReason.LEDGER_INTEGRITY:
+            return _failure_outcome(CleanupBlocker.LEDGER_INTEGRITY)
+        if reason is CaptureFailureReason.MIGRATION_BLOCKED:
+            return _failure_outcome(CleanupBlocker.MIGRATION_BLOCKED)
         return _failure_outcome(CleanupBlocker.FILESYSTEM_AUTHORITY)
     except _migration.MigrationBlockedError:
         return CaptureCleanupOutcome(

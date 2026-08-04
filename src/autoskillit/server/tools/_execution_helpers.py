@@ -256,13 +256,11 @@ def bind_projection_backend(
 
 
 def build_validated_skill_dispatch_contract(
-    resolved_command: str,
     projection_context: SkillProjectionContext,
     add_dirs: list[ValidatedAddDir],
     stored_contract: SkillSessionContract | None,
 ) -> SkillProjectionBinding:
     """Build immutable executor authority and verify resumed projected bytes."""
-    del resolved_command
     contract = build_skill_projection_binding(
         projection_context,
         artifact_paths=(add_dir.path for add_dir in add_dirs),

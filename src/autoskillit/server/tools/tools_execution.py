@@ -1824,7 +1824,6 @@ async def run_skill(
                 )
 
             _capability_contract = build_validated_skill_dispatch_contract(
-                resolved_command,
                 projection_context,
                 skill_add_dirs,
                 _stored_contract,

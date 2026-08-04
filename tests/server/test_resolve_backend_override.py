@@ -18,11 +18,14 @@ def _backend(result):
 
 class TestResolveBackendOverride:
     def test_exact_recipe_step_match(self) -> None:
+        from autoskillit.core import BackendAuthorityKind
         from autoskillit.server._guards import _resolve_backend_override
 
         cfg = _make_backend(recipe_overrides={"remediation": {"dry_walkthrough": "codex"}})
         result = _resolve_backend_override("dry_walkthrough", "remediation", cfg)
         assert _backend(result) == "codex"
+        assert result is not None
+        assert result.kind is BackendAuthorityKind.RECIPE
 
     def test_recipe_wildcard(self) -> None:
         from autoskillit.server._guards import _resolve_backend_override
@@ -42,12 +45,14 @@ class TestResolveBackendOverride:
         )
 
     def test_step_override_with_recipe_context(self) -> None:
+        from autoskillit.core import BackendAuthorityKind
         from autoskillit.server._guards import _resolve_backend_override
 
         cfg = _make_backend(step_overrides={"dry_walkthrough": "codex"})
-        assert (
-            _backend(_resolve_backend_override("dry_walkthrough", "remediation", cfg)) == "codex"
-        )
+        result = _resolve_backend_override("dry_walkthrough", "remediation", cfg)
+        assert _backend(result) == "codex"
+        assert result is not None
+        assert result.kind is BackendAuthorityKind.STEP
 
     def test_step_override_requires_recipe_context(self) -> None:
         from autoskillit.server._guards import _resolve_backend_override

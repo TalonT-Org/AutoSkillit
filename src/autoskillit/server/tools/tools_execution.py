@@ -1511,11 +1511,7 @@ async def run_skill(
                 _backend_authority = _resume_backend_authority
                 _effective_backend_obj = _resume_backend_obj
             elif _explicit_resolution is not None:
-                authority_kind = (
-                    BackendAuthorityKind.RECIPE
-                    if _explicit_resolution.tier.startswith("recipe_")
-                    else BackendAuthorityKind.STEP
-                )
+                authority_kind = _explicit_resolution.kind
                 authority_tier = (
                     BackendAuthorityTier.RECIPE
                     if authority_kind is BackendAuthorityKind.RECIPE

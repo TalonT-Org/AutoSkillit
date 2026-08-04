@@ -12,9 +12,8 @@ from autoskillit.core import (
     ReviewOperationState,
     ReviewReconciliationResult,
     ReviewResponseClass,
-    compute_review_operation_key,
 )
-from autoskillit.execution import GitHubReviewLedger
+from autoskillit.execution import GitHubReviewLedger, compute_review_operation_key
 from autoskillit.execution.github_review import _poster_support
 from autoskillit.execution.github_review.gateway import GatewayResult
 

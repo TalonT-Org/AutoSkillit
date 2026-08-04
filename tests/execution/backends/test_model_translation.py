@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core import SkillSessionConfig
-from autoskillit.core.types._type_backend import CODEX_MODEL_ALIASES
+from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES, CODEX_MODEL_ALIASES
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
 from tests.execution.backends._plugin_binding import plugin_binding
@@ -36,8 +36,8 @@ class TestCodexTranslateModel:
 
 
 class TestClaudeTranslateModel:
-    def test_identity(self) -> None:
-        assert ClaudeCodeBackend().translate_model("sonnet") == "sonnet"
+    def test_sonnet_alias(self) -> None:
+        assert ClaudeCodeBackend().translate_model("sonnet") == CLAUDE_MODEL_ALIASES["sonnet"]
 
     def test_preserves_context_suffix(self) -> None:
         assert ClaudeCodeBackend().translate_model("opus[1m]") == "opus[1m]"
@@ -90,13 +90,13 @@ class TestClaudeBuildCmdTranslatesModel:
     def test_build_interactive_cmd_preserves_suffix(self) -> None:
         spec = ClaudeCodeBackend().build_interactive_cmd(model="sonnet[1m]")
         model_idx = list(spec.cmd).index("--model")
-        assert spec.cmd[model_idx + 1] == "sonnet[1m]"
+        assert spec.cmd[model_idx + 1] == f"{CLAUDE_MODEL_ALIASES['sonnet']}[1m]"
 
     def test_build_skill_session_cmd_preserves_suffix(self) -> None:
         config = SkillSessionConfig(model="sonnet[1m]", completion_marker="%%DONE%%")
         spec = ClaudeCodeBackend().build_skill_session_cmd("/test", "/repo", config)
         model_idx = list(spec.cmd).index("--model")
-        assert spec.cmd[model_idx + 1] == "sonnet[1m]"
+        assert spec.cmd[model_idx + 1] == f"{CLAUDE_MODEL_ALIASES['sonnet']}[1m]"
 
     def test_build_food_truck_cmd_preserves_suffix(self) -> None:
         from pathlib import Path

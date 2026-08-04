@@ -6,7 +6,7 @@ import pytest
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-VALID_CLAUDE_MODEL_IDS: frozenset[str] = frozenset({"sonnet", "opus", "haiku"})
+VALID_CLAUDE_MODEL_IDS: frozenset[str] = frozenset({"claude-sonnet-5", "opus", "haiku"})
 
 
 def test_anomaly_detection_aliases_keys_match_shared() -> None:
@@ -58,6 +58,12 @@ def test_claude_alias_values_in_allowlist() -> None:
             f"CLAUDE_MODEL_ALIASES[{key!r}] = {value!r} is not in VALID_CLAUDE_MODEL_IDS. "
             "Update VALID_CLAUDE_MODEL_IDS if the intended target model changed."
         )
+
+
+def test_claude_sonnet_alias_uses_sonnet_5() -> None:
+    from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES
+
+    assert CLAUDE_MODEL_ALIASES["sonnet"] == "claude-sonnet-5"
 
 
 def test_codex_alias_values_differ_from_keys() -> None:

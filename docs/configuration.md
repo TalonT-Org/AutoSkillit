@@ -32,7 +32,7 @@ test_check:
   command: ["task", "test-check"]
 
 model:
-  default: "claude-sonnet-4-6"
+  default: "claude-sonnet-5"
 
 worktree_setup:
   command: ["task", "install-worktree"]
@@ -70,7 +70,7 @@ AutoSkillit uses [dynaconf](https://www.dynaconf.com/) for configuration. Enviro
 
 ```bash
 AUTOSKILLIT_TEST_CHECK__TIMEOUT=300           # sets test_check.timeout to 300
-AUTOSKILLIT_MODEL__DEFAULT=claude-sonnet-4-6  # sets model.default
+AUTOSKILLIT_MODEL__DEFAULT=claude-sonnet-5    # sets model.default
 AUTOSKILLIT_QUOTA_GUARD__ENABLED=false        # disables quota guard
 ```
 
@@ -375,7 +375,7 @@ test_check:
   command: ["pytest", "-v", "--tb=short"]
 
 model:
-  default: "claude-sonnet-4-6"
+  default: "claude-sonnet-5"
 
 worktree_setup:
   command: ["task", "install-worktree"]

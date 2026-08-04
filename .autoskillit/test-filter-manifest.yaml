@@ -109,6 +109,9 @@ src/autoskillit/agents/**:
   - arch/
   - contracts/
   - planner/
+  - execution/
+  - workspace/
+  - planner/
 
 .github/workflows/*.yml:
   - infra/

@@ -75,6 +75,7 @@ from autoskillit.pipeline import (
     DefaultGitHubApiLog,
     DefaultTimingLog,
     DefaultTokenLog,
+    OwnerBoundExplorationContextStore,
     ToolContext,
 )
 from autoskillit.recipe import (
@@ -89,6 +90,7 @@ from autoskillit.server._audit_authority_materializer import (
     DefaultAuditAuthorityMaterializer,
     DefaultCommittedDispositionResolver,
 )
+from autoskillit.server._exploration_service import DefaultExplorationService
 from autoskillit.server._recipe_execution import DefaultInputPreflightResolver
 from autoskillit.workspace import (
     DefaultCloneManager,
@@ -306,6 +308,10 @@ def make_context(
     gate = DefaultGateState(enabled=False)
 
     project_dir = project_dir if project_dir is not None else resolve_project_dir()
+    exploration_trusted_root = (
+        OwnerBoundExplorationContextStore.verified_repository_root_from_launch_environment()
+        or project_dir
+    )
     temp_dir = resolve_temp_dir(project_dir, config.workspace.temp_dir)
     temp_dir_relpath = temp_dir_display_str(config.workspace.temp_dir)
 
@@ -428,6 +434,10 @@ def make_context(
         audit_admission_ledger=audit_admission_ledger,
         audit_authority_materializer=audit_authority_materializer,
         committed_disposition_resolver=committed_disposition_resolver,
+        exploration_context_store=OwnerBoundExplorationContextStore(
+            trusted_root=exploration_trusted_root,
+            service=DefaultExplorationService(),
+        ),
         ephemeral_root=ephemeral_root,
         quota_refresh_task=None,
         session_serve_overrides=None,

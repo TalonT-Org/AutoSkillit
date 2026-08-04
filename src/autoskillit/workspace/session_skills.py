@@ -17,7 +17,7 @@ from collections.abc import Set as AbstractSet
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, NotRequired, TypedDict, cast
 
 from autoskillit.core import (
     SESSION_ADD_DIR_SUBDIR,
@@ -75,6 +75,11 @@ logger = get_logger(__name__)
 
 _SESSION_LEASES_SUBDIR = ".session-leases"
 _SKILL_UNAVAILABILITY_SCHEMA_VERSION = 1
+
+
+class _SessionSetupKwargs(TypedDict):
+    parent_sandbox_mode: str
+    explorer_binding_env: NotRequired[Mapping[str, Mapping[str, str]]]
 
 
 def _raise_failures(message: str, failures: list[BaseException]) -> None:
@@ -609,6 +614,8 @@ class DefaultSessionSkillManager:
         session_id: str,
         invocation: EffectiveSkillInvocationAuthority,
         projection_context: SkillProjectionContextAuthority,
+        *,
+        explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
     ) -> ValidatedAddDir:
         """Write only a prevalidated closure from its captured canonical content."""
         self._validate_session_id(session_id)
@@ -641,6 +648,7 @@ class DefaultSessionSkillManager:
             session_id,
             invocation.closure,
             projection_context,
+            explorer_binding_env=explorer_binding_env,
         )
 
     def init_session(
@@ -761,11 +769,14 @@ class DefaultSessionSkillManager:
         session_id: str,
         records: tuple[SkillAuthority, ...],
         projection_context: SkillProjectionContextAuthority,
+        *,
+        explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
     ) -> ValidatedAddDir:
         return self._initialize_bound_records(
             session_id,
             records,
             projection_context,
+            explorer_binding_env=explorer_binding_env,
         ).skills_dir
 
     def _initialize_bound_records(
@@ -773,6 +784,8 @@ class DefaultSessionSkillManager:
         session_id: str,
         records: tuple[SkillAuthority, ...],
         projection_context: SkillProjectionContextAuthority,
+        *,
+        explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
     ) -> _InitializedSession:
         self._validate_session_id(session_id)
         if (
@@ -834,6 +847,7 @@ class DefaultSessionSkillManager:
                 records,
                 projection_context,
                 skills_subdir=skills_subdir,
+                explorer_binding_env=explorer_binding_env,
             )
             initialized = _InitializedSession(
                 generated_home=generated_home,
@@ -875,6 +889,7 @@ class DefaultSessionSkillManager:
         projection_context: SkillProjectionContextAuthority,
         *,
         skills_subdir: Path,
+        explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
     ) -> ValidatedAddDir:
         backend = projection_context.backend
         add_dir = generated_home / SESSION_ADD_DIR_SUBDIR
@@ -907,7 +922,12 @@ class DefaultSessionSkillManager:
             if pre_launch_errors:
                 raise RuntimeError(f"Pre-launch check failed: {'; '.join(pre_launch_errors)}")
         if backend is not None:
-            backend.setup_session_dir(generated_home)
+            setup_kwargs: _SessionSetupKwargs = {
+                "parent_sandbox_mode": projection_context.parent_sandbox_mode,
+            }
+            if explorer_binding_env is not None:
+                setup_kwargs["explorer_binding_env"] = explorer_binding_env
+            backend.setup_session_dir(generated_home, **setup_kwargs)
 
         ungated_context = SkillProjectionContext(
             cwd=projection_context.cwd,
@@ -919,6 +939,7 @@ class DefaultSessionSkillManager:
             substitutions=projection_context.substitutions,
             gating=False,
             namespace=projection_context.namespace,
+            parent_sandbox_mode=projection_context.parent_sandbox_mode,
             projection_version=projection_context.projection_version,
         )
         session_records = (

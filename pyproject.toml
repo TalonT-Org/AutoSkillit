@@ -316,8 +316,8 @@ forbidden_modules = [
 ]
 
 # IL-008 | Lens: module-dependency | DS-001
-# Rationale: The six IL-1 peers (config, pipeline, execution, workspace, report,
-# planner) form an
+# Rationale: The seven IL-1 peers (config, pipeline, execution, workspace, report,
+# planner, exploration) form an
 # independent service tier. Lateral imports between them create hidden coupling
 # that prevents each package from being tested and deployed in isolation. The
 # independence contract makes this boundary machine-verifiable and surfaces any
@@ -332,6 +332,7 @@ modules = [
     "autoskillit.workspace",
     "autoskillit.report",
     "autoskillit.planner",
+    "autoskillit.exploration",
 ]
 # EXCEPTION: autoskillit.pipeline.context may import autoskillit.config.
 # pipeline.context.ToolContext owns AutomationConfig as the DI wiring point.

@@ -257,4 +257,22 @@ class CodingAgentBackend(Protocol):
 
     def build_inspector_cmd(self, prompt: str, *, model: str = "") -> CmdSpec: ...
 
-    def setup_session_dir(self, session_dir: Path) -> None: ...
+    def setup_session_dir(
+        self,
+        session_dir: Path,
+        *,
+        parent_sandbox_mode: str = "workspace-write",
+        explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
+    ) -> None: ...
+
+    def refresh_explorer_binding_env(
+        self,
+        session_dir: Path,
+        explorer_binding_env: Mapping[str, Mapping[str, str]],
+    ) -> None: ...
+
+    def clear_explorer_binding_env(
+        self,
+        session_dir: Path,
+        roles: frozenset[str],
+    ) -> None: ...

@@ -26,6 +26,16 @@ from autoskillit.pipeline.context import ToolContext
 from autoskillit.pipeline.context_admission_ledger import (
     DefaultContextAdmissionLedger,
 )
+from autoskillit.pipeline.exploration_context import (
+    EXPLORATION_PRINCIPAL_ROLE,
+    EXPLORER_ROLE_NAMES,
+    CapabilityResolution,
+    CapabilityResolutionStatus,
+    ExplorationContext,
+    ExplorationContextStoreProtocol,
+    ExplorationLaunchBinding,
+    OwnerBoundExplorationContextStore,
+)
 from autoskillit.pipeline.gate import (
     DefaultGateState,
     gate_error_result,
@@ -118,6 +128,14 @@ __all__ = [
     "write_status",
     # context
     "ToolContext",
+    "CapabilityResolution",
+    "CapabilityResolutionStatus",
+    "EXPLORER_ROLE_NAMES",
+    "EXPLORATION_PRINCIPAL_ROLE",
+    "ExplorationContext",
+    "ExplorationContextStoreProtocol",
+    "ExplorationLaunchBinding",
+    "OwnerBoundExplorationContextStore",
     "DefaultAuditAdmissionLedger",
     "DefaultContextAdmissionLedger",
     # kitchen transition

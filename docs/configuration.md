@@ -102,6 +102,14 @@ model:
 
 Recipe steps can also specify a `model` field per-step in their YAML definition.
 
+## Specialized Explorer Agents
+
+`semantic-code-navigator` and `repository-impact-profiler` are built-in terminal Codex explorer
+roles. Their `gpt-5.6-luna`, maximum reasoning-effort, and read-only policy is fixed by the
+registered role definition and is not controlled by `model.default`, `model.override`, or a
+project configuration setting. An L1 parent owns routing and synthesis; callers must not add
+per-role model, permission, or delegation overrides. See [Explorer agents](execution/explorer-agents.md).
+
 ## Worktree Setup
 
 Command to run after creating a git worktree (e.g. to install dependencies).

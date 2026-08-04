@@ -90,6 +90,7 @@ class TestModuleCascadeCore:
     def test_all_entries_present(self) -> None:
         expected_stems = {
             "_json",
+            "agent_definition",
             "artifact_lease",
             "private_file",
             "feature_flags",
@@ -120,6 +121,7 @@ class TestModuleCascadeCore:
             "tool_sequence_analysis",
             "_type_checkpoint",
             "_type_results",
+            "_type_exploration",
             "_type_results_execution",
             "_type_backend",
             "_type_launch",
@@ -206,6 +208,7 @@ class TestModuleCascadeCore:
             {
                 "core",
                 "execution",
+                "exploration",
                 "pipeline",
                 "workspace",
                 "recipe",

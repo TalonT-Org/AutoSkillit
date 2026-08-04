@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from collections.abc import Mapping
 from enum import StrEnum
@@ -16,9 +17,11 @@ from autoskillit.core import (
     MCP_CLIENT_BACKEND_ENV_VAR,
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
+    AgentDef,
     BackendCapabilities,
     BackendConventions,
     CmdSpec,
+    CodexAgentProjectionDef,
     CodingAgentBackend,
     EnvPolicy,
     OutputFormat,
@@ -28,7 +31,8 @@ from autoskillit.core import (
     SkillSessionConfig,
     StreamParser,
     ValidatedAddDir,
-    load_yaml,
+    agent_definition_digest,
+    load_agent_definitions,
     pkg_root,
 )
 from autoskillit.execution.backends.codex import (
@@ -39,6 +43,8 @@ from autoskillit.execution.backends.codex import (
     CodexResultParser,
     CodexSessionLocator,
     CodexStreamParser,
+    clear_explorer_binding_env,
+    refresh_explorer_binding_env,
 )
 from tests.execution.backends._plugin_binding import plugin_binding
 
@@ -628,7 +634,7 @@ class TestCodexBuildSkillSessionCmd:
         )
         assert CodexFlags.RESUME_SUBCOMMAND in spec.cmd
         assert "sess-abc123" in spec.cmd
-        assert "--sandbox" in spec.cmd
+        assert "--sandbox" not in spec.cmd
         assert "-a" not in spec.cmd
 
     def test_completion_marker_with_profile(self) -> None:
@@ -762,6 +768,11 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
         assert "--sandbox" in spec.cmd
         idx = spec.cmd.index("--sandbox")
         assert spec.cmd[idx + 1] == "read-only"
+
+    def test_workspace_write_parent_omits_cli_sandbox_override(self) -> None:
+        config = SkillSessionConfig(sandbox_mode="workspace-write")
+        spec = CodexBackend().build_skill_session_cmd("/test", cwd="/tmp", config=config)
+        assert "--sandbox" not in spec.cmd
 
     def test_config_path_returns_cmdspec(self) -> None:
         config = SkillSessionConfig(completion_marker="%%DONE%%", output_format=OutputFormat.JSON)
@@ -1522,6 +1533,15 @@ class TestCodexDiscardDispositions:
 
 
 class TestCodexBackendSetupSessionDir:
+    _CANONICAL_AUTOSKILLIT_MCP_CONFIG = (
+        "[mcp_servers.autoskillit]\n"
+        'command = "autoskillit"\n'
+        'args = ["mcp"]\n'
+        'env_vars = ["AUTOSKILLIT_HEADLESS_AUTO_GATE"]\n'
+        "startup_timeout_sec = 20\n"
+        "tool_timeout_sec = 30\n"
+    )
+
     @pytest.fixture(autouse=True)
     def _setup_dirs(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         self.fake_home = tmp_path / "fakehome"
@@ -1529,7 +1549,7 @@ class TestCodexBackendSetupSessionDir:
         self.codex_home.mkdir(parents=True)
         self.session_dir = tmp_path / "session"
         self.session_dir.mkdir()
-        (self.session_dir / "config.toml").write_text("[mcp_servers.autoskillit]\n")
+        (self.session_dir / "config.toml").write_text(self._CANONICAL_AUTOSKILLIT_MCP_CONFIG)
         self.fake_log_dir = tmp_path / "logs"
         monkeypatch.setattr(Path, "home", staticmethod(lambda: self.fake_home))
         monkeypatch.setattr(
@@ -1538,9 +1558,58 @@ class TestCodexBackendSetupSessionDir:
         )
 
     def _write_all_source_files(self) -> None:
-        (self.codex_home / "config.toml").write_text("[mcp_servers.autoskillit]\n")
+        (self.codex_home / "config.toml").write_text(self._CANONICAL_AUTOSKILLIT_MCP_CONFIG)
         (self.codex_home / "auth.json").write_text("{}")
         (self.codex_home / ".env").write_text("KEY=val\n")
+
+    @staticmethod
+    def _luna_definition(
+        *,
+        disabled_features: tuple[str, ...] = (),
+        agents_enabled: bool = True,
+    ) -> AgentDef:
+        return AgentDef(
+            name="semantic-code-navigator",
+            description="Bounded semantic navigation",
+            tools=("Read", "Grep", "Glob"),
+            model="sonnet",
+            max_turns=8,
+            body="Return bounded evidence only.",
+            codex=CodexAgentProjectionDef(
+                "gpt-5.6-luna",
+                "max",
+                "read-only",
+                disabled_features,
+                agents_enabled,
+            ),
+        )
+
+    @staticmethod
+    def _explorer_definitions() -> tuple[AgentDef, ...]:
+        names = {"semantic-code-navigator", "repository-impact-profiler"}
+        definitions = tuple(
+            definition
+            for definition in load_agent_definitions(pkg_root() / "agents")
+            if definition.name in names
+        )
+        assert {definition.name for definition in definitions} == names
+        return definitions
+
+    @staticmethod
+    def _explorer_binding_envs(
+        definitions: tuple[AgentDef, ...],
+        *,
+        generation: str,
+    ) -> dict[str, dict[str, str]]:
+        shared_binding = {
+            "AUTOSKILLIT_EXPLORATION_CAPABILITY": f"capability-{generation}",
+            "AUTOSKILLIT_EXPLORATION_ROLE": "shared-explorer-session",
+            "AUTOSKILLIT_EXPLORATION_SESSION_ID": f"session-{generation}",
+            "AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH": (
+                f"/authority/{generation}/shared-session.json"
+            ),
+        }
+        return {definition.name: dict(shared_binding) for definition in definitions}
 
     def test_happy_path_all_files_provisioned(self) -> None:
         self._write_all_source_files()
@@ -1584,22 +1653,15 @@ class TestCodexBackendSetupSessionDir:
         assert (self.session_dir / "agents").is_dir()
 
     def test_agent_toml_set_and_count_match_md_sources(self) -> None:
+        from autoskillit.core import load_agent_definitions
+
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)
         toml_files = list((self.session_dir / "agents").glob("*.toml"))
-        expected_names: set[str] = set()
-        for md_path in (pkg_root() / "agents").glob("*.md"):
-            if md_path.name in ("CLAUDE.md", "AGENTS.md"):
-                continue
-            text = md_path.read_text(encoding="utf-8")
-            if not text.startswith("---"):
-                continue
-            parts = text.split("---", 2)
-            if len(parts) < 3 or not parts[2].strip() or "'''" in parts[2]:
-                continue
-            meta = load_yaml(parts[1])
-            if isinstance(meta, dict) and meta.get("name") and meta.get("description"):
-                expected_names.add(f"{meta['name']}.toml")
+        expected_names = {
+            f"{definition.name}.toml"
+            for definition in load_agent_definitions(pkg_root() / "agents")
+        }
         actual_names = {path.name for path in toml_files}
         assert actual_names == expected_names, (
             f"generated TOMLs {actual_names} != valid source set {expected_names}"
@@ -1618,6 +1680,7 @@ class TestCodexBackendSetupSessionDir:
             assert data["developer_instructions"], (
                 f"{toml_path.name}: developer_instructions empty"
             )
+            assert data["instructions"] == data["developer_instructions"]
             from autoskillit.execution.backends._claude_prompt import codex_discipline_suffix
 
             assert (
@@ -1625,12 +1688,15 @@ class TestCodexBackendSetupSessionDir:
                 .rstrip()
                 .endswith(codex_discipline_suffix().rstrip())
             )
+            assert "AutoSkillit agent definition digest: sha256:" in data["developer_instructions"]
             expected_sandbox = (
                 "read-only"
                 if toml_path.stem
                 in {
                     "pr-review-auditor-reachability",
                     "pr-review-auditor-abstraction-surface",
+                    "semantic-code-navigator",
+                    "repository-impact-profiler",
                 }
                 else "workspace-write"
             )
@@ -1646,6 +1712,8 @@ class TestCodexBackendSetupSessionDir:
         for name in (
             "pr-review-auditor-reachability",
             "pr-review-auditor-abstraction-surface",
+            "semantic-code-navigator",
+            "repository-impact-profiler",
         ):
             data = tomllib.loads(
                 (self.session_dir / "agents" / f"{name}.toml").read_text(encoding="utf-8")
@@ -1664,20 +1732,511 @@ class TestCodexBackendSetupSessionDir:
         assert wp_role["config_file"] == "agents/wp-elaborator.toml"
         assert wp_role["description"]
 
-    def test_profile_agent_registration_takes_precedence(self) -> None:
+    @pytest.mark.parametrize("parent_sandbox", ["read-only", "workspace-write"])
+    def test_parent_sandbox_is_bound_without_preventing_child_narrowing(
+        self, parent_sandbox: str
+    ) -> None:
         import tomllib
 
+        self._write_all_source_files()
+        CodexBackend().setup_session_dir(
+            self.session_dir,
+            parent_sandbox_mode=parent_sandbox,
+        )
+        config = tomllib.loads((self.session_dir / "config.toml").read_text(encoding="utf-8"))
+        if parent_sandbox == "read-only":
+            assert config["sandbox_mode"] == "read-only"
+        else:
+            assert "sandbox_mode" not in config
+
+    def test_injected_luna_definition_is_the_only_generated_role(self) -> None:
+        import tomllib
+
+        definition = self._luna_definition()
+        CodexBackend().setup_session_dir(
+            self.session_dir,
+            parent_sandbox_mode="read-only",
+            agent_defs=(definition,),
+        )
+        generated = tuple((self.session_dir / "agents").glob("*.toml"))
+        assert [path.name for path in generated] == ["semantic-code-navigator.toml"]
+        parsed = tomllib.loads(generated[0].read_text(encoding="utf-8"))
+        assert parsed["model"] == "gpt-5.6-luna"
+        assert parsed["model_reasoning_effort"] == "max"
+        assert parsed["sandbox_mode"] == "read-only"
+        assert "features" not in parsed
+        assert "agents" not in parsed
+        assert agent_definition_digest(definition) in parsed["instructions"]
+        assert agent_definition_digest(definition) in parsed["developer_instructions"]
+
+    def test_explorer_parent_and_roles_project_one_exact_shared_principal(self) -> None:
+        import tomllib
+
+        definitions = self._explorer_definitions()
+        binding_envs = self._explorer_binding_envs(definitions, generation="first")
+        self._write_all_source_files()
+
+        CodexBackend().setup_session_dir(
+            self.session_dir,
+            parent_sandbox_mode="read-only",
+            agent_defs=definitions,
+            explorer_binding_env=binding_envs,
+        )
+
+        shared_binding = next(iter(binding_envs.values()))
+        expected_projection = {
+            "command": "autoskillit",
+            "args": ["mcp"],
+            "env_vars": ["AUTOSKILLIT_HEADLESS_AUTO_GATE"],
+            "startup_timeout_sec": 20,
+            "tool_timeout_sec": 30,
+            "enabled": True,
+            "enabled_tools": [
+                "submit_exploration_query",
+                "get_exploration_page",
+                "resume_exploration_context",
+            ],
+            "env": shared_binding,
+        }
+        role_projections = []
+        for definition in definitions:
+            parsed = tomllib.loads(
+                (self.session_dir / "agents" / f"{definition.name}.toml").read_text(
+                    encoding="utf-8"
+                )
+            )
+            assert set(parsed["mcp_servers"]) == {"autoskillit"}
+            projection = parsed["mcp_servers"]["autoskillit"]
+            assert projection == expected_projection
+            role_projections.append(projection)
+            assert agent_definition_digest(definition) in parsed["developer_instructions"]
+            assert parsed["model"] == "gpt-5.6-luna"
+            assert parsed["model_reasoning_effort"] == "max"
+            assert parsed["sandbox_mode"] == "read-only"
+
+        parent_config = tomllib.loads(
+            (self.session_dir / "config.toml").read_text(encoding="utf-8")
+        )
+        parent_projection = parent_config["mcp_servers"]["autoskillit"]
+        assert parent_config["sandbox_mode"] == "read-only"
+        assert parent_projection == expected_projection
+        assert role_projections == [parent_projection, parent_projection]
+
+    def test_explorer_setup_removes_ambient_parent_mcp_servers(self) -> None:
+        import tomllib
+
+        definitions = self._explorer_definitions()
+        binding_envs = self._explorer_binding_envs(definitions, generation="first")
+        (self.session_dir / "config.toml").write_text(
+            self._CANONICAL_AUTOSKILLIT_MCP_CONFIG
+            + '\n[mcp_servers."ambient"]\ncommand = "ambient-mcp"\n',
+            encoding="utf-8",
+        )
+
+        CodexBackend().setup_session_dir(
+            self.session_dir,
+            parent_sandbox_mode="read-only",
+            agent_defs=definitions,
+            explorer_binding_env=binding_envs,
+        )
+
+        parent = tomllib.loads((self.session_dir / "config.toml").read_text(encoding="utf-8"))
+        assert set(parent["mcp_servers"]) == {"autoskillit"}
+        for definition in definitions:
+            role = tomllib.loads(
+                (self.session_dir / "agents" / f"{definition.name}.toml").read_text(
+                    encoding="utf-8"
+                )
+            )
+            assert set(role["mcp_servers"]) == {"autoskillit"}
+
+    def test_explorer_projection_rejects_missing_transport_before_mutation(self) -> None:
+        definitions = self._explorer_definitions()
+        binding_envs = self._explorer_binding_envs(definitions, generation="first")
+        (self.session_dir / "config.toml").write_text("[mcp_servers.autoskillit]\n")
+
+        with pytest.raises(ValueError, match="requires exactly one canonical.*transport"):
+            CodexBackend().setup_session_dir(
+                self.session_dir,
+                parent_sandbox_mode="read-only",
+                agent_defs=definitions,
+                explorer_binding_env=binding_envs,
+            )
+
+        assert (self.session_dir / "config.toml").read_text(encoding="utf-8") == (
+            "[mcp_servers.autoskillit]\n"
+        )
+        assert not (self.session_dir / "agents").exists()
+
+    def test_explorer_projection_rejects_missing_role_binding_before_mutation(self) -> None:
+        definitions = self._explorer_definitions()
+        binding_envs = self._explorer_binding_envs(definitions, generation="first")
+        binding_envs.pop("repository-impact-profiler")
+        original_config = (self.session_dir / "config.toml").read_text(encoding="utf-8")
+
+        with pytest.raises(ValueError, match="cover exactly the generated explorer roles"):
+            CodexBackend().setup_session_dir(
+                self.session_dir,
+                parent_sandbox_mode="read-only",
+                agent_defs=definitions,
+                explorer_binding_env=binding_envs,
+            )
+
+        assert (self.session_dir / "config.toml").read_text(encoding="utf-8") == original_config
+        assert not (self.session_dir / "agents").exists()
+
+    def test_explorer_projection_rejects_divergent_role_bindings_before_mutation(self) -> None:
+        definitions = self._explorer_definitions()
+        binding_envs = self._explorer_binding_envs(definitions, generation="first")
+        binding_envs["semantic-code-navigator"]["AUTOSKILLIT_EXPLORATION_CAPABILITY"] = (
+            "role-local-capability"
+        )
+        original_config = (self.session_dir / "config.toml").read_text(encoding="utf-8")
+
+        with pytest.raises(ValueError, match="must be identical.*shared session principal"):
+            CodexBackend().setup_session_dir(
+                self.session_dir,
+                parent_sandbox_mode="read-only",
+                agent_defs=definitions,
+                explorer_binding_env=binding_envs,
+            )
+
+        assert (self.session_dir / "config.toml").read_text(encoding="utf-8") == original_config
+        assert not (self.session_dir / "agents").exists()
+
+    def test_refresh_explorer_binding_env_replaces_all_role_bindings(self) -> None:
+        import tomllib
+
+        definitions = self._explorer_definitions()
+        first = self._explorer_binding_envs(definitions, generation="first")
+        second = self._explorer_binding_envs(definitions, generation="second")
+        self._write_all_source_files()
+        backend = CodexBackend()
+        backend.setup_session_dir(
+            self.session_dir,
+            parent_sandbox_mode="read-only",
+            agent_defs=definitions,
+            explorer_binding_env=first,
+        )
+        before_config = (self.session_dir / "config.toml").read_text(encoding="utf-8")
+
+        backend.refresh_explorer_binding_env(self.session_dir, second)
+
+        projected_bindings = []
+        parent = tomllib.loads((self.session_dir / "config.toml").read_text(encoding="utf-8"))
+        projected_bindings.append(parent["mcp_servers"]["autoskillit"]["env"])
+        for definition in definitions:
+            parsed = tomllib.loads(
+                (self.session_dir / "agents" / f"{definition.name}.toml").read_text(
+                    encoding="utf-8"
+                )
+            )
+            projected_bindings.append(parsed["mcp_servers"]["autoskillit"]["env"])
+        assert projected_bindings == [next(iter(second.values()))] * 3
+        assert (self.session_dir / "config.toml").read_text(encoding="utf-8") != before_config
+
+    def test_refresh_explorer_binding_env_prevalidation_preserves_old_bindings(self) -> None:
+        definitions = self._explorer_definitions()
+        first = self._explorer_binding_envs(definitions, generation="first")
+        second = self._explorer_binding_envs(definitions, generation="second")
+        self._write_all_source_files()
+        CodexBackend().setup_session_dir(
+            self.session_dir,
+            parent_sandbox_mode="read-only",
+            agent_defs=definitions,
+            explorer_binding_env=first,
+        )
+        intact_role = self.session_dir / "agents" / "semantic-code-navigator.toml"
+        intact_content = intact_role.read_text(encoding="utf-8")
+        invalid_role = self.session_dir / "agents" / "repository-impact-profiler.toml"
+        invalid_role.write_text("name = 'tampered'\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="missing MCP projection"):
+            refresh_explorer_binding_env(self.session_dir, second)
+
+        assert intact_role.read_text(encoding="utf-8") == intact_content
+
+    def test_refresh_explorer_binding_env_rolls_back_all_three_configs(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        definitions = self._explorer_definitions()
+        first = self._explorer_binding_envs(definitions, generation="first")
+        second = self._explorer_binding_envs(definitions, generation="second")
+        self._write_all_source_files()
+        CodexBackend().setup_session_dir(
+            self.session_dir,
+            parent_sandbox_mode="read-only",
+            agent_defs=definitions,
+            explorer_binding_env=first,
+        )
+        paths = [
+            self.session_dir / "config.toml",
+            *(
+                self.session_dir / "agents" / f"{definition.name}.toml"
+                for definition in definitions
+            ),
+        ]
+        before = {path.relative_to(self.session_dir): path.read_text() for path in paths}
+        real_replace = os.replace
+        rejected_install = False
+
+        def fail_staged_session_install(src: Path | str, dst: Path | str) -> None:
+            nonlocal rejected_install
+            source = Path(src)
+            destination = Path(dst)
+            if (
+                not rejected_install
+                and source.name == "session"
+                and destination == self.session_dir
+            ):
+                rejected_install = True
+                raise OSError("simulated projection swap failure")
+            real_replace(src, dst)
+
+        monkeypatch.setattr(os, "replace", fail_staged_session_install)
+
+        with pytest.raises(OSError, match="simulated projection swap failure"):
+            refresh_explorer_binding_env(self.session_dir, second)
+
+        assert rejected_install is True
+        assert {
+            relative: (self.session_dir / relative).read_text() for relative in before
+        } == before
+
+    @pytest.mark.parametrize("operation", ["refresh", "scrub"])
+    def test_persisted_ambient_mcp_server_fails_closed_before_projection_rewrite(
+        self,
+        operation: str,
+    ) -> None:
+        definitions = self._explorer_definitions()
+        first = self._explorer_binding_envs(definitions, generation="first")
+        second = self._explorer_binding_envs(definitions, generation="second")
+        CodexBackend().setup_session_dir(
+            self.session_dir,
+            parent_sandbox_mode="read-only",
+            agent_defs=definitions,
+            explorer_binding_env=first,
+        )
+        config_path = self.session_dir / "config.toml"
+        config_path.write_text(
+            config_path.read_text(encoding="utf-8")
+            + '\n[mcp_servers."ambient"]\ncommand = "ambient-mcp"\n',
+            encoding="utf-8",
+        )
+        paths = [
+            config_path,
+            *(
+                self.session_dir / "agents" / f"{definition.name}.toml"
+                for definition in definitions
+            ),
+        ]
+        before = {path.relative_to(self.session_dir): path.read_text() for path in paths}
+
+        with pytest.raises(ValueError, match="must configure exactly one MCP server"):
+            if operation == "refresh":
+                refresh_explorer_binding_env(self.session_dir, second)
+            else:
+                clear_explorer_binding_env(self.session_dir, frozenset(first))
+
+        assert {
+            relative: (self.session_dir / relative).read_text() for relative in before
+        } == before
+
+    def test_explorer_projection_rejects_relative_authority_path_before_mutation(self) -> None:
+        definitions = self._explorer_definitions()
+        binding_envs = self._explorer_binding_envs(definitions, generation="first")
+        for binding in binding_envs.values():
+            binding["AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH"] = "relative-authority.json"
+        original_config = (self.session_dir / "config.toml").read_text(encoding="utf-8")
+
+        with pytest.raises(ValueError, match="authority path.*absolute"):
+            CodexBackend().setup_session_dir(
+                self.session_dir,
+                parent_sandbox_mode="read-only",
+                agent_defs=definitions,
+                explorer_binding_env=binding_envs,
+            )
+
+        assert (self.session_dir / "config.toml").read_text(encoding="utf-8") == original_config
+        assert not (self.session_dir / "agents").exists()
+
+    def test_clear_explorer_binding_env_scrubs_all_persisted_secrets(self) -> None:
+        import tomllib
+
+        definitions = self._explorer_definitions()
+        binding_envs = self._explorer_binding_envs(definitions, generation="first")
+        self._write_all_source_files()
+        backend = CodexBackend()
+        backend.setup_session_dir(
+            self.session_dir,
+            parent_sandbox_mode="read-only",
+            agent_defs=definitions,
+            explorer_binding_env=binding_envs,
+        )
+        before_config = (self.session_dir / "config.toml").read_text(encoding="utf-8")
+
+        backend.clear_explorer_binding_env(
+            self.session_dir,
+            frozenset(binding_envs),
+        )
+
+        parent_text = (self.session_dir / "config.toml").read_text(encoding="utf-8")
+        parent = tomllib.loads(parent_text)
+        parent_projection = parent["mcp_servers"]["autoskillit"]
+        assert parent_projection["enabled_tools"] == [
+            "submit_exploration_query",
+            "get_exploration_page",
+            "resume_exploration_context",
+        ]
+        assert "env" not in parent_projection
+        for definition in definitions:
+            role_text = (self.session_dir / "agents" / f"{definition.name}.toml").read_text(
+                encoding="utf-8"
+            )
+            parsed = tomllib.loads(role_text)
+            projection = parsed["mcp_servers"]["autoskillit"]
+            assert projection["enabled_tools"] == [
+                tool.removeprefix("mcp__autoskillit__") for tool in definition.tools
+            ]
+            assert "env" not in projection
+            for key in binding_envs[definition.name]:
+                assert key not in role_text
+            for value in binding_envs[definition.name].values():
+                assert value not in role_text
+        assert parent_text != before_config
+        for key, value in next(iter(binding_envs.values())).items():
+            assert key not in parent_text
+            assert value not in parent_text
+
+    def test_clear_explorer_binding_env_is_idempotent_after_scrubbing(self) -> None:
+        definitions = self._explorer_definitions()
+        binding_envs = self._explorer_binding_envs(definitions, generation="first")
+        self._write_all_source_files()
+        CodexBackend().setup_session_dir(
+            self.session_dir,
+            parent_sandbox_mode="read-only",
+            agent_defs=definitions,
+            explorer_binding_env=binding_envs,
+        )
+        roles = frozenset(binding_envs)
+
+        clear_explorer_binding_env(self.session_dir, roles)
+        first_scrub = {"parent": (self.session_dir / "config.toml").read_text(encoding="utf-8")}
+        first_scrub.update(
+            {
+                role: (self.session_dir / "agents" / f"{role}.toml").read_text(encoding="utf-8")
+                for role in roles
+            }
+        )
+        clear_explorer_binding_env(self.session_dir, roles)
+
+        second_scrub = {"parent": (self.session_dir / "config.toml").read_text(encoding="utf-8")}
+        second_scrub.update(
+            {
+                role: (self.session_dir / "agents" / f"{role}.toml").read_text(encoding="utf-8")
+                for role in roles
+            }
+        )
+        assert second_scrub == first_scrub
+
+    def test_injected_luna_disabled_features_generate_toml_feature_table(self) -> None:
+        import tomllib
+
+        definition = self._luna_definition(disabled_features=("apps", "shell_tool"))
+        CodexBackend().setup_session_dir(
+            self.session_dir,
+            parent_sandbox_mode="read-only",
+            agent_defs=(definition,),
+        )
+        generated = self.session_dir / "agents" / "semantic-code-navigator.toml"
+        generated_text = generated.read_text(encoding="utf-8")
+        parsed = tomllib.loads(generated_text)
+        assert parsed["features"] == {"apps": False, "shell_tool": False}
+        assert generated_text.index("developer_instructions") < generated_text.index("[features]")
+
+    def test_terminal_luna_definition_disables_nested_agents(self) -> None:
+        import tomllib
+
+        definition = self._luna_definition(agents_enabled=False)
+        CodexBackend().setup_session_dir(
+            self.session_dir,
+            parent_sandbox_mode="read-only",
+            agent_defs=(definition,),
+        )
+        generated = self.session_dir / "agents" / "semantic-code-navigator.toml"
+        generated_text = generated.read_text(encoding="utf-8")
+        parsed = tomllib.loads(generated_text)
+        assert parsed["agents"] == {"enabled": False}
+        assert generated_text.index("developer_instructions") < generated_text.index("[agents]")
+
+    def test_injected_luna_definition_rejects_writable_parent_before_mutation(self) -> None:
+        self._write_all_source_files()
+        config_path = self.session_dir / "config.toml"
+        original_config = 'model = "user-pinned"\n[mcp_servers.autoskillit]\n'
+        config_path.write_text(original_config, encoding="utf-8")
+
+        with pytest.raises(
+            ValueError,
+            match="gpt-5.6-luna/max/read-only agent projection requires",
+        ):
+            CodexBackend().setup_session_dir(
+                self.session_dir,
+                parent_sandbox_mode="workspace-write",
+                agent_defs=(self._luna_definition(),),
+            )
+
+        assert config_path.read_text(encoding="utf-8") == original_config
+        assert {path.name for path in self.session_dir.iterdir()} == {"config.toml"}
+
+    def test_ambient_agent_registration_fails_before_mutation(self) -> None:
         (self.session_dir / "config.toml").write_text(
             '[agents."wp-elaborator"]\n'
             'description = "profile role"\n'
             'config_file = "/profile/wp-elaborator.toml"\n'
         )
-        CodexBackend().setup_session_dir(self.session_dir)
-        config = tomllib.loads((self.session_dir / "config.toml").read_text(encoding="utf-8"))
-        assert config["agents"]["wp-elaborator"] == {
-            "description": "profile role",
-            "config_file": "/profile/wp-elaborator.toml",
-        }
+        original_config = (self.session_dir / "config.toml").read_text(encoding="utf-8")
+
+        with pytest.raises(ValueError, match="ambient Codex agent name collision"):
+            CodexBackend().setup_session_dir(self.session_dir)
+
+        assert (self.session_dir / "config.toml").read_text(encoding="utf-8") == original_config
+        assert {path.name for path in self.session_dir.iterdir()} == {"config.toml"}
+
+    def test_duplicate_injected_roles_fail_before_mutation(self) -> None:
+        original_config = (self.session_dir / "config.toml").read_text(encoding="utf-8")
+        definition = self._luna_definition()
+
+        with pytest.raises(ValueError, match="duplicate Codex agent definitions"):
+            CodexBackend().setup_session_dir(
+                self.session_dir,
+                parent_sandbox_mode="read-only",
+                agent_defs=(definition, definition),
+            )
+
+        assert (self.session_dir / "config.toml").read_text(encoding="utf-8") == original_config
+        assert {path.name for path in self.session_dir.iterdir()} == {"config.toml"}
+
+    def test_built_in_agent_name_fails_before_mutation(self) -> None:
+        original_config = (self.session_dir / "config.toml").read_text(encoding="utf-8")
+        definition = AgentDef(
+            name="explorer",
+            description="Reserved-role collision",
+            tools=("Read",),
+            model="sonnet",
+            max_turns=1,
+            body="Return bounded evidence only.",
+            codex=CodexAgentProjectionDef(None, None, "read-only"),
+        )
+
+        with pytest.raises(ValueError, match="Codex built-in agent name collision"):
+            CodexBackend().setup_session_dir(
+                self.session_dir,
+                parent_sandbox_mode="read-only",
+                agent_defs=(definition,),
+            )
+
+        assert (self.session_dir / "config.toml").read_text(encoding="utf-8") == original_config
+        assert {path.name for path in self.session_dir.iterdir()} == {"config.toml"}
 
     def test_agent_toml_model_alias_mapped(self) -> None:
         import tomllib

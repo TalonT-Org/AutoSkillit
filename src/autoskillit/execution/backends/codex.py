@@ -12,6 +12,7 @@ import signal
 import sqlite3
 import stat
 import subprocess
+import tempfile
 import threading
 import time
 import tomllib
@@ -48,6 +49,7 @@ from autoskillit.core import (
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
     SKILL_SESSION_REQUIRED_ENV,
+    AgentDef,
     BackendCapabilities,
     BackendConventions,
     BareResume,
@@ -73,11 +75,12 @@ from autoskillit.core import (
     SkillSemanticPlan,
     SkillSessionConfig,
     ValidatedAddDir,
+    agent_definition_digest,
     atomic_write,
     default_log_dir,
     extract_skill_name,
     get_logger,
-    load_yaml,
+    load_agent_definitions,
     pkg_root,
 )
 from autoskillit.execution.backends._backend_cmd_builder_base import (
@@ -99,6 +102,16 @@ from autoskillit.execution.backends._claude_prompt import (
     codex_discipline_suffix,
 )
 from autoskillit.execution.backends._cmd_builder import CmdBuilder
+from autoskillit.execution.backends._codex.explorer_projection import (
+    _EXPLORER_BINDING_ENV_KEYS,
+    _EXPLORER_ROLE_NAMES,
+    _ROLE_MCP_TRANSPORT_KEYS,
+    _canonical_explorer_mcp_transport,
+    _explorer_mcp_projection,
+    _render_parent_explorer_config,
+    _validated_explorer_binding_env,
+    _validated_explorer_binding_envs,
+)
 from autoskillit.execution.backends._codex_config import (
     CODEX_RECIPE_DELIVERY_BUDGET,
     _format_toml_value,
@@ -126,6 +139,8 @@ __all__ = [
     "CodexSessionLocator",
     "CodexStateReadinessProbe",
     "NON_VARIADIC_CODEX_FLAGS",
+    "clear_explorer_binding_env",
+    "refresh_explorer_binding_env",
     "VARIADIC_CODEX_FLAGS",
     "ensure_codex_mcp_registered",
 ]
@@ -200,7 +215,7 @@ _CODEX_SQLITE_HOME_ENV_VAR = "CODEX_SQLITE_HOME"
 
 def _codex_exec_base(
     *,
-    sandbox: str,
+    sandbox: str | None,
     json: bool = True,
     extra_overrides: Sequence[str] = (),
     bypass_hook_trust: bool = False,
@@ -208,12 +223,13 @@ def _codex_exec_base(
     cmd: list[str] = ["codex", "exec"]
     if json:
         cmd.append(CodexFlags.JSON)
-    cmd.extend([CodexFlags.SANDBOX, sandbox])
+    if sandbox is not None:
+        cmd.extend([CodexFlags.SANDBOX, sandbox])
     for override in extra_overrides:
         cmd.extend([CodexFlags.CONFIG_OVERRIDE, override])
     cmd.extend([CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED])
     if bypass_hook_trust:
-        # Safe: --sandbox workspace-write already restricts filesystem writes.
+        # Hook trust is independent from the sandbox selected by config/CLI.
         cmd.append(CodexFlags.DANGEROUSLY_BYPASS_HOOK_TRUST)
     return cmd
 
@@ -824,7 +840,8 @@ def _validate_inert_rollout_paths(
     return errors, tuple(fingerprint)
 
 
-_READ_ONLY_AGENT_TOOLS = frozenset({"Read", "Grep", "Glob"})
+def _bundled_agent_definitions() -> tuple[AgentDef, ...]:
+    return load_agent_definitions(pkg_root() / "agents")
 
 
 def _canonical_codex_model_effort(
@@ -904,34 +921,154 @@ def _generate_agent_tomls(session_dir: Path) -> int:
     logger.debug("codex_agents_generated", count=count, dest=str(out_dir))
     return count
 
+_CODEX_BUILT_IN_AGENT_NAMES = frozenset({"default", "explorer", "review", "reviewer"})
 
-def _register_agent_tomls(session_dir: Path) -> int:
-    """Register generated agent config layers in the session config."""
+
+def _preflight_agent_projection(
+    session_dir: Path,
+    definitions: tuple[AgentDef, ...],
+) -> None:
+    """Reject the complete role set before mutating a generated Codex home."""
+    names = tuple(definition.name for definition in definitions)
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        raise ValueError(f"duplicate Codex agent definitions: {duplicates}")
+    built_in_collisions = sorted(set(names) & _CODEX_BUILT_IN_AGENT_NAMES)
+    if built_in_collisions:
+        raise ValueError(f"Codex built-in agent name collision: {built_in_collisions}")
+
     config_path = session_dir / "config.toml"
-    config_text = config_path.read_text(encoding="utf-8")
-    config = tomllib.loads(config_text)
+    config = tomllib.loads(config_path.read_text(encoding="utf-8"))
     configured_agents = config.get("agents", {})
     if not isinstance(configured_agents, dict):
-        configured_agents = {}
+        raise ValueError("Codex config agents table must be a mapping")
+    ambient_collisions = sorted(set(names) & set(configured_agents))
+    if ambient_collisions:
+        raise ValueError(f"ambient Codex agent name collision: {ambient_collisions}")
 
+    agents_dir = session_dir / "agents"
+    if agents_dir.exists() and not agents_dir.is_dir():
+        raise ValueError(f"Codex agents path is not a directory: {agents_dir}")
+    artifact_collisions = sorted(
+        definition.name
+        for definition in definitions
+        if (agents_dir / f"{definition.name}.toml").exists()
+    )
+    if artifact_collisions:
+        raise ValueError(f"ambient Codex agent artifact collision: {artifact_collisions}")
+
+
+def _render_agent_toml(
+    definition: AgentDef,
+    *,
+    explorer_binding_env: Mapping[str, str] | None = None,
+    explorer_mcp_transport: Mapping[str, object] | None = None,
+    project_explorer_mcp: bool = False,
+) -> str:
+    """Render and parse one role before its output directory is touched."""
+    digest = agent_definition_digest(definition)
+    lines = [
+        f"name = {_format_toml_value(definition.name)}",
+        f"description = {_format_toml_value(definition.description)}",
+        f"sandbox_mode = {_format_toml_value(definition.codex.sandbox_mode)}",
+    ]
+    if definition.codex.model is not None:
+        lines.append(f"model = {_format_toml_value(definition.codex.model)}")
+    if definition.codex.reasoning_effort is not None:
+        lines.append(
+            f"model_reasoning_effort = {_format_toml_value(definition.codex.reasoning_effort)}"
+        )
+    body = (
+        f"{definition.body}\n\n"
+        f"AutoSkillit agent definition digest: {digest}\n\n"
+        f"{codex_discipline_suffix()}"
+    )
+    lines.append(f"instructions = '''\n{body}\n'''")
+    lines.append(f"developer_instructions = '''\n{body}\n'''")
+    if definition.codex.disabled_features:
+        lines.append("[features]")
+        lines.extend(f"{feature} = false" for feature in definition.codex.disabled_features)
+    if not definition.codex.agents_enabled:
+        lines.extend(("[agents]", "enabled = false"))
+    if explorer_binding_env is not None and not project_explorer_mcp:
+        raise ValueError("an explorer binding requires an explorer MCP projection")
+    if explorer_mcp_transport is not None and not project_explorer_mcp:
+        raise ValueError("an explorer MCP transport requires an explorer MCP projection")
+    if project_explorer_mcp:
+        if explorer_mcp_transport is None:
+            raise ValueError("an explorer MCP projection requires a canonical transport")
+        projection = _explorer_mcp_projection(
+            explorer_mcp_transport,
+            explorer_binding_env,
+        )
+        lines.append("[mcp_servers.autoskillit]")
+        lines.extend(
+            f"{key} = {_format_toml_value(projection[key])}"
+            for key in (*_ROLE_MCP_TRANSPORT_KEYS, "enabled", "enabled_tools")
+            if key in projection
+        )
+        if explorer_binding_env is not None:
+            lines.append("[mcp_servers.autoskillit.env]")
+            lines.extend(
+                f"{key} = {_format_toml_value(explorer_binding_env[key])}"
+                for key in sorted(_EXPLORER_BINDING_ENV_KEYS)
+            )
+    rendered = "\n".join(lines) + "\n"
+    tomllib.loads(rendered)
+    return rendered
+
+
+def _generate_agent_tomls(
+    session_dir: Path,
+    agent_defs: tuple[AgentDef, ...] | None = None,
+    *,
+    explorer_binding_envs: Mapping[str, Mapping[str, str]] | None = None,
+    explorer_mcp_transport: Mapping[str, object] | None = None,
+) -> int:
+    definitions = _bundled_agent_definitions() if agent_defs is None else agent_defs
+    bindings = explorer_binding_envs or {}
+    rendered = {
+        definition.name: _render_agent_toml(
+            definition,
+            explorer_binding_env=bindings.get(definition.name),
+            explorer_mcp_transport=(
+                explorer_mcp_transport if definition.name in bindings else None
+            ),
+            project_explorer_mcp=definition.name in bindings,
+        )
+        for definition in definitions
+    }
+    out_dir = session_dir / "agents"
+    out_dir.mkdir(exist_ok=True)
+    for definition in definitions:
+        toml_path = out_dir / f"{definition.name}.toml"
+        atomic_write(toml_path, rendered[definition.name])
+    logger.debug("codex_agents_generated", count=len(definitions), dest=str(out_dir))
+    return len(definitions)
+
+
+def _register_agent_tomls(
+    session_dir: Path,
+    agent_defs: tuple[AgentDef, ...] | None = None,
+) -> int:
+    config_path = session_dir / "config.toml"
+    config_text = config_path.read_text(encoding="utf-8")
+    tomllib.loads(config_text)
     registrations: list[str] = []
-    for agent_path in sorted((session_dir / "agents").glob("*.toml")):
+    definitions = _bundled_agent_definitions() if agent_defs is None else agent_defs
+    for definition in definitions:
+        agent_path = session_dir / "agents" / f"{definition.name}.toml"
         agent = tomllib.loads(agent_path.read_text(encoding="utf-8"))
-        name = agent.get("name")
-        description = agent.get("description")
-        if not isinstance(name, str) or not name or name in configured_agents:
-            continue
-        if not isinstance(description, str) or not description:
-            continue
+        if agent.get("name") != definition.name:
+            raise ValueError(f"generated agent identity mismatch: {agent_path}")
         registrations.extend(
             [
-                f"[agents.{_format_toml_value(name)}]",
-                f"description = {_format_toml_value(description)}",
+                f"[agents.{_format_toml_value(definition.name)}]",
+                f"description = {_format_toml_value(definition.description)}",
                 f"config_file = {_format_toml_value(f'agents/{agent_path.name}')}",
                 "",
             ]
         )
-
     if not registrations:
         return 0
     separator = "\n" if config_text.endswith("\n") else "\n\n"
@@ -940,6 +1077,270 @@ def _register_agent_tomls(session_dir: Path) -> int:
     tomllib.loads(updated)
     atomic_write(config_path, updated)
     return len(registrations) // 4
+
+
+def _validate_existing_explorer_role_toml(
+    toml_path: Path,
+    definition: AgentDef,
+    *,
+    require_binding_env: bool,
+    explorer_mcp_transport: Mapping[str, object],
+) -> dict[str, str] | None:
+    """Ensure a resumed role artifact still has the canonical non-secret projection."""
+    try:
+        current = tomllib.loads(toml_path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise ValueError(f"invalid materialized explorer role {toml_path}: {exc}") from exc
+    expected = tomllib.loads(
+        _render_agent_toml(
+            definition,
+            explorer_mcp_transport=explorer_mcp_transport,
+            project_explorer_mcp=True,
+        )
+    )
+    current_server = current.get("mcp_servers", {}).get("autoskillit")
+    expected_server = expected["mcp_servers"]["autoskillit"]
+    if not isinstance(current_server, dict):
+        raise ValueError(f"materialized explorer role missing MCP projection: {toml_path}")
+    current_env = current_server.pop("env", None)
+    expected_server.pop("env", None)
+    if current != expected:
+        raise ValueError(f"materialized explorer role does not match its AgentDef: {toml_path}")
+    if current_env is None and not require_binding_env:
+        return None
+    if not isinstance(current_env, dict):
+        raise ValueError(
+            f"materialized explorer role has an invalid binding environment: {toml_path}"
+        )
+    return _validated_explorer_binding_env(definition.name, current_env)
+
+
+def _validate_existing_parent_explorer_projection(
+    session_config: Mapping[str, object],
+    *,
+    require_binding_env: bool,
+    explorer_mcp_transport: Mapping[str, object],
+) -> dict[str, str] | None:
+    """Validate the parent half of the shared-principal MCP projection."""
+    if session_config.get("sandbox_mode") != "read-only":
+        raise ValueError("materialized explorer parent must be read-only")
+    servers = session_config.get("mcp_servers")
+    if not isinstance(servers, dict) or set(servers) != {"autoskillit"}:
+        raise ValueError("materialized explorer parent must configure exactly one MCP server")
+    current_server = servers.get("autoskillit")
+    if not isinstance(current_server, dict):
+        raise ValueError("materialized explorer parent is missing its MCP projection")
+    current_server = dict(current_server)
+    current_env = current_server.pop("env", None)
+    expected_server = _explorer_mcp_projection(explorer_mcp_transport, None)
+    if current_server != expected_server:
+        raise ValueError("materialized explorer parent has a divergent MCP projection")
+    if current_env is None and not require_binding_env:
+        return None
+    if not isinstance(current_env, dict):
+        raise ValueError("materialized explorer parent has an invalid binding environment")
+    return _validated_explorer_binding_env("parent", current_env)
+
+
+def _validate_materialized_explorer_roles(
+    session_dir: Path,
+    definitions: tuple[AgentDef, ...],
+    roles: frozenset[str],
+    *,
+    require_binding_env: bool,
+) -> tuple[dict[str, AgentDef], dict[str, object], str]:
+    """Validate registered persisted explorer artifacts before a grouped rewrite."""
+    if any(type(role) is not str for role in roles):
+        raise ValueError("explorer role cleanup set must contain only text names")
+    definitions_by_name = {definition.name: definition for definition in definitions}
+    if roles != _EXPLORER_ROLE_NAMES or not roles <= set(definitions_by_name):
+        raise ValueError(f"unknown explorer roles: {sorted(roles - set(definitions_by_name))}")
+    agents_dir = session_dir / "agents"
+    if not agents_dir.is_dir():
+        raise ValueError(f"materialized Codex agents directory is missing: {agents_dir}")
+    config_path = session_dir / "config.toml"
+    try:
+        config_text = config_path.read_text(encoding="utf-8")
+        session_config = tomllib.loads(config_text)
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise ValueError(f"invalid materialized Codex config: {exc}") from exc
+    registered_agents = session_config.get("agents")
+    if not isinstance(registered_agents, dict):
+        raise ValueError("materialized Codex config has no agent registrations")
+    explorer_mcp_transport = _canonical_explorer_mcp_transport(config_path)
+    projected_bindings = [
+        _validate_existing_parent_explorer_projection(
+            session_config,
+            require_binding_env=require_binding_env,
+            explorer_mcp_transport=explorer_mcp_transport,
+        )
+    ]
+
+    selected: dict[str, AgentDef] = {}
+    for role in sorted(roles):
+        definition = definitions_by_name[role]
+        registration = registered_agents.get(role)
+        expected_path = f"agents/{role}.toml"
+        if not isinstance(registration, dict) or registration.get("config_file") != expected_path:
+            raise ValueError(
+                f"materialized Codex config has no canonical registration for {role!r}"
+            )
+        projected_bindings.append(
+            _validate_existing_explorer_role_toml(
+                agents_dir / f"{role}.toml",
+                definition,
+                require_binding_env=require_binding_env,
+                explorer_mcp_transport=explorer_mcp_transport,
+            )
+        )
+        selected[role] = definition
+    if any(binding != projected_bindings[0] for binding in projected_bindings[1:]):
+        raise ValueError("materialized explorer bindings diverge from the shared principal")
+    return selected, explorer_mcp_transport, config_text
+
+
+def _atomically_replace_explorer_projection(
+    session_dir: Path,
+    rendered_config: str,
+    rendered_roles: Mapping[str, str],
+) -> None:
+    """Swap the parent and both roles as one staged session-root transaction."""
+    stage_root = Path(
+        tempfile.mkdtemp(prefix=".autoskillit-explorer-refresh-", dir=session_dir.parent)
+    )
+    staged_session = stage_root / "session"
+    backup_session = stage_root / "previous-session"
+    swapped = False
+    moved_original = False
+    try:
+        shutil.copytree(session_dir, staged_session, symlinks=True)
+        atomic_write(staged_session / "config.toml", rendered_config)
+        for role, content in rendered_roles.items():
+            atomic_write(staged_session / "agents" / f"{role}.toml", content)
+        os.replace(session_dir, backup_session)
+        moved_original = True
+        try:
+            os.replace(staged_session, session_dir)
+            swapped = True
+        except OSError:
+            os.replace(backup_session, session_dir)
+            moved_original = False
+            raise
+    finally:
+        if not swapped and moved_original and backup_session.exists() and not session_dir.exists():
+            os.replace(backup_session, session_dir)
+        shutil.rmtree(stage_root, ignore_errors=True)
+
+
+def refresh_explorer_binding_env(
+    session_dir: Path,
+    explorer_binding_env: Mapping[str, Mapping[str, str]],
+) -> None:
+    """Atomically replace only server-issued explorer binding values on resume.
+
+    The helper validates the persisted parent and both definition-derived role
+    layers before staging a replacement session root, so a failed refresh
+    cannot leave any of the three configs on a different principal.
+    """
+    definitions = _bundled_agent_definitions()
+    binding_envs = _validated_explorer_binding_envs(definitions, explorer_binding_env)
+    if not binding_envs:
+        return
+
+    definitions_by_name, explorer_mcp_transport, config_text = (
+        _validate_materialized_explorer_roles(
+            session_dir,
+            definitions,
+            frozenset(binding_envs),
+            require_binding_env=True,
+        )
+    )
+    shared_binding = next(iter(binding_envs.values()))
+    rendered_config = _render_parent_explorer_config(
+        config_text,
+        explorer_mcp_transport=explorer_mcp_transport,
+        explorer_binding_env=shared_binding,
+    )
+    rendered_roles: dict[str, str] = {}
+    for role, definition in definitions_by_name.items():
+        rendered_roles[role] = _render_agent_toml(
+            definition,
+            explorer_binding_env=shared_binding,
+            explorer_mcp_transport=explorer_mcp_transport,
+            project_explorer_mcp=True,
+        )
+    _atomically_replace_explorer_projection(
+        session_dir,
+        rendered_config,
+        rendered_roles,
+    )
+
+
+def clear_explorer_binding_env(session_dir: Path, roles: frozenset[str]) -> None:
+    """Atomically scrub persisted explorer secrets while retaining the broker allowlist."""
+    if not isinstance(roles, frozenset):
+        raise ValueError("explorer role cleanup set must be a frozenset")
+    if not roles:
+        return
+    definitions = _bundled_agent_definitions()
+    definitions_by_name, explorer_mcp_transport, config_text = (
+        _validate_materialized_explorer_roles(
+            session_dir,
+            definitions,
+            roles,
+            require_binding_env=False,
+        )
+    )
+    rendered_config = _render_parent_explorer_config(
+        config_text,
+        explorer_mcp_transport=explorer_mcp_transport,
+        explorer_binding_env=None,
+    )
+    rendered_roles = {
+        role: _render_agent_toml(
+            definition,
+            explorer_mcp_transport=explorer_mcp_transport,
+            project_explorer_mcp=True,
+        )
+        for role, definition in definitions_by_name.items()
+    }
+    _atomically_replace_explorer_projection(
+        session_dir,
+        rendered_config,
+        rendered_roles,
+    )
+
+
+def _render_parent_sandbox_config(config_text: str, sandbox_mode: str) -> str:
+    """Render the generated-home config with the normalized parent sandbox."""
+    if sandbox_mode not in {"read-only", "workspace-write"}:
+        raise ValueError(f"unsupported parent sandbox mode: {sandbox_mode!r}")
+    lines = config_text.splitlines()
+    table_start = next(
+        (i for i, line in enumerate(lines) if line.lstrip().startswith("[")), len(lines)
+    )
+    key_indexes = [
+        i
+        for i, line in enumerate(lines[:table_start])
+        if line.split("=", 1)[0].strip() == "sandbox_mode"
+    ]
+    if len(key_indexes) > 1:
+        raise ValueError("generated Codex config has duplicate top-level sandbox_mode keys")
+    if key_indexes:
+        del lines[key_indexes[0]]
+    if sandbox_mode == "read-only":
+        table_start = next(
+            (i for i, line in enumerate(lines) if line.lstrip().startswith("[")), len(lines)
+        )
+        replacement = f"sandbox_mode = {_format_toml_value(sandbox_mode)}"
+        lines.insert(table_start, replacement)
+    updated = "\n".join(lines) + "\n"
+    parsed = tomllib.loads(updated)
+    if sandbox_mode == "read-only" and parsed.get("sandbox_mode") != sandbox_mode:
+        raise ValueError("generated Codex config did not retain the parent sandbox mode")
+    if sandbox_mode == "workspace-write" and "sandbox_mode" in parsed:
+        raise ValueError("generated Codex config retained a workspace-write sandbox pin")
+    return updated
 
 
 def _materialize_profile_skills(
@@ -1067,6 +1468,7 @@ class CodexBackend(BackendCmdBuilderBase):
             session_dir_persistent=True,
             cook_startup_observer_capable=True,
             supports_model_invocation_gating=False,
+            terminal_explorer_capable=True,
             unnegotiated_tool_result_token_limit=(
                 CODEX_RECIPE_DELIVERY_BUDGET.ordinary_omitted_result_token_limit
             ),
@@ -1299,7 +1701,7 @@ class CodexBackend(BackendCmdBuilderBase):
         if network_access:
             _net_overrides.append("sandbox_workspace_write.network_access=true")
         cmd = _codex_exec_base(
-            sandbox=sandbox_mode,
+            sandbox=sandbox_mode if sandbox_mode == "read-only" else None,
             bypass_hook_trust=_should_bypass_hook_trust(
                 self.capabilities.hook_trust_policy,
                 automated_session=True,
@@ -1719,13 +2121,41 @@ class CodexBackend(BackendCmdBuilderBase):
             errors.append("Codex MCP validation mutated the inert rollout path topology")
         return errors
 
-    def setup_session_dir(self, session_dir: Path) -> None:
+    def setup_session_dir(
+        self,
+        session_dir: Path,
+        *,
+        parent_sandbox_mode: str = "workspace-write",
+        agent_defs: tuple[AgentDef, ...] | None = None,
+        explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
+    ) -> None:
         assert self.source_codex_home is not None
         codex_home_source = self.source_codex_home
         config_path = session_dir / "config.toml"
         if not config_path.is_file():
             raise FileNotFoundError(f"pre-launch Codex config snapshot is missing: {config_path}")
-        tomllib.loads(config_path.read_text(encoding="utf-8"))
+        definitions = _bundled_agent_definitions() if agent_defs is None else agent_defs
+        explorer_binding_envs = _validated_explorer_binding_envs(definitions, explorer_binding_env)
+        explorer_mcp_transport = (
+            _canonical_explorer_mcp_transport(config_path) if explorer_binding_envs else None
+        )
+        if explorer_binding_envs and parent_sandbox_mode != "read-only":
+            raise ValueError("explorer shared-principal projection requires a read-only parent")
+        AgentDef.validate_injected_parent_policy(agent_defs, parent_sandbox_mode)
+        _preflight_agent_projection(session_dir, definitions)
+        rendered_parent_config = _render_parent_sandbox_config(
+            config_path.read_text(encoding="utf-8"),
+            parent_sandbox_mode,
+        )
+        if explorer_binding_envs:
+            assert explorer_mcp_transport is not None
+            shared_binding = next(iter(explorer_binding_envs.values()))
+            rendered_parent_config = _render_parent_explorer_config(
+                rendered_parent_config,
+                explorer_mcp_transport=explorer_mcp_transport,
+                explorer_binding_env=shared_binding,
+            )
+        atomic_write(config_path, rendered_parent_config)
 
         auth_source = codex_home_source / "auth.json"
         auth_dest = session_dir / "auth.json"
@@ -1741,13 +2171,30 @@ class CodexBackend(BackendCmdBuilderBase):
         if env_source.exists():
             shutil.copy2(env_source, session_dir / ".env")
 
-        _generate_agent_tomls(session_dir)
-        registered = _register_agent_tomls(session_dir)
+        _generate_agent_tomls(
+            session_dir,
+            definitions,
+            explorer_binding_envs=explorer_binding_envs,
+            explorer_mcp_transport=explorer_mcp_transport,
+        )
+        registered = _register_agent_tomls(session_dir, definitions)
         logger.debug("codex_agents_registered", count=registered)
         _materialize_profile_skills(
             session_dir,
             source_codex_home=codex_home_source,
         )
+
+    def refresh_explorer_binding_env(
+        self,
+        session_dir: Path,
+        explorer_binding_env: Mapping[str, Mapping[str, str]],
+    ) -> None:
+        """Refresh server-issued explorer bindings for a restored Codex session."""
+        refresh_explorer_binding_env(session_dir, explorer_binding_env)
+
+    def clear_explorer_binding_env(self, session_dir: Path, roles: frozenset[str]) -> None:
+        """Scrub terminal explorer bindings from a generated Codex session."""
+        clear_explorer_binding_env(session_dir, roles)
 
     def validate_skill_content(self, content: str) -> list[str]:
         return []

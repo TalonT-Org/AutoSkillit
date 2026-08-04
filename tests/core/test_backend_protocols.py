@@ -46,6 +46,7 @@ def test_coding_agent_backend_has_setup_session_dir_method():
     from autoskillit.core import CodingAgentBackend
 
     assert callable(getattr(CodingAgentBackend, "setup_session_dir", None))
+    assert callable(getattr(CodingAgentBackend, "clear_explorer_binding_env", None))
 
 
 def test_session_locator_has_project_log_dir_method():
@@ -315,7 +316,21 @@ def test_stub_class_satisfies_coding_agent_backend():
         def build_inspector_cmd(self, prompt: str, *, model: str = "") -> CmdSpec:
             return CmdSpec(cmd=(), env={})
 
-        def setup_session_dir(self, session_dir: Path) -> None: ...
+        def setup_session_dir(
+            self,
+            session_dir: Path,
+            *,
+            parent_sandbox_mode: str = "workspace-write",
+            explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
+        ) -> None: ...
+
+        def refresh_explorer_binding_env(
+            self,
+            session_dir: Path,
+            explorer_binding_env: Mapping[str, Mapping[str, str]],
+        ) -> None: ...
+
+        def clear_explorer_binding_env(self, session_dir: Path, roles: frozenset[str]) -> None: ...
 
     assert isinstance(_Backend(), CodingAgentBackend)
 

@@ -4,6 +4,7 @@ Design specifications for planned features and skills.
 
 | Document | Description |
 |---|---|
+| [explorer-capability-conformance.md](explorer-capability-conformance.md) | Capability, sandbox, evidence-authority, attestation, and stop-gate contract for the specialized Codex Luna/max explorer roles |
 | [env-setup-design.md](env-setup-design.md) | Design spec for the dedicated `setup-environment` skill — Docker vs micromamba-host decision tree, structured output tokens, and recipe integration |
 | [recording-replay-accepted-degradations.md](recording-replay-accepted-degradations.md) | Accepted degradations in P8 recording/replay: Claude PTY cassette format incompatibility with Codex replay, and unchanged Claude session recording path |
 | [acp-session-contract.md](acp-session-contract.md) | Normative reference for P6-A3-WP1: all 34 backend/sub-protocol methods, interactive launch/attempt ownership records and identifier scopes, recovery ladder from `RetryReason` to `session/resume`/`session/load`/`session/new`, all 47 `BackendCapabilities` fields, and Codex shim deviations |

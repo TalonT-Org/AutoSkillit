@@ -73,6 +73,13 @@ from ._terminal_table import TerminalColumn as TerminalColumn
 from ._terminal_table import _render_gfm_table as _render_gfm_table
 from ._terminal_table import _render_terminal_table as _render_terminal_table
 from ._version_snapshot import collect_version_snapshot as collect_version_snapshot
+from .agent_definition import AGENT_DEFINITION_DIGEST_DOMAIN as AGENT_DEFINITION_DIGEST_DOMAIN
+from .agent_definition import AgentDef as AgentDef
+from .agent_definition import AgentDefinitionError as AgentDefinitionError
+from .agent_definition import CodexAgentProjectionDef as CodexAgentProjectionDef
+from .agent_definition import agent_definition_digest as agent_definition_digest
+from .agent_definition import load_agent_definition as load_agent_definition
+from .agent_definition import load_agent_definitions as load_agent_definitions
 from .audit_cycle_verifier import ArtifactByteReader as ArtifactByteReader
 from .audit_cycle_verifier import AuditCycleVerificationError as AuditCycleVerificationError
 from .audit_cycle_verifier import AuditCycleVerifier as AuditCycleVerifier
@@ -132,7 +139,14 @@ from .context_admission import (
 from .feature_flags import _collect_disabled_feature_tags as _collect_disabled_feature_tags
 from .feature_flags import is_feature_enabled as is_feature_enabled
 from .git_remote import REMOTE_PRECEDENCE as REMOTE_PRECEDENCE
+from .git_remote import GitHubRepositoryRef as GitHubRepositoryRef
+from .git_remote import RemoteIdentityProbe as RemoteIdentityProbe
+from .git_remote import RemoteIdentityResolution as RemoteIdentityResolution
+from .git_remote import parse_github_remote_url as parse_github_remote_url
 from .git_remote import resolve_clone_remote_name_sync as resolve_clone_remote_name_sync
+from .git_remote import (
+    resolve_repository_remote_identity_sync as resolve_repository_remote_identity_sync,
+)
 from .github_url import _parse_issue_ref as _parse_issue_ref
 from .github_url import normalize_owner_repo as normalize_owner_repo
 from .github_url import parse_github_repo as parse_github_repo
@@ -309,6 +323,7 @@ from .types import CODEX_SCHEMA_VERSION as CODEX_SCHEMA_VERSION
 from .types import CODEX_SESSIONS_SUBDIR as CODEX_SESSIONS_SUBDIR
 from .types import CODEX_STARTUP_TRACE_ENV_VAR as CODEX_STARTUP_TRACE_ENV_VAR
 from .types import CODEX_VALID_MODEL_IDS as CODEX_VALID_MODEL_IDS
+from .types import CODEX_VALID_REASONING_EFFORTS as CODEX_VALID_REASONING_EFFORTS
 from .types import CONFIG_AUTHORITY_KEYS as CONFIG_AUTHORITY_KEYS
 from .types import CONTEXT_ADMISSION_COVERAGE as CONTEXT_ADMISSION_COVERAGE
 from .types import (
@@ -377,6 +392,7 @@ from .types import OUTPUT_DISCIPLINE_DIGEST as OUTPUT_DISCIPLINE_DIGEST
 from .types import OUTPUT_DISCIPLINE_POLICY_VERSION as OUTPUT_DISCIPLINE_POLICY_VERSION
 from .types import OUTPUT_DISCIPLINE_REQUIRED_SKILLS as OUTPUT_DISCIPLINE_REQUIRED_SKILLS
 from .types import PACK_REGISTRY as PACK_REGISTRY
+from .types import PARENT_SANDBOX_MODES as PARENT_SANDBOX_MODES
 from .types import PIPELINE_FORBIDDEN_TOOLS as PIPELINE_FORBIDDEN_TOOLS
 from .types import PR_TELEMETRY_SECTIONS as PR_TELEMETRY_SECTIONS
 from .types import PRODUCER_SCHEMA_FIELDS as PRODUCER_SCHEMA_FIELDS
@@ -1020,6 +1036,7 @@ from .types import new_managed_attempt_id as new_managed_attempt_id
 from .types import new_managed_launch_id as new_managed_launch_id
 from .types import new_plugin_artifact_incarnation_id as new_plugin_artifact_incarnation_id
 from .types import normalize_inherited_fds as normalize_inherited_fds
+from .types import normalize_parent_sandbox_mode as normalize_parent_sandbox_mode
 from .types import parse_plan_paths as parse_plan_paths
 from .types import (
     pop_native_shell_capture_decision as pop_native_shell_capture_decision,
@@ -1048,3 +1065,28 @@ from .types import (
 from .types import validate_label_transition as validate_label_transition
 from .types import validate_recipe_artifact_sections as validate_recipe_artifact_sections
 from .types import validate_skill_capability_roles as validate_skill_capability_roles
+from .types._type_exploration import CapabilityResolution as CapabilityResolution
+from .types._type_exploration import CapabilityResolutionStatus as CapabilityResolutionStatus
+from .types._type_exploration import CollectorReport as CollectorReport
+from .types._type_exploration import CollectorStatus as CollectorStatus
+from .types._type_exploration import CompletenessReport as CompletenessReport
+from .types._type_exploration import ContinuationCursor as ContinuationCursor
+from .types._type_exploration import EvidencePage as EvidencePage
+from .types._type_exploration import EvidenceRecord as EvidenceRecord
+from .types._type_exploration import ExplorationApplicability as ExplorationApplicability
+from .types._type_exploration import (
+    ExplorationContextStoreProtocol as ExplorationContextStoreProtocol,
+)
+from .types._type_exploration import ExplorationQuerySpec as ExplorationQuerySpec
+from .types._type_exploration import ExplorationRouterPlan as ExplorationRouterPlan
+from .types._type_exploration import ExplorationTaskSpec as ExplorationTaskSpec
+from .types._type_exploration import FrontierItem as FrontierItem
+from .types._type_exploration import GraphEdge as GraphEdge
+from .types._type_exploration import GraphNode as GraphNode
+from .types._type_exploration import MethodProvenance as MethodProvenance
+from .types._type_exploration import NodeKey as NodeKey
+from .types._type_exploration import ProfileActivation as ProfileActivation
+from .types._type_exploration import RelationshipKind as RelationshipKind
+from .types._type_exploration import RepositoryIdentity as RepositoryIdentity
+from .types._type_exploration import RepositoryProfileId as RepositoryProfileId
+from .types._type_exploration import RepositorySnapshot as RepositorySnapshot

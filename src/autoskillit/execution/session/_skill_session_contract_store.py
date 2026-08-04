@@ -536,6 +536,7 @@ def _contract_to_dict(contract: SkillSessionContract) -> dict[str, Any]:
             "expected_when": list(contract.write_behavior.expected_when),
         },
         "read_only": contract.read_only,
+        "parent_sandbox_mode": contract.parent_sandbox_mode,
         "completion_required": contract.completion_required,
         "skill_contract_json": contract.skill_contract_json,
         "projection_substitutions": [list(item) for item in contract.projection_substitutions],
@@ -558,6 +559,9 @@ def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
         read_only = data.get("read_only", False)
         if not isinstance(read_only, bool):
             raise ValueError("read_only must be a boolean")
+        parent_sandbox_mode = data["parent_sandbox_mode"]
+        if not isinstance(parent_sandbox_mode, str):
+            raise ValueError("parent_sandbox_mode must be text")
         completion_required = data.get("completion_required", False)
         if not isinstance(completion_required, bool):
             raise ValueError("completion_required must be a boolean")
@@ -634,6 +638,7 @@ def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
                 ),
             ),
             read_only=read_only,
+            parent_sandbox_mode=parent_sandbox_mode,
             completion_required=completion_required,
             skill_contract_json=str(data.get("skill_contract_json", "")),
             projection_substitutions=tuple(

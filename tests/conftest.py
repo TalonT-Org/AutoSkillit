@@ -29,6 +29,7 @@ _LAYER_DIRS: frozenset[str] = frozenset(
         "config",
         "pipeline",
         "execution",
+        "exploration",
         "workspace",
         "recipe",
         "migration",
@@ -50,6 +51,7 @@ _SIZE_DIRS: frozenset[str] = frozenset(
         "core",
         "docs",
         "execution",
+        "exploration",
         "fleet",
         "hooks",
         "infra",
@@ -539,6 +541,7 @@ def bind_test_skill_resume_contract(
     cwd,
     skill_name: str = "implement",
     resolved_command: str | None = None,
+    read_only: bool = False,
 ) -> None:
     """Bind a minimal valid projected contract for resume-path tests."""
     import hashlib
@@ -653,6 +656,8 @@ def bind_test_skill_resume_contract(
         member_activate_deps={skill_name: ()},
         canonical_contents={skill_name: text},
         launch_contract=launch_contract,
+        read_only=read_only,
+        parent_sandbox_mode="read-only" if read_only else "workspace-write",
     )
     store = DefaultSkillSessionContractStore(root=Path(tool_ctx.temp_dir) / "test-skill-contracts")
     correlation_key = store.create_provisional(

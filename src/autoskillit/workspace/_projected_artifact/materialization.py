@@ -30,6 +30,7 @@ from autoskillit.core import (
     atomic_write,
     destination_location,
     dump_yaml_str,
+    normalize_parent_sandbox_mode,
     read_versioned_json,
     temp_dir_display_str,
     write_versioned_json,
@@ -97,11 +98,17 @@ class SkillProjectionContext:
     substitutions: Mapping[str, str] | None = None
     gating: bool | None = None
     namespace: str | None = None
+    parent_sandbox_mode: str = "workspace-write"
     projection_version: int = SKILL_PROJECTION_VERSION
 
     def __post_init__(self) -> None:
         if type(self.projection_version) is not int or self.projection_version < 1:
             raise SkillContractError("projection version must be a positive integer")
+        object.__setattr__(
+            self,
+            "parent_sandbox_mode",
+            normalize_parent_sandbox_mode(self.parent_sandbox_mode),
+        )
         if (self.catalog is None) == (self.invocation is None):
             raise SkillContractError(
                 "projection context must bind exactly one effective catalog or invocation"

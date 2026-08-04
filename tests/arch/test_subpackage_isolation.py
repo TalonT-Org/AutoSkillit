@@ -943,14 +943,15 @@ def test_no_subpackage_exceeds_10_files() -> None:
     """
     EXEMPTIONS: dict[str, int] = {
         # +generation-bound replay store and post-enforcement initialization commits.
-        "server": 20,  # +_audit_authority_materializer canonical publication boundary
+        "server": 21,  # +_exploration_service server-owned collector adapter
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         # +_github_http review boundary and +launch_resolution authority.
         "execution": 19,
-        "core": 30,  # +plugin identity authority + strict audit semantic codec
+        # +agent_definition native-role authority (#4443).
+        "core": 31,
         # +GitHub review types, portable launch authority, stable contract,
-        # closed skill semantics, and the non-executable projection binding shard.
-        "core/types": 49,
+        # closed skill semantics, non-executable projection binding, and explorer contracts.
+        "core/types": 50,
         "cli": 24,  # +_install_contract typed install process boundary (#4409);
         # +_capture_store capture-store stats/reclaim command
         "cli/doctor": 12,  # +_doctor_skills capability declaration authenticity checks;
@@ -965,11 +966,12 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # are one cohesive read/write/clear API with no internal seam to extract)
         "hooks": 22,  # +_capture_process owned shell process-group boundary;
         # +_hook_payload shared payload parser for guards  # noqa: E501
-        "pipeline": 16,  # +context/audit admission ledgers +recipe initialization
+        # +context/audit admission ledgers, recipe initialization, and exploration lifecycle
+        "pipeline": 17,
         # +kitchen transition authority
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
         "recipe/rules": 57,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing +rules_note_shape_contradiction  # noqa: E501
-        "server/tools": 33,  # +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
+        "server/tools": 34,  # noqa: E501 # +tools_exploration read-only broker endpoints; +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
         # auto-init dependency tracker + REVIEW_BEFORE_PLAN ordering telemetry)
         # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate
         # for direct headless executor callers — report_bug, prepare_issue, enrich_issues)
@@ -979,7 +981,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # Three private Codex ownership modules keep lock, prelaunch transaction,
         # and per-attempt storage concerns out of the public backend gateway:
         # +_codex_config_lock, +_codex_prelaunch, +_codex_session_storage.
-        "execution/backends": 16,
+        # +_explorer_conformance version-bound live attestation authority (#4443)
+        "execution/backends": 17,
         "smoke_utils": 11,  # cross-interpreter upgrade smoke support
     }
     violations: list[str] = []
@@ -1210,7 +1213,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "run_skill launch denial paths before command construction (+139 net lines)",
     ),
     "execution/backends/codex.py": (
-        1900,
+        2350,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1245,7 +1248,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "profile probing, and durable cook-storage adapter integration remain co-located "
         "with the backend whose command grammar they validate; managed native-shell "
         "decision and lineage-reference injection remain adjacent to the Codex command "
-        "builders that own the protected environment boundary",
+        "builders that own the protected environment boundary; #4443 adds canonical "
+        "agent-definition projection, parent/child sandbox precedence, and specialized "
+        "Codex explorer role registration and invocation wiring",
     ),
     "execution/backends/claude.py": (
         1100,
@@ -1254,7 +1259,8 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "both are shared builder-interface obligations even though Claude deliberately "
         "does not inject the Codex-only controls; REQ-SEM-ADAPT-001 semantic-plan "
         "adaptation remains on this registered backend so native child syntax and model "
-        "alias resolution cannot drift into a second adapter registry.",
+        "alias resolution cannot drift into a second adapter registry; #4443 also threads "
+        "parent sandbox authority through the shared no-op setup boundary.",
     ),
     "workspace/skill_capabilities.py": (
         1100,
@@ -1354,19 +1360,21 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "and fail-closed health invariants.",
     ),
     "server/tools/tools_execution.py": (
-        2325,
+        2500,
         "REQ-CNST-010-E18: #4419 keeps the attested reservation, dispatch, exhaustive "
         "materialization outcome routing, and durable response finalization at the existing "
         "run_skill transaction boundary. Splitting that control flow would separate success "
         "bookkeeping from the ledger state it must atomically finalize. Managed native-shell "
         "lineage preparation remains at that same attested launch boundary so runtime "
-        "binding and child construction cannot select different modes.",
+        "binding and child construction cannot select different modes; specialized explorer "
+        "projection and execution-identity persistence remain at the same admission boundary.",
     ),
     "server/tools/_execution_helpers.py": (
         1025,
         "REQ-CNST-010-E20: shared run-skill contract lifecycle and response-shaping helpers "
         "remain one server-tool support authority; the managed session metadata additions "
-        "must stay beside contract rehydration and persistence to prevent resume drift.",
+        "must stay beside contract rehydration and persistence to prevent resume drift. #4443 "
+        "also keeps parent sandbox authority in the same fresh/resumed projection contract.",
     ),
     "hook_registry.py": (
         1100,
@@ -1555,6 +1563,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "core/types/_type_subprocess.py",
         "core/types/_type_context_admission_persistence.py",
         "core/types/_type_native_shell_capture.py",
+        "core/types/_type_exploration.py",
     ):
         types_path = AUTOSKILLIT_ROOT / types_filename
         if not types_path.exists():

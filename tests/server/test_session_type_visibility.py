@@ -6,6 +6,10 @@ import pytest
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
+EXPLORATION_TOOLS = frozenset(
+    {"submit_exploration_query", "get_exploration_page", "resume_exploration_context"}
+)
+
 
 @pytest.mark.feature("fleet")
 class TestSessionTypeVisibility:
@@ -483,7 +487,7 @@ class TestSessionTypeVisibility:
 
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
-        kitchen_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS
+        kitchen_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EXPLORATION_TOOLS
         assert kitchen_gated.issubset(tool_names), (
             "All kitchen-tagged gated tools should be visible for non-notification backend"
         )
@@ -581,3 +585,178 @@ class TestFeatureGateVisibility:
         assert FLEET_TOOLS
         for tool in FLEET_TOOLS:
             assert tool in tool_names
+
+
+class TestExplorerBindingVisibility:
+    """A bound terminal explorer is an MCP allowlist, not a kitchen session."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_mcp_visibility(self):
+        from autoskillit.core import ALL_VISIBILITY_TAGS
+        from autoskillit.server import mcp
+
+        mcp._transforms.clear()
+        for tag in sorted(ALL_VISIBILITY_TAGS):
+            mcp.disable(tags={tag})
+        yield
+        mcp._transforms.clear()
+        for tag in sorted(ALL_VISIBILITY_TAGS):
+            mcp.disable(tags={tag})
+
+    @pytest.mark.parametrize(
+        "role",
+        (
+            "shared-explorer-session",
+            "semantic-code-navigator",
+            "repository-impact-profiler",
+        ),
+    )
+    @pytest.mark.anyio
+    async def test_unverified_explorer_environment_reveals_no_broker_tools(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        role: str,
+    ) -> None:
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_EXPLORATION_CAPABILITY", "explore_test_capability")
+        monkeypatch.setenv("AUTOSKILLIT_EXPLORATION_ROLE", role)
+        monkeypatch.setenv("AUTOSKILLIT_EXPLORATION_SESSION_ID", "headless-test")
+        monkeypatch.setenv(
+            "AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH",
+            "/tmp/.autoskillit-exploration-authority.json",
+        )
+        _apply_session_type_visibility()
+
+        visible = {tool.name for tool in await mcp.list_tools()}
+        assert not (visible & EXPLORATION_TOOLS)
+
+    @pytest.mark.anyio
+    async def test_verified_explorer_authority_reveals_only_broker_tools(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path,
+    ) -> None:
+        import asyncio
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, MagicMock
+
+        from autoskillit.core import RepositoryIdentity, RepositorySnapshot, SessionType
+        from autoskillit.pipeline import OwnerBoundExplorationContextStore
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server import _lifespan, mcp
+
+        project = tmp_path / "project"
+        cwd = project / "worktree"
+        authority_home = tmp_path / "session"
+        for path in (cwd, authority_home):
+            path.mkdir(parents=True)
+        service = MagicMock()
+        service.capture_snapshot.return_value = RepositorySnapshot(
+            RepositoryIdentity("test-repository", "test-revision"),
+            tree_digest="test-tree",
+            collector_manifest_digest="test-manifest",
+        )
+        parent: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+            trusted_root=project,
+            service=service,
+        )
+        binding = parent.bind_launch(
+            owner_id="uid:1000",
+            role="semantic-code-navigator",
+            session_id="session-a",
+            cwd=cwd,
+            repository_root=project,
+            source_identity="bundled:semantic-code-navigator:digest",
+            authority_home=authority_home,
+        )
+        for key, value in binding.provider_extras().items():
+            monkeypatch.setenv(key, value)
+        gate = DefaultGateState()
+        child: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+            trusted_root=project
+        )
+        monkeypatch.chdir(cwd)
+        ordinary_boot = AsyncMock()
+        monkeypatch.setitem(_lifespan._LIFESPAN_BOOT_REGISTRY, SessionType.SKILL, ordinary_boot)
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+        boot_ctx = SimpleNamespace(exploration_context_store=child, gate=gate, backend=None)
+        monkeypatch.setattr(_lifespan, "_get_ctx_or_none", lambda: boot_ctx)
+        monkeypatch.setattr(_lifespan, "run_startup_fix_required_coverage_check", lambda: None)
+        monkeypatch.setattr(_lifespan, "write_readiness_sentinel", lambda: None)
+        monkeypatch.setattr(_lifespan, "cleanup_readiness_sentinel", lambda: None)
+        monkeypatch.setattr(_lifespan, "clear_kitchens_for_pid", lambda *_args: None)
+        monkeypatch.setattr(_lifespan, "_finalize_recorder", lambda: None)
+
+        def _discard_background(coroutine, *, label):
+            del label
+            coroutine.close()
+            return asyncio.create_task(asyncio.sleep(0))
+
+        monkeypatch.setattr(_lifespan, "create_background_task", _discard_background)
+
+        async with _lifespan._autoskillit_lifespan(SimpleNamespace()):
+            ordinary_boot.assert_not_awaited()
+            assert gate.enabled is True
+            assert {tool.name for tool in await mcp.list_tools()} == EXPLORATION_TOOLS
+            assert list(await mcp.list_resources()) == []
+            assert list(await mcp.list_resource_templates()) == []
+
+    @pytest.mark.anyio
+    async def test_missing_explorer_authority_fails_closed(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        from autoskillit.core import SessionType
+        from autoskillit.pipeline import OwnerBoundExplorationContextStore
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server import mcp
+        from autoskillit.server._lifespan import (
+            _LIFESPAN_BOOT_REGISTRY,
+            _run_lifespan_session_boot,
+        )
+
+        for name, value in {
+            "AUTOSKILLIT_EXPLORATION_CAPABILITY": "not-a-capability",
+            "AUTOSKILLIT_EXPLORATION_ROLE": "semantic-code-navigator",
+            "AUTOSKILLIT_EXPLORATION_SESSION_ID": "session-a",
+            "AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH": "/tmp/missing-authority.json",
+        }.items():
+            monkeypatch.setenv(name, value)
+        gate = DefaultGateState()
+        ordinary_boot = AsyncMock()
+        monkeypatch.setitem(_LIFESPAN_BOOT_REGISTRY, SessionType.SKILL, ordinary_boot)
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+
+        await _run_lifespan_session_boot(
+            SimpleNamespace(
+                exploration_context_store=OwnerBoundExplorationContextStore[object](),
+                gate=gate,
+            )
+        )
+
+        ordinary_boot.assert_awaited_once()
+        assert gate.enabled is False
+        assert not ({tool.name for tool in await mcp.list_tools()} & EXPLORATION_TOOLS)
+
+    @pytest.mark.anyio
+    async def test_parent_without_explorer_binding_keeps_free_range_tools(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from autoskillit.core import FREE_RANGE_TOOLS
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        for name in (
+            "AUTOSKILLIT_EXPLORATION_CAPABILITY",
+            "AUTOSKILLIT_EXPLORATION_ROLE",
+            "AUTOSKILLIT_EXPLORATION_SESSION_ID",
+            "AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH",
+        ):
+            monkeypatch.delenv(name, raising=False)
+        _apply_session_type_visibility()
+
+        assert FREE_RANGE_TOOLS <= {tool.name for tool in await mcp.list_tools()}

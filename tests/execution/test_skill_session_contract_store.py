@@ -47,6 +47,8 @@ def _contract(tmp_path: Path, projected_text: str):
         member_capabilities={"root": frozenset({"github_api_write"})},
         member_activate_deps={"root": ()},
         canonical_contents={"root": projected_text},
+        read_only=True,
+        parent_sandbox_mode="read-only",
     )
 
 
@@ -83,6 +85,7 @@ def test_store_round_trip_preserves_machine_contract_and_projected_snapshot(
     stored = store.load("backend/session:final")
 
     assert stored.contract == contract
+    assert stored.contract.parent_sandbox_mode == "read-only"
     assert stored.raw_session_id == "backend/session:final"
     assert (stored.snapshot_dir / ".claude/skills/root/SKILL.md").read_text() == text
     assert stored.snapshot_dir.resolve().is_relative_to(root.resolve())

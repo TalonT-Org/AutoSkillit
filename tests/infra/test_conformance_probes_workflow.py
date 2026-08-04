@@ -151,6 +151,60 @@ class TestVersionResolution:
 
 
 class TestCacheGate:
+    def test_live_explorer_mcp_gate_is_required_before_attestation_upload(
+        self, workflow: dict
+    ) -> None:
+        steps = workflow["jobs"]["codex-probe"]["steps"]
+        gate_index, gate = next(
+            (index, step)
+            for index, step in enumerate(steps)
+            if step.get("name") == "Run authenticated production explorer MCP gate"
+        )
+        evidence_upload_index, evidence_upload = next(
+            (index, step)
+            for index, step in enumerate(steps)
+            if step.get("name") == "Upload production explorer live-gate evidence"
+        )
+        attestation_upload_index = next(
+            index
+            for index, step in enumerate(steps)
+            if step.get("name") == "Upload Luna explorer conformance attestation"
+        )
+
+        assert "if" not in gate
+        assert gate.get("continue-on-error") is not True
+        assert "task test-smoke-codex-explorer-live-gate" in gate["run"]
+        assert gate_index < evidence_upload_index < attestation_upload_index
+        assert evidence_upload["if"] == "always()"
+        assert evidence_upload["with"]["if-no-files-found"] == "error"
+        assert evidence_upload["with"]["path"].endswith("/live-explorer-gate.json")
+
+    def test_luna_explorer_gate_is_non_cached_and_publishes_attestation(
+        self, workflow: dict
+    ) -> None:
+        steps = workflow["jobs"]["codex-probe"]["steps"]
+        gate_index, gate = next(
+            (index, step)
+            for index, step in enumerate(steps)
+            if step.get("name") == "Run non-cached Luna explorer capability gate"
+        )
+        restore_index = next(
+            index
+            for index, step in enumerate(steps)
+            if "cache/restore" in (step.get("uses") or "")
+        )
+        upload_index, upload = next(
+            (index, step)
+            for index, step in enumerate(steps)
+            if step.get("name") == "Upload Luna explorer conformance attestation"
+        )
+        assert "if" not in gate
+        assert gate.get("continue-on-error") is not True
+        assert "task test-smoke-codex-explorer-gate" in gate["run"]
+        assert gate_index < upload_index < restore_index
+        assert upload["with"]["if-no-files-found"] == "error"
+        assert upload["with"]["path"] == ".autoskillit/temp/conformance/"
+
     def test_codex_config_parse_gate_precedes_cache_and_live_probe(self, workflow: dict) -> None:
         steps = workflow["jobs"]["codex-probe"]["steps"]
         parse_index, parse_step = next(

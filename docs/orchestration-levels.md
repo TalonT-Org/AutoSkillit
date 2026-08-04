@@ -19,6 +19,11 @@ Key properties:
 - Cannot call `run_skill`, `run_cmd`, or `run_python`
 - Session type: n/a (Claude Agent, not a full session)
 
+The specialized Codex explorers are L0 leaves as well. An L1 exploration parent may invoke
+`semantic-code-navigator` or `repository-impact-profiler`; each is terminal, read-only, and
+returns evidence for the parent to synthesize. They cannot delegate, mutate the repository, or
+replace the deterministic repository collectors. See [Explorer agents](execution/explorer-agents.md).
+
 ### L1 — Session
 
 A Claude Code session (interactive or headless) that can spawn L0 leaf

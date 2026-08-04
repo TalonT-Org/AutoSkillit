@@ -35,7 +35,7 @@ logger = get_logger(__name__)
 
 PROBE_CACHE_TTL: timedelta = timedelta(hours=24)
 PROBE_SUITE_CONTRACT: tuple[str, ...] = (
-    "generated-codex-child-v1",
+    "generated-codex-child-v7",
     "deep-investigate-codex-v2",
     "deep-investigate-claude-200k-v2",
     "claude-startup-readiness-v1",
@@ -79,7 +79,7 @@ PROBE_POLICY_IDENTITY: str = (
     f"{RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST}-{PROBE_SUITE_CONTRACT_DIGEST}-"
     f"{CODEX_RECIPE_PROBE_POLICY_DIGEST}"
 )
-_SCHEMA_VERSION: int = 3
+_SCHEMA_VERSION: int = 5
 
 
 @dataclass(frozen=True, slots=True)

@@ -62,6 +62,7 @@ from autoskillit.hook_registry import (
 )
 from autoskillit.pipeline import (
     KitchenOpenPhase,
+    OwnerBoundExplorationContextStore,
     confirm_kitchen_effect,
     create_background_task,
     new_kitchen_open_state,
@@ -652,6 +653,29 @@ _LIFESPAN_BOOT_REGISTRY: dict[SessionType, Callable[[Any], Awaitable[None]] | No
 }
 
 
+async def _explorer_auto_gate_boot(ctx: Any) -> bool:
+    """Reveal only broker tools after the sealed explorer launch authority verifies."""
+    from autoskillit.server import mcp  # circular-break
+
+    store = ctx.exploration_context_store
+    if not isinstance(store, OwnerBoundExplorationContextStore):
+        return False
+    if not store.validate_launch_environment() or ctx.gate is None:
+        return False
+    ctx.gate.enable()
+    mcp.enable(tags={"exploration"}, components={"tool"}, only=True)
+    return True
+
+
+async def _run_lifespan_session_boot(ctx: Any) -> None:
+    """Apply exactly one authenticated explorer or ordinary session boot path."""
+    if await _explorer_auto_gate_boot(ctx):
+        return
+    boot_fn = _LIFESPAN_BOOT_REGISTRY.get(_resolve_session_type())
+    if boot_fn is not None:
+        await boot_fn(ctx)
+
+
 async def _run_backend_mcp_registration_async(backend: CodingAgentBackend) -> None:
     """Offload backend-owned MCP configuration to an executor — fail-open."""
 
@@ -722,9 +746,8 @@ async def _autoskillit_lifespan(server: Any) -> Any:
                 )
             )
 
-        _boot_fn = _LIFESPAN_BOOT_REGISTRY.get(_resolve_session_type())
-        if _boot_fn is not None and _boot_ctx is not None:
-            await _boot_fn(_boot_ctx)
+        if _boot_ctx is not None:
+            await _run_lifespan_session_boot(_boot_ctx)
         yield
     finally:
         for task in bg_tasks:

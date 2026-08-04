@@ -203,6 +203,9 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "reset_dispatch",  # JSON cleanup report, generic renders correctly
         "get_recipe_section",  # bounded section content with continuation
         "complete_recipe_initialization",  # simple completion receipt
+        "submit_exploration_query",  # bounded evidence page JSON, generic renders correctly
+        "get_exploration_page",  # bounded evidence page JSON, generic renders correctly
+        "resume_exploration_context",  # bounded evidence page JSON, generic renders correctly
     }
 )
 

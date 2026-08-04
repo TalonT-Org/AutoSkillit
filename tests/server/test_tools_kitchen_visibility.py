@@ -13,6 +13,10 @@ from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
+EXPLORATION_TOOLS = frozenset(
+    {"submit_exploration_query", "get_exploration_page", "resume_exploration_context"}
+)
+
 
 # ---------------------------------------------------------------------------
 # Group C — visibility + component management
@@ -91,8 +95,9 @@ async def test_close_kitchen_tool_calls_reset_visibility(tmp_path, monkeypatch):
                 await close_kitchen(ctx=mock_ctx)
 
     mock_mcp.disable.assert_any_call(tags={"kitchen"})
+    mock_mcp.disable.assert_any_call(tags={"exploration"})
     mock_mcp.disable.assert_any_call(tags={"plan-review"})
-    assert mock_mcp.disable.call_count == 2
+    assert mock_mcp.disable.call_count == 3
     mock_ctx.reset_visibility.assert_called_once()
 
 
@@ -107,14 +112,18 @@ async def test_close_kitchen_hides_pre_revealed_tools(tmp_path, monkeypatch):
 
     mcp.enable(tags={"kitchen"})
     tools_before = {t.name for t in await mcp.list_tools()}
-    kitchen_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS
+    kitchen_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EXPLORATION_TOOLS
     assert kitchen_gated.issubset(tools_before), "kitchen tools should be visible after enable"
 
     mock_ctx = _make_mock_ctx()
     mock_ctx.reset_visibility = AsyncMock()
 
-    with patch("autoskillit.server.tools.tools_kitchen._close_kitchen_handler"):
-        await close_kitchen(ctx=mock_ctx)
+    with patch(
+        "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact",
+        return_value=None,
+    ):
+        with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+            await close_kitchen(ctx=mock_ctx)
 
     tools_after = {t.name for t in await mcp.list_tools()}
     assert not kitchen_gated.intersection(tools_after), (
@@ -167,7 +176,7 @@ async def test_close_open_roundtrip_restores_tools_via_session(tool_ctx):
     # unconditionally flips it back to False (line 612), so the subsequent open_kitchen
     # correctly enters `if not _skip_handler:` and exercises the _use_global_enable path.
     tool_ctx.gate_infrastructure_ready = True
-    kitchen_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS
+    kitchen_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EXPLORATION_TOOLS
 
     async with Client(mcp) as client:
         # Step 3: tools visible after global pre-reveal.
@@ -216,7 +225,7 @@ async def test_open_kitchen_after_close_restores_pre_revealed_tools(tmp_path, mo
     mcp.enable(tags={"kitchen"})
     mcp.enable(tags={"plan-review"})
     tools_before = {t.name for t in await mcp.list_tools()}
-    kitchen_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS
+    kitchen_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EXPLORATION_TOOLS
     assert kitchen_gated.issubset(tools_before), (
         "kitchen tools should be visible after pre-reveal enable"
     )
@@ -557,7 +566,7 @@ async def test_open_kitchen_no_redisable_when_empty(tmp_path, monkeypatch):
 
                     await open_kitchen(ctx=mock_ctx)
 
-    mock_ctx.disable_components.assert_not_called()
+    mock_ctx.disable_components.assert_called_once_with(tags={"exploration"})
 
 
 # ---------------------------------------------------------------------------

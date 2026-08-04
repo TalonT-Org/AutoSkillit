@@ -728,6 +728,7 @@ class CloneSuccessResult(TypedDict):
     clone_path: str
     source_dir: str
     remote_url: str
+    repository_identity_url: str
     clone_source_type: Literal["remote", "local"]
     clone_source_reason: str
 

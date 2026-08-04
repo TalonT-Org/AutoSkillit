@@ -36,6 +36,7 @@ _INSPECTION_TOOLS = frozenset(
         "check_repo_merge_state",
         "fetch_github_issue",
         "get_ci_status",
+        "get_exploration_page",
         "get_issue_title",
         "get_pipeline_report",
         "get_pr_reviews",
@@ -46,6 +47,8 @@ _INSPECTION_TOOLS = frozenset(
         "list_recipes",
         "load_recipe",
         "read_db",
+        "resume_exploration_context",
+        "submit_exploration_query",
         "validate_recipe",
     }
 )
@@ -260,6 +263,22 @@ _TOOL_DEFS = (
         required=("branch",),
     ),
     _tool("get_ci_status", ("branch", "run_id", "repo", "workflow", "event", "cwd")),
+    _tool(
+        "submit_exploration_query",
+        ("query", "max_results"),
+        required=("query",),
+        wire_types={"max_results": ToolWireType.INTEGER},
+    ),
+    _tool(
+        "get_exploration_page",
+        ("page_size", "continuation"),
+        wire_types={"page_size": ToolWireType.INTEGER},
+    ),
+    _tool(
+        "resume_exploration_context",
+        ("page_size",),
+        wire_types={"page_size": ToolWireType.INTEGER},
+    ),
     _tool(
         "clone_repo",
         ("source_dir", "run_name", "branch", "strategy", "remote_url", "step_name"),

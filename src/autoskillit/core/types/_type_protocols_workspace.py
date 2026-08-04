@@ -262,6 +262,9 @@ class SkillProjectionContextAuthority(Protocol):
     def namespace(self) -> str | None: ...
 
     @property
+    def parent_sandbox_mode(self) -> str: ...
+
+    @property
     def projection_version(self) -> int: ...
 
     @property
@@ -322,6 +325,8 @@ class SessionSkillManager(Protocol):
         session_id: str,
         invocation: EffectiveSkillInvocationAuthority,
         projection_context: SkillProjectionContextAuthority,
+        *,
+        explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
     ) -> ValidatedAddDir: ...
 
     def init_session(

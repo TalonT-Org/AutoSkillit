@@ -246,12 +246,15 @@ def build_fresh_projection_context(
 def bind_projection_backend(
     context: SkillProjectionContext,
     backend: CodingAgentBackend | None,
+    *,
+    parent_sandbox_mode: str = "workspace-write",
 ) -> SkillProjectionContext:
     """Complete fresh projection authority after capability-driven backend selection."""
     return dataclasses.replace(
         context,
         backend=backend,
         conventions=backend.conventions if backend is not None else None,
+        parent_sandbox_mode=parent_sandbox_mode,
     )
 
 
@@ -349,6 +352,7 @@ def build_skill_session_contract(
         expected_output_patterns=expected_output_patterns,
         write_behavior=write_behavior,
         read_only=read_only,
+        parent_sandbox_mode=projection_context.parent_sandbox_mode,
         completion_required=completion_required,
         skill_contract_json=skill_contract_json,
         projection_substitutions=tuple(sorted((projection_context.substitutions or {}).items())),
@@ -493,6 +497,7 @@ def rehydrate_skill_invocation(
         substitutions=dict(contract.projection_substitutions),
         gating=contract.projection_gating,
         namespace=contract.projection_namespace,
+        parent_sandbox_mode=contract.parent_sandbox_mode,
         projection_version=contract.projection_version,
     )
     return invocation, projection_context

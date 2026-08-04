@@ -21,13 +21,30 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.core import session_type as _resolve_session_type
+from autoskillit.pipeline import EXPLORATION_PRINCIPAL_ROLE, EXPLORER_ROLE_NAMES
 
 logger = get_logger(__name__)
 
+_EXPLORER_BINDING_ENV_KEYS = frozenset(
+    {
+        "AUTOSKILLIT_EXPLORATION_CAPABILITY",
+        "AUTOSKILLIT_EXPLORATION_ROLE",
+        "AUTOSKILLIT_EXPLORATION_SESSION_ID",
+        "AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH",
+    }
+)
+
+
+def _has_explorer_binding_env() -> bool:
+    """Return whether this MCP process is the bound endpoint of an explorer child."""
+    values = {key: os.environ.get(key, "") for key in _EXPLORER_BINDING_ENV_KEYS}
+    accepted_roles = EXPLORER_ROLE_NAMES | {EXPLORATION_PRINCIPAL_ROLE}
+    return all(values.values()) and values["AUTOSKILLIT_EXPLORATION_ROLE"] in accepted_roles
+
 
 def _collect_fleet_tool_tags() -> frozenset[str]:
-    """Return the union of all tool_tags across FEATURE_REGISTRY entries."""
-    return frozenset().union(*(fdef.tool_tags for fdef in FEATURE_REGISTRY.values()))
+    """Return only the feature tags authorized for fleet sessions."""
+    return FEATURE_REGISTRY["fleet"].tool_tags
 
 
 def _apply_session_type_visibility() -> None:
@@ -45,6 +62,16 @@ def _apply_session_type_visibility() -> None:
 
     _session = _resolve_session_type()
     _headless = os.environ.get(HEADLESS_ENV_VAR) == "1"
+
+    if _has_explorer_binding_env():
+        # Explorer bindings are a shared session principal.  They must
+        # never turn the child into a general AutoSkillit client: in particular
+        # free-range tools (such as open_kitchen), recipe resources, and
+        # resource templates are not part of the explorer contract.  FastMCP's
+        # Tag visibility is deferred until lifespan has reopened and verified
+        # the durable authority. Environment variables alone never reveal a
+        # broker capability.
+        return
 
     match _session:
         case SessionType.FLEET:

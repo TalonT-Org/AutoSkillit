@@ -183,6 +183,7 @@ def test_every_tool_has_an_explicit_initialization_operation() -> None:
             "check_repo_merge_state",
             "fetch_github_issue",
             "get_ci_status",
+            "get_exploration_page",
             "get_issue_title",
             "get_pipeline_report",
             "get_pr_reviews",
@@ -193,6 +194,8 @@ def test_every_tool_has_an_explicit_initialization_operation() -> None:
             "list_recipes",
             "load_recipe",
             "read_db",
+            "resume_exploration_context",
+            "submit_exploration_query",
             "validate_recipe",
         },
         ToolInitializationOperation.LIFECYCLE_CONTROL: {

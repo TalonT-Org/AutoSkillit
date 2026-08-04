@@ -27,6 +27,7 @@ from autoskillit.core import (
     CompletionRequiredResolver,
     ContextAdmissionLedger,
     DatabaseReader,
+    ExplorationContextStoreProtocol,
     FleetLock,
     GateState,
     GitHubApiLog,
@@ -95,6 +96,7 @@ class ToolContext:
     token_log:            TokenLog — per-step token tracking
     timing_log:           TimingLog — per-step wall-clock duration tracking
     response_log:         McpResponseLog — per-tool MCP response size tracking
+    exploration_context_store: Owner-bound capability store for specialized repository explorers
     gate:                 GateState — enables/disables gated tools
     plugin_authority:     PluginArtifactAuthority — lazy authority that acquires one
                           exact artifact incarnation for each physical child launch.
@@ -255,6 +257,7 @@ class ToolContext:
         default_factory=threading.RLock,
         repr=False,
     )
+    exploration_context_store: ExplorationContextStoreProtocol[object] | None = field(default=None)
 
     def __post_init__(self) -> None:
         if self.launch_resolver is _MISSING:

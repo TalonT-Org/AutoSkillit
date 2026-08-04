@@ -115,6 +115,9 @@ class TestToolRegistration:
             "write_audit_disposition_bundle",
             "write_audit_semantic_result",
             "write_standalone_audit_evidence",
+            "submit_exploration_query",
+            "get_exploration_page",
+            "resume_exploration_context",
         }
         assert expected == tool_names
 

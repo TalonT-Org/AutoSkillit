@@ -15,6 +15,7 @@ from ._type_results import WriteBehaviorSpec
 
 __all__ = [
     "MACHINE_ONLY_SKILL_FRONTMATTER_KEYS",
+    "PARENT_SANDBOX_MODES",
     "SKILL_PROJECTION_VERSION",
     "SKILL_SESSION_CONTRACT_SCHEMA_VERSION",
     "SkillSessionContract",
@@ -22,6 +23,7 @@ __all__ = [
     "SkillSourceRef",
     "SkillVisibilitySpec",
     "StoredSkillSessionContract",
+    "normalize_parent_sandbox_mode",
 ]
 
 
@@ -41,6 +43,14 @@ MACHINE_ONLY_SKILL_FRONTMATTER_KEYS = frozenset(
 # assertion in _skill_session_contract_store rather than silently reused.
 SKILL_PROJECTION_VERSION = 4
 SKILL_SESSION_CONTRACT_SCHEMA_VERSION = 4
+PARENT_SANDBOX_MODES: frozenset[str] = frozenset({"read-only", "workspace-write"})
+
+
+def normalize_parent_sandbox_mode(value: str) -> str:
+    """Validate and return one backend-neutral parent sandbox policy."""
+    if value not in PARENT_SANDBOX_MODES:
+        raise SkillContractError(f"unsupported parent sandbox mode: {value!r}")
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,6 +154,7 @@ class SkillSessionContract:
     expected_output_patterns: tuple[str, ...] = ()
     write_behavior: WriteBehaviorSpec = WriteBehaviorSpec()
     read_only: bool = False
+    parent_sandbox_mode: str = "workspace-write"
     completion_required: bool = False
     skill_contract_json: str = ""
     projection_substitutions: tuple[tuple[str, str], ...] = ()
@@ -154,6 +165,16 @@ class SkillSessionContract:
     schema_version: int = SKILL_SESSION_CONTRACT_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "parent_sandbox_mode",
+            normalize_parent_sandbox_mode(self.parent_sandbox_mode),
+        )
+        expected_parent_sandbox = "read-only" if self.read_only else "workspace-write"
+        if self.parent_sandbox_mode != expected_parent_sandbox:
+            raise SkillContractError(
+                "parent sandbox mode does not match the persisted read_only authority"
+            )
         object.__setattr__(self, "source_refs", MappingProxyType(dict(self.source_refs)))
         object.__setattr__(
             self,

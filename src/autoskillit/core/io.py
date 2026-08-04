@@ -514,6 +514,7 @@ _AUTOSKILLIT_GITIGNORE_ENTRIES = [
     "test-filter-manifest.yaml",
     "validation-errors/",
     "retiring_cache.lock",
+    "repository-profile.v1.json",
 ]
 
 _COMMITTED_BY_DESIGN: frozenset[str] = frozenset(

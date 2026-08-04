@@ -111,6 +111,32 @@ def test_codex_init_session_creates_skills_subdir(make_session_skill_manager, co
     assert not (session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR).exists()
 
 
+def test_materialization_forwards_only_server_explorer_binding_env(
+    make_session_skill_manager,
+    codex_env,
+) -> None:
+    manager = make_session_skill_manager()
+    catalog, context = _catalog_context(manager, backend=codex_env.backend)
+    binding_env = {
+        "semantic-code-navigator": {
+            "AUTOSKILLIT_EXPLORATION_CAPABILITY": "explore_opaque",
+            "AUTOSKILLIT_EXPLORATION_ROLE": "semantic-code-navigator",
+            "AUTOSKILLIT_EXPLORATION_SESSION_ID": "sid",
+        }
+    }
+
+    manager._materialize_bound_records(
+        "sid",
+        catalog.skills,
+        context,
+        explorer_binding_env=binding_env,
+    )
+
+    assert codex_env.backend.setup_session_dir.call_args.kwargs["explorer_binding_env"] == (
+        binding_env
+    )
+
+
 def test_codex_generated_home_links_projected_catalog_into_discovery_root(
     make_session_skill_manager,
     codex_env,
@@ -138,7 +164,11 @@ def test_codex_generated_home_preserves_existing_profile_skill_on_collision(
 ) -> None:
     profile_content = "---\nname: investigate\ndescription: profile copy\n---\n"
 
-    def setup_session_dir(session_dir: Path) -> None:
+    def setup_session_dir(
+        session_dir: Path,
+        *,
+        parent_sandbox_mode: str = "workspace-write",
+    ) -> None:
         profile_skill = session_dir / "skills" / "investigate"
         profile_skill.mkdir(parents=True)
         (profile_skill / "SKILL.md").write_text(profile_content)
@@ -165,7 +195,10 @@ def test_codex_init_session_delegates_to_setup_session_dir(
 ) -> None:
     mgr = make_session_skill_manager()
     session_path = _materialize(mgr, "sid", backend=codex_env.backend)
-    codex_env.backend.setup_session_dir.assert_called_once_with(Path(str(session_path)).parent)
+    codex_env.backend.setup_session_dir.assert_called_once_with(
+        Path(str(session_path)).parent,
+        parent_sandbox_mode="workspace-write",
+    )
 
 
 def test_no_backend_skips_setup_session_dir(make_session_skill_manager) -> None:

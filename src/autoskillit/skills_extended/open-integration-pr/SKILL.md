@@ -215,7 +215,7 @@ Empty results are stored as empty lists.
 
 ### Step 4g: Run Parallel Domain Analysis Subagents
 
-For each domain `D` in `domain_diffs`, spawn a subagent via `child delegation under the declared `sonnet` model-class policy` in a single
+For each domain `D` in `domain_diffs`, spawn a subagent via child delegation under the declared `sonnet` model-class policy in a single
 parallel message. **Issue all child delegations in a single message** to maximize parallelism.
 **Skip domains with no diff content** (not in `domain_diffs`) — do not spawn subagents for them.
 
@@ -247,7 +247,7 @@ The 7 canonical domain names are: **Server/MCP Tools**, **Pipeline/Execution**,
 
 ### Step 5: Select Arch-Lens Lenses
 
-Spawn a subagent via `child delegation under the declared `sonnet` model-class policy` with `changed_files` and the same lens
+Spawn a subagent via child delegation under the declared `sonnet` model-class policy with `changed_files` and the same lens
 menu as `open-pr`. Instruct it to return 1–3 lens names using the same `development`
 lens guard.
 

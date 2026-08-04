@@ -80,11 +80,8 @@ async def _execute_fleet_run(
     _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
         _raw_steps,
         dispatch_backend.name if dispatch_backend else None,
-        ctx.config.providers,
         recipe,
-        skill_resolver=ctx.skill_resolver,
         config_backend=ctx.config.agent_backend,
-        project_root=ctx.project_dir,
     )
 
     effective_backend = dispatch_backend or ctx.backend

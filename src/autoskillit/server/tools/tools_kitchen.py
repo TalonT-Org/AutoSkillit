@@ -997,11 +997,8 @@ def get_recipe(name: str) -> str:
         _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
             _raw_recipe.steps,
             ctx.backend.name if ctx.backend else None,
-            ctx.config.providers,
             name,
-            skill_resolver=ctx.skill_resolver,
             config_backend=ctx.config.agent_backend,
-            project_root=ctx.project_dir,
         )
         _backend_capabilities_map = build_backend_capabilities_map(
             _effective_backend_map, ctx.backend
@@ -1356,11 +1353,8 @@ async def open_kitchen(
             _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
                 _raw_recipe.steps if _raw_recipe is not None else None,
                 tool_ctx.backend.name if tool_ctx.backend else None,
-                tool_ctx.config.providers,
                 name,
-                skill_resolver=tool_ctx.skill_resolver,
                 config_backend=tool_ctx.config.agent_backend,
-                project_root=tool_ctx.project_dir,
             )
             _backend_capabilities_map = build_backend_capabilities_map(
                 _effective_backend_map, tool_ctx.backend

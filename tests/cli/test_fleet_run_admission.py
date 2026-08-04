@@ -247,16 +247,13 @@ class TestFleetRunCliAdmission:
         cli_map = captured.get("effective_backend_map")
 
         # Kitchen path: compute what dispatch_food_truck passes to execute_dispatch.
-        # dispatch_food_truck calls _compute_effective_backend_map(recipe_steps, backend_name,
-        # config_providers, recipe_name, skill_resolver=skill_resolver) with the same recipe
+        # dispatch_food_truck calls _compute_effective_backend_map with the same recipe
         # steps that _make_mock_ctx returns (empty dict).
         recipe_steps: dict[str, Any] = {}
         kitchen_map, _ = _compute_effective_backend_map(
             recipe_steps,
             backend_name,
-            None,  # config_providers
             "test-recipe",
-            skill_resolver=None,
         )
 
         assert cli_map == kitchen_map, (

@@ -42,7 +42,7 @@ class TestExplicitBackendOverrideAdmissionDispatchAgreement:
         )
         # Admission side
         admission_map, _ = _compute_effective_backend_map(
-            cast(Any, steps), "codex", None, "remediation", config_backend=cfg
+            cast(Any, steps), "codex", "remediation", config_backend=cfg
         )
         assert admission_map == {"dry_walkthrough": "codex"}
 

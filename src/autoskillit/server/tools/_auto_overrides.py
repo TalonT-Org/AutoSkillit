@@ -2,29 +2,23 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from autoskillit.core import SKILL_TOOLS
 
 if TYPE_CHECKING:
     from autoskillit.config._config_dataclasses import AgentBackendConfig
-    from autoskillit.core.types._type_protocols_workspace import SkillResolver
     from autoskillit.recipe.schema import RecipeStep
 
 
 def _compute_effective_backend_map(
     recipe_steps: dict[str, RecipeStep] | None,
     backend_name: str | None,
-    config_providers: Any | None,
     recipe_name: str,
     *,
-    skill_resolver: SkillResolver | None = None,
     config_backend: AgentBackendConfig | None = None,
-    project_root: Path | None = None,
 ) -> tuple[dict[str, str] | None, dict[str, str]]:
     """Build the per-step backend map from explicit authorities only."""
-    del config_providers, skill_resolver, project_root
     if backend_name is None or recipe_steps is None:
         return None, {}
 

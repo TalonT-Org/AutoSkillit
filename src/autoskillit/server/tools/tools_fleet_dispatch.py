@@ -607,11 +607,8 @@ async def dispatch_food_truck(
                 _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
                     _preflight_raw_steps,
                     _override_backend.name if _override_backend else None,
-                    tool_ctx.config.providers,
                     recipe,
-                    skill_resolver=tool_ctx.skill_resolver,
                     config_backend=tool_ctx.config.agent_backend,
-                    project_root=tool_ctx.project_dir,
                 )
                 _preflight_backend_capabilities_map = build_backend_capabilities_map(
                     _effective_backend_map, _override_backend

@@ -578,15 +578,11 @@ def _failure_primitive(value: CaptureFailureV2) -> dict[str, object]:
     }
 
 
-def _render_failure(value: CaptureFailureV2) -> bytes:
+def render_capture_failure_v2(value: CaptureFailureV2) -> bytes:
     encoded = _FAILURE_PREFIX + _canonical_json(_failure_primitive(value)) + _FRAME_SUFFIX
     if len(encoded) > MAX_CAPTURE_FAILURE_V2_BYTES:
         raise CaptureContractError("capture failure marker exceeds bound")
     return encoded
-
-
-def render_capture_failure_v2(value: CaptureFailureV2) -> bytes:
-    return _render_failure(value)
 
 
 def parse_capture_failure_v2(value: bytes) -> CaptureFailureV2:
@@ -610,7 +606,7 @@ def parse_capture_failure_v2(value: bytes) -> CaptureFailureV2:
         settlement_returncode=_optional_integer_field(decoded["settlement_returncode"]),
     )
     _validate_failure(failure)
-    if _render_failure(failure) != value:
+    if render_capture_failure_v2(failure) != value:
         raise CaptureContractError("capture failure transport is not canonical")
     return failure
 
@@ -964,15 +960,11 @@ def _failure_v3_primitive(value: CaptureFailureV3) -> dict[str, object]:
     }
 
 
-def _render_failure_v3(value: CaptureFailureV3) -> bytes:
+def render_capture_failure_v3(value: CaptureFailureV3) -> bytes:
     encoded = _FAILURE_V3_PREFIX + _canonical_json(_failure_v3_primitive(value)) + _FRAME_SUFFIX
     if len(encoded) > MAX_CAPTURE_FAILURE_V3_BYTES:
         raise CaptureContractError("capture failure V3 marker exceeds bound")
     return encoded
-
-
-def render_capture_failure_v3(value: CaptureFailureV3) -> bytes:
-    return _render_failure_v3(value)
 
 
 def parse_capture_failure_v3(value: bytes) -> CaptureFailureV3:
@@ -1000,6 +992,6 @@ def parse_capture_failure_v3(value: bytes) -> CaptureFailureV3:
         shell_returncode=_optional_integer_field(decoded["shell_returncode"]),
         settlement_returncode=_optional_integer_field(decoded["settlement_returncode"]),
     )
-    if _render_failure_v3(failure) != value:
+    if render_capture_failure_v3(failure) != value:
         raise CaptureContractError("capture failure V3 transport is not canonical")
     return failure

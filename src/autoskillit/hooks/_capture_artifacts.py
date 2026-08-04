@@ -840,11 +840,16 @@ def run_capture(
                 )
             if not isinstance(exc, _CAPTURE_RUNTIME_ERRORS):
                 raise
+            transport_reason = _capture_failure_policy.runtime_failure_reason(exc)
+            transport_detail = f"{failure_stage} failed"
+            if isinstance(exc, CaptureSetupError):
+                transport_reason = exc.reason
+                transport_detail = exc.detail
             return _capture_replay.capture_failure_return(
                 _capture_replay.failure_transport(
-                    reason=_capture_failure_policy.runtime_failure_reason(exc),
+                    reason=transport_reason,
                     stage=failure_stage,
-                    detail=f"{failure_stage} failed",
+                    detail=transport_detail,
                     shell_returncode=command_returncode,
                     settlement=settlement,
                 )

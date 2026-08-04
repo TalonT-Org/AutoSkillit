@@ -446,11 +446,11 @@ def test_saturated_installed_store_recovers_across_both_cleanup_owners(
 
         assert completed_b.returncode == 0
         assert process_b_sentinel.read_text() == "process-b"
-        runner_b_argv = shlex.split(runner_b.splitlines()[-1])
+        runner_b_request = decode_capture_request(shlex.split(runner_b.splitlines()[-1])[-1])
         authority_b = assert_shell_capture_marker_authority(
             completed_b.stdout,
             project,
-            runner_b_argv[-1],
+            runner_b_request.capture_id,
             sentinels=(b"installed-process-b-",),
         )
         assert authority_b.capture_bytes == b"installed-process-b-" * 1000
@@ -490,11 +490,11 @@ def test_saturated_installed_store_recovers_across_both_cleanup_owners(
 
         assert completed_c.returncode == 0
         assert process_c_sentinel.read_text() == "process-c"
-        runner_c_argv = shlex.split(runner_c.splitlines()[-1])
+        runner_c_request = decode_capture_request(shlex.split(runner_c.splitlines()[-1])[-1])
         authority_c = assert_shell_capture_marker_authority(
             completed_c.stdout,
             project,
-            runner_c_argv[-1],
+            runner_c_request.capture_id,
             sentinels=(b"installed-process-c-",),
         )
         assert authority_c.capture_bytes == b"installed-process-c-" * 1000

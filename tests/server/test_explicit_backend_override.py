@@ -121,6 +121,10 @@ class TestExplicitOverrideProviderPrecedence:
             "backend_for_authority",
             lambda _authority: fake_backend,
         )
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_execution.shutil.which",
+            lambda binary: f"/test-bin/{binary}",
+        )
 
         # Explicit backend override: pin this step to codex
         tool_ctx_kitchen_open.config.agent_backend = AgentBackendConfig(

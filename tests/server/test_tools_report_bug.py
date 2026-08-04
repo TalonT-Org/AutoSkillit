@@ -402,9 +402,18 @@ async def test_report_bug_delivers_winning_override_identity_and_projection(
         _cwd: str,
         *,
         capability_contract,
+        add_dirs=(),
         **_kwargs,
     ) -> SkillResult:
+        assert len(add_dirs) == 1
+        projected_paths = [
+            path
+            for path in Path(add_dirs[0].path).rglob("SKILL.md")
+            if path.parent.name == "report-bug"
+        ]
+        assert len(projected_paths) == 1
         captured["contract"] = capability_contract
+        captured["projected_digest"] = hashlib.sha256(projected_paths[0].read_bytes()).hexdigest()
         return _skill_ok("# Report")
 
     tool_ctx_kitchen_open.project_dir = tmp_path
@@ -422,7 +431,7 @@ async def test_report_bug_delivers_winning_override_identity_and_projection(
     assert contract.execution_role == SkillExecutionRole.SESSION.value
     assert contract.capability_union == frozenset()
     assert contract.canonical_digests["report-bug"] == hashlib.sha256(source_before).hexdigest()
-    assert contract.projected_digests["report-bug"]
+    assert contract.projected_digests["report-bug"] == captured["projected_digest"]
     assert not hasattr(contract, "projected_artifacts")
     assert override.read_bytes() == source_before
 

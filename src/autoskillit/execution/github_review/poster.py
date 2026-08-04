@@ -250,6 +250,122 @@ class DefaultGitHubReviewPoster:
             )
         return scope_material, authenticated_login, pr_author_login
 
+    @staticmethod
+    def _attempt_material(
+        *,
+        request: GitHubReviewRequest,
+        operation_key: str,
+        findings: tuple[_poster_support.CanonicalFinding, ...],
+        effective_event: str,
+    ) -> tuple[dict[str, Any], bytes, str]:
+        payload = _poster_support.payload(
+            request=request,
+            operation_key=operation_key,
+            findings=findings,
+            event=effective_event,
+        )
+        payload_json = _poster_support.canonical_json(payload)
+        attempt_digest = hashlib.sha256(
+            b"autoskillit:github-review-attempt:v1\0" + payload_json
+        ).hexdigest()
+        return payload, payload_json, attempt_digest
+
+    def _schedule_retry(
+        self,
+        *,
+        request: GitHubReviewRequest,
+        operation_key: str,
+        completed_attempt_number: int,
+        response_class: ReviewResponseClass,
+        status_code: int | None,
+        error: str | None,
+        retry_attempt_number: int,
+        retry_findings: tuple[_poster_support.CanonicalFinding, ...],
+        retry_effective_event: str,
+        retry_omitted: tuple[GitHubReviewFindingDisposition, ...],
+    ) -> None:
+        _, retry_payload_json, retry_attempt_digest = self._attempt_material(
+            request=request,
+            operation_key=operation_key,
+            findings=retry_findings,
+            effective_event=retry_effective_event,
+        )
+        self.ledger.complete_attempt_and_schedule_retry(
+            operation_key=operation_key,
+            completed_attempt_number=completed_attempt_number,
+            response_class=response_class,
+            status_code=status_code,
+            error=error,
+            retry_attempt_number=retry_attempt_number,
+            retry_attempt_digest=retry_attempt_digest,
+            retry_payload_json=retry_payload_json,
+            retry_canonical_indexes=tuple(finding.canonical_index for finding in retry_findings),
+            retry_omitted_dispositions=retry_omitted,
+            retry_effective_event=retry_effective_event,
+            retry_effective_body_digest=_poster_support.text_digest(request.body),
+        )
+
+    async def _resume_pending_retry(
+        self,
+        *,
+        request: GitHubReviewRequest,
+        operation_key: str,
+        findings: tuple[_poster_support.CanonicalFinding, ...],
+        attempt: ReviewAttemptRecord,
+    ) -> GitHubReviewPostResult:
+        preflight = await self._preflight_new_operation(request)
+        if isinstance(preflight, GitHubReviewPostResult):
+            self.ledger.complete_attempt(
+                operation_key=operation_key,
+                attempt_number=attempt.attempt_number,
+                state=preflight.state,
+                response_class=preflight.response_class,
+                status_code=None,
+                error=preflight.error,
+            )
+            return replace(preflight, operation_key=operation_key)
+        scope_material, authenticated_login, pr_author_login = preflight
+        retry_indexes = set(attempt.canonical_indexes)
+        retry_findings = tuple(
+            finding for finding in findings if finding.canonical_index in retry_indexes
+        )
+        if (
+            tuple(finding.canonical_index for finding in retry_findings)
+            != attempt.canonical_indexes
+        ):
+            error = "persisted review retry references unknown canonical findings"
+            self.ledger.complete_attempt(
+                operation_key=operation_key,
+                attempt_number=attempt.attempt_number,
+                state=ReviewOperationState.TERMINAL,
+                response_class=ReviewResponseClass.NONE,
+                status_code=None,
+                error=error,
+            )
+            return _poster_support.nonfinal_result(
+                request,
+                ReviewOperationState.TERMINAL,
+                ReviewResponseClass.NONE,
+                error,
+                operation_key=operation_key,
+            )
+        scope_id = self.ledger.rate_scope_id(
+            credential=scope_material.credential,
+            api_origin=scope_material.api_origin,
+        )
+        return await self._attempt(
+            request=request,
+            operation_key=operation_key,
+            scope_id=scope_id,
+            findings=retry_findings,
+            effective_event=attempt.effective_event,
+            attempt_number=attempt.attempt_number,
+            omitted=attempt.omitted_dispositions,
+            authenticated_login=authenticated_login,
+            pr_author_login=pr_author_login,
+            resume_pending=True,
+        )
+
     async def _attempt(
         self,
         *,
@@ -262,18 +378,15 @@ class DefaultGitHubReviewPoster:
         omitted: tuple[GitHubReviewFindingDisposition, ...],
         authenticated_login: str,
         pr_author_login: str,
+        resume_pending: bool = False,
     ) -> GitHubReviewPostResult:
-        payload = _poster_support.payload(
+        payload, payload_json, attempt_digest = self._attempt_material(
             request=request,
             operation_key=operation_key,
             findings=findings,
-            event=effective_event,
+            effective_event=effective_event,
         )
-        payload_json = _poster_support.canonical_json(payload)
-        attempt_digest = hashlib.sha256(
-            b"autoskillit:github-review-attempt:v1\0" + payload_json
-        ).hexdigest()
-        self.ledger.begin_attempt(
+        attempt = self.ledger.begin_attempt(
             operation_key=operation_key,
             attempt_number=attempt_number,
             attempt_digest=attempt_digest,
@@ -283,6 +396,26 @@ class DefaultGitHubReviewPoster:
             effective_event=effective_event,
             effective_body_digest=_poster_support.text_digest(request.body),
         )
+        if resume_pending:
+            if attempt.state != ReviewOperationState.RETRY_PENDING.value:
+                return _poster_support.nonfinal_result(
+                    request,
+                    ReviewOperationState.AMBIGUOUS,
+                    ReviewResponseClass.NONE,
+                    "persisted review retry is no longer pending",
+                    operation_key=operation_key,
+                )
+            if not self.ledger.claim_retry_attempt(
+                operation_key=operation_key,
+                attempt_number=attempt_number,
+            ):
+                return _poster_support.nonfinal_result(
+                    request,
+                    ReviewOperationState.AMBIGUOUS,
+                    ReviewResponseClass.NONE,
+                    "persisted review retry was claimed by another poster",
+                    operation_key=operation_key,
+                )
         lease_owner = secrets.token_hex(24)
         slot = await self.coordinator.acquire(
             scope_id=scope_id,
@@ -457,14 +590,6 @@ class DefaultGitHubReviewPoster:
 
         invalid_index = _poster_support.structured_invalid_comment_index(response, len(findings))
         if invalid_index is not None and attempt_number == 1:
-            self.ledger.complete_attempt(
-                operation_key=operation_key,
-                attempt_number=attempt_number,
-                state=ReviewOperationState.TERMINAL,
-                response_class=response_class,
-                status_code=response.status_code,
-                error=_poster_support.structured_error_message(response),
-            )
             reconciliation = await self._reconcile_payload(
                 request=request,
                 operation_key=operation_key,
@@ -493,9 +618,13 @@ class DefaultGitHubReviewPoster:
                 )
                 return result
             if reconciliation.result is ReviewReconciliationResult.UNCERTAIN:
-                self.ledger.set_operation_state(
-                    operation_key,
-                    ReviewOperationState.AMBIGUOUS,
+                self.ledger.complete_attempt(
+                    operation_key=operation_key,
+                    attempt_number=attempt_number,
+                    state=ReviewOperationState.AMBIGUOUS,
+                    response_class=response_class,
+                    status_code=response.status_code,
+                    error=reconciliation.error,
                 )
                 self._release_slot(
                     scope_id,
@@ -517,9 +646,13 @@ class DefaultGitHubReviewPoster:
                 authenticated_login=authenticated_login,
             )
             if not scan.certain:
-                self.ledger.set_operation_state(
-                    operation_key,
-                    ReviewOperationState.AMBIGUOUS,
+                self.ledger.complete_attempt(
+                    operation_key=operation_key,
+                    attempt_number=attempt_number,
+                    state=ReviewOperationState.AMBIGUOUS,
+                    response_class=response_class,
+                    status_code=response.status_code,
+                    error=scan.error,
                 )
                 self._release_slot(
                     scope_id,
@@ -570,9 +703,13 @@ class DefaultGitHubReviewPoster:
                 keep_in_flight=False,
             )
             if not reduced or len(reduced) >= len(findings):
-                self.ledger.set_operation_state(
-                    operation_key,
-                    ReviewOperationState.TERMINAL,
+                self.ledger.complete_attempt(
+                    operation_key=operation_key,
+                    attempt_number=attempt_number,
+                    state=ReviewOperationState.TERMINAL,
+                    response_class=response_class,
+                    status_code=response.status_code,
+                    error="validation fallback did not produce a nonempty strict subset",
                 )
                 return _poster_support.nonfinal_result(
                     request,
@@ -582,16 +719,31 @@ class DefaultGitHubReviewPoster:
                     operation_key=operation_key,
                     executed_mutations=attempt_number,
                 )
+            next_findings = tuple(reduced)
+            next_omitted_tuple = tuple(next_omitted)
+            self._schedule_retry(
+                request=request,
+                operation_key=operation_key,
+                completed_attempt_number=attempt_number,
+                response_class=response_class,
+                status_code=response.status_code,
+                error=_poster_support.structured_error_message(response),
+                retry_attempt_number=2,
+                retry_findings=next_findings,
+                retry_effective_event=effective_event,
+                retry_omitted=next_omitted_tuple,
+            )
             return await self._attempt(
                 request=request,
                 operation_key=operation_key,
                 scope_id=scope_id,
-                findings=tuple(reduced),
+                findings=next_findings,
                 effective_event=effective_event,
                 attempt_number=2,
-                omitted=tuple(next_omitted),
+                omitted=next_omitted_tuple,
                 authenticated_login=authenticated_login,
                 pr_author_login=pr_author_login,
+                resume_pending=True,
             )
 
         if (
@@ -600,13 +752,17 @@ class DefaultGitHubReviewPoster:
             and authenticated_login == pr_author_login
             and _poster_support.is_structured_self_review(response)
         ):
-            self.ledger.complete_attempt(
+            self._schedule_retry(
+                request=request,
                 operation_key=operation_key,
-                attempt_number=attempt_number,
-                state=ReviewOperationState.TERMINAL,
+                completed_attempt_number=attempt_number,
                 response_class=response_class,
                 status_code=response.status_code,
                 error=_poster_support.structured_error_message(response),
+                retry_attempt_number=2,
+                retry_findings=findings,
+                retry_effective_event="COMMENT",
+                retry_omitted=omitted,
             )
             self._release_slot(
                 scope_id,
@@ -624,6 +780,7 @@ class DefaultGitHubReviewPoster:
                 omitted=omitted,
                 authenticated_login=authenticated_login,
                 pr_author_login=pr_author_login,
+                resume_pending=True,
             )
 
         self.ledger.complete_attempt(
@@ -659,6 +816,13 @@ class DefaultGitHubReviewPoster:
         findings: tuple[_poster_support.CanonicalFinding, ...],
         attempt: ReviewAttemptRecord,
     ) -> GitHubReviewPostResult:
+        if attempt.state == ReviewOperationState.RETRY_PENDING.value:
+            return await self._resume_pending_retry(
+                request=request,
+                operation_key=operation_key,
+                findings=findings,
+                attempt=attempt,
+            )
         authenticated = await self.gateway.get_authenticated_user()
         authenticated_login = (
             _poster_support.login(authenticated.data) if authenticated.succeeded else None

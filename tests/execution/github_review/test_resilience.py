@@ -12,6 +12,7 @@ from autoskillit.core import (
     ReviewOperationState,
     ReviewReconciliationResult,
     ReviewResponseClass,
+    compute_review_operation_key,
 )
 from autoskillit.execution import GitHubReviewLedger
 from autoskillit.execution.github_review import _poster_support
@@ -205,6 +206,71 @@ async def test_exact_structured_422_retries_one_strict_subset_and_accounts_findi
         if item.kind is ReviewFindingDispositionKind.POSTED
     ]
     assert {item.remote_comment_id for item in posted} == {900, 901}
+
+
+@pytest.mark.anyio
+async def test_crash_before_reduced_retry_claim_resumes_persisted_intent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _request(
+        tmp_path,
+        comments=(
+            GitHubReviewComment(path="src/a.py", line=10, body="Keep A"),
+            GitHubReviewComment(path="src/b.py", line=20, body="Reject B"),
+            GitHubReviewComment(path="src/c.py", line=30, body="Keep C"),
+        ),
+    )
+    database_path = tmp_path / "ledger.sqlite3"
+    clock = ManualClock()
+    gateway = StatefulReviewGateway(
+        clock=clock,
+        outcomes=[
+            CreateOutcome(422, data=_validation_error(1)),
+            CreateOutcome(200, commit=True),
+        ],
+    )
+    poster = _poster(database_path, gateway, clock)
+
+    def crash_after_retry_is_persisted(*, operation_key: str, attempt_number: int) -> bool:
+        del operation_key, attempt_number
+        raise RuntimeError("crash after retry scheduling")
+
+    monkeypatch.setattr(
+        poster.ledger,
+        "claim_retry_attempt",
+        crash_after_retry_is_persisted,
+    )
+
+    interrupted = await poster.post(request)
+
+    operation_key = compute_review_operation_key(request)
+    ledger = GitHubReviewLedger(database_path)
+    operation = ledger.load_operation(operation_key)
+    attempts = ledger.load_attempts(operation_key)
+    assert interrupted.state is ReviewOperationState.AMBIGUOUS
+    assert len(gateway.create_calls) == 1
+    assert operation is not None
+    assert operation.state is ReviewOperationState.RETRY_PENDING
+    assert [attempt.state for attempt in attempts] == [
+        ReviewOperationState.TERMINAL.value,
+        ReviewOperationState.RETRY_PENDING.value,
+    ]
+    assert attempts[1].canonical_indexes == (0, 2)
+
+    recovered = await _poster(database_path, gateway, clock).post(request)
+
+    assert recovered.state is ReviewOperationState.SUCCEEDED
+    assert recovered.executed_mutation_count == 2
+    assert len(gateway.create_calls) == 2
+    second_bodies = [
+        item["body"].split("\n\n", 1)[0] for item in gateway.create_calls[1]["comments"]
+    ]
+    assert second_bodies == ["Keep A", "Keep C"]
+    assert recovered.receipt is not None
+    dispositions = {item.original_index: item for item in recovered.receipt.finding_dispositions}
+    assert dispositions[1].kind is ReviewFindingDispositionKind.OMITTED_INVALID
+    assert ledger.load_attempts(operation_key)[-1].state == (ReviewOperationState.SUCCEEDED.value)
 
 
 @pytest.mark.anyio

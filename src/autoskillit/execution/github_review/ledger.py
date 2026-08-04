@@ -417,6 +417,113 @@ class GitHubReviewLedger:
                 (state.value, now, operation_key),
             )
 
+    def complete_attempt_and_schedule_retry(
+        self,
+        *,
+        operation_key: str,
+        completed_attempt_number: int,
+        response_class: ReviewResponseClass,
+        status_code: int | None,
+        error: str | None,
+        retry_attempt_number: int,
+        retry_attempt_digest: str,
+        retry_payload_json: bytes,
+        retry_canonical_indexes: tuple[int, ...],
+        retry_omitted_dispositions: tuple[GitHubReviewFindingDisposition, ...],
+        retry_effective_event: str,
+        retry_effective_body_digest: str,
+    ) -> None:
+        """Atomically finish one attempt and persist the exact retry intent."""
+
+        if retry_attempt_number <= completed_attempt_number:
+            raise ValueError("review retry attempt number must advance")
+        now = time.time()
+        indexes_json = json.dumps(retry_canonical_indexes, separators=(",", ":")).encode()
+        omitted_json = _dispositions_json(retry_omitted_dispositions)
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            completed = connection.execute(
+                "UPDATE attempts SET state = ?, response_class = ?, status_code = ?, "
+                "error = ?, updated_at = ? WHERE operation_key = ? AND attempt_number = ? "
+                "AND state = ?",
+                (
+                    ReviewOperationState.TERMINAL.value,
+                    response_class.value,
+                    status_code,
+                    error,
+                    now,
+                    operation_key,
+                    completed_attempt_number,
+                    ReviewOperationState.POSTING.value,
+                ),
+            )
+            if completed.rowcount != 1:
+                raise ValueError("review attempt was not posting before retry scheduling")
+            connection.execute(
+                "INSERT INTO attempts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    operation_key,
+                    retry_attempt_number,
+                    retry_attempt_digest,
+                    retry_payload_json,
+                    indexes_json,
+                    omitted_json,
+                    retry_effective_event,
+                    retry_effective_body_digest,
+                    ReviewOperationState.RETRY_PENDING.value,
+                    ReviewResponseClass.NONE.value,
+                    None,
+                    None,
+                    now,
+                    now,
+                ),
+            )
+            operation = connection.execute(
+                "UPDATE operations SET state = ?, updated_at = ? WHERE operation_key = ? "
+                "AND state = ?",
+                (
+                    ReviewOperationState.RETRY_PENDING.value,
+                    now,
+                    operation_key,
+                    ReviewOperationState.POSTING.value,
+                ),
+            )
+            if operation.rowcount != 1:
+                raise ValueError("review operation was not posting before retry scheduling")
+
+    def claim_retry_attempt(self, *, operation_key: str, attempt_number: int) -> bool:
+        """Atomically claim a persisted retry before any network mutation."""
+
+        now = time.time()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            attempt = connection.execute(
+                "UPDATE attempts SET state = ?, updated_at = ? WHERE operation_key = ? "
+                "AND attempt_number = ? AND state = ?",
+                (
+                    ReviewOperationState.POSTING.value,
+                    now,
+                    operation_key,
+                    attempt_number,
+                    ReviewOperationState.RETRY_PENDING.value,
+                ),
+            )
+            if attempt.rowcount != 1:
+                return False
+            operation = connection.execute(
+                "UPDATE operations SET state = ?, updated_at = ? WHERE operation_key = ? "
+                "AND state = ?",
+                (
+                    ReviewOperationState.POSTING.value,
+                    now,
+                    operation_key,
+                    ReviewOperationState.RETRY_PENDING.value,
+                ),
+            )
+            if operation.rowcount != 1:
+                raise ValueError("persisted review retry has inconsistent operation state")
+            return True
+
     def record_attempt(
         self,
         *,

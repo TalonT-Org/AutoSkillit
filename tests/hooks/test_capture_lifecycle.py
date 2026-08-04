@@ -16,11 +16,19 @@ from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
 from dataclasses import FrozenInstanceError, asdict, replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
 
+import autoskillit.hooks._capture._capacity as capture_capacity
+import autoskillit.hooks._capture._reconcile as capture_reconcile
+import autoskillit.hooks._capture._sweep_cursor as sweep_cursor
 import autoskillit.hooks._capture_lifecycle as capture_lifecycle
+from autoskillit.hooks._capture._failure_policy import (
+    CaptureFailureReason,
+    runtime_failure_reason,
+)
 from autoskillit.hooks._capture._lifecycle_policy import CaptureStatus
 from autoskillit.hooks._capture._snapshot import (
     CaptureAuthorityError,
@@ -29,7 +37,13 @@ from autoskillit.hooks._capture._snapshot import (
     verify_capture_snapshot,
 )
 from autoskillit.hooks._capture._syntax import PUBLIC_NAME_RE
-from autoskillit.hooks._capture._types import CaptureFailureEvidence
+from autoskillit.hooks._capture._types import (
+    CaptureCapacitySpec,
+    CaptureFailureEvidence,
+    CleanupBlocker,
+    CleanupProgress,
+    SweepBudgetSpec,
+)
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
     CaptureRoot,
@@ -38,7 +52,10 @@ from autoskillit.hooks._capture_artifacts import (
     open_capture_root,
     open_project_anchor,
 )
+from autoskillit.hooks._capture_contract import CaptureContractError
 from autoskillit.hooks._capture_lifecycle import (
+    CaptureCapacityError,
+    CaptureCapacityReason,
     CaptureDeliveryStatus,
     CaptureLedgerError,
     CaptureLifecycleError,
@@ -55,6 +72,17 @@ pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 _CAPTURE_ID = "0123456789abcdef"
 
 
+def _sweep_budget(max_attempts: int, max_duration_seconds: float) -> SweepBudgetSpec:
+    return SweepBudgetSpec(
+        max_records_inspected=capture_lifecycle.MAX_ACTIVE_RECORDS,
+        max_replay_bytes=capture_lifecycle.MAX_LEDGER_BYTES,
+        max_attempts=max_attempts,
+        max_transitions=max_attempts * 4,
+        max_cursor_writes=max_attempts,
+        max_duration_seconds=max_duration_seconds,
+    )
+
+
 class _Clock:
     def __init__(self, value: float = 1_000_000.0) -> None:
         self.value = value
@@ -67,6 +95,156 @@ class _Clock:
 
     def advance(self, seconds: float) -> None:
         self.value += seconds
+
+
+def test_capacity_failure_reason_mapping_is_exhaustive_and_enum_keyed() -> None:
+    mapping = capture_capacity._FAILURE_REASONS
+
+    assert mapping == {
+        CaptureCapacityReason.ACTIVE_CAPACITY: (CaptureFailureReason.ACTIVE_CAPACITY_EXHAUSTED),
+        CaptureCapacityReason.RETENTION_CAPACITY: (
+            CaptureFailureReason.RETENTION_CAPACITY_EXHAUSTED
+        ),
+        CaptureCapacityReason.EVIDENCE_CAPACITY: (
+            CaptureFailureReason.EVIDENCE_CAPACITY_EXHAUSTED
+        ),
+        CaptureCapacityReason.PROJECTED_COMPACTED_BYTES: (
+            CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED
+        ),
+        CaptureCapacityReason.HARD_LEDGER_CAPACITY: (
+            CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED
+        ),
+    }
+
+
+def test_capacity_spec_derives_total_recovery_headroom() -> None:
+    spec = replace(
+        CaptureCapacitySpec(),
+        cursor_headroom_bytes=1024,
+        tamper_headroom_bytes=2048,
+        reclamation_headroom_bytes=4096,
+    )
+
+    assert spec.recovery_headroom_bytes == 7168
+
+
+@pytest.mark.parametrize("reason", tuple(CaptureCapacityReason))
+def test_capacity_error_preserves_internal_and_transported_reasons(
+    reason: CaptureCapacityReason,
+) -> None:
+    failure = CaptureCapacityError(reason)
+
+    assert failure.reason is reason
+    assert failure.failure_reason is capture_capacity.failure_reason(reason)
+
+
+def test_runtime_failure_reason_prefers_exact_transported_reason() -> None:
+    class ConflictingFailure(RuntimeError):
+        reason = CaptureFailureReason.UNKNOWN_SETUP
+        failure_reason = CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED
+
+    assert (
+        runtime_failure_reason(ConflictingFailure())
+        is CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED
+    )
+
+
+def test_cleanup_outcome_field_types_are_publicly_exported() -> None:
+    assert capture_lifecycle.CleanupBlocker is CleanupBlocker
+    assert capture_lifecycle.CleanupProgress is CleanupProgress
+    assert {"CleanupBlocker", "CleanupProgress"} <= set(capture_lifecycle.__all__)
+
+
+@pytest.mark.parametrize(
+    "error_type",
+    (
+        CaptureLifecycleError,
+        CaptureLedgerError,
+        capture_lifecycle._capture_ledger.LedgerCodecError,
+        capture_lifecycle._capture_ledger.CaptureTransitionCommittedError,
+        capture_lifecycle._capture_migration.MigrationIntegrityError,
+        CaptureContractError,
+    ),
+)
+def test_runtime_failure_reason_reads_closed_integrity_metadata(
+    error_type: type[BaseException],
+) -> None:
+    assert (
+        runtime_failure_reason(error_type("invalid capture state"))
+        is CaptureFailureReason.LEDGER_INTEGRITY
+    )
+
+
+@pytest.mark.parametrize(
+    ("control_name", "error_type"),
+    (
+        (capture_lifecycle.LOCK_NAME, CaptureLifecycleError),
+        (capture_lifecycle.LEDGER_NAME, CaptureLedgerError),
+    ),
+)
+@pytest.mark.parametrize(
+    ("error_number", "expected_reason"),
+    (
+        (errno.EACCES, CaptureFailureReason.PERMISSION_DENIED),
+        (errno.ELOOP, CaptureFailureReason.FILESYSTEM_AUTHORITY),
+        (errno.EIO, CaptureFailureReason.FILESYSTEM_IO),
+    ),
+)
+def test_lifecycle_control_open_preserves_os_failure_reason(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    control_name: str,
+    error_type: type[CaptureLifecycleError],
+    error_number: int,
+    expected_reason: CaptureFailureReason,
+) -> None:
+    anchor, root, store = _open_store(tmp_path / "project", _Clock())
+    real_open = capture_lifecycle.os.open
+
+    def fail_control(name, *args, **kwargs):
+        if name == control_name:
+            raise OSError(error_number, "denied")
+        return real_open(name, *args, **kwargs)
+
+    monkeypatch.setattr(capture_lifecycle.os, "open", fail_control)
+    try:
+        with pytest.raises(error_type) as caught:
+            if control_name == capture_lifecycle.LOCK_NAME:
+                with store._locked():
+                    pass
+            else:
+                store._open_ledger()
+
+        assert runtime_failure_reason(caught.value) is expected_reason
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_migration_phase_persisted_values_remain_uppercase_and_pinned() -> None:
+    assert {
+        phase.name: phase.value for phase in capture_lifecycle._capture_migration.MigrationPhase
+    } == {
+        "PLANNED": "PLANNED",
+        "QUARANTINED": "QUARANTINED",
+        "RETIRED": "RETIRED",
+    }
+
+
+def test_migration_authority_error_preserves_wrapped_os_errno(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    migration = capture_lifecycle._capture_migration
+
+    def deny_stat(*_args, **_kwargs):
+        raise OSError(errno.EACCES, "denied")
+
+    monkeypatch.setattr(migration.os, "stat", deny_stat)
+
+    with pytest.raises(migration.MigrationAuthorityError) as caught:
+        migration.load_transaction(1)
+
+    assert caught.value.errno == errno.EACCES
 
 
 def test_lifecycle_record_rejects_invalid_identity_at_construction() -> None:
@@ -399,6 +577,120 @@ def test_mixed_legacy_history_migrates_once_without_manufacturing_final_authorit
         assert decoded.frames
         assert {frame.format_version for frame in decoded.frames} == {2}
         assert {frame.compaction_epoch for frame in decoded.frames} == {2}
+        assert (
+            not _capture_dir(project)
+            .joinpath(capture_lifecycle._capture_migration.MIGRATION_NAME)
+            .exists()
+        )
+        assert _capture_dir(project).joinpath(sweep_cursor.CURSOR_NAME).exists()
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_legacy_migration_retires_until_reduced_publication_capacity_fits(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    anchor = open_project_anchor(str(project))
+    root = open_capture_root(anchor, create=True)
+    project_identity = (anchor.identity.device, anchor.identity.inode)
+    root_identity = (root.identity.device, root.identity.inode)
+    capture_ids = (_CAPTURE_ID, "1111111111111111", "2222222222222222")
+    frames: list[bytes] = []
+    normalized: list[CaptureLifecycleRecord] = []
+    carriers: list[Path] = []
+    for capture_id in capture_ids:
+        carrier = _capture_dir(project) / f"shell_{capture_id}.log"
+        carrier.write_bytes(b"captured")
+        carrier.chmod(0o600)
+        carriers.append(carrier)
+        value = carrier.stat()
+        legacy = _legacy_record(
+            capture_id=capture_id,
+            state=CaptureState.FINALIZED,
+            project_identity=project_identity,
+            root_identity=root_identity,
+            artifact_identity=(value.st_dev, value.st_ino),
+            observed_size=len(b"captured"),
+        )
+        frames.append(_legacy_frame(legacy))
+        normalized.append(
+            capture_lifecycle._capture_ledger.legacy_record_from_dict(
+                legacy,
+                revision=1,
+                compaction_epoch=2,
+            )
+        )
+    frame_bytes = max(
+        len(
+            capture_lifecycle._capture_ledger.encode_frame(
+                capture_lifecycle._capture_ledger.record_to_dict(record),
+                compaction_epoch=2,
+            )
+        )
+        for record in normalized
+    )
+    low = frame_bytes * 2 + 64
+    high = low + 2048
+    store = CaptureLifecycleStore(
+        root.fd,
+        project_identity=project_identity,
+        root_identity=root_identity,
+        wall_clock=lambda: 3_000_000.0,
+        _factory_token=capture_lifecycle._STORE_FACTORY_TOKEN,
+    )
+    store._capacity = CaptureCapacitySpec(
+        max_operational_records=8,
+        max_retained_records=8,
+        max_evidence_records=8,
+        max_tombstones=1,
+        compaction_low_bytes=low,
+        compaction_high_bytes=high,
+        hard_ledger_bytes=high + 5120,
+        cursor_headroom_bytes=1024,
+        tamper_headroom_bytes=1024,
+        reclamation_headroom_bytes=1024,
+    )
+    ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
+    ledger.write_bytes(b"".join(frames))
+    ledger.chmod(0o600)
+    try:
+        bounded = store.sweep(
+            SweepBudgetSpec(
+                max_records_inspected=1,
+                max_replay_bytes=capture_lifecycle.MAX_LEDGER_BYTES,
+                max_attempts=8,
+                max_transitions=32,
+                max_cursor_writes=8,
+                max_duration_seconds=1.0,
+            )
+        )
+
+        assert bounded.blocker is CleanupBlocker.RECORD_BUDGET
+        assert bounded.records_inspected == 1
+        assert bounded.cursor_writes == 0
+
+        store._sweep_budget = capture_reconcile.RUNNER_TAIL_BUDGET
+        store._sweep_records_inspected = store._sweep_replay_bytes = 0
+        store._sweep_transitions = store._sweep_cursor_writes = 0
+        try:
+            store.get_record(_CAPTURE_ID)
+        finally:
+            store._sweep_budget = None
+
+        assert store._sweep_cursor_writes == 1
+        decoded = capture_lifecycle._capture_ledger.decode_ledger(ledger.read_bytes())
+        assert {frame.format_version for frame in decoded.frames} == {2}
+        assert len(decoded.frames) == 2
+        assert sum(not carrier.exists() for carrier in carriers) == 2
+        assert ledger.stat().st_size <= low
+        assert (
+            not _capture_dir(project)
+            .joinpath(capture_lifecycle._capture_migration.MIGRATION_NAME)
+            .exists()
+        )
     finally:
         root.close()
         anchor.close()
@@ -875,7 +1167,7 @@ def test_deleted_capture_id_starts_a_new_incarnation_at_revision_one(
     artifact.release_lease()
     clock.advance(3601)
     try:
-        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        outcome = store.sweep(_sweep_budget(8, 1))
         tombstone = store.get_record(_CAPTURE_ID)
         replacement = store.reserve_capture(_CAPTURE_ID)
 
@@ -1114,7 +1406,7 @@ def test_failed_recovery_without_identity_preserves_replacement(
         staging.write_bytes(b"replacement")
 
         clock.advance(3601)
-        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        outcome = store.sweep(_sweep_budget(8, 1))
 
         assert outcome.tampered == 1
         assert store.get_record(_CAPTURE_ID).state is CaptureState.TAMPERED
@@ -1154,7 +1446,7 @@ def test_interrupted_publication_fsync_recovers_public_artifact(
         assert (_capture_dir(project) / failed.public_name).exists()
 
         clock.advance(3601)
-        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        outcome = store.sweep(_sweep_budget(8, 1))
         assert outcome.deleted == 1
         assert store.get_record(_CAPTURE_ID).state is CaptureState.DELETED
     finally:
@@ -1187,7 +1479,7 @@ def test_failed_published_commit_recovers_public_artifact(
         assert (_capture_dir(project) / failed.public_name).exists()
 
         clock.advance(3601)
-        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        outcome = store.sweep(_sweep_budget(8, 1))
         assert outcome.deleted == 1
         assert store.get_record(_CAPTURE_ID).state is CaptureState.DELETED
     finally:
@@ -1239,7 +1531,7 @@ def test_staged_identity_replacement_is_preserved_as_tampered(
         assert (staging.stat().st_dev, staging.stat().st_ino) != failed.artifact_identity
 
         clock.advance(3601)
-        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        outcome = store.sweep(_sweep_budget(8, 1))
         assert outcome.tampered == 1
         assert store.get_record(_CAPTURE_ID).state is CaptureState.TAMPERED
         assert staging.read_bytes() == b"replacement"
@@ -1275,7 +1567,7 @@ def test_quarantine_replacement_is_preserved_as_tampered(
             "unlink",
             interrupt_quarantine_unlink,
         )
-        first = store.sweep(max_items=8, max_duration_seconds=1)
+        first = store.sweep(_sweep_budget(8, 1))
         retry = store.get_record(_CAPTURE_ID)
         assert first.errors == 1
         assert retry is not None
@@ -1290,7 +1582,7 @@ def test_quarantine_replacement_is_preserved_as_tampered(
         quarantine.write_bytes(b"replacement")
 
         clock.advance(3)
-        second = store.sweep(max_items=8, max_duration_seconds=1)
+        second = store.sweep(_sweep_budget(8, 1))
         assert second.tampered == 1
         assert store.get_record(_CAPTURE_ID).state is CaptureState.TAMPERED
         assert not public.exists()
@@ -1317,7 +1609,7 @@ def test_normalization_rolls_back_unverified_public_link(tmp_path: Path) -> None
 
     try:
         clock.advance(3601)
-        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        outcome = store.sweep(_sweep_budget(8, 1))
 
         current = store.get_record(_CAPTURE_ID)
         assert outcome.tampered == 1
@@ -1343,7 +1635,7 @@ def test_quarantine_rolls_back_unverified_recovery_link(tmp_path: Path) -> None:
 
     try:
         clock.advance(3601)
-        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        outcome = store.sweep(_sweep_budget(8, 1))
 
         current = store.get_record(_CAPTURE_ID)
         assert outcome.tampered == 1
@@ -1391,7 +1683,7 @@ def test_unsafe_public_substitutes_survive_as_tampered(
             public.chmod(0o666)
 
         clock.advance(3601)
-        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        outcome = store.sweep(_sweep_budget(8, 1))
 
         record = store.get_record(_CAPTURE_ID)
         assert outcome.tampered == 1
@@ -1459,7 +1751,7 @@ def test_quiet_live_writer_survives_past_abandonment_deadline(tmp_path: Path) ->
     artifact = create_capture_artifact(root, _CAPTURE_ID, store)
     try:
         clock.advance(7200)
-        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        outcome = store.sweep(_sweep_budget(8, 1))
         assert outcome.carrier_lease_live == 1
         assert outcome.deleted == 0
         assert (_capture_dir(project) / artifact.name).exists()
@@ -1492,7 +1784,7 @@ def test_live_writer_sweep_closes_observation_descriptor(
             "_try_artifact_lease",
             staticmethod(carrier_lease_live),
         )
-        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        outcome = store.sweep(_sweep_budget(8, 1))
 
         assert outcome.carrier_lease_live == 1
         assert observed_fd >= 0
@@ -1538,7 +1830,7 @@ def test_cleanup_revalidates_revision_after_carrier_lease_handoff(
 
     monkeypatch.setattr(store, "_acquire_cleanup_lease", acquire_then_advance)
     try:
-        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        outcome = store.sweep(_sweep_budget(8, 1))
         current = store.get_record(_CAPTURE_ID)
 
         assert outcome.not_due == 1
@@ -1583,8 +1875,7 @@ def test_cleanup_handoff_loses_to_verified_final_commit(
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(
             store.sweep,
-            max_items=8,
-            max_duration_seconds=1,
+            _sweep_budget(8, 1),
         )
         try:
             assert lease_acquired.wait(timeout=5)
@@ -1683,7 +1974,7 @@ def test_observe_open_operational_failure_is_retried(
         clock.advance(3601)
         monkeypatch.setattr(capture_lifecycle.os, "open", fail_artifact_open)
 
-        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        outcome = store.sweep(_sweep_budget(8, 1))
 
         record = store.get_record(_CAPTURE_ID)
         assert outcome.errors == 1
@@ -1863,7 +2154,7 @@ def test_terminated_producer_is_recovered_by_independent_store(tmp_path: Path) -
         artifact = _capture_dir(project) / artifact_name
         assert artifact.read_bytes() == b"abandoned"
 
-        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        outcome = store.sweep(_sweep_budget(8, 1))
 
         assert outcome.deleted == 1
         assert store.get_record(_CAPTURE_ID).state is CaptureState.DELETED
@@ -1881,12 +2172,12 @@ def test_finalized_capture_ttl_begins_at_terminal_commit(tmp_path: Path) -> None
     artifact.release_lease()
     try:
         clock.advance(3599)
-        before = store.sweep(max_items=8, max_duration_seconds=1)
+        before = store.sweep(_sweep_budget(8, 1))
         assert before.deleted == 0
         assert (_capture_dir(project) / artifact.name).exists()
 
         clock.advance(2)
-        after = store.sweep(max_items=8, max_duration_seconds=1)
+        after = store.sweep(_sweep_budget(8, 1))
         assert after.deleted == 1
         assert after.deleted_bytes == 8
         assert not (_capture_dir(project) / artifact.name).exists()
@@ -1969,7 +2260,7 @@ def test_unlocked_abandoned_writer_is_recovered_and_deleted(tmp_path: Path) -> N
     artifact.release_lease()
     try:
         clock.advance(3601)
-        outcome = store.sweep(max_items=8, max_duration_seconds=1)
+        outcome = store.sweep(_sweep_budget(8, 1))
         assert outcome.deleted == 1
         assert not (_capture_dir(project) / artifact.name).exists()
         assert store.get_record(_CAPTURE_ID).state is CaptureState.DELETED
@@ -2023,7 +2314,7 @@ def test_staging_normalization_retry_preserves_phase(
     try:
         clock.advance(3601)
         monkeypatch.setattr(capture_lifecycle.os, "link", interrupted_link)
-        first = store.sweep(max_items=8, max_duration_seconds=1)
+        first = store.sweep(_sweep_budget(8, 1))
 
         retry = store.get_record(_CAPTURE_ID)
         assert first.errors == 1
@@ -2033,7 +2324,7 @@ def test_staging_normalization_retry_preserves_phase(
         assert staging.exists()
 
         clock.advance(3)
-        second = store.sweep(max_items=8, max_duration_seconds=1)
+        second = store.sweep(_sweep_budget(8, 1))
         assert second.deleted == 1
         assert store.get_record(_CAPTURE_ID).state is CaptureState.DELETED
         assert not staging.exists()
@@ -2064,7 +2355,7 @@ def test_quarantine_retry_reuses_committed_phase(
 
     try:
         monkeypatch.setattr(capture_lifecycle.os, "unlink", interrupted_unlink)
-        first = store.sweep(max_items=8, max_duration_seconds=1)
+        first = store.sweep(_sweep_budget(8, 1))
 
         retry = store.get_record(_CAPTURE_ID)
         assert first.errors == 1
@@ -2076,7 +2367,7 @@ def test_quarantine_retry_reuses_committed_phase(
         assert not (_capture_dir(project) / artifact.name).exists()
 
         clock.advance(3)
-        second = store.sweep(max_items=8, max_duration_seconds=1)
+        second = store.sweep(_sweep_budget(8, 1))
         assert second.deleted == 1
         assert store.get_record(_CAPTURE_ID).state is CaptureState.DELETED
         assert not (_capture_dir(project) / retry.quarantine_name).exists()
@@ -2110,9 +2401,9 @@ def test_cleanup_outcome_counts_retries_per_sweep(
 
     try:
         monkeypatch.setattr(store, "_quarantine_delete", fail_delete)
-        first = store.sweep(max_items=8, max_duration_seconds=1)
+        first = store.sweep(_sweep_budget(8, 1))
         clock.advance(3)
-        second = store.sweep(max_items=8, max_duration_seconds=1)
+        second = store.sweep(_sweep_budget(8, 1))
 
         record = store.get_record(_CAPTURE_ID)
         assert first.errors == first.retry_count == 1
@@ -2132,16 +2423,16 @@ def test_sweep_is_bounded_and_repeated_calls_make_progress(tmp_path: Path) -> No
         artifact_names = _seed_finalized_captures(root, store, count=5)
 
         clock.advance(3601)
-        first = store.sweep(max_items=2, max_duration_seconds=1)
+        first = store.sweep(_sweep_budget(2, 1))
         assert first.examined == 2
         assert first.deleted == 2
         assert first.remaining_due == 3
 
-        second = store.sweep(max_items=2, max_duration_seconds=1)
+        second = store.sweep(_sweep_budget(2, 1))
         assert second.deleted == 2
         assert second.remaining_due == 1
 
-        third = store.sweep(max_items=2, max_duration_seconds=1)
+        third = store.sweep(_sweep_budget(2, 1))
         assert third.deleted == 1
         assert third.remaining_due == 0
         assert not any((_capture_dir(project) / name).exists() for name in artifact_names)
@@ -2184,7 +2475,7 @@ def test_sweep_continues_after_failed_due_record(
         clock.advance(3601)
         monkeypatch.setattr(store, "_quarantine_delete", fail_first)
 
-        outcome = store.sweep(max_items=2, max_duration_seconds=1)
+        outcome = store.sweep(_sweep_budget(2, 1))
 
         failed = store.get_record(failed_id)
         completed = store.get_record(completed_id)
@@ -2230,7 +2521,7 @@ def test_sweep_defers_without_blocking_on_contended_ledger_lock(tmp_path: Path) 
         assert holder.stdout.readline() == "ready\n"
 
         started = time.monotonic()
-        outcome = store.sweep(max_items=8, max_duration_seconds=0.05)
+        outcome = store.sweep(_sweep_budget(8, 0.05))
         elapsed = time.monotonic() - started
 
         assert elapsed < 0.5
@@ -2266,7 +2557,7 @@ def test_sweep_is_bounded_by_elapsed_duration(
         clock.advance(3601)
         monkeypatch.setattr(store, "_sweep_one", advancing_sweep)
 
-        outcome = store.sweep(max_items=5, max_duration_seconds=1)
+        outcome = store.sweep(_sweep_budget(5, 1))
 
         assert outcome.examined == 2
         assert outcome.deleted == 2
@@ -2277,12 +2568,330 @@ def test_sweep_is_bounded_by_elapsed_duration(
         anchor.close()
 
 
+def test_sweep_reserves_one_attempt_after_discovery_consumes_elapsed_budget(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    real_due_keys = store._due_keys
+
+    def slow_discovery(now: float, max_records: int):
+        result = real_due_keys(now, max_records)
+        clock.advance(0.051)
+        return result
+
+    budget = SweepBudgetSpec(
+        max_records_inspected=8,
+        max_replay_bytes=capture_lifecycle.MAX_LEDGER_BYTES,
+        max_attempts=1,
+        max_transitions=4,
+        max_cursor_writes=1,
+        max_duration_seconds=0.05,
+    )
+    try:
+        _seed_finalized_captures(root, store, count=1)
+        clock.advance(3601)
+        monkeypatch.setattr(store, "_due_keys", slow_discovery)
+
+        outcome = store.sweep(budget)
+
+        assert outcome.examined == 1
+        assert outcome.deleted == 1
+        assert outcome.duration >= budget.max_duration_seconds
+        assert outcome.records_inspected == 1
+        assert outcome.blocker is CleanupBlocker.NONE
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_sweep_hard_attempt_budget_reports_typed_blocker(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    budget = SweepBudgetSpec(
+        max_records_inspected=8,
+        max_replay_bytes=capture_lifecycle.MAX_LEDGER_BYTES,
+        max_attempts=1,
+        max_transitions=4,
+        max_cursor_writes=1,
+        max_duration_seconds=1,
+    )
+    try:
+        _seed_finalized_captures(root, store, count=3)
+        clock.advance(3601)
+
+        outcome = store.sweep(budget)
+
+        assert outcome.examined == 1
+        assert outcome.deleted == 1
+        assert outcome.remaining_due == 2
+        assert outcome.blocker is CleanupBlocker.ATTEMPT_BUDGET
+        assert outcome.records_inspected <= budget.max_records_inspected
+        assert outcome.replay_bytes <= budget.max_replay_bytes
+        assert outcome.transitions <= budget.max_transitions
+        assert outcome.cursor_writes <= budget.max_cursor_writes
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_sweep_record_budget_is_hard_and_content_free(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    budget = SweepBudgetSpec(
+        max_records_inspected=2,
+        max_replay_bytes=capture_lifecycle.MAX_LEDGER_BYTES,
+        max_attempts=2,
+        max_transitions=8,
+        max_cursor_writes=2,
+        max_duration_seconds=1,
+    )
+    try:
+        _seed_finalized_captures(root, store, count=5)
+        clock.advance(3601)
+
+        outcome = store.sweep(budget)
+
+        assert outcome.records_inspected == budget.max_records_inspected
+        assert outcome.examined == 2
+        assert outcome.blocker is CleanupBlocker.RECORD_BUDGET
+        assert outcome.remaining_due >= 1
+        serialized = json.dumps(asdict(outcome), sort_keys=True)
+        assert _CAPTURE_ID not in serialized
+        assert str(project) not in serialized
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_persisted_cursor_reaches_reclaimable_work_behind_live_prefix(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    live = [create_capture_artifact(root, f"{index:016x}", store) for index in (1, 2)]
+    reclaimable = create_capture_artifact(root, f"{3:016x}", store)
+    os.write(reclaimable.fd, b"reclaimable")
+    _commit_verified(store, reclaimable, b"reclaimable", clock)
+    reclaimable.close_artifact_fd()
+    reclaimable.release_lease()
+    clock.advance(7200)
+    budget = _sweep_budget(2, 1)
+    try:
+        first = store.sweep(budget)
+        reopened = CaptureLifecycleStore.from_open_authorities(
+            anchor,
+            root,
+            wall_clock=clock.wall,
+            monotonic=clock.monotonic,
+        )
+        second = reopened.sweep(budget)
+
+        assert first.carrier_lease_live == 2
+        assert first.deleted == 0
+        assert second.deleted == 1
+        assert all((_capture_dir(project) / artifact.name).exists() for artifact in live)
+        assert not (_capture_dir(project) / reclaimable.name).exists()
+        cursor = _capture_dir(project) / sweep_cursor.CURSOR_NAME
+        assert stat.S_IMODE(cursor.stat().st_mode) == 0o600
+    finally:
+        for artifact in live:
+            artifact.close_artifact_fd()
+            artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+def test_missing_cursor_is_rebuilt_from_future_ledger_state(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    artifact = create_capture_artifact(root, _CAPTURE_ID, store)
+    cursor = _capture_dir(project) / sweep_cursor.CURSOR_NAME
+    try:
+        assert not cursor.exists()
+
+        outcome = store.sweep(_sweep_budget(1, 1))
+
+        assert outcome.examined == 0
+        assert outcome.cursor_writes == 1
+        assert outcome.progress is CleanupProgress.CURSOR_REPAIRED
+        assert json.loads(cursor.read_text())["capture_id"] == _CAPTURE_ID
+        assert stat.S_IMODE(cursor.stat().st_mode) == 0o600
+    finally:
+        artifact.close_artifact_fd()
+        artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+def test_sweep_cursor_retries_interrupted_private_file_write(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    anchor, root, store = _open_store(project, _Clock())
+    real_write = sweep_cursor._ledger.os.write
+    interrupted = False
+
+    def interrupt_once(fd: int, payload: bytes) -> int:
+        nonlocal interrupted
+        if not interrupted:
+            interrupted = True
+            raise InterruptedError
+        return real_write(fd, payload)
+
+    monkeypatch.setattr(sweep_cursor._ledger.os, "write", interrupt_once)
+    try:
+        sweep_cursor.write_cursor(
+            root.fd,
+            project_identity=store._project_identity,
+            root_identity=store._root_identity,
+            compaction_epoch=1,
+            due_key=capture_lifecycle.DueKey(1_000_000.0, _CAPTURE_ID),
+        )
+
+        loaded = sweep_cursor.load_cursor(
+            root.fd,
+            project_identity=store._project_identity,
+            root_identity=store._root_identity,
+            compaction_epoch=1,
+        )
+        assert interrupted
+        assert loaded.status is sweep_cursor.CursorStatus.VALID
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_content_invalid_cursor_is_removed_for_empty_ledger(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    cursor = _capture_dir(project) / sweep_cursor.CURSOR_NAME
+    cursor.write_bytes(b"not canonical json\n")
+    cursor.chmod(0o600)
+    try:
+        outcome = store.sweep(_sweep_budget(1, 1))
+
+        assert outcome.examined == 0
+        assert outcome.cursor_writes == 1
+        assert outcome.progress is CleanupProgress.CURSOR_REPAIRED
+        assert not cursor.exists()
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_sweep_cursor_symlink_is_fail_closed(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store, artifact = _finalized_capture(project, clock)
+    artifact.close_artifact_fd()
+    artifact.release_lease()
+    clock.advance(3601)
+    capture_dir = _capture_dir(project)
+    target = capture_dir / "cursor-target"
+    target.write_text("untrusted")
+    (capture_dir / sweep_cursor.CURSOR_NAME).symlink_to(target.name)
+    try:
+        with pytest.raises(sweep_cursor.CursorAuthorityError) as caught:
+            store.sweep(_sweep_budget(1, 1))
+        assert caught.value.errno == errno.ELOOP
+        assert (_capture_dir(project) / artifact.name).exists()
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_sweep_cursor_preserves_wrapped_os_error_errno(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def deny_stat(*_args, **_kwargs):
+        raise OSError(errno.EACCES, "denied")
+
+    monkeypatch.setattr(sweep_cursor.os, "stat", deny_stat)
+
+    with pytest.raises(sweep_cursor.CursorAuthorityError) as caught:
+        sweep_cursor.load_cursor(
+            1,
+            project_identity=(1, 2),
+            root_identity=(3, 4),
+            compaction_epoch=1,
+        )
+
+    assert caught.value.errno == errno.EACCES
+
+
+def test_sweep_cursor_identity_change_preserves_authority_errno(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    anchor, root, _store = _open_store(project, _Clock())
+    cursor = _capture_dir(project) / sweep_cursor.CURSOR_NAME
+    cursor.write_bytes(b"")
+    cursor.chmod(0o600)
+    observed = cursor.stat()
+
+    monkeypatch.setattr(
+        sweep_cursor.os,
+        "fstat",
+        lambda _fd: SimpleNamespace(
+            st_mode=observed.st_mode,
+            st_uid=observed.st_uid,
+            st_nlink=observed.st_nlink,
+            st_dev=observed.st_dev,
+            st_ino=observed.st_ino + 1,
+        ),
+    )
+    try:
+        with pytest.raises(sweep_cursor.CursorAuthorityError) as caught:
+            sweep_cursor.load_cursor(
+                root.fd,
+                project_identity=(anchor.identity.device, anchor.identity.inode),
+                root_identity=(root.identity.device, root.identity.inode),
+                compaction_epoch=1,
+            )
+
+        assert caught.value.errno == errno.ELOOP
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_reconcile_cursor_unsafe_metadata_reports_filesystem_authority(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    anchor, root, _store = _open_store(project, _Clock())
+    cursor = _capture_dir(project) / sweep_cursor.CURSOR_NAME
+    cursor.write_bytes(b"{}\n")
+    cursor.chmod(0o644)
+    root.close()
+    anchor.close()
+
+    outcome = capture_reconcile.reconcile_capture_store(
+        str(project),
+        capture_reconcile.RUNNER_TAIL_BUDGET,
+    )
+
+    assert outcome.errors == 1
+    assert outcome.remaining_due == 1
+    assert outcome.blocker is CleanupBlocker.FILESYSTEM_AUTHORITY
+
+
 def test_cleanup_outcome_is_frozen_and_contains_no_identifiers(tmp_path: Path) -> None:
     project = tmp_path / "project"
     clock = _Clock()
     anchor, root, store = _open_store(project, clock)
     try:
-        outcome = store.sweep(max_items=1, max_duration_seconds=1)
+        outcome = store.sweep(_sweep_budget(1, 1))
         with pytest.raises(FrozenInstanceError):
             outcome.deleted = 10
         serialized = json.dumps(asdict(outcome), sort_keys=True)
@@ -2291,6 +2900,173 @@ def test_cleanup_outcome_is_frozen_and_contains_no_identifiers(tmp_path: Path) -
     finally:
         root.close()
         anchor.close()
+
+
+def test_reconcile_adapter_opens_existing_store_without_creation(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, _store, artifact = _finalized_capture(project, clock)
+    artifact.close_artifact_fd()
+    artifact.release_lease()
+    root.close()
+    anchor.close()
+
+    outcome = capture_reconcile.reconcile_capture_store(
+        str(project),
+        capture_reconcile.RUNNER_TAIL_BUDGET,
+    )
+
+    assert outcome.deleted == 1
+    assert outcome.errors == 0
+    assert outcome.remaining_due == 0
+
+    absent_project = tmp_path / "absent-project"
+    absent_project.mkdir()
+    absent_outcome = capture_reconcile.reconcile_capture_store(
+        str(absent_project),
+        capture_reconcile.RUNNER_TAIL_BUDGET,
+    )
+
+    assert absent_outcome.blocker is CleanupBlocker.STORE_ABSENT
+    assert absent_outcome.errors == 0
+    assert not _capture_dir(absent_project).exists()
+
+
+def test_emit_bounded_diagnostic_normalizes_and_escapes_closing_bracket() -> None:
+    emitted: list[str] = []
+
+    capture_reconcile.emit_bounded_diagnostic(
+        "capture\n cleanup ] deferred",
+        maximum_bytes=100,
+        write=emitted.append,
+    )
+
+    assert emitted == [r"capture cleanup \u005d deferred"]
+
+
+def test_emit_bounded_diagnostic_truncates_at_utf8_boundary() -> None:
+    emitted: list[str] = []
+
+    capture_reconcile.emit_bounded_diagnostic(
+        "ééé",
+        maximum_bytes=5,
+        write=emitted.append,
+    )
+
+    assert emitted == ["éé"]
+    assert len(emitted[0].encode("utf-8")) <= 5
+
+
+@pytest.mark.parametrize(
+    "failure",
+    (
+        OSError("write failed"),
+        RuntimeError("write failed"),
+        TypeError("write failed"),
+        UnicodeError("write failed"),
+        ValueError("write failed"),
+    ),
+)
+def test_emit_bounded_diagnostic_swallows_best_effort_write_failures(
+    failure: Exception,
+) -> None:
+    def fail_write(_detail: str) -> None:
+        raise failure
+
+    capture_reconcile.emit_bounded_diagnostic(
+        "capture cleanup deferred",
+        maximum_bytes=100,
+        write=fail_write,
+    )
+
+
+@pytest.mark.parametrize(
+    ("failure", "blocker"),
+    (
+        (
+            CaptureLifecycleError.from_os_error(
+                "cannot open lifecycle lock",
+                OSError(errno.EACCES, "denied"),
+            ),
+            CleanupBlocker.PERMISSION_DENIED,
+        ),
+        (
+            capture_lifecycle._capture_migration.MigrationAuthorityError(
+                "cannot inspect legacy migration transaction",
+                error_number=errno.EIO,
+            ),
+            CleanupBlocker.FILESYSTEM_IO,
+        ),
+    ),
+)
+def test_reconcile_adapter_preserves_runtime_failure_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    failure: BaseException,
+    blocker: CleanupBlocker,
+) -> None:
+    def fail_open(*_args, **_kwargs):
+        raise failure
+
+    monkeypatch.setattr(capture_reconcile._authority, "open_capture_lifecycle", fail_open)
+
+    outcome = capture_reconcile.reconcile_capture_store(
+        "/project",
+        capture_reconcile.RUNNER_TAIL_BUDGET,
+    )
+
+    assert outcome.blocker is blocker
+    assert outcome.errors == 1
+
+
+@pytest.mark.parametrize(
+    ("reason", "blocker"),
+    (
+        (
+            CaptureFailureReason.ACTIVE_CAPACITY_EXHAUSTED,
+            CleanupBlocker.FILESYSTEM_AUTHORITY,
+        ),
+        (
+            CaptureFailureReason.RETENTION_CAPACITY_EXHAUSTED,
+            CleanupBlocker.FILESYSTEM_AUTHORITY,
+        ),
+        (
+            CaptureFailureReason.EVIDENCE_CAPACITY_EXHAUSTED,
+            CleanupBlocker.FILESYSTEM_AUTHORITY,
+        ),
+        (
+            CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED,
+            CleanupBlocker.FILESYSTEM_AUTHORITY,
+        ),
+        (
+            CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED,
+            CleanupBlocker.FILESYSTEM_AUTHORITY,
+        ),
+        (CaptureFailureReason.PERMISSION_DENIED, CleanupBlocker.PERMISSION_DENIED),
+        (CaptureFailureReason.FILESYSTEM_IO, CleanupBlocker.FILESYSTEM_IO),
+        (CaptureFailureReason.LEDGER_INTEGRITY, CleanupBlocker.LEDGER_INTEGRITY),
+        (CaptureFailureReason.MIGRATION_BLOCKED, CleanupBlocker.MIGRATION_BLOCKED),
+        (CaptureFailureReason.FILESYSTEM_AUTHORITY, CleanupBlocker.FILESYSTEM_AUTHORITY),
+        (CaptureFailureReason.RECOVERY_CONTENDED, CleanupBlocker.FILESYSTEM_AUTHORITY),
+        (CaptureFailureReason.UNKNOWN_SETUP, CleanupBlocker.FILESYSTEM_AUTHORITY),
+    ),
+)
+def test_reconcile_adapter_preserves_closed_setup_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    reason: CaptureFailureReason,
+    blocker: CleanupBlocker,
+) -> None:
+    def fail_open(*_args, **_kwargs):
+        raise CaptureSetupError(reason, "capture setup failed")
+
+    monkeypatch.setattr(capture_reconcile._authority, "open_capture_lifecycle", fail_open)
+
+    outcome = capture_reconcile.reconcile_capture_store(
+        "/project",
+        capture_reconcile.RUNNER_TAIL_BUDGET,
+    )
+
+    assert outcome.blocker is blocker
+    assert outcome.errors == 1
 
 
 def test_incomplete_final_ledger_frame_is_recovered(tmp_path: Path) -> None:
@@ -2330,6 +3106,141 @@ def test_active_record_bound_preserves_valid_ledger(
         assert ledger.read_bytes() == valid_ledger
         assert store.get_record(_CAPTURE_ID).state is CaptureState.RESERVED
         assert store.get_record("1" * 16) is None
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_evidence_capacity_counts_operational_and_forensic_records(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    store._capacity = replace(
+        CaptureCapacitySpec(),
+        max_operational_records=2,
+        max_retained_records=2,
+        max_evidence_records=2,
+    )
+    first = store.reserve_capture(_CAPTURE_ID)
+    store._transition(
+        store._authority_for(first),
+        allowed_states={CaptureState.RESERVED},
+        transform=lambda record: replace(
+            record,
+            state=CaptureState.TAMPERED,
+            retention_phase=CaptureRetentionPhase.TAMPERED,
+            revision=record.revision + 1,
+        ),
+    )
+    try:
+        admitted = store.reserve_capture("1" * 16)
+        assert admitted.state is CaptureState.RESERVED
+        with pytest.raises(CaptureCapacityError) as failure:
+            store.reserve_capture("2" * 16)
+        assert failure.value.reason is CaptureCapacityReason.EVIDENCE_CAPACITY
+        assert store.get_record(_CAPTURE_ID).state is CaptureState.TAMPERED
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_retention_occupancy_has_distinct_capacity_reason(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    store._capacity = replace(
+        CaptureCapacitySpec(),
+        max_operational_records=2,
+        max_retained_records=1,
+        max_evidence_records=3,
+    )
+    try:
+        store.reserve_capture(_CAPTURE_ID)
+        with pytest.raises(CaptureCapacityError) as failure:
+            store.reserve_capture("1" * 16)
+        assert failure.value.reason is CaptureCapacityReason.RETENTION_CAPACITY
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_projected_compacted_bytes_preserve_recovery_headroom(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
+    try:
+        store.reserve_capture(_CAPTURE_ID)
+        valid = ledger.read_bytes()
+        hard_bound = len(valid) * 2
+        store._capacity = CaptureCapacitySpec(
+            max_operational_records=8,
+            max_retained_records=8,
+            max_evidence_records=8,
+            max_tombstones=2,
+            compaction_low_bytes=hard_bound // 3,
+            compaction_high_bytes=hard_bound // 2,
+            hard_ledger_bytes=hard_bound,
+            cursor_headroom_bytes=32,
+            tamper_headroom_bytes=32,
+            reclamation_headroom_bytes=32,
+        )
+        with pytest.raises(CaptureCapacityError) as failure:
+            store.reserve_capture("1" * 16)
+        assert failure.value.reason is CaptureCapacityReason.HARD_LEDGER_CAPACITY
+        assert ledger.read_bytes() == valid
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_recovery_transition_compacts_within_reserved_headroom(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    try:
+        current = store.reserve_capture(_CAPTURE_ID)
+        candidate = replace(
+            current,
+            state=CaptureState.TAMPERED,
+            retention_phase=CaptureRetentionPhase.TAMPERED,
+            revision=current.revision + 1,
+        )
+        projected = {_CAPTURE_ID: candidate}
+        encoded = capture_capacity.compacted_bytes(
+            projected,
+            candidate.compaction_epoch + 1,
+            store._capacity,
+        )
+        store._capacity = CaptureCapacitySpec(
+            max_operational_records=8,
+            max_retained_records=8,
+            max_evidence_records=8,
+            max_tombstones=2,
+            compaction_low_bytes=encoded - 4,
+            compaction_high_bytes=encoded - 3,
+            hard_ledger_bytes=encoded,
+            cursor_headroom_bytes=1,
+            tamper_headroom_bytes=1,
+            reclamation_headroom_bytes=1,
+        )
+        monkeypatch.setattr(capture_lifecycle, "_COMPACTION_THRESHOLD_BYTES", 1)
+
+        recovered = store._transition(
+            store._authority_for(current),
+            allowed_states={CaptureState.RESERVED},
+            transform=lambda _record: candidate,
+        )
+
+        ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
+        assert recovered.state is CaptureState.TAMPERED
+        assert ledger.stat().st_size <= store._capacity.hard_ledger_bytes
+        assert ledger.stat().st_size > (
+            store._capacity.hard_ledger_bytes - store._capacity.recovery_headroom_bytes
+        )
     finally:
         root.close()
         anchor.close()

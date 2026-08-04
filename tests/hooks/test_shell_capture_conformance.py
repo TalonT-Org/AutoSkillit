@@ -37,10 +37,13 @@ from autoskillit.execution.session import DefaultManagedHeadlessSessionLineageSt
 from autoskillit.hooks._capture_artifacts import open_capture_lifecycle
 from autoskillit.hooks._capture_contract import (
     CAPTURE_REQUEST_PROTOCOL_VERSION,
+    CaptureFailureReason,
+    CaptureFailureV3,
     CaptureLineageRef,
     CaptureRequest,
     CaptureV2Fields,
     encode_capture_request,
+    parse_capture_failure_v3,
     parse_capture_v2,
 )
 from autoskillit.hooks._capture_lifecycle import CaptureState
@@ -118,6 +121,16 @@ def _parse_single_capture_v2(output: bytes) -> CaptureV2Fields:
     ]
     assert len(candidates) == 1
     return parse_capture_v2(candidates[0])
+
+
+def _parse_single_failure_v3(output: bytes) -> CaptureFailureV3:
+    candidates = [
+        line
+        for line in output.splitlines()
+        if line.startswith(b"[AutoSkillit shell capture failure v3:")
+    ]
+    assert len(candidates) == 1
+    return parse_capture_failure_v3(candidates[0])
 
 
 def _assert_published_capture_v2(project: Path, output: bytes, expected: bytes) -> None:
@@ -591,8 +604,13 @@ def test_capture_dir_uncreatable_fail_stops(tmp_path: Path) -> None:
     wrapped = _run_wrapped(command, tmp_path)
 
     assert wrapped.returncode == 1
-    combined = (wrapped.stdout + wrapped.stderr).decode(errors="replace")
+    combined_bytes = wrapped.stdout + wrapped.stderr
+    combined = combined_bytes.decode(errors="replace")
     assert '"status":"capture_failed"' in combined
+    assert (
+        _parse_single_failure_v3(combined_bytes).reason
+        is CaptureFailureReason.FILESYSTEM_AUTHORITY
+    )
     assert "should_not_run" not in combined
 
 
@@ -637,7 +655,9 @@ def test_main_generated_wrapper_rejects_symlinked_capture_components(
     )
 
     assert completed.returncode == 1
+    combined = (completed.stdout + completed.stderr).encode()
     assert '"status":"capture_failed"' in completed.stdout + completed.stderr
+    assert _parse_single_failure_v3(combined).reason is CaptureFailureReason.FILESYSTEM_AUTHORITY
     assert not (project / "command_ran").exists()
     assert not list(external.glob("shell_*.log"))
     assert secret.read_text() == "must-not-be-read"

@@ -37,21 +37,28 @@ else:
     from _capture import _failure_policy
     from _capture._syntax import CAPTURE_ID_RE, REFERENCE_RE, SHA256_RE
 
+CaptureFailureReason = _failure_policy.CaptureFailureReason
+
 __all__ = [
     "CAPTURE_REQUEST_PROTOCOL_VERSION",
     "CAPTURE_V2_PRODUCER",
     "CAPTURE_V2_SCHEMA_VERSION",
+    "CAPTURE_FAILURE_V3_PRODUCER",
+    "CAPTURE_FAILURE_V3_SCHEMA_VERSION",
     "MANAGED_ATTEMPT_ID_ENV_VAR",
     "MANAGED_LAUNCH_ID_ENV_VAR",
     "MANAGED_LINEAGE_DIGEST_ENV_VAR",
     "MANAGED_LINEAGE_REF_ENV_VAR",
     "MANAGED_LINEAGE_REF_SCHEMA_VERSION",
     "MAX_CAPTURE_FAILURE_V2_BYTES",
+    "MAX_CAPTURE_FAILURE_V3_BYTES",
     "MAX_CAPTURE_V2_MARKER_BYTES",
     "NATIVE_SHELL_CAPTURE_MODE_ENV_VAR",
     "PROTECTED_CAPTURE_ENV_VARS",
     "CaptureContractError",
+    "CaptureFailureReason",
     "CaptureFailureV2",
+    "CaptureFailureV3",
     "CaptureLineageRef",
     "CaptureProtocolError",
     "CaptureRequest",
@@ -65,8 +72,10 @@ __all__ = [
     "decode_lineage_ref_json",
     "encode_capture_request",
     "parse_capture_failure_v2",
+    "parse_capture_failure_v3",
     "parse_capture_v2",
     "render_capture_failure_v2",
+    "render_capture_failure_v3",
     "render_capture_v2",
 ]
 
@@ -74,6 +83,9 @@ CAPTURE_V2_SCHEMA_VERSION = 2
 CAPTURE_V2_PRODUCER = "codex_shell_capture"
 MAX_CAPTURE_V2_MARKER_BYTES = 2048
 MAX_CAPTURE_FAILURE_V2_BYTES = 1024
+CAPTURE_FAILURE_V3_SCHEMA_VERSION = 3
+CAPTURE_FAILURE_V3_PRODUCER = CAPTURE_V2_PRODUCER
+MAX_CAPTURE_FAILURE_V3_BYTES = 1024
 
 CAPTURE_REQUEST_PROTOCOL_VERSION: Final = 1
 MANAGED_LINEAGE_REF_SCHEMA_VERSION: Final = 1
@@ -95,6 +107,7 @@ PROTECTED_CAPTURE_ENV_VARS: Final = frozenset(
 
 _CAPTURE_PREFIX = b"[AutoSkillit shell capture v2:"
 _FAILURE_PREFIX = b"[AutoSkillit shell capture failure v2:"
+_FAILURE_V3_PREFIX = b"[AutoSkillit shell capture failure v3:"
 _FRAME_SUFFIX = b"]"
 _MAX_COMMAND_BYTES = 64 * 1024
 _MAX_SIGNED_VALUE = (1 << 63) - 1
@@ -161,10 +174,13 @@ _FAILURE_KEYS = frozenset(
         "status",
     }
 )
+_FAILURE_V3_KEYS = _FAILURE_KEYS | {"reason"}
 
 
 class CaptureContractError(ValueError):
     """Raised when a V2 capture transport value is invalid or noncanonical."""
+
+    failure_reason = CaptureFailureReason.LEDGER_INTEGRITY
 
 
 @dataclass(frozen=True, slots=True)
@@ -273,6 +289,18 @@ class CaptureFailureV2:
 
     def __post_init__(self) -> None:
         _validate_failure(self)
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureFailureV3:
+    reason: CaptureFailureReason
+    stage: str
+    detail: str
+    shell_returncode: int | None
+    settlement_returncode: int | None
+
+    def __post_init__(self) -> None:
+        _validate_failure_v3(self)
 
 
 def _plain_int(value: object, *, minimum: int = 0, maximum: int) -> bool:
@@ -517,6 +545,28 @@ def _validate_failure(value: CaptureFailureV2) -> None:
         raise CaptureContractError("invalid capture failure transport")
 
 
+def _validate_failure_v3(value: CaptureFailureV3) -> None:
+    if (
+        type(value) is not CaptureFailureV3
+        or type(value.reason) is not CaptureFailureReason
+        or not _failure_policy.valid_failure_stage(value.stage)
+        or not _failure_policy.valid_failure_detail(value.detail)
+        or (
+            value.shell_returncode is not None
+            and not _plain_int(value.shell_returncode, maximum=255)
+        )
+        or (
+            value.settlement_returncode is not None
+            and (
+                not isinstance(value.settlement_returncode, int)
+                or isinstance(value.settlement_returncode, bool)
+                or not -255 <= value.settlement_returncode <= 255
+            )
+        )
+    ):
+        raise CaptureContractError("invalid capture failure V3 transport")
+
+
 def _failure_primitive(value: CaptureFailureV2) -> dict[str, object]:
     _validate_failure(value)
     return {
@@ -530,15 +580,11 @@ def _failure_primitive(value: CaptureFailureV2) -> dict[str, object]:
     }
 
 
-def _render_failure(value: CaptureFailureV2) -> bytes:
+def render_capture_failure_v2(value: CaptureFailureV2) -> bytes:
     encoded = _FAILURE_PREFIX + _canonical_json(_failure_primitive(value)) + _FRAME_SUFFIX
     if len(encoded) > MAX_CAPTURE_FAILURE_V2_BYTES:
         raise CaptureContractError("capture failure marker exceeds bound")
     return encoded
-
-
-def render_capture_failure_v2(value: CaptureFailureV2) -> bytes:
-    return _render_failure(value)
 
 
 def parse_capture_failure_v2(value: bytes) -> CaptureFailureV2:
@@ -562,7 +608,7 @@ def parse_capture_failure_v2(value: bytes) -> CaptureFailureV2:
         settlement_returncode=_optional_integer_field(decoded["settlement_returncode"]),
     )
     _validate_failure(failure)
-    if _render_failure(failure) != value:
+    if render_capture_failure_v2(failure) != value:
         raise CaptureContractError("capture failure transport is not canonical")
     return failure
 
@@ -900,3 +946,54 @@ def _validate_command(value: object) -> None:
         raise CaptureProtocolError("invalid command") from exc
     if len(encoded) > _MAX_COMMAND_BYTES:
         raise CaptureProtocolError("command exceeds limit")
+
+
+def _failure_v3_primitive(value: CaptureFailureV3) -> dict[str, object]:
+    _validate_failure_v3(value)
+    return {
+        "detail": value.detail,
+        "producer": CAPTURE_FAILURE_V3_PRODUCER,
+        "reason": value.reason.value,
+        "schema_version": CAPTURE_FAILURE_V3_SCHEMA_VERSION,
+        "settlement_returncode": value.settlement_returncode,
+        "shell_returncode": value.shell_returncode,
+        "stage": value.stage,
+        "status": "capture_failed",
+    }
+
+
+def render_capture_failure_v3(value: CaptureFailureV3) -> bytes:
+    encoded = _FAILURE_V3_PREFIX + _canonical_json(_failure_v3_primitive(value)) + _FRAME_SUFFIX
+    if len(encoded) > MAX_CAPTURE_FAILURE_V3_BYTES:
+        raise CaptureContractError("capture failure V3 marker exceeds bound")
+    return encoded
+
+
+def parse_capture_failure_v3(value: bytes) -> CaptureFailureV3:
+    decoded = _decode_frame(
+        value,
+        prefix=_FAILURE_V3_PREFIX,
+        maximum=MAX_CAPTURE_FAILURE_V3_BYTES,
+    )
+    if set(decoded) != _FAILURE_V3_KEYS:
+        raise CaptureContractError("capture failure V3 fields do not match schema")
+    if (
+        decoded["schema_version"] != CAPTURE_FAILURE_V3_SCHEMA_VERSION
+        or decoded["producer"] != CAPTURE_FAILURE_V3_PRODUCER
+        or decoded["status"] != "capture_failed"
+    ):
+        raise CaptureContractError("capture failure status does not match V3")
+    try:
+        reason = CaptureFailureReason(_string_field(decoded["reason"]))
+    except ValueError as exc:
+        raise CaptureContractError("capture failure V3 reason is unknown") from exc
+    failure = CaptureFailureV3(
+        reason=reason,
+        stage=_string_field(decoded["stage"]),
+        detail=_string_field(decoded["detail"]),
+        shell_returncode=_optional_integer_field(decoded["shell_returncode"]),
+        settlement_returncode=_optional_integer_field(decoded["settlement_returncode"]),
+    )
+    if render_capture_failure_v3(failure) != value:
+        raise CaptureContractError("capture failure V3 transport is not canonical")
+    return failure

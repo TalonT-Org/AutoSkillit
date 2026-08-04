@@ -8,7 +8,7 @@ from typing import Protocol, TypeAlias
 
 from . import _ledger, _snapshot
 from ._module_identity import register_module_aliases
-from ._types import ObservedArtifact
+from ._types import CaptureCapacitySpec, ObservedArtifact, SweepBudgetSpec
 
 register_module_aliases(__name__)
 
@@ -91,12 +91,20 @@ class ResolverStorePort(LedgerReadStorePort, Protocol):
     _project_identity: tuple[int, int]
     _root_identity: tuple[int, int]
     _wall_clock: Callable[[], float]
+    _sweep_budget: SweepBudgetSpec | None
 
 
 class SweepStorePort(TransitionStorePort, Protocol):
+    _root_fd: int
     _project_identity: tuple[int, int]
     _root_identity: tuple[int, int]
+    _monotonic: Callable[[], float]
     _wall_clock: Callable[[], float]
+    _sweep_budget: SweepBudgetSpec | None
+    _sweep_records_inspected: int
+    _sweep_replay_bytes: int
+    _sweep_transitions: int
+    _sweep_cursor_writes: int
 
     def _acquire_cleanup_lease(
         self,
@@ -121,3 +129,15 @@ class SweepStorePort(TransitionStorePort, Protocol):
         preleased: ObservedArtifact | None = None,
         lease_checked: bool = False,
     ) -> int: ...
+
+
+class MigrationStorePort(SweepStorePort, Protocol):
+    _capacity: CaptureCapacitySpec
+
+    def _compact_locked(
+        self,
+        records: Records,
+        compaction_epoch: int,
+        *,
+        candidate: Record | None = None,
+    ) -> None: ...

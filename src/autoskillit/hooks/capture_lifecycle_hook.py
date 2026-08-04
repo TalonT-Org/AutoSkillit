@@ -13,11 +13,10 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _capture._authority import (  # type: ignore[import-not-found]  # noqa: E402
-    CaptureLifecycleError,
-    CaptureSetupError,
-    CaptureStoreAbsentError,
-    open_capture_lifecycle,
+from _capture._reconcile import (  # type: ignore[import-not-found]  # noqa: E402
+    SESSION_START_BUDGET,
+    cleanup_diagnostic,
+    reconcile_capture_store,
 )
 
 _capture_package = sys.modules["_capture"]
@@ -66,25 +65,12 @@ def main() -> int:
             or "\x00" in payload_cwd
         ):
             return 0
-        try:
-            with open_capture_lifecycle(payload_cwd, create=False) as lifecycle:
-                outcome = lifecycle.sweep(max_items=32, max_duration_seconds=0.05)
-                if outcome.errors:
-                    _bounded_stderr(
-                        "[AutoSkillit capture lifecycle cleanup deferred after "
-                        f"{outcome.errors} errors]\n"
-                    )
-        except CaptureStoreAbsentError:
-            return 0
-        except CaptureSetupError as exc:
-            detail = " ".join(str(exc).split()).replace("]", "\\u005d")
-            _bounded_stderr(f"[AutoSkillit capture lifecycle cleanup failed: {detail}]\n")
-        except (CaptureLifecycleError, OSError) as exc:
-            detail = " ".join(str(exc).split()).replace("]", "\\u005d")
-            _bounded_stderr(f"[AutoSkillit capture lifecycle cleanup failed: {detail}]\n")
-    except Exception as exc:
-        detail = " ".join(str(exc).split()).replace("]", "\\u005d")
-        _bounded_stderr(f"[AutoSkillit capture lifecycle hook failed: {detail}]\n")
+        outcome = reconcile_capture_store(payload_cwd, SESSION_START_BUDGET)
+        detail = cleanup_diagnostic(outcome, owner="session_start")
+        if detail is not None:
+            _bounded_stderr(f"[AutoSkillit capture lifecycle cleanup deferred: {detail}]\n")
+    except Exception:
+        _bounded_stderr("[AutoSkillit capture lifecycle hook failed]\n")
     return 0
 
 

@@ -22,13 +22,18 @@ from autoskillit.core import (
     NativeShellCaptureMode,
 )
 from autoskillit.hooks._capture_contract import (
+    CAPTURE_FAILURE_V3_PRODUCER,
+    CAPTURE_FAILURE_V3_SCHEMA_VERSION,
     CAPTURE_REQUEST_PROTOCOL_VERSION,
     CAPTURE_V2_PRODUCER,
     CAPTURE_V2_SCHEMA_VERSION,
     MAX_CAPTURE_FAILURE_V2_BYTES,
+    MAX_CAPTURE_FAILURE_V3_BYTES,
     MAX_CAPTURE_V2_MARKER_BYTES,
     CaptureContractError,
+    CaptureFailureReason,
     CaptureFailureV2,
+    CaptureFailureV3,
     CaptureLineageRef,
     CaptureProtocolError,
     CaptureRequest,
@@ -39,8 +44,10 @@ from autoskillit.hooks._capture_contract import (
     decode_lineage_ref_json,
     encode_capture_request,
     parse_capture_failure_v2,
+    parse_capture_failure_v3,
     parse_capture_v2,
     render_capture_failure_v2,
+    render_capture_failure_v3,
     render_capture_v2,
 )
 
@@ -561,3 +568,78 @@ def test_protected_lineage_reference_requires_canonical_exact_json() -> None:
         )
     with pytest.raises(CaptureProtocolError):
         decode_lineage_ref_json(" " * (contract._MAX_LINEAGE_REF_JSON_BYTES + 1))
+
+
+def test_v3_failure_reason_values_remain_uppercase_and_pinned() -> None:
+    assert {reason.name: reason.value for reason in CaptureFailureReason} == {
+        "ACTIVE_CAPACITY_EXHAUSTED": "ACTIVE_CAPACITY_EXHAUSTED",
+        "RETENTION_CAPACITY_EXHAUSTED": "RETENTION_CAPACITY_EXHAUSTED",
+        "EVIDENCE_CAPACITY_EXHAUSTED": "EVIDENCE_CAPACITY_EXHAUSTED",
+        "PROJECTED_COMPACTED_BYTES_EXHAUSTED": ("PROJECTED_COMPACTED_BYTES_EXHAUSTED"),
+        "HARD_LEDGER_CAPACITY_EXHAUSTED": "HARD_LEDGER_CAPACITY_EXHAUSTED",
+        "MIGRATION_BLOCKED": "MIGRATION_BLOCKED",
+        "LEDGER_INTEGRITY": "LEDGER_INTEGRITY",
+        "FILESYSTEM_AUTHORITY": "FILESYSTEM_AUTHORITY",
+        "PERMISSION_DENIED": "PERMISSION_DENIED",
+        "FILESYSTEM_IO": "FILESYSTEM_IO",
+        "RECOVERY_CONTENDED": "RECOVERY_CONTENDED",
+        "UNKNOWN_SETUP": "UNKNOWN_SETUP",
+    }
+
+
+@pytest.mark.parametrize("reason", tuple(CaptureFailureReason))
+def test_v3_failure_frame_has_closed_reason_and_is_canonical(
+    reason: CaptureFailureReason,
+) -> None:
+    failure = CaptureFailureV3(
+        reason=reason,
+        stage="capture_setup",
+        detail="capture setup failed",
+        shell_returncode=None,
+        settlement_returncode=None,
+    )
+
+    encoded = render_capture_failure_v3(failure)
+    decoded = json.loads(encoded.removeprefix(b"[AutoSkillit shell capture failure v3:")[:-1])
+
+    assert parse_capture_failure_v3(encoded) == failure
+    assert decoded == {
+        "detail": "capture setup failed",
+        "producer": CAPTURE_FAILURE_V3_PRODUCER,
+        "reason": reason.value,
+        "schema_version": CAPTURE_FAILURE_V3_SCHEMA_VERSION,
+        "settlement_returncode": None,
+        "shell_returncode": None,
+        "stage": "capture_setup",
+        "status": "capture_failed",
+    }
+    assert len(encoded) <= MAX_CAPTURE_FAILURE_V3_BYTES
+    with pytest.raises(CaptureContractError):
+        parse_capture_failure_v2(encoded)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        lambda value: value.replace(b'"reason":"UNKNOWN_SETUP"', b'"reason":"UNKNOWN"'),
+        lambda value: value.replace(b'"schema_version":3', b'"schema_version":2'),
+        lambda value: value.replace(b'"reason"', b'"extra":true,"reason"'),
+        lambda value: value.replace(b":{", b":{ ", 1),
+    ),
+)
+def test_v3_failure_parser_rejects_unknown_wrong_extra_and_noncanonical(mutation) -> None:
+    encoded = render_capture_failure_v3(
+        CaptureFailureV3(
+            reason=CaptureFailureReason.UNKNOWN_SETUP,
+            stage="capture_setup",
+            detail="capture setup failed",
+            shell_returncode=None,
+            settlement_returncode=None,
+        )
+    )
+
+    with pytest.raises(CaptureContractError):
+        parse_capture_failure_v3(mutation(encoded))
+
+    with pytest.raises(CaptureContractError, match="bound"):
+        parse_capture_failure_v3(b"x" * (MAX_CAPTURE_FAILURE_V3_BYTES + 1))

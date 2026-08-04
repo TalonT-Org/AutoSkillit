@@ -20,6 +20,8 @@ if _HOOKS_DIR not in sys.path:
 
 if TYPE_CHECKING:
     from autoskillit.hooks._capture import _delivery as _capture_delivery
+    from autoskillit.hooks._capture import _failure_policy as _capture_failure_policy
+    from autoskillit.hooks._capture import _reconcile as _capture_reconcile
     from autoskillit.hooks._capture import _replay as _capture_replay
     from autoskillit.hooks._capture._authority import (
         _DIRECTORY_FLAGS,
@@ -27,7 +29,6 @@ if TYPE_CHECKING:
         CAPTURE_PATH_COMPONENTS,
         CaptureRoot,
         CaptureSetupError,
-        CaptureStoreAbsentError,
         FileIdentity,
         ProjectAnchor,
         _open_directory_component,
@@ -54,12 +55,14 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture_contract import (
         _CAPTURE_ID_RE,
         _MAX_COMMAND_BYTES,
+        CaptureFailureReason,
         CaptureLineageRef,
         CaptureProtocolError,
         CaptureRequest,
         decode_capture_request,
     )
     from autoskillit.hooks._capture_lifecycle import (
+        CaptureCapacityError,
         CaptureDeliveryStatus,
         CaptureLifecycleError,
         CaptureLifecycleStore,
@@ -87,6 +90,8 @@ if TYPE_CHECKING:
     )
 else:
     from _capture import _delivery as _capture_delivery
+    from _capture import _failure_policy as _capture_failure_policy
+    from _capture import _reconcile as _capture_reconcile
     from _capture import _replay as _capture_replay
     from _capture._authority import (
         _DIRECTORY_FLAGS,
@@ -94,7 +99,6 @@ else:
         CAPTURE_PATH_COMPONENTS,
         CaptureRoot,
         CaptureSetupError,
-        CaptureStoreAbsentError,
         FileIdentity,
         ProjectAnchor,
         _open_directory_component,
@@ -121,12 +125,14 @@ else:
     from _capture_contract import (
         _CAPTURE_ID_RE,
         _MAX_COMMAND_BYTES,
+        CaptureFailureReason,
         CaptureLineageRef,
         CaptureProtocolError,
         CaptureRequest,
         decode_capture_request,
     )
     from _capture_lifecycle import (
+        CaptureCapacityError,
         CaptureDeliveryStatus,
         CaptureLifecycleError,
         CaptureLifecycleStore,
@@ -199,7 +205,9 @@ class CaptureArtifact:
 
     def __post_init__(self, _factory_token: object | None) -> None:
         if _factory_token is not _ARTIFACT_FACTORY_TOKEN:
-            raise CaptureSetupError("CaptureArtifact must be created by create_capture_artifact")
+            raise CaptureSetupError.authority(
+                "CaptureArtifact must be created by create_capture_artifact"
+            )
 
     def close_artifact_fd(self) -> None:
         if self.fd >= 0:
@@ -225,9 +233,9 @@ class CaptureArtifact:
         finalized: FinalizedCapture,
     ) -> VerifiedCaptureReader:
         if self.drain_writer_fd >= 0:
-            raise CaptureSetupError("capture drain writer is still open")
+            raise CaptureSetupError.authority("capture drain writer is still open")
         if self.fd < 0 or self.lease_fd < 0:
-            raise CaptureSetupError("capture artifact ownership is unavailable")
+            raise CaptureSetupError.authority("capture artifact ownership is unavailable")
         carrier_fd = self.fd
         lease_fd = self.lease_fd
         object.__setattr__(self, "fd", -1)
@@ -239,7 +247,9 @@ class CaptureArtifact:
                 os.close(carrier_fd)
             except OSError:
                 pass
-            raise CaptureSetupError("cannot transfer capture carrier lease") from exc
+            raise CaptureSetupError.from_os_error(
+                exc, "cannot transfer capture carrier lease"
+            ) from exc
         return lifecycle._adopt_verified_capture(finalized, carrier_fd)
 
 
@@ -255,7 +265,7 @@ def create_capture_artifact(
     lifecycle: CaptureLifecycleStore,
 ) -> CaptureArtifact:
     if not _CAPTURE_ID_RE.fullmatch(capture_id):
-        raise CaptureSetupError("invalid capture id")
+        raise CaptureSetupError.unknown("invalid capture id")
     try:
         fd, lease_fd, public_name, raw_identity, authority = lifecycle.create_artifact(capture_id)
         identity = FileIdentity(device=raw_identity[0], inode=raw_identity[1])
@@ -267,18 +277,29 @@ def create_capture_artifact(
             authority=authority,
             _factory_token=_ARTIFACT_FACTORY_TOKEN,
         )
-    except (CaptureLifecycleError, CaptureTransitionCommittedError, OSError) as exc:
-        raise CaptureSetupError("cannot create managed capture artifact") from exc
+    except CaptureCapacityError as exc:
+        raise CaptureSetupError(
+            exc.failure_reason,
+            "capture capacity is exhausted",
+        ) from exc
+    except (CaptureLifecycleError, CaptureTransitionCommittedError) as exc:
+        raise CaptureSetupError(
+            CaptureFailureReason.LEDGER_INTEGRITY, "cannot create managed capture artifact"
+        ) from exc
+    except OSError as exc:
+        raise CaptureSetupError.from_os_error(
+            exc, "cannot create managed capture artifact"
+        ) from exc
 
 
 def _duplicate_artifact_writer(artifact: CaptureArtifact) -> int:
     writer_fd = -1
     try:
         if artifact.fd < 0 or artifact.drain_writer_fd >= 0:
-            raise CaptureSetupError("capture drain writer ownership is unavailable")
+            raise CaptureSetupError.authority("capture drain writer ownership is unavailable")
         writer_fd = os.dup(artifact.fd)
         if not _same_identity(writer_fd, artifact.identity):
-            raise CaptureSetupError("duplicated capture artifact identity changed")
+            raise CaptureSetupError.authority("duplicated capture artifact identity changed")
         object.__setattr__(artifact, "drain_writer_fd", writer_fd)
         return writer_fd
     except (CaptureSetupError, OSError) as exc:
@@ -289,7 +310,7 @@ def _duplicate_artifact_writer(artifact: CaptureArtifact) -> int:
                 pass
         if isinstance(exc, CaptureSetupError):
             raise
-        raise CaptureSetupError("cannot duplicate capture artifact fd") from exc
+        raise CaptureSetupError.from_os_error(exc, "cannot duplicate capture artifact fd") from exc
 
 
 def _read_bounded_file_at(directory_fd: int, name: str) -> dict:
@@ -382,7 +403,7 @@ def verify_reference_publication_binding(
     """Verify that an issued tuple still resolves through the retained authorities."""
 
     if type(issuance) is not IssuedCaptureReference:
-        raise CaptureSetupError("publication binding requires an issued reference")
+        raise CaptureSetupError.unknown("publication binding requires an issued reference")
     manifest = issuance.snapshot.manifest
     if (
         manifest.project_identity != (anchor.identity.device, anchor.identity.inode)
@@ -494,7 +515,7 @@ def _publish_oversized_capture(
 ) -> PublishedCaptureReference | UnavailableCaptureReference:
     issuance = finalized.issuance
     if issuance is None:
-        raise CaptureSetupError("oversized capture lacks issued reference")
+        raise CaptureSetupError.unknown("oversized capture lacks issued reference")
     try:
         binding_valid = verify_reference_publication_binding(
             anchor,
@@ -572,17 +593,17 @@ def run_capture(
         or (attempt_id is None) != (lineage_ref is None)
         or (requested_mode == "direct" and lineage_ref is None)
     ):
-        raise CaptureSetupError("invalid capture authority")
+        raise CaptureSetupError.unknown("invalid capture authority")
     try:
         command_bytes = command.encode("utf-8")
     except UnicodeEncodeError as exc:
-        raise CaptureSetupError("invalid command encoding") from exc
+        raise CaptureSetupError.unknown("invalid command encoding") from exc
     if (
         not _CAPTURE_ID_RE.fullmatch(capture_id)
         or "\x00" in command
         or len(command_bytes) > _MAX_COMMAND_BYTES
     ):
-        raise CaptureSetupError("invalid capture request")
+        raise CaptureSetupError.unknown("invalid capture request")
 
     anchor = open_project_anchor(cwd)
     root: CaptureRoot | None = None
@@ -617,7 +638,7 @@ def run_capture(
                 project_policy_disabled=policy.disabled,
             )
             if not observation_recorded:
-                raise CaptureSetupError("runner observation recording failed")
+                raise CaptureSetupError.unknown("runner observation recording failed")
         if effective_direct:
             try:
                 spawned = _spawn_bash(anchor, bash_path, command, capture_output=False)
@@ -632,8 +653,9 @@ def run_capture(
                     raise
                 return _capture_replay.capture_failure_return(
                     _capture_replay.failure_transport(
+                        reason=_capture_failure_policy.runtime_failure_reason(exc),
                         stage="direct process",
-                        detail=f"direct process failed: {type(exc).__name__}: {exc}",
+                        detail="direct process failed",
                         shell_returncode=(
                             None if direct_settlement is None else direct_settlement.returncode
                         ),
@@ -678,6 +700,7 @@ def run_capture(
                 terminal_committed = True
                 return _capture_replay.capture_failure_return(
                     _capture_replay.failure_transport(
+                        reason=CaptureFailureReason.FILESYSTEM_IO,
                         stage=failure_stage,
                         detail=("capture output drain truncated after process-group settlement"),
                         shell_returncode=command_returncode,
@@ -697,6 +720,7 @@ def run_capture(
                 terminal_committed = True
                 return _capture_replay.capture_failure_return(
                     _capture_replay.failure_transport(
+                        reason=CaptureFailureReason.FILESYSTEM_IO,
                         stage="artifact_write",
                         detail="capture artifact write failed",
                         shell_returncode=command_returncode,
@@ -761,7 +785,7 @@ def run_capture(
                 ):
                     payload = _capture_replay.render_oversized_capture(delivery_value)
                 else:
-                    raise CaptureSetupError("capture delivery value is unavailable")
+                    raise CaptureSetupError.unknown("capture delivery value is unavailable")
                 failure_stage = "capture stdout write and flush"
 
                 def record_delivery_progress(_written: int) -> None:
@@ -785,14 +809,11 @@ def run_capture(
             return command_returncode
         except BaseException as exc:
             logger.error("capture_shell_execution_failed", exc_info=True)
-            recovery_detail = ""
             if command_outcome is None and process is not None:
                 settlement = _settle_failed_capture(process)
             if not terminal_committed:
                 try:
-                    failure_detail = _capture_replay._bounded_detail(
-                        f"{type(exc).__name__}: {exc}"
-                    )
+                    failure_detail = _capture_replay._bounded_detail(f"{failure_stage} failed")
                     lifecycle.commit_capture_failure(
                         artifact.authority,
                         CaptureFailureEvidence(
@@ -805,11 +826,8 @@ def run_capture(
                         observed_size=max(0, os.fstat(artifact.fd).st_size),
                     )
                     terminal_committed = True
-                except _CAPTURE_RUNTIME_ERRORS as recovery_error:
-                    recovery_detail = (
-                        "; failed-state recovery also failed: "
-                        f"{type(recovery_error).__name__}: {recovery_error}"
-                    )
+                except _CAPTURE_RUNTIME_ERRORS:
+                    logger.error("capture_failure_commit_failed", exc_info=True)
             elif finalized_capture is not None:
                 _capture_delivery.settle_finalized_failure(
                     lifecycle,
@@ -822,12 +840,16 @@ def run_capture(
                 )
             if not isinstance(exc, _CAPTURE_RUNTIME_ERRORS):
                 raise
+            transport_reason = _capture_failure_policy.runtime_failure_reason(exc)
+            transport_detail = f"{failure_stage} failed"
+            if isinstance(exc, CaptureSetupError):
+                transport_reason = exc.reason
+                transport_detail = exc.detail
             return _capture_replay.capture_failure_return(
                 _capture_replay.failure_transport(
+                    reason=transport_reason,
                     stage=failure_stage,
-                    detail=(
-                        f"{failure_stage} failed: {type(exc).__name__}: {exc}{recovery_detail}"
-                    ),
+                    detail=transport_detail,
                     shell_returncode=command_returncode,
                     settlement=settlement,
                 )
@@ -870,11 +892,12 @@ def _dispatch_runner(request: CaptureRequest) -> int:
             _capture_replay.runner_failure(
                 "capture_request",
                 "capture request rejected before command execution",
+                reason=CaptureFailureReason.UNKNOWN_SETUP,
             )
         )
     try:
         if request.command is None:
-            raise CaptureSetupError("run request is missing command")
+            raise CaptureSetupError.unknown("run request is missing command")
         return run_capture(
             request.command,
             request.cwd,
@@ -885,38 +908,34 @@ def _dispatch_runner(request: CaptureRequest) -> int:
         )
     except CaptureSetupError as exc:
         return _capture_replay.capture_failure_return(
-            _capture_replay.runner_failure("capture_setup", str(exc))
+            _capture_replay.runner_failure(
+                "capture_setup",
+                exc.detail,
+                reason=exc.reason,
+            )
         )
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError) as exc:
         return _capture_replay.capture_failure_return(
-            _capture_replay.runner_failure("capture_runner", "capture runner failed")
+            _capture_replay.runner_failure(
+                "capture_runner",
+                "capture runner failed",
+                reason=_capture_failure_policy.runtime_failure_reason(exc),
+            )
         )
-
-
-def _emit_cleanup_failure(detail: str) -> None:
-    safe_detail = " ".join(detail.split()).replace("]", "\\u005d")
-    bounded_detail = safe_detail.encode("utf-8")[:_MAX_CLEANUP_DETAIL_BYTES].decode(
-        "utf-8",
-        errors="ignore",
-    )
-    try:
-        sys.stderr.write(f"[AutoSkillit shell capture cleanup failed: {bounded_detail}]\n")
-    except _CAPTURE_RUNTIME_ERRORS:
-        pass
 
 
 def _sweep_after_runner(requested_cwd: str) -> None:
     try:
-        with open_capture_lifecycle(requested_cwd, create=False) as lifecycle:
-            outcome = lifecycle.sweep()
-            if outcome.errors:
-                _emit_cleanup_failure(f"cleanup deferred after {outcome.errors} errors")
-    except CaptureStoreAbsentError:
-        return
-    except CaptureSetupError as exc:
-        _emit_cleanup_failure(f"{type(exc).__name__}: {exc}")
-    except (CaptureLifecycleError, OSError) as exc:
-        _emit_cleanup_failure(f"{type(exc).__name__}: {exc}")
+        outcome = _capture_reconcile.reconcile_capture_store(
+            requested_cwd, _capture_reconcile.RUNNER_TAIL_BUDGET
+        )
+        detail = _capture_reconcile.cleanup_diagnostic(outcome, owner="runner_tail")
+        if detail is not None:
+            _capture_reconcile.emit_runner_diagnostic(detail, sys.stderr.write)
+    except _CAPTURE_RUNTIME_ERRORS:
+        _capture_reconcile.emit_runner_diagnostic(
+            "runner-tail reconciliation failed", sys.stderr.write
+        )
 
 
 def _main(argv: list[str] | None = None) -> int:
@@ -924,7 +943,9 @@ def _main(argv: list[str] | None = None) -> int:
     if len(args) != 1:
         return _capture_replay.capture_failure_return(
             _capture_replay.runner_failure(
-                "capture_invocation", "invalid capture runner invocation"
+                "capture_invocation",
+                "invalid capture runner invocation",
+                reason=CaptureFailureReason.UNKNOWN_SETUP,
             )
         )
     try:
@@ -932,16 +953,24 @@ def _main(argv: list[str] | None = None) -> int:
     except CaptureProtocolError:
         return _capture_replay.capture_failure_return(
             _capture_replay.runner_failure(
-                "capture_invocation", "invalid capture runner invocation"
+                "capture_invocation",
+                "invalid capture runner invocation",
+                reason=CaptureFailureReason.UNKNOWN_SETUP,
             )
         )
     try:
-        user_result = _dispatch_runner(request)
-    except _CAPTURE_RUNTIME_ERRORS:
-        user_result = _capture_replay.capture_failure_return(
-            _capture_replay.runner_failure("capture_runner", "capture runner failed")
-        )
-    _sweep_after_runner(request.cwd)
+        try:
+            user_result = _dispatch_runner(request)
+        except _CAPTURE_RUNTIME_ERRORS as exc:
+            user_result = _capture_replay.capture_failure_return(
+                _capture_replay.runner_failure(
+                    "capture_runner",
+                    "capture runner failed",
+                    reason=_capture_failure_policy.runtime_failure_reason(exc),
+                )
+            )
+    finally:
+        _sweep_after_runner(request.cwd)
     return user_result
 
 

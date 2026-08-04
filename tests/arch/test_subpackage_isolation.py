@@ -85,6 +85,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         # _HTTP_TIMEOUT = httpx.Timeout(...) — module-level httpx client timeout config
         "_update_checks_fetch",  # cli/_update_checks_fetch.py: _HTTP_TIMEOUT constant
         "_terminal",  # cli/_terminal.py: _BASE_RESET = "".join(...) derived from _RESET_SPEC
+        "_reconcile",  # hooks/_capture/_reconcile.py: immutable owner budget contracts
         "hook_registry",  # hook_registry.py: HOOK_REGISTRY_HASH = compute_registry_hash(...)
         "_fleet",  # cli/_fleet.py: fleet_app = App(name="fleet", ...)
         "_features",  # cli/_features.py: features_app = App(name="features", ...)

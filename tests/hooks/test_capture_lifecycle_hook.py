@@ -27,6 +27,7 @@ from autoskillit.hooks._capture._snapshot import (
     CommandOutcome,
     verify_capture_snapshot,
 )
+from autoskillit.hooks._capture._types import CaptureCleanupOutcome, CleanupBlocker
 from autoskillit.hooks._capture_artifacts import create_capture_artifact
 from autoskillit.hooks._capture_contract import NATIVE_SHELL_CAPTURE_MODE_ENV_VAR
 from autoskillit.hooks._capture_lifecycle import (
@@ -41,22 +42,24 @@ SCRIPT = Path(__file__).resolve().parents[2] / "src/autoskillit/hooks/capture_li
 _CAPTURE_ID = "0123456789abcdef"
 
 
-def test_cleanup_hook_imports_minimal_shared_authority() -> None:
+def test_cleanup_hook_imports_narrow_reconcile_api() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
     tree = ast.parse(source)
     imports = [
         node for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.level == 0
     ]
-    authority_imports = [node for node in imports if node.module == "_capture._authority"]
+    reconcile_imports = [node for node in imports if node.module == "_capture._reconcile"]
 
-    assert len(authority_imports) == 1
-    assert {alias.name for alias in authority_imports[0].names} == {
-        "CaptureLifecycleError",
-        "CaptureSetupError",
-        "CaptureStoreAbsentError",
-        "open_capture_lifecycle",
+    assert len(reconcile_imports) == 1
+    assert {alias.name for alias in reconcile_imports[0].names} == {
+        "SESSION_START_BUDGET",
+        "cleanup_diagnostic",
+        "reconcile_capture_store",
     }
-    assert all(node.module not in {"_capture_artifacts", "_capture_lifecycle"} for node in imports)
+    assert all(
+        node.module not in {"_capture._authority", "_capture_artifacts", "_capture_lifecycle"}
+        for node in imports
+    )
 
 
 def test_package_authority_uses_package_lifecycle_identity() -> None:
@@ -261,7 +264,7 @@ def test_cleanup_hook_reports_unsafe_capture_store(tmp_path: Path) -> None:
 
     assert completed.returncode == 0
     assert completed.stdout == ""
-    assert "capture lifecycle cleanup failed" in completed.stderr
+    assert "capture lifecycle cleanup deferred" in completed.stderr
     assert len(completed.stderr.encode("utf-8")) <= 512
     assert unsafe_component.read_text(encoding="utf-8") == "not a directory"
 
@@ -279,7 +282,7 @@ def test_cleanup_hook_fails_open_with_bounded_stderr(tmp_path: Path) -> None:
 
     assert completed.returncode == 0
     assert completed.stdout == ""
-    assert "capture lifecycle cleanup failed" in completed.stderr
+    assert "capture lifecycle cleanup deferred" in completed.stderr
     assert len(completed.stderr.encode()) <= 512
     assert artifact.read_bytes() == b"due"
 
@@ -298,29 +301,22 @@ def test_cleanup_hook_reports_sweep_outcome_errors(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    class Store:
-        def sweep(self, **_kwargs):
-            return type("Outcome", (), {"errors": 2})()
-
-    class OpenLifecycle:
-        def __enter__(self):
-            return Store()
-
-        def __exit__(self, *_args):
-            return None
-
     payload = json.dumps({"cwd": "/abs/project"}).encode("utf-8")
     monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(payload)))
     monkeypatch.setattr(
         capture_lifecycle_hook,
-        "open_capture_lifecycle",
-        lambda requested_cwd, *, create: OpenLifecycle(),
+        "reconcile_capture_store",
+        lambda requested_cwd, budget: CaptureCleanupOutcome(
+            errors=2,
+            remaining_due=1,
+            blocker=CleanupBlocker.LEDGER_INTEGRITY,
+        ),
     )
 
     assert capture_lifecycle_hook.main() == 0
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "cleanup deferred after 2 errors" in captured.err
+    assert "blocker=ledger_integrity errors=2" in captured.err
 
 
 def test_generated_codex_session_start_executes_cleanup_dispatcher(tmp_path: Path) -> None:

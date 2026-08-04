@@ -17,6 +17,11 @@ from dataclasses import InitVar, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ._failure_policy import (
+    CaptureFailureReason,
+    normalize_failure_detail,
+    os_failure_reason,
+)
 from ._module_identity import register_module_aliases
 
 register_module_aliases(__name__)
@@ -73,6 +78,29 @@ _READ_FLAGS = (
 class CaptureSetupError(RuntimeError):
     """Raised when the descriptor-anchored capture authority cannot be established."""
 
+    def __init__(self, reason: CaptureFailureReason, detail: str) -> None:
+        if type(reason) is not CaptureFailureReason:
+            raise TypeError("capture setup reason must be closed")
+        self.reason = reason
+        self.detail = normalize_failure_detail(detail)
+        super().__init__(self.detail)
+
+    @classmethod
+    def authority(cls, detail: str) -> CaptureSetupError:
+        return cls(CaptureFailureReason.FILESYSTEM_AUTHORITY, detail)
+
+    @classmethod
+    def unknown(cls, detail: str) -> CaptureSetupError:
+        return cls(CaptureFailureReason.UNKNOWN_SETUP, detail)
+
+    @classmethod
+    def filesystem_io(cls, detail: str) -> CaptureSetupError:
+        return cls(CaptureFailureReason.FILESYSTEM_IO, detail)
+
+    @classmethod
+    def from_os_error(cls, exc: OSError, detail: str) -> CaptureSetupError:
+        return cls(os_failure_reason(exc), detail)
+
 
 class CaptureStoreAbsentError(CaptureSetupError):
     """Raised when a cleanup-only open finds no existing capture store."""
@@ -100,7 +128,10 @@ class ProjectAnchor:
 
     def __post_init__(self, _factory_token: object | None) -> None:
         if _factory_token is not _AUTHORITY_FACTORY_TOKEN:
-            raise CaptureSetupError("ProjectAnchor must be created by open_project_anchor")
+            raise CaptureSetupError(
+                CaptureFailureReason.FILESYSTEM_AUTHORITY,
+                "ProjectAnchor must be created by open_project_anchor",
+            )
 
     def close(self) -> None:
         if self.fd >= 0:
@@ -122,7 +153,10 @@ class CaptureRoot:
 
     def __post_init__(self, _factory_token: object | None) -> None:
         if _factory_token is not _AUTHORITY_FACTORY_TOKEN:
-            raise CaptureSetupError("CaptureRoot must be created by open_capture_root")
+            raise CaptureSetupError(
+                CaptureFailureReason.FILESYSTEM_AUTHORITY,
+                "CaptureRoot must be created by open_capture_root",
+            )
 
     def close(self) -> None:
         for field_name in ("fd", "temp_fd", "autoskillit_fd"):
@@ -151,7 +185,10 @@ def _require_capabilities() -> None:
         or os.stat not in getattr(os, "supports_follow_symlinks", ())
         or os.listdir not in getattr(os, "supports_fd", ())
     ):
-        raise CaptureSetupError("required descriptor-relative filesystem primitives unavailable")
+        raise CaptureSetupError(
+            CaptureFailureReason.FILESYSTEM_AUTHORITY,
+            "required descriptor-relative filesystem primitives unavailable",
+        )
 
 
 def _identity(fd: int) -> FileIdentity:
@@ -167,26 +204,44 @@ def _open_directory_component(parent_fd: int, name: str, *, create: bool) -> int
         fd = os.open(name, _DIRECTORY_FLAGS, dir_fd=parent_fd)
     except FileNotFoundError:
         if not create:
-            raise CaptureStoreAbsentError(f"missing capture path component: {name}") from None
+            raise CaptureStoreAbsentError(
+                CaptureFailureReason.FILESYSTEM_AUTHORITY,
+                "missing capture path component",
+            ) from None
         try:
             os.mkdir(name, mode=0o700, dir_fd=parent_fd)
         except FileExistsError:
             pass
         except OSError as exc:
-            raise CaptureSetupError(f"cannot create capture path component: {name}") from exc
+            raise CaptureSetupError(
+                os_failure_reason(exc),
+                "cannot create capture storage",
+            ) from exc
         try:
             fd = os.open(name, _DIRECTORY_FLAGS, dir_fd=parent_fd)
         except OSError as exc:
-            raise CaptureSetupError(f"cannot open created capture component: {name}") from exc
+            raise CaptureSetupError(
+                os_failure_reason(exc),
+                "cannot open capture storage",
+            ) from exc
     except OSError as exc:
-        raise CaptureSetupError(f"unsafe capture path component: {name}") from exc
+        raise CaptureSetupError(
+            os_failure_reason(exc),
+            "unsafe capture path component",
+        ) from exc
 
     try:
         value = os.fstat(fd)
         if not stat.S_ISDIR(value.st_mode):
-            raise CaptureSetupError(f"capture path component is not a directory: {name}")
+            raise CaptureSetupError(
+                CaptureFailureReason.FILESYSTEM_AUTHORITY,
+                "capture path component is not a directory",
+            )
         if value.st_uid != os.geteuid() or value.st_mode & _UNTRUSTED_WRITE_BITS:
-            raise CaptureSetupError(f"capture path component has unsafe ownership or mode: {name}")
+            raise CaptureSetupError(
+                CaptureFailureReason.FILESYSTEM_AUTHORITY,
+                "capture path component has unsafe ownership or mode",
+            )
     except BaseException:
         os.close(fd)
         raise
@@ -198,15 +253,24 @@ def open_project_anchor(cwd: str) -> ProjectAnchor:
 
     _require_capabilities()
     if not isinstance(cwd, str) or not cwd or not os.path.isabs(cwd) or "\x00" in cwd:
-        raise CaptureSetupError("cwd must be a non-empty absolute path")
+        raise CaptureSetupError(
+            CaptureFailureReason.UNKNOWN_SETUP,
+            "capture cwd is invalid",
+        )
     try:
         fd = os.open(cwd, _DIRECTORY_FLAGS & ~getattr(os, "O_NOFOLLOW", 0))
     except OSError as exc:
-        raise CaptureSetupError("cannot open project anchor") from exc
+        raise CaptureSetupError(
+            os_failure_reason(exc),
+            "cannot open project anchor",
+        ) from exc
     try:
         anchor_stat = os.fstat(fd)
         if not stat.S_ISDIR(anchor_stat.st_mode):
-            raise CaptureSetupError("project anchor is not a directory")
+            raise CaptureSetupError(
+                CaptureFailureReason.FILESYSTEM_AUTHORITY,
+                "project anchor is not a directory",
+            )
         physical_path = Path(os.path.realpath(cwd))
         return ProjectAnchor(
             fd=fd,

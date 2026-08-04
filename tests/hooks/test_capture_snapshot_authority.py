@@ -487,12 +487,16 @@ def test_package_and_isolated_import_orders_share_authority_modules(
         "_snapshot",
         "_reader",
         "_ledger",
+        "_ledger_view",
         "_lifecycle_policy",
+        "_migration",
         "_store_port",
         "_types",
         "_sweep",
+        "_sweep_cursor",
         "_delivery",
         "_replay",
+        "_reconcile",
         "_resolver",
     )
     first = "_capture" if isolated_first else "autoskillit.hooks._capture"

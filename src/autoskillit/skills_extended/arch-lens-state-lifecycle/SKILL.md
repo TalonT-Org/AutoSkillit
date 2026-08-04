@@ -9,6 +9,97 @@ write_paths:
 - '{{AUTOSKILLIT_TEMP}}/arch-lens-state-lifecycle/'
 description: Create State Lifecycle architecture diagram showing field contracts, validation gates, and resume safety. Contract
   overlay lens answering "How is state corruption prevented?"
+exploration_vectors:
+  - id: state-schema
+    disposition: migrated
+    rationale: Semantic navigation traces state and context definitions, typed fields, and their code consumers while leaving lifecycle classification to the parent.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [declares, defines, references]
+    task_id: arch-lens-state-lifecycle-state-schema
+    frontier_item_id: arch-lens-state-lifecycle-state-schema-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: field-categories
+    disposition: migrated
+    rationale: Semantic navigation traces field reads, writes, and mutation paths needed for parent-owned lifecycle categorization.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: arch-lens-state-lifecycle-field-categories
+    frontier_item_id: arch-lens-state-lifecycle-field-categories-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: validation-gates
+    disposition: migrated
+    rationale: Semantic navigation follows validation definitions, call order, guarded state, and failure paths while the parent synthesizes gate semantics.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: arch-lens-state-lifecycle-validation-gates
+    frontier_item_id: arch-lens-state-lifecycle-validation-gates-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: resume-detection
+    disposition: migrated
+    rationale: Semantic navigation traces checkpoint reads, restore calls, and fresh-versus-resume branches without deciding the final resume strategy.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [calls, references, affects]
+    task_id: arch-lens-state-lifecycle-resume-detection
+    frontier_item_id: arch-lens-state-lifecycle-resume-detection-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: state-updates
+    disposition: migrated
+    rationale: Semantic navigation traces state mutation entry points, setters, merge paths, and subsequent reads while the parent classifies update policy.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: arch-lens-state-lifecycle-state-updates
+    frontier_item_id: arch-lens-state-lifecycle-state-updates-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: contract-enforcement
+    disposition: migrated
+    rationale: Semantic navigation traces contract definitions, enforcement calls, and violation paths while the parent retains contract interpretation and synthesis.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [declares, defines, calls, references]
+    task_id: arch-lens-state-lifecycle-contract-enforcement
+    frontier_item_id: arch-lens-state-lifecycle-contract-enforcement-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -60,6 +151,7 @@ semantic_requirements:
 - Show business logic details
 - Focus on data content (focus on mutation rules)
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -77,6 +169,11 @@ semantic_requirements:
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-state-lifecycle/arch_diag_state_lifecycle_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch exactly 6 exploration vectors through the deterministic router
+- Allow parent-boundary handoff of declarative artifacts and configuration consumers to `repository-impact-profiler` without creating another vector
+- Wait for every exploration result before categorizing fields, mapping validation flow, or creating the diagram
+- Retain parent authority over lifecycle, validation, resume, contract, and diagram synthesis
 
 
 ## Analysis Workflow
@@ -92,43 +189,37 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+### Step 1: Launch 6 Routed Exploration Vectors (SINGLE MESSAGE)
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch exactly these six vectors under their registered role policies. When a navigator finds a declarative artifact or configuration-consumer surface, the parent/router may reclassify that bounded handoff to `repository-impact-profiler`; it must not create a seventh vector.
 
-**State Schema**
-- Find state/context definitions
-- Identify typed state fields
-- Look for: State classes, Context objects, state schemas, typed dictionaries
+<!-- autoskillit:exploration-vector id="state-schema" -->
+1. **State schema** — Find state and context definitions, typed state fields, schemas, typed dictionaries, and code references to them. Report exact definitions and consumers; leave lifecycle classification to the parent.
+<!-- /autoskillit:exploration-vector -->
 
-**Field Categories**
-- Find field mutation patterns
-- Identify immutable vs mutable fields
-- Look for: immutable fields, readonly, lifecycle annotations, const fields
+<!-- autoskillit:exploration-vector id="field-categories" -->
+2. **Field categories** — Trace field reads, writes, and mutation patterns, including immutable, readonly, lifecycle-annotated, and constant fields. Supply evidence for categorization without assigning the final category.
+<!-- /autoskillit:exploration-vector -->
 
-**Validation Gates**
-- Find state validation code
-- Identify gate patterns
-- Look for: validate_*, gate, check_*, guard, assert, state validators
+<!-- autoskillit:exploration-vector id="validation-gates" -->
+3. **Validation gates** — Trace state validators, guards, checks, assertions, call order, guarded fields, and failure paths. Report the code-defined flow without synthesizing the final gate model.
+<!-- /autoskillit:exploration-vector -->
 
-**Resume Detection**
-- Find resume/checkpoint code
-- Identify resume detection strategy
-- Look for: resume, checkpoint, restore, detect state, load checkpoint
+<!-- autoskillit:exploration-vector id="resume-detection" -->
+4. **Resume detection** — Trace resume, checkpoint, restore, state detection, and checkpoint-loading paths, including differences between fresh and resumed execution. The parent determines the documented resume strategy.
+<!-- /autoskillit:exploration-vector -->
 
-**State Updates**
-- Find state mutation code
-- Identify update patterns
-- Look for: update methods, setState, mutation functions, state setters
+<!-- autoskillit:exploration-vector id="state-updates" -->
+5. **State updates** — Trace update methods, setters, mutation functions, merge behavior, storage writes, and downstream reads. Distinguish evidenced read/write paths from write-only artifacts; leave update-policy classification to the parent.
+<!-- /autoskillit:exploration-vector -->
 
-**Contract Enforcement**
-- Find contract validation
-- Identify violation detection
-- Look for: contract checking, violation detection, enforcement mechanisms
+<!-- autoskillit:exploration-vector id="contract-enforcement" -->
+6. **Contract enforcement** — Trace contract declarations, validation calls, enforcement mechanisms, and violation-detection paths. Report exact evidence while the parent interprets the contract rules and creates the diagram.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Categorize Fields
 

@@ -12,6 +12,7 @@ import autoskillit.workspace.session_skills as session_skills
 from autoskillit.core import (
     ClaudeDirectoryConventions,
     ManagedSessionHome,
+    RepositoryProfileId,
     SkillExecutionRole,
     ValidatedAddDir,
 )
@@ -63,10 +64,21 @@ def _catalog_context(
             skills=tuple(member for member in catalog.skills if member.name in names),
             execution_role=SkillExecutionRole.SESSION,
         )
+    else:
+        catalog = EffectiveSkillCatalog(
+            skills=tuple(member for member in catalog.skills if not member.exploration_vectors),
+            execution_role=SkillExecutionRole.SESSION,
+        )
+    resolved_exploration_profile = (
+        RepositoryProfileId.AUTOSKILLIT
+        if any(member.exploration_vectors for member in catalog.skills)
+        else None
+    )
     context = manager._provider.catalog_projection_context(
         catalog,
         project_root,
         backend=backend,
+        resolved_exploration_profile=resolved_exploration_profile,
     )
     return catalog, context
 
@@ -116,7 +128,11 @@ def test_materialization_forwards_only_server_explorer_binding_env(
     codex_env,
 ) -> None:
     manager = make_session_skill_manager()
-    catalog, context = _catalog_context(manager, backend=codex_env.backend)
+    catalog, context = _catalog_context(
+        manager,
+        backend=codex_env.backend,
+        names=frozenset({"investigate"}),
+    )
     binding_env = {
         "semantic-code-navigator": {
             "AUTOSKILLIT_EXPLORATION_CAPABILITY": "explore_opaque",

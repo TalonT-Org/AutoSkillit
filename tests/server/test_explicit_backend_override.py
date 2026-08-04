@@ -29,7 +29,70 @@ def _make_backend(**kwargs):
     return AgentBackendConfig(**kwargs)
 
 
+def _bundled_backend():
+    from autoskillit.config.settings import AgentBackendConfig
+    from autoskillit.core.io import load_yaml
+    from autoskillit.core.paths import pkg_root
+
+    defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+    return AgentBackendConfig(**defaults["agent_backend"])
+
+
 class TestExplicitBackendOverrideAdmissionDispatchAgreement:
+    @pytest.mark.parametrize(
+        ("recipe_name", "step_name", "key_path"),
+        [
+            (
+                "remediation",
+                "investigate",
+                "agent_backend.recipe_overrides.remediation.investigate",
+            ),
+            (
+                "research",
+                "scope",
+                "agent_backend.recipe_overrides.research.scope",
+            ),
+            (
+                "research-design",
+                "scope",
+                "agent_backend.recipe_overrides.research-design.scope",
+            ),
+        ],
+    )
+    def test_bundled_recipe_step_pin_drives_admission_with_exact_origin(
+        self, recipe_name: str, step_name: str, key_path: str
+    ) -> None:
+        from autoskillit.server.tools._auto_overrides import _compute_effective_backend_map
+
+        admission_map, origin_map = _compute_effective_backend_map(
+            cast(Any, _make_recipe_steps(step_name)),
+            "claude-code",
+            recipe_name,
+            config_backend=_bundled_backend(),
+        )
+
+        assert admission_map == {step_name: "codex"}
+        assert origin_map == {step_name: key_path}
+
+    @pytest.mark.parametrize(
+        "recipe_name",
+        ["implementation", "implementation-groups", "remediation"],
+    )
+    def test_unpinned_architecture_consumers_use_base_backend_without_origin(
+        self, recipe_name: str
+    ) -> None:
+        from autoskillit.server.tools._auto_overrides import _compute_effective_backend_map
+
+        admission_map, origin_map = _compute_effective_backend_map(
+            cast(Any, _make_recipe_steps("run_arch_lenses")),
+            "claude-code",
+            recipe_name,
+            config_backend=_bundled_backend(),
+        )
+
+        assert admission_map == {"run_arch_lenses": "claude-code"}
+        assert origin_map == {}
+
     def test_explicit_backend_override_admission_dispatch_agreement(self) -> None:
         """Both admission (compute_effective_backend_map) and dispatch agree
         on the explicit override: a codex pin must produce codex in both."""

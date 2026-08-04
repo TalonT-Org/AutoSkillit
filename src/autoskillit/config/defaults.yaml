@@ -344,5 +344,11 @@ agent_backend:
       analyze: codex
       extract_domain: codex
       elaborate_phases: codex
+    remediation:
+      investigate: codex
+    research:
+      scope: codex
+    research-design:
+      scope: codex
 
 features: {}

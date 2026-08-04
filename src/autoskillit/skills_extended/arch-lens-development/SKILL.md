@@ -9,6 +9,112 @@ write_paths:
 - '{{AUTOSKILLIT_TEMP}}/arch-lens-development/'
 description: Create Development architecture diagram showing project structure, build tools, and quality gates. Development
   lens answering "How is it built and tested?"
+exploration_vectors:
+  - id: project-structure
+    disposition: migrated
+    rationale: Semantic navigation traces module and package boundaries while parent-owned handoff may use repository impact evidence for declarative project artifacts.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [declares, defines, imports, references]
+    task_id: arch-lens-development-project-structure
+    frontier_item_id: arch-lens-development-project-structure-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: build-tooling
+    disposition: migrated
+    rationale: Repository impact evidence covers build configuration, package managers, build backends, task runners, and their consumers.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: arch-lens-development-build-tooling
+    frontier_item_id: arch-lens-development-build-tooling-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: linting-formatting
+    disposition: migrated
+    rationale: Repository impact evidence covers linter, formatter, pre-commit, and quality-tool declarations and the files or workflows they affect.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: arch-lens-development-linting-formatting
+    frontier_item_id: arch-lens-development-linting-formatting-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: type-checking
+    disposition: migrated
+    rationale: Repository impact evidence covers type-checker and static-analysis configuration, scope, strictness declarations, and consumers.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: arch-lens-development-type-checking
+    frontier_item_id: arch-lens-development-type-checking-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: test-framework
+    disposition: migrated
+    rationale: Repository impact evidence covers test configuration, runners, layout, fixtures, patterns, and workflow consumers.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: arch-lens-development-test-framework
+    frontier_item_id: arch-lens-development-test-framework-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: ci-cd
+    disposition: migrated
+    rationale: Repository impact evidence covers CI/CD workflow definitions, pipeline stages, invoked commands, artifacts, and affected checks.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, calls, references, affects]
+    task_id: arch-lens-development-ci-cd
+    frontier_item_id: arch-lens-development-ci-cd-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: entry-points
+    disposition: migrated
+    rationale: Semantic navigation traces command definitions and invocation paths while parent-owned handoff may use repository impact evidence for declarative entry-point registration.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [declares, defines, calls, references]
+    task_id: arch-lens-development-entry-points
+    frontier_item_id: arch-lens-development-entry-points-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -58,7 +164,9 @@ semantic_requirements:
 - Include runtime architecture details
 - Show business logic
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
+- Infer code ownership, maintainers, or team responsibility from repository structure
 
 **ALWAYS:**
 - Focus on BUILD and TEST infrastructure
@@ -75,6 +183,11 @@ semantic_requirements:
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-development/arch_diag_development_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch exactly 7 exploration vectors through the deterministic router
+- Allow parent-boundary handoff of project metadata and declarative entry-point registration from navigator vectors to `repository-impact-profiler` without creating extra vectors
+- Wait for every exploration result before mapping the quality pipeline, calculating project metrics, or creating the diagram
+- Retain parent authority over development-workflow and diagram synthesis
 
 
 ## Analysis Workflow
@@ -90,48 +203,41 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+### Step 1: Launch 7 Routed Exploration Vectors (SINGLE MESSAGE)
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch exactly these seven vectors under their registered role policies. The parent/router may hand project manifests and declarative entry-point registrations from the two navigator vectors to `repository-impact-profiler`; this does not create another vector. No vector may infer code ownership.
 
-**Project Structure**
-- Find top-level directory organization
-- Identify module/package boundaries
-- Look for: build configs, package definitions, project layout
+<!-- autoskillit:exploration-vector id="project-structure" -->
+1. **Project structure** — Trace top-level code organization, module and package boundaries, imports, and code-defined layout. Include bounded manifest or package-declaration handoffs for profiler evidence; report structure without inferring ownership.
+<!-- /autoskillit:exploration-vector -->
 
-**Build Tooling**
-- Find build configuration
-- Identify package manager and build backend
-- Look for: build config files, makefiles, task runners, package managers
+<!-- autoskillit:exploration-vector id="build-tooling" -->
+2. **Build tooling** — Identify build configuration, package managers, build backends, makefiles, task runners, generated artifacts, and the workflows or files they affect.
+<!-- /autoskillit:exploration-vector -->
 
-**Linting & Formatting**
-- Find code quality tools
-- Identify pre-commit hooks
-- Look for: linter configs, formatter configs, pre-commit hooks, code quality tools
+<!-- autoskillit:exploration-vector id="linting-formatting" -->
+3. **Linting and formatting** — Identify linter, formatter, pre-commit, and code-quality declarations, their configured scope, and workflow consumers.
+<!-- /autoskillit:exploration-vector -->
 
-**Type Checking**
-- Find type checking configuration
-- Identify strictness level
-- Look for: type checker configs, static analysis tools
+<!-- autoskillit:exploration-vector id="type-checking" -->
+4. **Type checking** — Identify type-checker and static-analysis configuration, declared strictness, included or excluded paths, and workflow consumers.
+<!-- /autoskillit:exploration-vector -->
 
-**Test Framework**
-- Find test configuration
-- Identify test patterns and fixtures
-- Look for: test configs, test directories, test runners, test fixtures
+<!-- autoskillit:exploration-vector id="test-framework" -->
+5. **Test framework** — Identify test configuration, directories, runners, naming patterns, fixtures, coverage settings, and build or CI consumers.
+<!-- /autoskillit:exploration-vector -->
 
-**CI/CD (if present)**
-- Find CI configuration
-- Identify workflow stages
-- Look for: CI/CD configs, workflow definitions, pipeline configs
+<!-- autoskillit:exploration-vector id="ci-cd" -->
+6. **CI/CD (if present)** — Identify CI/CD configuration, workflow stages, invoked quality commands, generated or published artifacts, triggers, and check consumers. Report absence as evidence rather than inventing a pipeline.
+<!-- /autoskillit:exploration-vector -->
 
-**Entry Points**
-- Find CLI entry points
-- Identify console scripts
-- Look for: entry point definitions, command definitions, binary files
+<!-- autoskillit:exploration-vector id="entry-points" -->
+7. **Entry points** — Trace CLI and binary command definitions, dispatch calls, and invocation paths. Include bounded declarative console-script or package-registration handoffs for profiler evidence; do not infer ownership from entry-point placement.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Map Quality Pipeline
 

@@ -23,6 +23,7 @@ from autoskillit.workspace.session_skills import (
     SkillsDirectoryProvider,
 )
 from autoskillit.workspace.skills import DefaultSkillResolver
+from tests.contracts._projection_helpers import non_exploration_catalog
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -33,7 +34,9 @@ def test_ephemeral_skill_md_namespace_matches_session_delivery(tmp_path: Path) -
     provider = SkillsDirectoryProvider()
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
     resolver = DefaultSkillResolver()
-    catalog = resolver.list_effective(tmp_path, SkillExecutionRole.SESSION)
+    catalog = non_exploration_catalog(
+        resolver.list_effective(tmp_path, SkillExecutionRole.SESSION)
+    )
     context = provider.catalog_projection_context(catalog, tmp_path)
     session_path = mgr.init_session("ns-check-session", catalog, context)
 

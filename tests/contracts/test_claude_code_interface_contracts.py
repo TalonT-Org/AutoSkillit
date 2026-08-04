@@ -24,10 +24,13 @@ def _materialize_session_catalog(
 ):
     from autoskillit.core import SkillExecutionRole
     from autoskillit.workspace import DefaultSkillResolver
+    from tests.contracts._projection_helpers import non_exploration_catalog
 
-    catalog = DefaultSkillResolver().list_effective(
-        project_root,
-        SkillExecutionRole.SESSION,
+    catalog = non_exploration_catalog(
+        DefaultSkillResolver().list_effective(
+            project_root,
+            SkillExecutionRole.SESSION,
+        )
     )
     context = manager._provider.catalog_projection_context(catalog, project_root)
     return manager.init_session(session_id, catalog, context)

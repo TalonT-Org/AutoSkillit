@@ -11,12 +11,66 @@ def _make_backend(**kwargs):
     return AgentBackendConfig(**kwargs)
 
 
+def _bundled_backend():
+    from autoskillit.config.settings import AgentBackendConfig
+    from autoskillit.core.io import load_yaml
+    from autoskillit.core.paths import pkg_root
+
+    defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+    return AgentBackendConfig(**defaults["agent_backend"])
+
+
 def _backend(result):
     """Extract .backend from a BackendPinResolution, or return None."""
     return result.backend if result is not None else None
 
 
 class TestResolveBackendOverride:
+    @pytest.mark.parametrize(
+        ("recipe_name", "step_name", "key_path"),
+        [
+            (
+                "remediation",
+                "investigate",
+                "agent_backend.recipe_overrides.remediation.investigate",
+            ),
+            (
+                "research",
+                "scope",
+                "agent_backend.recipe_overrides.research.scope",
+            ),
+            (
+                "research-design",
+                "scope",
+                "agent_backend.recipe_overrides.research-design.scope",
+            ),
+        ],
+    )
+    def test_bundled_recipe_step_pin_has_exact_authority(
+        self, recipe_name: str, step_name: str, key_path: str
+    ) -> None:
+        from autoskillit.core import BackendAuthorityKind
+        from autoskillit.server._guards import _resolve_backend_override
+
+        result = _resolve_backend_override(step_name, recipe_name, _bundled_backend())
+
+        assert result is not None
+        assert result.backend == "codex"
+        assert result.kind is BackendAuthorityKind.RECIPE
+        assert result.tier == "recipe_step"
+        assert result.key_path == key_path
+
+    @pytest.mark.parametrize(
+        "recipe_name",
+        ["implementation", "implementation-groups", "remediation"],
+    )
+    def test_bundled_architecture_consumers_remain_unpinned(self, recipe_name: str) -> None:
+        from autoskillit.server._guards import _resolve_backend_override
+
+        result = _resolve_backend_override("run_arch_lenses", recipe_name, _bundled_backend())
+
+        assert result is None
+
     def test_exact_recipe_step_match(self) -> None:
         from autoskillit.core import BackendAuthorityKind
         from autoskillit.server._guards import _resolve_backend_override

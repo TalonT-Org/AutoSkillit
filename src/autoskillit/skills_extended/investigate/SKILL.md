@@ -4,6 +4,442 @@ uses_capabilities:
 - claude_dir
 description: Deep investigation of errors, bugs, or codebase questions without making any code changes. Use when user mentions
   investigate, understand, explore, analyze, or pastes error tracebacks. Spawns parallel subagents for comprehensive exploration.
+exploration_vectors:
+  - id: standard-core-implementation
+    disposition: migrated
+    rationale: Semantic navigation supplies implementation symbols and local control-flow evidence without choosing a diagnosis or fix.
+    applicability: investigate-standard
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, imports, references]
+    task_id: investigate-standard-core-implementation
+    frontier_item_id: investigate-standard-core-implementation-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: standard-dependencies
+    disposition: migrated
+    rationale: Semantic navigation supplies import, call, and dependency relationships while the parent retains causal synthesis.
+    applicability: investigate-standard
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [imports, calls, references]
+    task_id: investigate-standard-dependencies
+    frontier_item_id: investigate-standard-dependencies-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: standard-consumer-impact
+    disposition: migrated
+    rationale: Repository impact evidence covers downstream consumers, registrations, configuration, artifacts, fixtures, and compatibility surfaces.
+    applicability: investigate-standard
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [references, affects]
+    task_id: investigate-standard-consumer-impact
+    frontier_item_id: investigate-standard-consumer-impact-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: standard-test-coverage
+    disposition: migrated
+    rationale: Repository impact evidence covers tests, fixtures, verification surfaces, and concrete coverage gaps.
+    applicability: investigate-standard
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [references, affects]
+    task_id: investigate-standard-test-coverage
+    frontier_item_id: investigate-standard-test-coverage-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: standard-error-provenance
+    disposition: migrated
+    rationale: Semantic navigation traces the failing call path and origin of invalid state without selecting a remedy.
+    applicability: investigate-standard
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: investigate-standard-error-provenance
+    frontier_item_id: investigate-standard-error-provenance-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: standard-similar-patterns
+    disposition: migrated
+    rationale: Semantic navigation finds comparable definitions and control-flow patterns for parent-side comparison.
+    applicability: investigate-standard
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references]
+    task_id: investigate-standard-similar-patterns
+    frontier_item_id: investigate-standard-similar-patterns-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: standard-architecture-constraints
+    disposition: migrated
+    rationale: Repository impact evidence covers architecture guidance, registries, configuration, and constraints affecting the mechanism.
+    applicability: investigate-standard
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: investigate-standard-architecture-constraints
+    frontier_item_id: investigate-standard-architecture-constraints-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: standard-web-research
+    disposition: retained
+    rationale: External documentation and issue research requires web access and source interpretation outside repository exploration.
+    applicability: investigate-standard
+    role: null
+    profile: auto
+    relationship_classes: [references]
+    task_id: investigate-standard-web-research
+    frontier_item_id: investigate-standard-web-research-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
+  - id: standard-design-intent-history
+    disposition: migrated
+    rationale: Repository impact evidence supplies bounded introducing-commit, change-history, and documented-constraint provenance for later intent reasoning.
+    applicability: investigate-standard
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: investigate-standard-design-intent-history
+    frontier_item_id: investigate-standard-design-intent-history-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: standard-design-intent-reasoning
+    disposition: retained
+    rationale: Inferring purpose from typed provenance and dependency evidence remains a non-code reasoning responsibility of the existing agent.
+    applicability: investigate-standard
+    role: null
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: investigate-standard-design-intent-reasoning
+    frontier_item_id: investigate-standard-design-intent-reasoning-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
+  - id: standard-recurrence-history
+    disposition: migrated
+    rationale: Repository impact evidence supplies bounded investigation-log and fix-history matches after the root cause is known.
+    applicability: investigate-standard
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [references, affects]
+    task_id: investigate-standard-recurrence-history
+    frontier_item_id: investigate-standard-recurrence-history-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: standard-recurrence-reasoning
+    disposition: retained
+    rationale: Comparing prior fixes with the current root cause and judging recurrence remains non-code reasoning for the existing agent.
+    applicability: investigate-standard
+    role: null
+    profile: auto
+    relationship_classes: [references, affects]
+    task_id: investigate-standard-recurrence-reasoning
+    frontier_item_id: investigate-standard-recurrence-reasoning-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
+  - id: deep-code-paths
+    disposition: migrated
+    rationale: Semantic navigation supplies deep call-path, symbol, import, and data-flow evidence without selecting a hypothesis or fix.
+    applicability: investigate-deep
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, imports, calls, references]
+    task_id: investigate-deep-code-paths
+    frontier_item_id: investigate-deep-code-paths-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: deep-log-history
+    disposition: migrated
+    rationale: Repository impact evidence supplies bounded session-log, change-history, prior-fix, and documented-constraint provenance.
+    applicability: investigate-deep
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: investigate-deep-log-history
+    frontier_item_id: investigate-deep-log-history-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: deep-dependencies
+    disposition: migrated
+    rationale: Semantic navigation maps deep import, call, and dependency direction evidence while the parent retains causal synthesis.
+    applicability: investigate-deep
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [imports, calls, references]
+    task_id: investigate-deep-dependencies
+    frontier_item_id: investigate-deep-dependencies-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: deep-related-components
+    disposition: migrated
+    rationale: Repository impact evidence maps consumers, registrations, configuration, artifacts, tests, fixtures, and architecture constraints interacting with the target.
+    applicability: investigate-deep
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: investigate-deep-related-components
+    frontier_item_id: investigate-deep-related-components-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: deep-web-research
+    disposition: retained
+    rationale: External documentation and issue research requires web access and source interpretation outside repository exploration.
+    applicability: investigate-deep
+    role: null
+    profile: auto
+    relationship_classes: [references]
+    task_id: investigate-deep-web-research
+    frontier_item_id: investigate-deep-web-research-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
+  - id: deep-design-intent-reasoning
+    disposition: retained
+    rationale: Inferring mechanism purpose from typed code, impact, and history evidence remains a non-code reasoning responsibility of the existing agent.
+    applicability: investigate-deep
+    role: null
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: investigate-deep-design-intent-reasoning
+    frontier_item_id: investigate-deep-design-intent-reasoning-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
+  - id: deep-recurrence-reasoning
+    disposition: retained
+    rationale: Comparing prior fixes with the current root cause and judging recurrence remains non-code reasoning for the existing agent.
+    applicability: investigate-deep
+    role: null
+    profile: auto
+    relationship_classes: [references, affects]
+    task_id: investigate-deep-recurrence-reasoning
+    frontier_item_id: investigate-deep-recurrence-reasoning-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
+  - id: deep-code-deepening
+    disposition: migrated
+    rationale: Semantic navigation supplies batch-specific local code evidence needed to resolve open questions without choosing the primary hypothesis.
+    applicability: investigate-deep
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, imports, calls, references]
+    task_id: investigate-deep-code-deepening
+    frontier_item_id: investigate-deep-code-deepening-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: deep-informed-web-research
+    disposition: retained
+    rationale: Batch-specific external research and interpretation remains with the existing web-capable agent.
+    applicability: investigate-deep
+    role: null
+    profile: auto
+    relationship_classes: [references]
+    task_id: investigate-deep-informed-web-research
+    frontier_item_id: investigate-deep-informed-web-research-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
+  - id: deep-design-intent-refresh
+    disposition: retained
+    rationale: Re-evaluating intent for newly surfaced mechanisms from typed evidence remains non-code reasoning for the existing agent.
+    applicability: investigate-deep
+    role: null
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: investigate-deep-design-intent-refresh
+    frontier_item_id: investigate-deep-design-intent-refresh-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
+  - id: deep-hypothesis-challenge
+    disposition: retained
+    rationale: Adversarial hypothesis evaluation is non-code reasoning and must remain with the existing challenge agent.
+    applicability: investigate-deep
+    role: null
+    profile: auto
+    relationship_classes: [conflicts-with, references]
+    task_id: investigate-deep-hypothesis-challenge
+    frontier_item_id: investigate-deep-hypothesis-challenge-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
+  - id: deep-solution-generation
+    disposition: retained
+    rationale: Generating and comparing candidate fixes must remain with existing reasoning agents rather than evidence-only explorer leaves.
+    applicability: investigate-deep
+    role: null
+    profile: auto
+    relationship_classes: [references, affects]
+    task_id: investigate-deep-solution-generation
+    frontier_item_id: investigate-deep-solution-generation-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
+  - id: deep-candidate-blast-radius
+    disposition: migrated
+    rationale: Repository impact evidence covers each candidate's consumers, tests, configuration, artifacts, compatibility surfaces, and risk without ranking fixes.
+    applicability: investigate-deep
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [references, affects, conflicts-with]
+    task_id: investigate-deep-candidate-blast-radius
+    frontier_item_id: investigate-deep-candidate-blast-radius-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: deep-breakage-reasoning
+    disposition: retained
+    rationale: Judging downstream contract violations and overall breakage risk from typed impact evidence remains with the existing adversarial agent.
+    applicability: investigate-deep
+    role: null
+    profile: auto
+    relationship_classes: [references, affects, conflicts-with]
+    task_id: investigate-deep-breakage-reasoning
+    frontier_item_id: investigate-deep-breakage-reasoning-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
+  - id: deep-factual-validation
+    disposition: retained
+    rationale: Cross-checking report claims against evidence is validator reasoning and remains with the existing factual-accuracy agent.
+    applicability: investigate-deep
+    role: null
+    profile: auto
+    relationship_classes: [references, conflicts-with]
+    task_id: investigate-deep-factual-validation
+    frontier_item_id: investigate-deep-factual-validation-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
+  - id: deep-recommendation-validation
+    disposition: retained
+    rationale: Assessing recommendation safety and scope is validator reasoning and remains with the existing recommendation agent.
+    applicability: investigate-deep
+    role: null
+    profile: auto
+    relationship_classes: [references, affects, conflicts-with]
+    task_id: investigate-deep-recommendation-validation
+    frontier_item_id: investigate-deep-recommendation-validation-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
+  - id: deep-gap-validation
+    disposition: retained
+    rationale: Identifying unexplored reasoning gaps is validator judgment and remains with the existing gap-analysis agent.
+    applicability: investigate-deep
+    role: null
+    profile: auto
+    relationship_classes: [references, affects]
+    task_id: investigate-deep-gap-validation
+    frontier_item_id: investigate-deep-gap-validation-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -56,7 +492,7 @@ Deep analysis mode is activated when ANY of the following conditions are met:
 
 ### Model
 
-When deep analysis mode is active, all subagents are spawned via `child delegation under the declared `sonnet` model-class policy`. The main skill session model is controlled by the recipe or user — typically `opus[1m]` for the main session in deep mode.
+When deep analysis mode is active, all subagents use child delegation under the declared `sonnet` model-class policy. The main skill session model is controlled by the recipe or user — typically `opus[1m]` for the main session in deep mode.
 
 ### When NOT Activated
 
@@ -114,10 +550,12 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Start independent child delegations sequentially
 
 **ALWAYS:**
-- Use subagents for parallel exploration
+- Use the registered exploration roles for all local repository reads covered by migrated vectors
+- Treat explorer leaves as terminal evidence producers: they return typed evidence only and never diagnose the root cause, rank candidates, or select a fix
+- Use existing subagents for web research, non-code reasoning, hypothesis challenge, solution generation, and validation
 - Start all independent child delegations before awaiting any result to maximize concurrency
 - Limit total subagent spawns to 16 across all batches (standard and deep mode). If the investigation requires more exploration vectors, consolidate related questions into fewer, broader subagent prompts rather than spawning additional agents.
-- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
+- Spawn all retained subagents through child delegation under the declared `sonnet` model-class policy
 - Write findings as a markdown report with unique name to `{{AUTOSKILLIT_TEMP}}/investigate/` directory (relative to the current working directory)
 - After writing the investigation report, emit the **absolute path** as a structured output
   token as your final output. Resolve the relative `{{AUTOSKILLIT_TEMP}}/investigate/...`
@@ -152,57 +590,93 @@ Identify what needs investigation:
 - **Module Investigation**: Identify the module/component to understand
 - **Question Investigation**: Clarify the specific question being asked
 
-### Step 2: Launch Parallel Subagents (SINGLE MESSAGE)
+### Step 2: Launch Parallel Exploration (SINGLE READY WAVE)
 
-**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
+Dispatch all ready standard-mode packets and independent retained agents before awaiting any result. Join every leaf before synthesis. A reasoning agent that consumes typed packet evidence is not ready until those packets complete.
 
-Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
+Do not output prose between ready dispatches. Immediately proceed to the next launch.
 
-Spawn child delegations to investigate different aspects simultaneously (some aspects may and should require multiple subagents):
+Use the deterministic router for the migrated local-repository vectors below:
 
+<!-- autoskillit:exploration-vector id="standard-core-implementation" -->
 **Core Implementation**
 - Find the primary source files
 - Understand the main logic flow
 - Identify key functions/classes
+- Return bounded typed evidence with file paths, symbols, and direct/inferred status; do not diagnose or propose fixes
+<!-- /autoskillit:exploration-vector -->
 
-**Dependencies & Consumers**
-- What depends on this code?
+<!-- autoskillit:exploration-vector id="standard-dependencies" -->
+**Dependencies**
 - What does this code depend on?
-- Map the dependency graph
+- Map imports, calls, and structural dependency direction
+- Return bounded typed evidence only; do not select a diagnosis or fix
+<!-- /autoskillit:exploration-vector -->
 
+<!-- autoskillit:exploration-vector id="standard-consumer-impact" -->
+**Consumers and impact surfaces**
+- Find downstream consumers, registrations, configuration, generated or installed artifacts, compatibility surfaces, and fixtures
+- Return bounded typed evidence with affected relationships; do not rank or select fixes
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="standard-test-coverage" -->
 **Test Coverage**
 - Find all tests for this code
 - Identify what scenarios are tested
 - Find gaps in test coverage
+- Return bounded typed evidence only; leave test-gap interpretation to synthesis
+<!-- /autoskillit:exploration-vector -->
 
+<!-- autoskillit:exploration-vector id="standard-error-provenance" -->
 **Error Context (if error investigation)**
 - Trace the error through the stack
 - Find where the bad state originated
-- Identify the root cause
+- Report the local call path and state provenance as typed evidence without naming a root cause or fix
+<!-- /autoskillit:exploration-vector -->
 
+<!-- autoskillit:exploration-vector id="standard-similar-patterns" -->
 **Similar Patterns**
 - Search for similar code elsewhere
 - How do other parts handle this?
 - Are there established patterns?
+- Return locations and structural similarities as typed evidence; do not recommend one pattern
+<!-- /autoskillit:exploration-vector -->
 
+<!-- autoskillit:exploration-vector id="standard-architecture-constraints" -->
 **Architecture Context**
 - Read relevant architecture.md files
-- Understand design decisions
-- Check for documented constraints
+- Find documented constraints in architecture guidance, ADRs, repository instructions, registries, and configuration
+- Return bounded typed evidence; leave intent interpretation to the reasoning agent
+<!-- /autoskillit:exploration-vector -->
 
+<!-- autoskillit:exploration-vector id="standard-web-research" -->
 **External Research (Web Search)**
+- Spawn an existing web-capable research subagent under the declared `sonnet` model-class policy
 - Search for error messages in external sources
 - Look up known issues in libraries/frameworks
 - Find documentation for relevant APIs
 - Check GitHub issues for similar problems
 - Search for Stack Overflow discussions
+<!-- /autoskillit:exploration-vector -->
 
 **Design Intent**
-- Run `git log --follow` on the mechanism's primary file(s) to find the introducing commit
-- Read the introducing commit message and diff to extract the stated purpose
-- Trace callers and dependents to map what relies on the mechanism
-- Check architecture docs (architecture.md, CLAUDE.md, ADRs) for documented design constraints
+
+<!-- autoskillit:exploration-vector id="standard-design-intent-history" -->
+- Use the routed provenance packet to run `git log --follow` on the mechanism's primary file(s) and find the introducing commit
+- Use the routed dependency and consumer packets to trace callers and dependents
+- Check architecture docs (`architecture.md`, `CLAUDE.md`, and ADRs) through the routed architecture-constraint evidence
+- Return bounded typed evidence for the introducing commit, relevant diff locations, later changes, dependencies, consumers, and documented constraints
+- Do not infer purpose or select a fix
+<!-- /autoskillit:exploration-vector -->
+
+After all ready packets complete, provide their typed provenance, dependency, consumer, and architecture evidence to the existing Design Intent reasoning agent:
+
+<!-- autoskillit:exploration-vector id="standard-design-intent-reasoning" -->
+- Spawn the existing Design Intent subagent under the declared `sonnet` model-class policy
+- Use only the supplied typed evidence and investigation context to infer the stated purpose and dependency chain
 - Produce a "design intent finding" per mechanism: what it is for, what introduced it, and what depends on it
+- Do not perform fresh local repository exploration; request a new routed packet if evidence is missing
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 3: Synthesize Findings
 
@@ -225,6 +699,7 @@ After subagents complete, consolidate into structured findings:
 
 Before writing the report, check whether the root cause identified in Step 3 has been investigated or fixed before. This catches recurring bugs where a prior fix was incomplete, symptom-only, or applied at the wrong layer. Zero overhead for first-occurrence bugs: if nothing matches, skip the analysis subagent and record a single-line result.
 
+<!-- autoskillit:exploration-vector id="standard-recurrence-history" -->
 #### Part A: Mine Past Investigation Logs
 
 Derive the Claude project log directory from the current working directory:
@@ -235,11 +710,11 @@ LOG_DIR="$HOME/.claude/projects/-${PROJECT_PATH//\//-}"
 LOG_DIR="${LOG_DIR//--/-}"
 ```
 
-Search for `.jsonl` files containing prior `/autoskillit:investigate` invocations, **excluding subagent log subdirectories** (`*/subagents/*`) so prior subagent conversations are not double-counted:
+Search for `.jsonl` files containing prior AutoSkillit investigate-skill invocations, **excluding subagent log subdirectories** (`*/subagents/*`) so prior subagent conversations are not double-counted:
 
 ```bash
 find "$LOG_DIR" -name "*.jsonl" -not -path "*/subagents/*" -print0 | \
-  xargs -0 grep -l '/autoskillit:investigate' 2>/dev/null
+  xargs -0 grep -l '[/]autoskillit:investigate' 2>/dev/null
 ```
 
 For each matching log file, extract the investigation topic, root cause conclusion, and affected components by scanning for keywords `"root cause"`, `"Root Cause"`, `"fix"`, and `"summary"` in assistant messages. Compare against the current investigation's root cause and affected components — overlapping components or error patterns indicate a recurrence.
@@ -261,19 +736,21 @@ For each matching commit, read the diff to check for symbol-level overlap with t
 git show {HASH} -- {AFFECTED_FILES}
 ```
 
-Cross-reference: if a commit message references the same error type, component name, or function that the current investigation identified as the root cause, treat it as a prior fix for the same or a closely related issue.
+Return bounded typed evidence for candidate log and commit matches, with timestamps, hashes, paths, symbols, and direct/inferred status. Do not decide whether a match proves recurrence and do not recommend a fix.
+<!-- /autoskillit:exploration-vector -->
 
 #### Part C: Conditional Analysis (only if history found)
 
-If Part A or Part B found matches, spawn a single subagent via `child delegation under the declared `sonnet` model-class policy` to:
+<!-- autoskillit:exploration-vector id="standard-recurrence-reasoning" -->
+If Parts A+B returned candidate matches, spawn a single existing reasoning subagent under the declared `sonnet` model-class policy and provide the typed recurrence evidence. The subagent must:
 
-- Read the prior fix diffs via `git show {commit_hash}`
-- Read any prior investigation report files discovered during log scanning
-- Compare the prior fix approach against the current root cause
+- Compare the supplied prior investigation and fix evidence against the current root cause
 - Identify what the prior fix missed (incomplete coverage, wrong layer, symptom-only fix, missing regression test)
 - Determine whether this represents a recurring pattern that needs architectural remediation
+- Request an additional routed evidence packet instead of performing fresh local repository exploration when evidence is missing
 
 If neither Part A nor Part B produced matches, skip the subagent entirely and record: **"No prior investigations or fixes found for this root cause."** This guarantees zero overhead for first-occurrence bugs.
+<!-- /autoskillit:exploration-vector -->
 
 #### Rectify Flag
 
@@ -381,26 +858,63 @@ Parse the investigation target (same as Step 1). Then propose an adaptive batch 
 
 ### Step D2: Batch 1 — Broad Parallel Exploration
 
-Launch a minimum of 5 parallel subagents via `child delegation under the declared `sonnet` model-class policy` covering:
+Launch a minimum of 5 parallel subagents/packets using the five ready vectors below in one parallel wave. Run the historical recurrence check from Step 3.5 in parallel with Batch 1 through the log/history packet. Native explorer leaves return typed evidence only; they never name a root cause, generate a solution, rank candidates, or select a fix.
 
-- **Code path tracing**: Trace execution paths through the primary affected components
-- **Log and history analysis**: Scan session logs and git history for prior occurrences
-- **Related component mapping**: Map all components that interact with the target
-- **External research**: Web search for known issues, library bugs, documentation
-- **Design Intent**: Run `git log --follow`, caller tracing, and architecture doc checks on the mechanisms under investigation — identical to the Standard Mode Design Intent vector but with deep mode evidence standards
+<!-- autoskillit:exploration-vector id="deep-code-paths" -->
+- **Code path tracing packet**: Trace execution paths, symbols, imports, and local data flow through the primary affected components. Return bounded typed evidence with locations and direct/inferred status only.
+<!-- /autoskillit:exploration-vector -->
 
-Simultaneously with Batch 1 subagents, run historical recurrence check (Step 3.5 Parts A+B) in parallel. Batch 1 is a completed agent wave only after every launch has a terminal result. Before launching Batch 2, emit an assistant progress message beginning `Inter-batch synthesis:` that summarizes confirmed findings, open questions, and new investigative leads.
+<!-- autoskillit:exploration-vector id="deep-log-history" -->
+- **Log and history packet**: Scan bounded session logs, git history, prior-fix commits, and documented constraints for prior occurrences and mechanism provenance. Return typed matches with timestamps, hashes, paths, and direct/inferred status; do not decide recurrence or intent.
+<!-- /autoskillit:exploration-vector -->
 
-After inter-batch synthesis, run Part C of Step 3.5 conditionally: if Parts A+B found prior history, spawn the conditional analysis subagent. Otherwise skip and proceed to D3.
+<!-- autoskillit:exploration-vector id="deep-dependencies" -->
+- **Dependency packet**: Map imports, calls, and dependency direction for the target and affected components. Return bounded typed relationship evidence only.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="deep-related-components" -->
+- **Related component and impact packet**: Map consumers, registrations, configuration, generated or installed artifacts, tests, fixtures, compatibility surfaces, and architecture constraints that interact with the target. Return bounded typed impact evidence without ranking remedies.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="deep-web-research" -->
+- **External research agent**: Spawn the existing web-capable subagent under the declared `sonnet` model-class policy to search for known issues, library bugs, and documentation.
+<!-- /autoskillit:exploration-vector -->
+
+Batch 1's ready wave is complete only after every launch has a terminal result. Then provide the typed code, dependency, impact, architecture, and provenance packets to the existing Design Intent reasoning agent:
+
+<!-- autoskillit:exploration-vector id="deep-design-intent-reasoning" -->
+- **Design Intent reasoning agent**: Infer the mechanism's stated purpose and dependency chain from the supplied typed evidence. Do not perform fresh local repository exploration; request a new routed packet if evidence is missing.
+<!-- /autoskillit:exploration-vector -->
+
+Before launching Batch 2, emit an assistant progress message beginning `Inter-batch synthesis:` that summarizes confirmed findings, open questions, and new investigative leads.
+
+<!-- autoskillit:exploration-vector id="deep-recurrence-reasoning" -->
+If the log/history packet found candidate prior investigations or fixes, spawn the existing recurrence reasoning subagent under the declared `sonnet` model-class policy. Compare only the supplied typed evidence with the current root cause, identify what a prior fix missed, and determine whether this is an architectural recurrence. Request a new routed packet instead of reading the repository directly when evidence is missing. If no history matches were returned, skip this agent and record: **"No prior investigations or fixes found for this root cause."**
+<!-- /autoskillit:exploration-vector -->
 
 ### Step D3: Batch 2+ — Informed Deepening
+
+Do not output prose between the ready dispatches in a batch; issue them in a single message before awaiting either result.
 
 For each subsequent batch (Batch 2, Batch 3, ...):
 
 1. Open with an explicit synthesis from prior batches — what was confirmed, what remains uncertain
-2. Each batch must include mandatory code exploration (local code search, file reads, symbol tracing) and mandatory web research (search for external documentation, known issues, library behavior)
+2. Dispatch both ready vectors below before awaiting either result:
+
+<!-- autoskillit:exploration-vector id="deep-code-deepening" -->
+   - **Mandatory local code packet**: Adapt the open questions into a batch-specific semantic navigation task covering code search, file/symbol tracing, imports, calls, and local data flow. Return bounded typed evidence only; do not choose the primary hypothesis or a fix.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="deep-informed-web-research" -->
+   - **Mandatory web research agent**: Spawn the existing web-capable subagent under the declared `sonnet` model-class policy to research external documentation, known issues, and library behavior relevant to the open questions.
+<!-- /autoskillit:exploration-vector -->
+
 3. After each batch completes, produce inter-batch synthesis (confirmed findings, open questions, new leads)
-4. If inter-batch synthesis surfaces new mechanisms as change candidates that were not covered in prior batches, re-dispatch the Design Intent subagent targeting those specific mechanisms. Fan-in: append each re-dispatched result as additional bullet points under `## Design Intent Findings` in the final report (do not replace prior findings).
+4. If inter-batch synthesis surfaces new mechanisms as change candidates that were not covered in prior batches, first route any missing local provenance/dependency evidence through the applicable deep packet, then re-dispatch the retained reasoning vector:
+
+<!-- autoskillit:exploration-vector id="deep-design-intent-refresh" -->
+   - **Design Intent refresh agent**: Re-evaluate intent for the newly surfaced mechanisms from supplied typed evidence only. Do not perform fresh local repository exploration. Fan-in: append the result as additional bullets under `## Design Intent Findings` in the final report; do not replace prior findings.
+<!-- /autoskillit:exploration-vector -->
 
 **Early termination:** When all findings across all open questions are SUPPORTED (backed by direct code evidence) and no new investigative leads have emerged in the last batch, stop iterating and proceed to D4.
 
@@ -412,7 +926,8 @@ Deep mode must execute at least two completed agent waves. Do not begin a later 
 
 Fires when ANY finding across any batch is marked NEEDS-EVIDENCE.
 
-Spawn one adversarial subagent via `child delegation under the declared `sonnet` model-class policy` whose role is to disconfirm the primary hypothesis:
+<!-- autoskillit:exploration-vector id="deep-hypothesis-challenge" -->
+Spawn one adversarial subagent through child delegation under the declared `sonnet` model-class policy whose role is to disconfirm the primary hypothesis:
 
 - Provide the primary hypothesis and all supporting evidence collected so far
 - Task: find counterevidence — code paths, behaviors, or data that contradict the hypothesis
@@ -421,37 +936,57 @@ Spawn one adversarial subagent via `child delegation under the declared `sonnet`
 **If counterevidence is found:** Return to D3 for one additional deepening batch focused on reconciling the contradiction.
 
 **When the challenge finds no counterevidence:** The hypothesis stands. Proceed to D5.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step D5: Solution Convergence
 
-**Issue ALL blast radius subagent calls in a single message — one per candidate — so they execute in parallel. Do not iterate across multiple turns.**
+Within candidate processing, do not output prose between ready launches; issue all ready work in a single message before awaiting results.
 
-Spawn solution-space subagents to enumerate candidate fixes. For each candidate, spawn one blast radius subagent via `child delegation under the declared `sonnet` model-class policy` to assess:
+<!-- autoskillit:exploration-vector id="deep-solution-generation" -->
+Spawn existing solution-space reasoning subagents under the declared `sonnet` model-class policy to enumerate candidate fixes. These agents generate candidates from the supported findings; explorer leaves must not generate, rank, or select fixes.
+<!-- /autoskillit:exploration-vector -->
 
-- Which components would be affected by this fix
-- What tests would need to be added or modified
-- What risk surface is introduced
+After candidate generation, route one consolidated impact packet covering every candidate:
+
+Before retained breakage reasoning begins, the typed evidence must trace the full dependency chain (callers, importers, and flag consumers) and check git history for prior revert patterns on the targeted mechanism.
+
+<!-- autoskillit:exploration-vector id="deep-candidate-blast-radius" -->
+**Candidate blast-radius packet**
+- For each supplied candidate, trace affected consumers, registrations, configuration, generated or installed artifacts, compatibility surfaces, tests, fixtures, and relevant revert history
+- Return bounded typed evidence keyed by candidate with affected relationships and direct/inferred status
+- Do not compare candidates, assess recommendation merit, rank options, or select a fix
+<!-- /autoskillit:exploration-vector -->
 
 After blast radius analysis, converge to a single recommendation — the highest-confidence, lowest-blast-radius candidate with direct code evidence. Kill alternative options and document why each was rejected.
 
-**Adversarial Breakage Analysis:** After converging to a single recommendation, assess whether it proposes removal, replacement, or any action whose execution would eliminate, reduce, or supersede the function of an existing mechanism. If so, spawn one adversarial breakage subagent via `child delegation under the declared `sonnet` model-class policy` per such recommendation:
+<!-- autoskillit:exploration-vector id="deep-breakage-reasoning" -->
+**Adversarial Breakage Analysis:** After converging to a single recommendation, assess whether it proposes removal, replacement, or any action whose execution would eliminate, reduce, or supersede the function of an existing mechanism. If so, spawn the existing adversarial breakage reasoning subagent under the declared `sonnet` model-class policy and supply the recommendation, Design Intent findings, and typed blast-radius evidence:
 
 1. Receive the recommendation and the mechanism it targets, along with the Design Intent findings for that mechanism
-2. Trace the mechanism's full dependency chain through code: callers, importers, flag consumers
-3. Check git history for prior revert patterns on the same mechanism: `git log --oneline --grep="revert" -- {mechanism_files}`
-4. Report a breakage surface analysis: what components would break, prior revert history, downstream contract violations, and overall breakage risk (LOW / MEDIUM / HIGH)
+2. Reason from the supplied dependency, consumer, test, artifact, and revert-history evidence
+3. Report a breakage surface analysis: what components would break, prior revert history, downstream contract violations, and overall breakage risk (LOW / MEDIUM / HIGH)
+4. Do not perform fresh local repository exploration; request a routed impact packet if evidence is missing
 
 The adversarial breakage subagent is distinct from the D4 challenge round. D4 asks "is the root cause correct?" (epistemological — fires on NEEDS-EVIDENCE findings). D5 breakage asks "what breaks if we follow this recommendation?" (consequentialist — fires on removal/change recommendations). Both are required in deep mode.
 
 If the recommendation does not propose removal or change of an existing mechanism (e.g., it proposes adding new code only), skip adversarial breakage analysis for that recommendation.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step D6: Post-Report Validation
 
-After writing the report (Step 4), spawn 2–3 independent validator subagents via `child delegation under the declared `sonnet` model-class policy` with distinct roles:
+After writing the report (Step 4), spawn 2–3 independent validator subagents through child delegation under the declared `sonnet` model-class policy with distinct roles:
 
+<!-- autoskillit:exploration-vector id="deep-factual-validation" -->
 - **Validator 1 — Factual accuracy**: Cross-check every claim in the report against actual code/evidence. Flag any factual inaccuracy.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="deep-recommendation-validation" -->
 - **Validator 2 — Recommendation soundness**: Assess whether the single recommendation is implementable, safe, and correctly scoped.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="deep-gap-validation" -->
 - **Validator 3 — Gap analysis** (optional, spawn if investigation was complex): Identify what the report does not cover that could be relevant.
+<!-- /autoskillit:exploration-vector -->
 
 Every validator launch must reach a terminal result before emitting `investigation_path`. If any validator identifies errors or gaps, apply in-place corrections to the report before finalizing validation. The structured output token is emitted **after** all validation and correction is complete, as the final line of the final assistant message with no later assistant text.
 
@@ -471,6 +1006,7 @@ Focus on:
 2. {Specific question 2}
 3. {Specific question 3}
 
+Use supplied typed explorer evidence for local repository claims. Do not perform fresh local repository exploration; request another routed packet when evidence is missing.
 This is a research task - DO NOT modify any code.
 Report your findings in a structured format.
 ```
@@ -482,12 +1018,14 @@ Use this template for the Design Intent subagent in both standard and deep modes
 ```
 Investigate the design intent and dependency chain of {mechanism} in {target}.
 
-Investigation tasks:
-1. Run `git log --follow` on {file_path(s)} to find the introducing commit
-2. Read the introducing commit message and diff to extract the stated purpose
-3. Trace all callers and dependents — map every component that relies on this mechanism
-4. Check architecture docs (architecture.md, CLAUDE.md, ADRs) for documented design constraints
-5. Produce a design intent finding: what this mechanism is for, what introduced it, and what depends on it
+TYPED PROVENANCE, DEPENDENCY, CONSUMER, AND ARCHITECTURE EVIDENCE:
+{routed evidence packets, including the result of `git log --follow` on the mechanism's primary files}
+
+Reasoning tasks:
+1. Infer the stated purpose from the introducing-commit and change-history evidence
+2. Interpret the supplied caller, dependent, consumer, and documented-constraint relationships
+3. Produce a design intent finding: what this mechanism is for, what introduced it, and what depends on it
+4. If evidence is missing, request a new routed packet instead of reading the repository directly
 
 Evidence standards:
 - Cite the introducing commit hash and date
@@ -509,15 +1047,19 @@ Investigate {specific aspect} of {target}.
 Context from prior batches:
 {Summary of confirmed findings and open questions from previous batch inter-batch synthesis}
 
+Typed local repository evidence:
+{routed evidence packets}
+
 Focus on:
 1. {Specific question 1}
 2. {Specific question 2}
 3. {Specific question 3}
 
 Evidence standards:
-- Cite specific file paths and line numbers for all code claims
+- Cite the typed packet's file paths and line numbers for all code claims
 - Include log timestamps for any log-based findings
 - Mark each finding as SUPPORTED (direct evidence), UNSUPPORTED (contradicted), or NEEDS-EVIDENCE (not yet confirmed)
+- Do not perform fresh local repository exploration; request a routed packet when evidence is missing
 
 This is a research task - DO NOT modify any code.
 Report your findings in a structured format with explicit evidence citations, using at most 800 words.
@@ -589,17 +1131,17 @@ Use this template for the D5 adversarial breakage subagent (deep mode only):
 RECOMMENDATION: {recommendation text}
 TARGET MECHANISM: {mechanism being removed/changed/superseded}
 DESIGN INTENT: {summary from Design Intent subagent findings for this mechanism}
+TYPED BLAST-RADIUS EVIDENCE: {routed dependency, consumer, test, artifact, compatibility, and revert-history evidence}
 
 YOUR ROLE: You are a breakage analyst. Your task is NOT to evaluate the recommendation's
 merit. Your task is to determine what would break if this recommendation is followed.
 
-Investigation tasks:
-1. Trace the mechanism's full dependency chain: callers, importers, flag consumers,
-   test fixtures that depend on its behavior
-2. Check git history for prior revert patterns on this mechanism:
-   `git log --oneline --grep="revert" -- {mechanism_files}`
+Analysis tasks:
+1. Interpret the supplied dependency chain: callers, importers, flag consumers, and test fixtures
+2. Interpret the supplied revert-history and downstream contract evidence
 3. Identify downstream components whose contracts or invariants rely on this mechanism
-4. Assess whether the recommendation accounts for all dependents found in steps 1-3
+4. Assess whether the recommendation accounts for all supplied dependents
+5. Request an additional routed impact packet instead of reading the repository directly when evidence is missing
 
 Report a breakage surface analysis:
 - Components that would break (with file paths and line numbers)

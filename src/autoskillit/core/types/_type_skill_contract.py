@@ -60,6 +60,10 @@ class ExplorationVectorApplicabilityId(StrEnum):
 
     ALWAYS = "always"
     PLANNER_EXTRACT_DOMAIN_DEEP = "planner-extract-domain-deep"
+    INVESTIGATE_STANDARD = "investigate-standard"
+    INVESTIGATE_DEEP = "investigate-deep"
+    SCOPE_SOFTWARE = "scope-software"
+    SCOPE_NON_SOFTWARE = "scope-non-software"
 
 
 class ExplorationVectorDisposition(StrEnum):

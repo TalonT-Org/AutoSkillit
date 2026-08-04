@@ -40,6 +40,31 @@ selection, waiting, evidence merge, synthesis, and output writes. The three deep
 preserves their existing `module_count > 20` or layered/hexagonal architecture condition while
 still giving applicable sessions native dispatch.
 
+Phase D extends reviewed adoption to `investigate`, `scope`, and the representative
+`arch-lens-module-dependency`, `arch-lens-state-lifecycle`, and `arch-lens-development` skills.
+Every migrated Phase D vector authors `profile: auto` and keeps one stable task/frontier identity.
+The source marker body is canonical review prose; backend projection replaces it with either the
+Claude `Agent` launch or the Codex `spawn_agent` launch only after the router plan is bound.
+
+`investigate` uses the closed `investigate-standard` and `investigate-deep` applicability IDs.
+Local implementation and error provenance, dependencies, consumers, tests, repeated code
+patterns, architecture constraints, history, and blast-radius collection route to typed explorer
+packets. Web research, design and recurrence interpretation, hypothesis challenge, solution
+generation, recommendation synthesis, breakage judgment, and post-report validation stay with
+the existing reasoning agents. Explorer leaves return evidence only and cannot diagnose the root
+cause, rank candidates, or select a fix.
+
+`scope` uses the closed `scope-software` and `scope-non-software` applicability IDs so its runtime
+branch choice activates only the corresponding migrated vectors. Retained and excluded vectors
+keep their reviewed marker prose and never receive a native dispatch replacement. The three lens
+skills preserve parent-owned synthesis and diagram output while routing only their reviewed local
+repository evidence leaves.
+
+Architecture orchestration for these exact recipe steps remains a separately reviewed follow-up:
+`implementation.run_arch_lenses`, `implementation-groups.run_arch_lenses`, and
+`remediation.run_arch_lenses`. Keeping that set explicit prevents the representative skill
+adoption from silently broadening into recipe-level backend-policy changes.
+
 ## Policy
 
 Both roles use the validated native Codex policy: `gpt-5.6-luna`, maximum reasoning effort, and

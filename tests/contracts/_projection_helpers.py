@@ -11,9 +11,29 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-__all__ = ["STALE_VERSION", "plant_stale_snapshot", "session_catalog"]
+__all__ = [
+    "STALE_VERSION",
+    "non_exploration_catalog",
+    "plant_stale_snapshot",
+    "session_catalog",
+]
 
 STALE_VERSION = "0.0.1-stale"
+
+
+def non_exploration_catalog(catalog):
+    """Return the explicit catalog used by projection tests unrelated to exploration."""
+    from autoskillit.workspace import EffectiveSkillCatalog
+
+    skills = tuple(skill for skill in catalog.skills if not skill.exploration_vectors)
+    names = frozenset(skill.name for skill in skills)
+    return EffectiveSkillCatalog(
+        skills=skills,
+        execution_role=catalog.execution_role,
+        namespace_sources={
+            name: source for name, source in catalog.namespace_sources.items() if name in names
+        },
+    )
 
 
 def session_catalog():

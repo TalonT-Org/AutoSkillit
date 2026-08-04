@@ -9,6 +9,97 @@ write_paths:
 - '{{AUTOSKILLIT_TEMP}}/arch-lens-module-dependency/'
 description: Create Module Dependency architecture diagram showing package coupling, layering, and fan-in/fan-out. Structural
   lens answering "How are modules coupled?"
+exploration_vectors:
+  - id: project-build-config-artifacts
+    disposition: migrated
+    rationale: Repository impact evidence identifies project manifests, build files, and configuration artifacts that declare or constrain module boundaries.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: arch-lens-module-dependency-project-build-config-artifacts
+    frontier_item_id: arch-lens-module-dependency-project-build-config-artifacts-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: module-layer-structure
+    disposition: migrated
+    rationale: Semantic navigation identifies modules, package purposes, and structural layer boundaries while the parent retains architectural interpretation.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, imports, references]
+    task_id: arch-lens-module-dependency-module-layer-structure
+    frontier_item_id: arch-lens-module-dependency-module-layer-structure-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: import-analysis-by-layer
+    disposition: migrated
+    rationale: Semantic navigation traces imports, references, and calls needed to distinguish internal, external, and layer-crossing dependencies.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [imports, calls, references]
+    task_id: arch-lens-module-dependency-import-analysis-by-layer
+    frontier_item_id: arch-lens-module-dependency-import-analysis-by-layer-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: circular-dependency-detection
+    disposition: migrated
+    rationale: Semantic navigation follows import and call cycles, including conditional and deferred edges, without deciding their architectural acceptability.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [imports, calls]
+    task_id: arch-lens-module-dependency-circular-dependency-detection
+    frontier_item_id: arch-lens-module-dependency-circular-dependency-detection-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: high-fan-in-modules
+    disposition: migrated
+    rationale: Semantic navigation supplies bounded incoming and outgoing import and call evidence for fan-in, fan-out, and instability metrics.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [imports, calls, references]
+    task_id: arch-lens-module-dependency-high-fan-in-modules
+    frontier_item_id: arch-lens-module-dependency-high-fan-in-modules-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: cross-domain-imports
+    disposition: migrated
+    rationale: Semantic navigation traces cross-boundary imports and references while the parent retains domain interpretation and violation classification.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [imports, calls, references]
+    task_id: arch-lens-module-dependency-cross-domain-imports
+    frontier_item_id: arch-lens-module-dependency-cross-domain-imports-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -59,6 +150,7 @@ semantic_requirements:
 - Include runtime behavior details
 - Show external system integrations in detail
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -76,6 +168,10 @@ semantic_requirements:
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-module-dependency/arch_diag_module_dependency_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch all 6 exploration vectors through the deterministic router
+- Wait for every exploration result before interpreting domains, classifying violations, calculating the final metrics, or creating the diagram
+- Retain parent authority over architectural interpretation and diagram creation
 
 
 ## Analysis Workflow
@@ -91,37 +187,37 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+### Step 1: Launch 6 Routed Exploration Vectors (SINGLE MESSAGE)
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch all six concurrently under their registered role policies:
 
-**Layer Identification**
-- Find top-level directories and their purposes
-- Identify the intended layering structure
-- Look for: build configs, project structure, architectural boundaries
+<!-- autoskillit:exploration-vector id="project-build-config-artifacts" -->
+1. **Project, build, and configuration artifacts** — Identify manifests, build files, package declarations, configuration, and generated project metadata that declare or constrain module and package boundaries. Report artifact evidence and consumers without deciding the intended architecture.
+<!-- /autoskillit:exploration-vector -->
 
-**Import Analysis by Layer**
-- For each top-level module, find its imports
-- Categorize: internal vs external, layer violations
-- Look for: import statements, dependencies, module references
+<!-- autoskillit:exploration-vector id="module-layer-structure" -->
+2. **Module and layer structure** — Find top-level modules and packages, their code-defined purposes, and structural layer boundaries. Trace definitions and references that support the structure; leave intended-layer and domain interpretation to the parent.
+<!-- /autoskillit:exploration-vector -->
 
-**Circular Dependency Detection**
-- Find modules that import each other
-- Identify deferred imports (often indicate issues)
-- Look for: conditional imports, late imports, circular references
+<!-- autoskillit:exploration-vector id="import-analysis-by-layer" -->
+3. **Import analysis by layer** — For each top-level module, trace internal and external imports, references, and call direction. Report candidate layer crossings with file paths and evidence; do not classify them as violations.
+<!-- /autoskillit:exploration-vector -->
 
-**High Fan-In Modules**
-- Count how many modules import each module
-- Identify the most depended-upon modules
-- These require stable interfaces
+<!-- autoskillit:exploration-vector id="circular-dependency-detection" -->
+4. **Circular dependency detection** — Trace modules that import or call each other, including conditional, deferred, and late imports, and return evidence for each candidate cycle.
+<!-- /autoskillit:exploration-vector -->
 
-**Cross-Domain Imports**
-- Check for forbidden cross-domain imports
-- Document violations with file paths
+<!-- autoskillit:exploration-vector id="high-fan-in-modules" -->
+5. **Fan metrics** — Count bounded incoming and outgoing module imports and calls, identify the highest fan-in and fan-out modules, and provide the raw values needed for instability calculations. Do not infer interface ownership or stability policy.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="cross-domain-imports" -->
+6. **Cross-domain imports** — Trace imports, references, and calls across domain or package boundaries and document candidate forbidden edges with file paths. The parent decides domain meaning and whether an edge is a violation.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Build Dependency Matrix
 

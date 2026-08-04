@@ -57,14 +57,3 @@ class GitHubReviewMutationCoordinator:
             if slot.blocked_operation_key is not None or slot.ready:
                 return slot
             await self.sleeper(slot.delay)
-
-    async def wait_for_slot(self, *, scope_id: str, owner_token: str) -> None:
-        """Compatibility adapter for direct coordinator callers."""
-
-        slot = await self.acquire(
-            scope_id=scope_id,
-            operation_key=owner_token,
-            lease_owner=owner_token,
-        )
-        if slot.blocked_operation_key is not None:
-            raise RuntimeError("another unresolved review mutation blocks this scope")

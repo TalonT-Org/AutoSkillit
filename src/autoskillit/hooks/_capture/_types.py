@@ -108,7 +108,7 @@ class SweepBudgetSpec:
 class CaptureCapacitySpec:
     max_operational_records: int = 4096
     max_retained_records: int = 4096
-    max_forensic_records: int = 4096
+    max_evidence_records: int = 4096
     max_tombstones: int = 256
     compaction_low_bytes: int = 15 * 1024 * 1024 // 4
     compaction_high_bytes: int = 31 * 1024 * 1024 // 8
@@ -117,18 +117,21 @@ class CaptureCapacitySpec:
     tamper_headroom_bytes: int = 32 * 1024
     reclamation_headroom_bytes: int = 64 * 1024
 
-    def __post_init__(self) -> None:
-        integer_values = tuple(getattr(self, field) for field in self.__dataclass_fields__)
-        recovery_headroom = (
+    @property
+    def recovery_headroom_bytes(self) -> int:
+        return (
             self.cursor_headroom_bytes
             + self.tamper_headroom_bytes
             + self.reclamation_headroom_bytes
         )
+
+    def __post_init__(self) -> None:
+        integer_values = tuple(getattr(self, field) for field in self.__dataclass_fields__)
         if (
             any(type(value) is not int or value <= 0 for value in integer_values)
             or self.max_retained_records > self.max_operational_records
             or not self.compaction_low_bytes < self.compaction_high_bytes
-            or self.compaction_high_bytes + recovery_headroom > self.hard_ledger_bytes
+            or self.compaction_high_bytes + self.recovery_headroom_bytes > self.hard_ledger_bytes
         ):
             raise ValueError("invalid capture capacity specification")
 
@@ -136,7 +139,7 @@ class CaptureCapacitySpec:
 class CaptureCapacityReason(StrEnum):
     ACTIVE_CAPACITY = "active_capacity_exhausted"
     RETENTION_CAPACITY = "retention_capacity_exhausted"
-    FORENSIC_EVIDENCE = "forensic_evidence_exhausted"
+    EVIDENCE_CAPACITY = "evidence_capacity_exhausted"
     PROJECTED_COMPACTED_BYTES = "projected_compacted_bytes_exhausted"
     HARD_LEDGER_CAPACITY = "hard_ledger_capacity_exhausted"
 

@@ -105,8 +105,8 @@ def test_capacity_failure_reason_mapping_is_exhaustive_and_enum_keyed() -> None:
         CaptureCapacityReason.RETENTION_CAPACITY: (
             CaptureFailureReason.RETENTION_CAPACITY_EXHAUSTED
         ),
-        CaptureCapacityReason.FORENSIC_EVIDENCE: (
-            CaptureFailureReason.FORENSIC_EVIDENCE_EXHAUSTED
+        CaptureCapacityReason.EVIDENCE_CAPACITY: (
+            CaptureFailureReason.EVIDENCE_CAPACITY_EXHAUSTED
         ),
         CaptureCapacityReason.PROJECTED_COMPACTED_BYTES: (
             CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED
@@ -115,6 +115,17 @@ def test_capacity_failure_reason_mapping_is_exhaustive_and_enum_keyed() -> None:
             CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED
         ),
     }
+
+
+def test_capacity_spec_derives_total_recovery_headroom() -> None:
+    spec = replace(
+        CaptureCapacitySpec(),
+        cursor_headroom_bytes=1024,
+        tamper_headroom_bytes=2048,
+        reclamation_headroom_bytes=4096,
+    )
+
+    assert spec.recovery_headroom_bytes == 7168
 
 
 @pytest.mark.parametrize("reason", tuple(CaptureCapacityReason))
@@ -633,7 +644,7 @@ def test_legacy_migration_retires_until_reduced_publication_capacity_fits(
     store._capacity = CaptureCapacitySpec(
         max_operational_records=8,
         max_retained_records=8,
-        max_forensic_records=8,
+        max_evidence_records=8,
         max_tombstones=1,
         compaction_low_bytes=low,
         compaction_high_bytes=high,
@@ -3019,7 +3030,7 @@ def test_reconcile_adapter_preserves_runtime_failure_reason(
             CleanupBlocker.FILESYSTEM_AUTHORITY,
         ),
         (
-            CaptureFailureReason.FORENSIC_EVIDENCE_EXHAUSTED,
+            CaptureFailureReason.EVIDENCE_CAPACITY_EXHAUSTED,
             CleanupBlocker.FILESYSTEM_AUTHORITY,
         ),
         (
@@ -3100,7 +3111,7 @@ def test_active_record_bound_preserves_valid_ledger(
         anchor.close()
 
 
-def test_terminal_evidence_uses_combined_not_operational_capacity(tmp_path: Path) -> None:
+def test_evidence_capacity_counts_operational_and_forensic_records(tmp_path: Path) -> None:
     project = tmp_path / "project"
     clock = _Clock()
     anchor, root, store = _open_store(project, clock)
@@ -3108,7 +3119,7 @@ def test_terminal_evidence_uses_combined_not_operational_capacity(tmp_path: Path
         CaptureCapacitySpec(),
         max_operational_records=2,
         max_retained_records=2,
-        max_forensic_records=2,
+        max_evidence_records=2,
     )
     first = store.reserve_capture(_CAPTURE_ID)
     store._transition(
@@ -3126,7 +3137,7 @@ def test_terminal_evidence_uses_combined_not_operational_capacity(tmp_path: Path
         assert admitted.state is CaptureState.RESERVED
         with pytest.raises(CaptureCapacityError) as failure:
             store.reserve_capture("2" * 16)
-        assert failure.value.reason is CaptureCapacityReason.FORENSIC_EVIDENCE
+        assert failure.value.reason is CaptureCapacityReason.EVIDENCE_CAPACITY
         assert store.get_record(_CAPTURE_ID).state is CaptureState.TAMPERED
     finally:
         root.close()
@@ -3141,7 +3152,7 @@ def test_retention_occupancy_has_distinct_capacity_reason(tmp_path: Path) -> Non
         CaptureCapacitySpec(),
         max_operational_records=2,
         max_retained_records=1,
-        max_forensic_records=3,
+        max_evidence_records=3,
     )
     try:
         store.reserve_capture(_CAPTURE_ID)
@@ -3165,7 +3176,7 @@ def test_projected_compacted_bytes_preserve_recovery_headroom(tmp_path: Path) ->
         store._capacity = CaptureCapacitySpec(
             max_operational_records=8,
             max_retained_records=8,
-            max_forensic_records=8,
+            max_evidence_records=8,
             max_tombstones=2,
             compaction_low_bytes=hard_bound // 3,
             compaction_high_bytes=hard_bound // 2,
@@ -3207,7 +3218,7 @@ def test_recovery_transition_compacts_within_reserved_headroom(
         store._capacity = CaptureCapacitySpec(
             max_operational_records=8,
             max_retained_records=8,
-            max_forensic_records=8,
+            max_evidence_records=8,
             max_tombstones=2,
             compaction_low_bytes=encoded - 4,
             compaction_high_bytes=encoded - 3,
@@ -3228,7 +3239,7 @@ def test_recovery_transition_compacts_within_reserved_headroom(
         assert recovered.state is CaptureState.TAMPERED
         assert ledger.stat().st_size <= store._capacity.hard_ledger_bytes
         assert ledger.stat().st_size > (
-            store._capacity.hard_ledger_bytes - capture_capacity.recovery_headroom(store._capacity)
+            store._capacity.hard_ledger_bytes - store._capacity.recovery_headroom_bytes
         )
     finally:
         root.close()

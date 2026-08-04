@@ -16,7 +16,7 @@ Record = _ledger.CaptureLifecycleRecord
 _REASON_DETAILS = {
     CaptureCapacityReason.ACTIVE_CAPACITY: "active lifecycle record bound reached",
     CaptureCapacityReason.RETENTION_CAPACITY: "retention capacity reached",
-    CaptureCapacityReason.FORENSIC_EVIDENCE: "forensic evidence capacity reached",
+    CaptureCapacityReason.EVIDENCE_CAPACITY: "evidence record capacity reached",
     CaptureCapacityReason.PROJECTED_COMPACTED_BYTES: "compacted lifecycle capacity reached",
     CaptureCapacityReason.HARD_LEDGER_CAPACITY: "hard lifecycle ledger capacity reached",
 }
@@ -24,7 +24,7 @@ _REASON_DETAILS = {
 _FAILURE_REASONS = {
     CaptureCapacityReason.ACTIVE_CAPACITY: CaptureFailureReason.ACTIVE_CAPACITY_EXHAUSTED,
     CaptureCapacityReason.RETENTION_CAPACITY: CaptureFailureReason.RETENTION_CAPACITY_EXHAUSTED,
-    CaptureCapacityReason.FORENSIC_EVIDENCE: CaptureFailureReason.FORENSIC_EVIDENCE_EXHAUSTED,
+    CaptureCapacityReason.EVIDENCE_CAPACITY: CaptureFailureReason.EVIDENCE_CAPACITY_EXHAUSTED,
     CaptureCapacityReason.PROJECTED_COMPACTED_BYTES: (
         CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED
     ),
@@ -42,12 +42,6 @@ def failure_reason(reason: CaptureCapacityReason) -> CaptureFailureReason:
     return _FAILURE_REASONS[reason]
 
 
-def recovery_headroom(spec: CaptureCapacitySpec) -> int:
-    return (
-        spec.cursor_headroom_bytes + spec.tamper_headroom_bytes + spec.reclamation_headroom_bytes
-    )
-
-
 def transition_compaction_bound(
     candidate: Record | None,
     spec: CaptureCapacitySpec,
@@ -58,7 +52,7 @@ def transition_compaction_bound(
         _ledger.CaptureState.TAMPERED,
     }:
         return spec.hard_ledger_bytes
-    return spec.hard_ledger_bytes - recovery_headroom(spec)
+    return spec.hard_ledger_bytes - spec.recovery_headroom_bytes
 
 
 def compacted_records(
@@ -124,10 +118,10 @@ def admission_reason(
         return CaptureCapacityReason.ACTIVE_CAPACITY
     if retained > spec.max_retained_records:
         return CaptureCapacityReason.RETENTION_CAPACITY
-    if operational + forensic > spec.max_forensic_records:
-        return CaptureCapacityReason.FORENSIC_EVIDENCE
+    if operational + forensic > spec.max_evidence_records:
+        return CaptureCapacityReason.EVIDENCE_CAPACITY
     encoded = compacted_bytes(projected, compaction_epoch, spec)
-    if encoded + recovery_headroom(spec) > spec.hard_ledger_bytes:
+    if encoded + spec.recovery_headroom_bytes > spec.hard_ledger_bytes:
         return CaptureCapacityReason.HARD_LEDGER_CAPACITY
     if encoded > spec.compaction_low_bytes:
         return CaptureCapacityReason.PROJECTED_COMPACTED_BYTES

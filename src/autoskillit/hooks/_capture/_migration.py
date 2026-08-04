@@ -436,7 +436,7 @@ def _fits(records: Mapping[str, Record], epoch: int, spec: CaptureCapacitySpec) 
     encoded = _capacity.compacted_bytes(records, epoch, spec)
     return (
         encoded <= spec.compaction_low_bytes
-        and encoded + _capacity.recovery_headroom(spec) <= spec.hard_ledger_bytes
+        and encoded + spec.recovery_headroom_bytes <= spec.hard_ledger_bytes
     )
 
 

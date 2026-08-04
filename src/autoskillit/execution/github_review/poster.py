@@ -20,14 +20,13 @@ from autoskillit.core import (
     ReviewOperationState,
     ReviewReconciliationResult,
     ReviewResponseClass,
-    get_logger,
 )
 from autoskillit.execution._github_http import (
     github_error_message,
     retry_after_seconds,
 )
 
-from . import _poster_retry, _poster_support
+from . import _poster_boundary, _poster_retry, _poster_support
 from ._mutation_coordinator import GitHubReviewMutationCoordinator
 from .canonical import (
     canonicalize_review_request,
@@ -43,7 +42,6 @@ _EXPECTED_REMOTE_STATES = {
     "COMMENT": "COMMENTED",
 }
 _FINAL_STATES = frozenset({ReviewOperationState.SUCCEEDED, ReviewOperationState.RECONCILED})
-logger = get_logger(__name__)
 
 
 class DefaultGitHubReviewPoster:
@@ -64,26 +62,7 @@ class DefaultGitHubReviewPoster:
         self._instance_lock = asyncio.Lock()
 
     async def post(self, request: GitHubReviewRequest) -> GitHubReviewPostResult:
-        async with self._instance_lock:
-            try:
-                return await self._post(request)
-            except (TypeError, ValueError) as exc:
-                return GitHubReviewPostResult(
-                    operation_key="",
-                    head_sha=request.head_sha,
-                    state=ReviewOperationState.TERMINAL,
-                    planned_comment_count=len(request.comments),
-                    error=f"{type(exc).__name__}: {exc}",
-                )
-            except Exception as exc:
-                logger.error("github_review_post_failed", exc_info=True)
-                return GitHubReviewPostResult(
-                    operation_key="",
-                    head_sha=request.head_sha,
-                    state=ReviewOperationState.AMBIGUOUS,
-                    planned_comment_count=len(request.comments),
-                    error=f"{type(exc).__name__}: {exc}",
-                )
+        return await _poster_boundary.post(self, request)
 
     async def _post(self, request: GitHubReviewRequest) -> GitHubReviewPostResult:
         request = replace(

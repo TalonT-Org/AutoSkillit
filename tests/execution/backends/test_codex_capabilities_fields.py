@@ -34,3 +34,11 @@ class TestCodexCapabilitiesNewFields:
         from autoskillit.execution.backends.codex import CodexBackend
 
         assert CodexBackend().capabilities.github_api_callable is False
+
+    def test_github_api_write_requires_network_access(self):
+        from autoskillit.core import SKILL_CAPABILITY_REGISTRY
+
+        capability = SKILL_CAPABILITY_REGISTRY["github_api_write"]
+        assert capability.required_sandbox_overrides == frozenset(
+            {"sandbox_workspace_write.network_access=true"}
+        )

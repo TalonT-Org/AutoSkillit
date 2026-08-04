@@ -15,6 +15,7 @@ def test_skill_semantic_taxonomy_is_closed_and_exported() -> None:
         SKILL_REASONING_EFFORTS,
         SkillSemanticOperation,
     )
+    from autoskillit.core.types import _type_skill_semantics
 
     assert {operation.value for operation in SkillSemanticOperation} == {
         "child_spawn",
@@ -28,6 +29,7 @@ def test_skill_semantic_taxonomy_is_closed_and_exported() -> None:
     }
     assert SKILL_MODEL_CLASSES == frozenset({"haiku", "sonnet", "opus"})
     assert SKILL_REASONING_EFFORTS == frozenset({"medium", "high", "xhigh"})
+    assert "SKILL_REASONING_EFFORTS" in _type_skill_semantics.__all__
 
 
 def test_skill_semantic_plan_is_frozen_slotted_and_derives_operations() -> None:

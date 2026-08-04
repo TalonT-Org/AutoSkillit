@@ -13,6 +13,7 @@ from ._type_exceptions import SkillContractError
 
 __all__ = [
     "SKILL_MODEL_CLASS_REGISTRY",
+    "SKILL_REASONING_EFFORTS",
     "SKILL_SEMANTIC_SCHEMA_VERSION",
     "ChildModelPolicySpec",
     "ChildSpawnSpec",

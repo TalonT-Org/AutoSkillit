@@ -106,10 +106,6 @@ class CaptureStoreAbsentError(CaptureSetupError):
     """Raised when a cleanup-only open finds no existing capture store."""
 
 
-def _reason_for_os_error(exc: OSError) -> CaptureFailureReason:
-    return os_failure_reason(exc)
-
-
 @dataclass(frozen=True, slots=True)
 class FileIdentity:
     device: int
@@ -218,19 +214,19 @@ def _open_directory_component(parent_fd: int, name: str, *, create: bool) -> int
             pass
         except OSError as exc:
             raise CaptureSetupError(
-                _reason_for_os_error(exc),
+                os_failure_reason(exc),
                 "cannot create capture storage",
             ) from exc
         try:
             fd = os.open(name, _DIRECTORY_FLAGS, dir_fd=parent_fd)
         except OSError as exc:
             raise CaptureSetupError(
-                _reason_for_os_error(exc),
+                os_failure_reason(exc),
                 "cannot open capture storage",
             ) from exc
     except OSError as exc:
         raise CaptureSetupError(
-            _reason_for_os_error(exc),
+            os_failure_reason(exc),
             "unsafe capture path component",
         ) from exc
 
@@ -265,7 +261,7 @@ def open_project_anchor(cwd: str) -> ProjectAnchor:
         fd = os.open(cwd, _DIRECTORY_FLAGS & ~getattr(os, "O_NOFOLLOW", 0))
     except OSError as exc:
         raise CaptureSetupError(
-            _reason_for_os_error(exc),
+            os_failure_reason(exc),
             "cannot open project anchor",
         ) from exc
     try:

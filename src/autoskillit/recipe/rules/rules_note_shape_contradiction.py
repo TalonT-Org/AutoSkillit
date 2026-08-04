@@ -13,7 +13,7 @@ from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 #   - "append it to the skill_command" (remediation, implementation-groups)
 #   - "Appends number and complexity to skill_command:" (merge-prs)
 #   - "Replace ${{ ... }} in the skill_command" (research)
-#   - "/autoskillit:merge-pr {pr_number} {complexity}" (merge-prs — unquoted example)
+#   - "/merge-pr {pr_number} {complexity}" (merge-prs — unquoted example)
 _INLINE_APPEND_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     (
         "append-to-skill_command",

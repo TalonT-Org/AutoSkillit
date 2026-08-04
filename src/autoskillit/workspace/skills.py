@@ -691,14 +691,14 @@ class DefaultSkillResolver:
                         precedence=precedence,
                     ),
                 )
-                if candidate.invalid_reason is None:
-                    return candidate
-                logger.warning(
-                    "project_local_skill_rejected",
-                    skill=name,
-                    path=str(skill_path),
-                    reason=candidate.invalid_reason,
-                )
+                if candidate.invalid_reason is not None:
+                    logger.warning(
+                        "project_local_skill_rejected",
+                        skill=name,
+                        path=str(skill_path),
+                        reason=candidate.invalid_reason,
+                    )
+                return candidate
         return self.resolve(name)
 
     def _list_effective_unfiltered(self, project_root: Path | None) -> tuple[SkillInfo, ...]:
@@ -745,7 +745,6 @@ class DefaultSkillResolver:
                             path=str(skill_path),
                             reason=candidate.invalid_reason,
                         )
-                        continue
                     selected.add(entry.name)
                     by_name[entry.name] = candidate
         return tuple(sorted(by_name.values(), key=lambda skill: skill.name))

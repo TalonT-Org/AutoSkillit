@@ -1033,18 +1033,30 @@ def test_effective_catalog_applies_pack_and_recipe_visibility(tmp_path: Path) ->
     assert "research-skill" in recipe_catalog.namespace_sources
 
 
-def test_invalid_project_override_falls_back_to_valid_bundled_skill(tmp_path: Path) -> None:
+def test_invalid_project_override_fails_closed_without_bundled_fallback(
+    tmp_path: Path,
+) -> None:
     resolver = _resolver_with_visibility_skills(tmp_path)
     override_dir = tmp_path / ".claude" / "skills" / "core-skill"
     override_dir.mkdir(parents=True)
-    (override_dir / "SKILL.md").write_text(
+    override_path = override_dir / "SKILL.md"
+    override_path.write_text(
         '---\nname: core-skill\n---\nSpawn the worker via `Agent(model="sonnet")`.\n',
         encoding="utf-8",
     )
 
-    catalog = resolver.list_effective(tmp_path, SkillExecutionRole.SESSION)
-    selected = next(skill for skill in catalog.skills if skill.name == "core-skill")
-    assert selected.source is SkillSource.BUNDLED
+    selected = resolver.resolve_effective("core-skill", tmp_path)
+
+    assert selected is not None
+    assert selected.source is SkillSource.PROJECT_LOCAL
+    assert selected.path == override_path
+    assert selected.invalid_reason is not None
+    with pytest.raises(SkillContractError) as exc_info:
+        resolver.list_effective(tmp_path, SkillExecutionRole.SESSION)
+    assert str(exc_info.value) == (
+        "effective skill catalog contains invalid contracts: "
+        f"'core-skill': {selected.invalid_reason}"
+    )
 
 
 def test_effective_catalog_applies_subsets_and_recipe_features(tmp_path: Path) -> None:

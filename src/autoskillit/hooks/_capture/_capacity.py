@@ -48,6 +48,19 @@ def recovery_headroom(spec: CaptureCapacitySpec) -> int:
     )
 
 
+def transition_compaction_bound(
+    candidate: Record | None,
+    spec: CaptureCapacitySpec,
+) -> int:
+    if candidate is not None and candidate.state in {
+        _ledger.CaptureState.DELETING,
+        _ledger.CaptureState.DELETED,
+        _ledger.CaptureState.TAMPERED,
+    }:
+        return spec.hard_ledger_bytes
+    return spec.hard_ledger_bytes - recovery_headroom(spec)
+
+
 def compacted_records(
     records: Mapping[str, Record],
     spec: CaptureCapacitySpec,
@@ -130,13 +143,8 @@ def transition_reason(
 ) -> CaptureCapacityReason | None:
     projected = _projected(records, candidate)
     encoded = compacted_bytes(projected, compaction_epoch, spec)
-    recovery_state = candidate.state in {
-        _ledger.CaptureState.DELETING,
-        _ledger.CaptureState.DELETED,
-        _ledger.CaptureState.TAMPERED,
-    }
-    required = encoded if recovery_state else encoded + recovery_headroom(spec)
-    if required > spec.hard_ledger_bytes:
+    recovery_state = transition_compaction_bound(candidate, spec) == spec.hard_ledger_bytes
+    if encoded > transition_compaction_bound(candidate, spec):
         return CaptureCapacityReason.HARD_LEDGER_CAPACITY
     if not recovery_state and encoded > spec.compaction_low_bytes:
         return CaptureCapacityReason.PROJECTED_COMPACTED_BYTES

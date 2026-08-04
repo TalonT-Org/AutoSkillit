@@ -3121,6 +3121,53 @@ def test_projected_compacted_bytes_preserve_recovery_headroom(tmp_path: Path) ->
         anchor.close()
 
 
+def test_recovery_transition_compacts_within_reserved_headroom(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    try:
+        current = store.reserve_capture(_CAPTURE_ID)
+        candidate = store._deleting_record(current)
+        projected = {_CAPTURE_ID: candidate}
+        encoded = capture_capacity.compacted_bytes(
+            projected,
+            candidate.compaction_epoch + 1,
+            store._capacity,
+        )
+        store._capacity = CaptureCapacitySpec(
+            max_operational_records=8,
+            max_retained_records=8,
+            max_forensic_records=8,
+            max_tombstones=2,
+            compaction_low_bytes=encoded - 4,
+            compaction_high_bytes=encoded - 3,
+            hard_ledger_bytes=encoded,
+            cursor_headroom_bytes=1,
+            tamper_headroom_bytes=1,
+            reclamation_headroom_bytes=1,
+        )
+        monkeypatch.setattr(capture_lifecycle, "_COMPACTION_THRESHOLD_BYTES", 1)
+
+        recovered = store._transition(
+            store._authority_for(current),
+            allowed_states={CaptureState.RESERVED},
+            transform=lambda _record: candidate,
+        )
+
+        ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
+        assert recovered.state is CaptureState.DELETING
+        assert ledger.stat().st_size <= store._capacity.hard_ledger_bytes
+        assert ledger.stat().st_size > (
+            store._capacity.hard_ledger_bytes - capture_capacity.recovery_headroom(store._capacity)
+        )
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_ledger_size_bound_rejects_without_mutating_valid_ledger(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

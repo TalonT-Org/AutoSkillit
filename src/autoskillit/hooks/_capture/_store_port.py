@@ -137,4 +137,6 @@ class MigrationStorePort(SweepStorePort, Protocol):
         self,
         records: Records,
         compaction_epoch: int,
+        *,
+        candidate: Record | None = None,
     ) -> None: ...

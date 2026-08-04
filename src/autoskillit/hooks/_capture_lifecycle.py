@@ -310,7 +310,7 @@ class CaptureLifecycleStore:
         ):
             latest = dict(records)
             latest[record.capture_id] = record
-            self._compact_locked(latest, compaction_epoch + 1)
+            self._compact_locked(latest, compaction_epoch + 1, candidate=record)
             return
         fd = self._open_ledger()
         try:
@@ -340,6 +340,8 @@ class CaptureLifecycleStore:
         self,
         records: Mapping[str, CaptureLifecycleRecord],
         compaction_epoch: int,
+        *,
+        candidate: CaptureLifecycleRecord | None = None,
     ) -> None:
         compacted = _capture_capacity.compacted_records(records, self._capacity)
         try:
@@ -354,7 +356,7 @@ class CaptureLifecycleStore:
             raise CaptureLedgerError(str(exc)) from exc
         compacted_bound = min(
             _MAX_COMPACTION_BYTES,
-            self._capacity.hard_ledger_bytes - _capture_capacity.recovery_headroom(self._capacity),
+            _capture_capacity.transition_compaction_bound(candidate, self._capacity),
         )
         if sum(map(len, frames)) > compacted_bound:
             raise CaptureLedgerError("lifecycle compaction exceeds bound")

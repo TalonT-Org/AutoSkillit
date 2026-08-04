@@ -2859,6 +2859,54 @@ def test_reconcile_adapter_opens_existing_store_without_creation(tmp_path: Path)
     assert not _capture_dir(absent_project).exists()
 
 
+def test_emit_bounded_diagnostic_normalizes_and_escapes_closing_bracket() -> None:
+    emitted: list[str] = []
+
+    capture_reconcile.emit_bounded_diagnostic(
+        "capture\n cleanup ] deferred",
+        maximum_bytes=100,
+        write=emitted.append,
+    )
+
+    assert emitted == [r"capture cleanup \u005d deferred"]
+
+
+def test_emit_bounded_diagnostic_truncates_at_utf8_boundary() -> None:
+    emitted: list[str] = []
+
+    capture_reconcile.emit_bounded_diagnostic(
+        "ééé",
+        maximum_bytes=5,
+        write=emitted.append,
+    )
+
+    assert emitted == ["éé"]
+    assert len(emitted[0].encode("utf-8")) <= 5
+
+
+@pytest.mark.parametrize(
+    "failure",
+    (
+        OSError("write failed"),
+        RuntimeError("write failed"),
+        TypeError("write failed"),
+        UnicodeError("write failed"),
+        ValueError("write failed"),
+    ),
+)
+def test_emit_bounded_diagnostic_swallows_best_effort_write_failures(
+    failure: Exception,
+) -> None:
+    def fail_write(_detail: str) -> None:
+        raise failure
+
+    capture_reconcile.emit_bounded_diagnostic(
+        "capture cleanup deferred",
+        maximum_bytes=100,
+        write=fail_write,
+    )
+
+
 @pytest.mark.parametrize(
     ("failure", "blocker"),
     (

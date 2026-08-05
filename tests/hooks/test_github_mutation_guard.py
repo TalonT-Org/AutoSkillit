@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from .conftest import _RUN_CMD_TOOL_DIRECT, make_hook_event
+
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 _RUN_CMD_TOOL = "mcp__plugin_autoskillit_autoskillit__run_cmd"
@@ -350,6 +352,98 @@ def test_proven_single_non_review_mutation_is_preserved(
     command = "gh api --method PATCH /repos/o/r/issues/7 -f title=updated"
 
     assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) is None
+
+
+@pytest.mark.parametrize(
+    "case_id",
+    [
+        "fp1-run-cmd-pwd-differing-cwds",
+        "fp2-run-cmd-git-rev-parse",
+        "fp3-run-cmd-sed",
+        "fp4-run-cmd-pwd-tool-cwd-omitted",
+        "fp5-run-cmd-pwd-equal-cwds",
+        "fp6-bash-chained-benign",
+        "fp7-bash-benign-loop",
+        "fp8-bash-dynamic-echo",
+        "fp8-bash-dynamic-git-log",
+        "fp9-bash-gh-in-quoted-loop-string",
+        "fp10-run-cmd-source-then-gh-read",
+    ],
+)
+def test_false_positive_corpus_is_allowed(
+    case_id: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Reproduce the live incident: a worktree run_cmd cwd must not be denied.
+
+    Every case here previously denied (or would deny under a content-free
+    envelope-equality check) despite issuing no GitHub mutation at all.
+    """
+    repo = str(tmp_path / "repo")
+    worktree = str(tmp_path / "worktree")
+
+    if case_id == "fp1-run-cmd-pwd-differing-cwds":
+        event = make_hook_event(tool="run_cmd", command="pwd", tool_cwd=worktree, payload_cwd=repo)
+    elif case_id == "fp2-run-cmd-git-rev-parse":
+        event = make_hook_event(
+            tool="run_cmd",
+            command="git rev-parse --show-toplevel 2>&1 | head -c 2000",
+            tool_cwd=worktree,
+            payload_cwd=repo,
+        )
+    elif case_id == "fp3-run-cmd-sed":
+        event = make_hook_event(
+            tool="run_cmd",
+            command="sed -n '1,50p' plan.md",
+            tool_cwd=worktree,
+            payload_cwd=repo,
+        )
+    elif case_id == "fp4-run-cmd-pwd-tool-cwd-omitted":
+        event = make_hook_event(tool="run_cmd", command="pwd", tool_cwd=None, payload_cwd=repo)
+    elif case_id == "fp5-run-cmd-pwd-equal-cwds":
+        event = make_hook_event(tool="run_cmd", command="pwd", tool_cwd=repo, payload_cwd=repo)
+    elif case_id == "fp6-bash-chained-benign":
+        event = make_hook_event(tool="Bash", command="ls && pwd", payload_cwd=repo)
+    elif case_id == "fp7-bash-benign-loop":
+        event = make_hook_event(tool="Bash", command="for n in 1 2; do ls; done", payload_cwd=repo)
+    elif case_id == "fp8-bash-dynamic-echo":
+        event = make_hook_event(tool="Bash", command='echo "$X"', payload_cwd=repo)
+    elif case_id == "fp8-bash-dynamic-git-log":
+        event = make_hook_event(tool="Bash", command='git log "$REF"', payload_cwd=repo)
+    elif case_id == "fp9-bash-gh-in-quoted-loop-string":
+        event = make_hook_event(
+            tool="Bash",
+            command='for f in *; do echo "see gh docs"; done',
+            payload_cwd=repo,
+        )
+    elif case_id == "fp10-run-cmd-source-then-gh-read":
+        event = make_hook_event(
+            tool="run_cmd",
+            command="source .venv/bin/activate && gh pr view --json state",
+            tool_cwd=worktree,
+            payload_cwd=repo,
+        )
+    else:
+        raise AssertionError(f"unhandled false-positive corpus case: {case_id}")
+
+    assert _decision(event, monkeypatch) is None
+
+
+def test_false_positive_corpus_allows_direct_prefix_run_cmd_tool_name(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Codex's direct-prefix run_cmd tool name must satisfy the same matcher."""
+    event = make_hook_event(
+        tool="run_cmd",
+        command="pwd",
+        tool_cwd=str(tmp_path / "worktree"),
+        payload_cwd=str(tmp_path / "repo"),
+        run_cmd_tool_name=_RUN_CMD_TOOL_DIRECT,
+    )
+
+    assert _decision(event, monkeypatch) is None
 
 
 @pytest.mark.parametrize("surface", ["bash", "run-cmd"])

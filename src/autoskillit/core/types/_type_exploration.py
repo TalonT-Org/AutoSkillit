@@ -464,7 +464,7 @@ class ContinuationCursor:
                 page_size=payload["p"],
                 authority_digest=payload["a"],
             )
-        except (TypeError, ValueError, UnicodeDecodeError) as exc:
+        except (TypeError, ValueError, UnicodeDecodeError, UnicodeEncodeError) as exc:
             raise ValueError("invalid continuation cursor") from exc
 
 

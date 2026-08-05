@@ -15,9 +15,11 @@ The package initializer remains import-free.
   required `Closes #N` reference. In headless skill sessions, git operations block
   `commit --amend`, `push --force`, `reset --hard`, `clean -f`, and `checkout .`.
   Raw GitHub review publication is fail-closed across Bash and `run_cmd`: the guard denies
-  review/comment writes, multiple or dynamically unresolved mutations, ambiguous CWD or
-  input-file authority, and permits only proven single non-review operations such as a
-  fully literal `resolveReviewThread` mutation.
+  review/comment writes, multiple or dynamically unresolved mutations, and relative
+  `--input` files that cannot be resolved against the command's own execution cwd (a
+  run_cmd call's own target-directory argument, not the unrelated session-level cwd), and
+  permits only proven single non-review operations such as a fully literal
+  `resolveReviewThread` mutation.
 - **Fleet lifecycle:** headless fleet dispatch is denied to prevent L3-to-L3 recursion.
   A fresh dispatch cannot claim an issue already marked `in-progress`; it must resume via
   `resume_session_id`. Reset requires an earlier resume attempt unless `force=true`, with

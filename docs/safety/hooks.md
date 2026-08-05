@@ -68,11 +68,15 @@ Denies `run_cmd` calls that perform editable installs without `--python
 ### `github_mutation_guard.py`
 **Guarded tools:** `Bash`, `run_cmd`
 Denies raw pull-request review writes and any command containing multiple,
-looped, dynamic, or otherwise unresolved GitHub mutations. Literal
-`gh api --input FILE` payloads are inspected only from an absolute effective
-working directory and fail closed when the request or `comments[]` count
-cannot be proven. Review publication must use the typed `post_pr_review` tool;
-proven single non-review mutations retain their existing policy.
+looped, dynamic, or otherwise unresolved GitHub mutations. Classification
+resolves relative `gh api --input FILE` payloads against the command's own
+*execution cwd* — a run_cmd tool call's own required target-directory
+argument, or a Bash call's payload cwd — never against an unrelated session-
+level field, and fails closed when no absolute execution cwd is available or
+the request/`comments[]` count cannot be proven. Review publication must use
+the typed `post_pr_review` tool; proven single non-review mutations retain
+their existing policy. See "Fail Modes" below for the guard's exhaustive
+deny-trigger vocabulary.
 
 ### `pr_create_guard.py`
 **Guarded tool:** `run_cmd`
@@ -314,7 +318,7 @@ All guard scripts fail-**open** for malformed or unparseable input: a JSON decod
 failure produces exit 0 (approve). This prevents a broken hook from blocking the
 entire tool chain.
 
-Three guards additionally fail-**closed** for valid input with unrecognized values,
+Five guards additionally fail-**closed** for valid input with unrecognized values,
 as a defense-in-depth measure against privilege escalation:
 
 | Guard | Fail-closed condition | Rationale |
@@ -322,6 +326,8 @@ as a defense-in-depth measure against privilege escalation:
 | `skill_command_guard.py` | Unexpected runtime error (not JSON parse) | Unknown failure mode = deny rather than risk executing an unvalidated command |
 | `open_kitchen_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not gain kitchen access |
 | `skill_orchestration_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not call orchestration tools (`run_skill`, `run_cmd`, `run_python`) |
+| `background_exec_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not bypass `run_in_background` prohibition |
+| `github_mutation_guard.py` | Ambiguous or unresolved GitHub mutation command | Unknown mutation scope must not bypass the structured review publisher |
 
 **Design principle:** Garbage-in (malformed hook input) = fail-open. Unknown-tier
 (valid input, unrecognized value) = fail-closed.
@@ -330,6 +336,30 @@ All remaining guards (`fleet_dispatch_guard.py`, `quota_guard.py`,
 `mcp_health_advisor.py`, `branch_protection_guard.py`, etc.) fail-open in every
 failure scenario — malformed input, unrecognized session types, runtime errors,
 and missing data.
+
+### `github_mutation_guard.py` execution-cwd semantics and trigger vocabulary
+
+The guard extracts two independent facts from each payload via the shared
+`hooks/_hook_payload.py` module: the *payload cwd* (the session-level `cwd`
+field) and the *execution cwd* (a run_cmd tool call's own `cwd` argument, or
+a Bash call's payload cwd — the directory the command actually runs in).
+These are never compared against each other; a run_cmd call's target
+directory differing from the session cwd is the normal shape of every
+worktree-topology call, not a conflict. Mutation classification resolves
+relative `--input` files against the execution cwd only; a missing or
+relative execution cwd degrades cleanly to "unresolved" rather than denying
+every command that carries one.
+
+Every deny routes through one of five machine-readable triggers
+(`DenyTrigger` in `github_mutation_guard.py`), each with its own reason text:
+
+| Trigger | Meaning |
+|---------|---------|
+| `field_confusion` | The payload carries both the Bash and run_cmd command fields, or a stray `cwd` inside a Bash `tool_input` — which text executes is ambiguous. |
+| `malformed_command` | The command field is missing or not a string. |
+| `unresolved_mutation` | Mutation cardinality or target cannot be statically proven safe (dynamic values, unresolved `--input`, repeatable/dispatch constructs reaching a possible GitHub exec). |
+| `multiple_mutations` | The command issues more than one GitHub mutation request. |
+| `review_mutation` | The command is a raw pull-request review publication. |
 
 ## Drift detection
 

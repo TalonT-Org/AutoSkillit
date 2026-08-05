@@ -772,8 +772,11 @@ class DefaultSessionSkillManager:
         else:
             configured_root = self._root
         if configured_root is None:
+            selected_backend = backend.name if backend is not None else None
             raise RuntimeError(
-                "A persistent_root is required for persistent generated-home sessions"
+                "A persistent_root is required for persistent generated-home sessions; "
+                f"selected_backend={selected_backend!r}; "
+                f"configured_backend_keys={sorted(self._persistent_roots)!r}"
             )
         try:
             effective_root = configured_root.resolve()

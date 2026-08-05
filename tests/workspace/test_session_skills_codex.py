@@ -416,9 +416,13 @@ def test_codex_session_requires_persistent_root_before_any_home_mutation(
         persistent_roots={},
     )
 
-    with pytest.raises(RuntimeError, match="persistent_root"):
+    with pytest.raises(RuntimeError) as exc_info:
         _materialize(mgr, "0123456789abcdef", backend=codex_env.backend)
 
+    assert str(exc_info.value) == (
+        "A persistent_root is required for persistent generated-home sessions; "
+        "selected_backend='codex'; configured_backend_keys=[]"
+    )
     assert not ephemeral_root.exists()
     assert mgr._session_roots == {}
     assert mgr._session_leases == {}

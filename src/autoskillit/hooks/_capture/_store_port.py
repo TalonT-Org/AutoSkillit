@@ -80,6 +80,8 @@ class DeliveryStorePort(Protocol):
 
 
 class DeliveryNormalizationStorePort(TransitionStorePort, Protocol):
+    _sweep_budget: SweepBudgetSpec | None
+
     def _acquire_cleanup_lease(
         self,
         record: Record,

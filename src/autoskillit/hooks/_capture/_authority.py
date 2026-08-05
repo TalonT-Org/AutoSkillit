@@ -23,6 +23,7 @@ from ._failure_policy import (
     os_failure_reason,
 )
 from ._module_identity import register_module_aliases
+from ._types import SweepBudgetSpec
 
 register_module_aliases(__name__)
 
@@ -323,14 +324,30 @@ def open_capture_lifecycle(
     requested_cwd: str,
     *,
     create: bool = False,
+    open_budget: SweepBudgetSpec | None = None,
 ) -> Iterator[CaptureLifecycleStore]:
-    """Open a lifecycle store from a validated payload cwd."""
+    """Open a lifecycle store from a validated payload cwd.
+
+    ``open_budget`` (a ``SweepBudgetSpec``), when supplied, bounds every
+    lock acquisition made for the duration of this ``with`` block —
+    starting with ``from_open_authorities``'s interrupted-delivery
+    normalization, which otherwise blocks indefinitely on a contended lock
+    regardless of any budget the caller intends to apply to a later
+    ``.sweep()`` call. Cleared when the block exits either way. Every other
+    caller passes nothing and keeps today's blocking-until-acquired open.
+    """
 
     anchor = open_project_anchor(requested_cwd)
     root: CaptureRoot | None = None
     try:
         root = open_capture_root(anchor, create=create)
-        yield CaptureLifecycleStore.from_open_authorities(anchor, root)
+        store = CaptureLifecycleStore.from_open_authorities(anchor, root, open_budget=open_budget)
+        try:
+            yield store
+        finally:
+            if open_budget is not None:
+                store._sweep_budget = None
+                store._sweep_started_monotonic = None
     finally:
         try:
             if root is not None:

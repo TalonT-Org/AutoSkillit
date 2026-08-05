@@ -3281,6 +3281,112 @@ def test_reconcile_adapter_opens_existing_store_without_creation(tmp_path: Path)
     assert not _capture_dir(absent_project).exists()
 
 
+def test_reconcile_capture_store_bounds_store_open_lock_contention(tmp_path: Path) -> None:
+    """The store-open lock acquisition — CaptureLifecycleStore.from_open_authorities'
+    interrupted-delivery normalization, which runs before .sweep() is ever
+    reached — must also be bounded by the caller's budget, not just the
+    later sweep body. Regression guard: before this fix, _sweep_budget and
+    _sweep_started_monotonic were only set inside .sweep() itself, so a
+    contended lock at store-open time blocked reconcile_capture_store
+    indefinitely (matching the external holder's release time exactly)
+    regardless of how tight budget.max_duration_seconds was.
+    """
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    store.reserve_capture(_CAPTURE_ID)
+    root.close()
+    anchor.close()
+
+    lock_path = _capture_dir(project) / capture_lifecycle.LOCK_NAME
+    holder_script = (
+        "import fcntl, os, sys, time\n"
+        "fd = os.open(sys.argv[1], os.O_RDWR)\n"
+        "fcntl.flock(fd, fcntl.LOCK_EX)\n"
+        "print('ready', flush=True)\n"
+        "time.sleep(1.0)\n"
+        "os.close(fd)\n"
+    )
+    holder = subprocess.Popen(
+        [sys.executable, "-c", holder_script, str(lock_path)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert holder.stdout is not None
+        assert holder.stdout.readline() == "ready\n"
+
+        budget = _sweep_budget(8, 0.15)
+        started = time.monotonic()
+        outcome = capture_reconcile.reconcile_capture_store(str(project), budget)
+        elapsed = time.monotonic() - started
+
+        assert elapsed < 0.5, f"store-open lock contention was not bounded: {elapsed}s"
+        assert outcome.blocker is CleanupBlocker.LOCK_CONTENDED
+        assert outcome.errors == 0
+        assert (
+            classify_cleanup_outcome(outcome.progress, outcome.blocker, outcome.errors)
+            is CleanupSeverity.STALLED
+        )
+    finally:
+        try:
+            holder.communicate(timeout=3)
+        except subprocess.TimeoutExpired:
+            holder.terminate()
+            holder.communicate(timeout=3)
+
+
+def test_reconcile_capture_store_recovers_from_store_open_lock_contention(
+    tmp_path: Path,
+) -> None:
+    """Companion to the bounded-contention test above: a lock released well
+    within the budget during store-open recovers within the same
+    reconcile_capture_store call and completes successfully — the
+    store-open path participates in the same bounded-retry mechanism the
+    sweep body does, not merely fails closed on any contention."""
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    store.reserve_capture(_CAPTURE_ID)
+    root.close()
+    anchor.close()
+
+    lock_path = _capture_dir(project) / capture_lifecycle.LOCK_NAME
+    holder_script = (
+        "import fcntl, os, sys, time\n"
+        "fd = os.open(sys.argv[1], os.O_RDWR)\n"
+        "fcntl.flock(fd, fcntl.LOCK_EX)\n"
+        "print('ready', flush=True)\n"
+        "time.sleep(0.02)\n"
+        "os.close(fd)\n"
+    )
+    holder = subprocess.Popen(
+        [sys.executable, "-c", holder_script, str(lock_path)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert holder.stdout is not None
+        assert holder.stdout.readline() == "ready\n"
+
+        budget = capture_reconcile.SESSION_START_BUDGET
+        started = time.monotonic()
+        outcome = capture_reconcile.reconcile_capture_store(str(project), budget)
+        elapsed = time.monotonic() - started
+
+        assert outcome.blocker is CleanupBlocker.NONE
+        assert outcome.errors == 0
+        assert elapsed < budget.max_duration_seconds
+    finally:
+        try:
+            holder.communicate(timeout=3)
+        except subprocess.TimeoutExpired:
+            holder.terminate()
+            holder.communicate(timeout=3)
+
+
 def test_emit_bounded_diagnostic_normalizes_and_escapes_closing_bracket() -> None:
     emitted: list[str] = []
 

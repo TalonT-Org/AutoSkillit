@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import stat
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -18,6 +19,7 @@ from ._types import (
     CleanupBlocker,
     CleanupProgress,
     CleanupSeverity,
+    LockContended,
     SweepBudgetSpec,
     classify_cleanup_outcome,
 )
@@ -84,11 +86,25 @@ def reconcile_capture_store(
 ) -> CaptureCleanupOutcome:
     if not isinstance(project_cwd, str) or not project_cwd or type(budget) is not SweepBudgetSpec:
         return _failure_outcome(CleanupBlocker.FILESYSTEM_AUTHORITY)
+    started = time.monotonic()
     try:
-        with _authority.open_capture_lifecycle(project_cwd, create=False) as lifecycle:
+        with _authority.open_capture_lifecycle(
+            project_cwd, create=False, open_budget=budget
+        ) as lifecycle:
             return lifecycle.sweep(budget)
     except _authority.CaptureStoreAbsentError:
         return CaptureCleanupOutcome(blocker=CleanupBlocker.STORE_ABSENT)
+    except LockContended:
+        # The store-open lock acquisition (interrupted-delivery
+        # normalization) exhausted the entire budget without ever
+        # acquiring — the same LOCK_CONTENDED outcome run_bounded_sweep
+        # reports for sweep-body contention, surfaced one layer up since
+        # the sweep body was never reached at all.
+        return CaptureCleanupOutcome(
+            remaining_due=1,
+            blocker=CleanupBlocker.LOCK_CONTENDED,
+            duration=max(0.0, time.monotonic() - started),
+        )
     except _migration.MigrationBlockedError:
         return CaptureCleanupOutcome(
             remaining_due=1,
@@ -131,13 +147,19 @@ def capture_store_stats(project_cwd: str) -> CaptureStoreStats:
     No cursor writes, no admission checks, no deletions, no ledger appends —
     the doctor battery's read-only check and ``autoskillit capture-store``
     (without ``--reclaim``) both call this and only this, so neither surface
-    can drift from what a real reconciliation pass would find.
+    can drift from what a real reconciliation pass would find. A diagnostic
+    read must never hang: opened with RUNNER_TAIL_BUDGET as its open_budget
+    so a contended lock — at store-open time or this function's own record
+    load — is bounded the same way a real sweep would be, never blocking
+    indefinitely.
     """
     if not isinstance(project_cwd, str) or not project_cwd:
         return CaptureStoreStats(CleanupBlocker.FILESYSTEM_AUTHORITY)
     try:
-        with _authority.open_capture_lifecycle(project_cwd, create=False) as store:
-            with store._locked():
+        with _authority.open_capture_lifecycle(
+            project_cwd, create=False, open_budget=RUNNER_TAIL_BUDGET
+        ) as store:
+            with store._locked(blocking=store._sweep_budget is None):
                 records, _compaction_epoch, ledger_bytes = store._load_locked()
             tracked = frozenset(
                 record.public_name
@@ -185,6 +207,8 @@ def capture_store_stats(project_cwd: str) -> CaptureStoreStats:
             )
     except _authority.CaptureStoreAbsentError:
         return CaptureStoreStats(CleanupBlocker.STORE_ABSENT)
+    except LockContended:
+        return CaptureStoreStats(CleanupBlocker.LOCK_CONTENDED)
     except _migration.MigrationBlockedError:
         return CaptureStoreStats(CleanupBlocker.MIGRATION_BLOCKED)
     except (

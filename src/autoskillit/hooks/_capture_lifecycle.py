@@ -205,7 +205,23 @@ class CaptureLifecycleStore:
         *,
         wall_clock: Callable[[], float] = time.time,
         monotonic: Callable[[], float] = time.monotonic,
+        open_budget: SweepBudgetSpec | None = None,
     ) -> CaptureLifecycleStore:
+        """Open a store and normalize interrupted deliveries.
+
+        ``open_budget``, when supplied, bounds the lock acquisitions inside
+        ``_normalize_interrupted_deliveries`` — otherwise a genuinely
+        contended lock blocks this call indefinitely regardless of any
+        budget a caller intends to apply to a later ``.sweep()`` call, since
+        that lock acquisition happens before ``.sweep()`` is ever reached.
+        The field is deliberately left set (not reset here) so a caller that
+        never calls ``.sweep()`` at all (e.g. a stats-only read) can keep
+        drawing on the same budget window for its own lock acquisitions;
+        ``open_capture_lifecycle`` resets it when its ``with`` block exits.
+        Every other caller (``create_artifact``, direct construction in
+        tests, ...) passes nothing and keeps today's blocking-until-acquired
+        behavior unchanged.
+        """
         anchor_identity = getattr(anchor, "identity")
         root_identity = getattr(root, "identity")
         store = cls(
@@ -216,6 +232,9 @@ class CaptureLifecycleStore:
             monotonic=monotonic,
             _factory_token=_STORE_FACTORY_TOKEN,
         )
+        if open_budget is not None:
+            store._sweep_budget = open_budget
+            store._sweep_started_monotonic = store._monotonic()
         store._normalize_interrupted_deliveries()
         return store
 

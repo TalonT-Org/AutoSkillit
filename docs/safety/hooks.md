@@ -285,17 +285,36 @@ Codex hook generation includes the scan-enabled `SESSION_START_BUDGET` path:
 A single non-blocking `flock()` attempt used to abort a sweep immediately on
 any contention, including the 256-attempt `SESSION_START_BUDGET` pass —
 `session_scope="any"` means every concurrent session contends the same lock
-at startup. `CaptureLifecycleStore._locked(blocking=False)` — the only
-non-blocking caller shape, used exclusively by sweep-path helpers while a
-sweep is active — now retries on `EAGAIN`/`EWOULDBLOCK` with jittered,
-doubling backoff (5–20ms base, capped, jitter from the stdlib `random`
-module's OS-entropy-seeded per-process state, never a wall-clock-derived
-source) bounded by the *same* `max_duration_seconds` the sweep already
-carries — no new configuration knob. `RUNNER_TAIL_BUDGET` (50ms) naturally
-permits one or two retries; `SESSION_START_BUDGET` (1.0s) rides out startup
-stampedes. `LOCK_CONTENDED` is only ever returned once the entire budget has
-elapsed without acquisition; blocking callers (every non-sweep transition)
-are unaffected.
+at startup. `CaptureLifecycleStore._locked(blocking=False)` now retries on
+`EAGAIN`/`EWOULDBLOCK` with jittered, doubling backoff (5–20ms base, capped,
+jitter from the stdlib `random` module's OS-entropy-seeded per-process
+state, never a wall-clock-derived source) bounded by the sweep's own
+`max_duration_seconds` — no new configuration knob. `RUNNER_TAIL_BUDGET`
+(50ms) naturally permits one or two retries; `SESSION_START_BUDGET` (1.0s)
+rides out startup stampedes. `LOCK_CONTENDED` is only ever returned once the
+entire budget has elapsed without acquisition; every other blocking caller
+(every non-sweep transition — `reserve_capture`, `commit_verified_snapshot`,
+`get_record`, ...) is unaffected and keeps today's kernel-blocking wait.
+
+Store-open lock acquisition is bounded the same way. Opening a store runs
+`_normalize_interrupted_deliveries` — its own `_locked()` calls — before a
+sweep is ever reached, so a contention there was previously unbounded
+regardless of how tight the caller's budget was: the budget only started
+governing retries once `.sweep()` began. `open_capture_lifecycle` and
+`CaptureLifecycleStore.from_open_authorities` accept an `open_budget`
+parameter; when supplied, it primes the retry mechanism (the same
+`_sweep_budget`/deadline fields the sweep body reads) before
+`_normalize_interrupted_deliveries` runs, and `normalize_interrupted_deliveries`
+switches its lock acquisitions to the bounded non-blocking path for exactly
+that window. `reconcile_capture_store` passes its own `budget` as
+`open_budget`, so both `RUNNER_TAIL_BUDGET` and `SESSION_START_BUDGET` bound
+the whole reconciliation operation, not merely the sweep body; a
+`LockContended` that exhausts the budget during store-open surfaces as the
+same `LOCK_CONTENDED` outcome the sweep body reports.
+`capture_store_stats()` opens with `RUNNER_TAIL_BUDGET` as its own
+`open_budget` for the same reason — a diagnostic read must never hang.
+Every other caller (`create_artifact`, direct construction in tests, ...)
+passes nothing and keeps today's blocking-until-acquired open unchanged.
 
 #### Stats and reclamation CLI
 

@@ -766,10 +766,12 @@ def test_live_production_explorer_mcp_gate_isolated_for_both_roles(
         service=DefaultExplorationService(),
     )
     session_id = "live-explorer-gate"
+    original_auth = Path("~/.codex/auth.json").expanduser()
+    original_auth_exists = original_auth.is_file()
     prepared = prepare_live_codex_parent(
         tmp_path=tmp_path,
         monkeypatch=monkeypatch,
-        source_auth=Path("~/.codex/auth.json").expanduser(),
+        source_auth=original_auth,
         agent_defs=tuple(definitions.values()),
         explorer_binding_env_factory=lambda authority_home: store.bind_launches(
             owner_id=f"uid:{os.getuid()}",
@@ -803,10 +805,16 @@ def test_live_production_explorer_mcp_gate_isolated_for_both_roles(
     credential = profile / "credential-canary"
     credential.write_text("live-gate-credential-canary\n", encoding="utf-8")
     authority = Path(bindings[_ROLES[0]]["AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH"])
-    if (source_auth := profile / ".codex" / "auth.json").is_symlink():
-        assert source_auth.is_symlink()
-        assert (session / "auth.json").is_symlink()
-        assert (session / "auth.json").resolve() == source_auth.resolve()
+    profile_auth = profile / ".codex" / "auth.json"
+    session_auth = session / "auth.json"
+    if original_auth_exists:
+        assert profile_auth.is_symlink(), "profile auth must link to the original Codex auth"
+        assert profile_auth.resolve() == original_auth.resolve()
+        assert session_auth.is_symlink(), "session auth must link to the original Codex auth"
+        assert session_auth.resolve() == original_auth.resolve()
+    else:
+        assert not profile_auth.exists() and not profile_auth.is_symlink()
+        assert not session_auth.exists() and not session_auth.is_symlink()
     _append_live_runtime_config(session / "config.toml")
     _assert_role_tomls(session, bindings, definitions)
     _write_luna_catalog(session, env)

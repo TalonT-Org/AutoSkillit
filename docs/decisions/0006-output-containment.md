@@ -49,6 +49,33 @@ lossless mechanism. Claude Code relief is immediate (Phase A).
 Every residual hook message uses a typed policy event rendered by a shared
 formatter. Suggested rewrites are classifier-validated before emission.
 
+**Implemented.** `hooks/_policy_event.py`'s `PolicyEvent`/`render_provenance_prefix`
+is the shared formatter; `hooks/_capture/_reconcile.py`, `shell_capture_hook.py`,
+and `capture_lifecycle_hook.py` construct every residual message through it — no
+ad-hoc `[AutoSkillit ...]` literal exists outside `_policy_event.py` in those
+modules (`tests/arch/test_hook_message_provenance.py`). The classifier is
+`classify_cleanup_outcome` (`hooks/_capture/_types.py`), which derives a
+`CleanupSeverity` from `(progress, blocker, errors)`:
+
+| Severity | Meaning | Emission |
+|---|---|---|
+| `healthy` | no blocker, or store absent | none |
+| `deferred` | bounded budget work exhausted, some progress made this pass | none — backlog remains but isn't attention-grade |
+| `stalled` | externally blocked (lock contention, migration, filesystem authority), or a budget blocker with zero progress | one neutral line |
+| `failed` | `errors > 0` | one failure-worded line — the only severity whose rendered text may contain "failed" |
+
+`hooks/_capture/_reconcile.py`'s `emit_owner_diagnostic(outcome, owner, write)` is
+the single owner-neutral emission path for both cleanup owners: the per-command
+runner-tail sweep (`owner="runner_tail"`) and the SessionStart sweep
+(`owner="session_start"`). `shell_capture_hook.py`'s native-shell control
+resolution (`_resolve_control`) is a separate three-way declared-mode contract,
+also routed through `PolicyEvent`: a declared `capture` mode with no managed
+identity is silent (normal, not anomalous); an undeclared mode emits a neutral
+note; an incomplete/invalid managed-identity tuple emits a distinct neutral
+note naming the fallback. Codex cook sessions (`codex.py build_interactive_cmd`)
+positively declare `AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE=capture`, so absence
+of that declaration is a genuine anomaly again rather than the common case.
+
 ### Pre-Spend Decision
 
 No shape-based pre-execution backstop remains in the end state. Execution cost is

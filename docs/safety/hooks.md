@@ -193,6 +193,47 @@ only. Trap isolation (#4323), a rendered ceiling (#4324), public bounded retriev
 (#4327), upstream live visibility (#4329), and general producer adoption (#4335)
 remain downstream work.
 
+#### Cleanup diagnostic severity
+
+Both cleanup owners (runner-tail and SessionStart) route their outcome through
+one classifier, `classify_cleanup_outcome(progress, blocker, errors)`
+(`hooks/_capture/_types.py`), before emission:
+
+| Severity | Trigger | Emission |
+|---|---|---|
+| `healthy` | no blocker (`NONE`), or the store doesn't exist yet (`STORE_ABSENT`) | none |
+| `deferred` | a bounded work budget (records/attempts/transitions/cursor-writes/replay-bytes/duration) was exhausted, but this pass still made progress | none — a bounded backlog is not, by itself, attention-grade |
+| `stalled` | externally blocked (lock contention, an in-flight migration, filesystem authority/permission/IO/ledger failure), or a budget blocker with *zero* progress this pass | one neutral line naming the blocker |
+| `failed` | `errors > 0` | one failure-worded line — the only severity whose rendered text may contain "failed" |
+
+`errors` always wins regardless of blocker or progress. An externally-blocked
+store (e.g. a held carrier lease blocking migration) stays `stalled` on every
+pass, independent of progress, so it never goes silent the way a merely
+budget-bounded backlog does. Every non-`healthy`, non-`deferred` message is
+rendered through `hooks/_policy_event.py`'s `PolicyEvent` +
+`render_provenance_prefix` — no hook constructs its own `[AutoSkillit ...]`
+literal (`tests/arch/test_hook_message_provenance.py`).
+
+#### Declared native-shell control mode
+
+`shell_capture_hook.py _resolve_control` reads `AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE`
+plus the four managed-identity vars and resolves to one of three outcomes, in
+addition to the fully-managed `direct` path used by managed headless/skill/
+resume/food-truck sessions:
+
+| State | Resolution | Diagnostic |
+|---|---|---|
+| `capture` declared, no managed identity | capture mode | none — this is cook's normal, declared state |
+| mode unset entirely (nothing declared) | capture mode | one neutral note: "native-shell control undeclared; using capture" |
+| declared but incomplete/invalid managed identity | capture mode | one neutral note: "incomplete managed native-shell controls; falling back to capture" |
+
+Codex cook sessions (`codex.py build_interactive_cmd`) positively declare
+`AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE=capture` — injected after
+`CodexEnvPolicy().build_env()` returns, since extras-side injection is
+unconditionally stripped by the managed native-shell env filter. Cook remains
+structurally unmanaged (no managed-identity params), now *declaredly* so:
+absence of the declaration is a genuine anomaly again, not the common case.
+
 ### `generated_file_write_guard.py`
 **Guarded tools:** `Write`, `Edit`
 Denies writes to generated files (`hooks.json`, `settings.json`). The hooks

@@ -43,6 +43,7 @@ if TYPE_CHECKING:
         decode_lineage_ref_json,
         encode_capture_request,
     )
+    from autoskillit.hooks._policy_event import PolicyEvent, render_provenance_prefix
 else:
     from _capture_contract import (
         _CAPTURE_ID_RE,
@@ -60,14 +61,17 @@ else:
         decode_lineage_ref_json,
         encode_capture_request,
     )
+    from _policy_event import PolicyEvent, render_provenance_prefix
 
 _HARNESS_SENTINEL = "# autoskillit-shell-capture v1"
 _ARG_MAX_FALLBACK_BYTES = 128 * 1024
 _ARG_MAX_HEADROOM_BYTES = 32 * 1024
 _RUNNER_BASENAME = "_capture_artifacts.py"
-_CONTROL_FALLBACK_DIAGNOSTIC = (
-    "AutoSkillit shell capture: managed launch controls missing or invalid; using capture."
-)
+_HOOK_ID = "shell_capture_hook"
+_HOOK_VERSION = 1
+_POLICY_EVENT_NAME = "native_shell_control"
+_UNDECLARED_DETAIL = "native-shell control undeclared; using capture"
+_INCOMPLETE_DETAIL = "incomplete managed native-shell controls; falling back to capture"
 _LOCAL_REJECTION_DETAIL = "AutoSkillit shell capture request rejected before execution"
 
 
@@ -224,12 +228,32 @@ def _build_harness(
     return _local_rejection_harness()
 
 
-def _capture_fallback(diagnostic: bool) -> _ResolvedControl:
+def _render_control_diagnostic(reason_code: str) -> str:
+    event = PolicyEvent(
+        hook_id=_HOOK_ID,
+        hook_version=_HOOK_VERSION,
+        event=_POLICY_EVENT_NAME,
+        decision="capture",
+        reason_code=reason_code,
+    )
+    return render_provenance_prefix(event)
+
+
+def _undeclared_fallback() -> _ResolvedControl:
     return _ResolvedControl(
         mode="capture",
         attempt_id=None,
         lineage_ref=None,
-        diagnostic=_CONTROL_FALLBACK_DIAGNOSTIC if diagnostic else None,
+        diagnostic=_render_control_diagnostic(_UNDECLARED_DETAIL),
+    )
+
+
+def _incomplete_fallback() -> _ResolvedControl:
+    return _ResolvedControl(
+        mode="capture",
+        attempt_id=None,
+        lineage_ref=None,
+        diagnostic=_render_control_diagnostic(_INCOMPLETE_DETAIL),
     )
 
 
@@ -241,8 +265,15 @@ def _resolve_control(environment: Mapping[str, str] | None = None) -> _ResolvedC
     lineage_digest = actual_environment.get(MANAGED_LINEAGE_DIGEST_ENV_VAR)
     serialized_ref = actual_environment.get(MANAGED_LINEAGE_REF_ENV_VAR)
     values = (mode, launch_id, attempt_id, lineage_digest, serialized_ref)
+    identity_values = (launch_id, attempt_id, lineage_digest, serialized_ref)
     if all(value is None for value in values):
-        return _capture_fallback(diagnostic=True)
+        # Nothing at all was declared — the pre-#4460 ambient state. Neutral,
+        # not a failure: most non-cook Codex launch paths still don't declare.
+        return _undeclared_fallback()
+    if mode == "capture" and all(value is None for value in identity_values):
+        # Cook sessions declare exactly this: capture mode, no managed
+        # identity — a normal, declared state that needs no diagnostic at all.
+        return _ResolvedControl(mode="capture", attempt_id=None, lineage_ref=None)
     if (
         mode not in {"capture", "direct"}
         or not isinstance(launch_id, str)
@@ -251,13 +282,13 @@ def _resolve_control(environment: Mapping[str, str] | None = None) -> _ResolvedC
         or not isinstance(lineage_digest, str)
         or not isinstance(serialized_ref, str)
     ):
-        return _capture_fallback(diagnostic=True)
+        return _incomplete_fallback()
     try:
         lineage_ref = decode_lineage_ref_json(serialized_ref)
     except CaptureProtocolError:
-        return _capture_fallback(diagnostic=True)
+        return _incomplete_fallback()
     if lineage_ref.launch_id != launch_id or lineage_ref.lineage_digest != lineage_digest:
-        return _capture_fallback(diagnostic=True)
+        return _incomplete_fallback()
     return _ResolvedControl(
         mode=mode,
         attempt_id=attempt_id,

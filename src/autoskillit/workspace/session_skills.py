@@ -134,6 +134,7 @@ def resolve_persistent_session_roots(
             logger.warning(
                 "persistent_root_unresolvable_for_backend",
                 backend=backend.name,
+                exc_info=True,
             )
             continue
         if root is not None:

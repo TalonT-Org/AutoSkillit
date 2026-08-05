@@ -31,11 +31,14 @@ from autoskillit.workspace._projected_artifact import (
     ProjectedPluginArtifactAuthority,
     ProjectedPluginRetirementOwner,
     ProjectionCacheKey,
+    RepairOutcome,
     iter_public_plugin_asset_files,
     project_default_plugin_authority,
     project_direct_install_authority,
     prune_stale_projections,
     public_plugin_asset_digest,
+    repair_broken_plugin_cache_hooks,
+    write_installed_plugin_artifact_manifest_locked,
 )
 from autoskillit.workspace._update_obligation import (
     PublicationObligation,
@@ -184,6 +187,7 @@ __all__ = [
     "ProjectionCacheKey",
     "ProjectedPluginArtifactAuthority",
     "ProjectedPluginRetirementOwner",
+    "RepairOutcome",
     "SkillFrontmatterParseResult",
     "SkillProjectionContext",
     "iter_public_plugin_asset_files",
@@ -234,8 +238,10 @@ __all__ = [
     "project_default_plugin_authority",
     "project_direct_install_authority",
     "read_skill_frontmatter",
+    "repair_broken_plugin_cache_hooks",
     "validate_skill_tier_roles",
     "validate_skill_capability_authenticity",
     "validate_skill_capability_declarations",
     "validate_skill_frontmatter",
+    "write_installed_plugin_artifact_manifest_locked",
 ]

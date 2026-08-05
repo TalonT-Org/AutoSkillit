@@ -190,6 +190,42 @@ def test_startup_hook_health_checks_plugin_cache(tmp_path: Path, monkeypatch) ->
     )
 
 
+def test_startup_hook_health_check_survives_repair_primitive_raising(monkeypatch) -> None:
+    """run_startup_hook_health_check must not propagate if the in-process repair
+    primitive (repair_broken_plugin_cache_hooks) itself raises.
+
+    The whole health-check body is wrapped in a never-fail-startup
+    except Exception -> return [] contract; this pins that the repair call
+    site added for the detection-repair loop closure is inside that same
+    net, not a hole that can crash server startup.
+    """
+    from autoskillit.server._lifespan import run_startup_hook_health_check
+
+    monkeypatch.setattr(
+        "autoskillit.server._lifespan.iter_all_scope_paths",
+        lambda project_root=None: iter([]),
+    )
+    monkeypatch.setattr(
+        "autoskillit.server._lifespan.validate_plugin_cache_hooks",
+        lambda cache_dir=None: ["python3 /stale/cache/path/hooks/quota_guard.py"],
+    )
+
+    def _raise_repair(cache_dir):
+        raise RuntimeError("simulated repair primitive failure")
+
+    monkeypatch.setattr(
+        "autoskillit.server._lifespan.repair_broken_plugin_cache_hooks",
+        _raise_repair,
+    )
+
+    broken = run_startup_hook_health_check()  # must not raise
+
+    assert broken == [], (
+        "the outer except-Exception contract swallows the whole check when the "
+        "repair primitive raises"
+    )
+
+
 def test_serve_startup_regenerates_on_hash_mismatch(tmp_path: Path, monkeypatch) -> None:
     """run_startup_drift_check() regenerates hooks.json when hash is mismatched."""
     import json as _json

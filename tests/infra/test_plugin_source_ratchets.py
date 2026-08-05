@@ -266,12 +266,13 @@ STRICT_PLUGIN_WRITE_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Every retirement-v2 migration and mutation surfaces file and parent fsync failures.",
     ),
     (
-        "cli/_plugin_artifact.py",
-        "_publish_installed_plugin_artifact_locked",
+        "workspace/_projected_artifact/_manifest_publication.py",
+        "write_installed_plugin_artifact_manifest_locked",
         "write_versioned_json:strict=True",
     ): (
         1,
-        "Installed incarnation publication persists exact identity before launch.",
+        "Installed incarnation publication persists exact identity before launch; "
+        "shared by first publish and the in-process repair's manifest refresh.",
     ),
     (
         "workspace/_projected_artifact/authority.py",

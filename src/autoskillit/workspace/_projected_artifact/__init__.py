@@ -14,6 +14,8 @@ from .._projection_cache import (
     public_plugin_asset_digest,
     read_projected_plugin_identity,
 )
+from ._hook_repair import RepairOutcome, repair_broken_plugin_cache_hooks
+from ._manifest_publication import write_installed_plugin_artifact_manifest_locked
 from .authority import (
     ProjectedPluginArtifactAuthority,
     project_default_plugin_authority,
@@ -35,6 +37,7 @@ __all__ = [
     "ProjectedPluginArtifactAuthority",
     "ProjectedPluginRetirementOwner",
     "ProjectionCacheKey",
+    "RepairOutcome",
     "SkillProjectionContext",
     "is_projected_asset",
     "iter_public_plugin_asset_files",
@@ -49,5 +52,7 @@ __all__ = [
     "prune_stale_projections",
     "public_plugin_asset_digest",
     "read_projected_plugin_identity",
+    "repair_broken_plugin_cache_hooks",
     "validate_sanitized_plugin_artifact",
+    "write_installed_plugin_artifact_manifest_locked",
 ]

@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
-    INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     ArtifactLease,
     PluginArtifactIdentity,
     PluginArtifactKind,
@@ -25,20 +24,16 @@ from autoskillit.core import (
     RetiringArtifactRecord,
     RetiringCacheReadResult,
     RetiringCacheState,
-    directory_tree_digest,
     due_retiring_records,
     get_logger,
     installed_plugin_artifact_lease_path,
     installed_plugin_artifact_manifest_path,
-    installed_plugin_artifact_manifest_payload,
     installed_plugin_artifact_root,
     installed_plugin_semantic_key,
     log_plugin_artifact_lifecycle,
     migrate_retiring_cache_v1,
-    new_plugin_artifact_incarnation_id,
     read_installed_plugin_artifact_identity,
     read_retiring_cache,
-    write_versioned_json,
 )
 
 logger = get_logger(__name__)
@@ -152,31 +147,14 @@ def _publish_installed_plugin_artifact_locked(
     semantic_key: str,
 ) -> PluginArtifactIdentity:
     """Publish identity while the caller owns the stable exclusive sidecar."""
+    from autoskillit.workspace import write_installed_plugin_artifact_manifest_locked
+
     managed_path = _canonical_installed_root(managed_path)
-    manifest_path = installed_plugin_artifact_manifest_path(managed_path)
-    identity = PluginArtifactIdentity(
+    return write_installed_plugin_artifact_manifest_locked(
+        managed_path,
         semantic_key=semantic_key,
-        incarnation_id=new_plugin_artifact_incarnation_id(),
-        manifest_schema_version=INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
-        artifact_digest=_complete_tree_digest(managed_path),
-        managed_path=managed_path,
-        manifest_path=manifest_path,
-    )
-    write_versioned_json(
-        manifest_path,
-        installed_plugin_artifact_manifest_payload(identity),
-        schema_version=INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
-        strict_durability=True,
-    )
-    log_plugin_artifact_lifecycle(
-        logger,
         action="publish",
-        outcome="succeeded",
-        artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN.value,
-        semantic_key=identity.semantic_key,
-        incarnation=identity.incarnation_id,
     )
-    return identity
 
 
 class InstalledPluginArtifactAuthority:
@@ -416,16 +394,6 @@ def _canonical_installed_root(root: Path) -> Path:
     if not stat.S_ISDIR(root_stat.st_mode):
         raise ValueError(f"installed plugin root must be a directory: {resolved}")
     return resolved
-
-
-def _complete_tree_digest(root: Path) -> str:
-    """Hash every relative entry, kind, mode, and regular-file byte."""
-    try:
-        return directory_tree_digest(root)
-    except (OSError, ValueError) as exc:
-        raise PluginArtifactValidationError(
-            f"installed plugin artifact cannot be digested: {root}"
-        ) from exc
 
 
 __all__ = [

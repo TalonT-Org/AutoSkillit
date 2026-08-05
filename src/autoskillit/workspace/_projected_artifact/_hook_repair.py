@@ -9,14 +9,13 @@ is the same layer ``server/_lifespan.py`` already imports unconditionally
 for ``verify_install_state()`` (see ``workspace/_install_state.py``), so the
 edge is precedented and legal.
 
-The manifest-refresh logic here is deliberately an INDEPENDENT
-implementation from ``cli/_plugin_artifact.py``'s
-``publish_installed_plugin_artifact`` rather than an import of it (an
-upward ``workspace → cli`` import is illegal). Both are built from the
-identical core-layer digest/manifest primitives
-(``directory_tree_digest``, ``write_versioned_json``,
-``installed_plugin_artifact_manifest_payload``), so they write the same
-manifest schema and neither invalidates the other's tamper detection.
+The manifest refresh itself delegates to
+``_manifest_publication.write_installed_plugin_artifact_manifest_locked``,
+the same shared core ``cli/_plugin_artifact.py``'s
+``publish_installed_plugin_artifact`` delegates to (a legal downward
+``cli → workspace`` import) — one implementation, two callers, so a
+rewritten cache ``hooks.json`` can never desync from the manifest that
+guards its tamper detection.
 """
 
 from __future__ import annotations
@@ -27,22 +26,17 @@ from pathlib import Path
 
 from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
-    INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     ArtifactLease,
     ArtifactLeaseContention,
-    PluginArtifactIdentity,
     atomic_write,
-    directory_tree_digest,
     get_logger,
     installed_plugin_artifact_lease_path,
-    installed_plugin_artifact_manifest_path,
-    installed_plugin_artifact_manifest_payload,
     installed_plugin_semantic_key,
-    log_plugin_artifact_lifecycle,
-    new_plugin_artifact_incarnation_id,
-    write_versioned_json,
 )
 from autoskillit.hook_registry import find_broken_hook_scripts, generate_hooks_json
+from autoskillit.workspace._projected_artifact._manifest_publication import (
+    write_installed_plugin_artifact_manifest_locked,
+)
 
 __all__ = ["RepairOutcome", "repair_broken_plugin_cache_hooks"]
 
@@ -56,34 +50,6 @@ class RepairOutcome:
     incarnation_dir: Path
     repaired: bool
     skipped_reason: str | None = None
-
-
-def _refresh_manifest_locked(managed_path: Path, *, semantic_key: str) -> PluginArtifactIdentity:
-    """Republish an incarnation's manifest while the caller already owns its lease."""
-    manifest_path = installed_plugin_artifact_manifest_path(managed_path)
-    identity = PluginArtifactIdentity(
-        semantic_key=semantic_key,
-        incarnation_id=new_plugin_artifact_incarnation_id(),
-        manifest_schema_version=INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
-        artifact_digest=directory_tree_digest(managed_path),
-        managed_path=managed_path,
-        manifest_path=manifest_path,
-    )
-    write_versioned_json(
-        manifest_path,
-        installed_plugin_artifact_manifest_payload(identity),
-        schema_version=INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
-        strict_durability=True,
-    )
-    log_plugin_artifact_lifecycle(
-        logger,
-        action="repair",
-        outcome="succeeded",
-        artifact_kind="installed_plugin",
-        semantic_key=identity.semantic_key,
-        incarnation=identity.incarnation_id,
-    )
-    return identity
 
 
 def repair_broken_plugin_cache_hooks(cache_dir: Path) -> tuple[RepairOutcome, ...]:
@@ -123,7 +89,11 @@ def repair_broken_plugin_cache_hooks(cache_dir: Path) -> tuple[RepairOutcome, ..
                 fresh = generate_hooks_json()
                 atomic_write(hooks_json_path, json.dumps(fresh, indent=2) + "\n")
                 semantic_key = installed_plugin_semantic_key(_AUTOSKILLIT_PLUGIN_KEY, version)
-                _refresh_manifest_locked(version_dir, semantic_key=semantic_key)
+                write_installed_plugin_artifact_manifest_locked(
+                    version_dir,
+                    semantic_key=semantic_key,
+                    action="repair",
+                )
         except ArtifactLeaseContention:
             outcomes.append(
                 RepairOutcome(

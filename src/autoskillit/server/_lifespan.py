@@ -69,7 +69,11 @@ from autoskillit.pipeline import (
 )
 from autoskillit.server._guards import _backend_supports_quota
 from autoskillit.server._state import _get_ctx_or_none, deferred_initialize
-from autoskillit.workspace import read_obligation, verify_install_state
+from autoskillit.workspace import (
+    read_obligation,
+    repair_broken_plugin_cache_hooks,
+    verify_install_state,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend
@@ -148,10 +152,6 @@ def run_startup_hook_health_check() -> list[str]:
 
         pending_obligation = read_obligation(Path.home())
         if cache_broken or pending_obligation is not None:
-            from autoskillit.workspace._projected_artifact._hook_repair import (
-                repair_broken_plugin_cache_hooks,
-            )
-
             cache_dir = (
                 Path.home()
                 / ".claude"

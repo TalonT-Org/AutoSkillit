@@ -816,14 +816,14 @@ def validate_skill_capability_authenticity(
     return tuple(diagnostics)
 
 
-_RETIRED_SEMANTIC_CAPABILITIES: dict[str, str] = {
+RETIRED_SEMANTIC_CAPABILITIES: dict[str, str] = {
     "agent_model": "semantic_requirements.child_model_policies",
     "agent_subagent": "semantic_requirements.child_spawns",
     "cross_skill_ref": "semantic_requirements.sibling_skills",
     "git_metadata_write": "semantic_requirements.git_metadata_writes",
 }
 _RETIRED_SEMANTIC_DECLARATIONS: dict[str, str] = {
-    **_RETIRED_SEMANTIC_CAPABILITIES,
+    **RETIRED_SEMANTIC_CAPABILITIES,
     "backend_requirements": "backend selection outside skill declarations",
     "required_backends": "backend selection outside skill declarations",
 }
@@ -885,7 +885,7 @@ def parse_skill_semantic_plan(
     """Parse one source declaration without granting it backend authority."""
     diagnostics: list[tuple[SkillInvalidityKind, str]] = []
     schema_version = data.get("semantic_version", SKILL_SEMANTIC_SCHEMA_VERSION)
-    retired_caps = sorted(uses_capabilities & _RETIRED_SEMANTIC_CAPABILITIES.keys())
+    retired_caps = sorted(uses_capabilities & RETIRED_SEMANTIC_CAPABILITIES.keys())
     for capability in retired_caps:
         diagnostics.append(
             (
@@ -894,7 +894,7 @@ def parse_skill_semantic_plan(
                     path,
                     schema_version=schema_version,
                     offending=capability,
-                    replacement=_RETIRED_SEMANTIC_CAPABILITIES[capability],
+                    replacement=RETIRED_SEMANTIC_CAPABILITIES[capability],
                 ),
             )
         )
@@ -1074,6 +1074,7 @@ __all__ = [
     "CapabilityActor",
     "CapabilityDirection",
     "CapabilitySourceClassification",
+    "RETIRED_SEMANTIC_CAPABILITIES",
     "SkillCapabilityEvidence",
     "SkillCapabilityValidation",
     "classify_skill_capability_evidence",

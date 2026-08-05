@@ -116,15 +116,25 @@ No recipe — use skills individually as needed.
 
 ## autoskillit migrate
 
-Check for outdated project recipes.
+Check for outdated project recipes and stale project-local skills.
 
-    autoskillit migrate [--check]
+    autoskillit migrate [--check] [--fix]
 
 **Flags:**
 - `--check` — Exit with code 1 if any recipes need migration (for CI)
+- `--fix` — Apply deterministic project-local skill-contract migrations in
+  place (e.g. a pre-contract-era skill copy missing a `uses_capabilities`
+  declaration, or missing `semantic_version`)
 
-Migrations are applied automatically when recipes are loaded. This command
-just reports what's pending.
+Recipe migrations are applied automatically when recipes are loaded; this
+command just reports what's pending for them. Project-local skills under
+`.claude/skills/`, `.autoskillit/skills/`, `.codex/skills/`, and
+`.agents/skills/` are different: a stale copy of a bundled skill silently
+shadows the bundled version until fixed, so `migrate` also reports which
+skills are invalid and why. Without `--fix`, skills are only reported, never
+touched. Advisory-only invalidity kinds (frontmatter shape errors, unknown
+capabilities, …) are always reported but never auto-fixed — follow the
+printed hint instead.
 
 ---
 

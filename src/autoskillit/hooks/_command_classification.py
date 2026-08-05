@@ -1139,11 +1139,13 @@ _REPEATABLE_SHELL_RE = re.compile(
     r"(?:^|[;&|]\s*)(?:for|while|until)\b"
     r"|\b[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)\s*\{"
 )
-_UNRESOLVED_DISPATCH_RE = re.compile(r"(?:^|[;&|]\s*)(?:eval|xargs|source|\.)\b|[<>]\(")
+_PROCESS_SUBSTITUTION_RE = re.compile(r"[<>]\(")
 _POSSIBLE_GITHUB_EXEC_RE = re.compile(
     r"""(?:^|[\s;&|()'"])(?:[^\s;&|()'"]*/)?(?:gh|curl)(?:[\s'"]|$)""",
     re.IGNORECASE,
 )
+_GH_DISPATCH_WORDS: frozenset[str] = frozenset({"eval", "xargs", "source", "."})
+_POSSIBLE_GITHUB_EXEC_NAMES: frozenset[str] = frozenset({"gh", "curl"})
 _PULL_REVIEW_ROUTE_RE = re.compile(
     r"^/repos/[^/]+/[^/]+/pulls/\d+/reviews"
     r"(?:/\d+(?:/events)?)?/?$",
@@ -1167,6 +1169,50 @@ _GRAPHQL_REVIEW_MUTATIONS: frozenset[str] = frozenset(
         "addPullRequestReviewThread",
     }
 )
+
+
+def _segment_has_possible_github_exec_token(segment: Sequence[str]) -> bool:
+    """True when gh/curl (path-normalized) appears as its own token in *segment*.
+
+    A quote-collapsed token (e.g. an echoed ``"see gh docs"`` string) never
+    equals ``gh``/``curl`` exactly — shlex already stripped the quoting by
+    the time segments reach here — so this does not false-positive on a
+    mention inside a single string argument.
+    """
+    return any(_normalize_executable(token) in _POSSIBLE_GITHUB_EXEC_NAMES for token in segment)
+
+
+def _segments_have_possible_github_exec_token(segments: Sequence[Sequence[str]]) -> bool:
+    """True when any segment contains gh/curl as a standalone token.
+
+    Used to bound repeatable shell constructs (for/while/until, an inline
+    function body fused into its opener's segment): a possible-exec token
+    reachable through repetition is cardinality-unresolved regardless of
+    which segment it lands in after shlex splits the payload on ``;``.
+    """
+    return any(_segment_has_possible_github_exec_token(segment) for segment in segments)
+
+
+def _segments_have_dispatch_word_exec_risk(segments: Sequence[Sequence[str]]) -> bool:
+    """True when a segment opened by eval/xargs/source/. also mentions gh/curl.
+
+    Scoped to the dispatch word's own segment, not the whole payload: a
+    ``gh`` command appearing as an unrelated *sibling* segment — e.g.
+    ``source .venv/bin/activate && gh pr view`` — is already independently
+    walked and classified by the normal segment loop and must not be
+    treated as hidden behind an unrelated dispatch word earlier on the
+    same line. ``eval``/``xargs`` genuinely consume or hand off the
+    following text to a fresh command, so their own segment's joined text
+    is searched (not just its tokens) to catch eval's single quoted
+    argument token.
+    """
+    for segment in segments:
+        verb, _args = command_verb_and_args(list(segment))
+        if verb not in _GH_DISPATCH_WORDS:
+            continue
+        if _POSSIBLE_GITHUB_EXEC_RE.search(" ".join(segment)):
+            return True
+    return False
 
 
 def _none_github_analysis() -> GitHubMutationAnalysis:
@@ -1467,6 +1513,51 @@ def _analyze_gh_api(
     )
 
 
+_GH_HELP_FLAGS: frozenset[str] = frozenset({"--help", "-h"})
+# Value-taking flags across the gh subcommands this module classifies below,
+# curated so the --help exemption cannot be spoofed by a flag's own value
+# (e.g. `gh pr review 5 --approve --body --help`) without needing a full
+# per-subcommand flag grammar — mirrors the hardcoded-per-command flag
+# tables already used by _analyze_gh_api/_analyze_curl_segment.
+_GH_KNOWN_VALUE_FLAGS: frozenset[str] = frozenset(
+    {
+        "--body",
+        "-b",
+        "--add-label",
+        "--remove-label",
+        "--add-assignee",
+        "--remove-assignee",
+        "--reason",
+        "--target",
+        "--visibility",
+    }
+)
+# gh subcommands that mutate state, keyed by noun -> mutating verbs. `pr
+# review` is handled separately (its own review-kind machinery); read verbs
+# (view, list, ...) are absent here and fall through to no-mutation.
+_GH_MUTATION_SUBCOMMANDS: dict[str, frozenset[str]] = {
+    "pr": frozenset({"merge", "close", "reopen", "edit", "ready", "lock", "unlock"}),
+    "issue": frozenset({"close", "reopen", "edit", "delete", "lock", "transfer"}),
+    "release": frozenset({"create", "edit", "delete"}),
+    "repo": frozenset({"edit", "delete", "archive"}),
+}
+
+
+def _gh_args_have_bare_help_flag(args: Sequence[str]) -> bool:
+    """Return True when -h/--help appears as its own flag, not another flag's value."""
+    i = 0
+    n = len(args)
+    while i < n:
+        token = args[i]
+        if token in _GH_HELP_FLAGS:
+            return True
+        if token in _GH_KNOWN_VALUE_FLAGS:
+            i += 2
+            continue
+        i += 1
+    return False
+
+
 def _analyze_gh_segment(
     args: Sequence[str],
     *,
@@ -1476,11 +1567,31 @@ def _analyze_gh_segment(
     if not args:
         return (None, "")
     if args[:2] == ["pr", "review"]:
+        if _gh_args_have_bare_help_flag(args[2:]):
+            return (None, "")
         return (
             GitHubMutationRecord(
                 method="POST",
                 route="/gh/pr/review",
                 kind=GitHubMutationKind.PULL_REVIEW,
+                request_count=1,
+                review_comment_count=None,
+            ),
+            "",
+        )
+    noun = args[0]
+    mutation_verbs = _GH_MUTATION_SUBCOMMANDS.get(noun)
+    if mutation_verbs is not None and len(args) >= 2:
+        verb = args[1]
+        if verb not in mutation_verbs:
+            return (None, "")
+        if _gh_args_have_bare_help_flag(args[2:]):
+            return (None, "")
+        return (
+            GitHubMutationRecord(
+                method="POST",
+                route=f"/gh/{noun}/{verb}",
+                kind=GitHubMutationKind.OTHER,
                 request_count=1,
                 review_comment_count=None,
             ),
@@ -1716,8 +1827,10 @@ def analyze_github_mutations(
             queue.append((nested, current_cwd, depth + 1))
 
         if (
-            _REPEATABLE_SHELL_RE.search(payload) or _UNRESOLVED_DISPATCH_RE.search(payload)
-        ) and _POSSIBLE_GITHUB_EXEC_RE.search(payload):
+            _REPEATABLE_SHELL_RE.search(payload) or _PROCESS_SUBSTITUTION_RE.search(payload)
+        ) and _segments_have_possible_github_exec_token(segments):
+            reasons.append("mutation cardinality is unresolved in a shell wrapper")
+        if _segments_have_dispatch_word_exec_risk(segments):
             reasons.append("mutation cardinality is unresolved in a shell wrapper")
 
     for argv, argv_cwd in argv_payloads:

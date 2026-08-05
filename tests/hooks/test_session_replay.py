@@ -9,6 +9,12 @@ which guards would actually be wired for that session type, since
 session_scope gating happens at hooks.json generation time, not inside each
 guard) — via the real ``hooks/_dispatch.py`` subprocess, exactly as Claude
 Code would invoke it.
+
+One narrow exception to the PreToolUse-only scope: ``dispatch_capture_lifecycle_hook``
+additionally dispatches the SessionStart ``capture_lifecycle_hook.py`` once
+per replay, the only consumer of the W2/W3 diagnostic-severity and
+convergence machinery (``reconcile_capture_store`` / ``classify_cleanup_outcome``)
+— unreachable through the per-event PreToolUse loop above.
 """
 
 from __future__ import annotations
@@ -18,6 +24,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +32,17 @@ import pytest
 
 from autoskillit.core import pkg_root
 from autoskillit.hook_registry import HOOK_REGISTRY, HookDef
+from autoskillit.hooks._capture._snapshot import (
+    CaptureMeasurement,
+    CommandOutcome,
+    verify_capture_snapshot,
+)
+from autoskillit.hooks._capture_artifacts import (
+    create_capture_artifact,
+    open_capture_root,
+    open_project_anchor,
+)
+from autoskillit.hooks._capture_lifecycle import CaptureLifecycleStore
 
 from .fixtures.session_replays import INCIDENT_TRANSCRIPT, fixture_path
 
@@ -239,6 +257,99 @@ def assert_replay_clean(replayed: list[tuple[ReplayEvent, list[GuardRunResult]]]
 
 
 # ---------------------------------------------------------------------------
+# Capture-lifecycle backlog seeding (W2/W3 convergence machinery)
+# ---------------------------------------------------------------------------
+
+_RETENTION_SECONDS = 3600.0
+_BACKLOG_BACKDATE_SECONDS = _RETENTION_SECONDS + 100.0
+
+
+def seed_capture_backlog(project_root: Path, *, count: int) -> None:
+    """Pre-seed the capture-lifecycle store under ``project_root`` with
+    ``count`` genuinely eligible (past-retention) records via the real
+    production store API — mirrors ``tests/hooks/test_capture_lifecycle.py``'s
+    ``_open_store``/``_seed_finalized_captures`` pattern.
+
+    The generic JSONL ``state_setup`` mechanism (``apply_state_setup``) can
+    only write plain-text files; the capture-lifecycle store's ledger is a
+    binary, SHA-256-framed format that cannot be hand-authored that way, so
+    this seeds through the real store-construction API instead. The wall
+    clock is backdated only at write time, so the records are already past
+    their retention deadline by the time the real (unmocked) reconcile call
+    inside ``dispatch_capture_lifecycle_hook`` runs against the real system
+    clock moments later.
+    """
+    seed_wall = time.time() - _BACKLOG_BACKDATE_SECONDS
+
+    def wall_clock() -> float:
+        return seed_wall
+
+    anchor = open_project_anchor(str(project_root))
+    try:
+        root = open_capture_root(anchor, create=True)
+    except BaseException:
+        anchor.close()
+        raise
+    try:
+        store = CaptureLifecycleStore.from_open_authorities(
+            anchor, root, wall_clock=wall_clock, monotonic=time.monotonic
+        )
+        for index in range(count):
+            capture_id = f"{index + 1:016x}"
+            artifact = create_capture_artifact(root, capture_id, store)
+            data = b"seeded-backlog-record"
+            os.write(artifact.fd, data)
+            measurement = CaptureMeasurement.from_bytes(data, inline_bytes=max(1, len(data)))
+            snapshot = verify_capture_snapshot(
+                fd=artifact.fd,
+                capture_id=artifact.authority.capture_id,
+                incarnation=artifact.authority.incarnation,
+                project_identity=store._project_identity,
+                root_identity=store._root_identity,
+                carrier_name=artifact.name,
+                carrier_identity=(artifact.identity.device, artifact.identity.inode),
+                measurement=measurement,
+                command_outcome=CommandOutcome.exited(0),
+                expected_revision=artifact.authority.expected_revision,
+                finalized_at=wall_clock(),
+                retention_deadline=wall_clock() + _RETENTION_SECONDS,
+            )
+            store.commit_verified_snapshot(snapshot, issue_reference=False)
+            artifact.close_artifact_fd()
+            artifact.release_lease()
+    finally:
+        root.close()
+        anchor.close()
+
+
+def dispatch_capture_lifecycle_hook(project_root: Path) -> GuardRunResult:
+    """Dispatch the SessionStart ``capture_lifecycle_hook.py`` once via the
+    real ``_dispatch.py``, exactly as a real session start would.
+
+    This is the only consumer of the W2/W3 diagnostic-severity and
+    convergence machinery (``reconcile_capture_store`` /
+    ``classify_cleanup_outcome``); the per-event loop above only ever
+    dispatches PreToolUse hooks, so this is a deliberate, narrow addition
+    for this one SessionStart hook rather than a general event-type
+    extension to the harness.
+    """
+    stdin_bytes = json.dumps({"cwd": str(project_root)}).encode("utf-8")
+    proc = subprocess.run(
+        [sys.executable, str(_DISPATCH_PATH), "capture_lifecycle_hook"],
+        input=stdin_bytes,
+        capture_output=True,
+        cwd=str(project_root),
+        env=os.environ,
+        timeout=_TIMEOUT_SECONDS,
+    )
+    return GuardRunResult(
+        script="capture_lifecycle_hook.py",
+        stdout=proc.stdout.decode("utf-8", errors="replace"),
+        stderr=proc.stderr.decode("utf-8", errors="replace"),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Fixture-driven tests
 # ---------------------------------------------------------------------------
 
@@ -281,4 +392,37 @@ def test_incident_transcript_genuine_mutation_is_actually_denied(tmp_path: Path)
         assert any(r.denied for r in results), (
             f"expected event {event.payload!r} to be denied by some matched guard, "
             f"but none of {[r.script for r in results]} denied it"
+        )
+
+
+def test_incident_transcript_capture_wrapped_command_over_seeded_backlog_is_clean(
+    tmp_path: Path,
+) -> None:
+    """W4 Step 1c: the transcript's capture-wrapped Bash event (routed
+    through shell_capture_hook.py's rewrite-into-runner path) must stay
+    clean even when the capture-lifecycle store already carries a
+    genuinely eligible (past-retention) backlog -- exercising the W2/W3
+    diagnostic-severity and convergence machinery end-to-end, not only the
+    W1 guard-decision path the other replay tests cover.
+    """
+    orchestrating_root = tmp_path / "orchestrating-project"
+    worktree_root = tmp_path / "worktrees" / "impl-something"
+    orchestrating_root.mkdir(parents=True)
+    worktree_root.mkdir(parents=True)
+
+    seed_capture_backlog(orchestrating_root, count=3)
+
+    mapping = {
+        "{{ORCHESTRATING_ROOT}}": str(orchestrating_root),
+        "{{WORKTREE_ROOT}}": str(worktree_root),
+    }
+    replayed = replay(INCIDENT_TRANSCRIPT, mapping, process_cwd=orchestrating_root)
+    assert_replay_clean(replayed)
+
+    lifecycle_result = dispatch_capture_lifecycle_hook(orchestrating_root)
+    assert not lifecycle_result.denied
+    for line in lifecycle_result.stderr.splitlines():
+        assert not _FAILURE_GRADE_RE.search(line), (
+            "capture_lifecycle_hook reconcile over a seeded backlog produced "
+            f"failure-grade stderr: {line!r}"
         )

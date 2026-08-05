@@ -37,6 +37,13 @@ from autoskillit.workspace._projected_artifact import (
     prune_stale_projections,
     public_plugin_asset_digest,
 )
+from autoskillit.workspace._update_obligation import (
+    PublicationObligation,
+    clear_obligation,
+    read_obligation,
+    update_obligation_expected_version,
+    write_obligation,
+)
 from autoskillit.workspace.cleanup import (
     CleanupResult,
     DefaultWorkspaceManager,
@@ -186,6 +193,11 @@ __all__ = [
     "reconcile_install_artifacts",
     "verify_install_state",
     "verify_installed_plugin_artifact",
+    "PublicationObligation",
+    "clear_obligation",
+    "read_obligation",
+    "update_obligation_expected_version",
+    "write_obligation",
     "SkillsDirectoryProvider",
     "materialize_agent_skill_tree",
     "materialize_codex_profile_skills",

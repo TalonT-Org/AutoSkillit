@@ -48,6 +48,7 @@ from ._doctor_install import (
     _check_autoskillit_on_path,
     _check_editable_install_source_exists,
     _check_install_classification,
+    _check_publication_obligation,
     _check_source_version_drift,
     _check_stale_entry_points,
     _check_update_dismissal_state,
@@ -158,6 +159,8 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.append(_check_install_classification())
     # Check 17: Update-prompt dismissal state
     results.append(_check_update_dismissal_state())
+    # Check 17b: Pending publication obligation (diagnostic only, no auto-fix)
+    results.append(_check_publication_obligation())
 
     # -- Fleet doctor checks (ambient env + infrastructure health) --
 

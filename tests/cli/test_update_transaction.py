@@ -1562,3 +1562,190 @@ def test_update_consumers_compose_with_registered_real_child_transaction(
         ["plugin", "install"],
     ]
     assert not Path(calls[1][1]["cwd"]).exists()
+
+
+# ---------------------------------------------------------------------------
+# Phase C — publication obligation journal lifecycle (T-C1).
+# ---------------------------------------------------------------------------
+
+
+def test_t_c1_obligation_written_before_upgrade_launch_and_cleared_on_completion(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A successful transaction writes the obligation immediately before the
+    upgrade subprocess launches (observed via an injected runner that reads
+    the journal from inside the upgrade call itself) and clears it by
+    RESULT_FINALIZATION.
+    """
+    from autoskillit.workspace import read_obligation
+
+    _prepare(monkeypatch)
+    _register_plugin(tmp_path)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.verify_installed_plugin_artifact",
+        lambda _spec: SimpleNamespace(
+            identity=SimpleNamespace(semantic_key=f"{_PLUGIN_REF}:1.1.0"),
+            findings=(),
+            lease=None,
+        ),
+    )
+    versions = iter(["1.0.0", "1.1.0"])
+    obligation_present_at_upgrade_launch: list[bool] = []
+
+    def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        if cmd[:3] == ["uv", "tool", "upgrade"]:
+            obligation_present_at_upgrade_launch.append(read_obligation(tmp_path) is not None)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: next(versions),
+        process_runner=runner,
+    )
+
+    assert obligation_present_at_upgrade_launch == [True]
+    assert result.outcome is UpdateTransactionOutcome.COMPLETED
+    assert read_obligation(tmp_path) is None
+
+
+@pytest.mark.parametrize(
+    ("failure_point", "expect_expected_version"),
+    [
+        ("upgrade_nonzero_exit", False),
+        ("raising_probe", False),
+        ("child_failure_after_probe", True),
+        ("verifier_raises_after_probe", True),
+    ],
+)
+def test_t_c1_obligation_survives_failures_at_or_after_upgrade_subprocess(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    failure_point: str,
+    expect_expected_version: bool,
+) -> None:
+    """For each fault-injected failure at or after the upgrade subprocess,
+    the obligation survives — with expected_version backfilled for failures
+    AFTER the probe succeeded, and None for failures at/before it (the new
+    version was never established, and the record must say so rather than
+    guess).
+    """
+    from autoskillit.workspace import read_obligation
+
+    _prepare(monkeypatch)
+    _register_plugin(tmp_path)
+    if failure_point == "verifier_raises_after_probe":
+        monkeypatch.setattr(
+            "autoskillit.cli.update._transaction.verify_installed_plugin_artifact",
+            lambda _spec: (_ for _ in ()).throw(RuntimeError("simulated verify crash")),
+        )
+
+    calls: list[list[str]] = []
+
+    def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        calls.append(list(cmd))
+        if failure_point == "upgrade_nonzero_exit" and len(calls) == 1:
+            return subprocess.CompletedProcess(cmd, 7)
+        if failure_point == "child_failure_after_probe" and len(calls) == 2:
+            return subprocess.CompletedProcess(cmd, 9)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    prober = (
+        (lambda _i, _e, _r: (_ for _ in ()).throw(RuntimeError("simulated probe failure")))
+        if failure_point == "raising_probe"
+        else (lambda _i, _e, _r: "1.1.0")
+    )
+
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: "1.0.0",
+        fresh_version_prober=prober,
+        process_runner=runner,
+    )
+
+    assert result.outcome is not UpdateTransactionOutcome.COMPLETED, failure_point
+    obligation = read_obligation(tmp_path)
+    assert obligation is not None, failure_point
+    if expect_expected_version:
+        assert obligation.expected_version == "1.1.0", failure_point
+    else:
+        assert obligation.expected_version is None, failure_point
+
+
+@pytest.mark.parametrize(
+    "failure_point",
+    [
+        "unknown_install_type",
+        "claudecode_deferral",
+        "maintenance_context_failure",
+        "worktree_refusal",
+    ],
+)
+def test_t_c1_no_obligation_for_failures_before_upgrade_subprocess(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, failure_point: str
+) -> None:
+    """Every failure/deferral strictly before the upgrade subprocess launches
+    mutates nothing and must leave NO obligation — a pending obligation here
+    would trigger spurious repairs forever.
+    """
+    from autoskillit.workspace import read_obligation
+
+    _prepare(monkeypatch)
+    _register_plugin(tmp_path)
+    base_env: dict[str, str] = {"PATH": "/bin"}
+
+    if failure_point == "unknown_install_type":
+        monkeypatch.setattr(
+            "autoskillit.cli.update._transaction.upgrade_command",
+            lambda _info: None,
+        )
+    elif failure_point == "claudecode_deferral":
+        base_env["CLAUDECODE"] = "1"
+    elif failure_point == "maintenance_context_failure":
+        monkeypatch.setattr(
+            "autoskillit.cli.update._transaction.build_maintenance_env",
+            lambda *_a, **_kw: (_ for _ in ()).throw(ValueError("simulated env build failure")),
+        )
+    elif failure_point == "worktree_refusal":
+        monkeypatch.setattr(
+            "autoskillit.cli.update._transaction.is_git_main_checkout",
+            lambda _path: True,
+        )
+
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env=base_env,
+        version_reader=lambda _name: "1.0.0",
+        process_runner=_recording_success_runner([]),
+    )
+
+    assert result.outcome is not UpdateTransactionOutcome.COMPLETED, failure_point
+    assert read_obligation(tmp_path) is None, failure_point
+
+
+def test_t_c1_failing_obligation_write_aborts_before_upgrade_subprocess(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A failed obligation write aborts the transaction with a mapped
+    failure BEFORE the uv subprocess launches — nothing is yet mutated, so
+    refusing to proceed is safe, and it upholds the invariant that the
+    irreversible region is entered only with the breadcrumb already on disk.
+    """
+    _prepare(monkeypatch)
+    _register_plugin(tmp_path)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.write_obligation",
+        lambda *_a, **_kw: (_ for _ in ()).throw(OSError("simulated disk full")),
+    )
+    calls: list[list[str]] = []
+
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: "1.0.0",
+        process_runner=_recording_success_runner(calls),
+    )
+
+    assert result.outcome is UpdateTransactionOutcome.FAILED_UPGRADE
+    assert not calls, "uv subprocess must never launch when the obligation write fails"

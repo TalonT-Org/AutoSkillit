@@ -41,6 +41,78 @@ def test_main_does_not_call_app_after_update_restart(monkeypatch: pytest.MonkeyP
     assert not app_called, "app() must not be called when update path exits the process"
 
 
+def test_main_install_argv_skips_obligation_repair_to_avoid_reentrancy(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """main() must not call attempt_obligation_repair() when invoked as
+    `autoskillit install ...`.
+
+    Regression guard: attempt_obligation_repair() itself spawns
+    `autoskillit install --maintenance-update` as a subprocess. If main()
+    called it unconditionally, that child's own main() would observe the
+    SAME still-pending obligation (written by the parent transaction before
+    launching this exact child) and recurse into another repair attempt —
+    an unbounded process chain, or a deadlock if the outer install()
+    invocation already holds the exclusive publication lease the recursive
+    repair's install() child also needs.
+    """
+    app_module = importlib.import_module("autoskillit.cli.app")
+
+    monkeypatch.setattr(app_module, "app", lambda: None)
+    monkeypatch.setattr(
+        "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda *a, **kw: None
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks.run_update_checks", lambda **kwargs: None
+    )
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    repair_calls: list[Path] = []
+    monkeypatch.setattr(
+        "autoskillit.cli.update._obligation_repair.attempt_obligation_repair",
+        lambda home, **kwargs: repair_calls.append(home),
+    )
+    monkeypatch.setattr(sys, "argv", ["autoskillit", "install", "--maintenance-update"])
+
+    app_module.main()
+
+    assert repair_calls == [], (
+        "main() must not call attempt_obligation_repair() for `install` invocations"
+    )
+
+
+def test_main_non_install_argv_still_calls_obligation_repair(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """main() still observes a pending obligation for every OTHER subcommand."""
+    app_module = importlib.import_module("autoskillit.cli.app")
+
+    monkeypatch.setattr(app_module, "app", lambda: None)
+    monkeypatch.setattr(
+        "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda *a, **kw: None
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks.run_update_checks", lambda **kwargs: None
+    )
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    repair_calls: list[Path] = []
+
+    def fake_repair(home: Path, **kwargs: object) -> MagicMock:
+        repair_calls.append(home)
+        return MagicMock(outcome="no_obligation", findings=())
+
+    monkeypatch.setattr(
+        "autoskillit.cli.update._obligation_repair.attempt_obligation_repair",
+        fake_repair,
+    )
+    monkeypatch.setattr(sys, "argv", ["autoskillit", "doctor"])
+
+    app_module.main()
+
+    assert repair_calls == [tmp_path]
+
+
 def test_serve_activity_check_uses_backend_derived_marker_dir(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

@@ -1,0 +1,170 @@
+"""Cross-interpreter upgrade smoke test (C-I4).
+
+The only test in the system that exercises real ``uv`` venv replacement
+under a real interpreter flip — issue #4469's exact fault class. This
+cannot be inflicted from in-process pytest: the running test interpreter's
+own import roots cannot be destroyed by the code under test (see
+``tests/cli/_upgrade_fixtures.py``'s documented blind spot). The in-suite
+approximation covering the same property cheaply (a fixture fake-venv tree
+renamed after publication) is
+``tests.contracts.test_hook_path_relocatability::test_token_aware_validation_survives_interpreter_pivot``
+(delivered with Phase A, since the property it pins — relocatable commands
+surviving an interpreter-tree rename — predates and is reused by this step).
+"""
+
+from __future__ import annotations
+
+import json
+import shlex
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+# Declared precondition, not a default to silently fall back on: the runner
+# must offer both minors, or this step fails loudly (no silent caps).
+_REQUIRED_PYTHON_MINORS = ("3.11", "3.13")
+
+
+def _find_source_root() -> Path:
+    """Return the installable source root (the pyproject.toml directory)."""
+    from autoskillit.core import pkg_root
+
+    candidate = pkg_root().parent.parent
+    if not (candidate / "pyproject.toml").is_file():
+        raise RuntimeError(f"could not locate pyproject.toml above pkg_root(): {candidate}")
+    return candidate
+
+
+def _run(cmd: list[str], *, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=600)
+
+
+def _cache_incarnations(cache_root: Path) -> set[str]:
+    if not cache_root.is_dir():
+        return set()
+    return {p.name for p in cache_root.iterdir() if p.is_dir() and not p.name.startswith(".")}
+
+
+def _assert_incarnation_hooks_execute(incarnation_dir: Path) -> None:
+    """Execute every PreToolUse-style command in this incarnation's hooks.json
+    verbatim, with ${CLAUDE_PLUGIN_ROOT} expanded against incarnation_dir —
+    simulating exactly what Claude Code does at hook-invocation time.
+    """
+    hooks_json_path = incarnation_dir / "hooks" / "hooks.json"
+    if not hooks_json_path.is_file():
+        raise RuntimeError(f"incarnation has no hooks.json: {incarnation_dir}")
+    data = json.loads(hooks_json_path.read_text(encoding="utf-8"))
+    event = json.dumps({"tool_name": "Read", "tool_input": {}})
+    for entries in data.get("hooks", {}).values():
+        for entry in entries:
+            for hook in entry.get("hooks", []):
+                command = hook.get("command", "")
+                if not command:
+                    continue
+                resolved = command.replace("${CLAUDE_PLUGIN_ROOT}", str(incarnation_dir))
+                parts = shlex.split(resolved)
+                if parts and parts[0] == "python3":
+                    parts[0] = sys.executable
+                proc = subprocess.run(
+                    parts, input=event, capture_output=True, text=True, timeout=10
+                )
+                if proc.returncode != 0:
+                    raise RuntimeError(
+                        f"hook command in incarnation {incarnation_dir.name} failed "
+                        f"after the cross-interpreter upgrade: {command} "
+                        f"(exit {proc.returncode}): {proc.stderr}"
+                    )
+
+
+def run_cross_interpreter_upgrade_smoke(*, work_dir: str) -> bool:
+    """Install on one Python minor, upgrade on another, verify hooks survive.
+
+    In a scratch HOME: ``uv tool install`` the current source tree with
+    ``--python <A>``, publish the plugin, then upgrade with
+    ``--python <B>`` (a genuinely different minor). Asserts the new cache
+    incarnation exists and that executing the retained incarnation's
+    PreToolUse commands verbatim (``${CLAUDE_PLUGIN_ROOT}`` expanded against
+    that incarnation's own directory) exits 0 — the live-session-safety
+    property Phase A's relocatable commands exist to guarantee.
+    """
+    root = Path(work_dir)
+    scratch_home = root / "scratch-home"
+    scratch_home.mkdir(parents=True, exist_ok=True)
+
+    import os
+
+    env = dict(os.environ)
+    env["HOME"] = str(scratch_home)
+    env.setdefault("XDG_CONFIG_HOME", str(scratch_home / ".config"))
+    env.setdefault("XDG_CACHE_HOME", str(scratch_home / ".cache"))
+    env.setdefault("XDG_DATA_HOME", str(scratch_home / ".local" / "share"))
+    env["PATH"] = f"{scratch_home / '.local' / 'bin'}{os.pathsep}{env.get('PATH', '')}"
+
+    minor_a, minor_b = _REQUIRED_PYTHON_MINORS
+    for minor in (minor_a, minor_b):
+        probe = subprocess.run(
+            ["uv", "python", "find", minor], capture_output=True, text=True, timeout=30
+        )
+        if probe.returncode != 0:
+            raise RuntimeError(
+                f"Cross-interpreter smoke requires Python {minor} available to uv "
+                f"on this runner, but `uv python find {minor}` failed: "
+                f"{probe.stderr.strip()}. Provision it (e.g. `uv python install "
+                f"{minor}`) — this step must FAIL, not silently skip."
+            )
+
+    source_root = _find_source_root()
+
+    install_a = _run(
+        ["uv", "tool", "install", "--force", "--python", minor_a, str(source_root)], env=env
+    )
+    if install_a.returncode != 0:
+        raise RuntimeError(f"initial install (python {minor_a}) failed: {install_a.stderr}")
+
+    entrypoint = shutil.which("autoskillit", path=env["PATH"])
+    if entrypoint is None:
+        raise RuntimeError(
+            f"autoskillit entrypoint not found on PATH after initial install: {env['PATH']}"
+        )
+
+    publish = _run([entrypoint, "install"], env=env)
+    if publish.returncode != 0:
+        raise RuntimeError(f"initial plugin publish failed: {publish.stderr}")
+
+    cache_root = (
+        scratch_home / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
+    )
+    pre_upgrade = _cache_incarnations(cache_root)
+    if not pre_upgrade:
+        raise RuntimeError(
+            f"no plugin cache incarnation found after initial publish: {cache_root}"
+        )
+
+    upgrade = _run(
+        ["uv", "tool", "install", "--force", "--python", minor_b, str(source_root)], env=env
+    )
+    if upgrade.returncode != 0:
+        raise RuntimeError(f"upgrade install (python {minor_b}) failed: {upgrade.stderr}")
+
+    republish = _run([entrypoint, "install", "--maintenance-update"], env=env)
+    if republish.returncode != 0:
+        raise RuntimeError(f"post-upgrade republication failed: {republish.stderr}")
+
+    post_upgrade = _cache_incarnations(cache_root)
+    new_incarnations = post_upgrade - pre_upgrade
+    if not new_incarnations:
+        raise RuntimeError(
+            "expected a new cache incarnation after upgrading to a different "
+            f"interpreter minor; pre={sorted(pre_upgrade)}, post={sorted(post_upgrade)}"
+        )
+
+    # The live-session-safety property: retained (pre-upgrade) incarnations'
+    # hooks must still execute after the interpreter that generated them is
+    # gone — this is the exact incident scenario.
+    for name in pre_upgrade:
+        _assert_incarnation_hooks_execute(cache_root / name)
+    for name in new_incarnations:
+        _assert_incarnation_hooks_execute(cache_root / name)
+
+    return True

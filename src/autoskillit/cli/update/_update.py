@@ -40,6 +40,12 @@ def run_update_command(home: Path | None = None) -> None:
             f"AutoSkillit update did not complete ({result.outcome.value}).",
             flush=True,
         )
+        from autoskillit.cli.update._obligation_repair import attempt_obligation_repair
+
+        repair_result = attempt_obligation_repair(_home)
+        if repair_result.outcome not in ("no_obligation", "cleared"):
+            for finding in repair_result.findings:
+                print(finding, flush=True)
         raise SystemExit(int(process_status))
 
     state = _read_dismiss_state(_home)

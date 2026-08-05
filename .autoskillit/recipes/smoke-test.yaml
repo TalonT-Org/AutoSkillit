@@ -69,8 +69,26 @@ steps:
       cmd: "task install-worktree"
       cwd: "${{ context.work_dir }}"
       step_name: "setup"
+    on_success: cross_interpreter_upgrade_smoke
+    on_failure: register_clone_failure
+
+  cross_interpreter_upgrade_smoke:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.run_cross_interpreter_upgrade_smoke"
+      args:
+        work_dir: "${{ context.work_dir }}/.smoke-cross-interpreter"
     on_success: implement_task
     on_failure: register_clone_failure
+    note: >-
+      The only test in the system that exercises real uv venv replacement
+      under a real interpreter flip (issue #4469's exact fault class,
+      structurally impossible to inflict from in-process pytest). Installs
+      on one Python minor in a scratch HOME, upgrades on another, and
+      asserts the retained incarnation's hook commands still execute.
+      Requires both Python minors provisioned on the runner (uv python
+      install) — fails loudly rather than silently skipping if either is
+      missing.
 
   implement_task:
     tool: run_skill

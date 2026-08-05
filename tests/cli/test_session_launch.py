@@ -348,6 +348,38 @@ def test_run_interactive_session_extra_env_merged(monkeypatch: pytest.MonkeyPatc
     assert captured["env"].get("MY_UNIQUE_KEY") == "MY_VAL"
 
 
+def test_run_interactive_session_injects_state_root_from_project_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """AUTOSKILLIT_STATE_ROOT is injected from the resolved project_dir so
+    PreToolUse guards can locate .autoskillit/ state for this cook session —
+    the interactive launch path has no other route through
+    _assemble_shared_env_extras (that helper is skill/food-truck only)."""
+    from autoskillit.core import AUTOSKILLIT_STATE_ROOT_ENV_VAR
+
+    _stub_plugin_installed(monkeypatch)
+    captured = _capture_subprocess(monkeypatch)
+    _run_interactive_session(system_prompt="test", project_dir=tmp_path)
+    assert captured["env"].get(AUTOSKILLIT_STATE_ROOT_ENV_VAR) == str(tmp_path)
+
+
+def test_run_interactive_session_state_root_survives_alongside_extra_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Injecting AUTOSKILLIT_STATE_ROOT must not drop caller-supplied extra_env keys."""
+    from autoskillit.core import AUTOSKILLIT_STATE_ROOT_ENV_VAR
+
+    _stub_plugin_installed(monkeypatch)
+    captured = _capture_subprocess(monkeypatch)
+    _run_interactive_session(
+        system_prompt="test",
+        extra_env={"MY_UNIQUE_KEY": "MY_VAL"},
+        project_dir=tmp_path,
+    )
+    assert captured["env"].get("MY_UNIQUE_KEY") == "MY_VAL"
+    assert captured["env"].get(AUTOSKILLIT_STATE_ROOT_ENV_VAR) == str(tmp_path)
+
+
 # ---------------------------------------------------------------------------
 # exits when claude missing
 # ---------------------------------------------------------------------------

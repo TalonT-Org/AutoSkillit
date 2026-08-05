@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core import (
+    AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     CAMPAIGN_ID_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
     SkillSessionConfig,
@@ -71,7 +72,7 @@ class TestAssembleSharedEnvExtras:
         monkeypatch.setenv(CAMPAIGN_ID_ENV_VAR, "camp-123")
         monkeypatch.setenv(KITCHEN_SESSION_ID_ENV_VAR, "kitchen-456")
 
-    def test_all_eight_keys(self) -> None:
+    def test_all_nine_keys(self) -> None:
         result = BackendCmdBuilderBase._assemble_shared_env_extras(
             session_type="skill",
             applicable_guards=frozenset({"write_guard"}),
@@ -81,7 +82,7 @@ class TestAssembleSharedEnvExtras:
             cwd="/work",
             scenario_step_name="step1",
         )
-        assert len(result) == 12
+        assert len(result) == 13
         assert result["MAX_MCP_OUTPUT_TOKENS"] == "50000"
         assert result["MCP_CONNECTION_NONBLOCKING"] == "0"
         assert result["AUTOSKILLIT_HEADLESS"] == "1"
@@ -93,6 +94,7 @@ class TestAssembleSharedEnvExtras:
         assert result["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] == "/tmp/wp"
         assert result["AUTOSKILLIT_ALLOWED_WRITE_PREFIXES"] == "/tmp/a:/tmp/b"
         assert result["AUTOSKILLIT_CWD"] == "/work"
+        assert result[AUTOSKILLIT_STATE_ROOT_ENV_VAR] == "/work"
         assert result["SCENARIO_STEP_NAME"] == "step1"
 
     def test_conditional_keys_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -107,6 +109,7 @@ class TestAssembleSharedEnvExtras:
         assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIX" not in result
         assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIXES" not in result
         assert "AUTOSKILLIT_CWD" not in result
+        assert AUTOSKILLIT_STATE_ROOT_ENV_VAR not in result
         assert "SCENARIO_STEP_NAME" not in result
         assert "AUTOSKILLIT_SESSION_TYPE" not in result
         assert "AUTOSKILLIT_APPLICABLE_GUARDS" not in result

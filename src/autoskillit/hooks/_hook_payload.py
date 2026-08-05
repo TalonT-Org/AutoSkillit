@@ -168,7 +168,13 @@ def resolve_state_root(payload_cwd: str) -> Path:
     if payload_cwd:
         current = Path(payload_cwd).resolve()
         while True:
-            if (current / ".autoskillit").is_dir():
+            candidate = current / ".autoskillit"
+            # lstat, not stat: a symlinked .autoskillit/ must never be treated
+            # as found here — accepting it would let every caller's later
+            # `root / ".autoskillit" / "temp" / ...` file access transparently
+            # follow the symlink outside the trust anchor (issue #4319).
+            # Keep walking upward past it in case a real ancestor exists.
+            if not candidate.is_symlink() and candidate.is_dir():
                 return current
             parent = current.parent
             if parent == current:

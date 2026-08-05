@@ -857,6 +857,10 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
         capabilities.discard(capability)
         if not capabilities:
             del self._session_capabilities[lease.session_id]
+            authority_path = self._session_authority_paths.get(lease.session_id)
+            if authority_path is not None:
+                self._launch_authorities.delete(authority_path)
+                del self._session_authority_paths[lease.session_id]
 
     def _discard_session_locked(self, session_id: str) -> None:
         for capability in tuple(self._session_capabilities.get(session_id, ())):

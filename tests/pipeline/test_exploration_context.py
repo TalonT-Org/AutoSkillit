@@ -340,6 +340,55 @@ def test_launch_replacement_and_cleanup_invalidate_capabilities_atomically(
     )
 
 
+def test_launch_replacement_removes_authority_from_prior_home(tmp_path: Path) -> None:
+    project_dir = tmp_path / "project"
+    first_home = tmp_path / "first-session"
+    second_home = tmp_path / "second-session"
+    first_home.mkdir()
+    second_home.mkdir()
+    store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+        trusted_root=project_dir,
+        service=_snapshot_service(),
+    )
+    kwargs = {
+        "owner_id": "uid:1000",
+        "role": "semantic-code-navigator",
+        "session_id": "session-a",
+        "cwd": project_dir,
+        "repository_root": project_dir,
+        "source_identity": "bundled:semantic-code-navigator:definition-digest",
+    }
+
+    first = store.bind_launch(**kwargs, authority_home=first_home)
+    second = store.bind_launch(**kwargs, authority_home=second_home)
+
+    assert not first.authority_path.exists()
+    assert second.authority_path.exists()
+
+
+def test_discarding_last_session_capability_removes_authority(tmp_path: Path) -> None:
+    project_dir = tmp_path / "project"
+    authority_home = tmp_path / "generated-session"
+    authority_home.mkdir()
+    store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+        trusted_root=project_dir,
+        service=_snapshot_service(),
+    )
+    binding = store.bind_launch(
+        owner_id="uid:1000",
+        role="semantic-code-navigator",
+        session_id="session-a",
+        cwd=project_dir,
+        repository_root=project_dir,
+        source_identity="bundled:semantic-code-navigator:definition-digest",
+        authority_home=authority_home,
+    )
+
+    store.discard(binding.capability)
+
+    assert not binding.authority_path.exists()
+
+
 def test_launch_rejects_untrusted_repository_root(tmp_path: Path) -> None:
     store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
         trusted_root=tmp_path / "project",

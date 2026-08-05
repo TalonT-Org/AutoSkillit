@@ -39,7 +39,6 @@ __all__ = [
     "CapabilityResolution",
     "CapabilityResolutionStatus",
     "EXPLORER_ROLE_NAMES",
-    "EXPLORATION_AUTHORITY_PATH_ENV",
     "EXPLORATION_PRINCIPAL_ROLE",
     "ExplorationLaunchBinding",
     "ExplorationContext",

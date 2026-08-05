@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.pipeline.exploration_context as exploration_context_module
 from autoskillit.core import RepositoryIdentity, RepositorySnapshot
 from autoskillit.pipeline.exploration_context import (
     EXPLORATION_AUTHORITY_PATH_ENV,
@@ -20,6 +21,15 @@ from autoskillit.pipeline.exploration_context import (
 )
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
+
+
+def test_raw_exploration_environment_names_are_internal() -> None:
+    assert {
+        "EXPLORATION_AUTHORITY_PATH_ENV",
+        "EXPLORATION_CAPABILITY_ENV",
+        "EXPLORATION_ROLE_ENV",
+        "EXPLORATION_SESSION_ENV",
+    }.isdisjoint(exploration_context_module.__all__)
 
 
 def _snapshot_service() -> MagicMock:

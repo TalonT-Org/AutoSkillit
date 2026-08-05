@@ -61,6 +61,39 @@ def test_generate_hooks_json_commands_are_relocatable() -> None:
                     )
 
 
+def test_compute_registry_hash_is_identical_for_absolute_and_relocatable_renderings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """compute_registry_hash hashes logical registry rows (scripts, event
+    type, matcher, timeout) — never the rendered command string — so the
+    embedded ``_autoskillit_registry_hash`` must be identical whether the
+    hooks are rendered in relocatable (hooks.json) form or absolute
+    (settings.json, dev-mode) form. A-I1 states this needs no
+    implementation change; this test pins the invariant so a future
+    refactor that accidentally threads the rendered command into the hash
+    cannot regress silently.
+    """
+    import autoskillit.cli._hooks as _hooks_mod
+    from autoskillit.cli._hooks import sync_hooks_to_settings
+
+    # sync_hooks_to_settings() refuses to run from a git worktree (its own
+    # dev-machine safety guard, unrelated to the property under test) and
+    # short-circuits to an eviction-only no-op when the plugin is installed
+    # — same idiom as tests/cli/conftest.py's autouse fixture.
+    monkeypatch.setattr(_hooks_mod, "is_git_worktree", lambda _path: False)
+    monkeypatch.setattr(
+        "autoskillit.cli._init_helpers._is_plugin_installed", lambda **kwargs: False
+    )
+
+    relocatable_hash = generate_hooks_json()["_autoskillit_registry_hash"]
+
+    settings_path = tmp_path / "settings.json"
+    sync_hooks_to_settings(settings_path)
+    absolute_hash = json.loads(settings_path.read_text())["_autoskillit_registry_hash"]
+
+    assert relocatable_hash == absolute_hash
+
+
 # ---------------------------------------------------------------------------
 # T-A2 — Self-healed bundled hooks.json is canonical and machine-independent.
 #

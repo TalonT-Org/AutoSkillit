@@ -1436,6 +1436,39 @@ def test_check_source_version_drift_warning_on_drift(
     assert ref_sha[:8] in result.message
 
 
+# ---------------------------------------------------------------------------
+# _check_publication_obligation — doctor check (diagnostic only, Check 17b)
+# ---------------------------------------------------------------------------
+
+
+def test_check_publication_obligation_ok_when_no_obligation_pending(tmp_path: Path) -> None:
+    """No obligation journal on disk reports OK."""
+    from autoskillit.cli.doctor import _check_publication_obligation
+    from autoskillit.core import Severity
+
+    result = _check_publication_obligation(home=tmp_path)
+    assert result.severity == Severity.OK
+    assert "no publication obligation pending" in result.message.lower()
+
+
+def test_check_publication_obligation_warning_when_obligation_pending(tmp_path: Path) -> None:
+    """A pending obligation reports WARNING with previous/expected version content."""
+    from autoskillit.cli.doctor import _check_publication_obligation
+    from autoskillit.core import Severity
+    from autoskillit.workspace import update_obligation_expected_version, write_obligation
+
+    write_obligation(
+        tmp_path, previous_version="1.0.0", originating_phase="upgrade-subprocess-gate"
+    )
+    update_obligation_expected_version(tmp_path, expected_version="1.1.0")
+
+    result = _check_publication_obligation(home=tmp_path)
+    assert result.severity == Severity.WARNING
+    assert "1.0.0" in result.message
+    assert "1.1.0" in result.message
+    assert "autoskillit install" in result.message
+
+
 # T-CACHE-INTEGRITY-1: doctor detects plugin cache hooks.json with broken paths
 def test_doctor_plugin_cache_integrity(tmp_path: Path) -> None:
     """_check_plugin_cache_integrity must return ERROR when cached hooks.json has broken paths.

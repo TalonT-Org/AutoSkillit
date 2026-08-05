@@ -238,6 +238,7 @@ def collect_search(
                 pattern,
                 CollectorStatus.FAILED,
                 ("invalid rg json output",),
+                tuple(evidence),
             )
         evidence.append(
             replace(

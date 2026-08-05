@@ -1552,14 +1552,82 @@ _GH_KNOWN_VALUE_FLAGS: frozenset[str] = frozenset(
         "--visibility",
     }
 )
-# gh subcommands that mutate state, keyed by noun -> mutating verbs. `pr
-# review` is handled separately (its own review-kind machinery); read verbs
-# (view, list, ...) are absent here and fall through to no-mutation.
+# gh subcommands that mutate remote state, keyed by noun -> mutating verbs.
+# `pr create` remains owned by pr_create_guard and `pr review` is handled
+# separately by the review-kind machinery below.
 _GH_MUTATION_SUBCOMMANDS: dict[str, frozenset[str]] = {
-    "pr": frozenset({"merge", "close", "reopen", "edit", "ready", "lock", "unlock"}),
-    "issue": frozenset({"close", "reopen", "edit", "delete", "lock", "transfer"}),
-    "release": frozenset({"create", "edit", "delete"}),
-    "repo": frozenset({"edit", "delete", "archive"}),
+    "cache": frozenset({"delete"}),
+    "codespace": frozenset({"create", "delete", "edit", "rebuild", "stop"}),
+    "gist": frozenset({"create", "delete", "edit", "rename"}),
+    "gpg-key": frozenset({"add", "delete"}),
+    "issue": frozenset(
+        {
+            "close",
+            "comment",
+            "create",
+            "delete",
+            "develop",
+            "edit",
+            "lock",
+            "pin",
+            "reopen",
+            "transfer",
+            "unlock",
+            "unpin",
+        }
+    ),
+    "label": frozenset({"clone", "create", "delete", "edit"}),
+    "pr": frozenset({"close", "comment", "edit", "lock", "merge", "ready", "reopen", "unlock"}),
+    "project": frozenset(
+        {
+            "close",
+            "copy",
+            "create",
+            "delete",
+            "edit",
+            "field-create",
+            "field-delete",
+            "item-add",
+            "item-archive",
+            "item-create",
+            "item-delete",
+            "item-edit",
+            "link",
+            "mark-template",
+            "unlink",
+        }
+    ),
+    "release": frozenset({"create", "delete", "delete-asset", "edit", "upload"}),
+    "repo": frozenset(
+        {"archive", "create", "delete", "edit", "fork", "rename", "sync", "unarchive"}
+    ),
+    "run": frozenset({"cancel", "delete", "rerun"}),
+    "secret": frozenset({"delete", "set"}),
+    "ssh-key": frozenset({"add", "delete"}),
+    "variable": frozenset({"delete", "set"}),
+    "workflow": frozenset({"disable", "enable", "run"}),
+}
+
+# Explicit reads for every mutation-capable noun above. An unlisted verb for
+# one of these nouns is unresolved rather than silently counted as zero: gh
+# can add mutating verbs over time, and nested command groups such as
+# `repo deploy-key` need deeper parsing before they can be proven read-only.
+_GH_READ_ONLY_SUBCOMMANDS: dict[str, frozenset[str]] = {
+    "cache": frozenset({"list"}),
+    "codespace": frozenset({"code", "cp", "jupyter", "list", "logs", "ports", "ssh", "view"}),
+    "gist": frozenset({"clone", "list", "view"}),
+    "gpg-key": frozenset({"list"}),
+    "issue": frozenset({"list", "status", "view"}),
+    "label": frozenset({"list"}),
+    "pr": frozenset({"checkout", "checks", "diff", "list", "status", "view"}),
+    "project": frozenset({"field-list", "item-list", "list", "view"}),
+    "release": frozenset({"download", "list", "verify", "verify-asset", "view"}),
+    "repo": frozenset({"clone", "list", "set-default", "view"}),
+    "run": frozenset({"download", "list", "view", "watch"}),
+    "secret": frozenset({"list"}),
+    "ssh-key": frozenset({"list"}),
+    "variable": frozenset({"list"}),
+    "workflow": frozenset({"list", "view"}),
 }
 
 
@@ -1586,9 +1654,11 @@ def _analyze_gh_segment(
 ) -> tuple[GitHubMutationRecord | None, str]:
     if not args:
         return (None, "")
+    if _gh_args_have_bare_help_flag(args[1:]):
+        return (None, "")
+    if args[:2] == ["pr", "create"]:
+        return (None, "")
     if args[:2] == ["pr", "review"]:
-        if _gh_args_have_bare_help_flag(args[2:]):
-            return (None, "")
         return (
             GitHubMutationRecord(
                 method="POST",
@@ -1603,10 +1673,10 @@ def _analyze_gh_segment(
     mutation_verbs = _GH_MUTATION_SUBCOMMANDS.get(noun)
     if mutation_verbs is not None and len(args) >= 2:
         verb = args[1]
+        if verb in _GH_READ_ONLY_SUBCOMMANDS[noun]:
+            return (None, "")
         if verb not in mutation_verbs:
-            return (None, "")
-        if _gh_args_have_bare_help_flag(args[2:]):
-            return (None, "")
+            return (None, f"gh {noun} {verb} mutation classification is unresolved")
         return (
             GitHubMutationRecord(
                 method="POST",

@@ -1171,18 +1171,34 @@ class TestAnalyzeGitHubMutations:
         [
             "gh pr merge 5",
             "gh pr close 5",
+            "gh pr comment 5 --body x",
             "gh issue close 5",
             "gh issue edit 5 --add-label x",
+            "gh gist create --public note.txt",
+            "gh workflow run ci.yml",
+            "gh run rerun 123",
+            "gh cache delete key",
+            "gh secret set TOKEN --body value",
             "gh release delete v1 --yes",
+            "gh release upload v1 artifact.whl",
             "gh repo edit --visibility private",
+            "gh repo sync owner/repo",
         ],
         ids=[
             "pr-merge",
             "pr-close",
+            "pr-comment",
             "issue-close",
             "issue-edit-add-label",
+            "gist-create",
+            "workflow-run",
+            "run-rerun",
+            "cache-delete",
+            "secret-set",
             "release-delete",
+            "release-upload",
             "repo-edit-visibility",
+            "repo-sync",
         ],
     )
     def test_widened_gh_subcommands_are_single_resolved_other(self, command: str) -> None:
@@ -1206,14 +1222,47 @@ class TestAnalyzeGitHubMutations:
 
     @pytest.mark.parametrize(
         "command",
-        ["gh pr view", "gh issue list", "gh pr merge --help"],
-        ids=["pr-view", "issue-list", "pr-merge-help"],
+        [
+            "gh pr view",
+            "gh issue list",
+            "gh gist view 123",
+            "gh workflow view ci.yml",
+            "gh run view 123",
+            "gh pr merge --help",
+            "gh gist create --help",
+        ],
+        ids=[
+            "pr-view",
+            "issue-list",
+            "gist-view",
+            "workflow-view",
+            "run-view",
+            "pr-merge-help",
+            "gist-create-help",
+        ],
     )
     def test_read_verbs_and_bare_help_flag_are_none(self, command: str) -> None:
         analysis = analyze_github_mutations(command)
 
         assert analysis.status is GitHubMutationStatus.NONE
         assert analysis.mutations == ()
+
+    def test_pr_create_remains_owned_by_the_dedicated_guard(self) -> None:
+        analysis = analyze_github_mutations("gh pr create --fill")
+
+        assert analysis.status is GitHubMutationStatus.NONE
+        assert analysis.mutations == ()
+
+    @pytest.mark.parametrize(
+        "command",
+        ["gh workflow frobnicate", "gh repo deploy-key list"],
+        ids=["unknown-mutation-capable-verb", "nested-mutation-capable-command"],
+    )
+    def test_unclassified_mutation_capable_subcommands_fail_closed(self, command: str) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert "mutation classification is unresolved" in analysis.reason
 
     @pytest.mark.parametrize(
         "command",

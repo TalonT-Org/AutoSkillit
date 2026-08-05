@@ -2306,13 +2306,17 @@ async def run_skill(
         if _exploration_bound_session_id is not None:
             exploration_store = tool_ctx.exploration_context_store
             if exploration_store is None:
-                raise SkillContractError("Explorer context store is unavailable during cleanup")
-            _cleanup_explorer_launch(
-                exploration_store,
-                session_id=_exploration_bound_session_id,
-                session_home=_exploration_bound_session_home,
-                backend=_explorer_backend_for_cleanup,
-            )
+                logger.warning(
+                    "explorer_context_store_unavailable_during_cleanup",
+                    session_id=_exploration_bound_session_id,
+                )
+            else:
+                _cleanup_explorer_launch(
+                    exploration_store,
+                    session_id=_exploration_bound_session_id,
+                    session_home=_exploration_bound_session_home,
+                    backend=_explorer_backend_for_cleanup,
+                )
         if _sn_token is not None:
             _current_step_name.reset(_sn_token)  # type: ignore[possibly-undefined]
         if _oid_token is not None:

@@ -1438,7 +1438,14 @@ def test_check_source_version_drift_warning_on_drift(
 
 # T-CACHE-INTEGRITY-1: doctor detects plugin cache hooks.json with broken paths
 def test_doctor_plugin_cache_integrity(tmp_path: Path) -> None:
-    """_check_plugin_cache_integrity must return ERROR when cached hooks.json has broken paths."""
+    """_check_plugin_cache_integrity must return ERROR when cached hooks.json has broken paths.
+
+    hooks.json lives two segments below the cache plugin dir
+    (<version>/hooks/hooks.json — write site: cli/_marketplace.py's
+    public_plugin_root / "hooks" / "hooks.json"), not one
+    (<version>/hooks.json) — this fixture pins the real layout so
+    validate_plugin_cache_hooks's glob is exercised against it.
+    """
     import json as _json
 
     from autoskillit.cli.doctor._doctor_mcp import _check_plugin_cache_integrity
@@ -1446,7 +1453,8 @@ def test_doctor_plugin_cache_integrity(tmp_path: Path) -> None:
 
     fake_cache = tmp_path / "cache"
     version_dir = fake_cache / "0.9.347"
-    version_dir.mkdir(parents=True)
+    hooks_dir = version_dir / "hooks"
+    hooks_dir.mkdir(parents=True)
     stale_hooks = {
         "hooks": {
             "PreToolUse": [
@@ -1462,7 +1470,7 @@ def test_doctor_plugin_cache_integrity(tmp_path: Path) -> None:
             ]
         }
     }
-    (version_dir / "hooks.json").write_text(_json.dumps(stale_hooks))
+    (hooks_dir / "hooks.json").write_text(_json.dumps(stale_hooks))
 
     result = _check_plugin_cache_integrity(cache_dir=fake_cache)
 
@@ -1482,7 +1490,8 @@ def test_doctor_plugin_cache_integrity_ok_when_valid(tmp_path: Path) -> None:
 
     fake_cache = tmp_path / "cache"
     version_dir = fake_cache / "0.9.347"
-    version_dir.mkdir(parents=True)
+    hooks_dir = version_dir / "hooks"
+    hooks_dir.mkdir(parents=True)
     valid_script = tmp_path / "hooks" / "guards" / "quota_guard.py"
     valid_script.parent.mkdir(parents=True)
     valid_script.write_text("# valid")
@@ -1501,7 +1510,7 @@ def test_doctor_plugin_cache_integrity_ok_when_valid(tmp_path: Path) -> None:
             ]
         }
     }
-    (version_dir / "hooks.json").write_text(_json.dumps(valid_hooks))
+    (hooks_dir / "hooks.json").write_text(_json.dumps(valid_hooks))
 
     result = _check_plugin_cache_integrity(cache_dir=fake_cache)
 

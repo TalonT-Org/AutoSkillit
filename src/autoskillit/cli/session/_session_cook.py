@@ -198,10 +198,53 @@ def cook(
     render_skill_catalog_exclusions(session_catalog.exclusions)
     catalog_compilation = compile_session_skill_catalog(session_catalog, backend)
     session_catalog = catalog_compilation.catalog
+
+    from autoskillit.cli._plugin_artifact import (
+        current_installed_plugin_root,
+        interactive_plugin_authority,
+    )
+    from autoskillit.core import PluginLoadMode, pkg_root
+
+    # Resolved before projection so catalog_projection_context() can bind
+    # {{AUTOSKILLIT_SCRIPTS}} against a root whose lifetime is independent of
+    # this venv: a mid-session `autoskillit update` may rebuild/delete the
+    # venv tree while a projected skill document referencing it is still in
+    # use by the running session. `generated_home` is a truthiness-only
+    # signal here — interactive_plugin_authority() only tests
+    # `generated_home is not None`, never reads the value — so project_dir
+    # (always non-None) stands in for the not-yet-created
+    # managed_home.generated_home without changing any branch taken.
+    artifact_authority, load_mode = interactive_plugin_authority(
+        backend=backend,
+        default_base_branch=config.branching.default_base_branch,
+        project_dir=project_dir,
+        skill_catalog=session_catalog,
+        generated_home=project_dir,
+    )
+    if load_mode is PluginLoadMode.IMPLICIT_INSTALLED:
+        # The one load mode with an eagerly-deterministic destination — no
+        # lease needed: the retained versioned plugin-cache incarnation,
+        # durable across a mid-session update (retire-don't-delete). This is
+        # exactly the scenario durable_scripts_root exists to protect.
+        durable_scripts_root = current_installed_plugin_root()
+    else:
+        # Other load modes (dev-source / local-install variants) resolve
+        # their real destination only inside plugin_launch_binding_scope
+        # below, in the retry loop — that resolution needs the resolved
+        # skill/backend digests and a leased artifact, and pulling it this
+        # early would change its lease lifetime across retries. pkg_root()
+        # is what this call site has always used (implicitly, via
+        # catalog_projection_context's previous hardcoded default); passing
+        # it explicitly here preserves current behavior for these modes
+        # while removing the hidden default from the shared projection
+        # helper itself.
+        durable_scripts_root = pkg_root()
+
     projection_context = skills_provider.catalog_projection_context(
         session_catalog,
         project_dir,
         backend=backend,
+        durable_scripts_root=durable_scripts_root,
     )
     session_mgr = DefaultSessionSkillManager(
         skills_provider,
@@ -219,15 +262,6 @@ def cook(
             Path(managed_home.skills_dir.path),
             backend=backend.name,
             unavailable=catalog_compilation.unavailable,
-        )
-        from autoskillit.cli._plugin_artifact import interactive_plugin_authority
-
-        artifact_authority, load_mode = interactive_plugin_authority(
-            backend=backend,
-            default_base_branch=config.branching.default_base_branch,
-            project_dir=project_dir,
-            skill_catalog=session_catalog,
-            generated_home=managed_home.generated_home,
         )
 
         if isinstance(resume_spec, BareResume):

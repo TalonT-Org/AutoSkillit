@@ -19,12 +19,12 @@ from autoskillit.execution.backends._codex_config import (
 from autoskillit.execution.backends._codex_config_lock import CodexConfigLock
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
-    HOOKS_DIR,
     LIFECYCLE_CONTRACTS,
     HookDef,
     LifecycleContractDef,
     _build_hook_entry,
     hook_applies_to_backend,
+    resolve_codex_hooks_dir,
     validate_lifecycle_contracts,
 )
 
@@ -60,6 +60,7 @@ def generate_codex_hooks_config(
         lifecycle_contracts,
         backend="codex",
     )
+    hooks_dir = resolve_codex_hooks_dir()
     groups: dict[str, dict[tuple[str, str], dict]] = {}
     for hook_def in registry:
         if not hook_applies_to_backend(
@@ -71,7 +72,7 @@ def generate_codex_hooks_config(
         event = hook_def.event_type
         key = (event, hook_def.matcher)
         hook_commands = [
-            _build_codex_hook_command(HOOKS_DIR, script, hook_def.timeout_seconds)
+            _build_codex_hook_command(hooks_dir, script, hook_def.timeout_seconds)
             for script in hook_def.scripts
         ]
         if event not in groups:
@@ -85,11 +86,16 @@ def generate_codex_hooks_config(
 
 
 def _is_autoskillit_hook_entry(entry: dict) -> bool:
-    """Check if a Codex hooks config entry belongs to autoskillit."""
-    hooks_dir_str = str(HOOKS_DIR)
+    """Check if a Codex hooks config entry belongs to autoskillit.
+
+    ``resolve_codex_hooks_dir()`` varies by install state (dev checkout vs.
+    retained plugin-cache incarnation), so detection cannot pin one literal
+    directory string — the ``_dispatch.py`` suffix match already covers every
+    autoskillit-generated command regardless of which root produced it.
+    """
     for hook in entry.get("hooks", []):
         cmd = hook.get("command", "")
-        if "/autoskillit/" in cmd or hooks_dir_str in cmd or "_dispatch.py" in cmd:
+        if "/autoskillit/" in cmd or "_dispatch.py" in cmd:
             return True
     return False
 

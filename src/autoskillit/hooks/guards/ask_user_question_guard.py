@@ -16,22 +16,28 @@ import sys
 from datetime import UTC
 from pathlib import Path
 
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _hook_payload import resolve_state_root  # type: ignore[import-not-found]  # noqa: E402
+
 ASK_USER_QUESTION_DENY_TRIGGER: str = "AskUserQuestion is not available in headless sessions"
 
 
-def _get_marker_path(session_id: str) -> Path:
+def _get_marker_path(session_id: str, payload_cwd: str = "") -> Path:
     override = os.environ.get("AUTOSKILLIT_STATE_DIR")
     if override:
         return Path(override) / "kitchen_state" / f"{session_id}.json"
     campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
-    base = Path.cwd() / ".autoskillit" / "temp" / "kitchen_state"
+    base = resolve_state_root(payload_cwd) / ".autoskillit" / "temp" / "kitchen_state"
     state_dir = base / campaign_id if campaign_id else base
     return state_dir / f"{session_id}.json"
 
 
-def _read_marker(session_id: str) -> dict | None:
+def _read_marker(session_id: str, payload_cwd: str = "") -> dict | None:
     try:
-        path = _get_marker_path(session_id)
+        path = _get_marker_path(session_id, payload_cwd)
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
@@ -67,7 +73,9 @@ def main() -> None:
     if not session_id:
         sys.exit(0)  # fail-open when session_id unavailable
 
-    marker = _read_marker(session_id)
+    raw_payload_cwd = payload.get("cwd", "")
+    payload_cwd = raw_payload_cwd if isinstance(raw_payload_cwd, str) else ""
+    marker = _read_marker(session_id, payload_cwd)
     # NOTE: The in-hook freshness check below is the SOLE source of correctness.
     # The session_start_hook TTL sweep is disk hygiene only — it has race windows.
     # A future maintainer MUST NOT remove this check on the grounds that "the sweep

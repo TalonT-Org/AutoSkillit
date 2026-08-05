@@ -6,6 +6,12 @@ import json
 import sys
 from pathlib import Path
 
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _hook_payload import resolve_state_root  # type: ignore[import-not-found]  # noqa: E402
+
 RESET_RESUME_DENY_TRIGGER: str = "RESUME ATTEMPT REQUIRED"
 
 _STATE_FILE_RELPATH = (".autoskillit", "temp", "resume_gate_state.json")
@@ -84,7 +90,8 @@ def main() -> None:
     if not dispatch_id:
         sys.exit(0)
 
-    project_root = Path.cwd()
+    payload_cwd = data.get("cwd", "")
+    project_root = resolve_state_root(payload_cwd if isinstance(payload_cwd, str) else "")
 
     if _is_refused(dispatch_id, project_root):
         sys.exit(0)

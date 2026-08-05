@@ -21,6 +21,7 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
+from _hook_payload import resolve_state_root  # type: ignore[import-not-found]  # noqa: E402
 from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
 from _hook_utils import STEP_SUFFIX_RE  # type: ignore[import-not-found]  # noqa: E402
 
@@ -66,10 +67,14 @@ def main() -> None:
     if not step_name:
         sys.exit(0)
 
+    raw_payload_cwd = data.get("cwd", "")
+    payload_cwd = raw_payload_cwd if isinstance(raw_payload_cwd, str) else ""
+    project_root = resolve_state_root(payload_cwd)
+
     order_id = tool_input.get("order_id", "") or os.environ.get("AUTOSKILLIT_DISPATCH_ID", "")
     if not order_id:
-        tracker_dir = Path.cwd() / ".autoskillit" / "temp" / "pipeline_tracker"
-        hook_config = read_merged_hook_config()
+        tracker_dir = project_root / ".autoskillit" / "temp" / "pipeline_tracker"
+        hook_config = read_merged_hook_config(root=project_root)
         kitchen_id = hook_config.get("kitchen_id", "")
         if kitchen_id:
             order_id = _resolve_order_id_from_kitchen(tracker_dir, kitchen_id)
@@ -92,7 +97,7 @@ def main() -> None:
             sys.exit(0)
 
     canonical = STEP_SUFFIX_RE.sub("", step_name)
-    tracker_path = Path.cwd() / ".autoskillit" / "temp" / "pipeline_tracker" / f"{order_id}.json"
+    tracker_path = project_root / ".autoskillit" / "temp" / "pipeline_tracker" / f"{order_id}.json"
     if not tracker_path.exists():
         sys.exit(0)
 

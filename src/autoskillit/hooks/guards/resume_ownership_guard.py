@@ -8,6 +8,12 @@ import os
 import sys
 from pathlib import Path
 
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _hook_payload import resolve_state_root  # type: ignore[import-not-found]  # noqa: E402
+
 RESUME_OWNERSHIP_DENY_TRIGGER: str = "resume_session_id ownership validation failed"
 
 
@@ -24,12 +30,12 @@ def _deny(reason: str) -> None:
     )
 
 
-def _resolve_provenance_path() -> Path:
+def _resolve_provenance_path(payload_cwd: str = "") -> Path:
     override = os.environ.get("AUTOSKILLIT_STATE_DIR", "")
     if override:
         return Path(override) / "session_provenance.jsonl"
     campaign = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
-    base = Path.cwd() / ".autoskillit" / "temp"
+    base = resolve_state_root(payload_cwd) / ".autoskillit" / "temp"
     if campaign:
         base = base / campaign
     return base / "session_provenance.jsonl"
@@ -70,7 +76,9 @@ def main() -> None:
     if not resume_session_id:
         sys.exit(0)
 
-    prov_path = _resolve_provenance_path()
+    raw_payload_cwd = data.get("cwd", "")
+    payload_cwd = raw_payload_cwd if isinstance(raw_payload_cwd, str) else ""
+    prov_path = _resolve_provenance_path(payload_cwd)
     record = _find_provenance(resume_session_id, prov_path)
 
     if record is None:

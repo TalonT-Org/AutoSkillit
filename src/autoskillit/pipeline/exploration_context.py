@@ -934,12 +934,6 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
         ).hexdigest()
         return f"sha256:{digest}"
 
-    def _discard_role_session_locked(self, *, role: str, session_id: str) -> None:
-        for capability in tuple(self._session_capabilities.get(session_id, ())):
-            lease = self._leases.get(capability)
-            if lease is not None and lease.role == role:
-                self._discard_locked(capability)
-
     def _new_capability_locked(self) -> str:
         # A collision is cryptographically implausible, but a loop preserves the
         # dictionary's single-source-of-truth invariant without relying on that.

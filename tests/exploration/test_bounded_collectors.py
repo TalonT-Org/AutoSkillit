@@ -28,7 +28,11 @@ from autoskillit.exploration.collectors.extractors import (
     collect_unsupported,
     collector_manifest_digest,
 )
-from autoskillit.exploration.graph import build_canonical_evidence_graph
+from autoskillit.exploration.graph import (
+    _RELATIONSHIP_BY_SUBJECT_NAMESPACE,
+    SubjectNamespace,
+    build_canonical_evidence_graph,
+)
 
 pytestmark = [
     pytest.mark.layer("exploration"),
@@ -225,28 +229,35 @@ def test_seeded_collectors_observe_structural_and_artifact_inputs_without_claimi
     assert {
         record.subject.namespace for record in structural.evidence if record.subject is not None
     } >= {
-        "python-alias",
-        "python-call",
-        "python-dynamic-import",
-        "python-import",
-        "python-nominal-protocol",
-        "python-protocol",
-        "python-reexport",
-        "python-registry",
-        "python-runtime-patch",
-        "python-runtime-wiring",
-        "python-symbol",
-        "python-test-consumer",
+        SubjectNamespace.PYTHON_ALIAS.value,
+        SubjectNamespace.PYTHON_CALL.value,
+        SubjectNamespace.PYTHON_DYNAMIC_IMPORT.value,
+        SubjectNamespace.PYTHON_IMPORT.value,
+        SubjectNamespace.PYTHON_NOMINAL_PROTOCOL.value,
+        SubjectNamespace.PYTHON_PROTOCOL.value,
+        SubjectNamespace.PYTHON_REEXPORT.value,
+        SubjectNamespace.PYTHON_REGISTRY.value,
+        SubjectNamespace.PYTHON_RUNTIME_PATCH.value,
+        SubjectNamespace.PYTHON_RUNTIME_WIRING.value,
+        SubjectNamespace.PYTHON_SYMBOL.value,
+        SubjectNamespace.PYTHON_TEST_CONSUMER.value,
     }
     assert registry.status is CollectorStatus.SUCCEEDED
     assert all(
         report.status is CollectorStatus.SUCCEEDED
         for report in (config, artifact, generated, coverage, test_map)
     )
-    graph = build_canonical_evidence_graph(
-        record
-        for report in (structural, registry, config, generated, coverage, test_map)
+    assert set(_RELATIONSHIP_BY_SUBJECT_NAMESPACE) == set(SubjectNamespace)
+    registered_namespaces = {namespace.value for namespace in SubjectNamespace}
+    classified_reports = (structural, registry, config, generated, coverage, test_map)
+    assert {
+        record.subject.namespace
+        for report in classified_reports
         for record in report.evidence
+        if record.subject is not None
+    } <= registered_namespaces
+    graph = build_canonical_evidence_graph(
+        record for report in classified_reports for record in report.evidence
     )
     assert {
         RelationshipKind.AFFECTS,

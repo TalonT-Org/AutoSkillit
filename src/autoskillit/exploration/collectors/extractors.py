@@ -20,6 +20,7 @@ from autoskillit.core import (
     RepositoryProfileId,
 )
 
+from ..graph import SubjectNamespace
 from ._bounded import (
     CollectorLimits,
     CollectorSafetyError,
@@ -71,12 +72,10 @@ def collector_manifest_digest(
 def _report(
     collector_id: str,
     snapshot_digest: str,
-    scope: str,
     status: CollectorStatus,
     diagnostics: tuple[str, ...] = (),
     evidence: tuple[EvidenceRecord, ...] = (),
 ) -> CollectorReport:
-    del scope
     return CollectorReport(
         collector_id, status, snapshot_digest, evidence, "; ".join(diagnostics) or None
     )
@@ -157,11 +156,10 @@ def collect_artifact(
     try:
         payload = read_contained_file(root, path, limits)
     except CollectorSafetyError as exc:
-        return _report(collector_id, snapshot_digest, path, CollectorStatus.FAILED, (str(exc),))
+        return _report(collector_id, snapshot_digest, CollectorStatus.FAILED, (str(exc),))
     return _report(
         collector_id,
         snapshot_digest,
-        path,
         CollectorStatus.SUCCEEDED,
         evidence=(
             _evidence(
@@ -182,11 +180,9 @@ def collect_file_list(
     try:
         paths = _scoped_paths(root, scope, limits)
     except CollectorSafetyError as exc:
-        return _report(collector_id, snapshot_digest, scope, CollectorStatus.FAILED, (str(exc),))
+        return _report(collector_id, snapshot_digest, CollectorStatus.FAILED, (str(exc),))
     evidence = tuple(_evidence(collector_id, snapshot_digest, path, 1, path) for path in paths)
-    return _report(
-        collector_id, snapshot_digest, scope, CollectorStatus.SUCCEEDED, evidence=evidence
-    )
+    return _report(collector_id, snapshot_digest, CollectorStatus.SUCCEEDED, evidence=evidence)
 
 
 def collect_search(
@@ -201,7 +197,7 @@ def collect_search(
     try:
         normalized_scopes = tuple(_normalise_scope(scope) for scope in scopes)
     except CollectorSafetyError as exc:
-        return _report(collector_id, snapshot_digest, pattern, CollectorStatus.FAILED, (str(exc),))
+        return _report(collector_id, snapshot_digest, CollectorStatus.FAILED, (str(exc),))
     globs = tuple(
         scope if (root / scope).is_file() else f"{scope}/**"
         for scope in normalized_scopes
@@ -209,16 +205,13 @@ def collect_search(
     )
     result = run_bounded_rg(root, pattern, globs=globs, limits=limits)
     if result.failure is not None:
-        return _report(
-            collector_id, snapshot_digest, pattern, CollectorStatus.FAILED, (result.failure,)
-        )
+        return _report(collector_id, snapshot_digest, CollectorStatus.FAILED, (result.failure,))
     evidence: list[EvidenceRecord] = []
     for raw_line in result.stdout.splitlines():
         if len(evidence) >= limits.max_matches:
             return _report(
                 collector_id,
                 snapshot_digest,
-                pattern,
                 CollectorStatus.TRUNCATED,
                 ("match limit exceeded",),
                 tuple(evidence),
@@ -235,7 +228,6 @@ def collect_search(
             return _report(
                 collector_id,
                 snapshot_digest,
-                pattern,
                 CollectorStatus.FAILED,
                 ("invalid rg json output",),
                 tuple(evidence),
@@ -250,7 +242,6 @@ def collect_search(
     return _report(
         collector_id,
         snapshot_digest,
-        pattern,
         status,
         () if status is CollectorStatus.SUCCEEDED else ("rg failed",),
         tuple(evidence),
@@ -267,7 +258,6 @@ def collect_python_ast(
         return _report(
             collector_id,
             snapshot_digest,
-            scope,
             CollectorStatus.TRUNCATED,
             ("symbol limit exceeded",),
             tuple(evidence),
@@ -297,19 +287,19 @@ def collect_python_ast(
             tree = ast.parse(source, filename=path, type_comments=True)
             for node in ast.walk(tree):
                 if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-                    namespace = "python-symbol"
+                    namespace = SubjectNamespace.PYTHON_SYMBOL
                     if isinstance(node, ast.ClassDef):
                         if any(
                             _is_named_base(base, frozenset({"Protocol"})) for base in node.bases
                         ):
-                            namespace = "python-protocol"
+                            namespace = SubjectNamespace.PYTHON_PROTOCOL
                         elif any(
                             _is_named_base(base, frozenset({"ABC", "ABCMeta"}))
                             for base in node.bases
                         ):
-                            namespace = "python-nominal-protocol"
+                            namespace = SubjectNamespace.PYTHON_NOMINAL_PROTOCOL
                     if observe(
-                        NodeKey(namespace, f"{path}:{node.lineno}:{node.name}"),
+                        NodeKey(namespace.value, f"{path}:{node.lineno}:{node.name}"),
                         path,
                         node.lineno,
                         node.name,
@@ -325,7 +315,7 @@ def collect_python_ast(
                             and decorator_name.rsplit(".", maxsplit=1)[-1] in {"override", "patch"}
                             and observe(
                                 NodeKey(
-                                    "python-runtime-patch",
+                                    SubjectNamespace.PYTHON_RUNTIME_PATCH.value,
                                     f"{path}:{node.lineno}:{decorator_name}",
                                 ),
                                 path,
@@ -337,7 +327,7 @@ def collect_python_ast(
                 elif isinstance(node, ast.Import):
                     for alias in node.names:
                         if observe(
-                            NodeKey("python-import", alias.name),
+                            NodeKey(SubjectNamespace.PYTHON_IMPORT.value, alias.name),
                             path,
                             node.lineno,
                             f"import {alias.name}",
@@ -346,11 +336,13 @@ def collect_python_ast(
                 elif isinstance(node, ast.ImportFrom):
                     module = f"{'.' * node.level}{node.module or ''}"
                     namespace = (
-                        "python-reexport" if path.endswith("__init__.py") else "python-import"
+                        SubjectNamespace.PYTHON_REEXPORT
+                        if path.endswith("__init__.py")
+                        else SubjectNamespace.PYTHON_IMPORT
                     )
                     for alias in node.names:
                         if observe(
-                            NodeKey(namespace, f"{module}:{alias.name}"),
+                            NodeKey(namespace.value, f"{module}:{alias.name}"),
                             path,
                             node.lineno,
                             f"from {module} import {alias.name}",
@@ -362,7 +354,10 @@ def collect_python_ast(
                             node.value, (ast.Name, ast.Attribute)
                         ):
                             if observe(
-                                NodeKey("python-alias", f"{path}:{target.id}"),
+                                NodeKey(
+                                    SubjectNamespace.PYTHON_ALIAS.value,
+                                    f"{path}:{target.id}",
+                                ),
                                 path,
                                 node.lineno,
                                 f"alias {target.id}",
@@ -370,7 +365,10 @@ def collect_python_ast(
                                 return truncated_report()
                         if isinstance(target, ast.Name) and "registry" in target.id.lower():
                             if observe(
-                                NodeKey("python-registry", f"{path}:{node.lineno}:{target.id}"),
+                                NodeKey(
+                                    SubjectNamespace.PYTHON_REGISTRY.value,
+                                    f"{path}:{node.lineno}:{target.id}",
+                                ),
                                 path,
                                 node.lineno,
                                 f"registry {target.id}",
@@ -380,7 +378,7 @@ def collect_python_ast(
                             target_name = _qualified_name(target)
                             if target_name is not None and observe(
                                 NodeKey(
-                                    "python-runtime-wiring",
+                                    SubjectNamespace.PYTHON_RUNTIME_WIRING.value,
                                     f"{path}:{node.lineno}:{target_name}",
                                 ),
                                 path,
@@ -390,7 +388,10 @@ def collect_python_ast(
                                 return truncated_report()
                 elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
                     if observe(
-                        NodeKey("python-declaration", f"{path}:{node.lineno}:{node.target.id}"),
+                        NodeKey(
+                            SubjectNamespace.PYTHON_DECLARATION.value,
+                            f"{path}:{node.lineno}:{node.target.id}",
+                        ),
                         path,
                         node.lineno,
                         f"declaration {node.target.id}",
@@ -401,7 +402,10 @@ def collect_python_ast(
                     if call_name is None:
                         continue
                     if observe(
-                        NodeKey("python-call", f"{path}:{node.lineno}:{call_name}"),
+                        NodeKey(
+                            SubjectNamespace.PYTHON_CALL.value,
+                            f"{path}:{node.lineno}:{call_name}",
+                        ),
                         path,
                         node.lineno,
                         f"call {call_name}",
@@ -417,7 +421,7 @@ def collect_python_ast(
                             else "<unresolved>"
                         )
                         if observe(
-                            NodeKey("python-dynamic-import", import_name),
+                            NodeKey(SubjectNamespace.PYTHON_DYNAMIC_IMPORT.value, import_name),
                             path,
                             node.lineno,
                             f"dynamic import {import_name}",
@@ -427,14 +431,20 @@ def collect_python_ast(
                         ):
                             return truncated_report()
                     if terminal_name in {"register", "setattr", "wire"} and observe(
-                        NodeKey("python-runtime-wiring", f"{path}:{node.lineno}:{call_name}"),
+                        NodeKey(
+                            SubjectNamespace.PYTHON_RUNTIME_WIRING.value,
+                            f"{path}:{node.lineno}:{call_name}",
+                        ),
                         path,
                         node.lineno,
                         f"runtime wiring {call_name}",
                     ):
                         return truncated_report()
                     if terminal_name in {"override", "patch", "setattr"} and observe(
-                        NodeKey("python-runtime-patch", f"{path}:{node.lineno}:{call_name}"),
+                        NodeKey(
+                            SubjectNamespace.PYTHON_RUNTIME_PATCH.value,
+                            f"{path}:{node.lineno}:{call_name}",
+                        ),
                         path,
                         node.lineno,
                         f"runtime patch {call_name}",
@@ -443,7 +453,10 @@ def collect_python_ast(
                     if (
                         path.startswith("tests/") or Path(path).name.startswith("test_")
                     ) and observe(
-                        NodeKey("python-test-consumer", f"{path}:{node.lineno}:{call_name}"),
+                        NodeKey(
+                            SubjectNamespace.PYTHON_TEST_CONSUMER.value,
+                            f"{path}:{node.lineno}:{call_name}",
+                        ),
                         path,
                         node.lineno,
                         f"test consumer {call_name}",
@@ -453,13 +466,12 @@ def collect_python_ast(
         return _report(
             collector_id,
             snapshot_digest,
-            scope,
             CollectorStatus.FAILED,
             (str(exc),),
             tuple(evidence),
         )
     return _report(
-        collector_id, snapshot_digest, scope, CollectorStatus.SUCCEEDED, evidence=tuple(evidence)
+        collector_id, snapshot_digest, CollectorStatus.SUCCEEDED, evidence=tuple(evidence)
     )
 
 
@@ -471,7 +483,6 @@ def collect_unsupported(
     return _report(
         collector_id,
         snapshot_digest,
-        scope,
         CollectorStatus.UNSUPPORTED,
         ("native capability is not available in the collector runtime",),
     )
@@ -484,12 +495,11 @@ def collect_autoskillit_toml(
     try:
         data = tomllib.loads(read_contained_file(root, path, limits).decode("utf-8"))
     except (CollectorSafetyError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
-        return _report(collector_id, snapshot_digest, path, CollectorStatus.FAILED, (str(exc),))
+        return _report(collector_id, snapshot_digest, CollectorStatus.FAILED, (str(exc),))
     excerpt = json.dumps(data, sort_keys=True, default=str)[: limits.max_output_bytes]
     return _report(
         collector_id,
         snapshot_digest,
-        path,
         CollectorStatus.SUCCEEDED,
         evidence=(
             replace(
@@ -500,7 +510,7 @@ def collect_autoskillit_toml(
                     1,
                     excerpt,
                 ),
-                subject=NodeKey("configuration-declaration", path),
+                subject=NodeKey(SubjectNamespace.CONFIGURATION_DECLARATION.value, path),
             ),
         ),
     )
@@ -515,7 +525,10 @@ def collect_observational_artifact(
 
 
 def _relabel(
-    report: CollectorReport, collector_id: str, *, subject_namespace: str | None = None
+    report: CollectorReport,
+    collector_id: str,
+    *,
+    subject_namespace: SubjectNamespace | None = None,
 ) -> CollectorReport:
     method, version = _collector_metadata(collector_id)
     evidence = tuple(
@@ -528,7 +541,7 @@ def _relabel(
             method=method,
             extractor_version=version,
             subject=(
-                NodeKey(subject_namespace, record.subject.value)
+                NodeKey(subject_namespace.value, record.subject.value)
                 if subject_namespace is not None and record.subject is not None
                 else record.subject
             ),
@@ -561,7 +574,6 @@ def collect_python_stub(
         return _report(
             "python-stub",
             snapshot_digest,
-            path,
             CollectorStatus.FAILED,
             ("python stub path must end in .pyi",),
         )
@@ -574,7 +586,7 @@ def collect_generated_artifact(
     return _relabel(
         collect_artifact(root, snapshot_digest, path, limits),
         "generated-artifact",
-        subject_namespace="generated-artifact",
+        subject_namespace=SubjectNamespace.GENERATED_ARTIFACT,
     )
 
 
@@ -584,7 +596,7 @@ def collect_coverage_observation(
     return _relabel(
         collect_observational_artifact(root, snapshot_digest, path, limits),
         "coverage-observation",
-        subject_namespace="coverage-observation",
+        subject_namespace=SubjectNamespace.COVERAGE_OBSERVATION,
     )
 
 
@@ -594,7 +606,7 @@ def collect_test_map_observation(
     return _relabel(
         collect_observational_artifact(root, snapshot_digest, path, limits),
         "test-map-observation",
-        subject_namespace="test-consumer",
+        subject_namespace=SubjectNamespace.TEST_CONSUMER,
     )
 
 

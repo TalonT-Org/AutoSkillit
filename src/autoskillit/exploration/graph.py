@@ -4,8 +4,32 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from enum import StrEnum
+from typing import Final
 
 from autoskillit.core import EvidenceRecord, GraphEdge, GraphNode, NodeKey, RelationshipKind
+
+
+class SubjectNamespace(StrEnum):
+    """Collector subject namespaces with explicit graph relationship semantics."""
+
+    CONFIGURATION_DECLARATION = "configuration-declaration"
+    COVERAGE_OBSERVATION = "coverage-observation"
+    GENERATED_ARTIFACT = "generated-artifact"
+    PYTHON_ALIAS = "python-alias"
+    PYTHON_CALL = "python-call"
+    PYTHON_DECLARATION = "python-declaration"
+    PYTHON_DYNAMIC_IMPORT = "python-dynamic-import"
+    PYTHON_IMPORT = "python-import"
+    PYTHON_NOMINAL_PROTOCOL = "python-nominal-protocol"
+    PYTHON_PROTOCOL = "python-protocol"
+    PYTHON_REEXPORT = "python-reexport"
+    PYTHON_REGISTRY = "python-registry"
+    PYTHON_RUNTIME_PATCH = "python-runtime-patch"
+    PYTHON_RUNTIME_WIRING = "python-runtime-wiring"
+    PYTHON_SYMBOL = "python-symbol"
+    PYTHON_TEST_CONSUMER = "python-test-consumer"
+    TEST_CONSUMER = "test-consumer"
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,24 +127,24 @@ def _origin_key(record: EvidenceRecord) -> NodeKey | None:
     return NodeKey("repository-path", path)
 
 
-_RELATIONSHIP_BY_SUBJECT_NAMESPACE: dict[str, RelationshipKind] = {
-    "python-alias": RelationshipKind.REFERENCES,
-    "python-call": RelationshipKind.CALLS,
-    "python-declaration": RelationshipKind.DECLARES,
-    "python-dynamic-import": RelationshipKind.IMPORTS,
-    "python-import": RelationshipKind.IMPORTS,
-    "python-nominal-protocol": RelationshipKind.DECLARES,
-    "python-protocol": RelationshipKind.DECLARES,
-    "python-reexport": RelationshipKind.REFERENCES,
-    "python-registry": RelationshipKind.AFFECTS,
-    "python-runtime-patch": RelationshipKind.AFFECTS,
-    "python-runtime-wiring": RelationshipKind.AFFECTS,
-    "python-symbol": RelationshipKind.DEFINES,
-    "python-test-consumer": RelationshipKind.AFFECTS,
-    "configuration-declaration": RelationshipKind.AFFECTS,
-    "coverage-observation": RelationshipKind.AFFECTS,
-    "generated-artifact": RelationshipKind.AFFECTS,
-    "test-consumer": RelationshipKind.AFFECTS,
+_RELATIONSHIP_BY_SUBJECT_NAMESPACE: Final[dict[SubjectNamespace, RelationshipKind]] = {
+    SubjectNamespace.CONFIGURATION_DECLARATION: RelationshipKind.AFFECTS,
+    SubjectNamespace.COVERAGE_OBSERVATION: RelationshipKind.AFFECTS,
+    SubjectNamespace.GENERATED_ARTIFACT: RelationshipKind.AFFECTS,
+    SubjectNamespace.PYTHON_ALIAS: RelationshipKind.REFERENCES,
+    SubjectNamespace.PYTHON_CALL: RelationshipKind.CALLS,
+    SubjectNamespace.PYTHON_DECLARATION: RelationshipKind.DECLARES,
+    SubjectNamespace.PYTHON_DYNAMIC_IMPORT: RelationshipKind.IMPORTS,
+    SubjectNamespace.PYTHON_IMPORT: RelationshipKind.IMPORTS,
+    SubjectNamespace.PYTHON_NOMINAL_PROTOCOL: RelationshipKind.DECLARES,
+    SubjectNamespace.PYTHON_PROTOCOL: RelationshipKind.DECLARES,
+    SubjectNamespace.PYTHON_REEXPORT: RelationshipKind.REFERENCES,
+    SubjectNamespace.PYTHON_REGISTRY: RelationshipKind.AFFECTS,
+    SubjectNamespace.PYTHON_RUNTIME_PATCH: RelationshipKind.AFFECTS,
+    SubjectNamespace.PYTHON_RUNTIME_WIRING: RelationshipKind.AFFECTS,
+    SubjectNamespace.PYTHON_SYMBOL: RelationshipKind.DEFINES,
+    SubjectNamespace.PYTHON_TEST_CONSUMER: RelationshipKind.AFFECTS,
+    SubjectNamespace.TEST_CONSUMER: RelationshipKind.AFFECTS,
 }
 
 
@@ -129,9 +153,12 @@ def _relationships_for_record(
 ) -> tuple[RelationshipKind, ...]:
     """Classify observed subjects without deriving links from unobserved semantics."""
 
-    relationship = _RELATIONSHIP_BY_SUBJECT_NAMESPACE.get(
-        subject.namespace, RelationshipKind.DECLARES
-    )
+    try:
+        namespace = SubjectNamespace(subject.namespace)
+    except ValueError:
+        relationship = RelationshipKind.DECLARES
+    else:
+        relationship = _RELATIONSHIP_BY_SUBJECT_NAMESPACE[namespace]
     if record.conflicts and relationship is not RelationshipKind.CONFLICTS_WITH:
         return relationship, RelationshipKind.CONFLICTS_WITH
     return (relationship,)

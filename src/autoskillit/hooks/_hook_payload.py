@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from enum import StrEnum
+from pathlib import Path
 from typing import Any, NamedTuple
 
 _RUN_CMD_SUFFIX = "__run_cmd"
@@ -119,3 +120,59 @@ def parse_hook_command(data: dict[str, Any]) -> ParsedHookCommand:
         payload_cwd=payload_cwd,
         anomalies=tuple(anomalies),
     )
+
+
+def extract_apply_patch_text(data: dict[str, Any]) -> str | None:
+    """Extract the raw patch text from a Codex ``apply_patch`` tool payload.
+
+    ``apply_patch``'s ``command`` field holds unified-diff/``*** Update File:``
+    patch text, not a shell command — a distinct semantic use of the same
+    key name kept separate from :func:`parse_hook_command`. Returns ``None``
+    when the payload is not apply_patch-shaped or the field is missing or
+    non-string.
+    """
+    if data.get("tool_name") != "apply_patch":
+        return None
+    tool_input = data.get("tool_input")
+    if not isinstance(tool_input, dict):
+        return None
+    raw = tool_input.get("command")
+    return raw if isinstance(raw, str) else None
+
+
+def resolve_state_root(payload_cwd: str) -> Path:
+    """Resolve the project root whose ``.autoskillit/`` directory holds session state.
+
+    Resolution order:
+
+    1. ``AUTOSKILLIT_STATE_ROOT`` env var, if set — the production signal
+       injected by launch preparation from the orchestrating project root.
+       Wins unconditionally; resolved (symlink-free) before returning.
+    2. An upward walk from ``payload_cwd`` (if non-empty), looking for a
+       directory containing a ``.autoskillit`` subdirectory. Each step
+       operates on resolved (symlink-free) paths — a symlinked
+       ``.autoskillit`` that escapes the trust anchor is never accepted
+       (see issue #4319). Stops at the filesystem root if none is found.
+    3. The process cwd (``Path.cwd()``), unchanged from pre-existing guard
+       behavior — the "no worse than today" fallback when neither of the
+       above resolves.
+
+    Returns the directory that *contains* ``.autoskillit`` (not the
+    ``.autoskillit`` directory itself) — callers append
+    ``.autoskillit/temp/...`` themselves, matching every existing call site.
+    """
+    env_root = os.environ.get("AUTOSKILLIT_STATE_ROOT")
+    if env_root:
+        return Path(env_root).resolve()
+
+    if payload_cwd:
+        current = Path(payload_cwd).resolve()
+        while True:
+            if (current / ".autoskillit").is_dir():
+                return current
+            parent = current.parent
+            if parent == current:
+                break
+            current = parent
+
+    return Path.cwd()

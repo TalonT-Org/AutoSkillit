@@ -111,12 +111,29 @@ def merge_hook_configs(base: dict, overlay: dict) -> dict:
     return merged
 
 
+def _default_state_root() -> Path:
+    """Bare-default state root: ``AUTOSKILLIT_STATE_ROOT`` env var, else process cwd.
+
+    Mirrors the env-var tier of ``hooks/_hook_payload.py``'s ``resolve_state_root``
+    for callers with no payload cwd to walk from. Kept as an inline duplicate
+    (not an import) to preserve this module's stdlib-only, zero-sibling-import
+    boundary — this module is imported both as a bare sibling module (guard
+    subprocesses that pre-insert ``hooks/`` onto ``sys.path``) and via the
+    normal package path (in-process test imports), and only the latter would
+    resolve a cross-module sibling import correctly.
+    """
+    env_root = os.environ.get("AUTOSKILLIT_STATE_ROOT")
+    if env_root:
+        return Path(env_root).resolve()
+    return Path.cwd()
+
+
 def read_merged_hook_config(root: Path | None = None) -> dict:
     """Read and merge base + overlay hook config files (stdlib-only).
 
     Returns ``{}`` if both files are absent or unreadable.
     """
-    cwd = root if root is not None else Path.cwd()
+    cwd = root if root is not None else _default_state_root()
     try:
         base_path = cwd.joinpath(*HOOK_DIR_COMPONENTS, HOOK_CONFIG_FILENAME)
         overlay_path = cwd.joinpath(*HOOK_DIR_COMPONENTS, HOOK_CONFIG_OVERLAY_FILENAME)

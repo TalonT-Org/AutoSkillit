@@ -49,6 +49,33 @@ def _runner() -> MockSubprocessRunner:
     return r
 
 
+def test_make_context_survives_stale_precontract_shadowing_skill(tmp_path):
+    """T6: make_context() (the real factory composition path, no resolver
+    mocking) does not crash when a project-local skill shadows a bundled
+    tier skill with a stale, pre-contract-era copy — it falls through and
+    logs the exclusion instead of raising (#4470)."""
+    import structlog.testing
+
+    stale_dir = tmp_path / ".claude" / "skills" / "audit-bugs"
+    stale_dir.mkdir(parents=True)
+    stale_dir_path = stale_dir / "SKILL.md"
+    stale_dir_path.write_text(
+        "---\n"
+        "name: audit-bugs\n"
+        "description: Stale pre-contract-era copy.\n"
+        "---\n"
+        "# audit-bugs\n\n"
+        'LOG_DIR="$HOME/.claude/projects/${PWD//\\//-}"\n',
+        encoding="utf-8",
+    )
+
+    with structlog.testing.capture_logs() as logs:
+        ctx = make_context(AutomationConfig(), runner=_runner(), project_dir=tmp_path)
+
+    assert isinstance(ctx, ToolContext)
+    assert any(entry.get("event") == "skill_catalog_exclusions" for entry in logs)
+
+
 def test_make_context_returns_toolcontext(tmp_path):
     ctx = make_context(AutomationConfig(), runner=_runner(), project_dir=tmp_path)
     assert isinstance(ctx, ToolContext)

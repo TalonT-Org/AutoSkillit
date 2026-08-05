@@ -368,6 +368,36 @@ def test_check_staleness_hashes_the_effective_project_override(tmp_path: Path) -
     assert stale == []
 
 
+def test_check_staleness_skips_hashing_invalid_project_override(tmp_path: Path) -> None:
+    """T12c: an invalid project-local override is treated as absent (not
+    hashed from its possibly-wrong content); the manifest's stored hash
+    becomes a hash_mismatch instead of silently matching invalid bytes."""
+    from autoskillit.workspace import DefaultSkillResolver
+
+    skills_dir = tmp_path / ".claude" / "skills"
+    skill_md = skills_dir / "investigate" / "SKILL.md"
+    skill_md.parent.mkdir(parents=True)
+    skill_md.write_text(
+        '---\nname: investigate\n---\nSpawn via `Agent(model="sonnet")`.\n',
+        encoding="utf-8",
+    )
+    contract = {
+        "bundled_manifest_version": load_bundled_manifest()["version"],
+        "skill_hashes": {"investigate": "deadbeef"},
+    }
+
+    stale = check_contract_staleness(
+        contract,
+        resolver=DefaultSkillResolver(),
+        project_root=tmp_path,
+    )
+
+    assert len(stale) == 1
+    assert stale[0].skill == "investigate"
+    assert stale[0].reason == "hash_mismatch"
+    assert stale[0].current_value == ""
+
+
 def test_check_staleness_preserves_triage_result_on_repeated_stale_hit(
     tmp_path: Path,
 ) -> None:

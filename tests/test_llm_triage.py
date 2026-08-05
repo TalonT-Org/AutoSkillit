@@ -156,6 +156,72 @@ async def test_triage_staleness_projects_the_project_effective_override(
     assert mock_run.call_args.kwargs["cwd"] == project_root.resolve()
 
 
+async def test_triage_staleness_sees_raw_stale_local_copy_not_bundled_twin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T14: an invalid project-local copy shadowing a valid bundled twin —
+    triage still receives the raw, stale project-local content via
+    resolve_local_candidate, not the bundled twin resolve_effective's
+    fall-through (2.2) would otherwise silently substitute."""
+    from unittest.mock import AsyncMock
+
+    from autoskillit._llm_triage import triage_staleness
+    from autoskillit.core import SubprocessResult, TerminationReason
+
+    project_root = tmp_path / "project"
+    skill_dir = project_root / ".claude" / "skills" / "implement-worktree"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("STALE-PROJECT-LOCAL-CONTENT-NO-FRONTMATTER\n")
+
+    response = json.dumps(
+        [
+            {
+                "index": 1,
+                "skill": "implement-worktree",
+                "meaningful_change": True,
+                "summary": "stale local copy observed",
+            }
+        ]
+    )
+    mock_run = AsyncMock(
+        return_value=SubprocessResult(
+            returncode=0,
+            stdout=(
+                json.dumps(
+                    {
+                        "type": "result",
+                        "subtype": "success",
+                        "is_error": False,
+                        "result": response,
+                        "session_id": "triage-stale-local",
+                    }
+                )
+                + "\n"
+            ),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+        )
+    )
+    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+
+    await triage_staleness(
+        [
+            StaleItem(
+                skill="implement-worktree",
+                reason="hash_mismatch",
+                stored_value="old",
+                current_value="new",
+            )
+        ],
+        project_root=project_root,
+        backend=ClaudeCodeBackend(),
+    )
+
+    command = mock_run.call_args.kwargs["cmd"]
+    assert "STALE-PROJECT-LOCAL-CONTENT-NO-FRONTMATTER" in command[2]
+
+
 # ---------------------------------------------------------------------------
 # T7: triage_staleness — run_managed_async lifecycle, logging, and error paths
 # ---------------------------------------------------------------------------

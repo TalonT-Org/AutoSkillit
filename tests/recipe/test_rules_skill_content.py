@@ -1769,3 +1769,21 @@ def test_graphql_rule_fires_for_documentation_schema_reference_without_invocatio
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
     rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
     assert _GRAPHQL_RULE_ID in rule_ids
+
+
+def test_resolve_skill_md_treats_invalid_local_only_candidate_as_unresolved(
+    tmp_path: Path,
+) -> None:
+    """T12a: a local-only invalid skill resolves as not-found (the existing
+    None branch), not its stale on-disk path."""
+    skill_dir = tmp_path / ".claude" / "skills" / "my-broken"
+    skill_dir.mkdir(parents=True)
+    skill_path = skill_dir / "SKILL.md"
+    skill_path.write_text(
+        '---\nname: my-broken\n---\nSpawn via `Agent(model="sonnet")`.\n',
+        encoding="utf-8",
+    )
+
+    resolved = _sh._resolve_skill_md("my-broken", project_root=tmp_path)
+
+    assert resolved is None

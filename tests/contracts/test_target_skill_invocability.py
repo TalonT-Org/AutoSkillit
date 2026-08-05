@@ -78,6 +78,27 @@ class TestResolvedNamespaceMatchesSkillLocation:
         assert name == "open-kitchen"
         assert resolved == "/open-kitchen"
 
+    def test_invalid_project_override_renders_as_unresolved(self, tmp_path: Path) -> None:
+        """T12d: an invalid project-local override renders as unresolved
+        (no new imports on this IL-0 path — only the invalid_reason field
+        already visible on the Protocol) instead of resolving to a
+        possibly-wrong namespace."""
+        override = tmp_path / ".claude" / "skills" / "open-kitchen" / "SKILL.md"
+        override.parent.mkdir(parents=True)
+        override.write_text(
+            '---\nname: open-kitchen\n---\nSpawn via `Agent(model="sonnet")`.\n',
+            encoding="utf-8",
+        )
+
+        resolved, name = resolve_target_skill(
+            "/autoskillit:open-kitchen",
+            DefaultSkillResolver(),
+            tmp_path,
+        )
+
+        assert name == "open-kitchen"
+        assert resolved == "/autoskillit:open-kitchen"
+
 
 class TestRoleDerivedInvocability:
     def test_process_issues_only_appears_in_orchestrator_catalog(self) -> None:

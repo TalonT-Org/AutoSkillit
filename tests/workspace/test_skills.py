@@ -14,6 +14,7 @@ from autoskillit.core.io import load_yaml
 from autoskillit.core.types import (
     SkillContractError,
     SkillExecutionRole,
+    SkillInvalidityKind,
     SkillSource,
     SkillSourceRef,
     SkillVisibilitySpec,
@@ -734,6 +735,113 @@ def test_orchestrator_skill_cannot_be_readded_to_session_tier(tmp_path: Path) ->
         )
 
 
+def test_stale_precontract_copy_of_bundled_tier_skill_does_not_crash_composition(
+    tmp_path: Path,
+) -> None:
+    """A pre-contract-era project-local shadow of a bundled tier skill falls
+    through to the bundled twin instead of crashing composition (#4470)."""
+    from autoskillit.config import load_config
+    from autoskillit.workspace import validate_skill_tier_roles
+
+    stale_dir = tmp_path / ".claude" / "skills" / "audit-bugs"
+    stale_dir.mkdir(parents=True)
+    stale_path = stale_dir / "SKILL.md"
+    stale_path.write_text(
+        "---\n"
+        "name: audit-bugs\n"
+        "description: Stale pre-contract-era copy.\n"
+        "---\n"
+        "# audit-bugs\n\n"
+        'LOG_DIR="$HOME/.claude/projects/${PWD//\\//-}"\n',
+        encoding="utf-8",
+    )
+
+    resolver = DefaultSkillResolver()
+    config = load_config(tmp_path)
+    visibility = config.skill_visibility_spec()
+
+    # Currently raises SkillContractError with the exact #4470 traceback signature:
+    # "configured tier2 skill 'audit-bugs' is invalid ... missing declaration for 'claude_dir'".
+    validate_skill_tier_roles(visibility, resolver, tmp_path)
+
+    effective = resolver.resolve_effective("audit-bugs", tmp_path)
+    assert effective is not None
+    assert effective.source in (SkillSource.BUNDLED, SkillSource.BUNDLED_EXTENDED)
+    assert effective.invalid_reason is None
+
+    catalog = resolver.list_effective(tmp_path, SkillExecutionRole.SESSION)
+    entry = next(skill for skill in catalog.skills if skill.name == "audit-bugs")
+    assert entry.source in (SkillSource.BUNDLED, SkillSource.BUNDLED_EXTENDED)
+    assert len(catalog.exclusions) == 1
+    exclusion = catalog.exclusions[0]
+    assert exclusion.name == "audit-bugs"
+    assert exclusion.path == stale_path
+    assert any(
+        item.kind is SkillInvalidityKind.UNDECLARED_CAPABILITY for item in exclusion.invalidities
+    )
+
+
+def test_local_only_invalid_skill_is_excluded_with_a_record(tmp_path: Path) -> None:
+    """A local-only invalid skill (no bundled twin) is excluded, not silently dropped."""
+    stale_dir = tmp_path / ".claude" / "skills" / "my-own-notes"
+    stale_dir.mkdir(parents=True)
+    stale_path = stale_dir / "SKILL.md"
+    stale_path.write_text(
+        "---\n"
+        "name: my-own-notes\n"
+        "description: Stale pre-contract-era copy.\n"
+        "---\n"
+        "# my-own-notes\n\n"
+        'LOG_DIR="$HOME/.claude/projects/${PWD//\\//-}"\n',
+        encoding="utf-8",
+    )
+
+    resolver = DefaultSkillResolver()
+    catalog = resolver.list_effective(tmp_path, SkillExecutionRole.SESSION)
+
+    assert "my-own-notes" not in {skill.name for skill in catalog.skills}
+    assert len(catalog.exclusions) == 1
+    exclusion = catalog.exclusions[0]
+    assert exclusion.name == "my-own-notes"
+    assert exclusion.path == stale_path
+    assert exclusion.invalidities
+    assert exclusion.hints
+    assert exclusion.fallback is None
+
+
+def test_multi_dir_fallthrough_preserves_recipe_loader_semantics(tmp_path: Path) -> None:
+    """An invalid higher-precedence local copy falls through to a valid lower one."""
+    invalid_dir = tmp_path / ".claude" / "skills" / "x"
+    invalid_dir.mkdir(parents=True)
+    invalid_path = invalid_dir / "SKILL.md"
+    invalid_path.write_text(
+        '---\nname: x\n---\nSpawn via `Agent(model="sonnet")`.\n',
+        encoding="utf-8",
+    )
+    valid_dir = tmp_path / ".autoskillit" / "skills" / "x"
+    valid_dir.mkdir(parents=True)
+    valid_path = valid_dir / "SKILL.md"
+    valid_path.write_text(
+        "---\nname: x\ndescription: Valid lower-precedence copy.\n---\n# x\n",
+        encoding="utf-8",
+    )
+
+    resolver = DefaultSkillResolver()
+    catalog = resolver.list_effective(tmp_path, SkillExecutionRole.SESSION)
+
+    entry = next(skill for skill in catalog.skills if skill.name == "x")
+    assert entry.source is SkillSource.PROJECT_LOCAL
+    assert entry.source_identity.search_dir == ".autoskillit/skills"
+    assert len(catalog.exclusions) == 1
+    assert catalog.exclusions[0].path == invalid_path
+    assert catalog.exclusions[0].fallback is SkillSource.PROJECT_LOCAL
+
+    # resolve_effective agrees: the valid lower-precedence copy wins outright.
+    resolved = resolver.resolve_effective("x", tmp_path)
+    assert resolved is not None
+    assert resolved.path == valid_path
+
+
 def test_activate_deps_are_resolvable():
     """Every activate_deps entry resolves to a known pack or known skill."""
     from autoskillit.core import PACK_REGISTRY
@@ -1033,9 +1141,12 @@ def test_effective_catalog_applies_pack_and_recipe_visibility(tmp_path: Path) ->
     assert "research-skill" in recipe_catalog.namespace_sources
 
 
-def test_invalid_project_override_fails_closed_without_bundled_fallback(
+def test_invalid_project_override_falls_back_to_bundled_with_exclusion_record(
     tmp_path: Path,
 ) -> None:
+    """A conscious revisit of the old fail-closed pin: an invalid shadowing
+    copy no longer poisons the catalog — it falls through to the valid
+    bundled twin, recorded as an exclusion rather than raising."""
     resolver = _resolver_with_visibility_skills(tmp_path)
     override_dir = tmp_path / ".claude" / "skills" / "core-skill"
     override_dir.mkdir(parents=True)
@@ -1045,18 +1156,15 @@ def test_invalid_project_override_fails_closed_without_bundled_fallback(
         encoding="utf-8",
     )
 
-    selected = resolver.resolve_effective("core-skill", tmp_path)
+    catalog = resolver.list_effective(tmp_path, SkillExecutionRole.SESSION)
 
-    assert selected is not None
-    assert selected.source is SkillSource.PROJECT_LOCAL
-    assert selected.path == override_path
-    assert selected.invalid_reason is not None
-    with pytest.raises(SkillContractError) as exc_info:
-        resolver.list_effective(tmp_path, SkillExecutionRole.SESSION)
-    assert str(exc_info.value) == (
-        "effective skill catalog contains invalid contracts: "
-        f"'core-skill': {selected.invalid_reason}"
-    )
+    entry = next(skill for skill in catalog.skills if skill.name == "core-skill")
+    assert entry.source is SkillSource.BUNDLED
+    assert len(catalog.exclusions) == 1
+    exclusion = catalog.exclusions[0]
+    assert exclusion.name == "core-skill"
+    assert exclusion.path == override_path
+    assert exclusion.fallback is SkillSource.BUNDLED
 
 
 def test_invalid_project_only_skill_is_excluded_without_poisoning_catalog(
@@ -1080,6 +1188,11 @@ def test_invalid_project_only_skill_is_excluded_without_poisoning_catalog(
     assert selected.invalid_reason is not None
     assert "project-only" not in {skill.name for skill in catalog.skills}
     assert "project-only" not in catalog.namespace_sources
+    assert len(catalog.exclusions) == 1
+    exclusion = catalog.exclusions[0]
+    assert exclusion.name == "project-only"
+    assert exclusion.path == skill_path
+    assert exclusion.fallback is None
 
 
 def test_effective_catalog_applies_subsets_and_recipe_features(tmp_path: Path) -> None:

@@ -75,6 +75,38 @@ class TestStandingBackendPinsFeasibility:
 
         assert all(r.severity == Severity.OK for r in results)
 
+    def test_invalid_skill_shadow_reports_invalidity_instead_of_silent_skip(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """T12b: an invalid project-local shadow of the pinned step's skill
+        is reported as a finding instead of silently skipping the
+        semantic-plan feasibility check for that step."""
+        from autoskillit.cli.doctor._doctor_config import (
+            _check_standing_backend_pins_feasibility,
+        )
+        from autoskillit.core import Severity
+
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
+        project_dir = tmp_path / "project"
+        _write_config(
+            project_dir / ".autoskillit" / "config.yaml",
+            "agent_backend:\n  recipe_overrides:\n    remediation:\n      assess: claude-code\n",
+        )
+        # "assess" resolves to the resolve-failures skill (remediation.yaml).
+        # Shadow it with an invalid project-local copy.
+        skill_dir = project_dir / ".claude" / "skills" / "resolve-failures"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            '---\nname: resolve-failures\n---\nSpawn via `Agent(model="sonnet")`.\n',
+            encoding="utf-8",
+        )
+
+        results = _check_standing_backend_pins_feasibility(project_dir=project_dir)
+
+        warnings = [r for r in results if r.severity == Severity.WARNING]
+        assert warnings, f"Expected at least one WARNING result, got: {results}"
+        assert any("resolve-failures" in r.message and "invalid" in r.message for r in warnings)
+
     def test_project_override_controls_pinned_backend_feasibility(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

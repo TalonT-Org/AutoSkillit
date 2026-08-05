@@ -576,6 +576,50 @@ class TestMigrateCommand:
         assert "old" in captured.out
         assert "Claude Code session" not in captured.out
 
+    # T10a: default `migrate` reports a pending skill migration, never touches the file
+    def test_migrate_reports_pending_skill_migration_without_touching_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """T10: default `migrate` reports a pending skill migration but never
+        rewrites the file — preserving the report-only contract pinned above."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".autoskillit" / "recipes").mkdir(parents=True)
+        skill_dir = tmp_path / ".claude" / "skills" / "audit-bugs"
+        skill_dir.mkdir(parents=True)
+        skill_path = skill_dir / "SKILL.md"
+        corpus_dir = Path(__file__).parents[1] / "contracts" / "fixtures" / "skill_contract_corpus"
+        original = (corpus_dir / "precontract_audit_bugs.md").read_text(encoding="utf-8")
+        skill_path.write_text(original, encoding="utf-8")
+
+        cli.migrate(check=False, fix=False)
+
+        captured = capsys.readouterr()
+        assert "audit-bugs" in captured.out
+        assert "migrate --fix" in captured.out
+        assert skill_path.read_text(encoding="utf-8") == original
+
+    # T10b: `migrate --fix` rewrites the file — fails while the adapter is
+    # registered but unreachable from the CLI driver.
+    def test_migrate_fix_rewrites_pending_skill_on_disk(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".autoskillit" / "recipes").mkdir(parents=True)
+        skill_dir = tmp_path / ".claude" / "skills" / "audit-bugs"
+        skill_dir.mkdir(parents=True)
+        skill_path = skill_dir / "SKILL.md"
+        corpus_dir = Path(__file__).parents[1] / "contracts" / "fixtures" / "skill_contract_corpus"
+        original = (corpus_dir / "precontract_audit_bugs.md").read_text(encoding="utf-8")
+        skill_path.write_text(original, encoding="utf-8")
+
+        cli.migrate(check=False, fix=True)
+
+        captured = capsys.readouterr()
+        assert "fixed: audit-bugs" in captured.out
+        rewritten = skill_path.read_text(encoding="utf-8")
+        assert rewritten != original
+        assert "claude_dir" in rewritten
+
 
 class TestInstallCommand:
     def test_worktree_guard_raises_before_any_mutation(

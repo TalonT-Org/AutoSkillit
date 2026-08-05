@@ -4,6 +4,7 @@ import hashlib
 import json
 import subprocess
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -163,11 +164,13 @@ def test_profile_activation_ignores_git_url_rewrites(
 
     resolution = resolve_repository_identity(root)
 
-    assert "ci-credential@" in rewritten
+    assert urlsplit(rewritten.strip()).username is not None
     assert resolution.source == "remote"
     assert resolution.normalized_identity == "github.com/talont-org/autoskillit"
     assert resolution.autoskillit_overlay
-    assert all("ci-credential" not in item.value for item in resolution.evidence)
+    assert tuple(
+        item.value for item in resolution.evidence if item.source == "git_remote:origin"
+    ) == ("github.com/TalonT-Org/AutoSkillit",)
 
 
 def test_profile_activation_uses_upstream_before_origin_for_conflicting_forks(

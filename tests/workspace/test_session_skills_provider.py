@@ -277,7 +277,7 @@ def test_skill_write_failure_rolls_back_unpublished_codex_home(
     manager = DefaultSessionSkillManager(
         provider,
         ephemeral_root=tmp_path / "ephemeral",
-        persistent_root=codex_root,
+        persistent_roots={"codex": codex_root},
     )
     backend = _codex_backend()
     catalog, context = _catalog_context(provider, tmp_path, backend=backend)
@@ -302,7 +302,7 @@ def test_skills_subdirectory_is_owned_per_session_not_manager_wide(tmp_path: Pat
     manager = DefaultSessionSkillManager(
         provider,
         ephemeral_root=tmp_path / "ephemeral",
-        persistent_root=tmp_path / "persistent" / "codex-sessions",
+        persistent_roots={"codex": tmp_path / "persistent" / "codex-sessions"},
     )
     codex_backend = _codex_backend()
     claude_catalog, claude_context = _catalog_context(provider, tmp_path)

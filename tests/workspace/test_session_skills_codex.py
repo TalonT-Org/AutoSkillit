@@ -319,8 +319,12 @@ def test_persistent_backend_declares_its_own_inert_paths(
     make_session_skill_manager,
     tmp_path: Path,
 ) -> None:
+    # backend.name stays "codex" (from _make_codex_backend()) because persistent
+    # roots are now resolved per backend name (#4391) — the fixture's codex_root
+    # kwarg only populates a "codex" entry in the manager's persistent_roots map.
+    # The point under test is that inert-path declaration follows
+    # capabilities.session_dir_symlinks generically, not a hardcoded convention.
     backend = _make_codex_backend()
-    backend.name = "persistent-test"
     backend.capabilities = replace(
         _CODEX_CAPABILITIES,
         session_dir_symlinks=frozenset({"records"}),
@@ -409,12 +413,16 @@ def test_codex_session_requires_persistent_root_before_any_home_mutation(
     mgr = DefaultSessionSkillManager(
         SkillsDirectoryProvider(),
         ephemeral_root=ephemeral_root,
-        persistent_root=None,
+        persistent_roots={},
     )
 
-    with pytest.raises(RuntimeError, match="persistent_root"):
+    with pytest.raises(RuntimeError) as exc_info:
         _materialize(mgr, "0123456789abcdef", backend=codex_env.backend)
 
+    assert str(exc_info.value) == (
+        "A persistent_root is required for persistent generated-home sessions; "
+        "selected_backend='codex'; configured_backend_keys=[]"
+    )
     assert not ephemeral_root.exists()
     assert mgr._session_roots == {}
     assert mgr._session_leases == {}
@@ -692,3 +700,81 @@ def test_session_projection_is_agent_safe_for_each_backend(
         "execution_role",
     }.isdisjoint(frontmatter)
     assert frontmatter["name"] == "make-arch-diag"
+
+
+def _stub_backend(
+    name: str,
+    *,
+    session_dir_persistent: bool = True,
+    persistent_session_root_subdir: Path | None,
+) -> MagicMock:
+    """Minimal stub with .name/.capabilities/.conventions built from real dataclasses."""
+    from autoskillit.core import BackendCapabilities, BackendConventions
+
+    backend = MagicMock()
+    backend.name = name
+    backend.capabilities = BackendCapabilities(session_dir_persistent=session_dir_persistent)
+    backend.conventions = BackendConventions(
+        persistent_session_root_subdir=persistent_session_root_subdir
+    )
+    return backend
+
+
+class TestResolvePersistentSessionRoot:
+    """T1 — direct unit tests for resolve_persistent_session_root (#4391)."""
+
+    def test_non_persistent_backend_returns_none(self, tmp_path: Path) -> None:
+        from autoskillit.execution.backends import get_backend
+
+        backend = get_backend("claude-code")
+        assert session_skills.resolve_persistent_session_root(tmp_path, backend) is None
+
+    def test_codex_backend_returns_subdir_of_base_root(self, tmp_path: Path) -> None:
+        from autoskillit.core import CODEX_SESSIONS_SUBDIR
+        from autoskillit.execution.backends import get_backend
+
+        backend = get_backend("codex")
+        assert session_skills.resolve_persistent_session_root(tmp_path, backend) == (
+            tmp_path / CODEX_SESSIONS_SUBDIR
+        )
+
+    def test_missing_root_convention_raises(self, tmp_path: Path) -> None:
+        backend = _stub_backend("synthetic", persistent_session_root_subdir=None)
+        with pytest.raises(RuntimeError, match="no generated-home root convention"):
+            session_skills.resolve_persistent_session_root(tmp_path, backend)
+
+    def test_absolute_subdir_raises_unsafe(self, tmp_path: Path) -> None:
+        backend = _stub_backend("synthetic", persistent_session_root_subdir=Path("/abs"))
+        with pytest.raises(RuntimeError, match="Unsafe persistent generated-home root"):
+            session_skills.resolve_persistent_session_root(tmp_path, backend)
+
+    def test_parent_traversal_subdir_raises_unsafe(self, tmp_path: Path) -> None:
+        backend = _stub_backend("synthetic", persistent_session_root_subdir=Path("../x"))
+        with pytest.raises(RuntimeError, match="Unsafe persistent generated-home root"):
+            session_skills.resolve_persistent_session_root(tmp_path, backend)
+
+
+class TestResolvePersistentSessionRoots:
+    """T2 — unit tests for resolve_persistent_session_roots (#4391)."""
+
+    def test_only_persistent_backends_are_included(self, tmp_path: Path) -> None:
+        from autoskillit.core import CODEX_SESSIONS_SUBDIR
+        from autoskillit.execution.backends import get_backend
+
+        backends = [get_backend("claude-code"), get_backend("codex")]
+        roots = session_skills.resolve_persistent_session_roots(tmp_path, backends)
+        assert roots == {"codex": tmp_path / CODEX_SESSIONS_SUBDIR}
+
+    def test_malformed_backend_not_in_required_names_is_skipped(self, tmp_path: Path) -> None:
+        backend = _stub_backend("synthetic", persistent_session_root_subdir=None)
+        roots = session_skills.resolve_persistent_session_roots(tmp_path, [backend])
+        assert roots == {}
+
+    def test_malformed_backend_in_required_names_raises(self, tmp_path: Path) -> None:
+        backend = _stub_backend("synthetic", persistent_session_root_subdir=None)
+        with pytest.raises(RuntimeError, match="no generated-home root convention"):
+            session_skills.resolve_persistent_session_roots(
+                tmp_path,
+                [backend],
+                required_backend_names=frozenset({"synthetic"}),
+            )

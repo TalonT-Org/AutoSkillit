@@ -130,6 +130,19 @@ def bfs_reachable_without_barrier(
     return _bfs_capped(graph, {start}, barriers)
 
 
+def bfs_reachable_without_barrier_in_graph(
+    graph: dict[str, set[str]],
+    start: str,
+    barrier: frozenset[str],
+) -> set[str]:
+    """BFS over a caller-supplied adjacency, visiting but not expanding barriers.
+
+    Unlike bfs_reachable_without_barrier, the caller chooses the edge model —
+    pass ctx.step_graph to traverse failure/context-limit/rate-limit edges too.
+    """
+    return _bfs_capped(graph, {start}, set(barrier))
+
+
 def _bfs_capped(
     graph: dict[str, set[str]],
     start_nodes: set[str],

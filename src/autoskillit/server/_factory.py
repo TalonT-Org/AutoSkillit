@@ -59,6 +59,7 @@ from autoskillit.execution import (
     GitHubReviewLedger,
     GitHubReviewMutationCoordinator,
     RecordingSubprocessRunner,
+    all_backends,
     build_replay_runner,
     get_backend,
 )
@@ -96,7 +97,7 @@ from autoskillit.workspace import (
     project_default_plugin_authority,
     project_direct_install_authority,
     resolve_ephemeral_root,
-    resolve_persistent_session_root,
+    resolve_persistent_session_roots,
     validate_skill_tier_roles,
 )
 
@@ -338,11 +339,15 @@ def make_context(
             catalog=session_catalog,
         )
     ephemeral_root = resolve_ephemeral_root()
-    persistent_root = resolve_persistent_session_root(temp_dir, backend)
+    persistent_roots = resolve_persistent_session_roots(
+        temp_dir,
+        all_backends(),
+        required_backend_names={backend.name},
+    )
     session_mgr = DefaultSessionSkillManager(
         provider,
         ephemeral_root,
-        persistent_root=persistent_root,
+        persistent_roots=persistent_roots,
     )
 
     audit = DefaultAuditLog()

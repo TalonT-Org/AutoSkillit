@@ -6,7 +6,10 @@ import regex as re
 
 from autoskillit.core import SKILL_TOOLS, Severity, get_logger, resolve_skill_name
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe._analysis_bfs import bfs_reachable_without_barrier
+from autoskillit.recipe._analysis_bfs import (
+    bfs_reachable_without_barrier,
+    bfs_reachable_without_barrier_in_graph,
+)
 from autoskillit.recipe.contracts import load_bundled_manifest
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
@@ -328,3 +331,73 @@ def _check_review_mode_reentry_waypoint(ctx: ValidationContext) -> list[RuleFind
             "review_loop_count on every iteration.",
         )
     ]
+
+
+_REVIEW_FAMILY_SKILLS = frozenset({"review-pr", "resolve-review"})
+_REVIEW_FAILURE_EDGE_FIELDS = (
+    "on_failure",
+    "on_context_limit",
+    "on_rate_limit",
+    "on_exhausted",
+)
+_REVIEW_FAILURE_ADVANCE_GATES = frozenset(
+    {"check_review_loop", "check_repo_ci_event", "derive_batch_ci_event"}
+)
+
+
+def _get_review_family_steps(ctx: ValidationContext) -> list[str]:
+    """Step IDs dispatching review-pr or resolve-review (any step id).
+
+    Module-level so silence tests can assert the rule is triggered on the
+    recipe under test before asserting zero findings.
+    """
+    return [
+        step_id
+        for step_id, step in ctx.recipe.steps.items()
+        if step.tool == "run_skill" and step.skill_name in _REVIEW_FAMILY_SKILLS
+    ]
+
+
+@semantic_rule(
+    name="review-failure-fallthrough-guard",
+    severity=Severity.ERROR,
+    description=(
+        "From a review-family step's failure-shaped edges (on_failure, "
+        "on_context_limit, on_rate_limit, on_exhausted), no CI-advance gate "
+        "(check_review_loop, check_repo_ci_event, derive_batch_ci_event) may be "
+        "reachable without first crossing check_review_posted or re-entering a "
+        "review-family step. A review that never ran must not fall through to "
+        "CI as though it had (#1684 shipped exactly that edge for three months; "
+        "#4448 reversed it with nothing preventing a re-flip)."
+    ),
+)
+def _check_review_failure_fallthrough(ctx: ValidationContext) -> list[RuleFinding]:
+    review_steps = _get_review_family_steps(ctx)
+    if not review_steps:
+        return []
+    barrier = frozenset({"check_review_posted"} | set(review_steps))
+    findings: list[RuleFinding] = []
+    for step_id in review_steps:
+        step = ctx.recipe.steps[step_id]
+        for field in _REVIEW_FAILURE_EDGE_FIELDS:
+            target = getattr(step, field)
+            if not target or target not in ctx.recipe.steps:
+                continue
+            reachable = bfs_reachable_without_barrier_in_graph(ctx.step_graph, target, barrier)
+            for gate in sorted(_REVIEW_FAILURE_ADVANCE_GATES & reachable):
+                findings.append(
+                    make_finding(
+                        rule_name="review-failure-fallthrough-guard",
+                        step_name=step_id,
+                        message=(
+                            f"Step '{step_id}' routes {field} to '{target}', "
+                            f"from which advance gate '{gate}' is reachable "
+                            f"without crossing check_review_posted — a review "
+                            f"that never ran could fall through to CI as an "
+                            f"unreviewed pass. Route failure-shaped edges to a "
+                            f"failure-family terminal "
+                            f"(e.g. release_issue_failure)."
+                        ),
+                    )
+                )
+    return findings

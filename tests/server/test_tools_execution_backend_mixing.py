@@ -58,7 +58,7 @@ def _install_codex_launch_backend(tool_ctx: Any, tmp_path: Path, monkeypatch) ->
     tool_ctx.session_skill_manager = DefaultSessionSkillManager(
         SkillsDirectoryProvider(),
         ephemeral_root=tmp_path / "ephemeral-sessions",
-        persistent_root=tmp_path / "persistent-sessions",
+        persistent_roots={"codex": tmp_path / "persistent-sessions"},
     )
     monkeypatch.setattr(
         tool_ctx.launch_resolver,

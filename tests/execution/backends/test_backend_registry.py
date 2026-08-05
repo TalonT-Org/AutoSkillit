@@ -90,6 +90,7 @@ class TestBackendRegistry:
             "_read_codex_config",
             "_serialize_toml",
             "_write_codex_config",
+            "all_backends",
             "codex_recipe_delivery_calling_contract",
             "ensure_codex_mcp_registered",
             "enumerate_fresh_codex_marker_ids",

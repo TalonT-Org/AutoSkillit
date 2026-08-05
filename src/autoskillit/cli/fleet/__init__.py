@@ -308,18 +308,14 @@ def fleet_status(
             sys.exit(_watch_loop(state_path))
         _render_status_display(state)
         if cleanup:
-            from autoskillit.core import (
-                CODEX_SESSIONS_SUBDIR,
-                resolve_temp_dir,
-                run_git,
-                sweep_stale_markers,
-            )
-            from autoskillit.execution import delete_skill_session_contracts
+            from autoskillit.core import resolve_temp_dir, run_git, sweep_stale_markers
+            from autoskillit.execution import all_backends, delete_skill_session_contracts
             from autoskillit.workspace import (
                 DefaultSessionSkillManager,
                 SkillsDirectoryProvider,
                 batch_delete,
                 resolve_ephemeral_root,
+                resolve_persistent_session_roots,
             )
 
             batch_delete("", _remove_clone_fn, owner=campaign_id)
@@ -333,7 +329,9 @@ def fleet_status(
                 skill_mgr = DefaultSessionSkillManager(
                     provider=SkillsDirectoryProvider(),
                     ephemeral_root=resolve_ephemeral_root(),
-                    persistent_root=resolve_temp_dir(_project_root) / CODEX_SESSIONS_SUBDIR,
+                    persistent_roots=resolve_persistent_session_roots(
+                        resolve_temp_dir(_project_root), all_backends()
+                    ),
                 )
                 for d in state.dispatches:
                     if d.dispatched_session_id:

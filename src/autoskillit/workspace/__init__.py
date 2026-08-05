@@ -71,6 +71,7 @@ from autoskillit.workspace.session_skills import (
     resolve_closure_write_dirs,
     resolve_ephemeral_root,
     resolve_persistent_session_root,
+    resolve_persistent_session_roots,
     write_skill_unavailability_metadata,
 )
 from autoskillit.workspace.skill_capabilities import (
@@ -200,6 +201,7 @@ __all__ = [
     "remove_clone",
     "resolve_ephemeral_root",
     "resolve_persistent_session_root",
+    "resolve_persistent_session_roots",
     "WORKTREES_DIR",
     "parse_frontmatter_content",
     "prepare_catalog_skill_projection",

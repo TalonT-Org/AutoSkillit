@@ -12,7 +12,8 @@ import os
 import shutil
 import tempfile
 import time
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Set as AbstractSet
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -108,6 +109,37 @@ def resolve_persistent_session_root(
     if subdir.is_absolute() or ".." in subdir.parts:
         raise RuntimeError(f"Unsafe persistent generated-home root convention: {subdir}")
     return base_root / subdir
+
+
+def resolve_persistent_session_roots(
+    base_root: Path,
+    backends: Iterable[CodingAgentBackend],
+    *,
+    required_backend_names: AbstractSet[str] = frozenset(),
+) -> dict[str, Path]:
+    """Resolve persistent generated-home roots for every persistent backend.
+
+    A backend whose root convention is malformed is skipped unless its name is
+    in required_backend_names, in which case the RuntimeError propagates —
+    construction sites require their own load-bearing backend to be resolvable
+    while deferring pinned-backend enforcement to preflight/doctor validation.
+    """
+    roots: dict[str, Path] = {}
+    for backend in backends:
+        try:
+            root = resolve_persistent_session_root(base_root, backend)
+        except RuntimeError:
+            if backend.name in required_backend_names:
+                raise
+            logger.warning(
+                "persistent_root_unresolvable_for_backend",
+                backend=backend.name,
+                exc_info=True,
+            )
+            continue
+        if root is not None:
+            roots[backend.name] = root
+    return roots
 
 
 @dataclass(slots=True)
@@ -538,11 +570,11 @@ class DefaultSessionSkillManager:
         provider: SkillsDirectoryProvider,
         ephemeral_root: Path,
         *,
-        persistent_root: Path | None = None,
+        persistent_roots: Mapping[str, Path] | None = None,
     ) -> None:
         self._provider = provider
         self._root = ephemeral_root
-        self._persistent_root = persistent_root
+        self._persistent_roots: dict[str, Path] = dict(persistent_roots or {})
         self._session_roots: dict[str, Path] = {}
         self._session_leases: dict[str, _SessionLease] = {}
         self._session_skills_subdirs: dict[str, Path] = {}
@@ -735,10 +767,16 @@ class DefaultSessionSkillManager:
         )
         backend = projection_context.backend
         persistent = backend is not None and backend.capabilities.session_dir_persistent
-        configured_root = self._persistent_root if persistent else self._root
+        if backend is not None and persistent:
+            configured_root = self._persistent_roots.get(backend.name)
+        else:
+            configured_root = self._root
         if configured_root is None:
+            selected_backend = backend.name if backend is not None else None
             raise RuntimeError(
-                "A persistent_root is required for persistent generated-home sessions"
+                "A persistent_root is required for persistent generated-home sessions; "
+                f"selected_backend={selected_backend!r}; "
+                f"configured_backend_keys={sorted(self._persistent_roots)!r}"
             )
         try:
             effective_root = configured_root.resolve()
@@ -930,6 +968,9 @@ class DefaultSessionSkillManager:
                 failures.append(exc)
         return failures
 
+    def _candidate_roots(self) -> tuple[Path, ...]:
+        return (self._root, *self._persistent_roots.values())
+
     def cleanup_session(self, session_id: str) -> bool:
         """Remove the session skill directory for a completed session.
 
@@ -953,9 +994,7 @@ class DefaultSessionSkillManager:
             _raise_failures("Owned session cleanup failed", failures)
             return existed
 
-        for root in (self._root, self._persistent_root):
-            if root is None:
-                continue
+        for root in self._candidate_roots():
             resolved_root = root.resolve()
             candidate = resolved_root / session_id
             if not os.path.lexists(candidate):
@@ -989,9 +1028,7 @@ class DefaultSessionSkillManager:
 
     def validate_session_exists(self, session_id: str) -> bool:
         """Return True if session directory exists and is non-empty."""
-        for root in (self._root, self._persistent_root):
-            if root is None:
-                continue
+        for root in self._candidate_roots():
             candidate = root / session_id
             if candidate.is_dir():
                 try:
@@ -1007,8 +1044,8 @@ class DefaultSessionSkillManager:
         """
         now = time.time()
         removed = 0
-        for root in (self._root, self._persistent_root):
-            if root is None or not root.exists():
+        for root in self._candidate_roots():
+            if not root.exists():
                 continue
             resolved_root = root.resolve()
             for entry in resolved_root.iterdir():

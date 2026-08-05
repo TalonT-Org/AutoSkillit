@@ -13,6 +13,7 @@ itself and its integration into open_kitchen and dispatch_food_truck.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -85,6 +86,29 @@ def _make_claude_backend() -> MagicMock:
     backend = MagicMock()
     backend.name = AGENT_BACKEND_CLAUDE_CODE
     backend.capabilities = caps
+    return backend
+
+
+def _make_persistent_backend(*, well_formed: bool) -> MagicMock:
+    """Mock backend with capabilities.session_dir_persistent=True (#4391).
+
+    `well_formed=False` leaves conventions.persistent_session_root_subdir as
+    None, matching the malformed-convention shape resolve_persistent_session_root
+    raises RuntimeError for.
+    """
+    from autoskillit.core import BackendCapabilities, BackendConventions
+
+    caps = BackendCapabilities(
+        session_dir_persistent=True,
+        applicable_guards=frozenset(),
+        anthropic_provider_capable=False,
+    )
+    backend = MagicMock()
+    backend.name = "codex"
+    backend.capabilities = caps
+    backend.conventions = BackendConventions(
+        persistent_session_root_subdir=(Path("codex-sessions") if well_formed else None)
+    )
     return backend
 
 
@@ -220,6 +244,109 @@ class TestCheckDispatchFeasibilityUnit:
         assert parsed.get("error") == "invalid_skill_invocation_for_pinned_step"
         assert parsed.get("skill") == "missing-skill"
         assert parsed.get("step") == "unknown_step"
+
+    def test_persistent_root_unresolvable_for_pinned_step_fails_closed(
+        self, tmp_path: Path
+    ) -> None:
+        """T6 (#4391) — a pin to a persistent backend with no derivable root
+        fails closed with an envelope naming the config key."""
+        from autoskillit.config._config_dataclasses import AgentBackendConfig
+        from autoskillit.server.tools._preflight import _check_dispatch_feasibility
+
+        backend = _make_persistent_backend(well_formed=False)
+        active_steps: dict[str, Any] = {
+            "resolve_review": _make_recipe_step(
+                "resolve_review", tool="run_skill", skill_name="resolve-review"
+            ),
+        }
+        config_backend = AgentBackendConfig(
+            recipe_overrides={"test-recipe": {"resolve_review": "codex"}},
+        )
+        with patch("autoskillit.server.tools._preflight.get_backend", return_value=backend):
+            result = _check_dispatch_feasibility(
+                post_prune_step_names=["resolve_review"],
+                active_recipe_steps=active_steps,
+                backend=backend,
+                config_providers=_DEFAULT_PROVIDERS,
+                recipe_name="test-recipe",
+                config_backend=config_backend,
+                skill_resolver=None,
+                temp_dir=tmp_path,
+            )
+        assert result is not None
+        parsed = json.loads(result)
+        assert parsed.get("error") == "persistent_root_unresolvable_for_pinned_step"
+        assert parsed.get("stage") == "dispatch_feasibility_preflight"
+        assert parsed.get("origin") == "agent_backend.recipe_overrides.test-recipe.resolve_review"
+        assert "resolve_review" in parsed.get("user_visible_message", "")
+        assert "agent_backend.recipe_overrides.test-recipe.resolve_review" in parsed.get(
+            "remedy", ""
+        )
+
+    def test_persistent_root_axis_passes_for_real_codex_pin(self, tmp_path: Path) -> None:
+        """T6 (#4391) — a pin to real codex (well-formed root) proceeds past
+        the persistent-root axis to the pre-existing semantic checks (the
+        "runs" branch of acceptance criterion 1)."""
+        from autoskillit.config._config_dataclasses import AgentBackendConfig
+        from autoskillit.execution.backends.codex import CodexBackend
+        from autoskillit.server.tools._preflight import _check_dispatch_feasibility
+
+        backend = CodexBackend()
+        active_steps: dict[str, Any] = {
+            "resolve_review": _make_recipe_step(
+                "resolve_review", tool="run_skill", skill_name="resolve-review"
+            ),
+        }
+        config_backend = AgentBackendConfig(
+            recipe_overrides={"test-recipe": {"resolve_review": "codex"}},
+        )
+        with patch("autoskillit.server.tools._preflight.get_backend", return_value=backend):
+            result = _check_dispatch_feasibility(
+                post_prune_step_names=["resolve_review"],
+                active_recipe_steps=active_steps,
+                backend=backend,
+                config_providers=_DEFAULT_PROVIDERS,
+                recipe_name="test-recipe",
+                config_backend=config_backend,
+                skill_resolver=None,
+                temp_dir=tmp_path,
+            )
+        # No persistent-root envelope — falls through to the next pre-existing
+        # check (missing skill_resolver), proving the persistent-root axis
+        # passed cleanly for a well-formed pin.
+        assert result is not None
+        parsed = json.loads(result)
+        assert parsed.get("error") == "skill_resolver_unavailable_for_pinned_step"
+
+    def test_persistent_root_unverifiable_when_temp_dir_absent(self) -> None:
+        """T6 (#4391) — a pin to a persistent backend fails closed when
+        temp_dir is absent, before any root derivation is attempted."""
+        from autoskillit.config._config_dataclasses import AgentBackendConfig
+        from autoskillit.server.tools._preflight import _check_dispatch_feasibility
+
+        backend = _make_persistent_backend(well_formed=True)
+        active_steps: dict[str, Any] = {
+            "resolve_review": _make_recipe_step(
+                "resolve_review", tool="run_skill", skill_name="resolve-review"
+            ),
+        }
+        config_backend = AgentBackendConfig(
+            recipe_overrides={"test-recipe": {"resolve_review": "codex"}},
+        )
+        with patch("autoskillit.server.tools._preflight.get_backend", return_value=backend):
+            result = _check_dispatch_feasibility(
+                post_prune_step_names=["resolve_review"],
+                active_recipe_steps=active_steps,
+                backend=backend,
+                config_providers=_DEFAULT_PROVIDERS,
+                recipe_name="test-recipe",
+                config_backend=config_backend,
+                skill_resolver=None,
+            )
+        assert result is not None
+        parsed = json.loads(result)
+        assert parsed.get("error") == "persistent_root_unverifiable_for_pinned_step"
+        assert parsed.get("stage") == "dispatch_feasibility_preflight"
 
     def test_incompatible_backend_fails(self) -> None:
         """Backend with empty applicable_guards returns error (1b)."""

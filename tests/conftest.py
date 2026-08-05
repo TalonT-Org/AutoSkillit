@@ -430,62 +430,87 @@ def minimal_ctx(tmp_path):
 
 
 @pytest.fixture
-def tool_ctx(monkeypatch, tmp_path):
-    """Provide a fully isolated ToolContext for server integration tests.
+def make_tool_ctx(monkeypatch, tmp_path):
+    """Factory fixture building a fully isolated ToolContext for server tests.
 
-    Full-stack fixture: calls make_context() from server/_factory.py, which
-    imports ALL production layers (L0–L3). Use minimal_ctx instead when the
-    test only needs gate, audit, token_log, timing_log, or config fields.
+    Full-stack factory: each call runs make_context() from server/_factory.py,
+    which imports ALL production layers (L0–L3). Use minimal_ctx instead when
+    the test only needs gate, audit, token_log, timing_log, or config fields.
 
-    Monkeypatches server._ctx so all server tool calls use this context.
-    Gate starts closed (matching production) — use tool_ctx_kitchen_open
-    when a test needs the gate open.
+    Monkeypatches server._ctx so all server tool calls use the most recently
+    built context. Gate starts closed (matching production) — use
+    tool_ctx_kitchen_open when a test needs the gate open.
 
     All service fields (executor, tester, db_reader, workspace_mgr, recipes,
     migrations) are wired via make_context() so routing tests work correctly.
+
+    Pass config to build a context from a specific AutomationConfig (e.g. to
+    pin agent_backend.recipe_overrides before context creation); omit it for
+    the default AutomationConfig(features={"fleet": True}).
     """
     from autoskillit.config import AutomationConfig
     from autoskillit.server import _state
     from autoskillit.server._factory import make_context
     from tests.fakes import FakePluginArtifactAuthority, MockSubprocessRunner
 
-    mock_runner = MockSubprocessRunner()
-    plugin_authority = FakePluginArtifactAuthority(tmp_path)
-    ctx = make_context(
-        AutomationConfig(features={"fleet": True}),
-        runner=mock_runner,
-        plugin_authority=plugin_authority,
-        project_dir=tmp_path,
-    )
-    ctx.audit_admission_ledger.recover_all()
-    ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
-    ctx.config.linux_tracing.tmpfs_path = str(tmp_path / "shm")
-    ctx.temp_dir = tmp_path / ".autoskillit" / "temp"
-    test_skills_root = tmp_path / ".claude" / "skills"
-    for skill_name in (
-        "do-a",
-        "do-b",
-        "eval-agent",
-        "idle-scope",
-        "implement",
-        "probe",
-        "some-skill",
-        "target-skill",
-        "test",
-        "test-skill",
-    ):
-        skill_dir = test_skills_root / skill_name
-        skill_dir.mkdir(parents=True, exist_ok=True)
-        (skill_dir / "SKILL.md").write_text(
-            f"---\nname: {skill_name}\ndescription: Test fixture skill\n---\n"
-            "# Test fixture skill\n"
+    created_authorities: list[FakePluginArtifactAuthority] = []
+
+    def _factory(config: AutomationConfig | None = None):
+        mock_runner = MockSubprocessRunner()
+        plugin_authority = FakePluginArtifactAuthority(tmp_path)
+        created_authorities.append(plugin_authority)
+        ctx = make_context(
+            config if config is not None else AutomationConfig(features={"fleet": True}),
+            runner=mock_runner,
+            plugin_authority=plugin_authority,
+            project_dir=tmp_path,
         )
-    monkeypatch.setattr(_state, "_ctx", ctx)
-    monkeypatch.setattr(_state, "_startup_ready", None)
+        ctx.audit_admission_ledger.recover_all()
+        ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
+        ctx.config.linux_tracing.tmpfs_path = str(tmp_path / "shm")
+        # Independent of the basis already baked into ctx.session_skill_manager
+        # at make_context() time — tests asserting manager roots must derive
+        # expectations from resolve_temp_dir(project_dir, config.workspace.temp_dir),
+        # not ctx.temp_dir.
+        ctx.temp_dir = tmp_path / ".autoskillit" / "temp"
+        test_skills_root = tmp_path / ".claude" / "skills"
+        for skill_name in (
+            "do-a",
+            "do-b",
+            "eval-agent",
+            "idle-scope",
+            "implement",
+            "probe",
+            "some-skill",
+            "target-skill",
+            "test",
+            "test-skill",
+        ):
+            skill_dir = test_skills_root / skill_name
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            (skill_dir / "SKILL.md").write_text(
+                f"---\nname: {skill_name}\ndescription: Test fixture skill\n---\n"
+                "# Test fixture skill\n"
+            )
+        monkeypatch.setattr(_state, "_ctx", ctx)
+        monkeypatch.setattr(_state, "_startup_ready", None)
+        return ctx
+
     try:
-        yield ctx
+        yield _factory
     finally:
-        plugin_authority.close()
+        for plugin_authority in created_authorities:
+            plugin_authority.close()
+
+
+@pytest.fixture
+def tool_ctx(make_tool_ctx):
+    """Provide a fully isolated ToolContext for server integration tests.
+
+    Thin wrapper around make_tool_ctx() using the default AutomationConfig.
+    See make_tool_ctx for the full contract.
+    """
+    return make_tool_ctx()
 
 
 @pytest.fixture

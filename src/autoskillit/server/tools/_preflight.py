@@ -14,6 +14,7 @@ from autoskillit.core import (
 )
 from autoskillit.hook_registry import HOOK_REGISTRY
 from autoskillit.server._misc import get_backend
+from autoskillit.workspace import resolve_persistent_session_root
 
 if TYPE_CHECKING:
     from autoskillit.config._config_dataclasses import AgentBackendConfig
@@ -64,6 +65,7 @@ def _check_dispatch_feasibility(
     config_backend: AgentBackendConfig | None = None,
     skill_resolver: SkillResolver | None,
     project_root: Path | None = None,
+    temp_dir: Path | None = None,
 ) -> str | None:
     """Fail-closed dispatch-feasibility preflight.
 
@@ -75,6 +77,12 @@ def _check_dispatch_feasibility(
     `skill_resolver` is REQUIRED for explicit-pin hard-capability feasibility
     checks. When omitted, the function fails closed for any pinned step: the
     dispatch is refused as infeasible rather than silently bypassing the gate.
+
+    `temp_dir` is required to verify the persistent session root for an
+    explicitly-pinned step whose backend has
+    `capabilities.session_dir_persistent=True` (#4391). When a persistent pin
+    is found and `temp_dir` is absent, or its root convention cannot be
+    derived, the dispatch fails closed.
     """
     if backend is None:
         return None
@@ -107,6 +115,50 @@ def _check_dispatch_feasibility(
                     _pinned_backend = get_backend(_explicit)
                 except (ValueError, KeyError):
                     continue
+                if _pinned_backend.capabilities.session_dir_persistent:
+                    if temp_dir is None:
+                        return json.dumps(
+                            {
+                                "success": False,
+                                "kitchen": "preflight_failed",
+                                "user_visible_message": (
+                                    f"Cannot verify persistent session root for "
+                                    f"explicitly-pinned step '{step_name}' (backend "
+                                    f"'{_explicit}'): temp_dir is not available."
+                                ),
+                                "error": "persistent_root_unverifiable_for_pinned_step",
+                                "stage": "dispatch_feasibility_preflight",
+                                "step": step_name,
+                                "backend": _explicit,
+                            }
+                        )
+                    try:
+                        resolve_persistent_session_root(temp_dir, _pinned_backend)
+                    except RuntimeError as exc:
+                        return json.dumps(
+                            {
+                                "success": False,
+                                "kitchen": "preflight_failed",
+                                "user_visible_message": (
+                                    f"Cannot dispatch step '{step_name}': explicitly "
+                                    f"pinned to backend '{_explicit}', which requires "
+                                    f"a persistent session root that cannot be "
+                                    f"derived ({exc})."
+                                ),
+                                "error": "persistent_root_unresolvable_for_pinned_step",
+                                "stage": "dispatch_feasibility_preflight",
+                                "backend": _explicit,
+                                "step": step_name,
+                                "origin": _resolution.key_path,
+                                "remedy": (
+                                    f"Remove or change '{_resolution.key_path}' in "
+                                    "~/.autoskillit/config.yaml or "
+                                    "<project>/.autoskillit/config.yaml, or pin a "
+                                    "backend whose persistent generated-home "
+                                    "convention is valid."
+                                ),
+                            }
+                        )
                 if skill_resolver is None:
                     return json.dumps(
                         {

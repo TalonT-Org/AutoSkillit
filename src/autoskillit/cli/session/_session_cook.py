@@ -53,13 +53,14 @@ def cook(
 ) -> None:
     """Launch Claude with all bundled AutoSkillit skills as slash commands."""
     from autoskillit.config import iter_display_categories, load_config
+    from autoskillit.execution import all_backends
     from autoskillit.workspace import (
         DefaultSessionSkillManager,
         DefaultSkillResolver,
         SkillsDirectoryProvider,
         compile_session_skill_catalog,
         resolve_ephemeral_root,
-        resolve_persistent_session_root,
+        resolve_persistent_session_roots,
         validate_skill_tier_roles,
         write_skill_unavailability_metadata,
     )
@@ -160,9 +161,10 @@ def cook(
         raise ValueError(f"{CODEX_STARTUP_TRACE_ENV_VAR} must be absent or exactly '1'")
     trace_enabled = trace_setting == "1" and backend.capabilities.cook_startup_observer_capable
 
-    persistent_root = resolve_persistent_session_root(
+    persistent_roots = resolve_persistent_session_roots(
         resolve_temp_dir(project_dir, config.workspace.temp_dir),
-        backend,
+        all_backends(),
+        required_backend_names={backend.name},
     )
     initial_prompt: str | None = None
     first_run = is_first_run(project_dir)
@@ -190,7 +192,7 @@ def cook(
     session_mgr = DefaultSessionSkillManager(
         skills_provider,
         ephemeral_root,
-        persistent_root=persistent_root,
+        persistent_roots=persistent_roots,
     )
     session_mgr.cleanup_stale()
 

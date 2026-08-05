@@ -201,14 +201,21 @@ def _check_standing_backend_pins_feasibility(
     Re-reads each config.yaml layer individually (mirrors
     ``_check_config_layers_for_secrets``) and resolves every ``recipe_overrides``
     and ``step_overrides`` pin against the step's versioned semantic plan.
+
+    Also checks the persistent-session-root axis (#4391): a pin to a backend
+    whose `capabilities.session_dir_persistent` is True but whose generated-home
+    root convention cannot be derived is reported as an ERROR naming the dotted
+    config key — this runs for both recipe and global `step_overrides` pins,
+    before the recipe-specific semantic-adaptation check below.
     """
     from autoskillit.core import (
         YAMLError,
         load_yaml,
+        resolve_temp_dir,
     )
     from autoskillit.execution import get_backend
     from autoskillit.recipe import find_recipe_by_name, load_recipe
-    from autoskillit.workspace import DefaultSkillResolver
+    from autoskillit.workspace import DefaultSkillResolver, resolve_persistent_session_root
 
     root = project_dir or Path.cwd()
     config_paths = [
@@ -255,6 +262,29 @@ def _check_standing_backend_pins_feasibility(
                     )
                 )
                 continue
+
+            if backend.capabilities.session_dir_persistent:
+                workspace_cfg = data.get("workspace")
+                temp_override = (
+                    workspace_cfg.get("temp_dir") if isinstance(workspace_cfg, dict) else None
+                )
+                base_root = resolve_temp_dir(
+                    root, temp_override if isinstance(temp_override, str) else None
+                )
+                try:
+                    resolve_persistent_session_root(base_root, backend)
+                except RuntimeError as exc:
+                    results.append(
+                        DoctorResult(
+                            Severity.ERROR,
+                            "standing_backend_pins_feasibility",
+                            f"{config_path}: {dotted_key} pins persistent backend "
+                            f"{backend_name!r}, but no persistent session root can be "
+                            f"derived: {exc}. Remove or change this pin, or fix the "
+                            "backend's generated-home convention.",
+                        )
+                    )
+                    continue
 
             if not is_recipe_pin:
                 # Global step_overrides pins are not tied to a single recipe's step

@@ -731,3 +731,15 @@ def test_make_context_codex_backend_not_none_plain_config(tmp_path) -> None:
     ctx = make_context(cfg, runner=_runner(), project_dir=tmp_path)
     assert ctx.backend is not None
     assert isinstance(ctx.backend, CodexBackend)
+
+
+def test_make_context_builds_persistent_roots_over_all_registered_backends(tmp_path) -> None:
+    """T4 (#4391): make_context() derives persistent_roots for every backend, not
+    just the configured global one — proving the fix's core wiring."""
+    from autoskillit.core import CODEX_SESSIONS_SUBDIR, resolve_temp_dir
+
+    config = AutomationConfig()
+    ctx = make_context(config, runner=_runner(), project_dir=tmp_path)
+
+    expected_root = resolve_temp_dir(tmp_path, config.workspace.temp_dir) / CODEX_SESSIONS_SUBDIR
+    assert ctx.session_skill_manager._persistent_roots == {"codex": expected_root}

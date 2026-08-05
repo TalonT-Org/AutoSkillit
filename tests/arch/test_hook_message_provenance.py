@@ -49,6 +49,21 @@ def _string_literals(path: Path) -> list[str]:
     ]
 
 
+def _imports_policy_event(path: Path) -> bool:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import) and any(
+            alias.name.rsplit(".", 1)[-1] == "_policy_event" for alias in node.names
+        ):
+            return True
+        if isinstance(node, ast.ImportFrom):
+            if node.module and node.module.rsplit(".", 1)[-1] == "_policy_event":
+                return True
+            if any(alias.name == "_policy_event" for alias in node.names):
+                return True
+    return False
+
+
 @pytest.mark.parametrize("path", _SCANNED_FILES, ids=lambda p: p.name)
 def test_no_ad_hoc_provenance_literal_outside_policy_event(path: Path) -> None:
     offending = [
@@ -77,10 +92,15 @@ def test_exempt_literals_are_still_present_and_narrow() -> None:
 
 def test_policy_event_module_has_a_production_importer() -> None:
     """hooks/_policy_event.py must not be an orphaned component."""
-    importer_re = re.compile(r"\b_policy_event\b")
     importers = [
         path
         for path in _HOOKS_DIR.rglob("*.py")
-        if path.name != "_policy_event.py" and importer_re.search(path.read_text(encoding="utf-8"))
+        if path.name != "_policy_event.py" and _imports_policy_event(path)
     ]
     assert importers, "hooks/_policy_event.py has zero production importers"
+
+
+def test_policy_event_comment_is_not_an_import(tmp_path: Path) -> None:
+    source = tmp_path / "comment_only.py"
+    source.write_text("# _policy_event is not imported here\n", encoding="utf-8")
+    assert not _imports_policy_event(source)

@@ -110,9 +110,6 @@ hooks:
 semantic_version: 1
 semantic_requirements:
   sibling_skills:
-  - name: arch-lens-concurrency
-  - name: arch-lens-process-flow
-  - name: make-arch-diag
   - name: mermaid
 ---
 
@@ -143,6 +140,7 @@ semantic_requirements:
 ## Critical Constraints
 
 **NEVER:**
+- Treat Related Skills as executable dependencies or invoke any cross-reference from that section; those entries are documentation-only and do not imply execution. Invoke only the required `/autoskillit:mermaid` skill; never invoke `/autoskillit:make-arch-diag`, another architecture lens, or any other cross-reference.
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for ourselves
@@ -153,7 +151,6 @@ semantic_requirements:
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
 - Let an exploration vector judge resilience effectiveness, select recovery policy, map the final error paths, or create the diagram
-- Treat Related Skills references as exploration dependencies or dispatch work to another architecture lens
 
 **ALWAYS:**
 - Focus on FAILURE paths and recovery
@@ -196,7 +193,7 @@ Dispatch all ready, scope-disjoint vectors through the deterministic router in a
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Dispatch exactly these six vectors under their registered role policies. The parent/router may hand declarative retry-policy or circuit-breaker configuration to `repository-impact-profiler`; this does not create another vector. Related Skills references remain documentation only and do not create dependencies.
+Dispatch exactly these six vectors under their registered role policies. The parent/router may hand declarative retry-policy or circuit-breaker configuration to `repository-impact-profiler`; this does not create another vector.
 
 <!-- autoskillit:exploration-vector id="exception-hierarchy" -->
 1. **Exception Hierarchy**

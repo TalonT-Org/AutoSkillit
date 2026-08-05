@@ -81,6 +81,28 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
+      - name: Install ripgrep
+        shell: bash
+        run: |
+          if command -v rg >/dev/null 2>&1; then
+            rg --version
+            exit 0
+          fi
+          case "$RUNNER_OS" in
+            Linux)
+              sudo apt-get update
+              sudo apt-get install --yes ripgrep
+              ;;
+            macOS)
+              brew install ripgrep
+              ;;
+            *)
+              echo "::error::Unsupported runner OS for ripgrep installation: $RUNNER_OS"
+              exit 1
+              ;;
+          esac
+          rg --version
+
       - name: Install dependencies
         run: uv sync --locked --extra dev
 

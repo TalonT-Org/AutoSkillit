@@ -507,6 +507,22 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
     }
 )
 
+# Guards that fail-closed for valid-but-unrecognized input, as a defense-in-depth
+# measure against privilege escalation (garbage-in still fails open everywhere).
+# Mirrored in src/autoskillit/hooks/guards/AGENTS.md and docs/safety/hooks.md —
+# tests/docs/test_guard_fail_mode_docs.py and tests/arch/test_fail_closed_guard_contract.py
+# enforce both the doc listing and a standing false-positive-corpus obligation
+# for every member.
+FAIL_CLOSED_GUARD_BASENAMES: frozenset[str] = frozenset(
+    {
+        "skill_command_guard.py",
+        "open_kitchen_guard.py",
+        "skill_orchestration_guard.py",
+        "background_exec_guard.py",
+        "github_mutation_guard.py",
+    }
+)
+
 # Risky gh CLI subcommand pairs that MUST have PreToolUse guard coverage.
 # test_risky_gh_subcommand_coverage.py enforces that every pair here is
 # detected by at least one command-inspecting guard registered under a

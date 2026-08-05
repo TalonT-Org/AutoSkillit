@@ -58,6 +58,40 @@ def test_read_contained_file_enforces_byte_limit(tmp_path: Path) -> None:
         read_contained_file(root, "large.txt", CollectorLimits(max_file_bytes=8))
 
 
+def test_bounded_rg_resolves_host_executable_before_sterile_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    host_bin = tmp_path / "host-bin"
+    host_bin.mkdir()
+    fake_rg = host_bin / "rg"
+    fake_rg.write_text('#!/bin/sh\n[ "$PATH" = "/usr/bin:/bin" ] || exit 2\nexit 1\n')
+    fake_rg.chmod(0o755)
+    monkeypatch.setenv("PATH", str(host_bin))
+
+    result = _bounded.run_bounded_rg(root, "needle", limits=CollectorLimits())
+
+    assert result.failure is None
+    assert result.returncode == 1
+
+
+def test_bounded_rg_rejects_repository_controlled_executable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    fake_rg = root / "rg"
+    fake_rg.write_text("#!/bin/sh\nexit 1\n")
+    fake_rg.chmod(0o755)
+    monkeypatch.setenv("PATH", str(root))
+
+    result = _bounded.run_bounded_rg(root, "needle", limits=CollectorLimits())
+
+    assert result.failure == "rg unavailable (untrusted repository path)"
+    assert result.returncode is None
+
+
 def test_read_contained_file_rejects_post_open_inode_swap(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

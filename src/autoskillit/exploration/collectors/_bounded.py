@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import selectors
+import shutil
 import signal
 import stat
 import subprocess
@@ -272,7 +273,26 @@ def run_bounded_rg(
         raise CollectorSafetyError("ripgrep pattern must be non-empty")
     if not root.is_dir() or root.is_symlink():
         raise CollectorSafetyError("collector root must be a real directory")
-    command = ["rg", "--no-config", "--no-follow", "--json", "--color=never", pattern]
+    rg_path = shutil.which("rg")
+    if rg_path is None:
+        return BoundedCommandResult(None, b"", b"", "rg unavailable (FileNotFoundError)")
+    try:
+        resolved_rg = Path(rg_path).resolve(strict=True)
+        resolved_rg.relative_to(root.resolve(strict=True))
+    except ValueError:
+        pass
+    except OSError as exc:
+        return BoundedCommandResult(None, b"", b"", f"rg unavailable ({type(exc).__name__})")
+    else:
+        return BoundedCommandResult(None, b"", b"", "rg unavailable (untrusted repository path)")
+    command = [
+        str(resolved_rg),
+        "--no-config",
+        "--no-follow",
+        "--json",
+        "--color=never",
+        pattern,
+    ]
     for glob in globs:
         if not glob or "\x00" in glob:
             raise CollectorSafetyError("ripgrep glob is invalid")

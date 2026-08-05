@@ -144,7 +144,7 @@ def parse_github_remote_url(url: str) -> GitHubRepositoryRef | None:
 def _probe_remote_sync(cwd: str | Path, name: str) -> RemoteIdentityProbe:
     try:
         result = subprocess.run(
-            ["git", "remote", "get-url", name],
+            ["git", "config", "--local", "--get-all", f"remote.{name}.url"],
             cwd=str(cwd),
             capture_output=True,
             text=True,
@@ -174,7 +174,16 @@ def _probe_remote_sync(cwd: str | Path, name: str) -> RemoteIdentityProbe:
             github_repository=None,
             diagnostic="not_configured",
         )
-    url = result.stdout.strip()
+    configured_urls = result.stdout.splitlines()
+    if len(configured_urls) != 1:
+        return RemoteIdentityProbe(
+            name=name,
+            url="",
+            usable=False,
+            github_repository=None,
+            diagnostic="multiple_urls",
+        )
+    url = configured_urls[0].strip()
     if not url or url.casefold().startswith("file://"):
         return RemoteIdentityProbe(
             name=name,

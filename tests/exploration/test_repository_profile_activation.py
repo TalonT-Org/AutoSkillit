@@ -141,6 +141,35 @@ def test_profile_activation_accepts_only_exact_canonical_remote_forms(
     assert resolution.source_remote == "origin"
 
 
+def test_profile_activation_ignores_git_url_rewrites(
+    tmp_path: Path,
+) -> None:
+    root = _new_git_repository(tmp_path, "rewritten-remote")
+    _set_remote(root, "origin", "https://github.com/TalonT-Org/AutoSkillit.git")
+    _git(
+        root,
+        "config",
+        "--local",
+        "url.https://ci-credential@github.com/TalonT-Org/.insteadOf",
+        "https://github.com/TalonT-Org/",
+    )
+    rewritten = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+
+    resolution = resolve_repository_identity(root)
+
+    assert "ci-credential@" in rewritten
+    assert resolution.source == "remote"
+    assert resolution.normalized_identity == "github.com/talont-org/autoskillit"
+    assert resolution.autoskillit_overlay
+    assert all("ci-credential" not in item.value for item in resolution.evidence)
+
+
 def test_profile_activation_uses_upstream_before_origin_for_conflicting_forks(
     tmp_path: Path,
 ) -> None:

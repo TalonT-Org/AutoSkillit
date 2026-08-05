@@ -46,6 +46,7 @@ from autoskillit.execution.backends import (
     _read_codex_config,
     _serialize_toml,
     _write_codex_config,
+    all_backends,
     codex_recipe_delivery_calling_contract,
     ensure_codex_mcp_registered,
     enumerate_fresh_codex_marker_ids,
@@ -328,5 +329,6 @@ __all__ = [
     "is_valid_fidelity_finding",
     "partition_files_by_domain",
     # backends
+    "all_backends",
     "get_backend",
 ]

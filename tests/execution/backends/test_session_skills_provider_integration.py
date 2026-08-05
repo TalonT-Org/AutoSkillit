@@ -82,7 +82,7 @@ def test_materialize_invocation_uses_structured_refusal_and_preserves_diagnostic
     manager = DefaultSessionSkillManager(
         SkillsDirectoryProvider(),
         ephemeral_root=tmp_path / "ephemeral",
-        persistent_root=persistent_root,
+        persistent_roots={"codex": persistent_root},
     )
 
     with pytest.raises(SkillContractError) as exc_info:

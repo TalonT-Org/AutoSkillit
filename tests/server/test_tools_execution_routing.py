@@ -738,7 +738,7 @@ async def test_process_issues_l2_parent_executes_session_child_on_each_backend(
         wraps=DefaultSessionSkillManager(
             SkillsDirectoryProvider(),
             ephemeral_root=tmp_path / "ephemeral-sessions",
-            persistent_root=tmp_path / "persistent-sessions",
+            persistent_roots={"codex": tmp_path / "persistent-sessions"},
         )
     )
     executor = InMemoryHeadlessExecutor()

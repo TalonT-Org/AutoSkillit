@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -11,6 +12,8 @@ from autoskillit.workspace.session_skills import (
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
 )
+
+_UNSET = object()
 
 
 @pytest.fixture
@@ -107,13 +110,19 @@ def make_session_skill_manager(tmp_path: Path):
     def _factory(
         *,
         ephemeral_root: Path | None = None,
-        codex_root: Path | None = None,
+        codex_root: Path | None | object = _UNSET,
     ) -> DefaultSessionSkillManager:
         provider = SkillsDirectoryProvider()
+        if codex_root is None:
+            persistent_roots: dict[str, Path] = {}
+        elif codex_root is _UNSET:
+            persistent_roots = {"codex": tmp_path / "codex-root"}
+        else:
+            persistent_roots = {"codex": cast(Path, codex_root)}
         return DefaultSessionSkillManager(
             provider,
             ephemeral_root=ephemeral_root or tmp_path,
-            persistent_root=codex_root or tmp_path / "codex-root",
+            persistent_roots=persistent_roots,
         )
 
     return _factory

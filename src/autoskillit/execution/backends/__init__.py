@@ -80,8 +80,14 @@ def get_backend(name: str) -> CodingAgentBackend:
     return cls()
 
 
+def all_backends() -> list[CodingAgentBackend]:
+    """Instantiate every registered backend, in registry-name order."""
+    return [get_backend(name) for name in sorted(BACKEND_REGISTRY)]
+
+
 __all__ = [
     "BACKEND_REGISTRY",
+    "all_backends",
     "CODEX_EXEC_FLAGS",
     "CODEX_TOP_LEVEL_ONLY_FLAGS",
     "CompositeSessionLocator",

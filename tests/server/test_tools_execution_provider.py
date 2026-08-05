@@ -465,7 +465,7 @@ async def test_anthropic_base_url_cannot_override_codex_backend_authority(
     tool_ctx_kitchen_open.session_skill_manager = DefaultSessionSkillManager(
         SkillsDirectoryProvider(),
         ephemeral_root=tmp_path / "ephemeral-sessions",
-        persistent_root=tmp_path / "persistent-sessions",
+        persistent_roots={"codex": tmp_path / "persistent-sessions"},
     )
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"

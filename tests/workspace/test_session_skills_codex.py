@@ -319,8 +319,12 @@ def test_persistent_backend_declares_its_own_inert_paths(
     make_session_skill_manager,
     tmp_path: Path,
 ) -> None:
+    # backend.name stays "codex" (from _make_codex_backend()) because persistent
+    # roots are now resolved per backend name (#4391) — the fixture's codex_root
+    # kwarg only populates a "codex" entry in the manager's persistent_roots map.
+    # The point under test is that inert-path declaration follows
+    # capabilities.session_dir_symlinks generically, not a hardcoded convention.
     backend = _make_codex_backend()
-    backend.name = "persistent-test"
     backend.capabilities = replace(
         _CODEX_CAPABILITIES,
         session_dir_symlinks=frozenset({"records"}),
@@ -409,7 +413,7 @@ def test_codex_session_requires_persistent_root_before_any_home_mutation(
     mgr = DefaultSessionSkillManager(
         SkillsDirectoryProvider(),
         ephemeral_root=ephemeral_root,
-        persistent_root=None,
+        persistent_roots={},
     )
 
     with pytest.raises(RuntimeError, match="persistent_root"):

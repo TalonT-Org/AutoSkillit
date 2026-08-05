@@ -114,7 +114,7 @@ class TestExplicitOverrideProviderPrecedence:
         tool_ctx_kitchen_open.session_skill_manager = DefaultSessionSkillManager(
             SkillsDirectoryProvider(),
             ephemeral_root=tmp_path / "ephemeral-sessions",
-            persistent_root=tmp_path / "persistent-sessions",
+            persistent_roots={"codex": tmp_path / "persistent-sessions"},
         )
         monkeypatch.setattr(
             tool_ctx_kitchen_open.launch_resolver,

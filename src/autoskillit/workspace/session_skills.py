@@ -968,6 +968,9 @@ class DefaultSessionSkillManager:
                 failures.append(exc)
         return failures
 
+    def _candidate_roots(self) -> tuple[Path, ...]:
+        return (self._root, *self._persistent_roots.values())
+
     def cleanup_session(self, session_id: str) -> bool:
         """Remove the session skill directory for a completed session.
 
@@ -991,7 +994,7 @@ class DefaultSessionSkillManager:
             _raise_failures("Owned session cleanup failed", failures)
             return existed
 
-        for root in (self._root, *self._persistent_roots.values()):
+        for root in self._candidate_roots():
             resolved_root = root.resolve()
             candidate = resolved_root / session_id
             if not os.path.lexists(candidate):
@@ -1025,7 +1028,7 @@ class DefaultSessionSkillManager:
 
     def validate_session_exists(self, session_id: str) -> bool:
         """Return True if session directory exists and is non-empty."""
-        for root in (self._root, *self._persistent_roots.values()):
+        for root in self._candidate_roots():
             candidate = root / session_id
             if candidate.is_dir():
                 try:
@@ -1041,7 +1044,7 @@ class DefaultSessionSkillManager:
         """
         now = time.time()
         removed = 0
-        for root in (self._root, *self._persistent_roots.values()):
+        for root in self._candidate_roots():
             if not root.exists():
                 continue
             resolved_root = root.resolve()

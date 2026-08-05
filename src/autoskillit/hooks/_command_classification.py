@@ -1172,14 +1172,34 @@ _GRAPHQL_REVIEW_MUTATIONS: frozenset[str] = frozenset(
 
 
 def _segment_has_possible_github_exec_token(segment: Sequence[str]) -> bool:
-    """True when gh/curl (path-normalized) appears as its own token in *segment*.
+    """True when gh/curl (path-normalized) is in command position within *segment*.
 
-    A quote-collapsed token (e.g. an echoed ``"see gh docs"`` string) never
-    equals ``gh``/``curl`` exactly — shlex already stripped the quoting by
-    the time segments reach here — so this does not false-positive on a
-    mention inside a single string argument.
+    Checks the segment's own command verb — via ``command_verb_and_args``,
+    which already skips env/wrapper prefixes and loop control words like
+    ``do``/``then`` — not every token. A bare-word argument that merely
+    mentions ``gh``/``curl`` (e.g. ``echo "gh"``, which shlex collapses to
+    the same tokens as an unquoted ``echo gh``) is never in command position
+    and must not trip this check.
+
+    An inline function definition (``name() {``) or a bare compound-command
+    opener (``{``) fuses its body's first command into the same shlex
+    segment as the opener — the segmenter only splits on shell operators
+    like ``;``, never on ``{`` — so the body's own verb would otherwise be
+    invisible to a verb-only check. When the segment's verb is such an
+    opener, the check is re-applied to the token immediately following it.
     """
-    return any(_normalize_executable(token) in _POSSIBLE_GITHUB_EXEC_NAMES for token in segment)
+    verb, args = command_verb_and_args(list(segment))
+    if _normalize_executable(verb) in _POSSIBLE_GITHUB_EXEC_NAMES:
+        return True
+    body: list[str] | None = None
+    if verb == "{":
+        body = args
+    elif verb.endswith("()") and args[:1] == ["{"]:
+        body = args[1:]
+    if body is None:
+        return False
+    body_verb, _body_args = command_verb_and_args(body)
+    return _normalize_executable(body_verb) in _POSSIBLE_GITHUB_EXEC_NAMES
 
 
 def _segments_have_possible_github_exec_token(segments: Sequence[Sequence[str]]) -> bool:

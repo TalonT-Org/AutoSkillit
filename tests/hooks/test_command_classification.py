@@ -1235,6 +1235,11 @@ class TestAnalyzeGitHubMutations:
         assert analysis.status is GitHubMutationStatus.NONE
         assert analysis.mutations == ()
 
+    def test_bare_gh_token_as_argument_inside_a_loop_is_none(self) -> None:
+        analysis = analyze_github_mutations('for i in 1; do echo "gh"; done')
+        assert analysis.status is GitHubMutationStatus.NONE
+        assert analysis.mutations == ()
+
     def test_gh_verb_reachable_through_a_loop_stays_deny_grade(self) -> None:
         analysis = analyze_github_mutations("for i in 1; do gh pr merge $i; done")
 

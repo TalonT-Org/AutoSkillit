@@ -234,6 +234,80 @@ unconditionally stripped by the managed native-shell env filter. Cook remains
 structurally unmanaged (no managed-identity params), now *declaredly* so:
 absence of the declaration is a genuine anomaly again, not the common case.
 
+#### Directory-reconciliation scan phase
+
+Every prior cleanup path only ever acts on records the ledger already knows
+about — a `shell_[0-9a-f]{16}.log` file written before a crash, a ledger
+reset, or a legacy pre-ledger run has no record and was permanently
+invisible to cleanup. `hooks/_capture/_orphan_scan.py` (stdlib-only) closes
+that gap. `SweepBudgetSpec` gains `max_directory_entries_scanned`
+(`_types.py`) — 0, the `RUNNER_TAIL_BUDGET` default, disables the phase
+entirely, so per-command runner-tail latency is unaffected; `SESSION_START_BUDGET`
+sets it to 512. The scan runs inside `run_bounded_sweep` after record-sweep
+work, only while duration budget remains.
+
+Directory entries are visited in sorted-name order — the only stable,
+restartable position `os.scandir` supports — resumed via a persisted
+`.orphan-scan-cursor` sidecar written through the same descriptor-relative
+atomic helper, `_control_file.publish_private_file()`, that
+`.capture-sweep-cursor` uses (never `.write_text()`), so repeated
+budget-bounded invocations cover the whole directory without rescanning
+from zero.
+
+A candidate name is *adopted*, never deleted directly, only when every gate
+holds jointly:
+
+| Gate | Rule |
+|---|---|
+| Name pattern | matches `^shell_[0-9a-f]{16}\.log$` exactly |
+| No symlink traversal | `lstat` shows a regular file — never `Path.is_file()`, which follows symlinks; a symlinked capture root once let cleanup escape the project (#4319) |
+| Age | mtime at least 24h old — comfortably beyond the one-hour finalize/abandon eligibility grace, so a file mid-write is never a candidate |
+| Not tracked | name is not the public name of any non-`DELETED`-phase ledger record — a `DELETING`-phase record's file, still on disk mid-quarantine, is excluded, or adoption would create a duplicate record for a tracked name; mtime alone is not a liveness signal, so this gate and the age gate above are both required jointly (#4321) |
+
+Adoption re-verifies every gate again under lock — the scan above runs
+unlocked — and constructs a `CaptureStatus.LEGACY_CLEANUP_ONLY` record, the
+same shape the legacy-ledger decode path produces, with
+`retention_phase=ELIGIBLE`: immediately due for the existing two-phase
+quarantine deletion. Admission is capacity-gated exactly like a real
+`reserve_capture()` call and shares the sweep's `max_transitions` budget — a
+capacity-exhausted candidate is silently skipped, deferred to a later
+invocation once cleanup frees room, so orphan adoption can only ever compete
+for the same active-record ceiling real captures do, never bypass or starve
+it (the same class of self-starvation issue #4440 fixed for the
+record-sweep path).
+
+Codex hook generation includes the scan-enabled `SESSION_START_BUDGET` path:
+`capture_lifecycle_hook.py` is registered `codex_status="works-as-is"`,
+`session_scope="any"` — the exclusion issue #4320 fixed no longer applies.
+
+#### Bounded lock-contention retry
+
+A single non-blocking `flock()` attempt used to abort a sweep immediately on
+any contention, including the 256-attempt `SESSION_START_BUDGET` pass —
+`session_scope="any"` means every concurrent session contends the same lock
+at startup. `CaptureLifecycleStore._locked(blocking=False)` — the only
+non-blocking caller shape, used exclusively by sweep-path helpers while a
+sweep is active — now retries on `EAGAIN`/`EWOULDBLOCK` with jittered,
+doubling backoff (5–20ms base, capped, jitter from the stdlib `random`
+module's OS-entropy-seeded per-process state, never a wall-clock-derived
+source) bounded by the *same* `max_duration_seconds` the sweep already
+carries — no new configuration knob. `RUNNER_TAIL_BUDGET` (50ms) naturally
+permits one or two retries; `SESSION_START_BUDGET` (1.0s) rides out startup
+stampedes. `LOCK_CONTENDED` is only ever returned once the entire budget has
+elapsed without acquisition; blocking callers (every non-sweep transition)
+are unaffected.
+
+#### Stats and reclamation CLI
+
+`hooks._capture._reconcile.capture_store_stats()` is the single read-only
+adapter both the doctor battery's capture-store check and `autoskillit
+capture-store` (without `--reclaim`) call, so neither surface can drift from
+what a real reconciliation pass would find. `autoskillit capture-store
+--reclaim` loops `reconcile_capture_store` with a generous one-time
+`RECLAIM_BUDGET` until a clean pass — no due records, no adoptable orphans —
+or a hard iteration cap. It exists for bulk pre-existing backlog; the
+SessionStart scan phase above keeps new debris from ever accumulating again.
+
 ### `generated_file_write_guard.py`
 **Guarded tools:** `Write`, `Edit`
 Denies writes to generated files (`hooks.json`, `settings.json`). The hooks

@@ -146,6 +146,23 @@ hook can be retired in favor of that mechanism.
 6. General retrieval, publication/privacy policy, quota accounting, and upstream
    live visibility remain downstream work identified by ADR-0008.
 
+## Resolved
+
+- **Unledgered orphan files:** a `shell_[0-9a-f]{16}.log` written before a crash, a
+  ledger reset, or a legacy pre-ledger run had no record and was permanently
+  invisible to cleanup. The budget-bounded directory-reconciliation scan phase
+  (`hooks/_capture/_orphan_scan.py`, `docs/safety/hooks.md`) adopts eligible
+  orphans into the same `LEGACY_CLEANUP_ONLY` shape the legacy-ledger decode
+  path already produces, so the existing quarantine-deletion path retires them
+  under normal budgets and invariants.
+- **Lock contention:** a single non-blocking `flock()` attempt aborted a sweep
+  immediately on any contention, including the 256-attempt `SESSION_START_BUDGET`
+  pass, even though `session_scope="any"` makes every concurrent session contend
+  the same lock at startup. Non-blocking lock acquisition now retries with
+  jittered, doubling backoff bounded by the sweep's own `max_duration_seconds`
+  budget — no new configuration knob — so a contended lock recovers within the
+  same invocation instead of zeroing it.
+
 ## Consequences
 
 - Claude Code sessions no longer see AutoSkillit shell deny or rewrite surfaces.

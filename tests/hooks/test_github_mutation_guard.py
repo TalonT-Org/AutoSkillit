@@ -521,22 +521,70 @@ def test_deny_messages_mapping_is_exhaustive() -> None:
     assert set(_DENY_MESSAGES.keys()) == set(DenyTrigger)
 
 
-@pytest.mark.parametrize("surface", ["bash", "run-cmd"])
-def test_conflicting_cwd_authorities_fail_closed(
-    surface: str,
+@pytest.mark.parametrize("tool_cwd", [None, "relative/dir"], ids=["omitted", "relative"])
+def test_relative_input_file_unresolved_without_an_absolute_tool_cwd(
+    tool_cwd: str | None,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    other = tmp_path / "other"
-    command = "gh api --method PATCH /repos/o/r/issues/7 -f title=updated"
-    if surface == "bash":
-        event = _bash_event(command, cwd=str(tmp_path))
-        event["tool_input"]["cwd"] = str(other)
-    else:
-        event = _run_cmd_event(command, cwd=str(tmp_path))
-        event["cwd"] = str(other)
+    """A run_cmd's own target-dir argument is the execution cwd, not the payload cwd.
 
-    assert _decision(event, monkeypatch) == "deny"
+    Resolving a relative --input file requires an absolute execution cwd;
+    an omitted or relative tool_cwd leaves resolution impossible, and the
+    payload's session-level cwd is never substituted as a fallback authority.
+    """
+    command = f"gh api {_OTHER_ROUTE} --method POST --input review.json"
+    event = make_hook_event(
+        tool="run_cmd",
+        command=command,
+        tool_cwd=tool_cwd,
+        payload_cwd=str(tmp_path),
+    )
+
+    result = _run_hook(event, monkeypatch)
+
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "unresolved_mutation" in result["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_literal_input_file_resolves_against_tool_cwd_not_payload_cwd(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    worktree = tmp_path / "worktree"
+    repo.mkdir()
+    worktree.mkdir()
+    (worktree / "comment.json").write_text(json.dumps({"body": "one comment"}), encoding="utf-8")
+    command = f"gh api {_OTHER_ROUTE} --method POST --input comment.json"
+    event = make_hook_event(
+        tool="run_cmd",
+        command=command,
+        tool_cwd=str(worktree),
+        payload_cwd=str(repo),
+    )
+
+    assert _decision(event, monkeypatch) is None
+
+
+def test_literal_non_review_mutation_allowed_with_differing_cwds(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A run_cmd's own target-dir argument differing from the session cwd is normal.
+
+    Replaces the old envelope-equality expectation: worktree topology means
+    these two facts differ on essentially every real call.
+    """
+    command = "gh api --method PATCH repos/o/r/issues/1"
+    event = make_hook_event(
+        tool="run_cmd",
+        command=command,
+        tool_cwd=str(tmp_path / "worktree"),
+        payload_cwd=str(tmp_path / "repo"),
+    )
+
+    assert _decision(event, monkeypatch) is None
 
 
 def test_guard_registration_is_exact() -> None:

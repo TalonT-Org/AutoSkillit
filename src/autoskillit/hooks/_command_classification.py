@@ -1554,29 +1554,29 @@ _GH_KNOWN_VALUE_FLAGS: frozenset[str] = frozenset(
 )
 
 
-def _gh_subcommand_table(spec: str) -> dict[str, frozenset[str]]:
-    pairs = (row.split(":", 1) for row in spec.split(";"))
-    return {noun: frozenset(verbs.split()) for noun, verbs in pairs}
-
-
-_GH_MUTATION_SUBCOMMANDS = _gh_subcommand_table(
-    "cache:delete;codespace:create delete edit rebuild stop;gist:create delete edit "
-    "rename;gpg-key:add delete;issue:close comment create delete develop edit lock pin reopen "
-    "transfer unlock unpin;label:clone create delete edit;pr:close comment edit lock merge "
-    "ready reopen unlock;project:close copy create delete edit field-create field-delete "
-    "item-add item-archive item-create item-delete item-edit link mark-template "
-    "unlink;release:create delete delete-asset edit upload;repo:archive create delete edit "
-    "fork rename sync unarchive;run:cancel delete rerun;secret:delete set;ssh-key:add "
-    "delete;variable:delete set;workflow:disable enable run"
-)
-# `pr create` has its own guard; other unlisted mutation-capable verbs fail closed.
-_GH_READ_ONLY_SUBCOMMANDS = _gh_subcommand_table(
-    "cache:list;codespace:code cp jupyter list logs ports ssh view;gist:clone list "
-    "view;gpg-key:list;issue:list status view;label:list;pr:checkout checks diff list status "
-    "view;project:field-list item-list list view;release:download list verify verify-asset "
-    "view;repo:clone list set-default view;run:download list view "
-    "watch;secret:list;ssh-key:list;variable:list;workflow:list view"
-)
+_GH_MUTATION_SUBCOMMANDS: dict[str, frozenset[str]] = {
+    row.partition(":")[0]: frozenset(row.partition(":")[2].split())
+    for row in (
+        "cache:delete;codespace:create delete edit rebuild stop;gist:create delete edit "
+        "rename;gpg-key:add delete;issue:close comment create delete develop edit lock pin reopen "
+        "transfer unlock unpin;label:clone create delete edit;pr:close comment edit lock merge "
+        "ready reopen unlock;project:close copy create delete edit field-create field-delete "
+        "item-add item-archive item-create item-delete item-edit link mark-template "
+        "unlink;release:create delete delete-asset edit upload;repo:archive create delete edit "
+        "fork rename sync unarchive;run:cancel delete rerun;secret:delete set;ssh-key:add "
+        "delete;variable:delete set;workflow:disable enable run"
+    ).split(";")
+}
+_GH_READ_ONLY_SUBCOMMANDS: dict[str, frozenset[str]] = {
+    row.partition(":")[0]: frozenset(row.partition(":")[2].split())
+    for row in (
+        "cache:list;codespace:code cp jupyter list logs ports ssh view;gist:clone list "
+        "view;gpg-key:list;issue:list status view;label:list;pr:checkout checks diff list status "
+        "view;project:field-list item-list list view;release:download list verify verify-asset "
+        "view;repo:clone list set-default view;run:download list view "
+        "watch;secret:list;ssh-key:list;variable:list;workflow:list view"
+    ).split(";")
+}
 
 
 def _gh_args_have_bare_help_flag(args: Sequence[str]) -> bool:

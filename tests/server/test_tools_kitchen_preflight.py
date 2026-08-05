@@ -96,7 +96,7 @@ def _make_persistent_backend(*, well_formed: bool) -> MagicMock:
     None, matching the malformed-convention shape resolve_persistent_session_root
     raises RuntimeError for.
     """
-    from autoskillit.core import BackendCapabilities
+    from autoskillit.core import BackendCapabilities, BackendConventions
 
     caps = BackendCapabilities(
         session_dir_persistent=True,
@@ -106,8 +106,8 @@ def _make_persistent_backend(*, well_formed: bool) -> MagicMock:
     backend = MagicMock()
     backend.name = "codex"
     backend.capabilities = caps
-    backend.conventions.persistent_session_root_subdir = (
-        Path("codex-sessions") if well_formed else None
+    backend.conventions = BackendConventions(
+        persistent_session_root_subdir=(Path("codex-sessions") if well_formed else None)
     )
     return backend
 

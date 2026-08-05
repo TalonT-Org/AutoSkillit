@@ -37,6 +37,11 @@ from ._types import (
 
 register_module_aliases(__name__)
 
+# A sweep attempt can expire a reference, mark the record abandoned, enter
+# deletion, and finally mark it deleted. Orphan admissions reserve the same
+# per-item ceiling because they share the sweep transition budget.
+_MAX_TRANSITIONS_PER_SWEEP_ITEM = 4
+
 
 class SweepRecord(Protocol):
     @property
@@ -806,7 +811,7 @@ def scan_and_adopt_orphans(
     adopted = 0
     for name in scan.candidates:
         _inspected, _replay, transitions, _cursor_writes = sweep_work_counters(store)
-        if transitions + 4 > budget.max_transitions:
+        if transitions + _MAX_TRANSITIONS_PER_SWEEP_ITEM > budget.max_transitions:
             break
         if adopt_orphan(store, name, lifecycle_error=lifecycle_error):
             adopted += 1
@@ -859,7 +864,7 @@ def run_bounded_sweep(
                 blocker = CleanupBlocker.ATTEMPT_BUDGET
             break
         _records, _bytes, transitions, _cursor_writes = work_counters()
-        if transitions + 4 > budget.max_transitions:
+        if transitions + _MAX_TRANSITIONS_PER_SWEEP_ITEM > budget.max_transitions:
             if blocker is CleanupBlocker.NONE:
                 blocker = CleanupBlocker.TRANSITION_BUDGET
             break

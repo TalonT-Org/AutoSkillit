@@ -326,6 +326,14 @@ def doctor(*, output_json: bool = False):
 
 
 @app.command
+def capture_store(*, reclaim: bool = False) -> None:
+    """Report capture-store ledger/directory statistics, or reclaim backlog with --reclaim."""
+    from autoskillit.cli._capture_store import run_capture_store
+
+    run_capture_store(reclaim=reclaim)
+
+
+@app.command
 def migrate(*, check: bool = False):
     """Report outdated recipes and their available migrations.
 

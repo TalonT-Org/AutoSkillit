@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import tomllib
 from collections.abc import Mapping
 from enum import StrEnum
 from pathlib import Path
@@ -837,8 +838,6 @@ class TestCodexBuildInteractiveCmd:
         assert "abc" not in spec.cmd
 
     def test_system_prompt_with_no_resume_appends_config_override(self) -> None:
-        import tomllib
-
         from autoskillit.execution.backends._claude_prompt import codex_discipline_suffix
 
         spec = CodexBackend().build_interactive_cmd(system_prompt="foo")
@@ -1653,8 +1652,6 @@ class TestCodexBackendSetupSessionDir:
         assert (self.session_dir / "agents").is_dir()
 
     def test_agent_toml_set_and_count_match_md_sources(self) -> None:
-        from autoskillit.core import load_agent_definitions
-
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)
         toml_files = list((self.session_dir / "agents").glob("*.toml"))
@@ -1669,8 +1666,6 @@ class TestCodexBackendSetupSessionDir:
         assert len(toml_files) == len(expected_names)
 
     def test_agent_toml_required_fields_present_and_nonempty(self) -> None:
-        import tomllib
-
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)
         for toml_path in sorted((self.session_dir / "agents").glob("*.toml")):
@@ -1705,8 +1700,6 @@ class TestCodexBackendSetupSessionDir:
             )
 
     def test_read_only_agent_tools_project_to_read_only_sandbox(self) -> None:
-        import tomllib
-
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)
         for name in (
@@ -1721,8 +1714,6 @@ class TestCodexBackendSetupSessionDir:
             assert data["sandbox_mode"] == "read-only"
 
     def test_generated_agents_are_registered_in_session_config(self) -> None:
-        import tomllib
-
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)
         config = tomllib.loads((self.session_dir / "config.toml").read_text(encoding="utf-8"))
@@ -1736,8 +1727,6 @@ class TestCodexBackendSetupSessionDir:
     def test_parent_sandbox_is_bound_without_preventing_child_narrowing(
         self, parent_sandbox: str
     ) -> None:
-        import tomllib
-
         self._write_all_source_files()
         CodexBackend().setup_session_dir(
             self.session_dir,
@@ -1750,8 +1739,6 @@ class TestCodexBackendSetupSessionDir:
             assert "sandbox_mode" not in config
 
     def test_injected_luna_definition_is_the_only_generated_role(self) -> None:
-        import tomllib
-
         definition = self._luna_definition()
         CodexBackend().setup_session_dir(
             self.session_dir,
@@ -1770,8 +1757,6 @@ class TestCodexBackendSetupSessionDir:
         assert agent_definition_digest(definition) in parsed["developer_instructions"]
 
     def test_explorer_parent_and_roles_project_one_exact_shared_principal(self) -> None:
-        import tomllib
-
         definitions = self._explorer_definitions()
         binding_envs = self._explorer_binding_envs(definitions, generation="first")
         self._write_all_source_files()
@@ -1823,8 +1808,6 @@ class TestCodexBackendSetupSessionDir:
         assert role_projections == [parent_projection, parent_projection]
 
     def test_explorer_setup_removes_ambient_parent_mcp_servers(self) -> None:
-        import tomllib
-
         definitions = self._explorer_definitions()
         binding_envs = self._explorer_binding_envs(definitions, generation="first")
         (self.session_dir / "config.toml").write_text(
@@ -1905,8 +1888,6 @@ class TestCodexBackendSetupSessionDir:
         assert not (self.session_dir / "agents").exists()
 
     def test_refresh_explorer_binding_env_replaces_all_role_bindings(self) -> None:
-        import tomllib
-
         definitions = self._explorer_definitions()
         first = self._explorer_binding_envs(definitions, generation="first")
         second = self._explorer_binding_envs(definitions, generation="second")
@@ -2061,8 +2042,6 @@ class TestCodexBackendSetupSessionDir:
         assert not (self.session_dir / "agents").exists()
 
     def test_clear_explorer_binding_env_scrubs_all_persisted_secrets(self) -> None:
-        import tomllib
-
         definitions = self._explorer_definitions()
         binding_envs = self._explorer_binding_envs(definitions, generation="first")
         self._write_all_source_files()
@@ -2140,8 +2119,6 @@ class TestCodexBackendSetupSessionDir:
         assert second_scrub == first_scrub
 
     def test_injected_luna_disabled_features_generate_toml_feature_table(self) -> None:
-        import tomllib
-
         definition = self._luna_definition(disabled_features=("apps", "shell_tool"))
         CodexBackend().setup_session_dir(
             self.session_dir,
@@ -2155,8 +2132,6 @@ class TestCodexBackendSetupSessionDir:
         assert generated_text.index("developer_instructions") < generated_text.index("[features]")
 
     def test_terminal_luna_definition_disables_nested_agents(self) -> None:
-        import tomllib
-
         definition = self._luna_definition(agents_enabled=False)
         CodexBackend().setup_session_dir(
             self.session_dir,
@@ -2239,8 +2214,6 @@ class TestCodexBackendSetupSessionDir:
         assert {path.name for path in self.session_dir.iterdir()} == {"config.toml"}
 
     def test_agent_toml_model_alias_mapped(self) -> None:
-        import tomllib
-
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)
         wp_toml = self.session_dir / "agents" / "wp-elaborator.toml"
@@ -2248,8 +2221,6 @@ class TestCodexBackendSetupSessionDir:
         assert data["model"] == CODEX_MODEL_ALIASES["sonnet"]
 
     def test_agent_toml_contains_effort(self) -> None:
-        import tomllib
-
         from autoskillit.core import CODEX_EFFORT_MAPPING
 
         self._write_all_source_files()
@@ -2267,8 +2238,6 @@ class TestCodexBackendSetupSessionDir:
         assert not (self.session_dir / "agents" / "CLAUDE.toml").exists()
 
     def test_developer_instructions_preserves_markdown_structure(self) -> None:
-        import tomllib
-
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)
         wp_toml = self.session_dir / "agents" / "wp-elaborator.toml"
@@ -2284,8 +2253,6 @@ class TestCodexBackendSetupSessionDir:
         assert not (self.session_dir / ".git").exists()
 
     def test_snapshotted_config_has_auto_compact_limit(self) -> None:
-        import tomllib
-
         from autoskillit.execution.backends import CODEX_AUTO_COMPACT_LIMIT
 
         (self.session_dir / "config.toml").write_text(
@@ -2298,8 +2265,6 @@ class TestCodexBackendSetupSessionDir:
         assert data["model_auto_compact_token_limit"] == CODEX_AUTO_COMPACT_LIMIT
 
     def test_session_config_lacks_key_when_source_lacks_it(self) -> None:
-        import tomllib
-
         (self.codex_home / "config.toml").write_text("[mcp_servers.autoskillit]\n")
         (self.codex_home / "auth.json").write_text("{}")
         CodexBackend().setup_session_dir(self.session_dir)

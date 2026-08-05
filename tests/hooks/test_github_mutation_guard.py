@@ -446,6 +446,81 @@ def test_false_positive_corpus_allows_direct_prefix_run_cmd_tool_name(
     assert _decision(event, monkeypatch) is None
 
 
+def test_field_confusion_payload_denies_with_field_confusion_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    event = make_hook_event(
+        tool="run_cmd",
+        command="pwd",
+        payload_cwd=str(tmp_path),
+        extra_tool_input={"command": "pwd"},
+    )
+
+    result = _run_hook(event, monkeypatch)
+
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+    reason = result["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "field_confusion" in reason
+    assert "review_mutation" not in reason
+    assert "multiple_mutations" not in reason
+    assert "unresolved_mutation" not in reason
+
+
+def test_review_mutation_denies_with_review_mutation_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    event = make_hook_event(
+        tool="Bash",
+        command="gh pr review --approve",
+        payload_cwd=str(tmp_path),
+    )
+
+    result = _run_hook(event, monkeypatch)
+
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "review_mutation" in result["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_multiple_mutations_deny_with_multiple_mutations_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    command = (
+        "gh api --method PATCH /repos/o/r/issues/7 -f title=x && "
+        "gh api --method DELETE /repos/o/r/issues/8"
+    )
+    event = make_hook_event(tool="Bash", command=command, payload_cwd=str(tmp_path))
+
+    result = _run_hook(event, monkeypatch)
+
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "multiple_mutations" in result["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_unresolved_mutation_denies_with_unresolved_mutation_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    event = make_hook_event(
+        tool="Bash",
+        command='gh api "repos/$OWNER/repo/pulls/1/reviews" -X POST',
+        payload_cwd=str(tmp_path),
+    )
+
+    result = _run_hook(event, monkeypatch)
+
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "unresolved_mutation" in result["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_deny_messages_mapping_is_exhaustive() -> None:
+    from autoskillit.hooks.guards.github_mutation_guard import _DENY_MESSAGES, DenyTrigger
+
+    assert set(_DENY_MESSAGES.keys()) == set(DenyTrigger)
+
+
 @pytest.mark.parametrize("surface", ["bash", "run-cmd"])
 def test_conflicting_cwd_authorities_fail_closed(
     surface: str,

@@ -308,6 +308,9 @@ print("SURVIVED", flush=True)
     )
     assert "SURVIVED" in result.stdout
     assert "ModuleNotFoundError" not in result.stderr
+    # The module default's WriteLoggerFactory writes to sys.stderr — assert
+    # the log line actually reached the stream, not just that nothing raised.
+    assert "simulated_failure" in result.stderr
 
 
 def test_t_b2_configure_logging_console_branch_survives_deleted_rich_tree() -> None:
@@ -343,6 +346,9 @@ except Exception:
     logger.warning("simulated_failure", exc_info=True)
 
 print("SURVIVED", flush=True)
+print("STREAM_CONTENT_START", flush=True)
+print("".join(stream.buf), flush=True)
+print("STREAM_CONTENT_END", flush=True)
 """
     result = _run_poisoned_subprocess(driver)
     assert result.returncode == 0, (
@@ -351,6 +357,13 @@ print("SURVIVED", flush=True)
     )
     assert "SURVIVED" in result.stdout
     assert "ModuleNotFoundError" not in result.stderr
+    # configure_logging()'s console branch writes to the injected `stream`
+    # (never sys.stderr directly) — assert the log line actually reached it,
+    # not just that nothing raised.
+    stream_content = result.stdout.split("STREAM_CONTENT_START\n", 1)[1].split(
+        "STREAM_CONTENT_END\n", 1
+    )[0]
+    assert "simulated_failure" in stream_content
 
 
 def test_t_b5_verifier_fault_injection_survives_real_logging_chain() -> None:
@@ -588,6 +601,7 @@ def test_metadata_must_advance_before_install(
         home=tmp_path,
         base_env={"PATH": "/bin"},
         version_reader=lambda _name: "1.0.0",
+        fresh_version_prober=lambda _info, _env, _runner: "1.0.0",
         process_runner=_recording_success_runner(calls),
     )
 
@@ -662,6 +676,7 @@ def test_install_process_statuses_map_to_distinct_update_outcomes(
         home=tmp_path,
         base_env={"PATH": "/bin"},
         version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
         process_runner=lambda cmd, **kwargs: subprocess.CompletedProcess(cmd, next(statuses)),
     )
 
@@ -700,6 +715,7 @@ def test_success_uses_sealed_env_explicit_cwd_and_maintenance_flags(
             "AUTOSKILLIT_AGENT_BACKEND__BACKEND": "codex",
         },
         version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
         process_runner=runner,
     )
 
@@ -788,6 +804,7 @@ def test_success_from_real_worktree_seals_env_and_uses_home_maintenance_cwd(
             home=home,
             base_env={**approved_base_env, **sensitive_env},
             version_reader=lambda _name: next(versions),
+            fresh_version_prober=lambda _info, _env, _runner: next(versions),
             process_runner=runner,
         )
 
@@ -846,6 +863,7 @@ def test_codex_caller_with_old_claude_registration_completes_only_after_matching
             "AUTOSKILLIT_AGENT_BACKEND__BACKEND": "codex",
         },
         version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
         process_runner=runner,
     )
 
@@ -899,6 +917,7 @@ def test_pre_update_obligation_is_immutable_but_post_update_evidence_is_fresh(
             "AUTOSKILLIT_AGENT_BACKEND__BACKEND": "codex",
         },
         version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
         process_runner=runner,
     )
 
@@ -975,6 +994,7 @@ def test_required_invalid_artifact_states_fail_only_at_final_verification(
         home=tmp_path,
         base_env={"PATH": "/bin"},
         version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
         process_runner=_recording_success_runner(calls),
     )
 
@@ -1005,6 +1025,7 @@ def test_verification_error_is_failed_postcondition(
         home=tmp_path,
         base_env={"PATH": "/bin"},
         version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
         process_runner=lambda cmd, **kwargs: subprocess.CompletedProcess(cmd, 0),
     )
 
@@ -1200,6 +1221,7 @@ def test_coordinator_runs_real_install_adapter_with_exact_isolated_context(
         home=home,
         base_env=base_env,
         version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
         process_runner=runner,
     )
 
@@ -1289,6 +1311,7 @@ def test_registered_plugin_crosses_real_install_cli_with_typed_statuses(
         home=home,
         base_env=base_env,
         version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
         process_runner=runner,
     )
 
@@ -1398,6 +1421,7 @@ def test_real_install_process_launch_signal_and_unknown_statuses_stop_verificati
         home=home,
         base_env=base_env,
         version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
         process_runner=runner,
     )
 
@@ -1470,6 +1494,7 @@ def test_update_consumers_compose_with_registered_real_child_transaction(
             home=home,
             base_env=base_env,
             version_reader=lambda _name: next(versions),
+            fresh_version_prober=lambda _info, _env, _runner: next(versions),
             process_runner=runner,
         )
         results.append(result)
@@ -1601,6 +1626,7 @@ def test_t_c1_obligation_written_before_upgrade_launch_and_cleared_on_completion
         home=tmp_path,
         base_env={"PATH": "/bin"},
         version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
         process_runner=runner,
     )
 
@@ -1613,8 +1639,10 @@ def test_t_c1_obligation_written_before_upgrade_launch_and_cleared_on_completion
     ("failure_point", "expect_expected_version"),
     [
         ("upgrade_nonzero_exit", False),
+        ("uv_oserror", False),
         ("raising_probe", False),
         ("child_failure_after_probe", True),
+        ("child_oserror", True),
         ("verifier_raises_after_probe", True),
     ],
 )
@@ -1646,8 +1674,12 @@ def test_t_c1_obligation_survives_failures_at_or_after_upgrade_subprocess(
         calls.append(list(cmd))
         if failure_point == "upgrade_nonzero_exit" and len(calls) == 1:
             return subprocess.CompletedProcess(cmd, 7)
+        if failure_point == "uv_oserror" and len(calls) == 1:
+            raise OSError("simulated uv-install launch failure")
         if failure_point == "child_failure_after_probe" and len(calls) == 2:
             return subprocess.CompletedProcess(cmd, 9)
+        if failure_point == "child_oserror" and len(calls) == 2:
+            raise OSError("simulated child install launch failure")
         return subprocess.CompletedProcess(cmd, 0)
 
     prober = (

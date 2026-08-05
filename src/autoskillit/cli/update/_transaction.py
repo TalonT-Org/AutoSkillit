@@ -295,23 +295,19 @@ def _resolve_fresh_version(
     maintenance_env: Mapping[str, str],
     runner: _ProcessRunner,
     fresh_version_prober: _VersionProber | None,
-    version_reader: _VersionReader | None,
 ) -> str:
     """Resolve the post-pivot environment's autoskillit version.
 
-    Prefers ``fresh_version_prober`` (out-of-process, safe past the pivot —
-    see module docstring and ``_default_fresh_version_prober``). Falls back
-    to ``version_reader`` ONLY when the caller explicitly injected one
-    without also injecting ``fresh_version_prober`` — a backward-compatible
-    seam for callers that inject a single ``version_reader`` covering both
-    the pre- and post-pivot reads. When neither is injected — every real
-    production caller — the safe out-of-process default is used: in-process
-    metadata reads are a pre-pivot-only API in production.
+    Always out-of-process: ``fresh_version_prober`` if injected, otherwise
+    the production default (``_default_fresh_version_prober``). Never
+    ``version_reader`` — that parameter is a pre-pivot-only API. The
+    parent's own import machinery is invalid past the pivot by construction
+    (the upgrade that just ran may have deleted the tree backing it —
+    issue #4469), so post-pivot truth can only come from a fresh subprocess,
+    never an in-process metadata read.
     """
     if fresh_version_prober is not None:
         return fresh_version_prober(info, maintenance_env, runner)
-    if version_reader is not None:
-        return version_reader("autoskillit")
     return _default_fresh_version_prober(info, maintenance_env, runner)
 
 
@@ -368,14 +364,12 @@ def run_update_transaction(
     post-update publication obligation even when the caller's ambient backend
     is Codex.
 
-    ``version_reader`` is consulted for the PRE-pivot read only unless it is
-    injected without ``fresh_version_prober``, in which case it also covers
-    the post-pivot read for backward compatibility with existing test
-    doubles — see ``_resolve_fresh_version``. The real production default
-    for the post-pivot read is ``fresh_version_prober`` /
-    ``_default_fresh_version_prober``: an out-of-process subprocess probe,
-    never in-process metadata, because the parent's own import machinery is
-    invalid past the pivot by construction.
+    ``version_reader`` is consulted for the PRE-pivot read only —
+    ``fresh_version_prober`` is the sole sanctioned source of post-pivot
+    version truth (defaulting to ``_default_fresh_version_prober``: an
+    out-of-process subprocess probe). In-process metadata reads are a
+    pre-pivot-only API in production, because the parent's own import
+    machinery is invalid past the pivot by construction.
     """
 
     progress = _TransactionProgress()
@@ -496,7 +490,6 @@ def run_update_transaction(
                 maintenance_env=maintenance_env,
                 runner=runner,
                 fresh_version_prober=fresh_version_prober,
-                version_reader=version_reader,
             )
             if Version(expected_version) <= Version(current_version):
                 return _upgrade_failure(

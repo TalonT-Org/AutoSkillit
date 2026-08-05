@@ -82,22 +82,32 @@ class TestResolvedNamespaceMatchesSkillLocation:
         """T12d: an invalid project-local override renders as unresolved
         (no new imports on this IL-0 path — only the invalid_reason field
         already visible on the Protocol) instead of resolving to a
-        possibly-wrong namespace."""
-        override = tmp_path / ".claude" / "skills" / "open-kitchen" / "SKILL.md"
+        possibly-wrong namespace.
+
+        Uses a fabricated, local-only skill name (no bundled twin) so
+        ``resolve_effective`` cannot fall through to a valid bundled entry —
+        the only scenario in which the invalid ``SkillInfo`` still escapes
+        and this guard has anything to do. The input already carries the
+        ``autoskillit:`` sigil; if the guard were absent, the fall-through
+        render would use the invalid candidate's PROJECT_LOCAL source
+        (namespace ``""``) and strip that sigil, producing a visibly
+        different ``/my-broken`` — manually verified by reverting the guard.
+        """
+        override = tmp_path / ".claude" / "skills" / "my-broken" / "SKILL.md"
         override.parent.mkdir(parents=True)
         override.write_text(
-            '---\nname: open-kitchen\n---\nSpawn via `Agent(model="sonnet")`.\n',
+            '---\nname: my-broken\n---\nSpawn via `Agent(model="sonnet")`.\n',
             encoding="utf-8",
         )
 
         resolved, name = resolve_target_skill(
-            "/autoskillit:open-kitchen",
+            "/autoskillit:my-broken",
             DefaultSkillResolver(),
             tmp_path,
         )
 
-        assert name == "open-kitchen"
-        assert resolved == "/autoskillit:open-kitchen"
+        assert name == "my-broken"
+        assert resolved == "/autoskillit:my-broken"
 
 
 class TestRoleDerivedInvocability:

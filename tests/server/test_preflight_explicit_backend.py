@@ -50,10 +50,15 @@ def _make_skill_resolver_with_no_caps() -> MagicMock:
 
 
 class TestPreflightExplicitBackend:
-    def test_explicit_override_to_missing_binary_excluded(self) -> None:
+    def test_explicit_override_to_missing_binary_excluded(self, tmp_path) -> None:
         """An explicit override pointing to a backend excludes that step from
         feasibility — with a synthetic fix-required hook, preflight passes
-        because the excluded step is not feasible."""
+        because the excluded step is not feasible.
+
+        Pins to the real (unpatched) CodexBackend, which is persistent — pass
+        temp_dir so the #4391 persistent-root axis derives cleanly and this
+        test keeps exercising its original fix-required-hook path (T6b).
+        """
         from autoskillit.config.settings import ProvidersConfig
         from autoskillit.server.tools._preflight import _check_dispatch_feasibility
 
@@ -77,6 +82,7 @@ class TestPreflightExplicitBackend:
                 recipe_name="remediation",
                 config_backend=cfg,
                 skill_resolver=_make_skill_resolver_with_no_caps(),
+                temp_dir=tmp_path,
             )
         assert err is None
 

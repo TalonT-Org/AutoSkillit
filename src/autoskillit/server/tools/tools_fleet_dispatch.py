@@ -649,6 +649,7 @@ async def dispatch_food_truck(
                 config_backend=tool_ctx.config.agent_backend,
                 skill_resolver=tool_ctx.skill_resolver,
                 project_root=tool_ctx.project_dir,
+                temp_dir=tool_ctx.temp_dir,
             )
             if _preflight_err is not None:
                 return _preflight_err

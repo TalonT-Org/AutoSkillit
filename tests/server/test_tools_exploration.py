@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -279,49 +280,159 @@ async def test_stale_resume_never_reopens_a_capability(monkeypatch: pytest.Monke
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("refresh_fails", (False, True))
-async def test_fresh_run_skill_revokes_explorer_authority_after_injection_outcome(
+async def test_fresh_run_skill_projects_real_codex_binding_before_execution_and_cleans(
     tool_ctx_kitchen_open,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    refresh_fails: bool,
 ) -> None:
-    """A freshly minted binding is terminally cleaned on success and refresh failure."""
+    """The real fresh Codex path projects authority during setup, then scrubs it."""
+    from autoskillit.core import SkillResult
     from autoskillit.execution.backends.codex import CodexBackend
     from autoskillit.server.tools import tools_execution
     from autoskillit.workspace import DefaultSessionSkillManager, SkillsDirectoryProvider
     from tests.fakes import InMemoryHeadlessExecutor
 
+    events: list[str] = []
     cleanup_store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
         trusted_root=tool_ctx_kitchen_open.project_dir,
         service=_snapshot_service(),
     )
-    cleanup_session = MagicMock(wraps=cleanup_store.cleanup_session)
-    monkeypatch.setattr(cleanup_store, "cleanup_session", cleanup_session)
+    original_store_cleanup = cleanup_store.cleanup_session
+
+    def _capture_store_cleanup(session_id: str) -> None:
+        events.append("store-cleanup")
+        original_store_cleanup(session_id)
+
+    monkeypatch.setattr(cleanup_store, "cleanup_session", _capture_store_cleanup)
     authority_paths: list[Path] = []
+    issued_bindings: dict[str, dict[str, str]] = {}
     bind_launches = cleanup_store.bind_launches
 
     def _capture_bound_authority(**kwargs: object) -> dict[str, dict[str, str]]:
+        events.append("bind")
         bindings = bind_launches(**kwargs)  # type: ignore[arg-type]
+        issued_bindings.update(bindings)
         authority_paths.append(
             Path(next(iter(bindings.values()))["AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH"])
         )
         return bindings
 
     monkeypatch.setattr(cleanup_store, "bind_launches", _capture_bound_authority)
-    concrete_backend = CodexBackend()
+    backend = CodexBackend(source_codex_home=tmp_path / "source-codex-home")
+    manager = DefaultSessionSkillManager(
+        SkillsDirectoryProvider(),
+        ephemeral_root=tmp_path / "ephemeral-sessions",
+        persistent_roots={"codex": tmp_path / "persistent-sessions"},
+    )
+    tool_ctx_kitchen_open.backend = backend
+    tool_ctx_kitchen_open.session_skill_manager = manager
+    tool_ctx_kitchen_open.read_only_resolver = lambda _command: True
+    executor = InMemoryHeadlessExecutor()
+    original_run = executor.run
+
+    async def _inspect_projected_launch(*args: object, **kwargs: object) -> SkillResult:
+        add_dirs = kwargs["add_dirs"]
+        assert isinstance(add_dirs, list)
+        session_home = Path(add_dirs[0].path).parent
+        shared_binding = next(iter(issued_bindings.values()))
+        parent = tomllib.loads((session_home / "config.toml").read_text(encoding="utf-8"))
+        assert parent["mcp_servers"]["autoskillit"]["env"] == shared_binding
+        for role in issued_bindings:
+            role_config = tomllib.loads(
+                (session_home / "agents" / f"{role}.toml").read_text(encoding="utf-8")
+            )
+            assert role_config["mcp_servers"]["autoskillit"]["env"] == shared_binding
+        assert authority_paths[0].is_file()
+        events.append("execute")
+        return await original_run(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(executor, "run", _inspect_projected_launch)
+    tool_ctx_kitchen_open.executor = executor
+    tool_ctx_kitchen_open.exploration_context_store = cleanup_store
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(
+        tool_ctx_kitchen_open.launch_resolver,
+        "backend_for_authority",
+        lambda _authority: backend,
+    )
+    monkeypatch.setattr(
+        tools_execution,
+        "_explorer_launch_identity",
+        lambda _invocation: (tool_ctx_kitchen_open.project_dir, "bundled:test"),
+    )
+    original_manager_cleanup = manager.cleanup_session
+
+    def _inspect_scrubbed_session(session_id: str) -> bool:
+        session_home = manager._session_roots[session_id] / session_id
+        parent = tomllib.loads((session_home / "config.toml").read_text(encoding="utf-8"))
+        assert "env" not in parent["mcp_servers"]["autoskillit"]
+        for role in issued_bindings:
+            role_config = tomllib.loads(
+                (session_home / "agents" / f"{role}.toml").read_text(encoding="utf-8")
+            )
+            assert "env" not in role_config["mcp_servers"]["autoskillit"]
+        events.append("manager-cleanup")
+        return original_manager_cleanup(session_id)
+
+    monkeypatch.setattr(manager, "cleanup_session", _inspect_scrubbed_session)
+
+    result = json.loads(await tools_execution.run_skill("/test skill", "/tmp"))
+
+    assert result["success"] is True, result["result"]
+    assert events == ["bind", "execute", "store-cleanup", "manager-cleanup"]
+    assert len(authority_paths) == 1
+    assert not authority_paths[0].exists()
+
+
+@pytest.mark.anyio
+async def test_fresh_run_skill_revokes_explorer_authority_after_codex_setup_failure(
+    tool_ctx_kitchen_open,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Cleanup ownership transfers before fresh Codex setup can fail."""
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.server.tools import tools_execution
+    from autoskillit.workspace import DefaultSessionSkillManager, SkillsDirectoryProvider
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    events: list[str] = []
+    cleanup_store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+        trusted_root=tool_ctx_kitchen_open.project_dir,
+        service=_snapshot_service(),
+    )
+    authority_paths: list[Path] = []
+    bind_launches = cleanup_store.bind_launches
+
+    def _capture_bound_authority(**kwargs: object) -> dict[str, dict[str, str]]:
+        events.append("bind")
+        bindings = bind_launches(**kwargs)  # type: ignore[arg-type]
+        authority_paths.append(
+            Path(next(iter(bindings.values()))["AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH"])
+        )
+        return bindings
+
+    original_store_cleanup = cleanup_store.cleanup_session
+
+    def _capture_store_cleanup(session_id: str) -> None:
+        events.append("store-cleanup")
+        original_store_cleanup(session_id)
+
+    monkeypatch.setattr(cleanup_store, "bind_launches", _capture_bound_authority)
+    monkeypatch.setattr(cleanup_store, "cleanup_session", _capture_store_cleanup)
+    concrete_backend = CodexBackend(source_codex_home=tmp_path / "source-codex-home")
     backend = MagicMock(wraps=concrete_backend)
     backend.name = concrete_backend.name
     backend.conventions = concrete_backend.conventions
-    backend.capabilities = replace(
-        concrete_backend.capabilities,
-        terminal_explorer_capable=True,
-    )
-    if refresh_fails:
-        backend.refresh_explorer_binding_env.side_effect = RuntimeError("injection failed")
-    else:
-        backend.refresh_explorer_binding_env.return_value = None
+    backend.capabilities = concrete_backend.capabilities
 
+    def _fail_setup(_session_dir: Path, **kwargs: object) -> None:
+        assert kwargs["explorer_binding_env"]
+        events.append("setup")
+        raise RuntimeError("injection failed")
+
+    backend.setup_session_dir.side_effect = _fail_setup
+    backend.clear_explorer_binding_env.return_value = None
     tool_ctx_kitchen_open.backend = backend
     tool_ctx_kitchen_open.session_skill_manager = DefaultSessionSkillManager(
         SkillsDirectoryProvider(),
@@ -345,9 +456,9 @@ async def test_fresh_run_skill_revokes_explorer_authority_after_injection_outcom
 
     result = json.loads(await tools_execution.run_skill("/test skill", "/tmp"))
 
-    assert result["success"] is (not refresh_fails), result["result"]
-    assert backend.refresh_explorer_binding_env.call_count == 1
-    cleanup_session.assert_called_once()
+    assert result["success"] is False
+    assert events == ["bind", "setup", "store-cleanup"]
+    backend.refresh_explorer_binding_env.assert_not_called()
     backend.clear_explorer_binding_env.assert_called_once()
     assert len(authority_paths) == 1
     assert not authority_paths[0].exists()

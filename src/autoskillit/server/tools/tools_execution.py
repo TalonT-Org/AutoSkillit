@@ -1524,6 +1524,8 @@ async def run_skill(
                 _effective_backend_obj = _resume_backend_obj
             elif _explicit_resolution is not None:
                 authority_kind = _explicit_resolution.kind
+                if authority_kind is None:
+                    raise SkillContractError("Explicit backend resolution lacks typed authority")
                 authority_tier = (
                     BackendAuthorityTier.RECIPE
                     if authority_kind is BackendAuthorityKind.RECIPE
@@ -1798,35 +1800,39 @@ async def run_skill(
                     _cleanup_session_id = session_id
                     if projection_context is None:
                         raise SkillContractError("Projection context was not prepared")
+
+                    def _mint_fresh_explorer_binding(
+                        authority_home: Path,
+                    ) -> dict[str, dict[str, str]] | None:
+                        nonlocal _exploration_bound_session_id
+                        nonlocal _exploration_bound_session_home
+                        nonlocal _explorer_backend_for_cleanup
+                        binding_env = _issue_explorer_binding_env(
+                            tool_ctx,
+                            session_id=session_id,
+                            projection_context=projection_context,
+                            identity=_explorer_parent_identity,
+                            authority_home=authority_home,
+                        )
+                        if binding_env is not None:
+                            # ``bind_launches`` persists authority before it
+                            # returns. Transfer cleanup ownership before Codex
+                            # validates or writes any projected config.
+                            _exploration_bound_session_id = session_id
+                            _exploration_bound_session_home = authority_home
+                            _explorer_backend_for_cleanup = _effective_backend_obj
+                            if _effective_backend_obj is None:
+                                raise SkillContractError(
+                                    "Explorer launch requires the bound Codex backend"
+                                )
+                        return binding_env
+
                     session_root = tool_ctx.session_skill_manager.materialize_invocation(
                         session_id,
                         invocation,
                         projection_context,
+                        explorer_binding_env_factory=_mint_fresh_explorer_binding,
                     )
-                    _explorer_binding_env = _issue_explorer_binding_env(
-                        tool_ctx,
-                        session_id=session_id,
-                        projection_context=projection_context,
-                        identity=_explorer_parent_identity,
-                        authority_home=Path(session_root.path).parent,
-                    )
-                    if _explorer_binding_env is not None:
-                        # ``bind_launches`` persists authority before it
-                        # returns.  Record cleanup ownership before any
-                        # further validation or config injection, so a missing
-                        # backend or failed refresh cannot strand that fresh
-                        # authority until expiry.
-                        _exploration_bound_session_id = session_id
-                        _exploration_bound_session_home = Path(session_root.path).parent
-                        _explorer_backend_for_cleanup = _effective_backend_obj
-                        if _effective_backend_obj is None:
-                            raise SkillContractError(
-                                "Explorer launch requires the bound Codex backend"
-                            )
-                        _effective_backend_obj.refresh_explorer_binding_env(
-                            Path(session_root.path).parent,
-                            _explorer_binding_env,
-                        )
                 else:
                     raise SkillContractError(
                         "Fresh execution requires a resolved skill invocation"

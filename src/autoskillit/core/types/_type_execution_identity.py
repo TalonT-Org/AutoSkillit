@@ -8,9 +8,24 @@ without introducing the ``_type_backend`` <-> ``_type_results`` cycle.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, NamedTuple
+from enum import StrEnum
+from typing import NamedTuple
 
-__all__ = ["BackendPinResolution", "ChildExecutionIdentity", "ExecutionIdentity"]
+__all__ = [
+    "BackendAuthorityKind",
+    "BackendPinResolution",
+    "ChildExecutionIdentity",
+    "ExecutionIdentity",
+]
+
+
+class BackendAuthorityKind(StrEnum):
+    """Closed set of inputs permitted to choose a backend."""
+
+    GLOBAL = "global"
+    RECIPE = "recipe"
+    STEP = "step"
+    CALLER = "caller"
 
 
 class BackendPinResolution(NamedTuple):
@@ -19,7 +34,7 @@ class BackendPinResolution(NamedTuple):
     backend: str
     tier: str
     key_path: str
-    kind: Any = None
+    kind: BackendAuthorityKind | None = None
 
 
 @dataclass(frozen=True, slots=True)

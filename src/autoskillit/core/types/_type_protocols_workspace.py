@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
 from datetime import datetime
 from pathlib import Path
@@ -351,6 +351,9 @@ class SessionSkillManager(Protocol):
         projection_context: SkillProjectionContextAuthority,
         *,
         explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
+        explorer_binding_env_factory: (
+            Callable[[Path], Mapping[str, Mapping[str, str]] | None] | None
+        ) = None,
     ) -> ValidatedAddDir: ...
 
     def init_session(

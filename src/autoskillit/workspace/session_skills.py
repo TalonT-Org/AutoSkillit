@@ -12,7 +12,7 @@ import os
 import shutil
 import tempfile
 import time
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from collections.abc import Set as AbstractSet
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -619,6 +619,9 @@ class DefaultSessionSkillManager:
         projection_context: SkillProjectionContextAuthority,
         *,
         explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
+        explorer_binding_env_factory: (
+            Callable[[Path], Mapping[str, Mapping[str, str]] | None] | None
+        ) = None,
     ) -> ValidatedAddDir:
         """Write only a prevalidated closure from its captured canonical content."""
         self._validate_session_id(session_id)
@@ -652,6 +655,7 @@ class DefaultSessionSkillManager:
             invocation.closure,
             projection_context,
             explorer_binding_env=explorer_binding_env,
+            explorer_binding_env_factory=explorer_binding_env_factory,
         )
 
     def init_session(
@@ -774,12 +778,16 @@ class DefaultSessionSkillManager:
         projection_context: SkillProjectionContextAuthority,
         *,
         explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
+        explorer_binding_env_factory: (
+            Callable[[Path], Mapping[str, Mapping[str, str]] | None] | None
+        ) = None,
     ) -> ValidatedAddDir:
         return self._initialize_bound_records(
             session_id,
             records,
             projection_context,
             explorer_binding_env=explorer_binding_env,
+            explorer_binding_env_factory=explorer_binding_env_factory,
         ).skills_dir
 
     def _initialize_bound_records(
@@ -789,8 +797,13 @@ class DefaultSessionSkillManager:
         projection_context: SkillProjectionContextAuthority,
         *,
         explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
+        explorer_binding_env_factory: (
+            Callable[[Path], Mapping[str, Mapping[str, str]] | None] | None
+        ) = None,
     ) -> _InitializedSession:
         self._validate_session_id(session_id)
+        if explorer_binding_env is not None and explorer_binding_env_factory is not None:
+            raise ValueError("provide an explorer binding map or factory, not both")
         if (
             session_id in self._session_roots
             or session_id in self._session_leases
@@ -851,6 +864,7 @@ class DefaultSessionSkillManager:
                 projection_context,
                 skills_subdir=skills_subdir,
                 explorer_binding_env=explorer_binding_env,
+                explorer_binding_env_factory=explorer_binding_env_factory,
             )
             initialized = _InitializedSession(
                 generated_home=generated_home,
@@ -893,6 +907,9 @@ class DefaultSessionSkillManager:
         *,
         skills_subdir: Path,
         explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
+        explorer_binding_env_factory: (
+            Callable[[Path], Mapping[str, Mapping[str, str]] | None] | None
+        ) = None,
     ) -> ValidatedAddDir:
         backend = projection_context.backend
         add_dir = generated_home / SESSION_ADD_DIR_SUBDIR
@@ -924,6 +941,8 @@ class DefaultSessionSkillManager:
             pre_launch_errors = backend.ensure_pre_launch(session_dir=generated_home)
             if pre_launch_errors:
                 raise RuntimeError(f"Pre-launch check failed: {'; '.join(pre_launch_errors)}")
+        if explorer_binding_env_factory is not None:
+            explorer_binding_env = explorer_binding_env_factory(generated_home)
         if backend is not None:
             setup_kwargs: _SessionSetupKwargs = {
                 "parent_sandbox_mode": projection_context.parent_sandbox_mode,

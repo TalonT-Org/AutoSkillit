@@ -67,7 +67,10 @@ class TestExecutionTypesNotInResults:
         assert isinstance(sr.provider, ProviderOutcome)
 
     def test_execution_identity_is_cycle_free_and_gateway_exported(self):
+        from typing import get_type_hints
+
         from autoskillit.core import (
+            BackendAuthorityKind,
             BackendPinResolution,
             ChildExecutionIdentity,
             ExecutionIdentity,
@@ -76,7 +79,11 @@ class TestExecutionTypesNotInResults:
 
         resolution = BackendPinResolution("codex", "recipe_step", "agent_backend.x")
         assert resolution.backend == "codex"
+        assert resolution.kind is None
+        assert get_type_hints(BackendPinResolution)["kind"] == BackendAuthorityKind | None
+        assert BackendAuthorityKind.__module__.endswith("._type_execution_identity")
         assert set(identity_all) == {
+            "BackendAuthorityKind",
             "BackendPinResolution",
             "ChildExecutionIdentity",
             "ExecutionIdentity",

@@ -900,6 +900,17 @@ class DefaultSkillResolver:
         )
         return tuple(sorted(by_name.values(), key=lambda skill: skill.name)), exclusions
 
+    def scan_effective(
+        self, project_root: Path | None
+    ) -> tuple[tuple[SkillInfo, ...], tuple[SkillExclusion, ...]]:
+        """Public pair-returning scan: effective skills plus excluded candidates.
+
+        Doctor and other operator-facing tooling call this directly instead
+        of reaching for the underscore-prefixed internal implementation.
+        """
+        normalized_root = project_root.resolve() if project_root is not None else None
+        return self._list_effective_unfiltered(normalized_root)
+
     def list_effective(
         self,
         project_root: Path | None,

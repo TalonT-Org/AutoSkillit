@@ -1,8 +1,12 @@
-"""Bundled skill capability-contract diagnostics."""
+"""Bundled and project-local skill capability-contract diagnostics."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from autoskillit.core import (
+    SKILL_CONTRACT_REMEDIATIONS,
+    RemediationAction,
     Severity,
     SkillContractError,
     validate_skill_capability_roles,
@@ -56,3 +60,49 @@ def _check_skill_capability_authenticity(
             message="Bundled skill capability declarations match source evidence.",
         )
     ]
+
+
+def _check_project_local_skill_contracts(
+    resolver: DefaultSkillResolver | None = None,
+    project_dir: Path | None = None,
+) -> list[DoctorResult]:
+    """Report invalid or shadowed project-local skill contracts.
+
+    Covers the erosion the resolution-boundary containment step deliberately
+    still surfaces: a stale/broken project-local copy (shadowing a bundled
+    twin, or standing alone with no bundled twin) is excluded from the
+    effective catalog rather than crashing composition, but that exclusion
+    would otherwise carry a log line nobody reads. This is the check that
+    makes it operator-visible.
+    """
+    skill_resolver = resolver or DefaultSkillResolver()
+    root = project_dir or Path.cwd()
+    _effective, exclusions = skill_resolver.scan_effective(root)
+    if not exclusions:
+        return [
+            DoctorResult(
+                severity=Severity.OK,
+                check="project_local_skill_contracts",
+                message="Project-local skill contracts validate cleanly.",
+            )
+        ]
+    results: list[DoctorResult] = []
+    for exclusion in exclusions:
+        kinds = sorted({item.kind.value for item in exclusion.invalidities})
+        message = f"{exclusion.path}: {', '.join(kinds)}"
+        if exclusion.hints:
+            message += "; hint: " + "; ".join(exclusion.hints)
+        deterministic = any(
+            SKILL_CONTRACT_REMEDIATIONS[item.kind].action is RemediationAction.DETERMINISTIC
+            for item in exclusion.invalidities
+        )
+        if deterministic:
+            message += "; run: autoskillit migrate --fix"
+        results.append(
+            DoctorResult(
+                severity=Severity.WARNING,
+                check="project_local_skill_contracts",
+                message=message,
+            )
+        )
+    return results

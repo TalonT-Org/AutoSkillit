@@ -73,7 +73,10 @@ from ._doctor_runtime import (
     _check_quota_cache_schema,
     _check_script_binary,
 )
-from ._doctor_skills import _check_skill_capability_authenticity
+from ._doctor_skills import (
+    _check_project_local_skill_contracts,
+    _check_skill_capability_authenticity,
+)
 from ._doctor_types import _NON_PROBLEM, DoctorResult
 
 logger = get_logger(__name__)
@@ -231,6 +234,8 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.extend(_check_skill_capability_authenticity())
     # Check 41: Capture-store ledger/directory statistics (read-only)
     results.append(_check_capture_store_stats())
+    # Check 42: Project-local skill contracts (excluded/shadowed stale copies)
+    results.extend(_check_project_local_skill_contracts())
     # Output
     if output_json:
         print(

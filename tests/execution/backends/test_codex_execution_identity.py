@@ -14,6 +14,19 @@ def _write_rollout(path, events: list[dict]) -> None:
     path.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
 
 
+def test_corrupt_compressed_rollout_uses_the_identity_error_boundary(tmp_path) -> None:
+    parent = tmp_path / "parent.jsonl.zst"
+    parent.write_bytes(b"not-a-zstandard-frame")
+    requested = ExecutionIdentity(
+        requested_parent_backend="codex",
+        requested_parent_model="opus",
+        requested_parent_effort="medium",
+    )
+
+    with pytest.raises(ValueError, match="invalid compressed Codex rollout"):
+        extract_codex_execution_identity(parent, requested=requested)
+
+
 def test_extracts_effective_identity_only_from_linked_rollouts(tmp_path) -> None:
     parent = tmp_path / "parent.jsonl"
     child = tmp_path / "child.jsonl"

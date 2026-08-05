@@ -17,9 +17,12 @@ _MAX_ROLLOUT_IDENTITY_BYTES = 16 * 1024 * 1024
 
 def _read_rollout(path: Path) -> list[Mapping[str, Any]]:
     if path.name.endswith(".zst"):
-        with path.open("rb") as source:
-            with zstandard.ZstdDecompressor().stream_reader(source) as reader:
-                raw = reader.read(_MAX_ROLLOUT_IDENTITY_BYTES + 1)
+        try:
+            with path.open("rb") as source:
+                with zstandard.ZstdDecompressor().stream_reader(source) as reader:
+                    raw = reader.read(_MAX_ROLLOUT_IDENTITY_BYTES + 1)
+        except zstandard.ZstdError as exc:
+            raise ValueError("invalid compressed Codex rollout") from exc
     else:
         with path.open("rb") as source:
             raw = source.read(_MAX_ROLLOUT_IDENTITY_BYTES + 1)

@@ -173,7 +173,7 @@ exploration_vectors:
     native_dispatch: false
   - id: custom-research
     disposition: retained
-    rationale: custom-unreviewed
+    rationale: Non-software scope questions require domain-specific external research that local repository evidence and registered code explorers cannot answer safely.
     applicability: scope-non-software
     role: null
     profile: auto

@@ -6,6 +6,7 @@ import importlib.metadata
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -25,7 +26,7 @@ from autoskillit.cli._install_contract import (
     InstallResult,
     result_from_process_status,
 )
-from autoskillit.cli._install_info import detect_install, upgrade_command
+from autoskillit.cli._install_info import InstallInfo, detect_install, upgrade_command
 from autoskillit.cli._installed_plugins import InstalledPluginsFile
 from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
@@ -61,6 +62,7 @@ logger = get_logger(__name__)
 
 _ProcessRunner = Callable[..., subprocess.CompletedProcess[Any]]
 _VersionReader = Callable[[str], str]
+_VersionProber = Callable[[InstallInfo, Mapping[str, str], _ProcessRunner], str]
 
 
 class UpdateTransactionPhase(StrEnum):
@@ -209,6 +211,107 @@ def _process_finding(stage: str, returncode: int) -> str:
     return f"{stage} exited with status {returncode}"
 
 
+def _report_post_pivot_failure(message: str) -> None:
+    """Log a post-pivot failure without ever raising past this call.
+
+    Must be called from within an active ``except:`` block — relies on
+    ``sys.exc_info()`` via ``exc_info=True`` to attach the traceback. Tries
+    the structured logger first; on ANY exception from logging itself (the
+    exact crash class core/logging.py's exception-rendering contract exists
+    to prevent, but this is the last line of defense if it were ever
+    reintroduced) falls back to a single plain line on ``sys.stderr``. Never
+    ``print()``: this module is not in ARCH-001's ``_PRINT_EXEMPT`` set and
+    the AST visitor flags bare ``print()`` calls — ``sys.stderr.write()`` is
+    not caught by that visitor and depends on nothing beyond ``sys``,
+    already imported at module top.
+    """
+    try:
+        logger.warning(message, exc_info=True)
+    except Exception:
+        try:
+            sys.stderr.write(f"{message}\n")
+        except Exception:
+            pass
+
+
+def _default_fresh_version_prober(
+    info: InstallInfo,
+    maintenance_env: Mapping[str, str],
+    runner: _ProcessRunner,
+) -> str:
+    """Resolve the post-pivot environment's version via a fresh subprocess.
+
+    Never consults in-process metadata: the parent's own import machinery is
+    invalid past the pivot by construction (the upgrade that just ran may
+    have deleted the tree backing it — issue #4469). Runs the new
+    ``autoskillit`` entrypoint under the maintenance environment and parses
+    its ``--version`` stdout.
+
+    Entrypoint resolution is explicit, not bare-PATH-dependent:
+    ``build_maintenance_env`` copies ``PATH`` verbatim from the ambient
+    caller, which for a background MCP-server caller may lack ``uv``'s
+    tool-shim directory. Prefers ``info.entrypoint`` (resolved pre-pivot
+    against the ambient, richest-PATH environment — see
+    ``InstallInfo.entrypoint``'s docstring); falls back to resolving against
+    the maintenance environment's own ``PATH``. Neither resolving, or the
+    probe subprocess itself failing, raises ``RuntimeError`` — mapped to a
+    failure finding by the caller's ``except`` handler, never left
+    unhandled.
+    """
+    entrypoint = info.entrypoint
+    if entrypoint is None:
+        resolved = shutil.which("autoskillit", path=maintenance_env.get("PATH"))
+        entrypoint = Path(resolved) if resolved is not None else None
+    if entrypoint is None:
+        raise RuntimeError(
+            "Could not resolve an autoskillit entrypoint to probe the "
+            "post-upgrade version (neither the pre-pivot ambient PATH nor "
+            "the maintenance environment's PATH could locate one)."
+        )
+    result = runner(
+        [str(entrypoint), "--version"],
+        check=False,
+        env=maintenance_env,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip() or "(no stderr)"
+        raise RuntimeError(
+            f"autoskillit --version exited with status {result.returncode}: {stderr}"
+        )
+    probed_version = (result.stdout or "").strip()
+    if not probed_version:
+        raise RuntimeError("autoskillit --version produced no output")
+    return probed_version
+
+
+def _resolve_fresh_version(
+    *,
+    info: InstallInfo,
+    maintenance_env: Mapping[str, str],
+    runner: _ProcessRunner,
+    fresh_version_prober: _VersionProber | None,
+    version_reader: _VersionReader | None,
+) -> str:
+    """Resolve the post-pivot environment's autoskillit version.
+
+    Prefers ``fresh_version_prober`` (out-of-process, safe past the pivot —
+    see module docstring and ``_default_fresh_version_prober``). Falls back
+    to ``version_reader`` ONLY when the caller explicitly injected one
+    without also injecting ``fresh_version_prober`` — a backward-compatible
+    seam for callers that inject a single ``version_reader`` covering both
+    the pre- and post-pivot reads. When neither is injected — every real
+    production caller — the safe out-of-process default is used: in-process
+    metadata reads are a pre-pivot-only API in production.
+    """
+    if fresh_version_prober is not None:
+        return fresh_version_prober(info, maintenance_env, runner)
+    if version_reader is not None:
+        return version_reader("autoskillit")
+    return _default_fresh_version_prober(info, maintenance_env, runner)
+
+
 def _map_install_result(
     progress: _TransactionProgress,
     install_result: InstallResult,
@@ -253,6 +356,7 @@ def run_update_transaction(
     process_runner: _ProcessRunner | None = None,
     base_env: Mapping[str, str] | None = None,
     version_reader: _VersionReader | None = None,
+    fresh_version_prober: _VersionProber | None = None,
 ) -> UpdateTransactionResult:
     """Upgrade, run a fresh maintenance install, and verify every obligation.
 
@@ -260,6 +364,15 @@ def run_update_transaction(
     particular, an existing Claude plugin registration creates an immutable
     post-update publication obligation even when the caller's ambient backend
     is Codex.
+
+    ``version_reader`` is consulted for the PRE-pivot read only unless it is
+    injected without ``fresh_version_prober``, in which case it also covers
+    the post-pivot read for backward compatibility with existing test
+    doubles — see ``_resolve_fresh_version``. The real production default
+    for the post-pivot read is ``fresh_version_prober`` /
+    ``_default_fresh_version_prober``: an out-of-process subprocess probe,
+    never in-process metadata, because the parent's own import machinery is
+    invalid past the pivot by construction.
     """
 
     progress = _TransactionProgress()
@@ -357,7 +470,13 @@ def run_update_transaction(
         progress.enter(UpdateTransactionPhase.IRREVERSIBLE_PIVOT)
         progress.enter(UpdateTransactionPhase.FRESH_VERSION_METADATA_GATE)
         try:
-            expected_version = read_version("autoskillit")
+            expected_version = _resolve_fresh_version(
+                info=info,
+                maintenance_env=maintenance_env,
+                runner=runner,
+                fresh_version_prober=fresh_version_prober,
+                version_reader=version_reader,
+            )
             if Version(expected_version) <= Version(current_version):
                 return _upgrade_failure(
                     progress,
@@ -365,7 +484,7 @@ def run_update_transaction(
                     f"beyond {current_version}; observed {expected_version}.",
                 )
         except Exception as exc:
-            logger.warning("update_post_upgrade_metadata_failed", exc_info=True)
+            _report_post_pivot_failure("update_post_upgrade_metadata_failed")
             return _upgrade_failure(
                 progress,
                 f"Could not verify post-upgrade autoskillit metadata: {exc}",
@@ -395,6 +514,7 @@ def run_update_transaction(
                 cwd=working_dir,
             )
         except OSError as exc:
+            _report_post_pivot_failure("update_install_child_launch_failed")
             install_result = InstallResult(
                 outcome=InstallOutcome.FAILED,
                 failure_kind=InstallFailureKind.CHILD,
@@ -443,7 +563,7 @@ def run_update_transaction(
                 )
             )
         except Exception as exc:
-            logger.warning("update_artifact_verification_failed", exc_info=True)
+            _report_post_pivot_failure("update_artifact_verification_failed")
             return progress.finish(
                 UpdateTransactionOutcome.FAILED_POSTCONDITION,
                 expected_version=expected_version,

@@ -167,6 +167,346 @@ def _recording_success_runner(
     return runner
 
 
+# ---------------------------------------------------------------------------
+# Phase B — pivot-safe update verification and crash-proof failure reporting.
+# ---------------------------------------------------------------------------
+
+# A meta_path blocker alone cannot reproduce the incident: Python consults
+# sys.modules before sys.meta_path, and the pinned structlog eagerly imports
+# the rich tree as a side effect of `import structlog` (verified against
+# this repo's venv: rich._emoji_codes, rich.traceback land in sys.modules
+# from the bare import) — by the time a driver script runs, there may be no
+# not-yet-imported rich.* module left for a naive blocker to catch. Purging
+# sys.modules AND installing the blocker together simulates the deleted
+# site-packages tree regardless of whether the runtime rich version imports
+# lazily or eagerly. Runs in a real subprocess (xdist-safe, and faithfully
+# models the fresh CLI process the incident occurred in) — this fault class
+# is structurally impossible for in-process pytest to inflict on itself
+# (the test runner's own import roots being destroyed).
+_POISON_RICH_PREFIX = """\
+import sys
+
+for _name in list(sys.modules):
+    if _name == "rich" or _name.startswith("rich."):
+        del sys.modules[_name]
+
+
+class _RichBlocker:
+    def find_spec(self, name, path=None, target=None):
+        if name == "rich" or name.startswith("rich."):
+            raise ModuleNotFoundError(f"simulated deleted site-packages tree: {name}")
+        return None
+
+
+sys.meta_path.insert(0, _RichBlocker())
+"""
+
+
+def _run_poisoned_subprocess(driver_body: str) -> subprocess.CompletedProcess[str]:
+    """Run ``driver_body`` in a fresh subprocess with rich purged and blocked.
+
+    ``driver_body`` should print "SURVIVED" on success — the shared success
+    marker every caller asserts on.
+    """
+    script = _POISON_RICH_PREFIX + "\n" + driver_body
+    return subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+
+
+def test_t_b1_incident_reproduction_raising_probe_survives_real_logging_chain() -> None:
+    """T-B1: the exact incident (raising post-pivot version probe, rendered
+    through the REAL configured logging chain, with rich unimportable) can
+    no longer double-crash.
+
+    Fails before B-I1+B-I3: the old FRESH_VERSION_METADATA_GATE consulted
+    in-process metadata directly and logged the failure via
+    ``logger.warning(..., exc_info=True)`` under structlog's default
+    rich-capable ConsoleRenderer — rendering that log record itself raised
+    ModuleNotFoundError from the deleted tree, escaping the except handler
+    and crashing the process a second time (the incident's exact double-
+    crash: PackageNotFoundError, then ModuleNotFoundError in the handler).
+    """
+    driver = """
+import importlib.metadata
+import subprocess
+import tempfile
+from pathlib import Path
+
+import autoskillit.cli.update._transaction as t
+from autoskillit.cli._install_info import InstallInfo, InstallType
+
+
+def _info():
+    return InstallInfo(InstallType.GIT_VCS, "abc123", "stable", "https://x", None)
+
+
+t.detect_install = _info
+t.upgrade_command = lambda _info: ["uv", "tool", "upgrade", "autoskillit"]
+t.is_git_worktree = lambda _p: False
+t.is_git_main_checkout = lambda _p: False
+
+
+def raising_prober(info, maintenance_env, runner):
+    raise importlib.metadata.PackageNotFoundError("autoskillit")
+
+
+def runner(cmd, **kwargs):
+    return subprocess.CompletedProcess(cmd, 0)
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    result = t.run_update_transaction(
+        home=Path(tmp),
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: "1.0.0",
+        fresh_version_prober=raising_prober,
+        process_runner=runner,
+    )
+    assert result.outcome.value == "failed-upgrade", result.outcome
+    assert result.findings, "expected findings on failure"
+
+print("SURVIVED", flush=True)
+"""
+    result = _run_poisoned_subprocess(driver)
+    assert result.returncode == 0, (
+        f"process crashed instead of reporting the mapped failure.\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    assert "SURVIVED" in result.stdout
+    assert "ModuleNotFoundError" not in result.stderr
+
+
+def test_t_b2_module_default_logging_survives_deleted_rich_tree() -> None:
+    """T-B2: the module-import-time default structlog config (core/logging.py,
+    consulted by every autoskillit path that logs before configure_logging()
+    runs — including the entire update transaction, which executes ahead of
+    any configure_logging() call, see cli/app.py's main()) must render an
+    exception without crashing when rich is unimportable.
+
+    Fails before B-I1: the default chain had no explicit ``processors=``, so
+    structlog's own default rich-capable ConsoleRenderer applied.
+    """
+    driver = """
+from autoskillit.core.logging import get_logger
+
+logger = get_logger("t_b2_default")
+try:
+    raise RuntimeError("simulated post-pivot failure")
+except Exception:
+    logger.warning("simulated_failure", exc_info=True)
+
+print("SURVIVED", flush=True)
+"""
+    result = _run_poisoned_subprocess(driver)
+    assert result.returncode == 0, (
+        f"process crashed rendering the exception.\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    assert "SURVIVED" in result.stdout
+    assert "ModuleNotFoundError" not in result.stderr
+
+
+def test_t_b2_configure_logging_console_branch_survives_deleted_rich_tree() -> None:
+    """T-B2: configure_logging()'s console (TTY, non-JSON) branch must also
+    survive — same property as the module default, exercised via the
+    explicit call site every CLI subcommand uses.
+    """
+    driver = """
+from autoskillit.core import configure_logging, get_logger
+
+
+class _FakeTTY:
+    def __init__(self):
+        self.buf = []
+
+    def write(self, s):
+        self.buf.append(s)
+        return len(s)
+
+    def flush(self):
+        pass
+
+    def isatty(self):
+        return True
+
+
+stream = _FakeTTY()
+configure_logging(json_output=False, stream=stream)
+logger = get_logger("t_b2_configured")
+try:
+    raise RuntimeError("simulated post-pivot failure")
+except Exception:
+    logger.warning("simulated_failure", exc_info=True)
+
+print("SURVIVED", flush=True)
+"""
+    result = _run_poisoned_subprocess(driver)
+    assert result.returncode == 0, (
+        f"process crashed rendering the exception.\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    assert "SURVIVED" in result.stdout
+    assert "ModuleNotFoundError" not in result.stderr
+
+
+def test_t_b5_verifier_fault_injection_survives_real_logging_chain() -> None:
+    """T-B5: a raising ``verify_installed_plugin_artifact`` — rendered
+    through the real logging chain, with rich unimportable — maps to the
+    same failure outcome as T-B1, no escape. Same shape as T-B1, one phase
+    later (POST_UPDATE_ARTIFACT_VERIFICATION instead of
+    FRESH_VERSION_METADATA_GATE).
+    """
+    driver = """
+import json
+import subprocess
+import tempfile
+from pathlib import Path
+
+import autoskillit.cli.update._transaction as t
+from autoskillit.cli._install_info import InstallInfo, InstallType
+
+
+def _info():
+    return InstallInfo(InstallType.GIT_VCS, "abc123", "stable", "https://x", None)
+
+
+t.detect_install = _info
+t.upgrade_command = lambda _info: ["uv", "tool", "upgrade", "autoskillit"]
+t.is_git_worktree = lambda _p: False
+t.is_git_main_checkout = lambda _p: False
+
+
+def raising_verify(spec):
+    raise RuntimeError("simulated verification crash (deleted tree)")
+
+
+t.verify_installed_plugin_artifact = raising_verify
+
+
+def runner(cmd, **kwargs):
+    return subprocess.CompletedProcess(cmd, 0)
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    tmp_path = Path(tmp)
+    registry = tmp_path / ".claude" / "plugins" / "installed_plugins.json"
+    registry.parent.mkdir(parents=True)
+    registry.write_text(json.dumps({
+        "version": 2,
+        "plugins": {"autoskillit@autoskillit-local": [{"installPath": str(tmp_path / "x")}]},
+    }))
+    result = t.run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: "1.0.0",
+        fresh_version_prober=lambda _i, _e, _r: "1.1.0",
+        process_runner=runner,
+    )
+    assert result.outcome.value == "failed-postcondition", result.outcome
+    assert result.findings, "expected findings on failure"
+
+print("SURVIVED", flush=True)
+"""
+    result = _run_poisoned_subprocess(driver)
+    assert result.returncode == 0, (
+        f"process crashed instead of reporting the mapped failure.\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    assert "SURVIVED" in result.stdout
+    assert "ModuleNotFoundError" not in result.stderr
+
+
+def test_t_b3_post_pivot_verification_is_out_of_process(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """T-B3: FRESH_VERSION_METADATA_GATE must not consult version_reader for
+    the post-pivot read when fresh_version_prober is supplied — the
+    transaction reaches INSTALL_CHILD_INVOCATION and completes.
+
+    Fails before B-I3: the gate always called version_reader (defaulting to
+    in-process importlib.metadata) for both the pre- and post-pivot reads.
+    """
+    _prepare(monkeypatch)
+    call_count = 0
+
+    def counting_version_reader(_name: str) -> str:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return "1.0.0"
+        pytest.fail("post-pivot read must go through fresh_version_prober, not version_reader")
+
+    calls: list[list[str]] = []
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=counting_version_reader,
+        fresh_version_prober=lambda _info, _env, _runner: "1.1.0",
+        process_runner=_recording_success_runner(calls),
+    )
+
+    assert result.outcome is UpdateTransactionOutcome.COMPLETED
+    assert result.expected_version == "1.1.0"
+    assert len(calls) == 2
+    assert call_count == 1
+    assert result.phase_history == UPDATE_TRANSACTION_PHASES
+
+
+def test_t_b3_default_fresh_version_prober_probes_path_resolved_autoskillit_version(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """T-B3 companion: the production default (neither fresh_version_prober
+    nor version_reader injected) constructs a subprocess invocation of the
+    resolved autoskillit entrypoint with --version under the maintenance
+    env — never touching in-process metadata for the post-pivot read.
+    """
+    fake_entrypoint = tmp_path / "fake-autoskillit"
+    fake_entrypoint.write_text("#!/bin/sh\necho 9.9.9\n")
+    fake_entrypoint.chmod(0o755)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.detect_install",
+        lambda: InstallInfo(
+            InstallType.GIT_VCS,
+            "abc",
+            "stable",
+            "https://x",
+            None,
+            entrypoint=fake_entrypoint,
+        ),
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.upgrade_command",
+        lambda _info: ["uv", "tool", "upgrade", "autoskillit"],
+    )
+    monkeypatch.setattr("autoskillit.cli.update._transaction.is_git_worktree", lambda _path: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.is_git_main_checkout", lambda _path: False
+    )
+    calls: list[tuple[list[str], dict[str, Any]]] = []
+
+    def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        calls.append((list(cmd), kwargs))
+        if len(calls) == 2:
+            return subprocess.run(cmd, **kwargs)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        process_runner=runner,
+    )
+
+    probe_cmd, probe_kwargs = calls[1]
+    assert probe_cmd == [str(fake_entrypoint), "--version"]
+    assert probe_kwargs["capture_output"] is True
+    assert probe_kwargs["text"] is True
+    assert probe_kwargs["env"]["PATH"] == "/bin"
+
+
 def test_update_transaction_declares_exact_twelve_phase_pivot_contract() -> None:
     assert UPDATE_TRANSACTION_PHASES == (
         UpdateTransactionPhase.CALLER_ENV_CAPTURE,

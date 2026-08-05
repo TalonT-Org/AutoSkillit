@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -20,6 +21,8 @@ from autoskillit.cli._install_info import (
 )
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
+
+_PYTHON_PIN = f"{sys.version_info.major}.{sys.version_info.minor}"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -277,7 +280,14 @@ def test_upgrade_command_stable() -> None:
         url=None,
         editable_source=None,
     )
-    assert upgrade_command(info) == ["uv", "tool", "upgrade", "autoskillit"]
+    assert upgrade_command(info) == [
+        "uv",
+        "tool",
+        "upgrade",
+        "autoskillit",
+        "--python",
+        _PYTHON_PIN,
+    ]
 
 
 def test_upgrade_command_main() -> None:
@@ -288,7 +298,14 @@ def test_upgrade_command_main() -> None:
         url=None,
         editable_source=None,
     )
-    assert upgrade_command(info) == ["uv", "tool", "upgrade", "autoskillit"]
+    assert upgrade_command(info) == [
+        "uv",
+        "tool",
+        "upgrade",
+        "autoskillit",
+        "--python",
+        _PYTHON_PIN,
+    ]
 
 
 def test_upgrade_command_release_tag() -> None:
@@ -299,7 +316,14 @@ def test_upgrade_command_release_tag() -> None:
         url=None,
         editable_source=None,
     )
-    assert upgrade_command(info) == ["uv", "tool", "upgrade", "autoskillit"]
+    assert upgrade_command(info) == [
+        "uv",
+        "tool",
+        "upgrade",
+        "autoskillit",
+        "--python",
+        _PYTHON_PIN,
+    ]
 
 
 def test_upgrade_command_develop() -> None:
@@ -316,6 +340,8 @@ def test_upgrade_command_develop() -> None:
         "install",
         "--force",
         _INSTALL_FROM_DEVELOP,
+        "--python",
+        _PYTHON_PIN,
     ]
 
 
@@ -476,3 +502,65 @@ def test_upgrade_command_arbitrary_dev_revision(revision: str) -> None:
     assert result is not None
     assert result[:3] == ["uv", "tool", "install"]
     assert "--force" in result
+    assert result[result.index("--python") + 1] == _PYTHON_PIN
+
+
+# ---------------------------------------------------------------------------
+# InstallInfo.entrypoint — T-B4 (interpreter-pivot immunity for cli/_install_info.py)
+# ---------------------------------------------------------------------------
+
+
+def test_detect_install_populates_entrypoint_from_ambient_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """detect_install() resolves entrypoint via shutil.which against the
+    ambient (pre-pivot) PATH — the executable a post-pivot version probe
+    needs, resolved while it is still safe to do so.
+    """
+    payload = json.dumps(
+        {
+            "url": "https://github.com/TalonT-Org/AutoSkillit.git",
+            "vcs_info": {
+                "vcs": "git",
+                "requested_revision": "stable",
+                "commit_id": "abc123def456",
+            },
+        }
+    )
+    monkeypatch.setattr(
+        "importlib.metadata.Distribution.from_name",
+        lambda _name: _fake_dist(payload),
+    )
+    fake_entrypoint = tmp_path / "autoskillit"
+    fake_entrypoint.write_text("#!/bin/sh\necho fake\n")
+    fake_entrypoint.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    info = detect_install()
+
+    assert info.entrypoint == fake_entrypoint
+
+
+def test_detect_install_entrypoint_none_when_unresolvable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """entrypoint is None, not an exception, when nothing is on PATH."""
+    payload = json.dumps(
+        {
+            "url": "https://github.com/TalonT-Org/AutoSkillit.git",
+            "vcs_info": {
+                "vcs": "git",
+                "requested_revision": "stable",
+                "commit_id": "abc123def456",
+            },
+        }
+    )
+    monkeypatch.setattr(
+        "importlib.metadata.Distribution.from_name",
+        lambda _name: _fake_dist(payload),
+    )
+    monkeypatch.setenv("PATH", "")
+
+    info = detect_install()
+
+    assert info.entrypoint is None

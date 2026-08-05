@@ -22,6 +22,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
+from packaging.version import Version
+
 from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.cli._install_info import (
     InstallInfo,
@@ -89,8 +91,6 @@ def _binary_signal(info: InstallInfo, home: Path, current: str) -> Signal | None
     if latest is None:
         return None
     try:
-        from packaging.version import Version
-
         if Version(latest) > Version(current):
             return Signal("binary", f"New release: {latest} (you have {current})")
     except Exception:
@@ -201,8 +201,6 @@ def _is_dismissed(
         dismissed_at = datetime.fromisoformat(raw_dismissed)
         if datetime.now(UTC) - dismissed_at >= window:
             return False
-        from packaging.version import Version
-
         if Version(current_version) > Version(str(entry.get("dismissed_version", "0.0.0"))):
             return False
         conditions = entry.get("conditions", [])

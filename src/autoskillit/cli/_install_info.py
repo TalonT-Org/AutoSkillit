@@ -1,12 +1,17 @@
 """Install classification and update policy for autoskillit CLI.
 
-Pure module — no I/O, no network, no subprocess.  Provides the canonical
-source of truth for install-type classification and the three policy helpers
-that drive the unified update check.
+Mostly pure — no network, no subprocess. ``detect_install()`` does read-only
+local I/O: ``direct_url.json`` package metadata (via ``parse_direct_url()``)
+and a PATH lookup for the running CLI's own entrypoint (via
+``shutil.which()``, resolved pre-pivot for ``InstallInfo.entrypoint`` — see
+its docstring). Every other function in this module is pure, deriving
+everything from an already-constructed ``InstallInfo``.
 """
 
 from __future__ import annotations
 
+import shutil
+import sys
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
@@ -41,6 +46,28 @@ class InstallInfo:
     requested_revision: str | None
     url: str | None
     editable_source: Path | None
+    entrypoint: Path | None = None
+    """The running autoskillit CLI's own executable, resolved pre-pivot.
+
+    Populated by ``detect_install()`` via ``shutil.which("autoskillit")``
+    against the ambient (pre-maintenance, richest-PATH) environment — safe
+    because it runs before any update subprocess. For a ``uv tool``
+    install this resolves to the uv tool shim (typically
+    ``~/.local/bin/autoskillit``), which ``uv`` rewrites in place during an
+    upgrade rather than recreating, so the path survives a venv rebuild.
+    This is exactly the executable a post-pivot version probe
+    (``cli/update/_transaction.py``'s ``fresh_version_prober``) needs to
+    invoke, even when the maintenance environment's own ``PATH`` (copied
+    verbatim from a possibly PATH-poor background caller — see
+    ``core/_claude_env.py``) would fail to locate it. ``None`` when no such
+    executable is discoverable (e.g. running from an uninstalled checkout).
+    """
+
+
+def _resolve_entrypoint() -> Path | None:
+    """Resolve the running autoskillit CLI's entrypoint against the ambient PATH."""
+    resolved = shutil.which("autoskillit")
+    return Path(resolved) if resolved is not None else None
 
 
 def detect_install() -> InstallInfo:
@@ -52,6 +79,7 @@ def detect_install() -> InstallInfo:
     _unknown = InstallInfo(InstallType.UNKNOWN, None, None, None, None)
     try:
         info = parse_direct_url()
+        entrypoint = _resolve_entrypoint()
         url = info["url"] or ""
         if info["install_type"] == "git-vcs":
             return InstallInfo(
@@ -60,6 +88,7 @@ def detect_install() -> InstallInfo:
                 requested_revision=info["requested_revision"],
                 url=url or None,
                 editable_source=None,
+                entrypoint=entrypoint,
             )
         if info["install_type"] == "local-editable":
             if isinstance(url, str) and url.startswith("file://"):
@@ -70,6 +99,7 @@ def detect_install() -> InstallInfo:
                     requested_revision=None,
                     url=url,
                     editable_source=Path(src_path),
+                    entrypoint=entrypoint,
                 )
         if info["install_type"] == "local-path":
             return InstallInfo(
@@ -78,6 +108,7 @@ def detect_install() -> InstallInfo:
                 requested_revision=None,
                 url=url or None,
                 editable_source=None,
+                entrypoint=entrypoint,
             )
         return _unknown
     except Exception:
@@ -127,16 +158,33 @@ def dismissal_window(info: InstallInfo) -> timedelta:
 def upgrade_command(info: InstallInfo) -> list[str] | None:
     """Return the subprocess command to upgrade autoskillit for this install.
 
-    - stable / main / release-tag → ``["uv", "tool", "upgrade", "autoskillit"]``
-    - dev-track → ``["uv", "tool", "install", "--force", <git URL>]``
+    - stable / main / release-tag →
+      ``["uv", "tool", "upgrade", "autoskillit", "--python", "<major>.<minor>"]``
+    - dev-track →
+      ``["uv", "tool", "install", "--force", <git URL>, "--python", "<major>.<minor>"]``
     - ``LOCAL_EDITABLE`` → ``["uv", "pip", "install", "-e", str(info.editable_source)]``
     - ``UNKNOWN`` / ``LOCAL_PATH`` → ``None``
+
+    Both ``uv tool`` shapes pin ``--python`` to the CURRENTLY RUNNING
+    interpreter's major.minor, captured here at command-construction time
+    (pre-pivot, while the parent's own interpreter is still authoritative).
+    A routine update then rebuilds the venv on the same interpreter line, so
+    the venv's ``lib/pythonX.Y`` layout — and every artifact deriving from
+    it — is stable across updates; an interpreter migration becomes an
+    explicit operator action instead of a side effect of update timing
+    (issue #4469: the incident's venv silently flipped from 3.13 to 3.11
+    mid-update). If the pinned minor is unavailable, ``uv`` fails loudly
+    pre-pivot rather than silently choosing a different one — strictly
+    better than an unpinned command that could resolve to any interpreter.
+    ``LOCAL_EDITABLE`` installs into an existing venv via ``uv pip install``
+    rather than rebuilding one, so no pin applies there.
     """
     if info.install_type == InstallType.LOCAL_EDITABLE and info.editable_source is not None:
         return ["uv", "pip", "install", "-e", str(info.editable_source)]
     if info.install_type != InstallType.GIT_VCS:
         return None
+    python_pin = f"{sys.version_info.major}.{sys.version_info.minor}"
     track = classify_track(info)
     if track == InstallTrack.DEV:
-        return ["uv", "tool", "install", "--force", _INSTALL_FROM_DEVELOP]
-    return ["uv", "tool", "upgrade", "autoskillit"]
+        return ["uv", "tool", "install", "--force", _INSTALL_FROM_DEVELOP, "--python", python_pin]
+    return ["uv", "tool", "upgrade", "autoskillit", "--python", python_pin]

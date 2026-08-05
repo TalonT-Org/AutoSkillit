@@ -77,6 +77,14 @@ class SkillInvalidity:
     detail: str
 
 
+def invalidity_hints(invalidities: Iterable[SkillInvalidity]) -> tuple[str, ...]:
+    """Return one deduplicated remediation hint per distinct invalidity kind."""
+    return tuple(
+        SKILL_CONTRACT_REMEDIATIONS[kind].hint
+        for kind in dict.fromkeys(item.kind for item in invalidities)
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class SkillInfo:
     """One exact, typed skill machine contract selected from a source."""
@@ -227,17 +235,13 @@ class SkillExclusion:
     def from_skill_info(cls, info: SkillInfo, *, fallback: SkillSource | None) -> SkillExclusion:
         """Build a record from a rejected candidate's own invalidities."""
         assert info.source_ref is not None
-        hints = tuple(
-            SKILL_CONTRACT_REMEDIATIONS[kind].hint
-            for kind in dict.fromkeys(item.kind for item in info.invalidities)
-        )
         return cls(
             name=info.name,
             path=info.path,
             search_dir=info.source_ref.search_dir or "",
             invalidities=info.invalidities,
             fallback=fallback,
-            hints=hints,
+            hints=invalidity_hints(info.invalidities),
         )
 
 
@@ -1138,10 +1142,7 @@ def validate_skill_tier_roles(
                     f"{effective.invalid_reason}"
                 )
                 if isinstance(effective, SkillInfo):
-                    hints = tuple(
-                        SKILL_CONTRACT_REMEDIATIONS[kind].hint
-                        for kind in dict.fromkeys(item.kind for item in effective.invalidities)
-                    )
+                    hints = invalidity_hints(effective.invalidities)
                     message += f" (path: {effective.path})"
                     if hints:
                         message += f"; hint: {'; '.join(hints)}"

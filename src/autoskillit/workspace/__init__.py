@@ -115,6 +115,7 @@ from autoskillit.workspace.skills import (
     bundled_skills_dir,
     bundled_skills_extended_dir,
     detect_project_local_overrides,
+    invalidity_hints,
     override_names,
     validate_skill_tier_roles,
 )
@@ -190,6 +191,7 @@ __all__ = [
     "build_skill_projection_binding",
     "finalize_skill_projection_binding",
     "detect_project_local_overrides",
+    "invalidity_hints",
     "override_names",
     "ProjectLocalOverride",
     "clone_repo",

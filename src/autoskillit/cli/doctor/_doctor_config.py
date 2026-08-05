@@ -344,6 +344,18 @@ def _check_standing_backend_pins_feasibility(
                         )
                     )
                     continue
+                if skill_info.invalid_reason is not None:
+                    results.append(
+                        DoctorResult(
+                            Severity.WARNING,
+                            "standing_backend_pins_feasibility",
+                            f"{config_path}: {dotted_key} references skill "
+                            f"{skill_name!r} (step {target_step.name!r}) whose contract "
+                            f"is invalid, so its semantic-plan feasibility could not be "
+                            f"checked: {skill_info.invalid_reason}",
+                        )
+                    )
+                    continue
 
                 if skill_info.semantic_plan is None:
                     continue

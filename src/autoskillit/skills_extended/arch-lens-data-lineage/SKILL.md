@@ -9,6 +9,82 @@ write_paths:
 - '{{AUTOSKILLIT_TEMP}}/arch-lens-data-lineage/'
 description: Create Data Lineage architecture diagram showing information flow, transformations, and storage destinations.
   Data-centric lens answering "Where is the data?"
+exploration_vectors:
+  - id: data-origins-inputs
+    disposition: migrated
+    rationale: Semantic navigation traces user input, ingestion, external reads, request handlers, and their call paths while the parent classifies data origins.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references]
+    task_id: arch-lens-data-lineage-data-origins-inputs
+    frontier_item_id: arch-lens-data-lineage-data-origins-inputs-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: transformation-stages
+    disposition: migrated
+    rationale: Semantic navigation traces adapters, converters, parsers, serializers, mappings, and transformation calls while the parent determines lineage stages.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: arch-lens-data-lineage-transformation-stages
+    frontier_item_id: arch-lens-data-lineage-transformation-stages-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: format-changes
+    disposition: migrated
+    rationale: Semantic navigation traces schema and type definitions plus serialization and conversion boundaries while the parent routes declarative schemas to repository impact profiling.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: arch-lens-data-lineage-format-changes
+    frontier_item_id: arch-lens-data-lineage-format-changes-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: storage-destinations
+    disposition: migrated
+    rationale: Repository impact evidence identifies persistence declarations, files, generated outputs, storage artifacts, and their consumers while the parent routes operation call tracing to semantic navigation.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: arch-lens-data-lineage-storage-destinations
+    frontier_item_id: arch-lens-data-lineage-storage-destinations-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: access-patterns
+    disposition: migrated
+    rationale: Semantic navigation traces retrieval, query, load, read, and data-access-layer calls while the parent determines lineage and source-of-truth meaning.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references]
+    task_id: arch-lens-data-lineage-access-patterns
+    frontier_item_id: arch-lens-data-lineage-access-patterns-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -59,6 +135,7 @@ semantic_requirements:
 - Focus on runtime behavior (that's process flow lens)
 - Show static structure without data context
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -76,6 +153,11 @@ semantic_requirements:
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-data-lineage/arch_diag_data_lineage_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch exactly 5 exploration vectors through the deterministic router
+- Route mixed semantic and declarative subfrontiers through the parent-owned plan; bounded handoffs return evidence to the originating vector without adding dependencies
+- Wait for every exploration result before mapping data flow, identifying conversion boundaries, or creating the diagram
+- Retain parent authority over lineage, source-of-truth, read/write, artifact, Mermaid, and output judgments
 
 
 ## Analysis Workflow
@@ -91,38 +173,33 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+### Step 1: Launch 5 Routed Exploration Vectors (SINGLE MESSAGE)
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch exactly these five authored vectors under their registered role policies. The parent routes code definitions, calls, and control flow to the navigator and declarative schemas, configuration, generated artifacts, tests, fixtures, and consumers to the profiler.
 
-**Data Origins (Inputs)**
-- Find user input handling
-- Identify external data sources
-- Look for: CLI args, API requests, file reads, imports, user input, data ingestion
+<!-- autoskillit:exploration-vector id="data-origins-inputs" -->
+1. **Data Origins (Inputs)** — Find user-input handling, external data sources, CLI arguments, API requests, file reads, imports, and ingestion call paths. The parent classifies the final origin categories.
+<!-- /autoskillit:exploration-vector -->
 
-**Transformation Stages**
-- Find data conversion/transformation code
-- Identify adapters and converters
-- Look for: Adapter, Converter, transform, parse, serialize, from_*, to_*, mapping, conversion
+<!-- autoskillit:exploration-vector id="transformation-stages" -->
+2. **Transformation Stages** — Trace adapters, converters, transforms, parsers, serializers, `from_*`, `to_*`, mappings, and conversion calls with their inputs and outputs.
+<!-- /autoskillit:exploration-vector -->
 
-**Format Changes**
-- Find schema definitions and conversions
-- Identify format boundaries (JSON, XML, protobuf, etc.)
-- Look for: schema models, type definitions, serialization, deserialization, format conversion
+<!-- autoskillit:exploration-vector id="format-changes" -->
+3. **Format Changes** — Trace schema models, type definitions, serialization, deserialization, and JSON, XML, protobuf, or other format boundaries. Route declarative schema evidence through the parent to the profiler.
+<!-- /autoskillit:exploration-vector -->
 
-**Storage Destinations**
-- Find database operations
-- Identify file outputs
-- Look for: database operations, persistence, .save(), .create(), .write(), storage
+<!-- autoskillit:exploration-vector id="storage-destinations" -->
+4. **Storage Destinations** — Identify persistence declarations, database and file destinations, generated outputs, storage artifacts, and consumers. Route bounded `.save()`, `.create()`, `.write()`, and other operation call tracing through the parent to the navigator.
+<!-- /autoskillit:exploration-vector -->
 
-**Access Patterns**
-- Find data retrieval code
-- Identify query patterns
-- Look for: .get(), .query(), .find(), .load(), read operations, data access layer
+<!-- autoskillit:exploration-vector id="access-patterns" -->
+5. **Access Patterns** — Trace retrieval code, queries, `.get()`, `.find()`, `.load()`, reads, and data-access-layer calls. Report evidence without deciding source-of-truth or lineage meaning.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Map Data Flow
 

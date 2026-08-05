@@ -9,6 +9,97 @@ write_paths:
 - '{{AUTOSKILLIT_TEMP}}/arch-lens-operational/'
 description: Create Operational architecture diagram showing CLI workflows, configuration, and observability. Administration
   lens answering "How is it run and monitored?"
+exploration_vectors:
+  - id: cli-entry-points
+    disposition: migrated
+    rationale: Semantic navigation traces CLI command definitions, groups, subcommands, and dispatch calls while parent-owned handoff covers declarative entry-point registration.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [declares, defines, calls, references]
+    task_id: arch-lens-operational-cli-entry-points
+    frontier_item_id: arch-lens-operational-cli-entry-points-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: configuration
+    disposition: migrated
+    rationale: Repository impact evidence covers configuration files, environment-variable declarations, defaults, override sources, and affected consumers.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: arch-lens-operational-configuration
+    frontier_item_id: arch-lens-operational-configuration-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: task-automation
+    disposition: migrated
+    rationale: Repository impact evidence covers task-runner definitions, automation scripts, invoked commands, generated artifacts, and workflow consumers.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, calls, references, affects]
+    task_id: arch-lens-operational-task-automation
+    frontier_item_id: arch-lens-operational-task-automation-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: logging-monitoring
+    disposition: migrated
+    rationale: Repository impact evidence covers logging and monitoring configuration, metrics, activity logs, output artifacts, tests, and their consumers.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, calls, references, affects]
+    task_id: arch-lens-operational-logging-monitoring
+    frontier_item_id: arch-lens-operational-logging-monitoring-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: status-health
+    disposition: migrated
+    rationale: Semantic navigation traces status and health command definitions, diagnostic calls, and returned outputs while the parent judges operational coverage.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references]
+    task_id: arch-lens-operational-status-health
+    frontier_item_id: arch-lens-operational-status-health-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: reset-recovery
+    disposition: migrated
+    rationale: Semantic navigation traces reset, cleanup, purge, and restore command definitions and call paths while the parent evaluates recovery safety.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: arch-lens-operational-reset-recovery
+    frontier_item_id: arch-lens-operational-reset-recovery-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -61,6 +152,8 @@ semantic_requirements:
 - Show code-level patterns
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
+- Let an exploration vector rank operator workflows, decide configuration precedence, judge recovery safety, or create the diagram
+- Treat Related Skills references as exploration dependencies or dispatch work to another architecture lens
 
 **ALWAYS:**
 - Focus on OPERATOR experience
@@ -77,6 +170,11 @@ semantic_requirements:
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-operational/arch_diag_operational_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch exactly 6 exploration vectors through the deterministic router
+- Allow parent-boundary handoff of declarative CLI registration from the CLI navigator vector to `repository-impact-profiler` without creating extra vectors
+- Wait for every exploration result before mapping operator workflows, documenting configuration hierarchy, or creating the diagram
+- Retain parent authority over operational hypotheses, judgments, Steps 2+, and diagram synthesis
 
 
 ## Analysis Workflow
@@ -92,43 +190,55 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+### Step 1: Launch 6 Routed Exploration Vectors (SINGLE MESSAGE)
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch exactly these six vectors under their registered role policies. The parent/router may hand declarative CLI entry-point registration to `repository-impact-profiler`; this does not create another vector. Related Skills references remain documentation only and do not create dependencies.
 
-**CLI Entry Points**
+<!-- autoskillit:exploration-vector id="cli-entry-points" -->
+1. **CLI Entry Points**
 - Find all CLI commands
 - Identify command groups and subcommands
 - Look for: CLI frameworks (Click, argparse, Commander, etc.), entry points, main commands
+<!-- /autoskillit:exploration-vector -->
 
-**Configuration**
+<!-- autoskillit:exploration-vector id="configuration" -->
+2. **Configuration**
 - Find configuration sources
 - Identify environment variables
 - Look for: config files (config.yaml, .env, settings.json, application.yml), environment variable usage, configuration libraries
+<!-- /autoskillit:exploration-vector -->
 
-**Task Automation**
+<!-- autoskillit:exploration-vector id="task-automation" -->
+3. **Task Automation**
 - Find task runner definitions
 - Identify automation scripts
 - Look for: Taskfile.yml, Makefile, package.json scripts, Rakefile, scripts/ directory
+<!-- /autoskillit:exploration-vector -->
 
-**Logging & Monitoring**
+<!-- autoskillit:exploration-vector id="logging-monitoring" -->
+4. **Logging & Monitoring**
 - Find logging configuration
 - Identify observability outputs
-- Look for: logging configuration, log files, metrics, activity logs, {{AUTOSKILLIT_TEMP}}/ output directories
+- Look for: logging configuration, log files, metrics, activity logs, configured temporary output directories
+<!-- /autoskillit:exploration-vector -->
 
-**Status & Health**
+<!-- autoskillit:exploration-vector id="status-health" -->
+5. **Status & Health**
 - Find status/health commands
 - Identify diagnostic outputs
 - Look for: status, health, info, diagnose, check commands
+<!-- /autoskillit:exploration-vector -->
 
-**Reset & Recovery**
+<!-- autoskillit:exploration-vector id="reset-recovery" -->
+6. **Reset & Recovery**
 - Find reset/cleanup commands
 - Identify recovery operations
 - Look for: reset, clean, clear, purge, restore commands
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Map Operator Workflows
 

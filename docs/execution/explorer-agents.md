@@ -60,10 +60,19 @@ keep their reviewed marker prose and never receive a native dispatch replacement
 skills preserve parent-owned synthesis and diagram output while routing only their reviewed local
 repository evidence leaves.
 
-Architecture orchestration for these exact recipe steps remains a separately reviewed follow-up:
+Phase E completes the same reviewed adoption across the exact thirteen architecture selectors in
+`prepare-pr`: `c4-container`, `concurrency`, `data-lineage`, `deployment`, `development`,
+`error-resilience`, `module-dependency`, `operational`, `process-flow`, `repository-access`,
+`scenarios`, `security`, and `state-lifecycle`. Each lens keeps its post-exploration analysis,
+diagram construction, output path, and parent-owned synthesis unchanged. Its ordered vector
+inventory, review rationale and relationship classes, dependency graph, and native-dispatch
+decision are test-frozen against the skill frontmatter.
+
+Architecture orchestration is pinned to Codex only at the three reviewed recipe-step authorities:
 `implementation.run_arch_lenses`, `implementation-groups.run_arch_lenses`, and
-`remediation.run_arch_lenses`. Keeping that set explicit prevents the representative skill
-adoption from silently broadening into recipe-level backend-policy changes.
+`remediation.run_arch_lenses`. The pins use the `recipe_step` tier, so unrelated steps and recipes
+continue to inherit their configured backend while existing planner, investigate, and scope pins
+remain intact.
 
 ## Policy
 

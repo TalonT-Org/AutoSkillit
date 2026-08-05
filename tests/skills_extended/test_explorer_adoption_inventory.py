@@ -570,7 +570,254 @@ _PHASE_D_INVENTORY: dict[str, tuple[PhaseDInventoryRow, ...]] = {
     ),
 }
 
-_DEFERRED_ARCHITECTURE_PINS = {
+_ARCHITECTURE_SELECTOR_SLUGS = (
+    "c4-container",
+    "concurrency",
+    "data-lineage",
+    "deployment",
+    "development",
+    "error-resilience",
+    "module-dependency",
+    "operational",
+    "process-flow",
+    "repository-access",
+    "scenarios",
+    "security",
+    "state-lifecycle",
+)
+
+_ARCHITECTURE_LENS_INVENTORY: dict[str, tuple[PhaseDInventoryRow, ...]] = {
+    "c4-container": (
+        (
+            "application-layer",
+            "migrated",
+            "semantic-code-navigator",
+            "arch-lens-c4-container-application-layer",
+            "always",
+        ),
+        (
+            "service-business-logic-layer",
+            "migrated",
+            "semantic-code-navigator",
+            "arch-lens-c4-container-service-business-logic-layer",
+            "always",
+        ),
+        (
+            "package-library-layer",
+            "migrated",
+            "semantic-code-navigator",
+            "arch-lens-c4-container-package-library-layer",
+            "always",
+        ),
+        (
+            "data-storage-layer",
+            "migrated",
+            "semantic-code-navigator",
+            "arch-lens-c4-container-data-storage-layer",
+            "always",
+        ),
+        (
+            "external-integrations",
+            "migrated",
+            "semantic-code-navigator",
+            "arch-lens-c4-container-external-integrations",
+            "always",
+        ),
+    ),
+    "concurrency": tuple(
+        (
+            vector_id,
+            "migrated",
+            "semantic-code-navigator",
+            f"arch-lens-concurrency-{vector_id}",
+            "always",
+        )
+        for vector_id in (
+            "concurrency-model",
+            "worker-pools",
+            "parallel-operations",
+            "synchronization-points",
+            "state-access",
+            "sequential-boundaries",
+        )
+    ),
+    "data-lineage": (
+        (
+            "data-origins-inputs",
+            "migrated",
+            "semantic-code-navigator",
+            "arch-lens-data-lineage-data-origins-inputs",
+            "always",
+        ),
+        (
+            "transformation-stages",
+            "migrated",
+            "semantic-code-navigator",
+            "arch-lens-data-lineage-transformation-stages",
+            "always",
+        ),
+        (
+            "format-changes",
+            "migrated",
+            "semantic-code-navigator",
+            "arch-lens-data-lineage-format-changes",
+            "always",
+        ),
+        (
+            "storage-destinations",
+            "migrated",
+            "repository-impact-profiler",
+            "arch-lens-data-lineage-storage-destinations",
+            "always",
+        ),
+        (
+            "access-patterns",
+            "migrated",
+            "semantic-code-navigator",
+            "arch-lens-data-lineage-access-patterns",
+            "always",
+        ),
+    ),
+    "deployment": tuple(
+        (
+            vector_id,
+            "migrated",
+            role,
+            f"arch-lens-deployment-{vector_id}",
+            "always",
+        )
+        for vector_id, role in (
+            ("process-boundaries", "semantic-code-navigator"),
+            ("container-docker", "repository-impact-profiler"),
+            ("local-storage", "semantic-code-navigator"),
+            ("network-services", "semantic-code-navigator"),
+            ("external-services", "semantic-code-navigator"),
+            ("web-frontend", "repository-impact-profiler"),
+        )
+    ),
+    "development": _PHASE_D_INVENTORY["arch-lens-development"],
+    "error-resilience": tuple(
+        (
+            vector_id,
+            "migrated",
+            "semantic-code-navigator",
+            f"arch-lens-error-resilience-{vector_id}",
+            "always",
+        )
+        for vector_id in (
+            "exception-hierarchy",
+            "validation-gates",
+            "error-detection",
+            "recovery-mechanisms",
+            "circuit-breakers",
+            "error-routing",
+        )
+    ),
+    "module-dependency": _PHASE_D_INVENTORY["arch-lens-module-dependency"],
+    "operational": tuple(
+        (
+            vector_id,
+            "migrated",
+            role,
+            f"arch-lens-operational-{vector_id}",
+            "always",
+        )
+        for vector_id, role in (
+            ("cli-entry-points", "semantic-code-navigator"),
+            ("configuration", "repository-impact-profiler"),
+            ("task-automation", "repository-impact-profiler"),
+            ("logging-monitoring", "repository-impact-profiler"),
+            ("status-health", "semantic-code-navigator"),
+            ("reset-recovery", "semantic-code-navigator"),
+        )
+    ),
+    "process-flow": tuple(
+        (
+            vector_id,
+            "migrated",
+            "semantic-code-navigator",
+            f"arch-lens-process-flow-{vector_id}",
+            "always",
+        )
+        for vector_id in (
+            "state-machines-workflows",
+            "entry-points-triggers",
+            "decision-points",
+            "loop-mechanisms",
+            "terminal-states",
+        )
+    ),
+    "repository-access": tuple(
+        (
+            vector_id,
+            "migrated",
+            "semantic-code-navigator",
+            f"arch-lens-repository-access-{vector_id}",
+            "always",
+        )
+        for vector_id in (
+            "repository-classes",
+            "entity-models",
+            "crud-operations",
+            "query-patterns",
+            "factory-scoping",
+            "format-conversion",
+        )
+    ),
+    "scenarios": tuple(
+        (
+            vector_id,
+            "migrated",
+            "semantic-code-navigator",
+            f"arch-lens-scenarios-{vector_id}",
+            "always",
+        )
+        for vector_id in (
+            "primary-use-cases",
+            "happy-path-flows",
+            "error-recovery-flows",
+            "resume-restart-flows",
+            "integration-points",
+        )
+    ),
+    "security": tuple(
+        (
+            vector_id,
+            "migrated",
+            role,
+            f"arch-lens-security-{vector_id}",
+            "always",
+        )
+        for vector_id, role in (
+            ("input-validation", "semantic-code-navigator"),
+            ("path-security", "semantic-code-navigator"),
+            ("process-boundaries", "semantic-code-navigator"),
+            ("authentication-authorization", "semantic-code-navigator"),
+            ("secret-management", "repository-impact-profiler"),
+            ("file-system-security", "repository-impact-profiler"),
+            ("database-isolation", "repository-impact-profiler"),
+        )
+    ),
+    "state-lifecycle": _PHASE_D_INVENTORY["arch-lens-state-lifecycle"],
+}
+
+_ARCHITECTURE_REVIEW_DIGESTS = {
+    "c4-container": "67a02b5577994ac2a615871ceb633f456536fbfb25ec6c9d6136bcbaf60686c3",
+    "concurrency": "08e120b079c45e82416c5f86b11ba4804e25ec9105e2bbe5df52472fd1d362ce",
+    "data-lineage": "5b7ac2e32320d3a82bf38d6f12e4277823e2d868c0bc00c8e9acfe6025ef7132",
+    "deployment": "8ef06c7e164e495c17d91cb197b8e081c51f010a7a0fb561a5911eec93f6581c",
+    "development": "62fce705d8b7292561dc44d5dabec6436334b081cac725cebd999676c4009fc6",
+    "error-resilience": "fae9d01f12b2f6e3a9a7091a9f7249a66114c8f834f01e7b5929868f4f47f187",
+    "module-dependency": "0906197b52200c9af01aefe7e73b954d14eaf3ff520f108990634256371ebaa1",
+    "operational": "1456102221b81b2e3b3df240687342f48adf27f480aa49899717d96ad1db210c",
+    "process-flow": "cc5afc815f03c4df1de2b1e5841412856085225b446f4b919489871976fea788",
+    "repository-access": "b64369dcfcc8e5e8bb87dc66b784ff02daac7948fa93e9dd6ab551f6408c41f4",
+    "scenarios": "2f8d649845a081da5d92807da906721cdac3d47045a45521cc7782ca38e225d8",
+    "security": "15b331b3aac8e57a86f50683d570f2a3b206fbce0c418585cd66e2f3400080c6",
+    "state-lifecycle": "774a419edb0502863dd0d86d5b072aa2e4fe6079f6addd47d6106c1665e0af36",
+}
+
+_ARCHITECTURE_RECIPE_STEP_PINS = {
     "implementation.run_arch_lenses",
     "implementation-groups.run_arch_lenses",
     "remediation.run_arch_lenses",
@@ -868,7 +1115,104 @@ def test_actual_migrated_phase_d_applicability_controls_native_dispatch(
                 )
 
 
-def test_phase_d_inventory_and_deferred_architecture_pins_are_explicit() -> None:
+def test_architecture_selectors_filesystem_inventory_and_native_matrix_are_exact() -> None:
+    prepare_pr = (pkg_root() / "skills_extended" / "prepare-pr" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    selector_table = prepare_pr.split("### Step 5: Select Arch-Lens Slugs", 1)[1].split(
+        "**Selection algorithm:**", 1
+    )[0]
+    selector_slugs = tuple(re.findall(r"^\| ([a-z0-9-]+) \|", selector_table, flags=re.MULTILINE))
+    filesystem_slugs = tuple(
+        path.parent.name.removeprefix("arch-lens-")
+        for path in sorted((pkg_root() / "skills_extended").glob("arch-lens-*/SKILL.md"))
+    )
+    actual_native_dispatch_matrix: dict[str, tuple[str, ...]] = {}
+
+    for slug in _ARCHITECTURE_SELECTOR_SLUGS:
+        info = _load_phase_d_skill(f"arch-lens-{slug}")
+        actual_native_dispatch_matrix[slug] = tuple(
+            vector.id for vector in info.exploration_vectors if vector.native_dispatch
+        )
+
+    assert (
+        selector_slugs
+        == filesystem_slugs
+        == tuple(_ARCHITECTURE_LENS_INVENTORY)
+        == tuple(actual_native_dispatch_matrix)
+        == _ARCHITECTURE_SELECTOR_SLUGS
+    )
+    assert actual_native_dispatch_matrix == {
+        slug: tuple(row[0] for row in rows) for slug, rows in _ARCHITECTURE_LENS_INVENTORY.items()
+    }
+
+
+@pytest.mark.parametrize("slug", _ARCHITECTURE_SELECTOR_SLUGS)
+def test_architecture_lens_vectors_match_complete_reviewed_inventory(slug: str) -> None:
+    expected = _ARCHITECTURE_LENS_INVENTORY[slug]
+    info = _load_phase_d_skill(f"arch-lens-{slug}")
+
+    assert [
+        (
+            vector.id,
+            vector.disposition.value,
+            vector.role,
+            vector.task.task_id,
+            vector.applicability.value,
+        )
+        for vector in info.exploration_vectors
+    ] == list(expected)
+    assert len({vector.id for vector in info.exploration_vectors}) == len(expected)
+    assert all(vector.profile is RepositoryProfileId.AUTO for vector in info.exploration_vectors)
+    assert all(vector.task.scope == (".",) for vector in info.exploration_vectors)
+    assert all(vector.rationale.strip() for vector in info.exploration_vectors)
+    assert all(vector.relationship_classes for vector in info.exploration_vectors)
+    assert all(
+        vector.disposition is ExplorationVectorDisposition.MIGRATED
+        and vector.role in {"semantic-code-navigator", "repository-impact-profiler"}
+        and vector.native_dispatch
+        for vector in info.exploration_vectors
+    )
+    assert _review_digest(info) == _ARCHITECTURE_REVIEW_DIGESTS[slug]
+
+    content = info.path.read_text(encoding="utf-8")
+    for vector in info.exploration_vectors:
+        assert content.count(vector.marker_line) == 1
+        for pattern in _RAW_MIGRATED_AGENT_SYNTAX:
+            assert pattern.search(vector.body) is None, (slug, vector.id, pattern.pattern)
+    assert content.count("<!-- /autoskillit:exploration-vector -->") == len(expected)
+
+
+def test_architecture_lens_task_inventory_is_unique_and_acyclic() -> None:
+    graph: dict[str, set[str]] = {}
+    vector_count = 0
+
+    for slug in _ARCHITECTURE_SELECTOR_SLUGS:
+        info = _load_phase_d_skill(f"arch-lens-{slug}")
+        for vector in info.exploration_vectors:
+            vector_count += 1
+            assert vector.task.task_id not in graph
+            graph[vector.task.task_id] = set(vector.task.depends_on)
+
+    assert vector_count == len(graph) == 76
+    assert set[str]().union(*graph.values()) <= set(graph)
+
+    remaining = dict(graph)
+    scheduled: list[str] = []
+    while remaining:
+        ready = tuple(task_id for task_id, dependencies in remaining.items() if not dependencies)
+        assert ready, f"cycle in architecture exploration graph: {remaining}"
+        scheduled.extend(ready)
+        remaining = {
+            task_id: dependencies.difference(ready)
+            for task_id, dependencies in remaining.items()
+            if task_id not in ready
+        }
+
+    assert len(scheduled) == vector_count
+
+
+def test_phase_d_inventory_and_architecture_recipe_step_pins_are_explicit() -> None:
     assert set(_PHASE_D_INVENTORY) == {
         "investigate",
         "scope",
@@ -893,7 +1237,7 @@ def test_phase_d_inventory_and_deferred_architecture_pins_are_explicit() -> None
         )
         == 21
     )
-    assert _DEFERRED_ARCHITECTURE_PINS == {
+    assert _ARCHITECTURE_RECIPE_STEP_PINS == {
         "implementation.run_arch_lenses",
         "implementation-groups.run_arch_lenses",
         "remediation.run_arch_lenses",

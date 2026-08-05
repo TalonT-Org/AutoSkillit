@@ -9,6 +9,97 @@ write_paths:
 - '{{AUTOSKILLIT_TEMP}}/arch-lens-error-resilience/'
 description: Create Error/Resilience architecture diagram showing failure handling, recovery mechanisms, and circuit breakers.
   Diagnostic lens answering "How are failures handled?"
+exploration_vectors:
+  - id: exception-hierarchy
+    disposition: migrated
+    rationale: Semantic navigation traces custom exception definitions, inheritance, and references while the parent retains failure taxonomy judgment.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [declares, defines, references]
+    task_id: arch-lens-error-resilience-exception-hierarchy
+    frontier_item_id: arch-lens-error-resilience-exception-hierarchy-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: validation-gates
+    disposition: migrated
+    rationale: Semantic navigation follows validation definitions, guard calls, fail-fast branches, and affected operations while the parent evaluates gate semantics.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: arch-lens-error-resilience-validation-gates
+    frontier_item_id: arch-lens-error-resilience-validation-gates-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: error-detection
+    disposition: migrated
+    rationale: Semantic navigation identifies exception handlers, detection branches, and error callbacks without deciding whether detection coverage is sufficient.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references]
+    task_id: arch-lens-error-resilience-error-detection
+    frontier_item_id: arch-lens-error-resilience-error-detection-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: recovery-mechanisms
+    disposition: migrated
+    rationale: Semantic navigation traces retry, backoff, and fallback control flow while parent-owned handoff may use repository impact evidence for declarative retry policies.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: arch-lens-error-resilience-recovery-mechanisms
+    frontier_item_id: arch-lens-error-resilience-recovery-mechanisms-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: circuit-breakers
+    disposition: migrated
+    rationale: Semantic navigation traces breaker definitions, trip decisions, thresholds, and failure branches while the parent retains resilience judgment and declarative-policy handoff.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: arch-lens-error-resilience-circuit-breakers
+    frontier_item_id: arch-lens-error-resilience-circuit-breakers-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: error-routing
+    disposition: migrated
+    rationale: Semantic navigation traces raises, error returns, propagation calls, and terminal failure states while the parent maps and interprets complete error paths.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [calls, references, affects]
+    task_id: arch-lens-error-resilience-error-routing
+    frontier_item_id: arch-lens-error-resilience-error-routing-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -61,6 +152,8 @@ semantic_requirements:
 - Ignore validation and fail-fast patterns
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
+- Let an exploration vector judge resilience effectiveness, select recovery policy, map the final error paths, or create the diagram
+- Treat Related Skills references as exploration dependencies or dispatch work to another architecture lens
 
 **ALWAYS:**
 - Focus on FAILURE paths and recovery
@@ -77,6 +170,11 @@ semantic_requirements:
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-error-resilience/arch_diag_error_resilience_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch exactly 6 exploration vectors through the deterministic router
+- Allow parent-boundary handoff of retry-policy and circuit-breaker configuration from navigator vectors to `repository-impact-profiler` without creating extra vectors
+- Wait for every exploration result before mapping error paths, documenting recovery mechanisms, or creating the diagram
+- Retain parent authority over resilience hypotheses, judgments, Steps 2+, and diagram synthesis
 
 
 ## Analysis Workflow
@@ -92,43 +190,55 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+### Step 1: Launch 6 Routed Exploration Vectors (SINGLE MESSAGE)
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch exactly these six vectors under their registered role policies. The parent/router may hand declarative retry-policy or circuit-breaker configuration to `repository-impact-profiler`; this does not create another vector. Related Skills references remain documentation only and do not create dependencies.
 
-**Exception Hierarchy**
+<!-- autoskillit:exploration-vector id="exception-hierarchy" -->
+1. **Exception Hierarchy**
 - Find custom exception classes
 - Map inheritance relationships
 - Look for: Exception, Error, raise, error classes, custom exceptions
+<!-- /autoskillit:exploration-vector -->
 
-**Validation Gates**
+<!-- autoskillit:exploration-vector id="validation-gates" -->
+2. **Validation Gates**
 - Find validation/guard functions
 - Identify fail-fast patterns
 - Look for: validate_*, check_*, assert, guard, gate, precondition checks
+<!-- /autoskillit:exploration-vector -->
 
-**Error Detection**
+<!-- autoskillit:exploration-vector id="error-detection" -->
+3. **Error Detection**
 - Find error detection points
 - Identify how failures are recognized
 - Look for: try/except, catch, on_error, handle_error, error handling
+<!-- /autoskillit:exploration-vector -->
 
-**Recovery Mechanisms**
+<!-- autoskillit:exploration-vector id="recovery-mechanisms" -->
+4. **Recovery Mechanisms**
 - Find retry logic
 - Identify fallback strategies
 - Look for: retry, backoff, attempt, max_retries, retry policies
+<!-- /autoskillit:exploration-vector -->
 
-**Circuit Breakers**
+<!-- autoskillit:exploration-vector id="circuit-breakers" -->
+5. **Circuit Breakers**
 - Find patterns that prevent infinite retries
 - Identify failure thresholds
 - Look for: circuit, breaker, max_failures, trip, failure thresholds
+<!-- /autoskillit:exploration-vector -->
 
-**Error Routing**
+<!-- autoskillit:exploration-vector id="error-routing" -->
+6. **Error Routing**
 - Find how errors are propagated
 - Identify error terminal states
 - Look for: raise, return Error, error node, ERROR state
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Map Error Paths
 

@@ -9,6 +9,97 @@ write_paths:
 - '{{AUTOSKILLIT_TEMP}}/arch-lens-deployment/'
 description: Create Deployment/Physical architecture diagram showing infrastructure topology, process boundaries, and network
   communication. Physical lens answering "Where does it run?"
+exploration_vectors:
+  - id: process-boundaries
+    disposition: migrated
+    rationale: Semantic navigation traces executable entry points, subprocess creation, process calls, and daemon startup paths while the parent determines physical process boundaries.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references]
+    task_id: arch-lens-deployment-process-boundaries
+    frontier_item_id: arch-lens-deployment-process-boundaries-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: container-docker
+    disposition: migrated
+    rationale: Repository impact evidence identifies Dockerfiles, compose files, Kubernetes manifests, container declarations, images, ports, volumes, and consumers.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: arch-lens-deployment-container-docker
+    frontier_item_id: arch-lens-deployment-container-docker-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: local-storage
+    disposition: migrated
+    rationale: Semantic navigation traces filesystem and database reads, writes, clients, and access calls while the parent routes storage declarations and generated artifacts to repository impact profiling.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: arch-lens-deployment-local-storage
+    frontier_item_id: arch-lens-deployment-local-storage-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: network-services
+    disposition: migrated
+    rationale: Semantic navigation traces servers, listeners, sockets, bind calls, endpoints, and network-service entry points while the parent determines deployment topology.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references]
+    task_id: arch-lens-deployment-network-services
+    frontier_item_id: arch-lens-deployment-network-services-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: external-services
+    disposition: migrated
+    rationale: Semantic navigation traces third-party clients, dependency imports, authentication calls, cloud access, and external service calls while the parent decides system boundaries.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [imports, calls, references]
+    task_id: arch-lens-deployment-external-services
+    frontier_item_id: arch-lens-deployment-external-services-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: web-frontend
+    disposition: migrated
+    rationale: Repository impact evidence identifies frontend manifests, build configuration, web-server declarations, static assets, generated outputs, CDN configuration, and consumers.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: arch-lens-deployment-web-frontend
+    frontier_item_id: arch-lens-deployment-web-frontend-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -59,6 +150,7 @@ semantic_requirements:
 - Include code-level details
 - Show internal logic
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -76,6 +168,11 @@ semantic_requirements:
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-deployment/arch_diag_deployment_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch exactly 6 exploration vectors through the deterministic router
+- Route mixed semantic and declarative deployment subfrontiers through the parent-owned plan; bounded handoffs return evidence to the originating vector without adding dependencies
+- Wait for every exploration result before mapping physical topology, identifying communication paths, or creating the diagram
+- Retain parent authority over deployment boundaries, locations, protocols, read/write classification, Mermaid generation, and output writing
 
 
 ## Analysis Workflow
@@ -91,43 +188,37 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+### Step 1: Launch 6 Routed Exploration Vectors (SINGLE MESSAGE)
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch exactly these six authored vectors under their registered role policies. The parent routes code definitions, imports, calls, and control flow to the navigator and deployment manifests, configuration, registries, generated artifacts, tests, fixtures, and consumers to the profiler.
 
-**Process Boundaries**
-- Find main process entry points
-- Identify subprocess spawning
-- Look for: main, entry_points, subprocess, process spawning, daemon processes
+<!-- autoskillit:exploration-vector id="process-boundaries" -->
+1. **Process Boundaries** — Find main process entry points, subprocess creation, process spawning, daemon processes, and their call paths. Route declarative entry-point and process configuration through the parent to the profiler.
+<!-- /autoskillit:exploration-vector -->
 
-**Container/Docker**
-- Find containerization config
-- Identify services
-- Look for: Dockerfile, docker-compose.yml, container definitions, Kubernetes configs
+<!-- autoskillit:exploration-vector id="container-docker" -->
+2. **Container/Docker** — Find Dockerfiles, compose files, Kubernetes manifests, container definitions, images, services, ports, volumes, generated artifacts, and consumers.
+<!-- /autoskillit:exploration-vector -->
 
-**Local Storage**
-- Find file storage locations
-- Identify database paths
-- Look for: data directories, database files, storage volumes, persistent storage
+<!-- autoskillit:exploration-vector id="local-storage" -->
+3. **Local Storage** — Trace filesystem and database clients, reads, writes, connections, and access calls. Route data directories, database paths, storage volumes, persistence declarations, and generated outputs through the parent to the profiler.
+<!-- /autoskillit:exploration-vector -->
 
-**Network Services**
-- Find service definitions
-- Identify ports and protocols
-- Look for: port, bind, listen, server, API, endpoint, network services
+<!-- autoskillit:exploration-vector id="network-services" -->
+4. **Network Services** — Trace service definitions, servers, APIs, endpoints, listeners, sockets, bind and listen calls, ports, and protocols. Route declarative port or host configuration through the parent to the profiler.
+<!-- /autoskillit:exploration-vector -->
 
-**External Services**
-- Find external API calls
-- Identify cloud services
-- Look for: external APIs, cloud services, third-party integrations
+<!-- autoskillit:exploration-vector id="external-services" -->
+5. **External Services** — Trace external API clients and calls, cloud-service access, imports, authentication, and third-party integrations. The parent determines external boundaries and deployment meaning.
+<!-- /autoskillit:exploration-vector -->
 
-**Web/Frontend**
-- Find frontend deployment
-- Identify static file serving
-- Look for: web servers, frontend builds, static assets, CDN
+<!-- autoskillit:exploration-vector id="web-frontend" -->
+6. **Web/Frontend** — Identify frontend and web-server manifests, build configuration, static assets, frontend outputs, serving declarations, CDN configuration, and consumers. Route bounded serving-call traces through the parent to the navigator.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Map Physical Topology
 

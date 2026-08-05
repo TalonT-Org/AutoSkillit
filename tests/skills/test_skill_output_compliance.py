@@ -4,6 +4,7 @@ and structured output tokens use 'key = value' format (spaces around =).
 
 from __future__ import annotations
 
+import hashlib
 import re
 
 import pytest
@@ -309,6 +310,22 @@ def test_output_path_tokens_synchronized() -> None:
 
 SKILL_CONTRACTS_PATH = pkg_root() / "recipe" / "skill_contracts.yaml"
 
+ARCHITECTURE_LENS_SKILLS = (
+    "arch-lens-c4-container",
+    "arch-lens-concurrency",
+    "arch-lens-data-lineage",
+    "arch-lens-deployment",
+    "arch-lens-development",
+    "arch-lens-error-resilience",
+    "arch-lens-module-dependency",
+    "arch-lens-operational",
+    "arch-lens-process-flow",
+    "arch-lens-repository-access",
+    "arch-lens-scenarios",
+    "arch-lens-security",
+    "arch-lens-state-lifecycle",
+)
+
 # Skills with path-capture contracts that must have their token instruction
 # in ## Critical Constraints (not only in ## Output or a late workflow step).
 PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
@@ -403,6 +420,59 @@ def _get_contracted_path_capture_skills() -> dict[str, list[str]]:
         if tokens:
             result[skill_name] = tokens
     return result
+
+
+def test_all_architecture_lenses_keep_the_exact_diagram_path_contract() -> None:
+    raw = load_yaml(SKILL_CONTRACTS_PATH)
+    contracts = raw["skills"]
+    architecture_contracts = tuple(name for name in contracts if name.startswith("arch-lens-"))
+
+    assert len(architecture_contracts) == len(ARCHITECTURE_LENS_SKILLS)
+    assert set(architecture_contracts) == set(ARCHITECTURE_LENS_SKILLS)
+    expected_contract = {
+        "inputs": [
+            {"name": "context_path", "type": "file_path", "required": False},
+            {"name": "experiment_plan_path", "type": "file_path", "required": False},
+            {"name": "project_context", "type": "string", "required": False},
+        ],
+        "outputs": [{"name": "diagram_path", "type": "file_path"}],
+        "expected_output_patterns": [r"diagram_path[ \t]*=[ \t]*/.+"],
+        "pattern_examples": ["diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"],
+    }
+    assert all(contracts[name] == expected_contract for name in ARCHITECTURE_LENS_SKILLS)
+    architecture_path_captures = tuple(
+        name
+        for name, tokens in PATH_CAPTURE_SKILLS.items()
+        if name.startswith("arch-lens-") and tokens == ["diagram_path"]
+    )
+    assert len(architecture_path_captures) == len(ARCHITECTURE_LENS_SKILLS)
+    assert set(architecture_path_captures) == set(ARCHITECTURE_LENS_SKILLS)
+
+
+@pytest.mark.parametrize(
+    ("skill_name", "step_two_heading", "expected_digest"),
+    [
+        (
+            "arch-lens-data-lineage",
+            "### Step 2: Map Data Flow",
+            "a3dc4ed2d0bb61d033f546abf06d76768b2d00c1766f7f102f280985b786c911",
+        ),
+        (
+            "arch-lens-process-flow",
+            "### Step 2: Map State Transitions",
+            "ea78691daf35480b0e1df7fac8c158f3d23fe83382566bd39f7943ced2d26939",
+        ),
+    ],
+)
+def test_data_and_process_lenses_keep_parent_owned_step_two_and_later_authority(
+    skill_name: str, step_two_heading: str, expected_digest: str
+) -> None:
+    content = _read_skill_md(skill_name)
+    authoritative_tail = content.split(step_two_heading, 1)[1]
+    normalized = f"{step_two_heading}{authoritative_tail}".rstrip() + "\n"
+
+    assert hashlib.sha256(normalized.encode()).hexdigest() == expected_digest
+    assert "diagram_path = {absolute_path_to_diagram_file}" in normalized
 
 
 @pytest.mark.parametrize("skill_name,token_names", list(PATH_CAPTURE_SKILLS.items()))

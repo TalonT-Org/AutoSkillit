@@ -9,6 +9,112 @@ write_paths:
 - '{{AUTOSKILLIT_TEMP}}/arch-lens-security/'
 description: Create Security architecture diagram showing trust boundaries, validation layers, and process isolation. Security
   lens answering "Where are the trust boundaries?"
+exploration_vectors:
+  - id: input-validation
+    disposition: migrated
+    rationale: Semantic navigation traces validation and sanitization definitions, calls, guarded inputs, and failure paths while the parent assesses trust boundaries.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: arch-lens-security-input-validation
+    frontier_item_id: arch-lens-security-input-validation-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: path-security
+    disposition: migrated
+    rationale: Semantic navigation traces path-validation and restriction control paths while parent-owned handoff may use repository impact evidence for declarative allowlists, denylists, and path policy.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: arch-lens-security-path-security
+    frontier_item_id: arch-lens-security-path-security-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: process-boundaries
+    disposition: migrated
+    rationale: Semantic navigation traces subprocess creation, isolation, timeout, guard, and cleanup control flow while the parent interprets process trust boundaries.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: arch-lens-security-process-boundaries
+    frontier_item_id: arch-lens-security-process-boundaries-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: authentication-authorization
+    disposition: migrated
+    rationale: Semantic navigation traces authentication and authorization definitions, permission checks, credential references, and guarded call paths without judging policy adequacy.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: arch-lens-security-authentication-authorization
+    frontier_item_id: arch-lens-security-authentication-authorization-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: secret-management
+    disposition: migrated
+    rationale: Repository impact evidence identifies secret and credential declarations, environment-variable use, ignore policy, configuration consumers, and affected surfaces without exposing values.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: arch-lens-security-secret-management
+    frontier_item_id: arch-lens-security-secret-management-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: file-system-security
+    disposition: migrated
+    rationale: Repository impact evidence identifies file-access controls, allowed write zones, snapshots, file-change policy, configuration, and affected consumers.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: arch-lens-security-file-system-security
+    frontier_item_id: arch-lens-security-file-system-security-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: database-isolation
+    disposition: migrated
+    rationale: Repository impact evidence identifies database access controls, tenant or user scoping declarations, isolation configuration, registrations, and affected consumers.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: arch-lens-security-database-isolation
+    frontier_item_id: arch-lens-security-database-isolation-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -57,9 +163,11 @@ semantic_requirements:
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for ourselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/arch-lens-security/`
 - Modify any source code files
+- Execute target code, application workflows, or target test commands to gather exploration evidence
 - Expose actual secrets or credentials
 - Show implementation details that could aid attacks
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -77,6 +185,11 @@ semantic_requirements:
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-security/arch_diag_security_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch exactly 7 exploration vectors through the deterministic router
+- Allow parent-boundary handoff of declarative path policy, process configuration, and credential-consumer artifacts to `repository-impact-profiler` without creating extra vectors
+- Wait for every exploration result before mapping trust boundaries, assessing validation layers, analyzing read/write direction, or creating the diagram
+- Retain parent authority over threat and trust-boundary interpretation, validation-layer synthesis, security judgment, and diagram creation
 
 
 ## Analysis Workflow
@@ -92,48 +205,41 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+### Step 1: Launch 7 Routed Exploration Vectors (SINGLE MESSAGE)
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch exactly these seven vectors under their registered role policies. When a navigator finds declarative path policy, process configuration, or credential-consumer artifacts, the parent/router may reclassify that bounded handoff to `repository-impact-profiler`; it must not create another vector. Each leaf returns bounded terminal evidence only and must not expose secret values, assess threats, judge security adequacy, map final trust boundaries, create diagrams, or write lens output.
 
-**Input Validation**
-- Find input validation code
-- Identify sanitization patterns
-- Look for: validate, sanitize, clean, escape, input validation
+<!-- autoskillit:exploration-vector id="input-validation" -->
+1. **Input validation** — Trace input-validation and sanitization definitions, call sites, guarded inputs, and failure paths, including validate, sanitize, clean, and escape patterns.
+<!-- /autoskillit:exploration-vector -->
 
-**Path Security**
-- Find path validation/restriction code
-- Identify forbidden patterns
-- Look for: path, traversal, .., forbidden, whitelist, blacklist
+<!-- autoskillit:exploration-vector id="path-security" -->
+2. **Path security** — Trace path validation and restriction control flow, traversal checks, forbidden patterns, and allowlist or denylist use; include bounded declarative path-policy handoffs for profiler evidence.
+<!-- /autoskillit:exploration-vector -->
 
-**Process Boundaries**
-- Find subprocess/isolation code
-- Identify timeouts and guards
-- Look for: subprocess, Popen, timeout, isolation, sandbox
+<!-- autoskillit:exploration-vector id="process-boundaries" -->
+3. **Process boundaries** — Trace subprocess and isolation code, including process creation, timeouts, guards, sandboxes, cleanup, and failure paths.
+<!-- /autoskillit:exploration-vector -->
 
-**Authentication/Authorization**
-- Find auth-related code
-- Identify permission checks
-- Look for: auth, permission, token, API key, credential
+<!-- autoskillit:exploration-vector id="authentication-authorization" -->
+4. **Authentication/authorization** — Trace authentication and authorization definitions, permission checks, token or API-key references, credential consumers, and guarded call paths without reporting credential values.
+<!-- /autoskillit:exploration-vector -->
 
-**Secret Management**
-- Find secret handling
-- Identify env var usage
-- Look for: secret, API_KEY, credential, .env, gitignore
+<!-- autoskillit:exploration-vector id="secret-management" -->
+5. **Secret management** — Identify secret and credential declarations, environment-variable use, `.env` handling, ignore policy, configuration consumers, and affected surfaces without reading or reporting secret values.
+<!-- /autoskillit:exploration-vector -->
 
-**File System Security**
-- Find file access controls
-- Identify write zone restrictions
-- Look for: write_zone, allowed_paths, snapshot, file_change
+<!-- autoskillit:exploration-vector id="file-system-security" -->
+6. **File system security** — Identify file-access controls, allowed paths, write-zone restrictions, snapshots, file-change policy, configuration, and affected consumers.
+<!-- /autoskillit:exploration-vector -->
 
-**Database Isolation**
-- Find database access controls
-- Identify per-user/per-tenant isolation
-- Look for: isolation, tenant, scope, multi-tenancy
+<!-- autoskillit:exploration-vector id="database-isolation" -->
+7. **Database isolation** — Identify database access controls, per-user or per-tenant scoping, multi-tenancy and isolation declarations, configuration, registrations, and affected consumers.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Map Trust Boundaries
 

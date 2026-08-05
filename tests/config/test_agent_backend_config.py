@@ -6,12 +6,17 @@ import yaml
 pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
 
 _DEFAULT_RECIPE_OVERRIDES = {
+    "implementation": {"run_arch_lenses": "codex"},
+    "implementation-groups": {"run_arch_lenses": "codex"},
     "planner": {
         "analyze": "codex",
         "extract_domain": "codex",
         "elaborate_phases": "codex",
     },
-    "remediation": {"investigate": "codex"},
+    "remediation": {
+        "investigate": "codex",
+        "run_arch_lenses": "codex",
+    },
     "research": {"scope": "codex"},
     "research-design": {"scope": "codex"},
 }
@@ -107,23 +112,17 @@ class TestAgentBackendConfigLoading:
         assert defaults["agent_backend"]["recipe_overrides"] == _DEFAULT_RECIPE_OVERRIDES
 
     @pytest.mark.parametrize(
-        ("recipe_name", "step_name"),
-        [
-            ("implementation", "run_arch_lenses"),
-            ("implementation-groups", "run_arch_lenses"),
-            ("remediation", "run_arch_lenses"),
-        ],
+        "recipe_name",
+        ["implementation", "implementation-groups", "remediation"],
     )
-    def test_defaults_leave_architecture_consumers_unpinned(
-        self, recipe_name: str, step_name: str
-    ) -> None:
+    def test_defaults_pin_architecture_consumers_to_codex(self, recipe_name: str) -> None:
         from autoskillit.core.io import load_yaml
         from autoskillit.core.paths import pkg_root
 
         defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
         recipe_overrides = defaults["agent_backend"]["recipe_overrides"]
 
-        assert step_name not in recipe_overrides.get(recipe_name, {})
+        assert recipe_overrides[recipe_name]["run_arch_lenses"] == "codex"
 
     def test_agent_backend_env_var_override(self, tmp_path, monkeypatch) -> None:
         from autoskillit.config import load_config
@@ -265,6 +264,7 @@ class TestAgentBackendConfigOverrides:
             **_DEFAULT_RECIPE_OVERRIDES,
             "remediation": {
                 "investigate": "codex",
+                "run_arch_lenses": "codex",
                 "dry_walkthrough": "codex",
             },
         }

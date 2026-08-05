@@ -43,9 +43,24 @@ class TestExplicitBackendOverrideAdmissionDispatchAgreement:
         ("recipe_name", "step_name", "key_path"),
         [
             (
+                "implementation",
+                "run_arch_lenses",
+                "agent_backend.recipe_overrides.implementation.run_arch_lenses",
+            ),
+            (
+                "implementation-groups",
+                "run_arch_lenses",
+                "agent_backend.recipe_overrides.implementation-groups.run_arch_lenses",
+            ),
+            (
                 "remediation",
                 "investigate",
                 "agent_backend.recipe_overrides.remediation.investigate",
+            ),
+            (
+                "remediation",
+                "run_arch_lenses",
+                "agent_backend.recipe_overrides.remediation.run_arch_lenses",
             ),
             (
                 "research",
@@ -73,25 +88,6 @@ class TestExplicitBackendOverrideAdmissionDispatchAgreement:
 
         assert admission_map == {step_name: "codex"}
         assert origin_map == {step_name: key_path}
-
-    @pytest.mark.parametrize(
-        "recipe_name",
-        ["implementation", "implementation-groups", "remediation"],
-    )
-    def test_unpinned_architecture_consumers_use_base_backend_without_origin(
-        self, recipe_name: str
-    ) -> None:
-        from autoskillit.server.tools._auto_overrides import _compute_effective_backend_map
-
-        admission_map, origin_map = _compute_effective_backend_map(
-            cast(Any, _make_recipe_steps("run_arch_lenses")),
-            "claude-code",
-            recipe_name,
-            config_backend=_bundled_backend(),
-        )
-
-        assert admission_map == {"run_arch_lenses": "claude-code"}
-        assert origin_map == {}
 
     def test_explicit_backend_override_admission_dispatch_agreement(self) -> None:
         """Both admission (compute_effective_backend_map) and dispatch agree

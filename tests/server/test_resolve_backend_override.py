@@ -30,9 +30,24 @@ class TestResolveBackendOverride:
         ("recipe_name", "step_name", "key_path"),
         [
             (
+                "implementation",
+                "run_arch_lenses",
+                "agent_backend.recipe_overrides.implementation.run_arch_lenses",
+            ),
+            (
+                "implementation-groups",
+                "run_arch_lenses",
+                "agent_backend.recipe_overrides.implementation-groups.run_arch_lenses",
+            ),
+            (
                 "remediation",
                 "investigate",
                 "agent_backend.recipe_overrides.remediation.investigate",
+            ),
+            (
+                "remediation",
+                "run_arch_lenses",
+                "agent_backend.recipe_overrides.remediation.run_arch_lenses",
             ),
             (
                 "research",
@@ -59,17 +74,6 @@ class TestResolveBackendOverride:
         assert result.kind is BackendAuthorityKind.RECIPE
         assert result.tier == "recipe_step"
         assert result.key_path == key_path
-
-    @pytest.mark.parametrize(
-        "recipe_name",
-        ["implementation", "implementation-groups", "remediation"],
-    )
-    def test_bundled_architecture_consumers_remain_unpinned(self, recipe_name: str) -> None:
-        from autoskillit.server._guards import _resolve_backend_override
-
-        result = _resolve_backend_override("run_arch_lenses", recipe_name, _bundled_backend())
-
-        assert result is None
 
     def test_exact_recipe_step_match(self) -> None:
         from autoskillit.core import BackendAuthorityKind

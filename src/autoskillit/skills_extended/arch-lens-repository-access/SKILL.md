@@ -9,6 +9,97 @@ write_paths:
 - '{{AUTOSKILLIT_TEMP}}/arch-lens-repository-access/'
 description: Create Repository/Data Access architecture diagram showing the repository pattern, entity relationships, and
   data access patterns. Data-centric lens answering "How is data accessed?"
+exploration_vectors:
+  - id: repository-classes
+    disposition: migrated
+    rationale: Semantic navigation identifies repository definitions, inheritance, imports, and concrete implementations while the parent retains repository-pattern interpretation.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, imports, references]
+    task_id: arch-lens-repository-access-repository-classes
+    frontier_item_id: arch-lens-repository-access-repository-classes-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: entity-models
+    disposition: migrated
+    rationale: Semantic navigation identifies entity and model definitions while parent-owned handoff may use repository impact evidence for declarative tables, collections, and ORM artifacts.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [declares, defines, references]
+    task_id: arch-lens-repository-access-entity-models
+    frontier_item_id: arch-lens-repository-access-entity-models-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: crud-operations
+    disposition: migrated
+    rationale: Semantic navigation traces CRUD and specialized-query method definitions, callers, and affected storage operations without classifying their architectural role.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: arch-lens-repository-access-crud-operations
+    frontier_item_id: arch-lens-repository-access-crud-operations-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: query-patterns
+    disposition: migrated
+    rationale: Semantic navigation traces query-builder, filter, join, ordering, grouping, and index-related code paths while the parent interprets query patterns.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references]
+    task_id: arch-lens-repository-access-query-patterns
+    frontier_item_id: arch-lens-repository-access-query-patterns-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: factory-scoping
+    disposition: migrated
+    rationale: Semantic navigation traces repository factories, dependency-injection calls, and session or context scope paths while parent-owned handoff covers declarative registrations and configuration.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: arch-lens-repository-access-factory-scoping
+    frontier_item_id: arch-lens-repository-access-factory-scoping-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: format-conversion
+    disposition: migrated
+    rationale: Semantic navigation traces adapter, DTO, serializer, mapper, and conversion definitions and calls while the parent interprets conversion boundaries.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: arch-lens-repository-access-format-conversion
+    frontier_item_id: arch-lens-repository-access-format-conversion-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -57,9 +148,11 @@ semantic_requirements:
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for ourselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/arch-lens-repository-access/`
 - Modify any source code files
+- Execute target code, application workflows, or target test commands to gather exploration evidence
 - Focus on data flow (that's data lineage lens)
 - Include business logic details
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -77,6 +170,11 @@ semantic_requirements:
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-repository-access/arch_diag_repository_access_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch exactly 6 exploration vectors through the deterministic router
+- Allow parent-boundary handoff of declarative entity artifacts, dependency-injection registrations, and configuration consumers to `repository-impact-profiler` without creating extra vectors
+- Wait for every exploration result before mapping entities, classifying access patterns, analyzing read/write direction, or creating the diagram
+- Retain parent authority over repository-pattern interpretation, relationship and access-pattern synthesis, read/write analysis, and diagram creation
 
 
 ## Analysis Workflow
@@ -92,43 +190,37 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+### Step 1: Launch 6 Routed Exploration Vectors (SINGLE MESSAGE)
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch exactly these six vectors under their registered role policies. When a navigator finds a declarative entity artifact, dependency-injection registration, or configuration-consumer surface, the parent/router may reclassify that bounded handoff to `repository-impact-profiler`; it must not create another vector. Each leaf returns bounded terminal evidence only and must not interpret the architecture, analyze read/write direction, synthesize relationships, select solutions, create diagrams, or write lens output.
 
-**Repository Classes**
-- Find all repository implementations
-- Identify base repository patterns
-- Look for: Repository classes, DAO (Data Access Object) patterns, base repository abstractions
+<!-- autoskillit:exploration-vector id="repository-classes" -->
+1. **Repository classes** — Find all repository implementations and base abstractions, including Repository and DAO patterns; report concrete definitions, inheritance, imports, and references.
+<!-- /autoskillit:exploration-vector -->
 
-**Entity Models**
-- Find entity/model classes
-- Identify table/collection definitions
-- Look for: ORM models (ActiveRecord, Entity Framework, TypeORM, etc.), data models, entity classes
+<!-- autoskillit:exploration-vector id="entity-models" -->
+2. **Entity models** — Find entity and model classes plus table or collection definitions, including ORM models, data models, and entity classes; include bounded declarative-artifact handoffs for profiler evidence.
+<!-- /autoskillit:exploration-vector -->
 
-**CRUD Operations**
-- Find standard CRUD methods
-- Identify specialized query methods
-- Look for: create, get, update, delete, save, find_*, get_by_*, query methods
+<!-- autoskillit:exploration-vector id="crud-operations" -->
+3. **CRUD operations** — Trace standard CRUD and specialized query methods, including create, get, update, delete, save, `find_*`, `get_by_*`, and query methods, with their callers and affected operations.
+<!-- /autoskillit:exploration-vector -->
 
-**Query Patterns**
-- Find complex queries and joins
-- Identify index usage patterns
-- Look for: filter, where, join, order_by, group_by, query builders
+<!-- autoskillit:exploration-vector id="query-patterns" -->
+4. **Query patterns** — Trace complex queries, joins, index usage, filters, where clauses, ordering, grouping, and query-builder definitions and calls.
+<!-- /autoskillit:exploration-vector -->
 
-**Factory/Scoping**
-- Find repository factory patterns
-- Identify scope management
-- Look for: Factory patterns, dependency injection, session/context management
+<!-- autoskillit:exploration-vector id="factory-scoping" -->
+5. **Factory/scoping** — Trace repository factories, dependency-injection calls, and session or context scope management; include bounded registry and configuration handoffs for profiler evidence.
+<!-- /autoskillit:exploration-vector -->
 
-**Format Conversion**
-- Find adapter/converter patterns
-- Identify boundary conversions
-- Look for: Adapters, DTOs, to_*/from_* methods, serializers, mappers
+<!-- autoskillit:exploration-vector id="format-conversion" -->
+6. **Format conversion** — Trace adapter and converter patterns at data boundaries, including DTOs, `to_*` and `from_*` methods, serializers, and mappers.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Map Entity Relationships
 

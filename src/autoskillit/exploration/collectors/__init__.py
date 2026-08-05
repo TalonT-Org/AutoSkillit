@@ -11,6 +11,7 @@ from ._bounded import (
 )
 from .extractors import (
     COLLECTOR_PROFILES,
+    CollectorInvocation,
     CollectorProfile,
     collect_architecture,
     collect_artifact,
@@ -31,6 +32,7 @@ __all__ = [
     "BoundedCommandResult",
     "COLLECTOR_PROFILES",
     "CollectorLimits",
+    "CollectorInvocation",
     "CollectorProfile",
     "CollectorSafetyError",
     "list_contained_files",

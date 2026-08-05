@@ -112,10 +112,13 @@ class SnapshotCaptureResult:
     diagnostic: str = ""
     start_identity: str = ""
     end_identity: str = ""
+    validated_activation: RepositoryProfileActivation | None = None
 
     def __post_init__(self) -> None:
         if self.status is SnapshotCaptureStatus.COMPLETE and self.snapshot is None:
             raise ValueError("complete snapshot capture requires a snapshot")
+        if self.status is SnapshotCaptureStatus.COMPLETE and self.validated_activation is None:
+            raise ValueError("complete snapshot capture requires a validated activation")
         if (
             self.status in {SnapshotCaptureStatus.STALE, SnapshotCaptureStatus.TRUNCATED}
             and self.snapshot is None
@@ -123,6 +126,22 @@ class SnapshotCaptureResult:
             raise ValueError("terminal snapshot capture requires an atomic marker")
         if self.status is SnapshotCaptureStatus.FAILED and self.snapshot is not None:
             raise ValueError("failed snapshot capture cannot expose snapshot state")
+        if (
+            self.status is not SnapshotCaptureStatus.COMPLETE
+            and self.validated_activation is not None
+        ):
+            raise ValueError("non-complete snapshot capture cannot expose an activation")
+        if self.snapshot is None or self.validated_activation is None:
+            return
+        activation = self.validated_activation
+        if self.snapshot.stale or self.snapshot.truncated:
+            raise ValueError("complete snapshot capture requires complete snapshot state")
+        if self.snapshot.identity != activation.identity.repository_identity:
+            raise ValueError("snapshot and activation repository identities must match")
+        if self.snapshot.profile_activation_digest != activation.activation_digest:
+            raise ValueError("snapshot and activation digests must match")
+        if self.snapshot.profile_versions != activation.profile_versions:
+            raise ValueError("snapshot and activation profile versions must match")
 
 
 class _SnapshotTruncated(RuntimeError):
@@ -644,6 +663,7 @@ def capture_repository_snapshot(
         ),
         start_identity=start.snapshot_identity,
         end_identity=end.snapshot_identity,
+        validated_activation=activation_end,
     )
 
 

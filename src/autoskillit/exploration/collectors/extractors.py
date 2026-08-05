@@ -9,7 +9,7 @@ import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
-from typing import Final
+from typing import Final, TypeAlias
 
 from autoskillit.core import (
     CollectorReport,
@@ -29,20 +29,64 @@ from ._bounded import (
     run_bounded_rg,
 )
 
-_COLLECTOR_VERSION: Final = "autoskillit.collector-extractors.v2"
+_COLLECTOR_VERSION: Final = "autoskillit.collector-extractors.v3"
 _OBSERVATION_UNCERTAINTY: Final = (
     "collector observations do not establish semantic relationships",
 )
+
+
+_InvocationReports: TypeAlias = tuple[tuple[tuple[str, ...], CollectorReport], ...]
+_InvocationAdapter: TypeAlias = Callable[
+    [Path, str, str, tuple[str, ...], CollectorLimits], _InvocationReports
+]
+_PerScopeCollector: TypeAlias = Callable[[Path, str, str, CollectorLimits], CollectorReport]
+
+
+@dataclass(frozen=True, slots=True)
+class CollectorInvocation:
+    """Registry-owned adapter from one query to typed, scope-labelled reports."""
+
+    collector_id: str
+    adapter_id: str
+    adapter: _InvocationAdapter
+
+    def __call__(
+        self,
+        root: Path,
+        snapshot_digest: str,
+        query: str,
+        scopes: tuple[str, ...],
+        limits: CollectorLimits,
+    ) -> _InvocationReports:
+        reports = self.adapter(root, snapshot_digest, query, scopes, limits)
+        if not reports:
+            raise ValueError(f"collector {self.collector_id} returned no invocation reports")
+        for searched_scope, report in reports:
+            if not searched_scope or any(not scope for scope in searched_scope):
+                raise ValueError(f"collector {self.collector_id} returned an empty searched scope")
+            if report.collector_id != self.collector_id:
+                raise ValueError(
+                    f"collector {self.collector_id} returned report for {report.collector_id}"
+                )
+            if report.snapshot_digest != snapshot_digest:
+                raise ValueError(
+                    f"collector {self.collector_id} returned report for another snapshot"
+                )
+        return reports
 
 
 @dataclass(frozen=True, slots=True)
 class CollectorProfile:
     collector_id: str
     method: str
-    collect: Callable[[Path, str, str, CollectorLimits], CollectorReport]
+    invocation: CollectorInvocation
     profile: RepositoryProfileId
     version: str = _COLLECTOR_VERSION
     required_by_default: bool = False
+
+    def __post_init__(self) -> None:
+        if self.invocation.collector_id != self.collector_id:
+            raise ValueError("collector profile and invocation identifiers must match")
 
 
 def collector_manifest_digest(
@@ -54,6 +98,7 @@ def collector_manifest_digest(
     records = [
         {
             "id": profile.collector_id,
+            "invocation": profile.invocation.adapter_id,
             "method": profile.method,
             "profile": profile.profile.value,
             "required_by_default": profile.required_by_default,
@@ -65,7 +110,7 @@ def collector_manifest_digest(
         raise ValueError("collector manifest contains duplicate collector identifiers")
     encoded = json.dumps(records, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
     return hashlib.sha256(
-        b"autoskillit.collector-manifest.v1\0" + encoded.encode("ascii")
+        b"autoskillit.collector-manifest.v2\0" + encoded.encode("ascii")
     ).hexdigest()
 
 
@@ -476,10 +521,13 @@ def collect_python_ast(
 
 
 def collect_unsupported(
-    root: Path, snapshot_digest: str, scope: str, limits: CollectorLimits
+    root: Path,
+    snapshot_digest: str,
+    limits: CollectorLimits,
+    *,
+    collector_id: str,
 ) -> CollectorReport:
     del root, limits
-    collector_id = scope
     return _report(
         collector_id,
         snapshot_digest,
@@ -610,81 +658,159 @@ def collect_test_map_observation(
     )
 
 
+def _per_scope_invocation(
+    collector_id: str,
+    collect: _PerScopeCollector,
+) -> CollectorInvocation:
+    def invoke(
+        root: Path,
+        snapshot_digest: str,
+        query: str,
+        scopes: tuple[str, ...],
+        limits: CollectorLimits,
+    ) -> _InvocationReports:
+        del query
+        return tuple(
+            (
+                (scope or ".",),
+                collect(root, snapshot_digest, scope, limits),
+            )
+            for scope in (scopes or ("",))
+        )
+
+    return CollectorInvocation(collector_id, "per-scope.v1", invoke)
+
+
+def _search_invocation() -> CollectorInvocation:
+    def invoke(
+        root: Path,
+        snapshot_digest: str,
+        query: str,
+        scopes: tuple[str, ...],
+        limits: CollectorLimits,
+    ) -> _InvocationReports:
+        return (
+            (
+                scopes or (".",),
+                collect_search(
+                    root,
+                    snapshot_digest,
+                    query.strip(),
+                    limits,
+                    scopes=scopes,
+                ),
+            ),
+        )
+
+    return CollectorInvocation("bounded-rg-search", "one-call-multi-scope-query.v1", invoke)
+
+
+def _unsupported_invocation(collector_id: str) -> CollectorInvocation:
+    def invoke(
+        root: Path,
+        snapshot_digest: str,
+        query: str,
+        scopes: tuple[str, ...],
+        limits: CollectorLimits,
+    ) -> _InvocationReports:
+        del query
+        return tuple(
+            (
+                (scope or ".",),
+                collect_unsupported(
+                    root,
+                    snapshot_digest,
+                    limits,
+                    collector_id=collector_id,
+                ),
+            )
+            for scope in (scopes or ("",))
+        )
+
+    return CollectorInvocation(collector_id, "fixed-unsupported-per-scope.v1", invoke)
+
+
 COLLECTOR_PROFILES: Final = (
     CollectorProfile(
         "contained-artifact",
         "bounded-file-read",
-        collect_artifact,
+        _per_scope_invocation("contained-artifact", collect_artifact),
         RepositoryProfileId.LANGUAGE_NEUTRAL,
     ),
     CollectorProfile(
         "contained-list",
         "contained-walk",
-        collect_file_list,
+        _per_scope_invocation("contained-list", collect_file_list),
         RepositoryProfileId.LANGUAGE_NEUTRAL,
         required_by_default=True,
     ),
     CollectorProfile(
         "bounded-rg-search",
         "rg-no-config-no-follow",
-        collect_search,
+        _search_invocation(),
         RepositoryProfileId.LANGUAGE_NEUTRAL,
         required_by_default=True,
     ),
     CollectorProfile(
         "python-ast",
         "stdlib-ast",
-        collect_python_ast,
+        _per_scope_invocation("python-ast", collect_python_ast),
         RepositoryProfileId.GENERIC_PYTHON,
         required_by_default=True,
     ),
     CollectorProfile(
-        "native-lsp", "unsupported", collect_unsupported, RepositoryProfileId.GENERIC_PYTHON
+        "native-lsp",
+        "unsupported",
+        _unsupported_invocation("native-lsp"),
+        RepositoryProfileId.GENERIC_PYTHON,
     ),
     CollectorProfile(
         "native-tree-sitter",
         "unsupported",
-        collect_unsupported,
+        _unsupported_invocation("native-tree-sitter"),
         RepositoryProfileId.GENERIC_PYTHON,
     ),
     CollectorProfile(
         "autoskillit-registry",
         "stdlib-ast",
-        collect_autoskillit_registry,
+        _per_scope_invocation("autoskillit-registry", collect_autoskillit_registry),
         RepositoryProfileId.AUTOSKILLIT,
         required_by_default=True,
     ),
     CollectorProfile(
         "autoskillit-manifest",
         "tomllib",
-        collect_autoskillit_toml,
+        _per_scope_invocation("autoskillit-manifest", collect_autoskillit_toml),
         RepositoryProfileId.AUTOSKILLIT,
     ),
     CollectorProfile(
         "autoskillit-architecture",
         "bounded-file-read",
-        collect_architecture,
+        _per_scope_invocation("autoskillit-architecture", collect_architecture),
         RepositoryProfileId.AUTOSKILLIT,
     ),
     CollectorProfile(
-        "python-stub", "bounded-file-read", collect_python_stub, RepositoryProfileId.GENERIC_PYTHON
+        "python-stub",
+        "bounded-file-read",
+        _per_scope_invocation("python-stub", collect_python_stub),
+        RepositoryProfileId.GENERIC_PYTHON,
     ),
     CollectorProfile(
         "generated-artifact",
         "bounded-file-read",
-        collect_generated_artifact,
+        _per_scope_invocation("generated-artifact", collect_generated_artifact),
         RepositoryProfileId.LANGUAGE_NEUTRAL,
     ),
     CollectorProfile(
         "coverage-observation",
         "bounded-file-read",
-        collect_coverage_observation,
+        _per_scope_invocation("coverage-observation", collect_coverage_observation),
         RepositoryProfileId.LANGUAGE_NEUTRAL,
     ),
     CollectorProfile(
         "test-map-observation",
         "bounded-file-read",
-        collect_test_map_observation,
+        _per_scope_invocation("test-map-observation", collect_test_map_observation),
         RepositoryProfileId.LANGUAGE_NEUTRAL,
     ),
 )

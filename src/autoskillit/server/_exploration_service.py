@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
-from typing import cast
 
 from autoskillit.core import (
     CollectorReport,
@@ -24,7 +22,7 @@ from autoskillit.exploration import (
     COLLECTOR_PROFILES,
     CollectorLimits,
     CollectorProfile,
-    activate_repository_profiles,
+    RepositoryProfileActivation,
     build_canonical_evidence_graph,
     capture_repository_snapshot,
     collector_manifest_digest,
@@ -42,15 +40,24 @@ logger = get_logger(__name__)
 class DefaultExplorationService:
     """Run the profile-scoped, non-executing collector plan for one snapshot."""
 
-    def capture_snapshot(self, root: Path) -> RepositorySnapshot:
-        """Capture one complete snapshot using the current collector manifest."""
+    @staticmethod
+    def _capture_snapshot_and_activation(
+        root: Path,
+    ) -> tuple[RepositorySnapshot, RepositoryProfileActivation]:
+        """Return only snapshot and profile state validated by the same capture."""
         captured = capture_repository_snapshot(
             root,
             collector_manifest_digest=collector_manifest_digest(),
         )
         snapshot = captured.snapshot
-        if snapshot is None or snapshot.stale or snapshot.truncated:
+        activation = captured.validated_activation
+        if snapshot is None or activation is None or snapshot.stale or snapshot.truncated:
             raise RuntimeError(f"repository snapshot {captured.status}")
+        return snapshot, activation
+
+    def capture_snapshot(self, root: Path) -> RepositorySnapshot:
+        """Capture one complete snapshot using the current collector manifest."""
+        snapshot, _activation = self._capture_snapshot_and_activation(root)
         return snapshot
 
     @staticmethod
@@ -100,14 +107,6 @@ class DefaultExplorationService:
         )
 
     @staticmethod
-    def _collector_input(
-        collector: CollectorProfile, query: ExplorationQuerySpec, scope: str
-    ) -> str:
-        if collector.collector_id == "bounded-rg-search":
-            return query.query.strip()
-        return scope
-
-    @staticmethod
     def _validate_evidence_graph(reports: tuple[CollectorReport, ...]) -> None:
         """Reject projections that reference evidence outside this collector generation."""
 
@@ -136,35 +135,13 @@ class DefaultExplorationService:
     ) -> CollectorReport:
         try:
             limits = CollectorLimits(max_matches=query.max_results)
-            scopes = query.scope or ("",)
-            reports: tuple[tuple[tuple[str, ...], CollectorReport], ...]
-            if collector.collector_id == "bounded-rg-search":
-                scoped_collect = cast(Callable[..., CollectorReport], collector.collect)
-                reports = (
-                    (
-                        query.scope or (".",),
-                        scoped_collect(
-                            root,
-                            snapshot_digest,
-                            self._collector_input(collector, query, ""),
-                            limits,
-                            scopes=query.scope,
-                        ),
-                    ),
-                )
-            else:
-                reports = tuple(
-                    (
-                        (scope or ".",),
-                        collector.collect(
-                            root,
-                            snapshot_digest,
-                            self._collector_input(collector, query, scope),
-                            limits,
-                        ),
-                    )
-                    for scope in scopes
-                )
+            reports = collector.invocation(
+                root,
+                snapshot_digest,
+                query.query,
+                query.scope,
+                limits,
+            )
             uncertainty = ("query is evaluated only by the registered collector method",)
             all_reports = tuple(report for _scope, report in reports)
             statuses = {report.status for report in all_reports}
@@ -213,8 +190,7 @@ class DefaultExplorationService:
             )
 
     def collect(self, query: ExplorationQuerySpec, *, root: Path) -> ExplorationContext:
-        snapshot = self.capture_snapshot(root)
-        activation = activate_repository_profiles(root)
+        snapshot, activation = self._capture_snapshot_and_activation(root)
         collectors = self._planned_collectors(query, activation.activations)
         expected_collectors = tuple(
             collector.collector_id for collector in collectors if collector.required_by_default
@@ -270,7 +246,7 @@ class DefaultExplorationService:
                     )
                 )
         try:
-            publication = self.capture_snapshot(root)
+            publication, _publication_activation = self._capture_snapshot_and_activation(root)
         except RuntimeError as exc:
             raise RuntimeError(
                 "exploration publication rejected because repository state changed "

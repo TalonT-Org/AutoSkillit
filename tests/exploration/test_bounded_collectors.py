@@ -8,6 +8,8 @@ import pytest
 
 from autoskillit.core import CollectorStatus, RelationshipKind
 from autoskillit.exploration.collectors import (
+    COLLECTOR_PROFILES,
+    CollectorInvocation,
     CollectorLimits,
     CollectorSafetyError,
     _bounded,
@@ -16,7 +18,6 @@ from autoskillit.exploration.collectors import (
     resolve_contained_path,
 )
 from autoskillit.exploration.collectors.extractors import (
-    COLLECTOR_PROFILES,
     collect_artifact,
     collect_autoskillit_registry,
     collect_autoskillit_toml,
@@ -166,6 +167,70 @@ def test_collector_manifest_is_derived_from_the_versioned_registry() -> None:
     assert original != collector_manifest_digest(changed)
 
 
+def test_collector_manifest_includes_registry_invocation_identity() -> None:
+    profile = COLLECTOR_PROFILES[0]
+    changed = (
+        replace(
+            profile,
+            invocation=replace(profile.invocation, adapter_id="test-mutated-adapter"),
+        ),
+        *COLLECTOR_PROFILES[1:],
+    )
+
+    assert collector_manifest_digest() != collector_manifest_digest(changed)
+
+
+def test_registry_invocations_conform_to_fixed_ids_and_scope_modes(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    (root / "left").mkdir(parents=True)
+    (root / "right").mkdir()
+    (root / "left" / "module.py").write_text("needle = 1\n")
+    (root / "right" / "module.py").write_text("needle = 2\n")
+    limits = CollectorLimits(max_matches=20)
+
+    assert all(
+        isinstance(profile.invocation, CollectorInvocation)
+        and profile.invocation.collector_id == profile.collector_id
+        for profile in COLLECTOR_PROFILES
+    )
+
+    search = next(
+        profile for profile in COLLECTOR_PROFILES if profile.collector_id == "bounded-rg-search"
+    )
+    search_reports = search.invocation(root, "snapshot", "  needle  ", ("left", "right"), limits)
+    assert len(search_reports) == 1
+    assert search_reports[0][0] == ("left", "right")
+    assert search_reports[0][1].status is CollectorStatus.SUCCEEDED
+    assert all(record.method == search.method for record in search_reports[0][1].evidence)
+    assert all(
+        record.extractor_version == search.version for record in search_reports[0][1].evidence
+    )
+
+    file_list = next(
+        profile for profile in COLLECTOR_PROFILES if profile.collector_id == "contained-list"
+    )
+    list_reports = file_list.invocation(
+        root, "snapshot", "ignored query", ("left", "right"), limits
+    )
+    assert tuple(scope for scope, _report in list_reports) == (("left",), ("right",))
+    assert all(report.collector_id == "contained-list" for _scope, report in list_reports)
+    assert all(
+        record.method == file_list.method and record.extractor_version == file_list.version
+        for _scope, report in list_reports
+        for record in report.evidence
+    )
+
+    unsupported = tuple(
+        profile for profile in COLLECTOR_PROFILES if profile.method == "unsupported"
+    )
+    assert unsupported
+    for profile in unsupported:
+        reports = profile.invocation(root, "snapshot", "ignored query", ("left", "right"), limits)
+        assert len(reports) == 2
+        assert all(report.collector_id == profile.collector_id for _scope, report in reports)
+        assert all(report.status is CollectorStatus.UNSUPPORTED for _scope, report in reports)
+
+
 def test_search_reports_invalid_scope_as_a_failed_collection(tmp_path: Path) -> None:
     report = collect_search(
         tmp_path,
@@ -223,7 +288,7 @@ def test_seeded_collectors_observe_structural_and_artifact_inputs_without_claimi
     coverage = collect_coverage_observation(root, "snapshot", "coverage.json", limits)
     test_map = collect_test_map_observation(root, "snapshot", "test-map.json", limits)
     unavailable = collect_artifact(root, "snapshot", "missing.json", limits)
-    unsupported = collect_unsupported(root, "snapshot", "native-lsp", limits)
+    unsupported = collect_unsupported(root, "snapshot", limits, collector_id="native-lsp")
 
     assert structural.status is CollectorStatus.SUCCEEDED
     assert {

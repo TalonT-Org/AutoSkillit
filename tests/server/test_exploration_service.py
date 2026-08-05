@@ -16,7 +16,7 @@ from autoskillit.core import (
     RepositoryProfileId,
 )
 from autoskillit.exploration._deterministic import CursorValidationError
-from autoskillit.exploration.collectors import COLLECTOR_PROFILES
+from autoskillit.exploration.collectors import COLLECTOR_PROFILES, CollectorInvocation
 from autoskillit.exploration.snapshot import SnapshotCaptureResult, SnapshotCaptureStatus
 from autoskillit.pipeline import CapabilityResolutionStatus, OwnerBoundExplorationContextStore
 from autoskillit.server import _exploration_service
@@ -270,13 +270,7 @@ def test_inapplicable_profiles_are_visible_without_claiming_optional_completenes
 
     context = service.collect(query, root=root)
     reports = {report.collector_id: report for report in context.completeness.reports}
-    search = next(
-        collector
-        for collector in COLLECTOR_PROFILES
-        if collector.collector_id == "bounded-rg-search"
-    )
 
-    assert service._collector_input(search, query, "") == "needle"
     assert reports["bounded-rg-search"].status is CollectorStatus.SUCCEEDED
     assert reports["python-ast"].status is CollectorStatus.UNSUPPORTED
     assert reports["autoskillit-registry"].status is CollectorStatus.UNSUPPORTED
@@ -298,16 +292,22 @@ def test_service_rejects_mutation_that_occurs_during_real_collector_execution(
         profile for profile in COLLECTOR_PROFILES if profile.collector_id == "bounded-rg-search"
     )
 
-    def mutate_after_search(*args: object, **kwargs: object):
-        report = search_profile.collect(*args, **kwargs)
+    def mutate_after_search(root_arg, snapshot_digest, task_query, scopes, limits):
+        reports = search_profile.invocation(root_arg, snapshot_digest, task_query, scopes, limits)
         (root / "module.py").write_text("def changed() -> str:\n    return 'changed'\n")
-        return report
+        return reports
+
+    mutating_invocation = CollectorInvocation(
+        search_profile.collector_id,
+        "test-mutate-after-search",
+        mutate_after_search,
+    )
 
     monkeypatch.setattr(
         _exploration_service,
         "COLLECTOR_PROFILES",
         tuple(
-            replace(profile, collect=mutate_after_search)
+            replace(profile, invocation=mutating_invocation)
             if profile.collector_id == search_profile.collector_id
             else profile
             for profile in COLLECTOR_PROFILES
@@ -316,6 +316,38 @@ def test_service_rejects_mutation_that_occurs_during_real_collector_execution(
 
     with pytest.raises(RuntimeError, match="publication rejected"):
         DefaultExplorationService().collect(ExplorationQuerySpec("needle"), root=root)
+
+
+def test_service_routes_with_capture_validated_activation_and_recaptures_publication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "language-neutral-repository"
+    _seed_non_python_repository(root)
+    captured = _exploration_service.capture_repository_snapshot(
+        root,
+        collector_manifest_digest=_exploration_service.collector_manifest_digest(),
+    )
+    assert captured.validated_activation is not None
+    (root / "appeared-after-capture.py").write_text("needle = 1\n")
+    captures = 0
+
+    def return_validated_capture(*args: object, **kwargs: object) -> SnapshotCaptureResult:
+        nonlocal captures
+        captures += 1
+        return captured
+
+    monkeypatch.setattr(
+        _exploration_service, "capture_repository_snapshot", return_validated_capture
+    )
+
+    context = DefaultExplorationService().collect(ExplorationQuerySpec("needle"), root=root)
+
+    assert captures == 2
+    assert {report.collector_id for report in context.completeness.reports} == {
+        profile.collector_id
+        for profile in COLLECTOR_PROFILES
+        if profile.profile is RepositoryProfileId.LANGUAGE_NEUTRAL
+    }
 
 
 def test_service_rejects_a_truncated_post_collection_publication(

@@ -2,6 +2,7 @@
 
 from .collectors import (
     COLLECTOR_PROFILES,
+    CollectorInvocation,
     CollectorLimits,
     CollectorProfile,
     collect_search,
@@ -40,6 +41,7 @@ __all__ = [
     "RepositoryIdentityResolution",
     "RepositoryProfileActivation",
     "CollectorLimits",
+    "CollectorInvocation",
     "CollectorProfile",
     "SnapshotCaptureLimits",
     "SnapshotCaptureResult",

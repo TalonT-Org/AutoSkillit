@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import os
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -87,7 +88,12 @@ def test_snapshot_captures_all_repository_state_without_exposing_ignored_bytes(
 
     assert result.status is SnapshotCaptureStatus.COMPLETE
     assert result.snapshot is not None
+    assert result.validated_activation is not None
     snapshot = result.snapshot
+    activation = result.validated_activation
+    assert snapshot.identity == activation.identity.repository_identity
+    assert snapshot.profile_activation_digest == activation.activation_digest
+    assert snapshot.profile_versions == activation.profile_versions
     assert snapshot.head_sha
     assert snapshot.index_digest.startswith("sha256:")
     assert snapshot.tree_digest.startswith("sha256:")
@@ -155,6 +161,7 @@ def test_snapshot_publishes_atomic_stale_marker_when_start_and_end_differ(
 
     assert result.status is SnapshotCaptureStatus.STALE
     assert result.snapshot is not None
+    assert result.validated_activation is None
     assert result.snapshot.stale
     assert result.snapshot.state == "stale"
     assert result.snapshot.tracked_records == ()
@@ -174,6 +181,7 @@ def test_snapshot_publishes_atomic_terminal_marker_when_a_limit_truncates(tmp_pa
 
     assert result.status is SnapshotCaptureStatus.TRUNCATED
     assert result.snapshot is not None
+    assert result.validated_activation is None
     assert result.snapshot.truncated
     assert result.snapshot.state == "truncated"
     assert result.snapshot.tree_digest == ""
@@ -243,3 +251,75 @@ def test_snapshot_fails_closed_when_a_hashed_file_is_swapped_after_open(
 
     assert result.status is SnapshotCaptureStatus.FAILED
     assert result.snapshot is None
+    assert result.validated_activation is None
+
+
+def test_snapshot_capture_rejects_profile_activation_toctou(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _new_repository(tmp_path)
+    activate = snapshot_module.activate_repository_profiles
+    activations = 0
+
+    def change_second_activation(*args: object, **kwargs: object):
+        nonlocal activations
+        activation = activate(*args, **kwargs)
+        activations += 1
+        if activations == 2:
+            return replace(activation, activation_digest="sha256:changed-activation")
+        return activation
+
+    monkeypatch.setattr(snapshot_module, "activate_repository_profiles", change_second_activation)
+
+    result = _capture(root)
+
+    assert result.status is SnapshotCaptureStatus.STALE
+    assert result.snapshot is not None
+    assert result.snapshot.stale
+    assert result.validated_activation is None
+
+
+def test_complete_capture_result_requires_consistent_validated_activation(
+    tmp_path: Path,
+) -> None:
+    result = _capture(_new_repository(tmp_path))
+    assert result.snapshot is not None
+    assert result.validated_activation is not None
+
+    with pytest.raises(ValueError, match="requires a validated activation"):
+        replace(result, validated_activation=None)
+    with pytest.raises(ValueError, match="repository identities must match"):
+        replace(
+            result,
+            snapshot=replace(
+                result.snapshot,
+                identity=replace(result.snapshot.identity, revision="different-revision"),
+            ),
+        )
+    with pytest.raises(ValueError, match="activation digests must match"):
+        replace(
+            result,
+            snapshot=replace(
+                result.snapshot,
+                profile_activation_digest="sha256:different-activation",
+            ),
+        )
+    with pytest.raises(ValueError, match="profile versions must match"):
+        replace(
+            result,
+            snapshot=replace(result.snapshot, profile_versions=(("different", "1"),)),
+        )
+
+
+def test_terminal_capture_result_rejects_validated_activation(tmp_path: Path) -> None:
+    root = _new_repository(tmp_path)
+    complete = _capture(root)
+    assert complete.validated_activation is not None
+    terminal = capture_repository_snapshot(
+        root,
+        collector_manifest_digest=_COLLECTOR_MANIFEST_DIGEST,
+        limits=SnapshotCaptureLimits(max_paths=1),
+    )
+
+    with pytest.raises(ValueError, match="non-complete"):
+        replace(terminal, validated_activation=complete.validated_activation)

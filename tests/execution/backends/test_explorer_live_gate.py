@@ -540,7 +540,15 @@ def test_live_parent_resume_uses_authenticated_read_only_thread(
 
     def fake_run(invocation: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         observed.extend(invocation)
-        assert kwargs["cwd"] == tmp_path
+        assert kwargs == {
+            "cwd": tmp_path,
+            "env": {"OPENAI_API_KEY": "test-only"},
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "text": True,
+            "timeout": 10,
+            "check": False,
+        }
         return subprocess.CompletedProcess(invocation, 0, "", "")
 
     monkeypatch.setattr(subprocess, "run", fake_run)

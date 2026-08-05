@@ -392,11 +392,17 @@ def publish_explorer_attestation(
     output_root.mkdir(parents=True, exist_ok=True)
     output_path = output_root / EXPLORER_ATTESTATION_FILENAME
     sidecar_path = _attestation_sidecar_path(output_path)
-    if output_path.exists() or sidecar_path.exists():
-        raise FileExistsError(f"explorer attestation already exists: {output_path}")
     payload = json.dumps(asdict(attestation), sort_keys=True, separators=(",", ":")) + "\n"
-    atomic_write(output_path, payload)
-    atomic_write(sidecar_path, _sha256_identity(payload.encode("utf-8")) + "\n")
+    atomic_write(output_path, payload, exclusive=True)
+    try:
+        atomic_write(
+            sidecar_path,
+            _sha256_identity(payload.encode("utf-8")) + "\n",
+            exclusive=True,
+        )
+    except Exception:
+        output_path.unlink(missing_ok=True)
+        raise
     loaded = read_explorer_attestation(output_path)
     validate_explorer_attestation(
         loaded,

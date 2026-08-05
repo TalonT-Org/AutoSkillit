@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
+from threading import Barrier
 
 import pytest
 
+from autoskillit.execution.backends import _explorer_conformance as conformance
 from autoskillit.execution.backends._explorer_conformance import (
+    EXPLORER_ATTESTATION_FILENAME,
     EXPLORER_ATTESTATION_SCHEMA_VERSION,
     EXPLORER_MODEL,
     EXPLORER_PARENT_MODEL,
@@ -333,6 +337,94 @@ def test_publish_is_atomic_unique_and_round_trips(tmp_path: Path) -> None:
             attestation,
             **_expected(digest),
         )
+
+
+def test_concurrent_publication_has_exactly_one_winner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    digest = validate_codex_luna_catalog(_catalog())
+    attestations = (
+        _attestation(digest),
+        replace(_attestation(digest), child_thread_id="other-child"),
+    )
+    expected_authorities = (
+        _expected(digest),
+        {**_expected(digest), "expected_child_thread_id": "other-child"},
+    )
+    publication_barrier = Barrier(2)
+    real_atomic_write = conformance.atomic_write
+
+    def synchronized_atomic_write(
+        path: Path,
+        content: str,
+        *,
+        strict_durability: bool = False,
+        exclusive: bool = False,
+    ) -> None:
+        if path.name == EXPLORER_ATTESTATION_FILENAME:
+            publication_barrier.wait(timeout=5)
+        real_atomic_write(
+            path,
+            content,
+            strict_durability=strict_durability,
+            exclusive=exclusive,
+        )
+
+    monkeypatch.setattr(conformance, "atomic_write", synchronized_atomic_write)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = tuple(
+            executor.submit(
+                publish_explorer_attestation,
+                tmp_path,
+                attestation,
+                **expected,
+            )
+            for attestation, expected in zip(attestations, expected_authorities, strict=True)
+        )
+
+    published: list[Path] = []
+    failures: list[FileExistsError] = []
+    for future in futures:
+        try:
+            published.append(future.result())
+        except FileExistsError as exc:
+            failures.append(exc)
+
+    assert len(published) == 1
+    assert len(failures) == 1
+    assert isinstance(failures[0], FileExistsError)
+    assert read_explorer_attestation(published[0]) in attestations
+    validate_published_explorer_release_readiness(published[0])
+
+
+def test_publication_removes_payload_when_sidecar_publication_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    digest = validate_codex_luna_catalog(_catalog())
+    real_atomic_write = conformance.atomic_write
+
+    def fail_sidecar_publication(
+        path: Path,
+        content: str,
+        *,
+        strict_durability: bool = False,
+        exclusive: bool = False,
+    ) -> None:
+        if path.name.endswith(".sha256"):
+            raise OSError("sidecar publication failed")
+        real_atomic_write(
+            path,
+            content,
+            strict_durability=strict_durability,
+            exclusive=exclusive,
+        )
+
+    monkeypatch.setattr(conformance, "atomic_write", fail_sidecar_publication)
+    with pytest.raises(OSError, match="sidecar publication failed"):
+        publish_explorer_attestation(tmp_path, _attestation(digest), **_expected(digest))
+
+    assert not (tmp_path / EXPLORER_ATTESTATION_FILENAME).exists()
+    assert not (tmp_path / f"{EXPLORER_ATTESTATION_FILENAME}.sha256").exists()
 
 
 def test_publication_rejects_a_tampered_expected_authority(tmp_path: Path) -> None:

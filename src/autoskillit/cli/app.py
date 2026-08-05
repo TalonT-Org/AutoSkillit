@@ -393,8 +393,14 @@ def migrate(*, check: bool = False, fix: bool = False):
 
 def _migrate_skills(project_dir: Path, *, fix: bool) -> None:
     """Report — and, with fix=True, apply — pending project-local skill migrations."""
+    from autoskillit.core import SKILL_CONTRACT_REMEDIATIONS, RemediationAction
     from autoskillit.migration import default_migration_engine
-    from autoskillit.workspace import DefaultSkillResolver, invalidity_hints
+    from autoskillit.workspace import (
+        DefaultSkillResolver,
+        SkillInfo,
+        SkillInvalidity,
+        invalidity_hints,
+    )
 
     engine = default_migration_engine()
     skill_adapter = engine.get_adapter("skill")
@@ -407,8 +413,10 @@ def _migrate_skills(project_dir: Path, *, fix: bool) -> None:
 
     resolver = DefaultSkillResolver()
     print(f"\n{len(pending_skills)} project-local skill(s) need migration:\n")
+    pending_info: dict[str, SkillInfo | None] = {}
     for skill_file in pending_skills:
         info = resolver.resolve_local_candidate(skill_file.name, project_dir)
+        pending_info[skill_file.name] = info
         kinds = sorted({item.kind.value for item in info.invalidities}) if info else []
         hints = invalidity_hints(info.invalidities) if info is not None else ()
         print(f"  {skill_file.name} ({skill_file.path}): {', '.join(kinds)}")
@@ -437,7 +445,25 @@ def _migrate_skills(project_dir: Path, *, fix: bool) -> None:
             )
         )
         if result.success:
-            print(f"  fixed: {skill_file.name}")
+            # Per-file results: which kinds this deterministic fix addressed,
+            # plus hints for any ADVISORY kinds left on the same file (a
+            # DETERMINISTIC fix never touches co-occurring ADVISORY defects).
+            info = pending_info.get(skill_file.name)
+            fixed_kinds: set[str] = set()
+            remaining_advisory: list[SkillInvalidity] = []
+            if info is not None:
+                for item in info.invalidities:
+                    if (
+                        SKILL_CONTRACT_REMEDIATIONS[item.kind].action
+                        is RemediationAction.DETERMINISTIC
+                    ):
+                        fixed_kinds.add(item.kind.value)
+                    else:
+                        remaining_advisory.append(item)
+            suffix = f" ({', '.join(sorted(fixed_kinds))})" if fixed_kinds else ""
+            print(f"  fixed: {skill_file.name}{suffix}")
+            for hint in invalidity_hints(remaining_advisory):
+                print(f"    - {hint}")
         else:
             print(f"  FAILED: {skill_file.name}: {result.error}")
 

@@ -504,15 +504,27 @@ class SkillMigrationAdapter(DeterministicMigrationAdapter):
                 # replacement stops it from being flagged again. A raw
                 # portable token (Agent(, subagent_type=, ...) literally
                 # present in the body cannot be fixed frontmatter-only —
-                # this adapter never rewrites body prose, so that half stays
-                # advisory in practice despite the registered DETERMINISTIC
-                # action; the hint still points the operator at the fix.
+                # this adapter never rewrites body prose. If no declared
+                # retired capability triggered this kind, the only possible
+                # cause is such a raw body token, so report failure instead
+                # of silently claiming a fix that never happened.
                 from autoskillit.workspace.skill_capabilities import (  # noqa: PLC0415
                     RETIRED_SEMANTIC_CAPABILITIES,
                 )
 
                 declared_caps = set(data.get("uses_capabilities") or [])
                 retired = declared_caps & RETIRED_SEMANTIC_CAPABILITIES.keys()
+                if not retired:
+                    return MigrationResult(
+                        success=False,
+                        name=file.name,
+                        error=(
+                            "raw portable token(s) in skill body cannot be fixed "
+                            "frontmatter-only; rewrite the body to remove the "
+                            "offending token(s), or leave this finding as an "
+                            "operator-visible advisory"
+                        ),
+                    )
                 data["uses_capabilities"] = sorted(declared_caps - retired)
                 data.setdefault("semantic_version", SKILL_SEMANTIC_SCHEMA_VERSION)
                 requirements = dict(data.get("semantic_requirements") or {})

@@ -785,6 +785,7 @@ class DefaultSkillResolver:
                     skill=name,
                     path=str(skill_path),
                     reason=candidate.invalid_reason,
+                    hints=invalidity_hints(candidate.invalidities),
                 )
                 if first_invalid is None:
                     first_invalid = candidate
@@ -832,6 +833,7 @@ class DefaultSkillResolver:
                         skill=name,
                         path=str(skill_path),
                         reason=candidate.invalid_reason,
+                        hints=invalidity_hints(candidate.invalidities),
                     )
                 return candidate
         return self.resolve(name)
@@ -882,6 +884,7 @@ class DefaultSkillResolver:
                             skill=entry.name,
                             path=str(skill_path),
                             reason=candidate.invalid_reason,
+                            hints=invalidity_hints(candidate.invalidities),
                         )
                         pending_exclusions.append(candidate)
                         continue
@@ -1153,8 +1156,9 @@ def validate_skill_tier_roles(
                     f"{effective.invalid_reason}"
                 )
                 if isinstance(effective, SkillInfo):
+                    kinds = sorted({item.kind.value for item in effective.invalidities})
                     hints = invalidity_hints(effective.invalidities)
-                    message += f" (path: {effective.path})"
+                    message += f" (path: {effective.path}, kind: {', '.join(kinds)})"
                     if hints:
                         message += f"; hint: {'; '.join(hints)}"
                 raise SkillContractError(f"{message}; run: autoskillit doctor")

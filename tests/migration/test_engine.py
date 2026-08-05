@@ -688,6 +688,7 @@ class TestMigrateRecipesConstant:
         )
         result = await adapter.migrate(file, run_headless=mock_rh, temp_dir=tmp_path)
         assert not result.success
+        assert result.retries_attempted == MIGRATE_RECIPES_MAX_RETRIES
 
 
 # ---------------------------------------------------------------------------
@@ -809,4 +810,3 @@ class TestSkillMigrationAdapter:
 
         assert result.success
         assert result.migrated_content is None
-        assert result.retries_attempted == MIGRATE_RECIPES_MAX_RETRIES

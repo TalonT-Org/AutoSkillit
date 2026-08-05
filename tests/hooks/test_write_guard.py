@@ -9,6 +9,8 @@ from unittest.mock import patch
 
 import pytest
 
+from .conftest import make_hook_event
+
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 
@@ -1411,3 +1413,93 @@ class TestWriteGuardCodexPatchFormatXfail:
             "no target paths found in patch"
             in parsed["hookSpecificOutput"]["permissionDecisionReason"]
         )
+
+
+class TestWriteGuardRunCmdExecutionCwd:
+    """Matched allow/deny coverage for execution-cwd-preferred write-target
+    resolution (``parse_hook_command``'s ``execution_cwd``, preferred over the
+    ``AUTOSKILLIT_CWD`` env-var fallback). ``execution_cwd`` is the run_cmd
+    tool's own ``cwd`` argument -- independent of the payload's top-level
+    session ``cwd`` -- matching the worktree-relative-write scenario this
+    resolution was added to fix.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _enable_headless(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+
+    def test_run_cmd_relative_write_inside_prefix_via_execution_cwd_allowed(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        """A worktree-relative write resolves against the run_cmd tool's own
+        cwd argument (execution_cwd), not the stale AUTOSKILLIT_CWD env var,
+        and is allowed once the resolved target falls inside the prefix.
+        """
+        allowed = tmp_path / "allowed"
+        allowed.mkdir()
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", str(allowed) + "/")
+        # If the stale env var were consulted instead of execution_cwd, the
+        # write target would resolve under `elsewhere` -- outside the prefix.
+        monkeypatch.setenv("AUTOSKILLIT_CWD", str(elsewhere))
+
+        event = make_hook_event(
+            tool="run_cmd",
+            command="sed -i 's/x/y/' out.txt",
+            tool_cwd=str(allowed),
+            payload_cwd=str(elsewhere),
+        )
+        result = _run_hook(event)
+        assert result == ""
+
+    def test_run_cmd_relative_write_outside_prefix_via_execution_cwd_denied(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        """Same shape, but the run_cmd tool's own cwd resolves the write
+        target outside the allowed prefix -- denied even though
+        AUTOSKILLIT_CWD (which would incorrectly resolve inside the prefix
+        if consulted instead) is set to the allowed directory.
+        """
+        allowed = tmp_path / "allowed"
+        allowed.mkdir()
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", str(allowed) + "/")
+        # If the stale env var were consulted instead of execution_cwd, the
+        # write target would resolve under `allowed` -- inside the prefix.
+        monkeypatch.setenv("AUTOSKILLIT_CWD", str(allowed))
+
+        event = make_hook_event(
+            tool="run_cmd",
+            command="sed -i 's/x/y/' out.txt",
+            tool_cwd=str(elsewhere),
+            payload_cwd=str(allowed),
+        )
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_run_cmd_execution_cwd_omitted_falls_back_to_autoskillit_cwd(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        """Pre-existing behavior must not regress: when the run_cmd tool
+        omits its own cwd argument, relative-write resolution still falls
+        back to the AUTOSKILLIT_CWD env var.
+        """
+        allowed = tmp_path / "allowed"
+        allowed.mkdir()
+
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", str(allowed) + "/")
+        monkeypatch.setenv("AUTOSKILLIT_CWD", str(allowed))
+
+        event = make_hook_event(
+            tool="run_cmd",
+            command="sed -i 's/x/y/' out.txt",
+            tool_cwd=None,
+            payload_cwd=str(allowed),
+        )
+        result = _run_hook(event)
+        assert result == ""

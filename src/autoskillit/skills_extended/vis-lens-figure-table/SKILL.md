@@ -8,6 +8,37 @@ activate_deps:
 description: 'Create Decisional Layout visualization planning spec showing figure-vs-table selection heuristics: tables win
   for exact values, ≤5 items, leaderboards, and ablation matrices; figures win for trends, distributions, and spatial patterns;
   borderline cases recommend both. Decisional lens answering "Should this result be a figure or a table?"'
+exploration_vectors:
+  - id: missing-context-fields
+    disposition: migrated
+    rationale: Repository impact evidence locates revision-scoped context and experiment-plan artifacts and reports only fields still absent after direct caller-context parsing.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: vis-lens-figure-table-missing-context-fields
+    frontier_item_id: vis-lens-figure-table-missing-context-fields-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: result-slot-inventory
+    disposition: retained
+    rationale: Result-slot classification is direct interpretation of caller-supplied experiment-plan content, not repository discovery, so it remains lens-owned prose.
+    applicability: always
+    role: null
+    profile: auto
+    relationship_classes: [references, affects]
+    task_id: vis-lens-figure-table-result-slot-inventory
+    frontier_item_id: vis-lens-figure-table-result-slot-inventory-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -63,6 +94,8 @@ semantic_requirements:
 - Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-figure-table/`
 - Force a figure when the reader needs exact numeric values for a leaderboard or lookup
 - Force a table when the primary message is a trend, curve, or distributional shape
+- Import or execute target code, tests, experiments, models, or benchmarks
+- Let a migrated exploration vector classify result slots, choose TABLE/FIGURE/BOTH, design the figure, or create the diagram
 
 **ALWAYS:**
 - Apply the decision rule below to every result slot in the experiment plan
@@ -70,6 +103,11 @@ semantic_requirements:
 - Justify borderline decisions with explicit reference to the decision rule criteria
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool — this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
+- Use the registered exploration role for repository reads
+- Dispatch exactly 1 migrated exploration vector through the deterministic router
+- Keep the retained result-slot inventory as direct parent interpretation of supplied context
+- Wait for the fallback result, when applicable, before classifying result slots
+- Retain parent authority over layout, placement, narrative, and figure-spec judgments in Steps 1–3
 - Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-figure-table/vis_spec_figure_table_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -88,10 +126,21 @@ If positional arg 1 (context_path) is provided and the file exists, read it to o
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
 methodology. Use this structured context as the foundation for Steps 1–4; skip the CWD
-exploration for these fields if the context file supplies them.
+exploration for fields supplied completely by those artifacts.
+
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses supplied context and experiment-plan arguments, inspect only
+existing revision-scoped CWD artifacts for fields that remain absent. Never rediscover
+or override supplied complete fields. If no fields are missing, return an explicit
+not-applicable result without repository search. If relevant evidence is absent or
+unrelated, explicitly report it as unavailable or unrelated without widening scope,
+inferring meaning, or importing or executing target code, tests, experiments, models,
+or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 1: Inventory Result Slots
 
+<!-- autoskillit:exploration-vector id="result-slot-inventory" -->
 Enumerate every metric, experiment result, or finding that needs to be communicated.
 For each result slot, classify it as one of:
 - **exact-value query**: reader needs the precise number (leaderboard, lookup table)
@@ -100,6 +149,7 @@ For each result slot, classify it as one of:
 - **comparison/ranking**: multiple systems compared by a scalar metric
 - **spatial/geometric**: data has a spatial or structural layout (heatmap, scatter)
 - **ablation matrix**: systematic removal/addition of components in a table grid
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Apply Decision Rule per Slot
 

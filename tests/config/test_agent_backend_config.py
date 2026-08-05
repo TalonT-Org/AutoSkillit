@@ -20,8 +20,12 @@ _DEFAULT_RECIPE_OVERRIDES = {
     "research": {
         "run_experiment_lenses": "codex",
         "scope": "codex",
+        "vis_apply": "codex",
     },
-    "research-design": {"scope": "codex"},
+    "research-design": {
+        "scope": "codex",
+        "vis_apply": "codex",
+    },
     "research-review": {"run_experiment_lenses": "codex"},
 }
 
@@ -287,6 +291,7 @@ class TestAgentBackendConfigOverrides:
             "research": {
                 "run_experiment_lenses": "codex",
                 "scope": "codex",
+                "vis_apply": "codex",
                 "custom_review": "claude-code",
             },
         }

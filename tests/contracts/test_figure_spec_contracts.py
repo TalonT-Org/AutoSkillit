@@ -15,6 +15,20 @@ from autoskillit.core.paths import pkg_root
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 _VIS_LENS_DIR = pkg_root() / "skills_extended"
+_VIS_LENS_FAMILY = (
+    "vis-lens-always-on",
+    "vis-lens-antipattern",
+    "vis-lens-caption-annot",
+    "vis-lens-chart-select",
+    "vis-lens-color-access",
+    "vis-lens-figure-table",
+    "vis-lens-methodology-norms",
+    "vis-lens-multi-compare",
+    "vis-lens-reproducibility",
+    "vis-lens-story-arc",
+    "vis-lens-temporal",
+    "vis-lens-uncertainty",
+)
 
 
 def _figure_spec_blocks_in(skill_md: Path) -> list[tuple[str, str]]:
@@ -68,6 +82,30 @@ def _non_composite_vis_lens_skills() -> list[Path]:
 
 
 _VIS_LENS_SKILLS = _non_composite_vis_lens_skills()
+
+
+def test_vis_lens_family_and_figure_spec_producers_are_exact() -> None:
+    filesystem = tuple(
+        path.parent.name for path in sorted(_VIS_LENS_DIR.glob("vis-lens-*/SKILL.md"))
+    )
+    producers = tuple(path.parent.name for path in _VIS_LENS_SKILLS)
+    defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+    packaged = tuple(name for name in defaults["skills"]["tier2"] if name.startswith("vis-lens-"))
+
+    assert filesystem == _VIS_LENS_FAMILY
+    assert len(packaged) == len(_VIS_LENS_FAMILY)
+    assert set(packaged) == set(_VIS_LENS_FAMILY)
+    assert producers == tuple(
+        skill_name for skill_name in _VIS_LENS_FAMILY if skill_name != "vis-lens-always-on"
+    )
+
+
+def test_always_on_preserves_its_spec_index_authority() -> None:
+    always_on = _VIS_LENS_DIR / "vis-lens-always-on" / "SKILL.md"
+    content = always_on.read_text(encoding="utf-8")
+
+    assert content.count("# yaml:spec-index") == 1
+    assert not _figure_spec_blocks_in(always_on)
 
 
 def test_figure_spec_schema_completeness() -> None:

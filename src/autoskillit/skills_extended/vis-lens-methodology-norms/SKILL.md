@@ -7,6 +7,97 @@ activate_deps:
 - mermaid
 description: Create Methodology Norms visualization planning spec showing ML sub-area mandatory figures, community conventions,
   and coverage gaps. Methodology-Normative lens answering "Which domain-specific figures are expected by reviewers?"
+exploration_vectors:
+  - id: missing-context-fields
+    disposition: migrated
+    rationale: Repository impact evidence locates revision-scoped context and experiment-plan artifacts and reports only fields still absent after direct caller-context parsing.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: vis-lens-methodology-norms-missing-context-fields
+    frontier_item_id: vis-lens-methodology-norms-missing-context-fields-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: methodology-tradition-resolution
+    disposition: retained
+    rationale: Tradition selection, bundled norm interpretation, out-of-scope handling, and external norm authority remain lens-owned decisions over supplied context rather than native repository discovery.
+    applicability: always
+    role: null
+    profile: auto
+    relationship_classes: [references, affects]
+    task_id: vis-lens-methodology-norms-methodology-tradition-resolution
+    frontier_item_id: vis-lens-methodology-norms-methodology-tradition-resolution-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
+  - id: generated-figure-artifacts
+    disposition: migrated
+    rationale: Repository impact profiling inventories pre-existing generated figure artifacts and their revision-scoped paths without judging coverage.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: vis-lens-methodology-norms-generated-figure-artifacts
+    frontier_item_id: vis-lens-methodology-norms-generated-figure-artifacts-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: figure-generating-code
+    disposition: migrated
+    rationale: Semantic navigation traces figure-writing calls, their definitions, and output-path relationships without importing or executing plotting code.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: vis-lens-methodology-norms-figure-generating-code
+    frontier_item_id: vis-lens-methodology-norms-figure-generating-code-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: planned-figure-artifacts
+    disposition: migrated
+    rationale: Repository impact profiling inventories declarative figure plans in revision-scoped planning documents, task descriptions, and manifests without inferring completion.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: vis-lens-methodology-norms-planned-figure-artifacts
+    frontier_item_id: vis-lens-methodology-norms-planned-figure-artifacts-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: mandatory-figure-coverage
+    disposition: retained
+    rationale: Matching collected evidence to methodology-specific mandatory figures and assigning present, partial, or absent status is lens-owned normative synthesis.
+    applicability: always
+    role: null
+    profile: auto
+    relationship_classes: [references, affects]
+    task_id: vis-lens-methodology-norms-mandatory-figure-coverage
+    frontier_item_id: vis-lens-methodology-norms-mandatory-figure-coverage-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -213,6 +304,8 @@ when a tradition is loaded (either via `tradition_slug` or via `classify_methodo
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-methodology-norms/`
 - Declare a figure "present" if it exists only in code but is not yet generated — coverage requires the actual output file or a concrete plan entry
+- Import or execute target code, tests, experiments, models, plotting pipelines, or benchmarks
+- Let a migrated exploration vector select a methodology tradition, assign coverage status, recommend figures, or create the diagram
 
 **ALWAYS:**
 - Identify the ML sub-area from the experiment plan or context before checking mandatory figures
@@ -220,6 +313,12 @@ when a tradition is loaded (either via `tradition_slug` or via `classify_methodo
 - Sort the gap list absent-first, then partial
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
+- Use the registered exploration roles for all repository reads
+- Dispatch exactly 4 migrated exploration vectors through the deterministic router
+- Keep tradition resolution and mandatory-figure coverage as retained parent-owned source blocks
+- Route mixed code and declarative figure evidence through the parent without creating extra vectors
+- Wait for every migrated exploration result before assigning present, partial, or absent status
+- Retain parent authority over methodology norms, external source availability, licensing, network use, gap analysis, and visualization judgments
 - Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-methodology-norms/vis_spec_methodology_norms_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -234,6 +333,17 @@ when a tradition is loaded (either via `tradition_slug` or via `classify_methodo
 
 ### Step 0: Parse optional arguments and identify methodology tradition
 
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses supplied context and experiment-plan arguments, inspect only
+existing revision-scoped CWD artifacts for fields that remain absent. Never rediscover
+or override supplied complete fields. If no fields are missing, return an explicit
+not-applicable result without repository search. If relevant evidence is absent or
+unrelated, explicitly report it as unavailable or unrelated without widening scope,
+inferring meaning, or importing or executing target code, tests, experiments, models,
+or benchmarks.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="methodology-tradition-resolution" -->
 If positional arg 1 (context_path) is provided and the file exists, read it. Check for
 a `## Methodology Tradition` section containing `tradition_slug`. If present:
 - Load the tradition YAML from `recipes/methodology-traditions/{tradition_slug}.yaml`
@@ -256,28 +366,40 @@ Identify the ML sub-area by scanning for keywords:
 - `time series`, `forecasting`, `temporal`, `ACF`, `seasonal`, `trend` → Time-Series
 
 If multiple sub-areas match, analyze for all matching sub-areas.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 1: Inventory Existing and Planned Figures
 
-Scan experiment plan, context file, and codebase for:
+Dispatch the three authored repository-discovery vectors with the ready fallback vector
+through one deterministic router plan before awaiting any result. Supplied context,
+experiment-plan content, and methodology-norm sources remain direct parent inputs.
 
 **Existing Figures**
+<!-- autoskillit:exploration-vector id="generated-figure-artifacts" -->
 - Find all generated figure files: `*.png`, `*.pdf`, `*.svg` in results/figures directories
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="figure-generating-code" -->
 - Find figure-generating code: `savefig`, `plt.save`, `fig.write_image`
+<!-- /autoskillit:exploration-vector -->
 
 **Planned Figures**
+<!-- autoskillit:exploration-vector id="planned-figure-artifacts" -->
 - Find figure descriptions in experiment plan, README, or task descriptions
 - Look for: `figure`, `plot`, `diagram`, `visualization`, `chart` in planning documents
+<!-- /autoskillit:exploration-vector -->
 
 **Figure Types Present**
+<!-- autoskillit:exploration-vector id="mandatory-figure-coverage" -->
 - Match found figures to mandatory types from the sub-area table
 - Classify each mandatory type as: present / partial / absent
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Check Coverage for Each Mandatory Figure Type
 
 For each mandatory figure type in the identified sub-area:
 
-1. Search for evidence of this figure type in the codebase and plan
+1. Use the collected generated-artifact, figure-code, planned-artifact, and supplied-plan evidence
 2. Assign coverage status:
    - **present** — figure exists as generated output or concrete implementation
    - **partial** — figure is planned but not generated, or exists but missing key elements

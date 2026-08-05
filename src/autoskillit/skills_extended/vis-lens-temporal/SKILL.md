@@ -8,6 +8,97 @@ activate_deps:
 description: Create Temporal Dynamics visualization planning spec showing axis scaling (linear vs log), smoothing disclosure,
   epoch/step alignment, run aggregation (mean + variance bands), early-stopping markers, and wall-clock vs step-count x-axis.
   Temporal lens answering "Are training dynamics shown clearly and honestly?"
+exploration_vectors:
+  - id: missing-context-fields
+    disposition: migrated
+    rationale: Repository impact evidence fills only visualization-context fields missing after parent-side supplied-input parsing; complete caller context remains direct authority.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: vis-lens-temporal-missing-context-fields
+    frontier_item_id: vis-lens-temporal-missing-context-fields-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: learning-loss-curves
+    disposition: migrated
+    rationale: Repository impact evidence inventories pre-existing curve specifications, generated figures, tables, data declarations, and fixtures, with bounded code tracing through parent-mediated navigator handoff.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: vis-lens-temporal-learning-loss-curves
+    frontier_item_id: vis-lens-temporal-learning-loss-curves-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: seed-count
+    disposition: migrated
+    rationale: Semantic navigation traces seed-count definitions, random-state configuration, run construction, and affected training-curve paths while the parent judges sufficiency.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: vis-lens-temporal-seed-count
+    frontier_item_id: vis-lens-temporal-seed-count-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: smoothing-calls
+    disposition: migrated
+    rationale: Semantic navigation traces smoothing definitions, parameters, calls, and affected visualization paths while disclosure and appropriateness remain parent judgments.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: vis-lens-temporal-smoothing-calls
+    frontier_item_id: vis-lens-temporal-smoothing-calls-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: x-axis-type
+    disposition: migrated
+    rationale: Semantic navigation traces epoch, step, and wall-clock definitions, plotting references, and affected comparison paths while alignment remains a parent judgment.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: vis-lens-temporal-x-axis-type
+    frontier_item_id: vis-lens-temporal-x-axis-type-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: early-stopping
+    disposition: migrated
+    rationale: Semantic navigation traces early-stopping configuration, control flow, best-epoch references, and affected plot annotations while the parent judges marker completeness.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: vis-lens-temporal-early-stopping
+    frontier_item_id: vis-lens-temporal-early-stopping-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -64,6 +155,7 @@ semantic_requirements:
 - Omit the CRITICAL flag when n_seeds == 1 for training curves — single-seed variance is unquantifiable
 - Apply smoothing without disclosing the smoothing window or method
 - Mix epoch-count and step-count x-axes on the same multi-run comparison without alignment
+- Import or execute target code, tests, experiments, models, benchmarks, notebooks, or plotting workflows to gather evidence
 
 **ALWAYS:**
 - CRITICAL: if `n_seeds == 1` for any training curve, flag as **CRITICAL** — single-seed training curves cannot demonstrate stability or convergence robustness
@@ -72,6 +164,12 @@ semantic_requirements:
   wall-clock time OR total gradient steps (not raw epochs), and document the choice
 - Use log-scale y-axis when loss spans more than one order of magnitude
 - Mark early-stopping epoch/step as a vertical dashed line with label
+- Use the registered exploration roles for all repository reads
+- Route the missing-context vector only for fields absent after direct caller-context parsing, and dispatch the 5 repo-local temporal inventory vectors through the deterministic router
+- Allow parent-boundary handoff between declarative or generated-artifact evidence and semantic code navigation without creating extra vectors
+- Keep external availability, licensing, and network checks lens-owned and outside native exploration
+- Wait for every applicable exploration result before judging scale, smoothing, seed sufficiency, alignment, or early-stopping disclosure, emitting figure specifications, or creating the diagram
+- Retain parent authority over critical and warning classifications, axis and alignment decisions, disclosure judgment, figure-spec synthesis, and diagram creation
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool — this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-temporal/vis_spec_temporal_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
@@ -94,29 +192,43 @@ arg 2 (experiment_plan_path) is provided and exists, read the experiment plan fo
 methodology. Use this structured context as the foundation for Steps 1–4; skip the CWD
 exploration for these fields if the context file supplies them.
 
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
+
 ### Step 1: Inventory Training Curves
 
-Scan experiment plan, context file, and codebase for:
+Use the supplied experiment plan and context directly. Route only the repo-local inventory below through registered exploration roles.
 
 **Learning and Loss Curves**
-- Find all learning curves, loss curves, metric-vs-step plots
-- Look for: `train_loss`, `val_loss`, `reward`, `accuracy_vs_epoch`, `loss_curve`, `plt.plot`
+
+<!-- autoskillit:exploration-vector id="learning-loss-curves" -->
+Inventory pre-existing learning curves, loss curves, metric-versus-step figure specifications, generated figures, tables, data declarations, tests, and fixtures. Include bounded parent-mediated navigator handoff for plotting symbols and consumers; do not import or execute target code.
+<!-- /autoskillit:exploration-vector -->
 
 **Seed Count**
-- Find n_seeds for each training run
-- Look for: `n_seeds`, `num_seeds`, `seeds`, `SEEDS`, `random_state`, `runs`
+
+<!-- autoskillit:exploration-vector id="seed-count" -->
+Trace seed-count and run-count definitions, seed collections, random-state configuration, training-run construction, and the curve paths they affect. Return code relationships and declared values only.
+<!-- /autoskillit:exploration-vector -->
 
 **Smoothing Calls**
-- Detect whether smoothing is applied and whether it is disclosed
-- Look for: `smooth`, `ema`, `rolling_mean`, `gaussian_filter`, `savgol_filter`, EMA α parameters
+
+<!-- autoskillit:exploration-vector id="smoothing-calls" -->
+Trace smoothing definitions and calls, including exponential moving averages, rolling means, filters, window sizes, and smoothing parameters, plus the visualization paths they affect. Return evidence only; the parent determines whether smoothing is disclosed and appropriate.
+<!-- /autoskillit:exploration-vector -->
 
 **X-Axis Type**
-- Determine whether x-axis is epoch-count, step-count, or wall-clock time
-- Look for: `epochs`, `steps`, `global_step`, `time_elapsed`, x-axis labels
+
+<!-- autoskillit:exploration-vector id="x-axis-type" -->
+Trace epoch-count, step-count, global-step, and wall-clock definitions and plotting references, including axis labels and the multi-run comparisons they affect. Return evidence only; the parent determines the axis type and alignment.
+<!-- /autoskillit:exploration-vector -->
 
 **Early Stopping**
-- Detect early-stopping usage and whether it is marked on the plot
-- Look for: `early_stopping`, `patience`, `best_epoch`, `EarlyStopping`
+
+<!-- autoskillit:exploration-vector id="early-stopping" -->
+Trace early-stopping definitions, configuration, patience and best-epoch references, control flow, and affected plot annotations. Return evidence only; the parent determines whether stopping is disclosed and marked.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Determine Axis Scaling
 

@@ -354,8 +354,10 @@ agent_backend:
     research:
       run_experiment_lenses: codex
       scope: codex
+      vis_apply: codex
     research-design:
       scope: codex
+      vis_apply: codex
     research-review:
       run_experiment_lenses: codex
 

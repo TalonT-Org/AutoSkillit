@@ -73,9 +73,19 @@ class TestExplicitBackendOverrideAdmissionDispatchAgreement:
                 "agent_backend.recipe_overrides.research.scope",
             ),
             (
+                "research",
+                "vis_apply",
+                "agent_backend.recipe_overrides.research.vis_apply",
+            ),
+            (
                 "research-design",
                 "scope",
                 "agent_backend.recipe_overrides.research-design.scope",
+            ),
+            (
+                "research-design",
+                "vis_apply",
+                "agent_backend.recipe_overrides.research-design.vis_apply",
             ),
             (
                 "research-review",

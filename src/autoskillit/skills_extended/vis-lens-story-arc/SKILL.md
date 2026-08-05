@@ -8,6 +8,82 @@ activate_deps:
 description: Create Narrative Story Arc visualization planning spec showing visual consistency across the report (same color
   = same model everywhere), logical figure progression, redundant figure detection, and narrative dependency between figures.
   Narrative lens answering "Do the figures tell a coherent story across the report?"
+exploration_vectors:
+  - id: missing-context-fields
+    disposition: migrated
+    rationale: Repository impact evidence fills only visualization-context fields missing after parent-side supplied-input parsing; complete caller context remains direct authority.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: vis-lens-story-arc-missing-context-fields
+    frontier_item_id: vis-lens-story-arc-missing-context-fields-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: enumerate-number-figures
+    disposition: retained
+    rationale: Figure enumeration consumes the supplied or pre-existing figure plan directly and does not require an independent repository scan.
+    applicability: always
+    role: null
+    profile: auto
+    relationship_classes: [references]
+    task_id: vis-lens-story-arc-enumerate-number-figures
+    frontier_item_id: vis-lens-story-arc-enumerate-number-figures-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
+  - id: global-color-map
+    disposition: migrated
+    rationale: Repository impact evidence inventories pre-existing figure descriptions, palette declarations, generated artifacts, and configuration, with bounded code-symbol tracing through parent-mediated navigator handoff.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: vis-lens-story-arc-global-color-map
+    frontier_item_id: vis-lens-story-arc-global-color-map-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: detect-redundant-figures
+    disposition: retained
+    rationale: Redundancy detection is a parent-owned comparison and judgment over known figure mappings and questions rather than repository discovery.
+    applicability: always
+    role: null
+    profile: auto
+    relationship_classes: [references]
+    task_id: vis-lens-story-arc-detect-redundant-figures
+    frontier_item_id: vis-lens-story-arc-detect-redundant-figures-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
+  - id: map-narrative-dependencies
+    disposition: retained
+    rationale: Narrative dependency mapping is parent-owned interpretation of the established figure sequence, roles, and report sections rather than repository discovery.
+    applicability: always
+    role: null
+    profile: auto
+    relationship_classes: [references]
+    task_id: vis-lens-story-arc-map-narrative-dependencies
+    frontier_item_id: vis-lens-story-arc-map-narrative-dependencies-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -63,6 +139,7 @@ semantic_requirements:
 - Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-story-arc/`
 - Assign the same color to two different models, conditions, or categories across figures
 - Include a figure that presents the same data and conclusion as another figure already in the plan
+- Import or execute target code, tests, experiments, models, benchmarks, notebooks, or plotting workflows to gather evidence
 
 **ALWAYS:**
 - Build a global color→entity mapping table across all figures; flag any inconsistency
@@ -70,6 +147,12 @@ semantic_requirements:
 - Flag any figure whose narrative role duplicates another (same question, same data)
 - Verify that figures appear in a logical dependency order (motivation → method → result → implication)
 - The primary diagram output is a **figure-sequence flow diagram** (mermaid) showing narrative dependencies
+- Use the registered exploration roles for all repository reads
+- Route the missing-context vector only for fields absent after direct caller-context parsing, dispatch the global-color-map repo scan through the deterministic router, and keep retained narrative blocks parent-owned
+- Allow parent-boundary handoff between declarative or generated-artifact evidence and semantic code navigation without creating extra vectors
+- Keep external availability, licensing, and network checks lens-owned and outside native exploration
+- Wait for every applicable exploration result before judging consistency or redundancy, mapping narrative dependencies, emitting figure specifications, or creating the diagram
+- Retain parent authority over figure enumeration, color consistency and redundancy judgments, narrative dependency interpretation, figure-spec synthesis, and diagram creation
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool — this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-story-arc/vis_spec_story_arc_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
@@ -92,34 +175,35 @@ arg 2 (experiment_plan_path) is provided and exists, read the experiment plan fo
 methodology. Use this structured context as the foundation for Steps 1–4; skip the CWD
 exploration for these fields if the context file supplies them.
 
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
+
 ### Step 1: Enumerate and Number All Figures
 
-List all planned figures in document order. For each figure record:
-- Figure ID (fig-01, fig-02, ...)
-- Title / description
-- What data/question it addresses
-- Which section it appears in (intro, method, results, discussion, appendix)
+<!-- autoskillit:exploration-vector id="enumerate-number-figures" -->
+From the supplied or pre-existing figure plan, list all planned figures in document order. For each figure record its identifier, title or description, addressed data or question, and report section.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Build Global Color Map
 
-Scan all figure descriptions and plotting code for color/palette assignments:
-- Build table: { color_hex_or_name → entity_name }
-- Check: is the same entity always the same color across all figures?
-- FLAG INCONSISTENCY if entity A is blue in fig-02 but orange in fig-05
+<!-- autoskillit:exploration-vector id="global-color-map" -->
+Inventory color and palette assignments declared by pre-existing figure descriptions, figure specifications, generated artifacts, and visualization configuration. Use parent-mediated semantic navigator handoff for bounded tracing of plotting-code color assignments; do not import or execute plotting code.
+<!-- /autoskillit:exploration-vector -->
+
+The parent builds the color-to-entity table, checks that every entity keeps one color across figures, and flags inconsistency when assignments differ.
 
 ### Step 3: Detect Redundant Figures
 
-For each pair of figures, check:
-- Do they display the same underlying data (same x/y variables, same conditions)?
-- Do they answer the same question?
-- If YES → flag as REDUNDANT; recommend merging or removing one
+<!-- autoskillit:exploration-vector id="detect-redundant-figures" -->
+For each pair of known figures, compare the underlying data mapping, variables, conditions, and addressed question. The parent flags a pair as redundant and recommends merging or removal only when both the data and conclusion duplicate one another.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 4: Map Narrative Dependencies
 
-For each figure, identify:
-- Which figure(s) it logically depends on (must be read first)
-- Which figure(s) it motivates (enables interpretation of)
-- Whether its narrative position (section) matches its dependency order
+<!-- autoskillit:exploration-vector id="map-narrative-dependencies" -->
+For each known figure, identify which earlier figures must be read first, which later figures it motivates or enables, and whether its report section matches that dependency order. Keep the narrative interpretation and ordering judgment with the parent.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 5: Emit yaml:figure-spec Blocks and Sequence Diagram
 

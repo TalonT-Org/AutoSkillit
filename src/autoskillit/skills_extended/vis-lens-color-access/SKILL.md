@@ -8,6 +8,97 @@ activate_deps:
 description: Create Chromatic Accessibility visualization planning spec showing colorblind safety (Okabe-Ito, Paul Tol palettes),
   perceptual uniformity checks (viridis/cividis pass; jet/rainbow fail), non-color redundant encoding (shape + line-style),
   and text size minimums. Chromatic lens answering "Is the color encoding accessible and perceptually uniform?"
+exploration_vectors:
+  - id: missing-context-fields
+    disposition: migrated
+    rationale: Repository impact evidence locates revision-scoped context and experiment-plan artifacts and reports only fields still absent after direct caller-context parsing.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: vis-lens-color-access-missing-context-fields
+    frontier_item_id: vis-lens-color-access-missing-context-fields-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: palette-colormap-usage
+    disposition: migrated
+    rationale: Semantic navigation traces palette and colormap declarations and their plotting-call consumers without deciding accessibility.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [declares, defines, calls, references]
+    task_id: vis-lens-color-access-palette-colormap-usage
+    frontier_item_id: vis-lens-color-access-palette-colormap-usage-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: hue-encoding-usage
+    disposition: migrated
+    rationale: Semantic navigation traces quantitative and categorical fields into hue, luminance, and scale encodings while leaving accessibility judgment to the lens.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: vis-lens-color-access-hue-encoding-usage
+    frontier_item_id: vis-lens-color-access-hue-encoding-usage-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: series-definitions
+    disposition: migrated
+    rationale: Semantic navigation identifies series declarations, labels, legends, and plotting consumers used to establish the evidence-backed series inventory.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references]
+    task_id: vis-lens-color-access-series-definitions
+    frontier_item_id: vis-lens-color-access-series-definitions-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: redundant-encoding-declarations
+    disposition: migrated
+    rationale: Semantic navigation locates marker, line-style, and dash declarations associated with discovered plotted series without issuing warnings.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references]
+    task_id: vis-lens-color-access-redundant-encoding-declarations
+    frontier_item_id: vis-lens-color-access-redundant-encoding-declarations-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: text-size-parameters
+    disposition: migrated
+    rationale: Semantic navigation traces font-size declarations, plotting-call parameters, and global style configuration references without applying publication thresholds.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [declares, defines, calls, references]
+    task_id: vis-lens-color-access-text-size-parameters
+    frontier_item_id: vis-lens-color-access-text-size-parameters-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -63,6 +154,8 @@ semantic_requirements:
 - Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-color-access/`
 - Use `jet` or `rainbow` colormaps for any quantitative data — these are perceptually non-uniform and fail colorblind simulation
 - Encode quantitative data with hue alone (no luminance gradient)
+- Import or execute target code, tests, plotting pipelines, models, or benchmarks
+- Let an exploration vector decide accessibility, assign PASS/FAIL/WARNING, design the figure, or create the diagram
 
 **ALWAYS:**
 - Use Okabe-Ito (8 colors) or Paul Tol palettes for categorical nominal data
@@ -71,6 +164,11 @@ semantic_requirements:
 - Caption text and axis labels: minimum 8pt in final figure; 10pt preferred for publication
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool — this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
+- Use the registered exploration roles for all repository reads
+- Dispatch exactly 6 migrated exploration vectors through the deterministic router
+- Route mixed declarative and generated-artifact evidence through the parent for bounded profiler handoff without creating extra vectors
+- Wait for every migrated exploration result before applying accessibility thresholds or emitting figure specifications
+- Retain parent authority over accessibility, palette, annotation, and visualization judgments in Steps 1–4
 - Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-color-access/vis_spec_color_access_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -89,37 +187,65 @@ If positional arg 1 (context_path) is provided and the file exists, read it to o
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
 methodology. Use this structured context as the foundation for Steps 1–4; skip the CWD
-exploration for these fields if the context file supplies them.
+exploration for fields supplied completely by those artifacts.
+
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses supplied context and experiment-plan arguments, inspect only
+existing revision-scoped CWD artifacts for fields that remain absent. Never rediscover
+or override supplied complete fields. If no fields are missing, return an explicit
+not-applicable result without repository search. If relevant evidence is absent or
+unrelated, explicitly report it as unavailable or unrelated without widening scope,
+inferring meaning, or importing or executing target code, tests, experiments, models,
+or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 1: Inventory Color Usage
 
-Scan experiment plan, context file, and codebase for:
+Dispatch the five authored repository-discovery vectors with the ready fallback vector
+through one deterministic router plan before awaiting any result. Supplied context and
+experiment-plan content remain direct parent inputs.
 
 **Palette and Colormap Names**
+<!-- autoskillit:exploration-vector id="palette-colormap-usage" -->
 - Find all palette names and colormap strings in plotting code
 - Look for: `cmap=`, `palette=`, `color=`, `colors=`, `sns.color_palette`, `plt.cm.`
+<!-- /autoskillit:exploration-vector -->
+
 - Flag FAIL: `jet`, `rainbow`, `hsv`, `Spectral`, `hot`, `cool`
 - Pass: `viridis`, `cividis`, `mako`, `okabe-ito`, `wong`, `tol`, `tab10`
 
 **Hue-Only Encoding**
-- Detect cases where quantitative data uses hue without luminance gradient
-- Look for: diverging colormaps applied to continuous scales, categorical palettes applied to ordinal data
+<!-- autoskillit:exploration-vector id="hue-encoding-usage" -->
+- Trace quantitative, ordinal, and categorical fields into hue, luminance, and scale encodings
+- Report declared scale types and code relationships without deciding whether an encoding is accessible
+<!-- /autoskillit:exploration-vector -->
+
+The parent lens detects hue-only quantitative encoding and distinguishes continuous,
+ordinal, and categorical palette use.
 
 **Series Count**
+<!-- autoskillit:exploration-vector id="series-definitions" -->
 - Count the number of color-distinguished series per figure
 - Look for: legend entries, `label=` parameters, series lists
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Redundant Encoding Audit
 
+<!-- autoskillit:exploration-vector id="redundant-encoding-declarations" -->
 For each color-distinguished series in a line or scatter plot:
 - Check whether a marker shape (`marker=`) is also assigned
 - Check whether a line-style dash (`linestyle=`, `dashes=`) is also assigned
+<!-- /autoskillit:exploration-vector -->
+
 - If neither is present: flag as WARNING — "Series relies on color alone; add marker or linestyle"
 
 ### Step 3: Text Size Audit
 
+<!-- autoskillit:exploration-vector id="text-size-parameters" -->
 Scan figure creation calls for font size parameters:
 - Look for: `fontsize=`, `labelsize=`, `title_fontsize=`, `tick_params(labelsize=...)`, `rcParams`
+<!-- /autoskillit:exploration-vector -->
+
 - Flag any value < 8 as WARNING: "Font size {N}pt is below 8pt minimum"
 - Flag any value < 10 as INFO: "Font size {N}pt is below 10pt preferred for publication"
 

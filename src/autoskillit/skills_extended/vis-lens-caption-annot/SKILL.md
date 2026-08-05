@@ -8,6 +8,97 @@ activate_deps:
 description: Create Annotative Caption visualization planning spec showing declarative titles, axis labels with units, error
   definition in legend, baseline references, sample sizes, and venue-specific caption format. Annotative lens answering "Are
   figure captions and axis labels fully self-contained?"
+exploration_vectors:
+  - id: caller-context
+    disposition: retained
+    rationale: Caller-provided context and experiment plans are explicit inputs read directly, so parsing and interpretation remain parent-owned without native exploration dispatch.
+    applicability: always
+    role: null
+    profile: auto
+    relationship_classes: [references]
+    task_id: vis-lens-caption-annot-caller-context
+    frontier_item_id: vis-lens-caption-annot-caller-context-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
+  - id: missing-context-fields
+    disposition: migrated
+    rationale: Repository impact evidence retrieves only IV/DV, hypothesis, control, and success-criterion fields absent after direct caller-context parsing while the parent preserves visualization interpretation.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: vis-lens-caption-annot-missing-context-fields
+    frontier_item_id: vis-lens-caption-annot-missing-context-fields-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: figure-title-inventory
+    disposition: migrated
+    rationale: Repository impact evidence inventories current figure-title strings in plans, plotting configuration, code references, and generated artifacts while the parent classifies title quality.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: vis-lens-caption-annot-figure-title-inventory
+    frontier_item_id: vis-lens-caption-annot-figure-title-inventory-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: axis-label-unit-evidence
+    disposition: migrated
+    rationale: Repository impact evidence inventories axis labels, continuous units, and categorical scale descriptions across figure specifications, plotting configuration, and generated artifacts while the parent audits completeness.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: vis-lens-caption-annot-axis-label-unit-evidence
+    frontier_item_id: vis-lens-caption-annot-axis-label-unit-evidence-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: uncertainty-definition-evidence
+    disposition: migrated
+    rationale: Repository impact evidence inventories error-bar, shaded-region, confidence-interval, legend, and caption declarations while the parent determines whether uncertainty is adequately defined.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: vis-lens-caption-annot-uncertainty-definition-evidence
+    frontier_item_id: vis-lens-caption-annot-uncertainty-definition-evidence-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: baseline-sample-disclosure
+    disposition: migrated
+    rationale: Repository impact evidence inventories baseline names, cited sources, plotted conditions, and disclosed sample sizes while the parent judges disclosure sufficiency.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: vis-lens-caption-annot-baseline-sample-disclosure
+    frontier_item_id: vis-lens-caption-annot-baseline-sample-disclosure-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -64,6 +155,7 @@ semantic_requirements:
 - Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-caption-annot/`
 - Use a non-declarative title like "Results" or "Figure 3: Performance" — titles must state the takeaway (e.g., "Model A outperforms baseline on all benchmarks")
 - Omit units from axis labels (e.g., write "Latency (ms)", not "Latency")
+- Run exploration leaves in the background
 
 **ALWAYS:**
 - Check every figure title for declarative language
@@ -73,6 +165,11 @@ semantic_requirements:
 - Report sample size per plotted condition (n=X seeds, N=X subjects, etc.)
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool — this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
+- Use the registered exploration roles for all repository reads
+- Dispatch exactly 5 migrated exploration vectors through the deterministic router
+- Route semantic plotting-code, symbol, and data-control-flow handoffs to `semantic-code-navigator` and bounded schema, configuration, generated-figure, table, test, fixture, reproduction, caption, and pre-existing artifact handoffs to `repository-impact-profiler` through the parent-owned plan
+- Wait for every exploration result before classifying titles, auditing annotations, assigning findings, or creating the diagram
+- Retain parent authority over caption, label, uncertainty, baseline, sample-disclosure, Mermaid, `yaml:figure-spec`, and output decisions
 - Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-caption-annot/vis_spec_caption_annot_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -87,40 +184,55 @@ semantic_requirements:
 
 ### Step 0: Parse optional arguments
 
+<!-- autoskillit:exploration-vector id="caller-context" -->
 If positional arg 1 (context_path) is provided and the file exists, read it to obtain
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
-methodology. Use this structured context as the foundation for Steps 1–4; skip the CWD
-exploration for these fields if the context file supplies them.
+methodology. Use this structured context as the foundation for Steps 1–4.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 1: Inventory Figure Titles
 
-For every figure in the experiment plan or codebase:
-- Collect the current title string
+<!-- autoskillit:exploration-vector id="figure-title-inventory" -->
+For every figure in the experiment plan or codebase, retrieve the current title string from planning, plotting configuration, code references, or generated artifacts. Route semantic plot-title definitions through the parent to the navigator. Use static repository evidence only; do not import or execute target code, tests, visualization pipelines, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
+
+For every collected title:
 - Classify: DECLARATIVE (states a result) vs DESCRIPTIVE (labels the figure)
 - FAIL if title is purely descriptive (e.g. "Ablation Results", "Performance Comparison")
 - PASS if title states the key finding (e.g. "Removing component X degrades accuracy by 8 pp")
 
 ### Step 2: Axis Label and Unit Audit
 
-For every axis in every figure:
-- Confirm the label is present (no unlabeled axes)
-- Confirm units are stated for continuous quantities: time (ms/s), memory (MB/GB), accuracy (%), loss (nats/bits), etc.
+<!-- autoskillit:exploration-vector id="axis-label-unit-evidence" -->
+For every axis in every figure, retrieve the label, any stated unit for continuous quantities such as time (ms/s), memory (MB/GB), accuracy (%), or loss (nats/bits), and any categorical grouping-variable description. Route semantic axis-label assignments through the parent to the navigator. Use static repository evidence only; do not import or execute target code, tests, visualization pipelines, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
+
+- Confirm every retrieved axis has a label
+- Confirm units are stated for continuous quantities
 - Confirm categorical axes name the grouping variable
 - FLAG WARNING for any axis missing a unit on a continuous quantity
 
 ### Step 3: Error and Uncertainty Definition Audit
 
-For every figure that shows error bars, shaded regions, or confidence intervals:
-- Identify the error representation: CI (90/95/99%), ±1 std, ±1 SEM, IQR, min/max
-- Verify the definition appears in the legend or caption text
+<!-- autoskillit:exploration-vector id="uncertainty-definition-evidence" -->
+For every figure that shows error bars, shaded regions, or confidence intervals, retrieve the error representation—CI (90/95/99%), ±1 std, ±1 SEM, IQR, or min/max—and whether its definition appears in legend or caption text. Route semantic uncertainty-rendering definitions through the parent to the navigator. Use static repository evidence only; do not import or execute target code, tests, visualization pipelines, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
+
 - FLAG FAIL if error bars are shown but not defined
 
 ### Step 4: Baseline and Sample Size Disclosure
 
-- Identify every "baseline" referenced in a figure or caption
-- Verify the baseline name and source are stated (e.g. "GPT-4 (OpenAI, 2023)")
-- For each plotted group/condition, verify sample size n is disclosed (seeds, subjects, runs)
+<!-- autoskillit:exploration-vector id="baseline-sample-disclosure" -->
+Retrieve every baseline referenced in a figure or caption, its stated name and source (for example, "GPT-4 (OpenAI, 2023)"), and the disclosed sample size for each plotted group or condition (seeds, subjects, or runs). Use static repository evidence only; do not perform external availability, licensing, or network checks, and do not import or execute target code, tests, visualization pipelines, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
+
+- Verify every baseline name and source are stated
+- Verify sample size n is disclosed for each plotted group or condition
 - FLAG WARNING for any undisclosed baseline or missing n
 
 ### Step 5: Emit yaml:figure-spec Blocks

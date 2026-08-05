@@ -347,6 +347,21 @@ EXPERIMENT_LENS_SKILLS = (
     "exp-lens-governance-risk",
 )
 
+VISUALIZATION_LENS_SKILLS = (
+    "vis-lens-always-on",
+    "vis-lens-antipattern",
+    "vis-lens-caption-annot",
+    "vis-lens-chart-select",
+    "vis-lens-color-access",
+    "vis-lens-figure-table",
+    "vis-lens-methodology-norms",
+    "vis-lens-multi-compare",
+    "vis-lens-reproducibility",
+    "vis-lens-story-arc",
+    "vis-lens-temporal",
+    "vis-lens-uncertainty",
+)
+
 # Skills with path-capture contracts that must have their token instruction
 # in ## Critical Constraints (not only in ## Output or a late workflow step).
 PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
@@ -495,6 +510,37 @@ def test_all_experiment_lenses_keep_exact_output_contracts_and_temp_paths() -> N
         temp_dir = f"{{{{AUTOSKILLIT_TEMP}}}}/{skill_name}/"
         file_stem = skill_name.removeprefix("exp-lens-").replace("-", "_")
         diagram_path = f"{temp_dir}exp_diag_{file_stem}_{{YYYY-MM-DD_HHMMSS}}.md"
+
+        assert f"Create files outside `{temp_dir}`" in content
+        assert f"Write output to `{diagram_path}`" in content
+        assert diagram_path in content
+        assert PATH_CAPTURE_SKILLS[skill_name] == ["diagram_path"]
+
+
+def test_all_visualization_lenses_keep_exact_output_contracts_and_temp_paths() -> None:
+    raw = load_yaml(SKILL_CONTRACTS_PATH)
+    contracts = raw["skills"]
+    visualization_contracts = tuple(name for name in contracts if name.startswith("vis-lens-"))
+
+    assert len(visualization_contracts) == len(VISUALIZATION_LENS_SKILLS)
+    assert set(visualization_contracts) == set(VISUALIZATION_LENS_SKILLS)
+    expected_contract = {
+        "inputs": [
+            {"name": "context_path", "type": "file_path", "required": False},
+            {"name": "experiment_plan_path", "type": "file_path", "required": False},
+            {"name": "project_context", "type": "string", "required": False},
+        ],
+        "outputs": [{"name": "diagram_path", "type": "file_path"}],
+        "expected_output_patterns": [r"diagram_path[ \t]*=[ \t]*/.+"],
+        "pattern_examples": ["diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"],
+    }
+
+    for skill_name in VISUALIZATION_LENS_SKILLS:
+        assert contracts[skill_name] == expected_contract
+        content = _read_skill_md(skill_name)
+        temp_dir = f"{{{{AUTOSKILLIT_TEMP}}}}/{skill_name}/"
+        file_stem = skill_name.removeprefix("vis-lens-").replace("-", "_")
+        diagram_path = f"{temp_dir}vis_spec_{file_stem}_{{YYYY-MM-DD_HHMMSS}}.md"
 
         assert f"Create files outside `{temp_dir}`" in content
         assert f"Write output to `{diagram_path}`" in content

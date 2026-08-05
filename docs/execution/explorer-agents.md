@@ -87,6 +87,18 @@ Experiment-lens orchestration is pinned to Codex only for
 `recipe_step` tier. Lens analysis, scientific judgment, optional visualization, temp directories,
 diagram paths, and final synthesis remain parent-owned.
 
+Phase G reviews all twelve packaged visualization lenses. The shared selector currently reaches
+exactly seven: `always-on`, `temporal`, `multi-compare`, `chart-select`, `uncertainty`,
+`figure-table`, and `methodology-norms`. The other five remain packaged with their reviewed
+semantics but are not silently added to either recipe selector. Supplied caller context and
+external or scientific judgments remain parent-owned; only bounded repository evidence vectors
+receive native dispatch. Figure-spec blocks, the always-on `yaml:spec-index`, temp directories,
+and diagram paths remain unchanged.
+
+Visualization application is pinned to Codex only for `research.vis_apply` and
+`research-design.vis_apply` at the `recipe_step` tier. Both recipes retain dynamic `{slug}`
+materialization, so the pin selects the backend without changing the chosen lens or its arguments.
+
 ## Policy
 
 Both roles use the validated native Codex policy: `gpt-5.6-luna`, maximum reasoning effort, and

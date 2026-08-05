@@ -7,6 +7,52 @@ activate_deps:
 - mermaid
 description: Create Anti-Pattern Detection visualization audit showing severity-tiered catalog of visualization anti-patterns
   present in or planned for the experiment. Diagnostic lens answering "Which visualization anti-patterns are present?"
+exploration_vectors:
+  - id: caller-context
+    disposition: retained
+    rationale: Caller-provided context and experiment plans are explicit inputs read directly, so parsing and interpretation remain parent-owned without native exploration dispatch.
+    applicability: always
+    role: null
+    profile: auto
+    relationship_classes: [references]
+    task_id: vis-lens-antipattern-caller-context
+    frontier_item_id: vis-lens-antipattern-caller-context-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
+  - id: missing-context-fields
+    disposition: migrated
+    rationale: Repository impact evidence retrieves only IV/DV, hypothesis, control, and success-criterion fields absent after direct caller-context parsing while the parent preserves visualization interpretation.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: vis-lens-antipattern-missing-context-fields
+    frontier_item_id: vis-lens-antipattern-missing-context-fields-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: chart-visualization-clues
+    disposition: migrated
+    rationale: Semantic navigation traces repository-local plotting, axis, seed, smoothing, embedding, and encoding symbols while the parent routes planning and generated-artifact evidence to the profiler and judges anti-patterns.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references]
+    task_id: vis-lens-antipattern-chart-visualization-clues
+    frontier_item_id: vis-lens-antipattern-chart-visualization-clues-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -80,6 +126,7 @@ semantic_requirements:
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-antipattern/`
 - Skip checking figures that appear only in planning documents — anti-patterns in planned figures must be caught before implementation
+- Run exploration leaves in the background
 
 **ALWAYS:**
 - Check every identified figure against ALL 16 anti-patterns in the catalog
@@ -87,6 +134,11 @@ semantic_requirements:
 - Populate the `anti_patterns` field in each yaml:figure-spec with the IDs of matched patterns
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
+- Use the registered exploration roles for all repository reads
+- Dispatch exactly 2 migrated exploration vectors through the deterministic router
+- Route semantic plotting-code, symbol, and data-control-flow handoffs to `semantic-code-navigator` and bounded schema, configuration, generated-figure, table, test, fixture, reproduction, planning-document, and pre-existing artifact handoffs to `repository-impact-profiler` through the parent-owned plan
+- Wait for the exploration result before matching anti-patterns, sorting severity, or creating the diagram
+- Retain parent authority over anti-pattern classification, severity, remediation, Mermaid, `yaml:figure-spec`, and output decisions
 - Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-antipattern/vis_spec_antipattern_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -101,14 +153,20 @@ semantic_requirements:
 
 ### Step 0: Parse optional arguments
 
+<!-- autoskillit:exploration-vector id="caller-context" -->
 If positional arg 1 (context_path) is provided and the file exists, read it to obtain
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
-methodology. Use this structured context as the foundation for Steps 1–4; skip the CWD
-exploration for these fields if the context file supplies them.
+methodology. Use this structured context as the foundation for Steps 1–4.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 1: Scan for Chart Type and Visualization Clues
 
+<!-- autoskillit:exploration-vector id="chart-visualization-clues" -->
 Scan experiment plan, context file, and codebase for evidence of chart type choices:
 
 **Code Patterns**
@@ -128,7 +186,12 @@ Scan experiment plan, context file, and codebase for evidence of chart type choi
 
 **Planning Document Patterns**
 - Look for descriptions like "3D bar", "dual axis", "radar chart", "single run"
-- Look for baseline selection that seems hand-picked or unpublished
+- Collect baseline-selection descriptions and any stated publication or source metadata
+
+Route bounded planning documents, configuration, and generated figure artifacts through the parent to the profiler. Use static repository evidence only; do not import or execute target code, tests, visualization pipelines, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
+
+The parent determines whether any documented baseline selection is hand-picked or unpublished.
 
 ### Step 2: Check Each Figure Against All Anti-Patterns
 

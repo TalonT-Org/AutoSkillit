@@ -861,6 +861,44 @@ _EXPERIMENT_RECIPE_STEP_PINS = {
     "research-review.run_experiment_lenses",
 }
 
+_VISUALIZATION_LENS_SKILLS = (
+    "vis-lens-always-on",
+    "vis-lens-antipattern",
+    "vis-lens-caption-annot",
+    "vis-lens-chart-select",
+    "vis-lens-color-access",
+    "vis-lens-figure-table",
+    "vis-lens-methodology-norms",
+    "vis-lens-multi-compare",
+    "vis-lens-reproducibility",
+    "vis-lens-story-arc",
+    "vis-lens-temporal",
+    "vis-lens-uncertainty",
+)
+
+_REACHABLE_VISUALIZATION_LENSES = (
+    "vis-lens-always-on",
+    "vis-lens-temporal",
+    "vis-lens-multi-compare",
+    "vis-lens-chart-select",
+    "vis-lens-uncertainty",
+    "vis-lens-figure-table",
+    "vis-lens-methodology-norms",
+)
+
+_UNREACHABLE_VISUALIZATION_LENSES = (
+    "vis-lens-antipattern",
+    "vis-lens-caption-annot",
+    "vis-lens-color-access",
+    "vis-lens-reproducibility",
+    "vis-lens-story-arc",
+)
+
+_VISUALIZATION_RECIPE_STEP_PINS = {
+    "research.vis_apply",
+    "research-design.vis_apply",
+}
+
 ExperimentInventoryRow = tuple[str, str]
 
 
@@ -1057,6 +1095,151 @@ _EXPERIMENT_REVIEW_DIGESTS = {
 _MISSING_CONTEXT_FIELDS_BODY_DIGESTS = {
     "39ecf9415491404a6c1288da80979096fa452d04bd6df835b048ecef6f78620d",
     "5fd56558f7f721791a43d5825ff77ce73960eda3ba27332fc39ae83466a138f7",
+}
+
+VisualizationInventoryRow = tuple[str, str, str | None]
+
+_VISUALIZATION_VECTOR_INVENTORY: dict[str, tuple[VisualizationInventoryRow, ...]] = {
+    "vis-lens-always-on": (
+        ("caller-context", "retained", None),
+        ("missing-context-fields", "migrated", "repository-impact-profiler"),
+        ("figure-inventory", "migrated", "repository-impact-profiler"),
+    ),
+    "vis-lens-antipattern": (
+        ("caller-context", "retained", None),
+        ("missing-context-fields", "migrated", "repository-impact-profiler"),
+        ("chart-visualization-clues", "migrated", "semantic-code-navigator"),
+    ),
+    "vis-lens-caption-annot": (
+        ("caller-context", "retained", None),
+        ("missing-context-fields", "migrated", "repository-impact-profiler"),
+        ("figure-title-inventory", "migrated", "repository-impact-profiler"),
+        ("axis-label-unit-evidence", "migrated", "repository-impact-profiler"),
+        ("uncertainty-definition-evidence", "migrated", "repository-impact-profiler"),
+        ("baseline-sample-disclosure", "migrated", "repository-impact-profiler"),
+    ),
+    "vis-lens-chart-select": (
+        ("caller-context", "retained", None),
+        ("missing-context-fields", "migrated", "repository-impact-profiler"),
+        ("existing-figure-inventory", "migrated", "repository-impact-profiler"),
+        ("data-types-variables", "migrated", "semantic-code-navigator"),
+        ("current-chart-choices", "migrated", "semantic-code-navigator"),
+        ("encoding-channel-usage", "migrated", "semantic-code-navigator"),
+    ),
+    "vis-lens-color-access": (
+        ("missing-context-fields", "migrated", "repository-impact-profiler"),
+        ("palette-colormap-usage", "migrated", "semantic-code-navigator"),
+        ("hue-encoding-usage", "migrated", "semantic-code-navigator"),
+        ("series-definitions", "migrated", "semantic-code-navigator"),
+        ("redundant-encoding-declarations", "migrated", "semantic-code-navigator"),
+        ("text-size-parameters", "migrated", "semantic-code-navigator"),
+    ),
+    "vis-lens-figure-table": (
+        ("missing-context-fields", "migrated", "repository-impact-profiler"),
+        ("result-slot-inventory", "retained", None),
+    ),
+    "vis-lens-methodology-norms": (
+        ("missing-context-fields", "migrated", "repository-impact-profiler"),
+        ("methodology-tradition-resolution", "retained", None),
+        ("generated-figure-artifacts", "migrated", "repository-impact-profiler"),
+        ("figure-generating-code", "migrated", "semantic-code-navigator"),
+        ("planned-figure-artifacts", "migrated", "repository-impact-profiler"),
+        ("mandatory-figure-coverage", "retained", None),
+    ),
+    "vis-lens-multi-compare": (
+        ("missing-context-fields", "migrated", "repository-impact-profiler"),
+        ("condition-factor-definitions", "migrated", "semantic-code-navigator"),
+        ("series-overlap-assessment", "retained", None),
+        ("factorial-structure", "migrated", "semantic-code-navigator"),
+    ),
+    "vis-lens-reproducibility": (
+        ("missing-context-fields", "migrated", "repository-impact-profiler"),
+        ("data-availability-inventory", "migrated", "repository-impact-profiler"),
+        ("preprocessing-parameter-audit", "migrated", "semantic-code-navigator"),
+        ("library-version-audit", "migrated", "semantic-code-navigator"),
+        ("random-seed-audit", "migrated", "semantic-code-navigator"),
+        ("per-figure-code-reference", "migrated", "repository-impact-profiler"),
+    ),
+    "vis-lens-story-arc": (
+        ("missing-context-fields", "migrated", "repository-impact-profiler"),
+        ("enumerate-number-figures", "retained", None),
+        ("global-color-map", "migrated", "repository-impact-profiler"),
+        ("detect-redundant-figures", "retained", None),
+        ("map-narrative-dependencies", "retained", None),
+    ),
+    "vis-lens-temporal": (
+        ("missing-context-fields", "migrated", "repository-impact-profiler"),
+        ("learning-loss-curves", "migrated", "repository-impact-profiler"),
+        ("seed-count", "migrated", "semantic-code-navigator"),
+        ("smoothing-calls", "migrated", "semantic-code-navigator"),
+        ("x-axis-type", "migrated", "semantic-code-navigator"),
+        ("early-stopping", "migrated", "semantic-code-navigator"),
+    ),
+    "vis-lens-uncertainty": (
+        ("missing-context-fields", "migrated", "repository-impact-profiler"),
+        ("figures-error-bearing-quantities", "migrated", "repository-impact-profiler"),
+        ("seed-count", "migrated", "semantic-code-navigator"),
+        (
+            "existing-uncertainty-representation",
+            "migrated",
+            "semantic-code-navigator",
+        ),
+        ("claims-about-variance", "migrated", "repository-impact-profiler"),
+    ),
+}
+
+_VISUALIZATION_REVIEW_DIGESTS = {
+    "vis-lens-always-on": "54910fdebf3566387a1ec75811e5545da3bb0fc0f0031c0a59290516987d925e",
+    "vis-lens-antipattern": "497cba72b86879803a9611ccb4578a43e48fa0b36726528036eb45590a7d2b26",
+    "vis-lens-caption-annot": "21b473995a78df709b3dc49da576e530faf5319f62b03a0213587b0fd81b9793",
+    "vis-lens-chart-select": "94cca789f3aada3913881cc6b8934c32cce746a9fff48e0a44f9fcc1d8ed285e",
+    "vis-lens-color-access": "e94e7f559fd2975abd3a9fc484e063c6be55636f16919dc2c745448f367a95e5",
+    "vis-lens-figure-table": "14340a525e7fd20d0cce74f7172b41c540b302ad92cae0c7573ba8070df38274",
+    "vis-lens-methodology-norms": (
+        "febfc479015fe45aa13845064f121c0a43461b2928f31ee0143c8cdf37e9eeb7"
+    ),
+    "vis-lens-multi-compare": "0881751d4599e70cf7f9cc25bae195f2d67b7ec60e00683b75db2fa794ce2a40",
+    "vis-lens-reproducibility": (
+        "a077c788bc34dc29715c90da8b123650a05b85c2307b6d56a9520e02036fff73"
+    ),
+    "vis-lens-story-arc": "8b1d77d224579876fa12978384a3cab17fa0bed658f684163f0b9e9a04e1c894",
+    "vis-lens-temporal": "9d2a14ae7389896827acd6a67a98189efb81cf3607a57f3795cdcb7ad58a0578",
+    "vis-lens-uncertainty": "3d45a8f0f6013a244f94521351dc37a29ed4375b4a0ee78921050c27dfc8f0e8",
+}
+
+_VISUALIZATION_RETAINED_BODY_AUTHORITIES = {
+    ("vis-lens-always-on", "caller-context"): ("positional arg 1", "structured context"),
+    ("vis-lens-antipattern", "caller-context"): ("positional arg 1", "structured context"),
+    ("vis-lens-caption-annot", "caller-context"): ("positional arg 1", "structured context"),
+    ("vis-lens-chart-select", "caller-context"): ("positional arg 1", "structured context"),
+    ("vis-lens-figure-table", "result-slot-inventory"): (
+        "classify it as one of",
+        "exact-value query",
+    ),
+    ("vis-lens-methodology-norms", "methodology-tradition-resolution"): (
+        "tradition_slug",
+        "out-of-scope tradition",
+    ),
+    ("vis-lens-methodology-norms", "mandatory-figure-coverage"): (
+        "mandatory types",
+        "present / partial / absent",
+    ),
+    ("vis-lens-multi-compare", "series-overlap-assessment"): (
+        "assess whether",
+        "overlapping confidence bands",
+    ),
+    ("vis-lens-story-arc", "enumerate-number-figures"): (
+        "supplied or pre-existing figure plan",
+        "document order",
+    ),
+    ("vis-lens-story-arc", "detect-redundant-figures"): (
+        "parent flags",
+        "data and conclusion",
+    ),
+    ("vis-lens-story-arc", "map-narrative-dependencies"): (
+        "parent",
+        "ordering judgment",
+    ),
 }
 
 _PHASE_D_REVIEW_DIGESTS = {
@@ -1521,6 +1704,175 @@ def test_phase_f_experiment_inventory_is_complete_unique_and_acyclic() -> None:
         }
 
     assert len(scheduled) == 108
+
+
+def test_visualization_family_reachability_pins_and_filter_coverage_are_exact() -> None:
+    defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+    bundled = tuple(name for name in defaults["skills"]["tier2"] if name.startswith("vis-lens-"))
+    filesystem = tuple(
+        path.parent.name
+        for path in sorted((pkg_root() / "skills_extended").glob("vis-lens-*/SKILL.md"))
+    )
+    recipe_overrides = defaults["agent_backend"]["recipe_overrides"]
+    actual_pins = {
+        f"{recipe_name}.{step_name}": backend
+        for recipe_name, steps in recipe_overrides.items()
+        for step_name, backend in steps.items()
+        if step_name == "vis_apply"
+    }
+
+    assert filesystem == tuple(_VISUALIZATION_VECTOR_INVENTORY)
+    assert filesystem == _VISUALIZATION_LENS_SKILLS
+    assert len(bundled) == len(_VISUALIZATION_LENS_SKILLS)
+    assert set(bundled) == set(_VISUALIZATION_LENS_SKILLS)
+    assert set(_REACHABLE_VISUALIZATION_LENSES) < set(_VISUALIZATION_LENS_SKILLS)
+    assert set(_UNREACHABLE_VISUALIZATION_LENSES) == (
+        set(_VISUALIZATION_LENS_SKILLS) - set(_REACHABLE_VISUALIZATION_LENSES)
+    )
+    assert actual_pins == {
+        "research.vis_apply": "codex",
+        "research-design.vis_apply": "codex",
+    }
+    assert set(actual_pins) == _VISUALIZATION_RECIPE_STEP_PINS
+
+    manifest = load_yaml(pkg_root().parents[1] / ".autoskillit" / "test-filter-manifest.yaml")
+    skill_targets = set(manifest["src/autoskillit/skills_extended/*/SKILL.md"])
+    assert {"contracts/", "execution/", "skills/", "skills_extended/"} <= skill_targets
+
+
+@pytest.mark.parametrize("skill_name", _VISUALIZATION_LENS_SKILLS)
+def test_visualization_vectors_match_complete_reviewed_inventory(skill_name: str) -> None:
+    info = _load_phase_d_skill(skill_name)
+    expected = _VISUALIZATION_VECTOR_INVENTORY[skill_name]
+
+    assert (
+        tuple(
+            (vector.id, vector.disposition.value, vector.role)
+            for vector in info.exploration_vectors
+        )
+        == expected
+    )
+    assert len({vector.id for vector in info.exploration_vectors}) == len(expected)
+    assert all(
+        vector.profile is RepositoryProfileId.AUTO
+        and vector.task.profile is RepositoryProfileId.AUTO
+        and vector.task.task_id == f"{skill_name}-{vector.id}"
+        and vector.task.frontier_item_id == f"{skill_name}-{vector.id}-frontier"
+        and vector.task.depends_on == ()
+        and vector.task.scope == (".",)
+        and vector.rationale.strip()
+        and vector.relationship_classes
+        for vector in info.exploration_vectors
+    )
+    assert all(
+        (
+            vector.role in {"semantic-code-navigator", "repository-impact-profiler"}
+            and vector.native_dispatch
+        )
+        if vector.disposition is ExplorationVectorDisposition.MIGRATED
+        else vector.role is None and not vector.native_dispatch
+        for vector in info.exploration_vectors
+    )
+    assert _review_digest(info) == _VISUALIZATION_REVIEW_DIGESTS[skill_name]
+
+    missing_fields = next(
+        vector for vector in info.exploration_vectors if vector.id == "missing-context-fields"
+    )
+    assert hashlib.sha256(missing_fields.body.encode()).hexdigest() in (
+        _MISSING_CONTEXT_FIELDS_BODY_DIGESTS
+    )
+    normalized_missing_body = missing_fields.body.lower().replace("-", " ")
+    for invariant in (
+        "absent",
+        "never rediscover",
+        "override",
+        "not applicable",
+        "search",
+        "unavailable",
+        "unrelated",
+        "without widening scope",
+        "inferring meaning",
+        "importing or executing target code",
+    ):
+        assert invariant in normalized_missing_body, (skill_name, invariant)
+
+    content = info.path.read_text(encoding="utf-8")
+    assert "Retain parent authority over" in content
+    for vector in info.exploration_vectors:
+        assert content.count(vector.marker_line) == 1
+        if vector.disposition is ExplorationVectorDisposition.MIGRATED:
+            for pattern in _RAW_MIGRATED_AGENT_SYNTAX:
+                assert pattern.search(vector.body) is None, (
+                    skill_name,
+                    vector.id,
+                    pattern.pattern,
+                )
+    assert content.count("<!-- /autoskillit:exploration-vector -->") == len(expected)
+
+
+def test_visualization_retained_context_and_judgment_authorities_are_exact() -> None:
+    actual: dict[tuple[str, str], str] = {}
+
+    for skill_name in _VISUALIZATION_LENS_SKILLS:
+        info = _load_phase_d_skill(skill_name)
+        actual.update(
+            {
+                (skill_name, vector.id): vector.body.lower()
+                for vector in info.exploration_vectors
+                if vector.disposition is ExplorationVectorDisposition.RETAINED
+            }
+        )
+
+    assert set(actual) == set(_VISUALIZATION_RETAINED_BODY_AUTHORITIES)
+    for key, required_phrases in _VISUALIZATION_RETAINED_BODY_AUTHORITIES.items():
+        assert all(phrase in actual[key] for phrase in required_phrases), key
+
+    for skill_name in (
+        "vis-lens-reproducibility",
+        "vis-lens-story-arc",
+        "vis-lens-temporal",
+        "vis-lens-uncertainty",
+    ):
+        content = _load_phase_d_skill(skill_name).path.read_text(encoding="utf-8")
+        assert (
+            "Keep external availability, licensing, and network checks lens-owned "
+            "and outside native exploration"
+        ) in content
+
+
+def test_visualization_task_inventory_is_complete_unique_and_acyclic() -> None:
+    graph: dict[str, set[str]] = {}
+    migrated_count = 0
+    retained_count = 0
+
+    for skill_name in _VISUALIZATION_LENS_SKILLS:
+        info = _load_phase_d_skill(skill_name)
+        for vector in info.exploration_vectors:
+            assert vector.task.task_id not in graph
+            graph[vector.task.task_id] = set(vector.task.depends_on)
+            if vector.disposition is ExplorationVectorDisposition.MIGRATED:
+                migrated_count += 1
+            else:
+                retained_count += 1
+
+    assert len(graph) == 58
+    assert migrated_count == 47
+    assert retained_count == 11
+    assert set[str]().union(*graph.values()) <= set(graph)
+
+    remaining = dict(graph)
+    scheduled: list[str] = []
+    while remaining:
+        ready = tuple(task_id for task_id, dependencies in remaining.items() if not dependencies)
+        assert ready, f"cycle in visualization exploration graph: {remaining}"
+        scheduled.extend(ready)
+        remaining = {
+            task_id: dependencies.difference(ready)
+            for task_id, dependencies in remaining.items()
+            if task_id not in ready
+        }
+
+    assert len(scheduled) == 58
 
 
 @pytest.mark.parametrize("slug", _ARCHITECTURE_SELECTOR_SLUGS)

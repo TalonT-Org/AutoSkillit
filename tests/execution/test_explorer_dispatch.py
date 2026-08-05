@@ -130,6 +130,21 @@ _EXPERIMENT_LENS_SKILLS = (
     "exp-lens-governance-risk",
 )
 
+_VISUALIZATION_LENS_SKILLS = (
+    "vis-lens-always-on",
+    "vis-lens-antipattern",
+    "vis-lens-caption-annot",
+    "vis-lens-chart-select",
+    "vis-lens-color-access",
+    "vis-lens-figure-table",
+    "vis-lens-methodology-norms",
+    "vis-lens-multi-compare",
+    "vis-lens-reproducibility",
+    "vis-lens-story-arc",
+    "vis-lens-temporal",
+    "vis-lens-uncertainty",
+)
+
 
 def _vectors_from_skill(skill_name: str) -> tuple[ExplorationVectorDef, ...]:
     path = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
@@ -306,6 +321,53 @@ def test_all_actual_experiment_vectors_render_each_backend_native_form(
 
     assert rendered_count == 108
     assert authored_step_one_count == 90
+
+
+@pytest.mark.parametrize(
+    ("backend", "native_prefix"),
+    [
+        (ClaudeCodeBackend(), 'Agent(subagent_type="autoskillit:'),
+        (CodexBackend(), 'spawn_agent(agent_type="'),
+    ],
+)
+def test_all_actual_visualization_vectors_render_each_backend_native_form(
+    backend: ClaudeCodeBackend | CodexBackend,
+    native_prefix: str,
+) -> None:
+    filesystem_skills = tuple(
+        path.parent.name
+        for path in sorted((pkg_root() / "skills_extended").glob("vis-lens-*/SKILL.md"))
+    )
+    assert filesystem_skills == _VISUALIZATION_LENS_SKILLS
+
+    rendered_count = 0
+    retained_count = 0
+    for skill_name in _VISUALIZATION_LENS_SKILLS:
+        all_vectors = _vectors_from_skill(skill_name)
+        vectors = _actual_skill_vectors(skill_name)
+        retained_count += len(all_vectors) - len(vectors)
+        plan = _plan(vectors)
+        rendered = backend.exploration_dispatch_renderer.render(plan, vectors)
+
+        assert rendered.router_plan_digest == plan.digest
+        assert tuple(rendered.replacements) == tuple(
+            vector.id for vector in sorted(vectors, key=lambda item: item.task.task_id)
+        )
+        assert set(rendered.replacements).isdisjoint(
+            vector.id
+            for vector in all_vectors
+            if vector.disposition is ExplorationVectorDisposition.RETAINED
+        )
+        for vector in vectors:
+            rendered_count += 1
+            replacement = rendered.replacements[vector.id]
+            assert f'{native_prefix}{vector.role}"' in replacement
+            assert f"task_id: {vector.task.task_id}" in replacement
+            assert "profile: autoskillit" in replacement
+            assert json.dumps(vector.body)[1:-1] in replacement
+
+    assert rendered_count == 47
+    assert retained_count == 11
 
 
 @pytest.mark.parametrize("selected", _VECTORS, ids=lambda vector: vector.id)

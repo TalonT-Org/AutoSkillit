@@ -8,6 +8,97 @@ activate_deps:
 description: Create Chart Type Selection visualization planning spec showing encoding channel assignments, Cleveland-McGill
   perceptual hierarchy, and data-type→chart-type matrix. Typological lens answering "Which chart type is perceptually optimal
   for this data?"
+exploration_vectors:
+  - id: caller-context
+    disposition: retained
+    rationale: Caller-provided context and experiment plans are explicit inputs read directly, so parsing and interpretation remain parent-owned without native exploration dispatch.
+    applicability: always
+    role: null
+    profile: auto
+    relationship_classes: [references]
+    task_id: vis-lens-chart-select-caller-context
+    frontier_item_id: vis-lens-chart-select-caller-context-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: false
+  - id: missing-context-fields
+    disposition: migrated
+    rationale: Repository impact evidence retrieves only IV/DV, hypothesis, control, and success-criterion fields absent after direct caller-context parsing while the parent preserves visualization interpretation.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: vis-lens-chart-select-missing-context-fields
+    frontier_item_id: vis-lens-chart-select-missing-context-fields-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: existing-figure-inventory
+    disposition: migrated
+    rationale: Repository impact evidence inventories existing figures, plots, image outputs, figure specifications, and plotting artifacts while the parent determines figure slots and chart suitability.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: vis-lens-chart-select-existing-figure-inventory
+    frontier_item_id: vis-lens-chart-select-existing-figure-inventory-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: data-types-variables
+    disposition: migrated
+    rationale: Semantic navigation traces repository-local variable, metric, score, embedding, distribution, time, and epoch definitions while the parent routes declarative schemas and data artifacts to the profiler and classifies types.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references]
+    task_id: vis-lens-chart-select-data-types-variables
+    frontier_item_id: vis-lens-chart-select-data-types-variables-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: current-chart-choices
+    disposition: migrated
+    rationale: Semantic navigation traces existing chart-construction definitions and call paths while the parent routes configuration and planning artifacts to the profiler and evaluates the choices.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references]
+    task_id: vis-lens-chart-select-current-chart-choices
+    frontier_item_id: vis-lens-chart-select-current-chart-choices-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: encoding-channel-usage
+    disposition: migrated
+    rationale: Semantic navigation traces axis, hue, color, size, marker, alpha, and facet assignments while the parent routes declarative figure specifications to the profiler and judges encoding quality.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references]
+    task_id: vis-lens-chart-select-encoding-channel-usage
+    frontier_item_id: vis-lens-chart-select-encoding-channel-usage-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -116,6 +207,7 @@ metadata:
 - Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-chart-select/`
 - Use `radar` or `pie` chart types — these are perceptually inferior and excluded from the controlled vocabulary
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -126,6 +218,11 @@ metadata:
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch exactly 5 migrated exploration vectors through the deterministic router
+- Route semantic plotting-code, symbol, and data-control-flow handoffs to `semantic-code-navigator` and bounded schema, configuration, generated-figure, table, test, fixture, reproduction, planning-document, and pre-existing artifact handoffs to `repository-impact-profiler` through the parent-owned plan
+- Wait for every exploration result before classifying data types, selecting chart types, ranking encodings, or creating the diagram
+- Retain parent authority over data-type classification, chart selection, perceptual ranking, encoding assignment, Mermaid, `yaml:figure-spec`, and output decisions
 - Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-chart-select/vis_spec_chart_select_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -140,35 +237,40 @@ metadata:
 
 ### Step 0: Parse optional arguments
 
+<!-- autoskillit:exploration-vector id="caller-context" -->
 If positional arg 1 (context_path) is provided and the file exists, read it to obtain
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
-methodology. Use this structured context as the foundation for Steps 1–4; skip the CWD
-exploration for these fields if the context file supplies them.
+methodology. Use this structured context as the foundation for Steps 1–4.
+<!-- /autoskillit:exploration-vector -->
 
-### Step 1: Parallel Exploration (SINGLE MESSAGE)
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+### Step 1: Launch 4 Routed Exploration Vectors (SINGLE MESSAGE)
+
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn parallel exploration tasks to investigate:
+Dispatch exactly these four authored vectors under their registered role policies. Mixed code and declarative evidence remains one parent-owned plan; bounded role handoffs return to the originating vector and do not add graph dependencies.
 
-**Existing Figure Inventory**
-- Find all existing figures, plots, and visualizations in the project
-- Look for: `fig`, `figure`, `plot`, `chart`, `image`, `png`, `svg`, `pdf`, `matplotlib`, `seaborn`, `plotly`
+<!-- autoskillit:exploration-vector id="existing-figure-inventory" -->
+1. **Existing Figure Inventory** — Find all existing figures, plots, and visualizations through `fig`, `figure`, `plot`, `chart`, `image`, `png`, `svg`, `pdf`, `matplotlib`, `seaborn`, and `plotly` artifacts. Route semantic plotting-code relationships through the parent to the navigator. Use static repository evidence only; do not import or execute target code, tests, visualization pipelines, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Data Types and Variables**
-- Find all variables, metrics, and data fields to be visualized
-- Look for: `accuracy`, `loss`, `metric`, `score`, `embedding`, `distribution`, `time`, `epoch`
+<!-- autoskillit:exploration-vector id="data-types-variables" -->
+2. **Data Types and Variables** — Find all repository-local variables, metrics, and data fields to be visualized through `accuracy`, `loss`, `metric`, `score`, `embedding`, `distribution`, `time`, and `epoch` definitions and references. Route bounded schemas, configuration, data manifests, fixtures, and pre-existing artifacts through the parent to the profiler. Use static repository evidence only; do not import or execute target code, tests, visualization pipelines, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Current Chart Choices**
-- Find existing chart-type decisions in code, config, or planning docs
-- Look for: `bar_plot`, `scatter`, `line_chart`, `heatmap`, `histogram`, `boxplot`, `violinplot`
+<!-- autoskillit:exploration-vector id="current-chart-choices" -->
+3. **Current Chart Choices** — Find existing chart-type decisions through `bar_plot`, `scatter`, `line_chart`, `heatmap`, `histogram`, `boxplot`, and `violinplot` definitions and call paths. Route bounded configuration and planning documents through the parent to the profiler. Use static repository evidence only; do not import or execute target code, tests, visualization pipelines, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Encoding Channel Usage**
-- Find existing axis assignments, color mappings, size mappings
-- Look for: `xlabel`, `ylabel`, `hue`, `color`, `size`, `marker`, `alpha`, `facet`
+<!-- autoskillit:exploration-vector id="encoding-channel-usage" -->
+4. **Encoding Channel Usage** — Find existing axis assignments, color mappings, and size mappings through `xlabel`, `ylabel`, `hue`, `color`, `size`, `marker`, `alpha`, and `facet` definitions and call paths. Route bounded figure specifications and generated artifacts through the parent to the profiler. Use static repository evidence only; do not import or execute target code, tests, visualization pipelines, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Build the Data-Type → Chart-Type Matrix
 

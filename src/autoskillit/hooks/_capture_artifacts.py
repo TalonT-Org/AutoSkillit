@@ -88,6 +88,7 @@ if TYPE_CHECKING:
         HOOK_CONFIG_OVERLAY_FILENAME,
         merge_hook_configs,
     )
+    from autoskillit.hooks._policy_event import PolicyEvent, render_provenance_prefix
 else:
     from _capture import _delivery as _capture_delivery
     from _capture import _failure_policy as _capture_failure_policy
@@ -158,6 +159,7 @@ else:
         HOOK_CONFIG_OVERLAY_FILENAME,
         merge_hook_configs,
     )
+    from _policy_event import PolicyEvent, render_provenance_prefix
 
 __all__ = [
     "CAPTURE_PATH_COMPONENTS",
@@ -178,7 +180,6 @@ __all__ = [
 _DEFAULT_INLINE_BYTES = 12_000
 _MAX_INLINE_BYTES = 1_000_000
 _MAX_POLICY_FILE_BYTES = 64 * 1024
-_MAX_CLEANUP_DETAIL_BYTES = 240
 _CAPTURE_RUNTIME_ERRORS = (
     OSError,
     subprocess.SubprocessError,
@@ -924,18 +925,34 @@ def _dispatch_runner(request: CaptureRequest) -> int:
         )
 
 
+_RUNNER_TAIL_OWNER = "runner_tail"
+
+
+def _emit_runner_tail_crash_diagnostic() -> None:
+    event = PolicyEvent(
+        hook_id=_RUNNER_TAIL_OWNER,
+        hook_version=1,
+        event="capture_cleanup",
+        decision="failed",
+        reason_code="runner-tail reconciliation raised an unexpected exception",
+    )
+    _capture_reconcile.emit_bounded_diagnostic(
+        render_provenance_prefix(event),
+        maximum_bytes=_capture_reconcile.DIAGNOSTIC_MAX_BYTES,
+        write=sys.stderr.write,
+    )
+
+
 def _sweep_after_runner(requested_cwd: str) -> None:
     try:
         outcome = _capture_reconcile.reconcile_capture_store(
             requested_cwd, _capture_reconcile.RUNNER_TAIL_BUDGET
         )
-        detail = _capture_reconcile.cleanup_diagnostic(outcome, owner="runner_tail")
-        if detail is not None:
-            _capture_reconcile.emit_runner_diagnostic(detail, sys.stderr.write)
-    except _CAPTURE_RUNTIME_ERRORS:
-        _capture_reconcile.emit_runner_diagnostic(
-            "runner-tail reconciliation failed", sys.stderr.write
+        _capture_reconcile.emit_owner_diagnostic(
+            outcome, owner=_RUNNER_TAIL_OWNER, write=sys.stderr.write
         )
+    except _CAPTURE_RUNTIME_ERRORS:
+        _emit_runner_tail_crash_diagnostic()
 
 
 def _main(argv: list[str] | None = None) -> int:

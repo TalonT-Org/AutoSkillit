@@ -38,11 +38,15 @@ from autoskillit.hooks._capture._snapshot import (
 )
 from autoskillit.hooks._capture._syntax import PUBLIC_NAME_RE
 from autoskillit.hooks._capture._types import (
+    BLOCKER_FAMILY,
     CaptureCapacitySpec,
+    CaptureCleanupOutcome,
     CaptureFailureEvidence,
     CleanupBlocker,
     CleanupProgress,
+    CleanupSeverity,
     SweepBudgetSpec,
+    classify_cleanup_outcome,
 )
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
@@ -3513,3 +3517,190 @@ def test_ledger_reload_rejects_conflicting_final_manifest(tmp_path: Path) -> Non
         artifact.release_lease()
         root.close()
         anchor.close()
+
+
+# --- Diagnostic severity classifier + emission-policy contract (W2) --------
+
+_SEVERITY_RANK = {
+    CleanupSeverity.HEALTHY: 0,
+    CleanupSeverity.DEFERRED: 1,
+    CleanupSeverity.STALLED: 2,
+    CleanupSeverity.FAILED: 3,
+}
+
+
+def test_blocker_family_is_exhaustive_and_closed() -> None:
+    assert set(BLOCKER_FAMILY) == set(CleanupBlocker)
+    assert set(BLOCKER_FAMILY.values()) == {"healthy", "budget", "external"}
+
+
+@pytest.mark.parametrize("errors", (1, 2, 7))
+@pytest.mark.parametrize("blocker", list(CleanupBlocker))
+@pytest.mark.parametrize("progress", list(CleanupProgress))
+def test_classify_cleanup_outcome_errors_always_win(
+    progress: CleanupProgress,
+    blocker: CleanupBlocker,
+    errors: int,
+) -> None:
+    assert classify_cleanup_outcome(progress, blocker, errors) is CleanupSeverity.FAILED
+
+
+@pytest.mark.parametrize("progress", list(CleanupProgress))
+@pytest.mark.parametrize(
+    "blocker",
+    [b for b, family in BLOCKER_FAMILY.items() if family == "healthy"],
+)
+def test_classify_cleanup_outcome_healthy_family_is_always_healthy(
+    progress: CleanupProgress,
+    blocker: CleanupBlocker,
+) -> None:
+    assert classify_cleanup_outcome(progress, blocker, 0) is CleanupSeverity.HEALTHY
+
+
+@pytest.mark.parametrize(
+    "blocker",
+    [b for b, family in BLOCKER_FAMILY.items() if family == "budget"],
+)
+def test_classify_cleanup_outcome_budget_family_is_progress_gated(
+    blocker: CleanupBlocker,
+) -> None:
+    assert classify_cleanup_outcome(CleanupProgress.NONE, blocker, 0) is CleanupSeverity.STALLED
+    for progress in CleanupProgress:
+        if progress is CleanupProgress.NONE:
+            continue
+        assert classify_cleanup_outcome(progress, blocker, 0) is CleanupSeverity.DEFERRED
+
+
+@pytest.mark.parametrize("progress", list(CleanupProgress))
+@pytest.mark.parametrize(
+    "blocker",
+    [b for b, family in BLOCKER_FAMILY.items() if family == "external"],
+)
+def test_classify_cleanup_outcome_external_family_is_always_stalled(
+    progress: CleanupProgress,
+    blocker: CleanupBlocker,
+) -> None:
+    """An externally-blocked store must keep surfacing, never go silent."""
+    assert classify_cleanup_outcome(progress, blocker, 0) is CleanupSeverity.STALLED
+
+
+def test_classify_cleanup_outcome_incident_case_is_deferred() -> None:
+    outcome = classify_cleanup_outcome(CleanupProgress.RETIRED, CleanupBlocker.RECORD_BUDGET, 0)
+    assert outcome is CleanupSeverity.DEFERRED
+
+
+def test_classify_cleanup_outcome_migration_blocked_explicit_case_is_stalled() -> None:
+    assert (
+        classify_cleanup_outcome(
+            CleanupProgress.CURSOR_ADVANCED, CleanupBlocker.MIGRATION_BLOCKED, 0
+        )
+        is CleanupSeverity.STALLED
+    )
+
+
+@pytest.mark.parametrize("errors", (0, 1))
+@pytest.mark.parametrize("blocker", list(CleanupBlocker))
+def test_classify_cleanup_outcome_progress_never_increases_severity(
+    blocker: CleanupBlocker,
+    errors: int,
+) -> None:
+    """Total over CleanupProgress x CleanupBlocker x {0, 1}: adding progress at a
+    fixed (blocker, errors) never makes the outcome look worse."""
+    none_rank = _SEVERITY_RANK[classify_cleanup_outcome(CleanupProgress.NONE, blocker, errors)]
+    for progress in CleanupProgress:
+        rank = _SEVERITY_RANK[classify_cleanup_outcome(progress, blocker, errors)]
+        assert rank <= none_rank
+
+
+def test_classify_cleanup_outcome_missing_blocker_family_raises() -> None:
+    class _RogueBlocker:
+        value = "rogue"
+
+    with pytest.raises(KeyError):
+        classify_cleanup_outcome(CleanupProgress.NONE, cast(CleanupBlocker, _RogueBlocker()), 0)
+
+
+def test_emit_owner_diagnostic_incident_case_is_silent() -> None:
+    """The incident: RETIRED/RECORD_BUDGET/0 must never look like a failure."""
+    outcome = CaptureCleanupOutcome(
+        progress=CleanupProgress.RETIRED,
+        blocker=CleanupBlocker.RECORD_BUDGET,
+        errors=0,
+        remaining_due=7,
+    )
+    written: list[str] = []
+    capture_reconcile.emit_owner_diagnostic(outcome, owner="runner_tail", write=written.append)
+    assert written == []
+    assert capture_reconcile.cleanup_diagnostic(outcome, owner="runner_tail") is None
+
+
+def test_emit_owner_diagnostic_incident_case_is_silent_via_real_sweep(tmp_path: Path) -> None:
+    """Same incident, but driven through a real seeded store + reconcile_capture_store."""
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    budget = SweepBudgetSpec(
+        max_records_inspected=8,
+        max_replay_bytes=capture_lifecycle.MAX_LEDGER_BYTES,
+        max_attempts=2,
+        max_transitions=8,
+        max_cursor_writes=8,
+        max_duration_seconds=1,
+    )
+    _seed_finalized_captures(root, store, count=5)
+    clock.advance(3601)
+    root.close()
+    anchor.close()
+
+    outcome = capture_reconcile.reconcile_capture_store(str(project), budget)
+
+    assert outcome.errors == 0
+    assert outcome.progress is CleanupProgress.RETIRED
+    assert outcome.blocker is CleanupBlocker.ATTEMPT_BUDGET
+    assert (
+        classify_cleanup_outcome(outcome.progress, outcome.blocker, outcome.errors)
+        is CleanupSeverity.DEFERRED
+    )
+
+    written: list[str] = []
+    capture_reconcile.emit_owner_diagnostic(outcome, owner="runner_tail", write=written.append)
+    assert written == []
+
+
+def test_emit_owner_diagnostic_stalled_case_is_neutral() -> None:
+    outcome = CaptureCleanupOutcome(
+        progress=CleanupProgress.CURSOR_ADVANCED,
+        blocker=CleanupBlocker.MIGRATION_BLOCKED,
+        errors=0,
+        remaining_due=1,
+    )
+    written: list[str] = []
+    capture_reconcile.emit_owner_diagnostic(outcome, owner="session_start", write=written.append)
+
+    assert len(written) == 1
+    (line,) = written
+    assert "deferred" in line
+    assert "migration_blocked" in line
+    for failure_word in ("failed", "error", "invalid"):
+        assert failure_word not in line
+
+
+def test_emit_owner_diagnostic_failed_case_preserves_failure_wording() -> None:
+    outcome = CaptureCleanupOutcome(
+        errors=2, remaining_due=1, blocker=CleanupBlocker.LEDGER_INTEGRITY
+    )
+    written: list[str] = []
+    capture_reconcile.emit_owner_diagnostic(outcome, owner="runner_tail", write=written.append)
+
+    assert len(written) == 1
+    (line,) = written
+    assert "failed" in line
+    assert "blocker=ledger_integrity errors=2" in line
+    assert len(line.encode("utf-8")) <= capture_reconcile.DIAGNOSTIC_MAX_BYTES
+
+
+def test_emit_owner_diagnostic_healthy_case_is_silent() -> None:
+    outcome = CaptureCleanupOutcome()
+    written: list[str] = []
+    capture_reconcile.emit_owner_diagnostic(outcome, owner="runner_tail", write=written.append)
+    assert written == []

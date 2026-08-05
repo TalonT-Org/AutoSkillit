@@ -181,15 +181,12 @@ class _ExplorationLaunchAuthorityStore:
         return capability, reopened
 
     def delete(self, authority_path: Path) -> None:
-        try:
-            resolved = authority_path.resolve(strict=False)
-            if resolved.name != _AUTHORITY_FILENAME:
-                return
-            if authority_path.is_symlink():
-                return
-            authority_path.unlink(missing_ok=True)
-        except OSError:
+        resolved = authority_path.resolve(strict=False)
+        if resolved.name != _AUTHORITY_FILENAME:
             return
+        if authority_path.is_symlink():
+            return
+        authority_path.unlink(missing_ok=True)
 
     @staticmethod
     def _load(

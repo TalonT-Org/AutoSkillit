@@ -1244,7 +1244,7 @@ _VISUALIZATION_RETAINED_BODY_AUTHORITIES = {
 
 _PHASE_D_REVIEW_DIGESTS = {
     "investigate": "a9b6026ed99b0071006f87fb6629ea782c665cc16f86f93c006a554eac49453a",
-    "scope": "c9b43045d40f08e1ddaee38a9a0a6dc2ebad9fc75a0fe9f18a808eda5ee5cd84",
+    "scope": "a61e7a3d4ff67c41fe4becdcaba3ad3137888cf74557dd680e320987a9bf98e9",
     "arch-lens-module-dependency": (
         "0906197b52200c9af01aefe7e73b954d14eaf3ff520f108990634256371ebaa1"
     ),

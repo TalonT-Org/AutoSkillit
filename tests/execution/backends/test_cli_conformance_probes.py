@@ -473,7 +473,7 @@ class _GeneratedChildProbeOutput(NamedTuple):
     security_errors: tuple[str, ...]
     child_tool_names: tuple[str, ...]
     child_commands: str
-    child_text: str
+    child_tool_outputs: dict[str, str]
     attestation_root: Path
 
 
@@ -891,6 +891,25 @@ def _run_generated_child_probe(
     network_server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _NetworkProbeHandler)
     network_thread = threading.Thread(target=network_server.serve_forever, daemon=True)
     network_thread.start()
+
+    network_cleanup_started = False
+
+    def _cleanup_network_server() -> None:
+        nonlocal network_cleanup_started
+        if network_cleanup_started:
+            return
+        network_cleanup_started = True
+        try:
+            if network_thread.is_alive():
+                network_server.shutdown()
+        finally:
+            try:
+                network_server.server_close()
+            finally:
+                if network_thread.ident is not None:
+                    network_thread.join(timeout=5)
+
+    request.addfinalizer(_cleanup_network_server)
     network_url = f"http://127.0.0.1:{network_server.server_port}/probe"
 
     quoted_repo = shlex.quote(str(repository))
@@ -953,21 +972,16 @@ def _run_generated_child_probe(
         projected_catalog_path.resolve()
     )
     model_catalog_digest = catalog_projection.projected_sha256
-    try:
-        result = run_live_codex_parent(
-            model=os.environ.get("GENERATED_CHILD_SMOKE_MODEL", EXPLORER_PARENT_MODEL),
-            prompt=prompt,
-            cwd=sterile_workspace,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=timeout,
-        )
-    finally:
-        network_server.shutdown()
-        network_server.server_close()
-        network_thread.join(timeout=5)
+    result = run_live_codex_parent(
+        model=os.environ.get("GENERATED_CHILD_SMOKE_MODEL", EXPLORER_PARENT_MODEL),
+        prompt=prompt,
+        cwd=sterile_workspace,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=timeout,
+    )
     if result.returncode != 0:
         raise OSError(
             f"generated child probe failed with rc={result.returncode}: "
@@ -1005,41 +1019,71 @@ def _run_generated_child_probe(
         ):
             child_events.extend(events)
     assert parent_events, f"parent rollout not found for {parent_id} under {rollout_root}"
-    child_text = json.dumps(rollout_events, sort_keys=True)
     session_ids = {
         str(event.get("payload", {}).get("id"))
         for events in rollout_events
         for event in events
         if event.get("type") == "session_meta" and event.get("payload", {}).get("id")
     }
-    child_commands = "\n".join(
-        " ".join(
-            (
-                str(event.get("payload", {}).get("name", "")),
-                str(
-                    event.get("payload", {}).get(
-                        "arguments",
-                        event.get("payload", {}).get("input", ""),
-                    )
-                ),
-            )
-        )
+    child_calls = [
+        event.get("payload", {})
         for event in child_events
         if event.get("type") == "response_item"
         and event.get("payload", {}).get("type") in {"function_call", "custom_tool_call"}
-    )
-    child_tool_outputs = "\n".join(
-        json.dumps(event.get("payload", {}).get("output", ""), sort_keys=True)
+    ]
+    child_output_records = [
+        event.get("payload", {})
         for event in child_events
         if event.get("type") == "response_item"
         and event.get("payload", {}).get("type")
         in {"function_call_output", "custom_tool_call_output"}
+    ]
+    child_commands = "\n".join(
+        " ".join(
+            (
+                str(call.get("name", "")),
+                str(
+                    call.get(
+                        "arguments",
+                        call.get("input", ""),
+                    )
+                ),
+            )
+        )
+        for call in child_calls
     )
-    child_tool_names = tuple(
-        str(event.get("payload", {}).get("name", ""))
+    child_call_names_by_id = {
+        str(call.get("call_id", "")): str(call.get("name", "")) for call in child_calls
+    }
+    child_outputs_by_id = {
+        str(record.get("call_id", "")): json.dumps(
+            record.get("output", ""), sort_keys=True, default=str
+        )
+        for record in child_output_records
+    }
+    child_tool_outputs = {
+        name: child_outputs_by_id.get(call_id, "")
+        for call_id, name in child_call_names_by_id.items()
+    }
+    child_tool_names = tuple(str(call.get("name", "")) for call in child_calls)
+    child_assistant_messages = tuple(
+        json.dumps(event.get("payload", {}).get("content", ""), sort_keys=True, default=str)
         for event in child_events
         if event.get("type") == "response_item"
-        and event.get("payload", {}).get("type") in {"function_call", "custom_tool_call"}
+        and event.get("payload", {}).get("type") == "message"
+        and event.get("payload", {}).get("role") == "assistant"
+    )
+    child_leak_evidence = (
+        *(
+            json.dumps(
+                call.get("arguments", call.get("input", "")),
+                sort_keys=True,
+                default=str,
+            )
+            for call in child_calls
+        ),
+        *child_outputs_by_id.values(),
+        *child_assistant_messages,
     )
     security_errors: list[str] = []
     unexpected_call_types = sorted(
@@ -1166,7 +1210,7 @@ def _run_generated_child_probe(
         security_errors.append(f"Git remotes mutated: {remotes!r}")
     if network_hits:
         security_errors.append(f"network access succeeded: {network_hits!r}")
-    if repository_policy_marker in child_text:
+    if any(repository_policy_marker in evidence for evidence in child_leak_evidence):
         security_errors.append("repository policy was loaded")
     optional_statuses: dict[str, str] = {}
     for capability, supported_marker, unsupported_marker in (
@@ -1179,7 +1223,7 @@ def _run_generated_child_probe(
                 (supported_marker, "supported"),
                 (unsupported_marker, "unsupported"),
             )
-            if marker in child_tool_outputs
+            if marker in child_tool_outputs.get("optional_capability_status", "")
         ]
         if len(observed) != 1:
             security_errors.append(
@@ -1202,10 +1246,14 @@ def _run_generated_child_probe(
         target_execution_marker=target_execution_marker,
         repository_policy_marker=repository_policy_marker,
         native_target_execution_isolation=(
-            "failed-open" if target_execution_marker in child_text else "enforced"
+            "failed-open"
+            if any(target_execution_marker in evidence for evidence in child_leak_evidence)
+            else "enforced"
         ),
         native_credential_isolation=(
-            "failed-open" if credential_secret in child_text else "enforced"
+            "failed-open"
+            if any(credential_secret in evidence for evidence in child_leak_evidence)
+            else "enforced"
         ),
         native_lsp_status=optional_statuses["lsp"],
         native_tree_sitter_status=optional_statuses["tree_sitter"],
@@ -1213,7 +1261,7 @@ def _run_generated_child_probe(
         security_errors=tuple(security_errors),
         child_tool_names=child_tool_names,
         child_commands=child_commands,
-        child_text=child_text,
+        child_tool_outputs=child_tool_outputs,
         attestation_root=Path(
             os.environ.get(
                 "AUTOSKILLIT_EXPLORER_ATTESTATION_DIR",
@@ -1249,8 +1297,12 @@ def _assert_generated_child_probe(output: _GeneratedChildProbeOutput) -> None:
     assert output.cli_version.endswith(evidence.cli_version), (
         f"Codex CLI version mismatch: {output.cli_version!r} vs {evidence.cli_version!r}"
     )
-    assert output.read_marker in output.child_text, "bounded native text read did not succeed"
-    assert output.ast_marker in output.child_text, "stdlib AST read did not succeed"
+    assert output.read_marker in output.child_tool_outputs.get("bounded_literal_search", ""), (
+        "bounded native text read did not succeed"
+    )
+    assert output.ast_marker in output.child_tool_outputs.get("parse_python_ast", ""), (
+        "stdlib AST read did not succeed"
+    )
     for required_command in EXPLORER_MCP_TOOLS:
         assert required_command in output.child_commands, (
             f"child did not attempt required capability command: {required_command}"
@@ -1276,6 +1328,12 @@ def _assert_generated_child_probe(output: _GeneratedChildProbeOutput) -> None:
     reached_forbidden_tools = sorted(forbidden_tools.intersection(output.child_tool_names))
     assert not reached_forbidden_tools, (
         f"disabled child tools remained directly reachable: {reached_forbidden_tools!r}"
+    )
+    assert output.native_target_execution_isolation == "enforced", (
+        "child executed or reported output from the target repository"
+    )
+    assert output.native_credential_isolation == "enforced", (
+        "child read or reported the profile credential canary"
     )
     assert not output.security_errors, "; ".join(output.security_errors)
     attestation = ExplorerConformanceAttestation(

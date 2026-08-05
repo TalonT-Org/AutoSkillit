@@ -52,6 +52,7 @@ from autoskillit.workspace.skills import (
     DefaultSkillResolver,
     EffectiveSkillCatalog,
     SkillCatalogEntry,
+    SkillExclusion,
     SkillInfo,
     _skill_info_from_frontmatter,
 )
@@ -264,6 +265,7 @@ def compile_session_skill_catalog(
             skills=tuple(supported),
             execution_role=catalog.execution_role,
             namespace_sources=namespace_sources,
+            exclusions=cast(tuple[SkillExclusion, ...], tuple(catalog.exclusions)),
         ),
         unavailable=tuple(sorted(unavailable, key=lambda item: item.skill)),
     )

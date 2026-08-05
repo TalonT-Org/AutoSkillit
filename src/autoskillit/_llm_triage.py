@@ -82,7 +82,7 @@ async def triage_staleness(
     resolver = default_skill_resolver()
     for item in hash_items:
         if item.skill not in skill_md_cache:
-            skill_info = resolver.resolve_effective(item.skill, effective_project_root)
+            skill_info = resolver.resolve_local_candidate(item.skill, effective_project_root)
             if (
                 skill_info is not None
                 and skill_info.invalid_reason is not None

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from ._type_backend import BackendConventions
-from ._type_enums import SkillExecutionRole, SkillSource
+from ._type_enums import SkillExecutionRole, SkillInvalidityKind, SkillSource
 from ._type_plugin_source import (
     PluginArtifactIdentity,
     PluginLaunchBinding,
@@ -34,7 +34,9 @@ __all__ = [
     "ResolvedSkillAuthority",
     "SessionSkillManager",
     "SkillAuthority",
+    "SkillExclusionAuthority",
     "SkillFrontmatterAuthority",
+    "SkillInvalidityAuthority",
     "SkillLister",
     "SkillProjectionContextAuthority",
     "SkillResolver",
@@ -103,6 +105,40 @@ class SkillFrontmatterAuthority(Protocol):
 
 
 @runtime_checkable
+class SkillInvalidityAuthority(Protocol):
+    """One typed reason a skill's contract failed, crossing the IL-0 boundary."""
+
+    @property
+    def kind(self) -> SkillInvalidityKind: ...
+
+    @property
+    def detail(self) -> str: ...
+
+
+@runtime_checkable
+class SkillExclusionAuthority(Protocol):
+    """One project-local skill candidate excluded from the effective catalog."""
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def path(self) -> Path: ...
+
+    @property
+    def search_dir(self) -> str: ...
+
+    @property
+    def invalidities(self) -> tuple[SkillInvalidityAuthority, ...]: ...
+
+    @property
+    def fallback(self) -> SkillSource | None: ...
+
+    @property
+    def hints(self) -> tuple[str, ...]: ...
+
+
+@runtime_checkable
 class SkillAuthority(Protocol):
     """Structural machine authority shared by resolved and catalog skill records."""
 
@@ -166,6 +202,9 @@ class EffectiveSkillCatalogAuthority(Protocol):
 
     @property
     def namespace_sources(self) -> Mapping[str, SkillSource]: ...
+
+    @property
+    def exclusions(self) -> Sequence[SkillExclusionAuthority]: ...
 
 
 @runtime_checkable

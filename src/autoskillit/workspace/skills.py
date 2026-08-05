@@ -16,6 +16,7 @@ from autoskillit.core import (
     PACK_REGISTRY,
     RETIRED_SKILL_NAMES,
     SKILL_CAPABILITY_REGISTRY,
+    SKILL_CONTRACT_REMEDIATIONS,
     FeatureLifecycle,
     SkillContractError,
     SkillExecutionRole,
@@ -206,12 +207,48 @@ class SkillCatalogEntry:
 
 
 @dataclass(frozen=True, slots=True)
+class SkillExclusion:
+    """One project-local skill candidate excluded from the effective catalog.
+
+    Recorded — never silently dropped — whenever the resolution boundary
+    (``resolve_effective`` / ``_list_effective_unfiltered``) skips an invalid
+    project-local candidate in favor of the next valid source or, if none
+    exists, an operator-visible absence.
+    """
+
+    name: str
+    path: Path
+    search_dir: str
+    invalidities: tuple[SkillInvalidity, ...]
+    fallback: SkillSource | None
+    hints: tuple[str, ...]
+
+    @classmethod
+    def from_skill_info(cls, info: SkillInfo, *, fallback: SkillSource | None) -> SkillExclusion:
+        """Build a record from a rejected candidate's own invalidities."""
+        assert info.source_ref is not None
+        hints = tuple(
+            SKILL_CONTRACT_REMEDIATIONS[kind].hint
+            for kind in dict.fromkeys(item.kind for item in info.invalidities)
+        )
+        return cls(
+            name=info.name,
+            path=info.path,
+            search_dir=info.source_ref.search_dir or "",
+            invalidities=info.invalidities,
+            fallback=fallback,
+            hints=hints,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class EffectiveSkillCatalog:
     """Immutable role-filtered view of every effective skill source."""
 
     skills: tuple[SkillCatalogEntry, ...]
     execution_role: SkillExecutionRole
     namespace_sources: Mapping[str, SkillSource] = field(default_factory=dict)
+    exclusions: tuple[SkillExclusion, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -704,7 +741,65 @@ class DefaultSkillResolver:
         return list(combined)
 
     def resolve_effective(self, name: str, project_root: Path | None) -> SkillInfo | None:
-        """Resolve the current highest-precedence source without caching overrides."""
+        """Resolve the current highest-precedence VALID source.
+
+        Recipe-loader fall-through semantics (``recipe/io.py``): the first
+        *valid* project-local candidate, in precedence order, wins. An
+        invalid higher-precedence local copy is logged and skipped rather
+        than shadowing a valid bundled twin or a valid lower-precedence
+        local copy — it never escapes to a composition-root gate. If the
+        name has no valid source anywhere, the highest-precedence invalid
+        local candidate is returned so callers can still report why.
+        """
+        normalized_root = project_root.resolve() if project_root is not None else None
+        first_invalid: SkillInfo | None = None
+        if normalized_root is not None:
+            for precedence, search_dir in enumerate(_OVERRIDE_SEARCH_DIRS):
+                skill_path = _project_skill_path(
+                    normalized_root,
+                    normalized_root / search_dir,
+                    name,
+                )
+                if skill_path is None:
+                    continue
+                candidate = _skill_info_from_frontmatter(
+                    name,
+                    SkillSource.PROJECT_LOCAL,
+                    skill_path,
+                    source_ref=SkillSourceRef(
+                        origin=SkillSource.PROJECT_LOCAL,
+                        logical_name=name,
+                        skill_path=skill_path,
+                        search_dir=search_dir,
+                        precedence=precedence,
+                    ),
+                )
+                if candidate.invalid_reason is None:
+                    return candidate
+                logger.warning(
+                    "project_local_skill_rejected",
+                    skill=name,
+                    path=str(skill_path),
+                    reason=candidate.invalid_reason,
+                )
+                if first_invalid is None:
+                    first_invalid = candidate
+        bundled = self.resolve(name)
+        return bundled if bundled is not None else first_invalid
+
+    def resolve_local_candidate(self, name: str, project_root: Path | None) -> SkillInfo | None:
+        """Return the first-path-match project-local candidate, valid or not.
+
+        Preserves ``resolve_effective``'s pre-fall-through semantics: the
+        first project-local search dir containing the name wins regardless
+        of validity, falling through to the bundled source only when no
+        project-local directory contains the name at all. ``_llm_triage``
+        is the one caller whose purpose is comparing the raw, possibly
+        stale, on-disk content against a stored baseline — under
+        ``resolve_effective``'s fall-through it would silently receive a
+        bundled twin's substitute content instead of the file it needs to
+        triage.
+        """
         normalized_root = project_root.resolve() if project_root is not None else None
         if normalized_root is not None:
             for precedence, search_dir in enumerate(_OVERRIDE_SEARCH_DIRS):
@@ -737,9 +832,12 @@ class DefaultSkillResolver:
                 return candidate
         return self.resolve(name)
 
-    def _list_effective_unfiltered(self, project_root: Path | None) -> tuple[SkillInfo, ...]:
+    def _list_effective_unfiltered(
+        self, project_root: Path | None
+    ) -> tuple[tuple[SkillInfo, ...], tuple[SkillExclusion, ...]]:
         normalized_root = project_root.resolve() if project_root is not None else None
         by_name = {skill.name: skill for skill in self.list_all()}
+        pending_exclusions: list[SkillInfo] = []
         if normalized_root is not None:
             selected: set[str] = set()
             for precedence, search_dir in enumerate(_OVERRIDE_SEARCH_DIRS):
@@ -774,7 +872,6 @@ class DefaultSkillResolver:
                             precedence=precedence,
                         ),
                     )
-                    selected.add(entry.name)
                     if candidate.invalid_reason is not None:
                         logger.warning(
                             "project_local_skill_rejected",
@@ -782,10 +879,22 @@ class DefaultSkillResolver:
                             path=str(skill_path),
                             reason=candidate.invalid_reason,
                         )
-                        if entry.name not in by_name:
-                            continue
+                        pending_exclusions.append(candidate)
+                        continue
+                    # Recipe-loader "seen"-on-success rule: only a valid candidate
+                    # claims the name, so an invalid higher-precedence copy never
+                    # clobbers a valid bundled entry or blocks a valid lower-
+                    # precedence local copy from being found on the next pass.
+                    selected.add(entry.name)
                     by_name[entry.name] = candidate
-        return tuple(sorted(by_name.values(), key=lambda skill: skill.name))
+        exclusions = tuple(
+            SkillExclusion.from_skill_info(
+                candidate,
+                fallback=(by_name[candidate.name].source if candidate.name in by_name else None),
+            )
+            for candidate in pending_exclusions
+        )
+        return tuple(sorted(by_name.values(), key=lambda skill: skill.name)), exclusions
 
     def list_effective(
         self,
@@ -800,12 +909,15 @@ class DefaultSkillResolver:
     ) -> EffectiveSkillCatalog:
         """Return a fresh, immutable catalog authorized by role and visibility."""
         normalized_root = project_root.resolve() if project_root is not None else None
-        effective_skills = self._list_effective_unfiltered(normalized_root)
+        effective_skills, exclusions = self._list_effective_unfiltered(normalized_root)
+        # Invalid project-local candidates never reach this point — they were
+        # already diverted into `exclusions` above. Any survivor here is a
+        # bundled/extended packaging bug, guarded at merge time (T7).
         invalid = tuple(skill for skill in effective_skills if skill.invalid_reason is not None)
         if invalid:
             details = "; ".join(f"{skill.name!r}: {skill.invalid_reason}" for skill in invalid)
             raise SkillContractError(
-                f"effective skill catalog contains invalid contracts: {details}"
+                f"bundled skill catalog contains invalid contracts (packaging bug): {details}"
             )
         disabled, custom_tags, features, experimental_enabled = _visibility_policy(
             visibility,
@@ -874,6 +986,7 @@ class DefaultSkillResolver:
             skills=skills,
             execution_role=execution_role,
             namespace_sources=namespace_sources,
+            exclusions=exclusions,
         )
 
     def resolve_invocation(
@@ -933,7 +1046,9 @@ class DefaultSkillResolver:
             for dependency in skill.activate_deps:
                 if dependency in PACK_REGISTRY:
                     if pack_catalog is None:
-                        pack_catalog = self._list_effective_unfiltered(normalized_root)
+                        pack_catalog, _pack_exclusions = self._list_effective_unfiltered(
+                            normalized_root
+                        )
                         for candidate in pack_catalog:
                             resolved_by_name.setdefault(candidate.name, candidate)
                     members = sorted(
@@ -1013,10 +1128,24 @@ def validate_skill_tier_roles(
                     f"configured {tier_name} skill {skill_name!r} was not found"
                 )
             if effective.invalid_reason is not None:
-                raise SkillContractError(
+                # Only fires now for names whose *every* implementation is
+                # invalid — resolve_effective already fell through to a valid
+                # bundled twin or lower-precedence local copy for every other
+                # case. Enrich with path/hints when the concrete resolver
+                # (the overwhelmingly common case) supplied a real SkillInfo.
+                message = (
                     f"configured {tier_name} skill {skill_name!r} is invalid: "
                     f"{effective.invalid_reason}"
                 )
+                if isinstance(effective, SkillInfo):
+                    hints = tuple(
+                        SKILL_CONTRACT_REMEDIATIONS[kind].hint
+                        for kind in dict.fromkeys(item.kind for item in effective.invalidities)
+                    )
+                    message += f" (path: {effective.path})"
+                    if hints:
+                        message += f"; hint: {'; '.join(hints)}"
+                raise SkillContractError(f"{message}; run: autoskillit doctor")
             if effective.execution_role is not SkillExecutionRole.SESSION:
                 role = (
                     effective.execution_role.value

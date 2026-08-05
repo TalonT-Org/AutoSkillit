@@ -64,6 +64,7 @@ from autoskillit.workspace._projection_cache import (
 from autoskillit.workspace.skills import (
     EffectiveSkillCatalog,
     SkillCatalogEntry,
+    SkillExclusion,
     _skill_info_from_frontmatter,
 )
 
@@ -318,6 +319,7 @@ class ProjectedPluginArtifactAuthority:
                 skills=cast(tuple[SkillCatalogEntry, ...], tuple(self.catalog.skills)),
                 execution_role=self.catalog.execution_role,
                 namespace_sources=self.namespace_sources,
+                exclusions=cast(tuple[SkillExclusion, ...], tuple(self.catalog.exclusions)),
             )
         if not catalog.skills:
             raise PluginArtifactPublicationError(

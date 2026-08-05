@@ -1,6 +1,6 @@
 """Retired name registries, skill contracts, orchestration prompt sections, CI/domain constants.
 
-Zero autoskillit imports.
+Zero autoskillit imports; sibling imports remain within the IL-0 type package.
 """
 
 from __future__ import annotations
@@ -9,6 +9,9 @@ from collections.abc import Mapping
 from hashlib import sha256
 from types import MappingProxyType
 from typing import NamedTuple
+
+from ._type_enums import RemediationAction, SkillInvalidityKind
+from ._type_skill_semantics import SKILL_SEMANTIC_SCHEMA_VERSION
 
 __all__ = [
     "OUTPUT_DISCIPLINE_POLICY_VERSION",
@@ -21,6 +24,8 @@ __all__ = [
     "RETIRED_AGENT_NAMES",
     "RETIRED_INSTALL_ARTIFACT_SHAPES",
     "RetiredArtifactShape",
+    "SkillContractRemediationDef",
+    "SKILL_CONTRACT_REMEDIATIONS",
     "SKILL_COMMAND_PREFIX",
     "SKILL_COMMAND_DISPLAY_MAX",
     "AUTOSKILLIT_SKILL_PREFIX",
@@ -240,6 +245,118 @@ if _ABSOLUTE_ARTIFACT_KEYS:
     raise AssertionError(
         "RETIRED_INSTALL_ARTIFACT_SHAPES keys must be Path.home()-relative. "
         f"Offending: {_ABSOLUTE_ARTIFACT_KEYS}"
+    )
+
+
+class SkillContractRemediationDef(NamedTuple):
+    """One SkillInvalidityKind's forcing-function remediation declaration.
+
+    Modeled on ``RetiredArtifactShape``: a new validation cannot ship without
+    registering how pre-existing artifacts that now fail it are handled.
+    ``DETERMINISTIC`` kinds must be handled by ``SkillMigrationAdapter``;
+    ``ADVISORY`` kinds only ever surface ``hint`` to an operator.
+    """
+
+    kind: SkillInvalidityKind
+    introduced_in: str
+    action: RemediationAction
+    hint: str
+
+
+# Append-only, exactly like RETIRED_INSTALL_ARTIFACT_SHAPES: every member of
+# SkillInvalidityKind must have an entry here, enforced by a guard test in
+# tests/contracts/. The resolver (workspace/skills.py) renders `hint` into
+# SkillExclusion records, composition-root warnings, and doctor findings;
+# migration/engine.py's SkillMigrationAdapter renders every DETERMINISTIC
+# entry into an actual frontmatter rewrite.
+SKILL_CONTRACT_REMEDIATIONS: Mapping[SkillInvalidityKind, SkillContractRemediationDef] = (
+    MappingProxyType(
+        {
+            SkillInvalidityKind.FRONTMATTER_PARSE: SkillContractRemediationDef(
+                kind=SkillInvalidityKind.FRONTMATTER_PARSE,
+                introduced_in="0.10.929",
+                action=RemediationAction.ADVISORY,
+                hint="fix the YAML frontmatter parse error named in the detail message",
+            ),
+            SkillInvalidityKind.FIELD_SHAPE: SkillContractRemediationDef(
+                kind=SkillInvalidityKind.FIELD_SHAPE,
+                introduced_in="0.10.929",
+                action=RemediationAction.ADVISORY,
+                hint=(
+                    "change the offending frontmatter field to a YAML list, "
+                    "e.g. 'categories: [tag]'"
+                ),
+            ),
+            SkillInvalidityKind.RESERVED_FIELD: SkillContractRemediationDef(
+                kind=SkillInvalidityKind.RESERVED_FIELD,
+                introduced_in="0.10.929",
+                action=RemediationAction.ADVISORY,
+                hint=(
+                    "remove 'canonical_content'/'canonical_digest' from frontmatter — "
+                    "these are source-derived and must not be supplied"
+                ),
+            ),
+            SkillInvalidityKind.UNKNOWN_CAPABILITY: SkillContractRemediationDef(
+                kind=SkillInvalidityKind.UNKNOWN_CAPABILITY,
+                introduced_in="0.10.929",
+                action=RemediationAction.ADVISORY,
+                hint=(
+                    "remove the unrecognized capability name from 'uses_capabilities:', or "
+                    "move the skill to an execution role permitted to declare it"
+                ),
+            ),
+            SkillInvalidityKind.UNDECLARED_CAPABILITY: SkillContractRemediationDef(
+                kind=SkillInvalidityKind.UNDECLARED_CAPABILITY,
+                introduced_in="0.10.929",
+                action=RemediationAction.DETERMINISTIC,
+                hint=(
+                    "add the missing capability name(s) to 'uses_capabilities:' in the frontmatter"
+                ),
+            ),
+            SkillInvalidityKind.SEMANTIC_UNDECLARED_TOKENS: SkillContractRemediationDef(
+                kind=SkillInvalidityKind.SEMANTIC_UNDECLARED_TOKENS,
+                introduced_in="0.10.929",
+                action=RemediationAction.DETERMINISTIC,
+                hint=(
+                    "add a 'semantic_version'/'semantic_requirements' declaration covering "
+                    "the detected portable-execution tokens"
+                ),
+            ),
+            SkillInvalidityKind.SEMANTIC_MISSING_VERSION: SkillContractRemediationDef(
+                kind=SkillInvalidityKind.SEMANTIC_MISSING_VERSION,
+                introduced_in="0.10.929",
+                action=RemediationAction.DETERMINISTIC,
+                hint=(
+                    f"add 'semantic_version: {SKILL_SEMANTIC_SCHEMA_VERSION}' alongside the "
+                    "existing semantic_requirements"
+                ),
+            ),
+            SkillInvalidityKind.SEMANTIC_VERSION_MISMATCH: SkillContractRemediationDef(
+                kind=SkillInvalidityKind.SEMANTIC_VERSION_MISMATCH,
+                introduced_in="0.10.929",
+                action=RemediationAction.ADVISORY,
+                hint=(
+                    "update semantic_requirements to the current schema and bump "
+                    f"semantic_version to {SKILL_SEMANTIC_SCHEMA_VERSION}"
+                ),
+            ),
+            SkillInvalidityKind.SEMANTIC_PLAN_INVALID: SkillContractRemediationDef(
+                kind=SkillInvalidityKind.SEMANTIC_PLAN_INVALID,
+                introduced_in="0.10.929",
+                action=RemediationAction.ADVISORY,
+                hint="fix the malformed semantic_requirements mapping named in the detail message",
+            ),
+        }
+    )
+)
+
+_UNREGISTERED_INVALIDITY_KINDS = sorted(
+    set(SkillInvalidityKind) - set(SKILL_CONTRACT_REMEDIATIONS)
+)
+if _UNREGISTERED_INVALIDITY_KINDS:
+    raise AssertionError(
+        "Every SkillInvalidityKind must have a SKILL_CONTRACT_REMEDIATIONS entry. "
+        f"Missing: {_UNREGISTERED_INVALIDITY_KINDS}"
     )
 
 WORKTREE_SKILLS: frozenset[str] = frozenset(

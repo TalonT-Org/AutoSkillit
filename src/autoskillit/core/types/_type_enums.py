@@ -16,6 +16,7 @@ __all__ = [
     "SkillExecutionRole",
     "SkillSource",
     "SkillInvalidityKind",
+    "RemediationAction",
     "RecipeSource",
     "ClaudeFlags",
     "VARIADIC_CLAUDE_FLAGS",
@@ -171,6 +172,13 @@ class SkillInvalidityKind(StrEnum):
     SEMANTIC_MISSING_VERSION = "semantic_missing_version"
     SEMANTIC_VERSION_MISMATCH = "semantic_version_mismatch"
     SEMANTIC_PLAN_INVALID = "semantic_plan_invalid"
+
+
+class RemediationAction(StrEnum):
+    """Whether a SkillInvalidityKind can be auto-repaired or only advised on."""
+
+    DETERMINISTIC = "deterministic"
+    ADVISORY = "advisory"
 
 
 class RecipeSource(StrEnum):

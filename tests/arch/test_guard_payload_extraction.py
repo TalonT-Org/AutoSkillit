@@ -24,11 +24,6 @@ _GUARDS_DIR = _REPO_ROOT / "src" / "autoskillit" / "hooks" / "guards"
 # hooks/_hook_payload.py (parse_hook_command / extract_apply_patch_text).
 _TRACKED_KEYS: frozenset[str] = frozenset({"cmd", "command", "cwd"})
 
-# Guards not yet migrated to parse_hook_command. Must shrink to empty as guards
-# migrate — a stale entry (a name no longer present on disk, or one that no
-# longer reads a tracked key) fails the same as a missing migration.
-EXEMPT: frozenset[str] = frozenset()
-
 
 class _TrackedTooInputReadVisitor(ast.NodeVisitor):
     """Collects (lineno, key) for every direct tool_input["cmd"/"command"/"cwd"]
@@ -75,28 +70,14 @@ def _scan_guard(path: Path) -> list[tuple[int, str]]:
     return visitor.hits
 
 
-def test_exempt_basenames_are_live_guard_files() -> None:
-    """Every EXEMPT entry must name a file that still exists under guards/."""
-    live = {path.name for path in _GUARDS_DIR.glob("*.py")}
-    stale = EXEMPT - live
-    assert not stale, (
-        f"EXEMPT references guard files no longer on disk (stale entry — "
-        f"remove it): {sorted(stale)}"
-    )
+def test_no_direct_tool_input_command_cwd_reads() -> None:
+    """No guard reads tool_input["cmd"/"command"/"cwd"] directly.
 
-
-def test_no_direct_tool_input_command_cwd_reads_outside_exempt() -> None:
-    """No guard outside EXEMPT reads tool_input["cmd"/"command"/"cwd"] directly.
-
-    Fails immediately for every unmigrated guard when EXEMPT still lists it;
-    fails for any *new* guard that hand-rolls extraction without ever being
-    added to EXEMPT. The shared path is hooks/_hook_payload.py — one level up
-    from guards/, so it is never itself scanned by this glob.
+    The shared path is hooks/_hook_payload.py — one level up from guards/, so
+    it is never itself scanned by this glob.
     """
     violations: list[str] = []
     for path in sorted(_GUARDS_DIR.glob("*.py")):
-        if path.name in EXEMPT:
-            continue
         hits = _scan_guard(path)
         for lineno, key in hits:
             violations.append(f"{path.name}:{lineno} — direct tool_input[{key!r}] read")
@@ -104,20 +85,4 @@ def test_no_direct_tool_input_command_cwd_reads_outside_exempt() -> None:
     assert not violations, (
         "Guards reading tool_input cmd/command/cwd keys directly instead of via "
         "hooks/_hook_payload.py's parse_hook_command:\n" + "\n".join(violations)
-    )
-
-
-def test_exempt_entries_actually_need_the_exemption() -> None:
-    """Every EXEMPT entry must still contain a tracked-key read — no stale exemptions."""
-    unnecessary: list[str] = []
-    for name in sorted(EXEMPT):
-        path = _GUARDS_DIR / name
-        if not path.is_file():
-            continue  # covered by test_exempt_basenames_are_live_guard_files
-        if not _scan_guard(path):
-            unnecessary.append(name)
-
-    assert not unnecessary, (
-        "EXEMPT lists guards with no remaining direct tool_input cmd/command/cwd "
-        f"read — remove the now-unnecessary exemption: {unnecessary}"
     )

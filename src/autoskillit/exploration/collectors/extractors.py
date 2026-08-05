@@ -198,7 +198,10 @@ def collect_search(
     scopes: tuple[str, ...] = (),
 ) -> CollectorReport:
     collector_id = "bounded-rg-search"
-    normalized_scopes = tuple(_normalise_scope(scope) for scope in scopes)
+    try:
+        normalized_scopes = tuple(_normalise_scope(scope) for scope in scopes)
+    except CollectorSafetyError as exc:
+        return _report(collector_id, snapshot_digest, pattern, CollectorStatus.FAILED, (str(exc),))
     globs = tuple(
         scope if (root / scope).is_file() else f"{scope}/**"
         for scope in normalized_scopes

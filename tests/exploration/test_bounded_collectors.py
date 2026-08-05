@@ -23,6 +23,7 @@ from autoskillit.exploration.collectors.extractors import (
     collect_coverage_observation,
     collect_generated_artifact,
     collect_python_ast,
+    collect_search,
     collect_test_map_observation,
     collect_unsupported,
     collector_manifest_digest,
@@ -159,6 +160,19 @@ def test_collector_manifest_is_derived_from_the_versioned_registry() -> None:
     )
 
     assert original != collector_manifest_digest(changed)
+
+
+def test_search_reports_invalid_scope_as_a_failed_collection(tmp_path: Path) -> None:
+    report = collect_search(
+        tmp_path,
+        "snapshot",
+        "needle",
+        CollectorLimits(),
+        scopes=("../outside",),
+    )
+
+    assert report.status is CollectorStatus.FAILED
+    assert report.diagnostic == "collector scope must be a contained literal path"
 
 
 def test_seeded_collectors_observe_structural_and_artifact_inputs_without_claiming_execution(

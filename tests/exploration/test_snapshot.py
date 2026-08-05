@@ -13,6 +13,7 @@ from autoskillit.exploration.snapshot import (
     SnapshotCaptureLimits,
     SnapshotCaptureStatus,
     capture_repository_snapshot,
+    pagination_identity,
 )
 
 pytestmark = [
@@ -49,6 +50,20 @@ def _capture(root: Path):
     return capture_repository_snapshot(
         root,
         collector_manifest_digest=_COLLECTOR_MANIFEST_DIGEST,
+    )
+
+
+def test_pagination_digest_preserves_golden_canonical_bytes() -> None:
+    assert (
+        pagination_identity(
+            query=" Example  Query ",
+            ordered_item_identities=("item-a", "item-b"),
+            snapshot_identity="snapshot-a",
+            profile_identity="profile-a",
+            schema_identity="schema-a",
+            collector_manifest_digest="manifest-a",
+        )
+        == "sha256:63bccbccdce27c7c1eb439e0523a77fcdb1fb16da823032176f8d940073e4db9"
     )
 
 

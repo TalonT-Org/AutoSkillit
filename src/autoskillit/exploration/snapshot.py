@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import stat
 import subprocess
@@ -16,6 +15,7 @@ from typing import Literal
 
 from autoskillit.core import RepositoryIdentity, RepositorySnapshot
 
+from ._digest import qualified_digest
 from .collectors._bounded import _open_contained_regular_file
 from .identity import resolve_repository_identity
 from .profile import RepositoryProfileActivation, activate_repository_profiles
@@ -127,19 +127,6 @@ class SnapshotCaptureResult:
 
 class _SnapshotTruncated(RuntimeError):
     pass
-
-
-def _canonical_json(value: object) -> bytes:
-    return json.dumps(
-        value,
-        ensure_ascii=True,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("ascii")
-
-
-def _qualified_digest(domain: bytes, value: object) -> str:
-    return f"sha256:{hashlib.sha256(domain + _canonical_json(value)).hexdigest()}"
 
 
 def _git(
@@ -429,8 +416,8 @@ def _capture_once(root: Path, limits: SnapshotCaptureLimits) -> CapturedReposito
         "-z",
         timeout=timeout,
     )
-    index_tree_digest = _qualified_digest(b"autoskillit.index-tree.v1\0", index_payload)
-    working_tree_digest = _qualified_digest(
+    index_tree_digest = qualified_digest(b"autoskillit.index-tree.v1\0", index_payload)
+    working_tree_digest = qualified_digest(
         b"autoskillit.working-tree.v1\0",
         {"ignore_policy": DEFAULT_IGNORE_POLICY, "paths": working_payload},
     )
@@ -445,7 +432,7 @@ def _capture_once(root: Path, limits: SnapshotCaptureLimits) -> CapturedReposito
         "status_digest": status_digest,
         "ignore_policy": DEFAULT_IGNORE_POLICY,
     }
-    snapshot_identity = _qualified_digest(SNAPSHOT_DIGEST_DOMAIN, snapshot_payload)
+    snapshot_identity = qualified_digest(SNAPSHOT_DIGEST_DOMAIN, snapshot_payload)
     return CapturedRepositoryState(
         schema_version=SNAPSHOT_SCHEMA_VERSION,
         worktree_root=str(worktree_root),
@@ -495,7 +482,7 @@ def _snapshot_pagination_identity(
         *captured.ignored_records,
         *captured.missing_records,
     )
-    return _qualified_digest(
+    return qualified_digest(
         PAGINATION_DIGEST_DOMAIN,
         {
             "stable_order": ordered_records,
@@ -515,7 +502,7 @@ def _complete_snapshot(
     activation: RepositoryProfileActivation,
     collector_manifest_digest: str,
 ) -> RepositorySnapshot:
-    ignore_policy_digest = _qualified_digest(
+    ignore_policy_digest = qualified_digest(
         b"autoskillit.ignore-policy.v1\0", captured.ignore_policy
     )
     return RepositorySnapshot(
@@ -559,7 +546,7 @@ def _terminal_snapshot(
         profile_versions=activation.profile_versions,
         profile_activation_digest=activation.activation_digest,
         schema_version=SNAPSHOT_SCHEMA_ID,
-        ignore_policy_digest=_qualified_digest(
+        ignore_policy_digest=qualified_digest(
             b"autoskillit.ignore-policy.v1\0", DEFAULT_IGNORE_POLICY
         ),
         pagination_identity="",
@@ -621,7 +608,7 @@ def capture_repository_snapshot(
     )
     activation_changed = activation_start.activation_digest != activation_end.activation_digest
     if start.snapshot_identity != end.snapshot_identity or identity_changed or activation_changed:
-        stale_digest = _qualified_digest(
+        stale_digest = qualified_digest(
             b"autoskillit.stale-snapshot.v1\0",
             {
                 "start": start.snapshot_identity,
@@ -710,4 +697,4 @@ def pagination_identity(
     for name, value in payload.items():
         if name not in {"stable_order", "total_count"} and not value:
             raise ValueError(f"pagination authority {name} must be non-empty")
-    return _qualified_digest(PAGINATION_DIGEST_DOMAIN, payload)
+    return qualified_digest(PAGINATION_DIGEST_DOMAIN, payload)

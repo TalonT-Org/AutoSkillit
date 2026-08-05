@@ -19,6 +19,8 @@ from autoskillit.core import (
     resolve_repository_remote_identity_sync,
 )
 
+from ._digest import qualified_digest
+
 AUTOSKILLIT_REPOSITORY_IDENTITY = "github.com/talont-org/autoskillit"
 AUTOSKILLIT_REPOSITORY_DISPLAY_IDENTITY = "github.com/TalonT-Org/AutoSkillit"
 OFFLINE_DECLARATION_PATH = ".autoskillit/repository-profile.v1.json"
@@ -71,19 +73,15 @@ class RepositoryIdentityResolution:
 
     @property
     def identity_digest(self) -> str:
-        payload = json.dumps(
+        return qualified_digest(
+            REPOSITORY_IDENTITY_DIGEST_DOMAIN,
             {
                 "normalized_identity": self.normalized_identity,
                 "source": self.source,
                 "source_remote": self.source_remote,
                 "usable_remote_found": self.usable_remote_found,
             },
-            ensure_ascii=True,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("ascii")
-        digest = hashlib.sha256(REPOSITORY_IDENTITY_DIGEST_DOMAIN + payload).hexdigest()
-        return f"sha256:{digest}"
+        )
 
 
 @dataclass(frozen=True, slots=True)

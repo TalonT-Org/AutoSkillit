@@ -8,14 +8,18 @@ from urllib.parse import urlsplit
 
 import pytest
 
+import autoskillit.exploration.profile as profile_module
+from autoskillit.core import RepositoryIdentity
 from autoskillit.exploration.identity import (
     OFFLINE_DECLARATION_DIGEST_DOMAIN,
     OFFLINE_DECLARATION_PATH,
     OFFLINE_MARKER_QUORUM,
     OFFLINE_QUORUM_MARKER_PATHS,
     OFFLINE_REQUIRED_MARKER_PATHS,
+    RepositoryIdentityResolution,
     resolve_repository_identity,
 )
+from autoskillit.exploration.profile import activate_repository_profiles
 
 pytestmark = [
     pytest.mark.layer("exploration"),
@@ -78,6 +82,41 @@ def _write_profile_declaration(
     declaration = root / OFFLINE_DECLARATION_PATH
     declaration.parent.mkdir(parents=True, exist_ok=True)
     declaration.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_identity_and_profile_activation_digests_preserve_golden_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    identity = RepositoryIdentityResolution(
+        normalized_identity="github.com/example/repo",
+        display_identity="github.com/Example/Repo",
+        source="remote",
+        source_remote="origin",
+        usable_remote_found=True,
+        autoskillit_overlay=False,
+        evidence=(),
+        repository_identity=RepositoryIdentity(
+            "github.com/example/repo",
+            "abc123",
+            host="github.com",
+            owner="Example",
+            repo="Repo",
+        ),
+    )
+    monkeypatch.setattr(
+        profile_module,
+        "_contains_python_source",
+        lambda _root: (True, "python_source:module.py"),
+    )
+
+    activation = activate_repository_profiles(tmp_path, identity=identity)
+
+    assert identity.identity_digest == (
+        "sha256:0af080033f52579ea0b9e65bfa37f50ef3b9dc3a8b21da3dbd5e9be63ccc4825"
+    )
+    assert activation.activation_digest == (
+        "sha256:d7389fee1ce7e52bce3c9e8ff60301871be8d425a8132c746a2b127a793ccba2"
+    )
 
 
 def test_offline_profile_contract_has_exact_fixed_paths() -> None:

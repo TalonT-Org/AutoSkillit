@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +12,7 @@ from autoskillit.core import (
     RepositoryProfileId,
 )
 
+from ._digest import qualified_digest
 from .identity import RepositoryIdentityResolution, resolve_repository_identity
 
 PROFILE_SCHEMA_VERSION = "autoskillit.repository-profiles.v1"
@@ -102,7 +101,8 @@ def activate_repository_profiles(
         (RepositoryProfileId.GENERIC_PYTHON.value, "1"),
         (RepositoryProfileId.AUTOSKILLIT.value, "1"),
     )
-    activation_payload = json.dumps(
+    activation_digest = qualified_digest(
+        PROFILE_ACTIVATION_DIGEST_DOMAIN,
         {
             "activations": [
                 [item.profile.value, item.applicability.value, item.reason] for item in activations
@@ -112,14 +112,7 @@ def activate_repository_profiles(
             "profile_versions": profile_versions,
             "schema_version": PROFILE_SCHEMA_VERSION,
         },
-        ensure_ascii=True,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("ascii")
-    activation_hex = hashlib.sha256(
-        PROFILE_ACTIVATION_DIGEST_DOMAIN + activation_payload
-    ).hexdigest()
-    activation_digest = f"sha256:{activation_hex}"
+    )
     return RepositoryProfileActivation(
         activations=activations,
         identity=resolved_identity,

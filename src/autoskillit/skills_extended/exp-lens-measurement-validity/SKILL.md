@@ -6,7 +6,98 @@ uses_capabilities: []
 activate_deps:
 - mermaid
 description: Analyze measurement validity for experimental design — auditing metric-construct alignment, proxy validity, reliability,
-  sensitivity, and consequential validity. Argumentative lens answering "Do measurements justify the interpretation?"
+ sensitivity, and consequential validity. Argumentative lens answering "Do measurements justify the interpretation?"
+exploration_vectors:
+  - id: missing-context-fields
+    disposition: migrated
+    rationale: Repository impact evidence locates revision-scoped context and experiment-plan artifacts and identifies only missing declared fields without executing target code.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-measurement-validity-missing-context-fields
+    frontier_item_id: exp-lens-measurement-validity-missing-context-fields-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: metric-definitions
+    disposition: migrated
+    rationale: Semantic navigation traces computed and reported metric definitions and code consumers while the parent retains construct interpretation.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [declares, defines, calls, references]
+    task_id: exp-lens-measurement-validity-metric-definitions
+    frontier_item_id: exp-lens-measurement-validity-metric-definitions-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: intended-interpretations
+    disposition: migrated
+    rationale: Repository impact evidence covers metric claims, intended interpretations, result narratives, experiment plans, and revision-scoped report consumers.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-measurement-validity-intended-interpretations
+    frontier_item_id: exp-lens-measurement-validity-intended-interpretations-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: metric-computation-details
+    disposition: migrated
+    rationale: Semantic navigation traces aggregation, weighting, thresholds, cutoffs, edge cases, and metric call paths without judging validity.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: exp-lens-measurement-validity-metric-computation-details
+    frontier_item_id: exp-lens-measurement-validity-metric-computation-details-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: alternative-metrics-considered
+    disposition: migrated
+    rationale: Repository impact evidence covers alternative metric declarations, selection rationale, rejected measures, limitations, and revision-scoped evaluation artifacts.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-measurement-validity-alternative-metrics-considered
+    frontier_item_id: exp-lens-measurement-validity-alternative-metrics-considered-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: construct-metric-gap
+    disposition: migrated
+    rationale: Repository impact evidence covers local caveats, proxy limitations, approximation disclosures, failure artifacts, and claims that metrics do not capture.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-measurement-validity-construct-metric-gap
+    frontier_item_id: exp-lens-measurement-validity-construct-metric-gap-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -58,6 +149,8 @@ semantic_requirements:
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-measurement-validity/`
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
+- Import or execute target code, tests, experiments, models, or benchmarks
+- Let an exploration vector construct validity arguments, judge metric alignment, issue a verdict, or create the diagram
 
 **ALWAYS:**
 - Treat every reported metric as a claim requiring a validity argument
@@ -67,6 +160,11 @@ semantic_requirements:
 - BEFORE creating any optional diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch exactly 6 exploration vectors through the deterministic router
+- Route mixed metric-definition evidence through the parent for bounded profiler handoff without creating extra vectors
+- Wait for every exploration result before building validity arguments, assessing metric-construct alignment, or creating the diagram
+- Retain parent authority over psychometric, statistical, and consequential-validity judgments in Steps 2+
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-measurement-validity/exp_diag_measurement_validity_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -84,36 +182,55 @@ semantic_requirements:
 If positional arg 1 (context_path) is provided and the file exists, read it to obtain
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
-methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
+methodology. Use supplied structured context as the foundation for Steps 1-5.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses supplied context and experiment-plan arguments, inspect only
+existing revision-scoped CWD artifacts for fields that remain absent. Never rediscover
+or override supplied complete fields. If no fields are missing, return an explicit
+not-applicable result without repository search. If relevant evidence is absent or
+unrelated, explicitly report it as unavailable or unrelated without widening scope,
+inferring meaning, or importing or executing target code, tests, experiments, models,
+or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+### Step 1: Launch 5 Authored Discovery Vectors (SINGLE MESSAGE)
+
+Dispatch the five authored Step-1 vectors with the ready fallback vector through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Use the registered role for each source block. Parent-mediated profiler handoff for mixed evidence does not create another vector.
 
-**Metric Definitions**
+<!-- autoskillit:exploration-vector id="metric-definitions" -->
+1. **Metric Definitions**
 - Find all metrics computed and reported
 - Look for: metric, score, accuracy, f1, precision, recall, bleu, rouge, loss, error_rate, latency
+<!-- /autoskillit:exploration-vector -->
 
-**Intended Interpretations**
+<!-- autoskillit:exploration-vector id="intended-interpretations" -->
+2. **Intended Interpretations**
 - Find what conclusions are drawn from each metric
 - Look for: better, worse, improves, indicates, measures, reflects, captures, proxy
+<!-- /autoskillit:exploration-vector -->
 
-**Metric Computation Details**
+<!-- autoskillit:exploration-vector id="metric-computation-details" -->
+3. **Metric Computation Details**
 - Find exactly how each metric is computed (aggregation, weighting, edge cases)
 - Look for: average, macro, micro, weighted, threshold, cutoff, aggregate
+<!-- /autoskillit:exploration-vector -->
 
-**Alternative Metrics Considered**
+<!-- autoskillit:exploration-vector id="alternative-metrics-considered" -->
+4. **Alternative Metrics Considered**
 - Find whether alternative metrics were evaluated and why they were rejected
 - Look for: also measured, alternative, we chose, instead of, limitation
+<!-- /autoskillit:exploration-vector -->
 
-**Construct-Metric Gap**
+<!-- autoskillit:exploration-vector id="construct-metric-gap" -->
+5. **Construct-Metric Gap**
 - Find where the metric diverges from the construct it claims to measure
 - Look for: limitation, caveat, imperfect, proxy, approximate, does not capture
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Build Validity Arguments
 

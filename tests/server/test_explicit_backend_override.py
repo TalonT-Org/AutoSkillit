@@ -64,6 +64,11 @@ class TestExplicitBackendOverrideAdmissionDispatchAgreement:
             ),
             (
                 "research",
+                "run_experiment_lenses",
+                "agent_backend.recipe_overrides.research.run_experiment_lenses",
+            ),
+            (
+                "research",
                 "scope",
                 "agent_backend.recipe_overrides.research.scope",
             ),
@@ -71,6 +76,11 @@ class TestExplicitBackendOverrideAdmissionDispatchAgreement:
                 "research-design",
                 "scope",
                 "agent_backend.recipe_overrides.research-design.scope",
+            ),
+            (
+                "research-review",
+                "run_experiment_lenses",
+                "agent_backend.recipe_overrides.research-review.run_experiment_lenses",
             ),
         ],
     )

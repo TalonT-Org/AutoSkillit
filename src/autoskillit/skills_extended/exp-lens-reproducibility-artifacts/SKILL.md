@@ -7,6 +7,97 @@ activate_deps:
 - mermaid
 description: Create Reproducibility Artifacts experimental design diagram showing run instructions, environment capture, data
   availability, determinism controls, and audit trail. Transparency lens answering "Could an independent party reproduce this?"
+exploration_vectors:
+  - id: missing-context-fields
+    disposition: migrated
+    rationale: Repository impact evidence fills only experiment-context fields missing after parent-side argument parsing, without interpreting the experimental design.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-reproducibility-artifacts-missing-context-fields
+    frontier_item_id: exp-lens-reproducibility-artifacts-missing-context-fields-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: environment-dependencies
+    disposition: migrated
+    rationale: Repository impact evidence identifies dependency manifests, lockfiles, container definitions, environment setup, and their consumers.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-reproducibility-artifacts-environment-dependencies
+    frontier_item_id: exp-lens-reproducibility-artifacts-environment-dependencies-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: data-provenance
+    disposition: migrated
+    rationale: Repository impact evidence identifies data manifests, download and checksum artifacts, version declarations, and affected consumers while the parent assesses provenance.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-reproducibility-artifacts-data-provenance
+    frontier_item_id: exp-lens-reproducibility-artifacts-data-provenance-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: execution-entry-points
+    disposition: migrated
+    rationale: Semantic navigation traces run-script and command entry definitions, imports, and invocation paths while parent-owned handoff covers declarative workflow registrations.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [declares, defines, imports, calls, references]
+    task_id: exp-lens-reproducibility-artifacts-execution-entry-points
+    frontier_item_id: exp-lens-reproducibility-artifacts-execution-entry-points-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: random-seed-determinism
+    disposition: migrated
+    rationale: Semantic navigation traces random-seed setup and nondeterminism-control definitions, calls, and guarded execution paths without judging reproducibility.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: exp-lens-reproducibility-artifacts-random-seed-determinism
+    frontier_item_id: exp-lens-reproducibility-artifacts-random-seed-determinism-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: output-artifacts-logging
+    disposition: migrated
+    rationale: Repository impact evidence identifies result, log, figure, checkpoint, and tracking artifacts plus their declarations and consumers.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-reproducibility-artifacts-output-artifacts-logging
+    frontier_item_id: exp-lens-reproducibility-artifacts-output-artifacts-logging-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -56,7 +147,9 @@ semantic_requirements:
 - Modify any source code files
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-reproducibility-artifacts/`
+- Execute target code, experiment workflows, or target test commands to gather exploration evidence
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -67,6 +160,11 @@ semantic_requirements:
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Register exactly 6 exploration vectors and route the missing-context fallback only for fields absent after parent-side argument parsing
+- Allow parent-boundary handoff between code navigation and declarative artifact evidence without creating extra vectors
+- Wait for every applicable exploration result before mapping the reproduction chain, classifying artifacts, assessing determinism, or creating the diagram
+- Retain parent authority over reproducibility judgment, weakest-link analysis, artifact classification, and diagram creation
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-reproducibility-artifacts/exp_diag_reproducibility_artifacts_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -85,35 +183,39 @@ If positional arg 1 (context_path) is provided and the file exists, read it to o
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
 methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
+exploration for these fields if the context file supplies them.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+### Step 1: Launch 5 Routed Exploration Vectors (SINGLE MESSAGE)
+
+Dispatch all ready, scope-disjoint Step-1 vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch exactly these five Step-1 vectors under their registered role policies. The parent/router may hand bounded code or declarative evidence to the other registered role when needed; this does not create another vector. Each leaf returns terminal evidence only and must not execute the target, classify reproducibility, identify the weakest link, create diagrams, or write lens output.
 
-**Environment & Dependencies**
-- Find dependency files, container definitions, environment setup
-- Look for: requirements, Dockerfile, environment.yml, conda, pip, nix, lock
+<!-- autoskillit:exploration-vector id="environment-dependencies" -->
+1. **Environment and dependencies** — Find dependency files, container definitions, lockfiles, and environment setup, including requirements, Dockerfile, environment files, conda, pip, nix, and lock artifacts.
+<!-- /autoskillit:exploration-vector -->
 
-**Data Provenance**
-- Find data download scripts, checksums, versioning
-- Look for: download, checksum, hash, version, dvc, data_url, manifest
+<!-- autoskillit:exploration-vector id="data-provenance" -->
+2. **Data provenance** — Find data download declarations, checksums, hashes, versions, data URLs, DVC metadata, manifests, and their consumers.
+<!-- /autoskillit:exploration-vector -->
 
-**Execution Entry Points**
-- Find run scripts, Makefiles, workflow managers
-- Look for: Makefile, run.sh, snakemake, nextflow, main, entrypoint, cli
+<!-- autoskillit:exploration-vector id="execution-entry-points" -->
+3. **Execution entry points** — Trace run scripts, Makefiles, workflow managers, main definitions, entry points, CLI dispatch, and invocation paths without running them.
+<!-- /autoskillit:exploration-vector -->
 
-**Random Seed & Determinism**
-- Find seed setting, nondeterminism controls
-- Look for: seed, random_state, deterministic, cudnn, PYTHONHASHSEED
+<!-- autoskillit:exploration-vector id="random-seed-determinism" -->
+4. **Random seed and determinism** — Trace seed setting and nondeterminism controls, including random-state, deterministic, CUDNN, and hash-seed definitions and calls.
+<!-- /autoskillit:exploration-vector -->
 
-**Output Artifacts & Logging**
-- Find result storage, logging, figure generation
-- Look for: save, log, output, results, figures, checkpoint, wandb, mlflow
+<!-- autoskillit:exploration-vector id="output-artifacts-logging" -->
+5. **Output artifacts and logging** — Find result storage, logging, generated figures, checkpoints, and experiment-tracking artifacts and consumers.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Map the Reproduction Chain
 

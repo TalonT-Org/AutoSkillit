@@ -7,6 +7,97 @@ activate_deps:
 - mermaid
 description: Create a validity threat matrix identifying alternative explanations and design mitigations. Adversarial lens
   answering "What alternative explanations survive?"
+exploration_vectors:
+  - id: missing-context-fields
+    disposition: migrated
+    rationale: Repository impact evidence fills only experiment-context fields missing after parent-side argument parsing, leaving validity interpretation to the parent.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-validity-threats-missing-context-fields
+    frontier_item_id: exp-lens-validity-threats-missing-context-fields-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: temporal-changes-history
+    disposition: migrated
+    rationale: Repository impact evidence identifies deployment, release, update, migration, incident, outage, and rollback artifacts and affected experiment surfaces.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-validity-threats-temporal-changes-history
+    frontier_item_id: exp-lens-validity-threats-temporal-changes-history-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: instrumentation-changes
+    disposition: migrated
+    rationale: Repository impact evidence identifies logging, monitoring, metric, measurement, instrumentation, version, and schema declarations and consumers.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-validity-threats-instrumentation-changes
+    frontier_item_id: exp-lens-validity-threats-instrumentation-changes-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: selection-filtering
+    disposition: migrated
+    rationale: Semantic navigation traces subject, sample, and data selection, filtering, eligibility, inclusion, exclusion, and sampling control paths without judging selection bias.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: exp-lens-validity-threats-selection-filtering
+    frontier_item_id: exp-lens-validity-threats-selection-filtering-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: co-interventions
+    disposition: migrated
+    rationale: Repository impact evidence identifies concurrent experiment, parallel treatment, co-running change, and overlap declarations, configuration, registrations, and affected consumers.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-validity-threats-co-interventions
+    frontier_item_id: exp-lens-validity-threats-co-interventions-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: treatment-diffusion
+    disposition: migrated
+    rationale: Semantic navigation traces contamination, diffusion, spillover, shared-path, cross-group, and control-exposure definitions and calls while the parent assesses validity.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: exp-lens-validity-threats-treatment-diffusion
+    frontier_item_id: exp-lens-validity-threats-treatment-diffusion-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -55,7 +146,9 @@ semantic_requirements:
 
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-validity-threats/`
+- Execute target code, experiment workflows, or target test commands to gather exploration evidence
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -66,6 +159,11 @@ semantic_requirements:
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Register exactly 6 exploration vectors and route the missing-context fallback only for fields absent after parent-side argument parsing
+- Allow parent-boundary handoff between semantic control-flow evidence and declarative history, instrumentation, or experiment-registration evidence without creating extra vectors
+- Wait for every applicable exploration result before applying the threat taxonomy, analyzing alternative explanations, or creating the diagram
+- Retain parent authority over threat plausibility, mitigation strength, residual-risk and alternative-explanation judgment, and diagram creation
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-validity-threats/exp_diag_validity_threats_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -84,35 +182,39 @@ If positional arg 1 (context_path) is provided and the file exists, read it to o
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
 methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
+exploration for these fields if the context file supplies them.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+### Step 1: Launch 5 Routed Exploration Vectors (SINGLE MESSAGE)
+
+Dispatch all ready, scope-disjoint Step-1 vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch exactly these five Step-1 vectors under their registered role policies. The parent/router may hand bounded code or declarative evidence to the other registered role when needed; this does not create another vector. Each leaf returns terminal evidence only and must not execute the target, apply the threat taxonomy, judge alternatives or mitigations, create diagrams, or write lens output.
 
-**Temporal Changes (History)**
-- Find system, environment, or data changes during the experiment
-- Look for: deploy, release, update, change, migration, incident, outage, rollback
+<!-- autoskillit:exploration-vector id="temporal-changes-history" -->
+1. **Temporal changes (history)** — Identify system, environment, or data-change artifacts during the experiment, including deployments, releases, updates, migrations, incidents, outages, and rollbacks.
+<!-- /autoskillit:exploration-vector -->
 
-**Instrumentation Changes**
-- Find changes to measurement tools or logging during the experiment
-- Look for: logging, monitoring, metric, measure, instrument, version, schema
+<!-- autoskillit:exploration-vector id="instrumentation-changes" -->
+2. **Instrumentation changes** — Identify changes to logging, monitoring, metrics, measurement tools, instrumentation versions, schemas, and affected consumers.
+<!-- /autoskillit:exploration-vector -->
 
-**Selection & Filtering**
-- Find how subjects, samples, or data were selected
-- Look for: filter, select, sample, eligibility, inclusion, exclusion, criteria
+<!-- autoskillit:exploration-vector id="selection-filtering" -->
+3. **Selection and filtering** — Trace how subjects, samples, or data are filtered, selected, sampled, and admitted or excluded through eligibility and criteria control paths.
+<!-- /autoskillit:exploration-vector -->
 
-**Co-interventions**
-- Find other changes running simultaneously with the treatment
-- Look for: concurrent, parallel, simultaneous, co-running, other_experiment, a_b_overlap
+<!-- autoskillit:exploration-vector id="co-interventions" -->
+4. **Co-interventions** — Identify concurrent, parallel, simultaneous, co-running, other-experiment, and overlap declarations, configuration, registrations, and consumers.
+<!-- /autoskillit:exploration-vector -->
 
-**Treatment Diffusion**
-- Find ways treatment effects could spread to control groups
-- Look for: contamination, diffusion, spillover, shared, cross, control_exposure
+<!-- autoskillit:exploration-vector id="treatment-diffusion" -->
+5. **Treatment diffusion** — Trace contamination, diffusion, spillover, shared-path, cross-group, and control-exposure definitions and calls that could connect treatment to controls.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Apply Threat Taxonomy
 

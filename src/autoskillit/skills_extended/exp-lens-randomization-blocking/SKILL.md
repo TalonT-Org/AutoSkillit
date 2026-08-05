@@ -6,7 +6,98 @@ uses_capabilities: []
 activate_deps:
 - mermaid
 description: Create Randomization & Blocking experimental design diagram showing assignment mechanisms, blocking factors,
-  and comparability sources. Design-Structural lens answering "Where does comparability come from?"
+ and comparability sources. Design-Structural lens answering "Where does comparability come from?"
+exploration_vectors:
+  - id: missing-context-fields
+    disposition: migrated
+    rationale: Repository impact evidence locates revision-scoped context and experiment-plan artifacts and identifies only missing declared fields without executing target code.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-randomization-blocking-missing-context-fields
+    frontier_item_id: exp-lens-randomization-blocking-missing-context-fields-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: assignment-mechanism
+    disposition: migrated
+    rationale: Semantic navigation traces assignment, allocation, split, stratification, blocking, hashing, and bucketing control flow without judging comparability.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: exp-lens-randomization-blocking-assignment-mechanism
+    frontier_item_id: exp-lens-randomization-blocking-assignment-mechanism-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: blocking-stratification
+    disposition: migrated
+    rationale: Semantic navigation traces block, strata, matching, pairing, covariate, and grouping definitions and data-control paths.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: exp-lens-randomization-blocking-blocking-stratification
+    frontier_item_id: exp-lens-randomization-blocking-blocking-stratification-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: replication-structure
+    disposition: migrated
+    rationale: Repository impact evidence covers declared replicates, trials, runs, seeds, folds, fixtures, result artifacts, and revision-scoped replication manifests.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-randomization-blocking-replication-structure
+    frontier_item_id: exp-lens-randomization-blocking-replication-structure-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: order-timing-effects
+    disposition: migrated
+    rationale: Semantic navigation traces ordering, sequencing, carryover, period, washout, crossover, and timing control flow without assessing causal adequacy.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: exp-lens-randomization-blocking-order-timing-effects
+    frontier_item_id: exp-lens-randomization-blocking-order-timing-effects-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: exclusion-attrition
+    disposition: migrated
+    rationale: Semantic navigation traces exclusion, dropout, missingness, censoring, incomplete-unit, and filtering paths while parent-owned handoff covers affected data artifacts.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: exp-lens-randomization-blocking-exclusion-attrition
+    frontier_item_id: exp-lens-randomization-blocking-exclusion-attrition-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -58,6 +149,8 @@ semantic_requirements:
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-randomization-blocking/`
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
+- Import or execute target code, tests, experiments, models, or benchmarks
+- Let an exploration vector judge comparability, causal strength, pseudoreplication, or create the diagram
 
 **ALWAYS:**
 - Trace the exact mechanism that creates comparability between treatment groups
@@ -67,6 +160,11 @@ semantic_requirements:
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch exactly 6 exploration vectors through the deterministic router
+- Route mixed replication and assignment-data evidence through the parent for bounded profiler handoff without creating extra vectors
+- Wait for every exploration result before judging comparability, causal strength, pseudoreplication, or creating the diagram
+- Retain parent authority over experimental, causal, and statistical judgments in Steps 2+
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-randomization-blocking/exp_diag_randomization_blocking_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -85,35 +183,55 @@ If positional arg 1 (context_path) is provided and the file exists, read it to o
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
 methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
+exploration for fields supplied completely by those artifacts.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses supplied context and experiment-plan arguments, inspect only
+existing revision-scoped CWD artifacts for fields that remain absent. Never rediscover
+or override supplied complete fields. If no fields are missing, return an explicit
+not-applicable result without repository search. If relevant evidence is absent or
+unrelated, explicitly report it as unavailable or unrelated without widening scope,
+inferring meaning, or importing or executing target code, tests, experiments, models,
+or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+### Step 1: Launch 5 Authored Discovery Vectors (SINGLE MESSAGE)
+
+Dispatch the five authored Step-1 vectors with the ready fallback vector through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Use the registered role for each source block. Parent-mediated profiler handoff for mixed evidence does not create another vector.
 
-**Assignment Mechanism**
+<!-- autoskillit:exploration-vector id="assignment-mechanism" -->
+1. **Assignment Mechanism**
 - Find how experimental units are assigned to conditions
 - Look for: random, assign, allocate, split, stratify, block, hash, bucket
+<!-- /autoskillit:exploration-vector -->
 
-**Blocking & Stratification**
+<!-- autoskillit:exploration-vector id="blocking-stratification" -->
+2. **Blocking & Stratification**
 - Find blocking factors and stratification variables
 - Look for: block, strata, stratify, covariate, match, pair, group_by
+<!-- /autoskillit:exploration-vector -->
 
-**Replication Structure**
+<!-- autoskillit:exploration-vector id="replication-structure" -->
+3. **Replication Structure**
 - Find how many independent replicates exist per condition
 - Look for: replicate, repeat, trial, run, seed, fold, n_replications
+<!-- /autoskillit:exploration-vector -->
 
-**Order & Timing Effects**
+<!-- autoskillit:exploration-vector id="order-timing-effects" -->
+4. **Order & Timing Effects**
 - Find potential for carryover or order effects
 - Look for: order, sequence, carryover, period, washout, crossover, time
+<!-- /autoskillit:exploration-vector -->
 
-**Exclusion & Attrition**
+<!-- autoskillit:exploration-vector id="exclusion-attrition" -->
+5. **Exclusion & Attrition**
 - Find how units are excluded or drop out during the experiment
 - Look for: exclude, drop, attrition, missing, censor, incomplete, filter
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Map the Allocation Flow
 

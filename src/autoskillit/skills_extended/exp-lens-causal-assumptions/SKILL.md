@@ -7,6 +7,97 @@ activate_deps:
 - mermaid
 description: Create Causal Assumptions experimental design diagram showing confounders, mediators, colliders, and identification
   strategy. Causal-structural lens answering "What causal assumptions support this design?"
+exploration_vectors:
+  - id: missing-context-fields
+    disposition: migrated
+    rationale: Repository impact evidence retrieves only IV/DV, hypothesis, control, and success-criterion fields absent from supplied context while the parent preserves causal interpretation.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-causal-assumptions-missing-context-fields
+    frontier_item_id: exp-lens-causal-assumptions-missing-context-fields-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: treatment-outcome-definition
+    disposition: migrated
+    rationale: Semantic navigation traces treatment assignment and outcome measurement symbols and call paths while the parent classifies variables and routes declarative experiment artifacts to the profiler.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references]
+    task_id: exp-lens-causal-assumptions-treatment-outcome-definition
+    frontier_item_id: exp-lens-causal-assumptions-treatment-outcome-definition-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: confounding-pathways
+    disposition: migrated
+    rationale: Repository impact evidence finds shared data, preprocessing configuration, environment, seed, and global-state artifacts while the parent identifies confounding pathways.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-causal-assumptions-confounding-pathways
+    frontier_item_id: exp-lens-causal-assumptions-confounding-pathways-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: mediator-mechanism-variables
+    disposition: migrated
+    rationale: Semantic navigation traces transforms, preprocessing, feature construction, intermediates, and pipeline calls while the parent determines mediator and mechanism status.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references]
+    task_id: exp-lens-causal-assumptions-mediator-mechanism-variables
+    frontier_item_id: exp-lens-causal-assumptions-mediator-mechanism-variables-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: collider-selection-variables
+    disposition: migrated
+    rationale: Semantic navigation traces post-treatment filtering, subsetting, exclusion, threshold, and selection control flow while the parent classifies colliders and selection variables.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references]
+    task_id: exp-lens-causal-assumptions-collider-selection-variables
+    frontier_item_id: exp-lens-causal-assumptions-collider-selection-variables-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: randomization-assignment
+    disposition: migrated
+    rationale: Semantic navigation traces randomization, allocation, splitting, stratification, and blocking logic while the parent routes declarative assignment artifacts to the profiler and judges validity.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references]
+    task_id: exp-lens-causal-assumptions-randomization-assignment
+    frontier_item_id: exp-lens-causal-assumptions-randomization-assignment-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -57,6 +148,7 @@ semantic_requirements:
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-causal-assumptions/`
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -67,6 +159,11 @@ semantic_requirements:
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch exactly 6 exploration vectors through the deterministic router
+- Route semantic code, symbol, and data-control-flow handoffs to `semantic-code-navigator` and bounded configuration, data, fixture, manifest, generated-artifact, reproduction, test, and pre-existing revision-scoped artifact handoffs to `repository-impact-profiler` through the parent-owned plan
+- Wait for every exploration result before classifying variables, building the causal graph, or creating the diagram
+- Retain parent authority over causal classification, identification assumptions, Mermaid generation, and output writing
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-causal-assumptions/exp_diag_causal_assumptions_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -85,35 +182,39 @@ If positional arg 1 (context_path) is provided and the file exists, read it to o
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
 methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
+exploration for these fields if the context file supplies them.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+### Step 1: Launch 5 Routed Exploration Vectors (SINGLE MESSAGE)
+
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch exactly these five authored vectors under their registered role policies. Mixed code and declarative evidence remains one parent-owned plan; bounded role handoffs return to the originating vector and do not add graph dependencies.
 
-**Treatment & Outcome Definition**
-- Find experiment config, treatment assignment code, outcome measurement
-- Look for: treatment, control, outcome, response, endpoint, metric
+<!-- autoskillit:exploration-vector id="treatment-outcome-definition" -->
+1. **Treatment & Outcome Definition** — Find experiment configuration, treatment-assignment code, and outcome measurement through `treatment`, `control`, `outcome`, `response`, `endpoint`, and `metric` evidence. Route bounded configuration and measurement artifacts through the parent to the profiler.
+<!-- /autoskillit:exploration-vector -->
 
-**Confounding Pathways**
-- Find shared data sources, preprocessing, environment variables
-- Look for: shared, common, config, environment, seed, global
+<!-- autoskillit:exploration-vector id="confounding-pathways" -->
+2. **Confounding Pathways** — Find shared data sources, preprocessing, and environment variables through `shared`, `common`, `config`, `environment`, `seed`, and `global` evidence. Route semantic preprocessing and shared-state code through the parent to the navigator.
+<!-- /autoskillit:exploration-vector -->
 
-**Mediator & Mechanism Variables**
-- Find intermediate processing steps between treatment and outcome
-- Look for: transform, preprocess, feature, intermediate, pipeline
+<!-- autoskillit:exploration-vector id="mediator-mechanism-variables" -->
+3. **Mediator & Mechanism Variables** — Find intermediate processing steps between treatment and outcome through `transform`, `preprocess`, `feature`, `intermediate`, and `pipeline` definitions and call paths.
+<!-- /autoskillit:exploration-vector -->
 
-**Collider & Selection Variables**
-- Find filtering, subsetting, or conditional logic applied post-treatment
-- Look for: filter, subset, exclude, condition, threshold, select
+<!-- autoskillit:exploration-vector id="collider-selection-variables" -->
+4. **Collider & Selection Variables** — Find filtering, subsetting, exclusion, threshold, and selection control flow applied post-treatment through `filter`, `subset`, `exclude`, `condition`, `threshold`, and `select` evidence.
+<!-- /autoskillit:exploration-vector -->
 
-**Randomization & Assignment**
-- Find how experimental units are assigned to conditions
-- Look for: random, assign, allocate, split, stratify, block
+<!-- autoskillit:exploration-vector id="randomization-assignment" -->
+5. **Randomization & Assignment** — Find how experimental units are assigned to conditions through `random`, `assign`, `allocate`, `split`, `stratify`, and `block` definitions and call paths. Route bounded seed, split, and assignment artifacts through the parent to the profiler.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Build the Causal Graph Structure
 

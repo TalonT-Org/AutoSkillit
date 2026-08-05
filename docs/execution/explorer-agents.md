@@ -74,6 +74,19 @@ Architecture orchestration is pinned to Codex only at the three reviewed recipe-
 continue to inherit their configured backend while existing planner, investigate, and scope pins
 remain intact.
 
+Phase F applies the reviewed contract to the eighteen experiment lenses registered by
+`make-experiment-diag`. Each lens has one shared `missing-context-fields` Step-0 vector and five
+lens-specific Step-1 vectors. Step 0 may investigate only fields that remain absent after parent
+argument parsing: complete supplied fields are never rediscovered or overwritten, and absent or
+unrelated evidence is reported explicitly without widening scope, inferring scientific meaning,
+or executing the target. Across the family, all 108 vectors use `profile: auto`, while the ninety
+authored Step-1 vectors retain their exact ordered roles and evidence relationships.
+
+Experiment-lens orchestration is pinned to Codex only for
+`research.run_experiment_lenses` and `research-review.run_experiment_lenses`, again at the
+`recipe_step` tier. Lens analysis, scientific judgment, optional visualization, temp directories,
+diagram paths, and final synthesis remain parent-owned.
+
 ## Policy
 
 Both roles use the validated native Codex policy: `gpt-5.6-luna`, maximum reasoning effort, and

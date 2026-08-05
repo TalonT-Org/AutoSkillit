@@ -92,6 +92,8 @@ src/autoskillit/config/defaults.yaml:
   - infra/
   - docs/
   - workspace/
+  - server/test_resolve_backend_override.py
+  - server/test_explicit_backend_override.py
 
 src/autoskillit/hooks/registry.sha256:
   - infra/

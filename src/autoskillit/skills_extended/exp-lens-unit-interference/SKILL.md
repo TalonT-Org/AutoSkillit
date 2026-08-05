@@ -7,6 +7,97 @@ activate_deps:
 - mermaid
 description: Create Unit Interference experimental design diagram showing unit hierarchy, cluster structure, shared resources,
   and SUTVA violation pathways. Causal-Structural lens answering "What is the unit, and can treatments spill over?"
+exploration_vectors:
+  - id: missing-context-fields
+    disposition: migrated
+    rationale: Repository impact evidence fills only experiment-context fields missing after parent-side argument parsing, leaving unit and interference interpretation to the parent.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-unit-interference-missing-context-fields
+    frontier_item_id: exp-lens-unit-interference-missing-context-fields-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: unit-definition
+    disposition: migrated
+    rationale: Semantic navigation identifies experimental-unit definitions and traces how user, request, session, query, item, sample, trial, or instance symbols are consumed.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [declares, defines, calls, references]
+    task_id: exp-lens-unit-interference-unit-definition
+    frontier_item_id: exp-lens-unit-interference-unit-definition-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: cluster-group-structure
+    disposition: migrated
+    rationale: Semantic navigation traces cluster and group definitions, membership calls, and structural boundaries while the parent assesses interference risk.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: exp-lens-unit-interference-cluster-group-structure
+    frontier_item_id: exp-lens-unit-interference-cluster-group-structure-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: shared-resources
+    disposition: migrated
+    rationale: Repository impact evidence identifies shared cache, queue, pool, database, service, load-balancer, accelerator, and memory access declarations and affected consumers.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-unit-interference-shared-resources
+    frontier_item_id: exp-lens-unit-interference-shared-resources-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: network-social-connections
+    disposition: migrated
+    rationale: Semantic navigation traces graph, neighbor, messaging, recommendation, and influence definitions and call paths that may connect units.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [defines, calls, references, affects]
+    task_id: exp-lens-unit-interference-network-social-connections
+    frontier_item_id: exp-lens-unit-interference-network-social-connections-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: treatment-assignment-boundary
+    disposition: migrated
+    rationale: Semantic navigation traces treatment bucket, hash, experiment, variant, flag, and rollout definitions and control paths while parent-owned handoff covers declarative registrations.
+    applicability: always
+    role: semantic-code-navigator
+    profile: auto
+    relationship_classes: [declares, defines, calls, references, affects]
+    task_id: exp-lens-unit-interference-treatment-assignment-boundary
+    frontier_item_id: exp-lens-unit-interference-treatment-assignment-boundary-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -56,7 +147,9 @@ semantic_requirements:
 - Modify any source code files
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-unit-interference/`
+- Execute target code, experiment workflows, or target test commands to gather exploration evidence
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -67,6 +160,11 @@ semantic_requirements:
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Register exactly 6 exploration vectors and route the missing-context fallback only for fields absent after parent-side argument parsing
+- Allow parent-boundary handoff between code navigation and declarative shared-resource or assignment evidence without creating extra vectors
+- Wait for every applicable exploration result before mapping the hierarchy, analyzing interference, assessing SUTVA, or creating the diagram
+- Retain parent authority over unit and cluster interpretation, spillover classification, magnitude and mitigation judgment, and diagram creation
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-unit-interference/exp_diag_unit_interference_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -85,40 +183,39 @@ If positional arg 1 (context_path) is provided and the file exists, read it to o
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
 methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
+exploration for these fields if the context file supplies them.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+### Step 1: Launch 5 Routed Exploration Vectors (SINGLE MESSAGE)
+
+Dispatch all ready, scope-disjoint Step-1 vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch exactly these five Step-1 vectors under their registered role policies. The parent/router may hand bounded code or declarative evidence to the other registered role when needed; this does not create another vector. Each leaf returns terminal evidence only and must not execute the target, define the final unit hierarchy, assess SUTVA, rate spillover, create diagrams, or write lens output.
 
-**Unit Definition**
-- Find what constitutes one experimental unit
-- Is it a user, request, session, query, item, sample, trial, or instance?
-- Look for: user, request, session, query, item, sample, trial, instance
+<!-- autoskillit:exploration-vector id="unit-definition" -->
+1. **Unit definition** — Trace what constitutes one experimental unit, including user, request, session, query, item, sample, trial, or instance definitions and consumers.
+<!-- /autoskillit:exploration-vector -->
 
-**Cluster & Group Structure**
-- Find groupings of units that might share treatment effects
-- Identify natural clustering that predates treatment assignment
-- Look for: cluster, group, shard, server, region, batch, household, team
+<!-- autoskillit:exploration-vector id="cluster-group-structure" -->
+2. **Cluster and group structure** — Trace groupings and membership paths for clusters, groups, shards, servers, regions, batches, households, and teams, including structures predating assignment.
+<!-- /autoskillit:exploration-vector -->
 
-**Shared Resources**
-- Find infrastructure shared across treatment groups
-- Identify components both treatment and control units touch
-- Look for: cache, queue, pool, database, service, load_balancer, gpu, memory
+<!-- autoskillit:exploration-vector id="shared-resources" -->
+3. **Shared resources** — Identify infrastructure and access declarations shared across treatment and control groups, including caches, queues, pools, databases, services, load balancers, accelerators, and memory.
+<!-- /autoskillit:exploration-vector -->
 
-**Network & Social Connections**
-- Find connections between units that could transmit treatment effects
-- Identify paths by which a treated unit could alter a control unit's experience
-- Look for: network, graph, friend, neighbor, link, message, recommend, influence
+<!-- autoskillit:exploration-vector id="network-social-connections" -->
+4. **Network and social connections** — Trace network, graph, friend, neighbor, link, message, recommendation, and influence definitions and call paths connecting units.
+<!-- /autoskillit:exploration-vector -->
 
-**Treatment Assignment Boundary**
-- Find where the treatment boundary is drawn
-- Identify whether the assignment is at the unit level or a coarser level
-- Look for: bucket, hash, experiment_id, variant, flag, feature_flag, rollout
+<!-- autoskillit:exploration-vector id="treatment-assignment-boundary" -->
+5. **Treatment assignment boundary** — Trace bucket, hash, experiment, variant, flag, feature-flag, and rollout definitions and control paths, including bounded declarative registration handoffs.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Map the Unit-Cluster-Resource Hierarchy
 

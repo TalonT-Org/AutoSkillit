@@ -18,6 +18,7 @@ from autoskillit.core import (
     SkillSource,
     pkg_root,
 )
+from autoskillit.core.io import load_yaml
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.workspace import EffectiveSkillInvocation, SkillInfo
@@ -823,6 +824,241 @@ _ARCHITECTURE_RECIPE_STEP_PINS = {
     "remediation.run_arch_lenses",
 }
 
+_EXPERIMENT_LENS_SKILLS = (
+    "exp-lens-estimand-clarity",
+    "exp-lens-causal-assumptions",
+    "exp-lens-comparator-construction",
+    "exp-lens-pipeline-integrity",
+    "exp-lens-variance-stability",
+    "exp-lens-fair-comparison",
+    "exp-lens-reproducibility-artifacts",
+    "exp-lens-measurement-validity",
+    "exp-lens-sensitivity-robustness",
+    "exp-lens-benchmark-representativeness",
+    "exp-lens-unit-interference",
+    "exp-lens-error-budget",
+    "exp-lens-severity-testing",
+    "exp-lens-randomization-blocking",
+    "exp-lens-validity-threats",
+    "exp-lens-iterative-learning",
+    "exp-lens-exploratory-confirmatory",
+    "exp-lens-governance-risk",
+)
+
+_PREPARE_RESEARCH_PR_LENS_SUBSET = (
+    "exp-lens-fair-comparison",
+    "exp-lens-estimand-clarity",
+    "exp-lens-causal-assumptions",
+    "exp-lens-iterative-learning",
+    "exp-lens-sensitivity-robustness",
+    "exp-lens-exploratory-confirmatory",
+    "exp-lens-validity-threats",
+    "exp-lens-severity-testing",
+)
+
+_EXPERIMENT_RECIPE_STEP_PINS = {
+    "research.run_experiment_lenses",
+    "research-review.run_experiment_lenses",
+}
+
+ExperimentInventoryRow = tuple[str, str]
+
+
+def _experiment_inventory(
+    *step_one: ExperimentInventoryRow,
+) -> tuple[ExperimentInventoryRow, ...]:
+    return (("missing-context-fields", "repository-impact-profiler"), *step_one)
+
+
+_EXPERIMENT_VECTOR_INVENTORY: dict[str, tuple[ExperimentInventoryRow, ...]] = {
+    "exp-lens-estimand-clarity": _experiment_inventory(
+        ("stated-claims-hypotheses", "repository-impact-profiler"),
+        ("treatment-definition", "semantic-code-navigator"),
+        ("outcome-definition", "semantic-code-navigator"),
+        ("population-scope", "repository-impact-profiler"),
+        ("complication-handling", "semantic-code-navigator"),
+    ),
+    "exp-lens-causal-assumptions": _experiment_inventory(
+        ("treatment-outcome-definition", "semantic-code-navigator"),
+        ("confounding-pathways", "repository-impact-profiler"),
+        ("mediator-mechanism-variables", "semantic-code-navigator"),
+        ("collider-selection-variables", "semantic-code-navigator"),
+        ("randomization-assignment", "semantic-code-navigator"),
+    ),
+    "exp-lens-comparator-construction": _experiment_inventory(
+        ("baseline-control-definitions", "repository-impact-profiler"),
+        ("implementation-parity", "repository-impact-profiler"),
+        ("version-environment-match", "repository-impact-profiler"),
+        ("tuning-protocol-symmetry", "repository-impact-profiler"),
+        ("temporal-baseline-drift", "repository-impact-profiler"),
+    ),
+    "exp-lens-pipeline-integrity": _experiment_inventory(
+        ("data-loading-sources", "semantic-code-navigator"),
+        ("preprocessing-transforms", "semantic-code-navigator"),
+        ("split-logic", "semantic-code-navigator"),
+        ("feature-engineering", "semantic-code-navigator"),
+        ("model-training-evaluation", "semantic-code-navigator"),
+    ),
+    "exp-lens-variance-stability": _experiment_inventory(
+        ("random-seed-management", "semantic-code-navigator"),
+        ("nondeterminism-sources", "semantic-code-navigator"),
+        ("multiple-run-protocol", "semantic-code-navigator"),
+        ("variance-reporting", "repository-impact-profiler"),
+        ("signal-to-noise-assessment", "repository-impact-profiler"),
+    ),
+    "exp-lens-fair-comparison": _experiment_inventory(
+        ("compute-resource-allocation", "repository-impact-profiler"),
+        ("tuning-protocol-per-method", "semantic-code-navigator"),
+        ("data-access-preprocessing", "semantic-code-navigator"),
+        ("engineering-effort-indicators", "semantic-code-navigator"),
+        ("reporting-completeness", "repository-impact-profiler"),
+    ),
+    "exp-lens-reproducibility-artifacts": _experiment_inventory(
+        ("environment-dependencies", "repository-impact-profiler"),
+        ("data-provenance", "repository-impact-profiler"),
+        ("execution-entry-points", "semantic-code-navigator"),
+        ("random-seed-determinism", "semantic-code-navigator"),
+        ("output-artifacts-logging", "repository-impact-profiler"),
+    ),
+    "exp-lens-measurement-validity": _experiment_inventory(
+        ("metric-definitions", "semantic-code-navigator"),
+        ("intended-interpretations", "repository-impact-profiler"),
+        ("metric-computation-details", "semantic-code-navigator"),
+        ("alternative-metrics-considered", "repository-impact-profiler"),
+        ("construct-metric-gap", "repository-impact-profiler"),
+    ),
+    "exp-lens-sensitivity-robustness": _experiment_inventory(
+        ("analytic-choices-made", "semantic-code-navigator"),
+        ("ablation-coverage", "semantic-code-navigator"),
+        ("preprocessing-variations", "semantic-code-navigator"),
+        ("hyperparameter-sensitivity", "repository-impact-profiler"),
+        ("distribution-environment-variations", "repository-impact-profiler"),
+    ),
+    "exp-lens-benchmark-representativeness": _experiment_inventory(
+        ("benchmark-dataset-inventory", "repository-impact-profiler"),
+        ("task-scenario-coverage", "repository-impact-profiler"),
+        ("metric-coverage", "repository-impact-profiler"),
+        ("claimed-generalization-scope", "repository-impact-profiler"),
+        ("distribution-characteristics", "repository-impact-profiler"),
+    ),
+    "exp-lens-unit-interference": _experiment_inventory(
+        ("unit-definition", "semantic-code-navigator"),
+        ("cluster-group-structure", "semantic-code-navigator"),
+        ("shared-resources", "repository-impact-profiler"),
+        ("network-social-connections", "semantic-code-navigator"),
+        ("treatment-assignment-boundary", "semantic-code-navigator"),
+    ),
+    "exp-lens-error-budget": _experiment_inventory(
+        ("sample-size-power", "repository-impact-profiler"),
+        ("multiple-comparisons", "semantic-code-navigator"),
+        ("sequential-analysis", "semantic-code-navigator"),
+        ("decision-thresholds", "repository-impact-profiler"),
+        ("effect-size-context", "repository-impact-profiler"),
+    ),
+    "exp-lens-severity-testing": _experiment_inventory(
+        ("positive-results-claimed", "repository-impact-profiler"),
+        ("negative-controls-sanity-checks", "repository-impact-profiler"),
+        ("adversarial-conditions", "repository-impact-profiler"),
+        ("alternative-explanations-tested", "repository-impact-profiler"),
+        ("prediction-specificity", "repository-impact-profiler"),
+    ),
+    "exp-lens-randomization-blocking": _experiment_inventory(
+        ("assignment-mechanism", "semantic-code-navigator"),
+        ("blocking-stratification", "semantic-code-navigator"),
+        ("replication-structure", "repository-impact-profiler"),
+        ("order-timing-effects", "semantic-code-navigator"),
+        ("exclusion-attrition", "semantic-code-navigator"),
+    ),
+    "exp-lens-validity-threats": _experiment_inventory(
+        ("temporal-changes-history", "repository-impact-profiler"),
+        ("instrumentation-changes", "repository-impact-profiler"),
+        ("selection-filtering", "semantic-code-navigator"),
+        ("co-interventions", "repository-impact-profiler"),
+        ("treatment-diffusion", "semantic-code-navigator"),
+    ),
+    "exp-lens-iterative-learning": _experiment_inventory(
+        ("factor-space", "repository-impact-profiler"),
+        ("interaction-structure", "repository-impact-profiler"),
+        ("cost-resource-model", "repository-impact-profiler"),
+        ("sequential-decision-logic", "semantic-code-navigator"),
+        ("learning-objectives", "repository-impact-profiler"),
+    ),
+    "exp-lens-exploratory-confirmatory": _experiment_inventory(
+        ("pre-specified-plans", "repository-impact-profiler"),
+        ("analytic-flexibility", "semantic-code-navigator"),
+        ("selective-reporting-signals", "repository-impact-profiler"),
+        ("post-hoc-rationalization", "repository-impact-profiler"),
+        ("exploration-confirmation-separation", "repository-impact-profiler"),
+    ),
+    "exp-lens-governance-risk": _experiment_inventory(
+        ("intended-use-deployment-context", "repository-impact-profiler"),
+        ("subgroup-fairness-analysis", "repository-impact-profiler"),
+        ("harm-risk-metrics", "semantic-code-navigator"),
+        ("monitoring-feedback-plans", "semantic-code-navigator"),
+        ("limitation-disclosure", "repository-impact-profiler"),
+    ),
+}
+
+_EXPERIMENT_REVIEW_DIGESTS = {
+    "exp-lens-estimand-clarity": (
+        "adea2c13317bd089d66bde08d23999afd92a15a3a63e5fc3de2f7fef7ef408fd"
+    ),
+    "exp-lens-causal-assumptions": (
+        "0ffa8a302a004551e3f3d1047032b0884ffd338957b66e4e0cff02c89f009cbc"
+    ),
+    "exp-lens-comparator-construction": (
+        "d7a2491f6f289957419cc43017c467c0ee6d69038f4f0c4792aaded536e62e06"
+    ),
+    "exp-lens-pipeline-integrity": (
+        "0da452196ade9066331166675e9ee13c684e508dfd8a52ef078e01a534daa6d2"
+    ),
+    "exp-lens-variance-stability": (
+        "53f5cc17a866441d9c32a885af036c352b2609730ab7446e0522c14fc6d3caf1"
+    ),
+    "exp-lens-fair-comparison": (
+        "66885994e8a08d1fbede4982b72bf05abab31c88229e7c3aeac2710dd8b3ce86"
+    ),
+    "exp-lens-reproducibility-artifacts": (
+        "fa4604b518ad6614bb0e184aa72c340913e4d6579ece0f71f47c518c8bf05666"
+    ),
+    "exp-lens-measurement-validity": (
+        "ce31d75424c90b7b33e7f079a10cbab196494f402329abc4fa32e0da34760c5c"
+    ),
+    "exp-lens-sensitivity-robustness": (
+        "3a39f90bac84fe19fd44dfadde19a0235ee1e90f2f07aa094d88ab820f26fe2d"
+    ),
+    "exp-lens-benchmark-representativeness": (
+        "4846390e2073a2bb0c467c501f6421040f1b33a30d3977b43c396f3a73b35af6"
+    ),
+    "exp-lens-unit-interference": (
+        "2d4aa7606833bb73185c25a96edf7a0fc3d5658868f1cb50ea21a30f0953e5f6"
+    ),
+    "exp-lens-error-budget": ("60cd3e77ee5f2f1195dd7a52b08f8cc73a691f47864d9675ada0dae31a52e7ee"),
+    "exp-lens-severity-testing": (
+        "10ca2b28a3855d694b5b639a85f1889c80c8f2bff0cd9864245422602409128c"
+    ),
+    "exp-lens-randomization-blocking": (
+        "dc404626d7852d7eebecac31173aaf6778dbbc118649c5154e3ea17b3bdb610b"
+    ),
+    "exp-lens-validity-threats": (
+        "0f875fa4a12f07161536d8551c1aaac080aff0cab1d36259b767baef74b5a2fa"
+    ),
+    "exp-lens-iterative-learning": (
+        "174878db7f640ae29590f177d433f17d55b1b8f53161ada51f67bdff90a93034"
+    ),
+    "exp-lens-exploratory-confirmatory": (
+        "56aebdd702018d3c19f7edf8379a05d9d4ff7b781f64c5254d0f236a43c0dfa2"
+    ),
+    "exp-lens-governance-risk": (
+        "9fe55c185e3bb7dfd2c81f0061e4160081a8886e529c67aaba07c63afe553a3e"
+    ),
+}
+
+_MISSING_CONTEXT_FIELDS_BODY_DIGESTS = {
+    "39ecf9415491404a6c1288da80979096fa452d04bd6df835b048ecef6f78620d",
+    "5fd56558f7f721791a43d5825ff77ce73960eda3ba27332fc39ae83466a138f7",
+}
+
 _PHASE_D_REVIEW_DIGESTS = {
     "investigate": "a9b6026ed99b0071006f87fb6629ea782c665cc16f86f93c006a554eac49453a",
     "scope": "c9b43045d40f08e1ddaee38a9a0a6dc2ebad9fc75a0fe9f18a808eda5ee5cd84",
@@ -1145,6 +1381,146 @@ def test_architecture_selectors_filesystem_inventory_and_native_matrix_are_exact
     assert actual_native_dispatch_matrix == {
         slug: tuple(row[0] for row in rows) for slug, rows in _ARCHITECTURE_LENS_INVENTORY.items()
     }
+
+
+def test_experiment_lens_bundled_alias_and_prepare_research_families_are_exact() -> None:
+    defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+    bundled = tuple(name for name in defaults["skills"]["tier2"] if name.startswith("exp-lens-"))
+    make_experiment = (
+        pkg_root() / "skills_extended" / "make-experiment-diag" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    make_frontmatter = load_yaml(make_experiment.split("---", 2)[1])
+    siblings = tuple(
+        item["name"]
+        for item in make_frontmatter["semantic_requirements"]["sibling_skills"]
+        if item["name"].startswith("exp-lens-")
+    )
+    alias_table = make_experiment.split("## Alias Table", 1)[1].split("## Related Skills", 1)[0]
+    aliases = tuple(re.findall(r"^\| [a-z-]+ \| (exp-lens-[a-z-]+) \|", alias_table, re.MULTILINE))
+    filesystem = {
+        path.parent.name for path in (pkg_root() / "skills_extended").glob("exp-lens-*/SKILL.md")
+    }
+
+    prepare_research = (
+        pkg_root() / "skills_extended" / "prepare-research-pr" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    selection_table = prepare_research.split("## Lens Selection Table", 1)[1].split(
+        "## Experiment Status Badges", 1
+    )[0]
+    prepare_outputs = tuple(dict.fromkeys(re.findall(r"exp-lens-[a-z-]+", selection_table)))
+
+    assert bundled == aliases == _EXPERIMENT_LENS_SKILLS
+    assert tuple(_EXPERIMENT_VECTOR_INVENTORY) == _EXPERIMENT_LENS_SKILLS
+    assert siblings == tuple(sorted(_EXPERIMENT_LENS_SKILLS))
+    assert filesystem == set(_EXPERIMENT_LENS_SKILLS)
+    assert prepare_outputs == _PREPARE_RESEARCH_PR_LENS_SUBSET
+    assert set(prepare_outputs) < set(_EXPERIMENT_LENS_SKILLS)
+    assert _EXPERIMENT_RECIPE_STEP_PINS == {
+        "research.run_experiment_lenses",
+        "research-review.run_experiment_lenses",
+    }
+
+    manifest = load_yaml(pkg_root().parents[1] / ".autoskillit" / "test-filter-manifest.yaml")
+    skill_targets = set(manifest["src/autoskillit/skills_extended/*/SKILL.md"])
+    assert {"skills_extended/", "execution/", "skills/"} <= skill_targets
+
+
+@pytest.mark.parametrize("skill_name", _EXPERIMENT_LENS_SKILLS)
+def test_phase_f_experiment_vectors_match_complete_reviewed_inventory(
+    skill_name: str,
+) -> None:
+    info = _load_phase_d_skill(skill_name)
+    expected = _EXPERIMENT_VECTOR_INVENTORY[skill_name]
+
+    assert tuple((vector.id, vector.role) for vector in info.exploration_vectors) == expected
+    assert tuple(
+        vector.id for vector in info.exploration_vectors if vector.native_dispatch
+    ) == tuple(vector_id for vector_id, _ in expected)
+    assert len({vector.id for vector in info.exploration_vectors}) == len(expected) == 6
+    assert all(
+        vector.disposition is ExplorationVectorDisposition.MIGRATED
+        and vector.applicability is ExplorationVectorApplicabilityId.ALWAYS
+        and vector.profile is RepositoryProfileId.AUTO
+        and vector.task.profile is RepositoryProfileId.AUTO
+        and vector.task.task_id == f"{skill_name}-{vector.id}"
+        and vector.task.frontier_item_id == f"{skill_name}-{vector.id}-frontier"
+        and vector.task.depends_on == ()
+        and vector.task.scope == (".",)
+        and vector.native_dispatch
+        and vector.rationale.strip()
+        and vector.relationship_classes
+        for vector in info.exploration_vectors
+    )
+    assert _review_digest(info) == _EXPERIMENT_REVIEW_DIGESTS[skill_name]
+
+    missing_fields = info.exploration_vectors[0]
+    assert missing_fields.id == "missing-context-fields"
+    assert missing_fields.role == "repository-impact-profiler"
+    assert hashlib.sha256(missing_fields.body.encode()).hexdigest() in (
+        _MISSING_CONTEXT_FIELDS_BODY_DIGESTS
+    )
+    normalized_missing_body = missing_fields.body.lower().replace("-", " ")
+    for invariant in (
+        "absent",
+        "never rediscover",
+        "override",
+        "not applicable",
+        "search",
+        "unavailable",
+        "unrelated",
+        "without widening scope",
+        "inferring meaning",
+        "importing or executing target code",
+        "tests",
+        "experiments",
+    ):
+        assert invariant in normalized_missing_body, (skill_name, invariant)
+
+    content = info.path.read_text(encoding="utf-8")
+    for vector in info.exploration_vectors:
+        assert content.count(vector.marker_line) == 1
+        for pattern in _RAW_MIGRATED_AGENT_SYNTAX:
+            assert pattern.search(vector.body) is None, (
+                skill_name,
+                vector.id,
+                pattern.pattern,
+            )
+    assert content.count("<!-- /autoskillit:exploration-vector -->") == len(expected)
+
+
+def test_phase_f_experiment_inventory_is_complete_unique_and_acyclic() -> None:
+    graph: dict[str, set[str]] = {}
+    step_zero_count = 0
+    step_one_count = 0
+
+    for skill_name in _EXPERIMENT_LENS_SKILLS:
+        info = _load_phase_d_skill(skill_name)
+        for vector in info.exploration_vectors:
+            assert vector.task.task_id not in graph
+            graph[vector.task.task_id] = set(vector.task.depends_on)
+            if vector.id == "missing-context-fields":
+                step_zero_count += 1
+            else:
+                step_one_count += 1
+
+    assert step_zero_count == 18
+    assert step_one_count == 90
+    assert len(graph) == 108
+    assert set[str]().union(*graph.values()) <= set(graph)
+
+    remaining = dict(graph)
+    scheduled: list[str] = []
+    while remaining:
+        ready = tuple(task_id for task_id, dependencies in remaining.items() if not dependencies)
+        assert ready, f"cycle in experiment exploration graph: {remaining}"
+        scheduled.extend(ready)
+        remaining = {
+            task_id: dependencies.difference(ready)
+            for task_id, dependencies in remaining.items()
+            if task_id not in ready
+        }
+
+    assert len(scheduled) == 108
 
 
 @pytest.mark.parametrize("slug", _ARCHITECTURE_SELECTOR_SLUGS)

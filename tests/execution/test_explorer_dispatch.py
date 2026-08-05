@@ -109,10 +109,29 @@ _ARCHITECTURE_LENS_SKILLS = (
     "arch-lens-state-lifecycle",
 )
 
+_EXPERIMENT_LENS_SKILLS = (
+    "exp-lens-estimand-clarity",
+    "exp-lens-causal-assumptions",
+    "exp-lens-comparator-construction",
+    "exp-lens-pipeline-integrity",
+    "exp-lens-variance-stability",
+    "exp-lens-fair-comparison",
+    "exp-lens-reproducibility-artifacts",
+    "exp-lens-measurement-validity",
+    "exp-lens-sensitivity-robustness",
+    "exp-lens-benchmark-representativeness",
+    "exp-lens-unit-interference",
+    "exp-lens-error-budget",
+    "exp-lens-severity-testing",
+    "exp-lens-randomization-blocking",
+    "exp-lens-validity-threats",
+    "exp-lens-iterative-learning",
+    "exp-lens-exploratory-confirmatory",
+    "exp-lens-governance-risk",
+)
 
-def _architecture_vectors_from_skill(
-    skill_name: str,
-) -> tuple[ExplorationVectorDef, ...]:
+
+def _vectors_from_skill(skill_name: str) -> tuple[ExplorationVectorDef, ...]:
     path = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
     content = path.read_text(encoding="utf-8")
     frontmatter = cast(dict[str, Any], load_yaml(content.split("---", 2)[1]))
@@ -154,8 +173,8 @@ def _architecture_vectors_from_skill(
     return tuple(vectors)
 
 
-def _actual_architecture_vectors(skill_name: str) -> tuple[ExplorationVectorDef, ...]:
-    vectors = _architecture_vectors_from_skill(skill_name)
+def _actual_skill_vectors(skill_name: str) -> tuple[ExplorationVectorDef, ...]:
+    vectors = _vectors_from_skill(skill_name)
     assert all(vector.profile is RepositoryProfileId.AUTO for vector in vectors)
     return tuple(
         replace(
@@ -226,7 +245,7 @@ def test_all_actual_architecture_vectors_render_each_backend_native_form(
 
     rendered_count = 0
     for skill_name in _ARCHITECTURE_LENS_SKILLS:
-        vectors = _actual_architecture_vectors(skill_name)
+        vectors = _actual_skill_vectors(skill_name)
         assert vectors, skill_name
         plan = _plan(vectors)
         rendered = backend.exploration_dispatch_renderer.render(plan, vectors)
@@ -244,6 +263,49 @@ def test_all_actual_architecture_vectors_render_each_backend_native_form(
             assert json.dumps(vector.body)[1:-1] in replacement
 
     assert rendered_count > len(_ARCHITECTURE_LENS_SKILLS)
+
+
+@pytest.mark.parametrize(
+    ("backend", "native_prefix"),
+    [
+        (ClaudeCodeBackend(), 'Agent(subagent_type="autoskillit:'),
+        (CodexBackend(), 'spawn_agent(agent_type="'),
+    ],
+)
+def test_all_actual_experiment_vectors_render_each_backend_native_form(
+    backend: ClaudeCodeBackend | CodexBackend,
+    native_prefix: str,
+) -> None:
+    filesystem_skills = {
+        path.parent.name for path in (pkg_root() / "skills_extended").glob("exp-lens-*/SKILL.md")
+    }
+    assert filesystem_skills == set(_EXPERIMENT_LENS_SKILLS)
+
+    rendered_count = 0
+    authored_step_one_count = 0
+    for skill_name in _EXPERIMENT_LENS_SKILLS:
+        vectors = _actual_skill_vectors(skill_name)
+        assert len(vectors) == 6, skill_name
+        assert vectors[0].id == "missing-context-fields"
+        plan = _plan(vectors)
+        rendered = backend.exploration_dispatch_renderer.render(plan, vectors)
+
+        assert rendered.router_plan_digest == plan.digest
+        assert tuple(rendered.replacements) == tuple(
+            vector.id for vector in sorted(vectors, key=lambda item: item.task.task_id)
+        )
+        for vector in vectors:
+            rendered_count += 1
+            if vector.id != "missing-context-fields":
+                authored_step_one_count += 1
+            replacement = rendered.replacements[vector.id]
+            assert f'{native_prefix}{vector.role}"' in replacement
+            assert f"task_id: {vector.task.task_id}" in replacement
+            assert "profile: autoskillit" in replacement
+            assert json.dumps(vector.body)[1:-1] in replacement
+
+    assert rendered_count == 108
+    assert authored_step_one_count == 90
 
 
 @pytest.mark.parametrize("selected", _VECTORS, ids=lambda vector: vector.id)

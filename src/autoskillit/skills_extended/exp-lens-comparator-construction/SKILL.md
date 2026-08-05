@@ -7,6 +7,97 @@ activate_deps:
 - mermaid
 description: Create Comparator Construction experimental design analysis assessing whether baselines and controls are fair
   and relevant. Counterfactual lens answering "Is the comparator fair and relevant?"
+exploration_vectors:
+  - id: missing-context-fields
+    disposition: migrated
+    rationale: Repository impact evidence retrieves only IV/DV, hypothesis, control, and success-criterion fields absent from supplied context while the parent preserves comparator interpretation.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-comparator-construction-missing-context-fields
+    frontier_item_id: exp-lens-comparator-construction-missing-context-fields-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: baseline-control-definitions
+    disposition: migrated
+    rationale: Repository impact evidence inventories baseline and control declarations, references, and consumers while the parent judges whether each comparator is fair and relevant.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-comparator-construction-baseline-control-definitions
+    frontier_item_id: exp-lens-comparator-construction-baseline-control-definitions-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: implementation-parity
+    disposition: migrated
+    rationale: Repository impact evidence inventories reproduction provenance, tuning artifacts, and baseline implementation references while the parent routes semantic implementation traces to the navigator and assesses parity.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-comparator-construction-implementation-parity
+    frontier_item_id: exp-lens-comparator-construction-implementation-parity-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: version-environment-match
+    disposition: migrated
+    rationale: Repository impact evidence inventories version, library, framework, hardware, environment, and checkpoint artifacts without deciding whether environments are comparable.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-comparator-construction-version-environment-match
+    frontier_item_id: exp-lens-comparator-construction-version-environment-match-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: tuning-protocol-symmetry
+    disposition: migrated
+    rationale: Repository impact evidence inventories search spaces, tuning budgets, trials, sweeps, and epoch settings while the parent evaluates protocol symmetry.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-comparator-construction-tuning-protocol-symmetry
+    frontier_item_id: exp-lens-comparator-construction-tuning-protocol-symmetry-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
+  - id: temporal-baseline-drift
+    disposition: migrated
+    rationale: Repository impact evidence inventories dates, versions, deprecations, updates, and pre-existing revision-scoped baseline artifacts while the parent judges temporal relevance.
+    applicability: always
+    role: repository-impact-profiler
+    profile: auto
+    relationship_classes: [declares, references, affects]
+    task_id: exp-lens-comparator-construction-temporal-baseline-drift
+    frontier_item_id: exp-lens-comparator-construction-temporal-baseline-drift-frontier
+    depends_on: []
+    scope: [.]
+    max_results: 100
+    max_report_bytes: 20000
+    evidence_version: 1
+    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -58,6 +149,7 @@ semantic_requirements:
 - Accept at face value that baselines received symmetric treatment
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-comparator-construction/`
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -68,6 +160,11 @@ semantic_requirements:
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch exactly 6 exploration vectors through the deterministic router
+- Route semantic code, symbol, and data-control-flow handoffs to `semantic-code-navigator` and bounded configuration, data, fixture, manifest, generated-artifact, reproduction, test, and pre-existing revision-scoped artifact handoffs to `repository-impact-profiler` through the parent-owned plan
+- Wait for every exploration result before building the comparator inventory, evaluating fairness, or creating the diagram
+- Retain parent authority over comparator relevance and fairness judgments, Mermaid generation, and output writing
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-comparator-construction/exp_diag_comparator_construction_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -86,35 +183,39 @@ If positional arg 1 (context_path) is provided and the file exists, read it to o
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
 methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
+exploration for these fields if the context file supplies them.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+### Step 1: Launch 5 Routed Exploration Vectors (SINGLE MESSAGE)
+
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch exactly these five authored vectors under their registered role policies. Mixed code and declarative evidence remains one parent-owned plan; bounded role handoffs return to the originating vector and do not add graph dependencies.
 
-**Baseline/Control Definitions**
-- Find what the proposed method is compared against
-- Look for: baseline, control, comparison, prior, state-of-the-art, vanilla, default, reference
+<!-- autoskillit:exploration-vector id="baseline-control-definitions" -->
+1. **Baseline/Control Definitions** — Find what the proposed method is compared against through `baseline`, `control`, `comparison`, `prior`, `state-of-the-art`, `vanilla`, `default`, and `reference` evidence. Route semantic baseline definitions through the parent to the navigator.
+<!-- /autoskillit:exploration-vector -->
 
-**Implementation Parity**
-- Find whether baselines get equal engineering effort
-- Look for: reproduce, reimplement, original, paper, author, tuned, optimized, hyperparameter
+<!-- autoskillit:exploration-vector id="implementation-parity" -->
+2. **Implementation Parity** — Find whether baselines receive equal engineering effort through `reproduce`, `reimplement`, `original`, `paper`, `author`, `tuned`, `optimized`, and `hyperparameter` evidence. Route semantic implementation symbols and call paths through the parent to the navigator.
+<!-- /autoskillit:exploration-vector -->
 
-**Version & Environment Match**
-- Find whether baselines use the same software/hardware environment
-- Look for: version, library, framework, gpu, hardware, environment, checkpoint
+<!-- autoskillit:exploration-vector id="version-environment-match" -->
+3. **Version & Environment Match** — Find whether baselines use the same software and hardware environment through `version`, `library`, `framework`, `gpu`, `hardware`, `environment`, and `checkpoint` evidence.
+<!-- /autoskillit:exploration-vector -->
 
-**Tuning Protocol Symmetry**
-- Find whether hyperparameter tuning is symmetric
-- Look for: tune, search, grid, optuna, sweep, budget, trials, epochs
+<!-- autoskillit:exploration-vector id="tuning-protocol-symmetry" -->
+4. **Tuning Protocol Symmetry** — Find whether hyperparameter tuning is symmetric through `tune`, `search`, `grid`, `optuna`, `sweep`, `budget`, `trials`, and `epochs` evidence.
+<!-- /autoskillit:exploration-vector -->
 
-**Temporal Baseline Drift**
-- Find whether baselines have been updated or are stale
-- Look for: date, published, year, updated, latest, deprecated, legacy
+<!-- autoskillit:exploration-vector id="temporal-baseline-drift" -->
+5. **Temporal Baseline Drift** — Find whether baselines have been updated or are stale through `date`, `published`, `year`, `updated`, `latest`, `deprecated`, and `legacy` evidence.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Build the Comparator Inventory
 

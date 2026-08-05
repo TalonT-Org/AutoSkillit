@@ -17,8 +17,12 @@ _DEFAULT_RECIPE_OVERRIDES = {
         "investigate": "codex",
         "run_arch_lenses": "codex",
     },
-    "research": {"scope": "codex"},
+    "research": {
+        "run_experiment_lenses": "codex",
+        "scope": "codex",
+    },
     "research-design": {"scope": "codex"},
+    "research-review": {"run_experiment_lenses": "codex"},
 }
 
 
@@ -110,6 +114,16 @@ class TestAgentBackendConfigLoading:
         assert "agent_backend" in defaults
         assert defaults["agent_backend"]["backend"] == "claude-code"
         assert defaults["agent_backend"]["recipe_overrides"] == _DEFAULT_RECIPE_OVERRIDES
+
+    def test_defaults_manifest_routes_backend_pins_to_resolver_contracts(self) -> None:
+        from autoskillit.core.io import load_yaml
+        from autoskillit.core.paths import pkg_root
+
+        manifest = load_yaml(pkg_root().parents[1] / ".autoskillit" / "test-filter-manifest.yaml")
+        targets = manifest["src/autoskillit/config/defaults.yaml"]
+
+        assert "server/test_resolve_backend_override.py" in targets
+        assert "server/test_explicit_backend_override.py" in targets
 
     @pytest.mark.parametrize(
         "recipe_name",
@@ -252,7 +266,10 @@ class TestAgentBackendConfigOverrides:
                 {
                     "agent_backend": {
                         "backend": "codex",
-                        "recipe_overrides": {"remediation": {"dry_walkthrough": "codex"}},
+                        "recipe_overrides": {
+                            "remediation": {"dry_walkthrough": "codex"},
+                            "research": {"custom_review": "claude-code"},
+                        },
                         "step_overrides": {"implement": "claude-code"},
                     }
                 }
@@ -266,6 +283,11 @@ class TestAgentBackendConfigOverrides:
                 "investigate": "codex",
                 "run_arch_lenses": "codex",
                 "dry_walkthrough": "codex",
+            },
+            "research": {
+                "run_experiment_lenses": "codex",
+                "scope": "codex",
+                "custom_review": "claude-code",
             },
         }
         assert cfg.agent_backend.step_overrides == {"implement": "claude-code"}

@@ -115,29 +115,6 @@ _SKIP_REASON = (
     " or ~/.codex/auth.json to run Codex smoke tests"
 )
 _CODEX_AUTH_PATH = Path("~/.codex/auth.json").expanduser()
-_CODEX_PROBE_PROCESS_ENV_ALLOWLIST = frozenset(
-    {
-        "ALL_PROXY",
-        "CODEX_API_KEY",
-        "CODEX_BASE_URL",
-        "HTTP_PROXY",
-        "HTTPS_PROXY",
-        "NO_PROXY",
-        "OPENAI_API_KEY",
-        "OPENAI_BASE_URL",
-        "OPENAI_ORGANIZATION",
-        "OPENAI_ORG_ID",
-        "OPENAI_PROJECT_ID",
-        "PATH",
-        "REQUESTS_CA_BUNDLE",
-        "SSL_CERT_DIR",
-        "SSL_CERT_FILE",
-        "all_proxy",
-        "http_proxy",
-        "https_proxy",
-        "no_proxy",
-    }
-)
 
 _skip_unless_codex_smoke = pytest.mark.skipif(
     not os.environ.get("CODEX_SMOKE_TEST")

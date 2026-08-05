@@ -50,29 +50,6 @@ _LIVE_ENV = "AUTOSKILLIT_EXPLORER_LIVE_GATE"
 _AUTH_ENV_NAMES = ("CODEX_API_KEY", "OPENAI_API_KEY")
 _MAX_CAPTURE_BYTES = 4 * 1024 * 1024
 _PARENT_TIMEOUT_SECONDS = 240
-_CODEX_PROCESS_ENV_ALLOWLIST = frozenset(
-    {
-        "ALL_PROXY",
-        "CODEX_API_KEY",
-        "CODEX_BASE_URL",
-        "HTTP_PROXY",
-        "HTTPS_PROXY",
-        "NO_PROXY",
-        "OPENAI_API_KEY",
-        "OPENAI_BASE_URL",
-        "OPENAI_ORGANIZATION",
-        "OPENAI_ORG_ID",
-        "OPENAI_PROJECT_ID",
-        "PATH",
-        "REQUESTS_CA_BUNDLE",
-        "SSL_CERT_DIR",
-        "SSL_CERT_FILE",
-        "all_proxy",
-        "http_proxy",
-        "https_proxy",
-        "no_proxy",
-    }
-)
 
 _skip_unless_live_gate = pytest.mark.skipif(
     not os.environ.get(_LIVE_ENV)

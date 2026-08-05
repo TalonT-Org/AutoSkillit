@@ -326,7 +326,7 @@ async def test_fresh_run_skill_revokes_explorer_authority_after_injection_outcom
     tool_ctx_kitchen_open.session_skill_manager = DefaultSessionSkillManager(
         SkillsDirectoryProvider(),
         ephemeral_root=tmp_path / "ephemeral-sessions",
-        persistent_root=tmp_path / "persistent-sessions",
+        persistent_roots={"codex": tmp_path / "persistent-sessions"},
     )
     tool_ctx_kitchen_open.read_only_resolver = lambda _command: True
     tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
@@ -379,7 +379,7 @@ async def test_resumed_run_skill_revokes_replacement_authority_after_refresh_fai
     tool_ctx_kitchen_open.session_skill_manager = DefaultSessionSkillManager(
         SkillsDirectoryProvider(),
         ephemeral_root=tmp_path / "ephemeral-sessions",
-        persistent_root=tmp_path / "persistent-sessions",
+        persistent_roots={"codex": tmp_path / "persistent-sessions"},
     )
     bind_test_skill_resume_contract(
         tool_ctx_kitchen_open,

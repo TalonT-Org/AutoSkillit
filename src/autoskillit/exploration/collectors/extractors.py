@@ -87,7 +87,7 @@ def _evidence(
 ) -> EvidenceRecord:
     claim = excerpt
     location = f"{path}:{line}"
-    method, version = _COLLECTOR_METADATA.get(collector_id, ("collector", _COLLECTOR_VERSION))
+    method, version = _collector_metadata(collector_id)
     digest = hashlib.sha256(claim.encode("utf-8", "surrogateescape")).hexdigest()
     identifier = hashlib.sha256(
         f"{collector_id}\0{method}\0{version}\0{path}\0{line}\0{claim}\0{digest}".encode(
@@ -513,7 +513,7 @@ def collect_observational_artifact(
 def _relabel(
     report: CollectorReport, collector_id: str, *, subject_namespace: str | None = None
 ) -> CollectorReport:
-    method, version = _COLLECTOR_METADATA[collector_id]
+    method, version = _collector_metadata(collector_id)
     evidence = tuple(
         replace(
             record,
@@ -674,6 +674,11 @@ COLLECTOR_PROFILES: Final = (
 )
 
 
-_COLLECTOR_METADATA: Final = {
-    profile.collector_id: (profile.method, profile.version) for profile in COLLECTOR_PROFILES
-}
+def _collector_metadata(collector_id: str) -> tuple[str, str]:
+    profile = next(
+        (profile for profile in COLLECTOR_PROFILES if profile.collector_id == collector_id),
+        None,
+    )
+    if profile is None:
+        return "collector", _COLLECTOR_VERSION
+    return profile.method, profile.version

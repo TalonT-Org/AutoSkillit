@@ -38,6 +38,11 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _has_exact_identity_field(content: str, field: str, value: str) -> bool:
+    expected = f"{field}: {value}"
+    return any(line.strip() == expected for line in content.splitlines())
+
+
 def _explorer_launch_identity(
     invocation: EffectiveSkillInvocationAuthority | None,
 ) -> tuple[Path, str] | None:
@@ -263,9 +268,15 @@ def _build_requested_execution_identity(
             )
             for child in requested_children:
                 if (
-                    f"task_id: {child.task_id}" not in projected_skill
-                    or f"router_plan_digest: {child.plan_digest}" not in projected_skill
-                    or f"role_definition_digest: {child.definition_digest}" not in projected_skill
+                    not _has_exact_identity_field(projected_skill, "task_id", child.task_id)
+                    or not _has_exact_identity_field(
+                        projected_skill, "router_plan_digest", child.plan_digest
+                    )
+                    or not _has_exact_identity_field(
+                        projected_skill,
+                        "role_definition_digest",
+                        child.definition_digest,
+                    )
                 ):
                     raise SkillContractError(
                         "Projected native exploration packet identity is incomplete"

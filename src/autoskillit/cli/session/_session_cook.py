@@ -10,7 +10,12 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from autoskillit.cli.session._session_launch import (
+    render_skill_catalog_exclusions,
+    render_skill_contract_composition_failure,
+)
 from autoskillit.core import (
+    SkillContractError,
     is_feature_enabled,
     plugin_launch_binding_scope,
     resolve_project_dir,
@@ -73,7 +78,11 @@ def cook(
     project_dir = resolve_project_dir()
     skill_resolver = DefaultSkillResolver()
     skill_visibility = config.skill_visibility_spec()
-    validate_skill_tier_roles(skill_visibility, skill_resolver, project_dir)
+    try:
+        validate_skill_tier_roles(skill_visibility, skill_resolver, project_dir)
+    except SkillContractError as exc:
+        render_skill_contract_composition_failure(exc)
+        raise SystemExit(1) from exc
     if backend is None:
         from autoskillit.cli.session._session_backend import resolve_global_backend
 
@@ -176,12 +185,17 @@ def cook(
         temp_dir_relpath=temp_dir_display_str(config.workspace.temp_dir),
         default_base_branch=config.branching.default_base_branch,
     )
-    session_catalog = skill_resolver.list_effective(
-        project_dir,
-        SkillExecutionRole.SESSION,
-        visibility=skill_visibility,
-        cook_session=True,
-    )
+    try:
+        session_catalog = skill_resolver.list_effective(
+            project_dir,
+            SkillExecutionRole.SESSION,
+            visibility=skill_visibility,
+            cook_session=True,
+        )
+    except SkillContractError as exc:
+        render_skill_contract_composition_failure(exc)
+        raise SystemExit(1) from exc
+    render_skill_catalog_exclusions(session_catalog.exclusions)
     catalog_compilation = compile_session_skill_catalog(session_catalog, backend)
     session_catalog = catalog_compilation.catalog
     projection_context = skills_provider.catalog_projection_context(

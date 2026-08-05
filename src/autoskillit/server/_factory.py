@@ -28,6 +28,7 @@ from autoskillit.core import (
     PluginRetirementCoordinator,
     RecipeExecutionId,
     RecipeExecutionSnapshot,
+    SkillContractError,
     SkillExecutionRole,
     SubprocessRunner,
     WriteBehaviorSpec,
@@ -313,12 +314,30 @@ def make_context(
         default_base_branch=config.branching.default_base_branch,
     )
     skill_visibility = config.skill_visibility_spec()
-    validate_skill_tier_roles(skill_visibility, provider.resolver, project_dir)
-    session_catalog = provider.resolver.list_effective(
-        project_dir,
-        SkillExecutionRole.SESSION,
-        visibility=skill_visibility,
-    )
+    try:
+        validate_skill_tier_roles(skill_visibility, provider.resolver, project_dir)
+        session_catalog = provider.resolver.list_effective(
+            project_dir,
+            SkillExecutionRole.SESSION,
+            visibility=skill_visibility,
+        )
+    except SkillContractError:
+        # Message is already actionable after the resolution-boundary
+        # containment (file path, invalidity kind's hint, doctor pointer).
+        # Re-raised as-is — every MCP-facing caller of make_context() already
+        # wraps composition in try/except SkillContractError and returns a
+        # clean, structured error envelope instead of a stack dump.
+        logger.error("skill_composition_failed", project_dir=str(project_dir))
+        raise
+    if session_catalog.exclusions:
+        logger.warning(
+            "skill_catalog_exclusions",
+            project_dir=str(project_dir),
+            excluded=[
+                {"name": item.name, "path": str(item.path), "hints": list(item.hints)}
+                for item in session_catalog.exclusions
+            ],
+        )
     # Single lazy authority, shared with `autoskillit cook`. No projection is
     # materialized until a physical child launch has resolved its backend and
     # load mode.

@@ -18,7 +18,6 @@ from autoskillit.core import (
     EffectiveSkillCatalogAuthority,
     HookTrustPolicy,
     ManagedSessionHome,
-    SkillContractError,
     SkillProjectionContextAuthority,
     ValidatedAddDir,
 )
@@ -339,8 +338,14 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
     assert captured["pass_fds"] == (3, 5)
 
 
-def test_cook_rejects_orchestrator_skill_in_l1_tier_before_launch() -> None:
-    """Direct cook composition validates configured tiers before materialization."""
+def test_cook_rejects_orchestrator_skill_in_l1_tier_before_launch(capsys) -> None:
+    """Direct cook composition validates configured tiers before materialization.
+
+    Composition-root rendering (2.3) catches SkillContractError around
+    validate_skill_tier_roles and exits cleanly instead of letting a raw
+    traceback propagate — the pin moves from `pytest.raises(SkillContractError)`
+    to `pytest.raises(SystemExit)` plus an output assertion.
+    """
     cfg = AutomationConfig()
     cfg.skills.tier2 = ["process-issues"]
     mock_backend_cls, _ = _make_mock_backend_class()
@@ -352,8 +357,13 @@ def test_cook_rejects_orchestrator_skill_in_l1_tier_before_launch() -> None:
         patch("autoskillit.cli.session._session_cook.resolve_project_dir", Path.cwd),
         patch("autoskillit.cli.session._session_process.run_cook_attempt") as run,
     ):
-        with pytest.raises(SkillContractError, match="process-issues.*ORCHESTRATOR"):
+        with pytest.raises(SystemExit) as exc_info:
             cook_module.cook(backend=mock_backend_cls())
 
+    assert exc_info.value.code == 1
+    out = capsys.readouterr().out
+    assert "process-issues" in out
+    assert "ORCHESTRATOR" in out
+    assert "Traceback" not in out
     manager_cls.assert_not_called()
     run.assert_not_called()

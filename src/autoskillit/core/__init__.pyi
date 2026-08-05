@@ -901,6 +901,7 @@ from .types import SkillContractView as SkillContractView
 from .types import SkillExecutionRole as SkillExecutionRole
 from .types import SkillFamilyDef as SkillFamilyDef
 from .types import SkillFrontmatterAuthority as SkillFrontmatterAuthority
+from .types import SkillInvalidityKind as SkillInvalidityKind
 from .types import SkillLister as SkillLister
 from .types import SkillModelClassDef as SkillModelClassDef
 from .types import SkillProjectionBinding as SkillProjectionBinding

@@ -948,7 +948,7 @@ class TestSkillInfoSchemaExhaustiveness:
         derived_fields = {
             "execution_role",
             "frontmatter",
-            "invalid_reason",
+            "invalidities",
             "semantic_plan",
         }
         parseable_fields = dc_fields - constructor_only - derived_fields

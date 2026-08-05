@@ -29,6 +29,7 @@ from autoskillit.core import (
     LogicalRoleSpec,
     SiblingSkillSpec,
     SkillContractError,
+    SkillInvalidityKind,
     SkillSemanticPlan,
 )
 
@@ -880,18 +881,21 @@ def parse_skill_semantic_plan(
     path: Path,
     content: str,
     uses_capabilities: frozenset[str],
-) -> tuple[SkillSemanticPlan | None, tuple[str, ...]]:
+) -> tuple[SkillSemanticPlan | None, tuple[tuple[SkillInvalidityKind, str], ...]]:
     """Parse one source declaration without granting it backend authority."""
-    diagnostics: list[str] = []
+    diagnostics: list[tuple[SkillInvalidityKind, str]] = []
     schema_version = data.get("semantic_version", SKILL_SEMANTIC_SCHEMA_VERSION)
     retired_caps = sorted(uses_capabilities & _RETIRED_SEMANTIC_CAPABILITIES.keys())
     for capability in retired_caps:
         diagnostics.append(
-            _semantic_error(
-                path,
-                schema_version=schema_version,
-                offending=capability,
-                replacement=_RETIRED_SEMANTIC_CAPABILITIES[capability],
+            (
+                SkillInvalidityKind.SEMANTIC_UNDECLARED_TOKENS,
+                _semantic_error(
+                    path,
+                    schema_version=schema_version,
+                    offending=capability,
+                    replacement=_RETIRED_SEMANTIC_CAPABILITIES[capability],
+                ),
             )
         )
 
@@ -906,11 +910,14 @@ def parse_skill_semantic_plan(
     for token, replacement in raw_tokens:
         if token in body:
             diagnostics.append(
-                _semantic_error(
-                    path,
-                    schema_version=schema_version,
-                    offending=token,
-                    replacement=replacement,
+                (
+                    SkillInvalidityKind.SEMANTIC_UNDECLARED_TOKENS,
+                    _semantic_error(
+                        path,
+                        schema_version=schema_version,
+                        offending=token,
+                        replacement=replacement,
+                    ),
                 )
             )
 
@@ -919,21 +926,27 @@ def parse_skill_semantic_plan(
         return None, tuple(diagnostics)
     if "semantic_version" not in data:
         diagnostics.append(
-            _semantic_error(
-                path,
-                schema_version="missing",
-                offending="semantic_requirements",
-                replacement=f"semantic_version: {SKILL_SEMANTIC_SCHEMA_VERSION}",
+            (
+                SkillInvalidityKind.SEMANTIC_MISSING_VERSION,
+                _semantic_error(
+                    path,
+                    schema_version="missing",
+                    offending="semantic_requirements",
+                    replacement=f"semantic_version: {SKILL_SEMANTIC_SCHEMA_VERSION}",
+                ),
             )
         )
         return None, tuple(diagnostics)
     if schema_version != SKILL_SEMANTIC_SCHEMA_VERSION:
         diagnostics.append(
-            _semantic_error(
-                path,
-                schema_version=schema_version,
-                offending=f"semantic_version: {schema_version}",
-                replacement=f"semantic_version: {SKILL_SEMANTIC_SCHEMA_VERSION}",
+            (
+                SkillInvalidityKind.SEMANTIC_VERSION_MISMATCH,
+                _semantic_error(
+                    path,
+                    schema_version=schema_version,
+                    offending=f"semantic_version: {schema_version}",
+                    replacement=f"semantic_version: {SKILL_SEMANTIC_SCHEMA_VERSION}",
+                ),
             )
         )
         return None, tuple(diagnostics)
@@ -941,11 +954,14 @@ def parse_skill_semantic_plan(
     raw_requirements = data.get("semantic_requirements", {})
     if not isinstance(raw_requirements, dict):
         diagnostics.append(
-            _semantic_error(
-                path,
-                schema_version=schema_version,
-                offending="semantic_requirements",
-                replacement="a mapping of version-1 semantic requirement fields",
+            (
+                SkillInvalidityKind.SEMANTIC_PLAN_INVALID,
+                _semantic_error(
+                    path,
+                    schema_version=schema_version,
+                    offending="semantic_requirements",
+                    replacement="a mapping of version-1 semantic requirement fields",
+                ),
             )
         )
         return None, tuple(diagnostics)
@@ -956,11 +972,14 @@ def parse_skill_semantic_plan(
             token, f"one of {sorted(_SEMANTIC_REQUIREMENT_KEYS)}"
         )
         diagnostics.append(
-            _semantic_error(
-                path,
-                schema_version=schema_version,
-                offending=token,
-                replacement=replacement,
+            (
+                SkillInvalidityKind.SEMANTIC_PLAN_INVALID,
+                _semantic_error(
+                    path,
+                    schema_version=schema_version,
+                    offending=token,
+                    replacement=replacement,
+                ),
             )
         )
     if diagnostics:
@@ -1028,11 +1047,14 @@ def parse_skill_semantic_plan(
         )
     except (SkillContractError, TypeError, ValueError) as exc:
         diagnostics.append(
-            _semantic_error(
-                path,
-                schema_version=schema_version,
-                offending="semantic_requirements",
-                replacement=f"a valid version-{SKILL_SEMANTIC_SCHEMA_VERSION} plan ({exc})",
+            (
+                SkillInvalidityKind.SEMANTIC_PLAN_INVALID,
+                _semantic_error(
+                    path,
+                    schema_version=schema_version,
+                    offending="semantic_requirements",
+                    replacement=f"a valid version-{SKILL_SEMANTIC_SCHEMA_VERSION} plan ({exc})",
+                ),
             )
         )
         return None, tuple(diagnostics)

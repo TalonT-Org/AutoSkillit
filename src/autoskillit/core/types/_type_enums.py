@@ -15,6 +15,7 @@ __all__ = [
     "RestartScope",
     "SkillExecutionRole",
     "SkillSource",
+    "SkillInvalidityKind",
     "RecipeSource",
     "ClaudeFlags",
     "VARIADIC_CLAUDE_FLAGS",
@@ -151,6 +152,25 @@ class SkillSource(StrEnum):
     BUNDLED_EXTENDED = "bundled_extended"
     PROJECT_LOCAL = "project_local"
     THIRD_PARTY = "third_party"
+
+
+class SkillInvalidityKind(StrEnum):
+    """One enumerable reason a skill contract failed validation.
+
+    Mechanically enumerable so a forcing-function registry
+    (``SKILL_CONTRACT_REMEDIATIONS``) can require every kind to declare how
+    pre-existing artifacts are handled before a new validation may ship.
+    """
+
+    FRONTMATTER_PARSE = "frontmatter_parse"
+    FIELD_SHAPE = "field_shape"
+    RESERVED_FIELD = "reserved_field"
+    UNKNOWN_CAPABILITY = "unknown_capability"
+    UNDECLARED_CAPABILITY = "undeclared_capability"
+    SEMANTIC_UNDECLARED_TOKENS = "semantic_undeclared_tokens"
+    SEMANTIC_MISSING_VERSION = "semantic_missing_version"
+    SEMANTIC_VERSION_MISMATCH = "semantic_version_mismatch"
+    SEMANTIC_PLAN_INVALID = "semantic_plan_invalid"
 
 
 class RecipeSource(StrEnum):

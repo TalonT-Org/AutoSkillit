@@ -19,6 +19,7 @@ from autoskillit.core import (
     FeatureLifecycle,
     SkillContractError,
     SkillExecutionRole,
+    SkillInvalidityKind,
     SkillResolver,
     SkillSemanticPlan,
     SkillSource,
@@ -68,6 +69,14 @@ def _project_skill_path(root: Path, search: Path, name: str) -> Path | None:
 
 
 @dataclass(frozen=True, slots=True)
+class SkillInvalidity:
+    """One typed reason a skill's contract failed validation."""
+
+    kind: SkillInvalidityKind
+    detail: str
+
+
+@dataclass(frozen=True, slots=True)
 class SkillInfo:
     """One exact, typed skill machine contract selected from a source."""
 
@@ -83,7 +92,7 @@ class SkillInfo:
     canonical_content: str = ""
     canonical_digest: str = ""
     frontmatter: SkillFrontmatterParseResult | None = None
-    invalid_reason: str | None = None
+    invalidities: tuple[SkillInvalidity, ...] = ()
 
     def __post_init__(self) -> None:
         if self.source_ref is None:
@@ -120,17 +129,29 @@ class SkillInfo:
         if (
             self.frontmatter is not None
             and not self.frontmatter.is_valid
-            and self.invalid_reason is None
+            and not self.invalidities
         ):
             object.__setattr__(
                 self,
-                "invalid_reason",
-                f"invalid frontmatter: {self.frontmatter.error}",
+                "invalidities",
+                (
+                    SkillInvalidity(
+                        SkillInvalidityKind.FRONTMATTER_PARSE,
+                        f"invalid frontmatter: {self.frontmatter.error}",
+                    ),
+                ),
             )
 
     @property
     def canonical_bytes(self) -> bytes:
         return self.canonical_content.encode("utf-8")
+
+    @property
+    def invalid_reason(self) -> str | None:
+        """Byte-identical to the accumulated string this field used to be."""
+        if not self.invalidities:
+            return None
+        return "; ".join(item.detail for item in self.invalidities)
 
     @property
     def source_identity(self) -> SkillSourceIdentity:
@@ -390,14 +411,21 @@ def _skill_info_from_frontmatter(
             canonical_content=parsed.content,
             canonical_digest=hashlib.sha256(parsed.content.encode()).hexdigest(),
             frontmatter=parsed,
-            invalid_reason=f"invalid frontmatter: {parsed.error}",
+            invalidities=(
+                SkillInvalidity(
+                    SkillInvalidityKind.FRONTMATTER_PARSE,
+                    f"invalid frontmatter: {parsed.error}",
+                ),
+            ),
         )
 
     data = parsed.data
-    invalid_reasons: list[str] = []
+    invalidities: list[SkillInvalidity] = []
     categories_raw = data.get("categories", [])
     if not isinstance(categories_raw, list):
-        invalid_reasons.append("categories must be a list")
+        invalidities.append(
+            SkillInvalidity(SkillInvalidityKind.FIELD_SHAPE, "categories must be a list")
+        )
         categories_raw = []
     categories = frozenset(str(c) for c in categories_raw)
 
@@ -409,7 +437,9 @@ def _skill_info_from_frontmatter(
             skill=name,
             hint="use bracket syntax: uses_capabilities: [agent_subagent]",
         )
-        invalid_reasons.append("uses_capabilities must be a list")
+        invalidities.append(
+            SkillInvalidity(SkillInvalidityKind.FIELD_SHAPE, "uses_capabilities must be a list")
+        )
         caps_raw = []
     uses_capabilities = frozenset(str(c) for c in caps_raw)
 
@@ -421,13 +451,15 @@ def _skill_info_from_frontmatter(
         content=parsed.content,
         uses_capabilities=uses_capabilities,
     )
-    invalid_reasons.extend(semantic_diagnostics)
+    invalidities.extend(SkillInvalidity(kind, detail) for kind, detail in semantic_diagnostics)
 
     execution_role = parsed.execution_role
 
     activate_deps_raw = data.get("activate_deps", [])
     if not isinstance(activate_deps_raw, list):
-        invalid_reasons.append("activate_deps must be a list")
+        invalidities.append(
+            SkillInvalidity(SkillInvalidityKind.FIELD_SHAPE, "activate_deps must be a list")
+        )
         activate_deps_raw = []
     activate_deps = tuple(str(dep) for dep in activate_deps_raw)
 
@@ -436,7 +468,12 @@ def _skill_info_from_frontmatter(
     supplied_canonical_content = data.get("canonical_content")
     supplied_canonical_digest = data.get("canonical_digest")
     if supplied_canonical_content is not None or supplied_canonical_digest is not None:
-        invalid_reasons.append("canonical content and digest are source-derived")
+        invalidities.append(
+            SkillInvalidity(
+                SkillInvalidityKind.RESERVED_FIELD,
+                "canonical content and digest are source-derived",
+            )
+        )
 
     unknown_caps = uses_capabilities - frozenset(SKILL_CAPABILITY_REGISTRY)
     if unknown_caps:
@@ -450,7 +487,7 @@ def _skill_info_from_frontmatter(
     try:
         validate_skill_capability_roles(uses_capabilities, execution_role)
     except SkillContractError as exc:
-        invalid_reasons.append(str(exc))
+        invalidities.append(SkillInvalidity(SkillInvalidityKind.UNKNOWN_CAPABILITY, str(exc)))
 
     canonical_digest = hashlib.sha256(parsed.content.encode()).hexdigest()
 
@@ -467,7 +504,7 @@ def _skill_info_from_frontmatter(
         canonical_content=parsed.content,
         canonical_digest=canonical_digest,
         frontmatter=parsed,
-        invalid_reason="; ".join(invalid_reasons) or None,
+        invalidities=tuple(invalidities),
     )
     from autoskillit.workspace.skill_capabilities import (
         validate_skill_capability_authenticity,
@@ -475,15 +512,14 @@ def _skill_info_from_frontmatter(
 
     authenticity_diagnostics = validate_skill_capability_authenticity(info)
     if authenticity_diagnostics:
-        reasons = [
-            reason
-            for reason in (
-                info.invalid_reason,
-                *authenticity_diagnostics,
-            )
-            if reason
-        ]
-        info = replace(info, invalid_reason="; ".join(reasons))
+        info = replace(
+            info,
+            invalidities=info.invalidities
+            + tuple(
+                SkillInvalidity(SkillInvalidityKind.UNDECLARED_CAPABILITY, reason)
+                for reason in authenticity_diagnostics
+            ),
+        )
     return info
 
 

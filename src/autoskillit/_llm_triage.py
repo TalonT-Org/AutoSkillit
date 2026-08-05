@@ -101,7 +101,7 @@ async def triage_staleness(
                     canonical_digest=hashlib.sha256(synthetic_content.encode()).hexdigest(),
                     frontmatter=parse_frontmatter_content(synthetic_content),
                     execution_role=SkillExecutionRole.SESSION,
-                    invalid_reason=None,
+                    invalidities=(),
                 )
             if (
                 skill_info is None

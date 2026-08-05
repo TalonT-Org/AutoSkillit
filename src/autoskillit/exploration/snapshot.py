@@ -597,7 +597,7 @@ def capture_repository_snapshot(
     except _SnapshotTruncated as exc:
         if identity_start is None or activation_start is None:
             return SnapshotCaptureResult(
-                status=SnapshotCaptureStatus.TRUNCATED, snapshot=None, diagnostic=str(exc)
+                status=SnapshotCaptureStatus.FAILED, snapshot=None, diagnostic=str(exc)
             )
         terminal = _terminal_snapshot(
             identity=identity_start.repository_identity,

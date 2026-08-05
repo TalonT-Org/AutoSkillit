@@ -93,6 +93,19 @@ _DEEP_PROFILER = _vector(
 )
 _VECTORS = (_STANDARD_NAVIGATOR, _DEEP_PROFILER)
 
+_BACKEND_NATIVE_PREFIX_CASES = (
+    pytest.param(
+        ClaudeCodeBackend(),
+        'Agent(subagent_type="autoskillit:',
+        id="claude",
+    ),
+    pytest.param(
+        CodexBackend(),
+        'spawn_agent(agent_type="',
+        id="codex",
+    ),
+)
+
 _ARCHITECTURE_LENS_SKILLS = (
     "arch-lens-c4-container",
     "arch-lens-concurrency",
@@ -204,10 +217,7 @@ def _actual_skill_vectors(skill_name: str) -> tuple[ExplorationVectorDef, ...]:
 
 @pytest.mark.parametrize(
     ("backend", "native_prefix"),
-    [
-        (ClaudeCodeBackend(), 'Agent(subagent_type="autoskillit:'),
-        (CodexBackend(), 'spawn_agent(agent_type="'),
-    ],
+    _BACKEND_NATIVE_PREFIX_CASES,
 )
 def test_phase_d_neutral_plan_renders_each_backend_native_form(
     backend: ClaudeCodeBackend | CodexBackend,
@@ -243,10 +253,7 @@ def test_phase_d_backends_preserve_neutral_plan_and_role_identities() -> None:
 
 @pytest.mark.parametrize(
     ("backend", "native_prefix"),
-    [
-        (ClaudeCodeBackend(), 'Agent(subagent_type="autoskillit:'),
-        (CodexBackend(), 'spawn_agent(agent_type="'),
-    ],
+    _BACKEND_NATIVE_PREFIX_CASES,
 )
 def test_all_actual_architecture_vectors_render_each_backend_native_form(
     backend: ClaudeCodeBackend | CodexBackend,
@@ -282,10 +289,7 @@ def test_all_actual_architecture_vectors_render_each_backend_native_form(
 
 @pytest.mark.parametrize(
     ("backend", "native_prefix"),
-    [
-        (ClaudeCodeBackend(), 'Agent(subagent_type="autoskillit:'),
-        (CodexBackend(), 'spawn_agent(agent_type="'),
-    ],
+    _BACKEND_NATIVE_PREFIX_CASES,
 )
 def test_all_actual_experiment_vectors_render_each_backend_native_form(
     backend: ClaudeCodeBackend | CodexBackend,
@@ -325,10 +329,7 @@ def test_all_actual_experiment_vectors_render_each_backend_native_form(
 
 @pytest.mark.parametrize(
     ("backend", "native_prefix"),
-    [
-        (ClaudeCodeBackend(), 'Agent(subagent_type="autoskillit:'),
-        (CodexBackend(), 'spawn_agent(agent_type="'),
-    ],
+    _BACKEND_NATIVE_PREFIX_CASES,
 )
 def test_all_actual_visualization_vectors_render_each_backend_native_form(
     backend: ClaudeCodeBackend | CodexBackend,

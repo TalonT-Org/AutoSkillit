@@ -22,6 +22,7 @@ if _HOOKS_DIR not in sys.path:
 command_has_blocked_protected_path_read = import_module(
     "_command_classification"
 ).command_has_blocked_protected_path_read
+parse_hook_command = import_module("_hook_payload").parse_hook_command
 
 RECIPE_READ_DENY_TRIGGER: str = "must not read recipe/skill/agent files directly"
 
@@ -50,8 +51,7 @@ def main() -> None:
     tool = tool_name.split("__")[-1]
 
     if tool == "run_cmd" or tool_name == "Bash":
-        cmd_key = "command" if tool_name == "Bash" else "cmd"
-        cmd: str = tool_input.get(cmd_key, "")
+        cmd: str = parse_hook_command(data).command or ""
         if command_has_blocked_protected_path_read(cmd, _CMD_PATH_PATTERNS):
             _deny(
                 f"run_cmd/Bash {RECIPE_READ_DENY_TRIGGER}. "

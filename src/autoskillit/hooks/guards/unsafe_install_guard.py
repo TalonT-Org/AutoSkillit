@@ -23,6 +23,7 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     strip_heredoc_bodies,
     tokenize_command_segments,
 )
+from _hook_payload import parse_hook_command  # type: ignore[import-not-found]  # noqa: E402
 
 UNSAFE_INSTALL_DENY_TRIGGER: str = "Blocked: editable install without --python .venv"
 
@@ -237,12 +238,12 @@ def _is_system_install(cmd: str) -> bool:
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
-        tool_input = data.get("tool_input", {})
-        cmd = tool_input.get("command", "") or tool_input.get("cmd", "")
     except (json.JSONDecodeError, AttributeError, OSError):
         sys.exit(0)
 
-    if not isinstance(cmd, str) or not cmd:
+    cmd = parse_hook_command(data).command or ""
+
+    if not cmd:
         sys.exit(0)
 
     if _is_unsafe_editable_install(cmd):

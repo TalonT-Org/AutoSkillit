@@ -14,6 +14,13 @@ import os
 import re
 import shlex
 import sys
+from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _hook_payload import parse_hook_command  # type: ignore[import-not-found]  # noqa: E402
 
 TEST_RUNNER_DENY_TRIGGER: str = "Direct pytest invocation is prohibited"
 
@@ -140,11 +147,7 @@ def main() -> None:
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)  # fail-open
 
-    tool_input = data.get("tool_input")
-    if not isinstance(tool_input, dict):
-        sys.exit(0)
-
-    cmd = tool_input.get("command", "") or tool_input.get("cmd", "")
+    cmd = parse_hook_command(data).command or ""
     if not cmd:
         sys.exit(0)
 

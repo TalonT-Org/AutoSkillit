@@ -20,6 +20,7 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _command_classification import _SHELL_OPS  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import parse_hook_command  # type: ignore[import-not-found]  # noqa: E402
 
 ARTIFACT_DOWNLOAD_DENY_TRIGGER: str = "gh artifact download without --dir is prohibited"
 
@@ -60,10 +61,10 @@ def _deny_subcommand(cmd: str) -> str | None:
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
-        tool_input = data.get("tool_input", {})
-        cmd = tool_input.get("command", "") or tool_input.get("cmd", "")
     except (json.JSONDecodeError, AttributeError, OSError):
         sys.exit(0)
+
+    cmd = parse_hook_command(data).command or ""
 
     if not cmd:
         sys.exit(0)

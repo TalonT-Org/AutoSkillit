@@ -27,6 +27,10 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     has_interpreter_wrapped_command,
     has_nested_shell,
 )
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    parse_hook_command,
+    resolve_state_root,
+)
 from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
 
 GIT_OPS_DENY_TRIGGER: str = "Destructive git operation blocked in headless session"
@@ -156,10 +160,11 @@ def main() -> None:
 
     try:
         data = json.loads(sys.stdin.read())
-        tool_input = data.get("tool_input", {})
-        cmd = tool_input.get("command", "") or tool_input.get("cmd", "")
     except (json.JSONDecodeError, AttributeError, OSError):
         sys.exit(0)
+
+    parsed = parse_hook_command(data)
+    cmd = parsed.command or ""
 
     if not cmd:
         sys.exit(0)
@@ -176,10 +181,12 @@ def main() -> None:
     if session_type in _EXEMPT_SESSION_TYPES:
         sys.exit(0)
 
+    project_root = resolve_state_root(parsed.payload_cwd)
+
     # Hook config file is written by open_kitchen and removed by close_kitchen.
     # Its presence reliably signals an open kitchen without needing session ID.
     try:
-        cfg_path = Path.cwd() / ".autoskillit" / "temp" / ".hook_config.json"
+        cfg_path = project_root / ".autoskillit" / "temp" / ".hook_config.json"
         if not cfg_path.exists():
             sys.exit(0)
     except OSError:
@@ -187,7 +194,7 @@ def main() -> None:
 
     # Recipe-level authorization: check git_ops_policy for per-subcommand allow.
     try:
-        hook_data = read_merged_hook_config()
+        hook_data = read_merged_hook_config(root=project_root)
         git_ops_policy = hook_data.get("git_ops_policy", {})
         if git_ops_policy.get(f"allow_{blocked[0]}"):
             sys.exit(0)

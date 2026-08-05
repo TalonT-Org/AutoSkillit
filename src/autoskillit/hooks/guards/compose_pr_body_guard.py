@@ -24,6 +24,10 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     _SHELL_CONTROL_WORDS,
     _SHELL_OPS,
 )
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    parse_hook_command,
+    resolve_state_root,
+)
 
 # Tokens that mark the boundary of a fresh command — either a shell operator
 # (already in _SHELL_OPS) or a shell control word like `do`/`then` that
@@ -222,10 +226,11 @@ def main() -> None:
 
     try:
         data = json.loads(sys.stdin.read())
-        tool_input = data.get("tool_input", {})
-        cmd = tool_input.get("command", "") or tool_input.get("cmd", "")
     except (json.JSONDecodeError, AttributeError, OSError):
         sys.exit(0)
+
+    parsed = parse_hook_command(data)
+    cmd = parsed.command or ""
 
     if not cmd:
         sys.exit(0)
@@ -234,16 +239,17 @@ def main() -> None:
     if not body_path_str:
         sys.exit(0)
 
+    project_root = resolve_state_root(parsed.payload_cwd)
     body_path = Path(body_path_str)
     if not body_path.is_absolute():
-        body_path = Path.cwd() / body_path
+        body_path = project_root / body_path
 
     try:
         body_content = body_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         sys.exit(0)
 
-    closing_issue = _find_closing_issue(Path.cwd())
+    closing_issue = _find_closing_issue(project_root)
     if not closing_issue:
         sys.exit(0)
 

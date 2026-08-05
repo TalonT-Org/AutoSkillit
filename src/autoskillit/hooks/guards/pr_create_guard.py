@@ -25,6 +25,10 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     has_interpreter_wrapped_command,
     tokenize_shell_payload_segments,
 )
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    parse_hook_command,
+    resolve_state_root,
+)
 from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
 
 PR_CREATE_DENY_TRIGGER: str = "PR creation via run_cmd is prohibited"
@@ -85,10 +89,11 @@ def _is_gh_pr_create(cmd: str) -> bool:
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
-        tool_input = data.get("tool_input", {})
-        cmd = tool_input.get("command", "") or tool_input.get("cmd", "")
     except (json.JSONDecodeError, AttributeError, OSError):
         sys.exit(0)
+
+    parsed = parse_hook_command(data)
+    cmd = parsed.command or ""
 
     if not _is_gh_pr_create(cmd):
         sys.exit(0)
@@ -101,12 +106,14 @@ def main() -> None:
     if session_type in _EXEMPT_SESSION_TYPES:
         sys.exit(0)
 
+    project_root = resolve_state_root(parsed.payload_cwd)
+
     # Hook config file is written by open_kitchen and removed by close_kitchen.
     # Its presence reliably signals an open kitchen without needing session ID.
     try:
         # Keep in sync with HOOK_DIR_COMPONENTS/HOOK_CONFIG_FILENAME in _hook_settings.py
         # (stdlib-only boundary prevents a shared import).
-        cfg_path = Path.cwd() / ".autoskillit" / "temp" / ".hook_config.json"
+        cfg_path = project_root / ".autoskillit" / "temp" / ".hook_config.json"
         if not cfg_path.exists():
             sys.exit(0)  # kitchen not open; fail-open
     except OSError:
@@ -115,7 +122,7 @@ def main() -> None:
     # Recipe-level authorization: recipes that legitimately create PRs set
     # recipe_allows_pr_create=true in .hook_config.json after loading.
     try:
-        hook_data = read_merged_hook_config()
+        hook_data = read_merged_hook_config(root=project_root)
         if hook_data.get("recipe_allows_pr_create"):
             sys.exit(0)
     except (OSError, json.JSONDecodeError, AttributeError, TypeError) as exc:

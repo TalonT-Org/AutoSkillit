@@ -24,6 +24,7 @@ _GITHUB_SCP_RE = re.compile(
     r"(?P<repository>[A-Za-z0-9_.-]+?)(?:\.git)?\Z",
     re.IGNORECASE,
 )
+_MAX_EXCEPTION_DIAGNOSTIC_LENGTH = 256
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,6 +142,29 @@ def parse_github_remote_url(url: str) -> GitHubRepositoryRef | None:
     )
 
 
+def _exception_diagnostic(prefix: str, exc: BaseException) -> str:
+    """Return bounded, single-line exception evidence for a failed probe."""
+    components = [prefix, type(exc).__name__]
+    if isinstance(exc, OSError) and exc.errno is not None:
+        components.append(f"errno={exc.errno}")
+        detail = exc.strerror or str(exc)
+    else:
+        detail = str(exc)
+    if detail:
+        components.append(detail)
+
+    diagnostic = re.sub(
+        r"\s+",
+        " ",
+        "".join(
+            character if character.isprintable() else " " for character in ":".join(components)
+        ),
+    ).strip()
+    if len(diagnostic) <= _MAX_EXCEPTION_DIAGNOSTIC_LENGTH:
+        return diagnostic
+    return f"{diagnostic[: _MAX_EXCEPTION_DIAGNOSTIC_LENGTH - 3]}..."
+
+
 def _probe_remote_sync(cwd: str | Path, name: str) -> RemoteIdentityProbe:
     try:
         result = subprocess.run(
@@ -150,13 +174,13 @@ def _probe_remote_sync(cwd: str | Path, name: str) -> RemoteIdentityProbe:
             text=True,
             timeout=15,
         )
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
         return RemoteIdentityProbe(
             name=name,
             url="",
             usable=False,
             github_repository=None,
-            diagnostic="timeout",
+            diagnostic=_exception_diagnostic("timeout", exc),
         )
     except OSError as exc:
         return RemoteIdentityProbe(
@@ -164,7 +188,7 @@ def _probe_remote_sync(cwd: str | Path, name: str) -> RemoteIdentityProbe:
             url="",
             usable=False,
             github_repository=None,
-            diagnostic=f"os_error:{type(exc).__name__}",
+            diagnostic=_exception_diagnostic("os_error", exc),
         )
     if result.returncode != 0:
         return RemoteIdentityProbe(

@@ -50,6 +50,11 @@ def _payloads(events: list[Mapping[str, Any]], event_type: str) -> list[Mapping[
     ]
 
 
+def _has_exact_identity_field(evidence: str, field: str, value: str) -> bool:
+    expected = f"{field}: {value}"
+    return any(line.strip() == expected for line in evidence.splitlines())
+
+
 def _unique_text(owner: str, field: str, values: list[object], *, required: bool) -> str:
     observed = {value for value in values if isinstance(value, str) and value}
     if len(observed) > 1:
@@ -192,9 +197,11 @@ def extract_codex_execution_identity(
             child
             for child in requested.children
             if child.role == role
-            and f"task_id: {child.task_id}" in evidence
-            and f"router_plan_digest: {child.plan_digest}" in evidence
-            and f"role_definition_digest: {child.definition_digest}" in evidence
+            and _has_exact_identity_field(evidence, "task_id", child.task_id)
+            and _has_exact_identity_field(evidence, "router_plan_digest", child.plan_digest)
+            and _has_exact_identity_field(
+                evidence, "role_definition_digest", child.definition_digest
+            )
         )
         if len(matches) != 1:
             raise ValueError("Codex child rollout does not uniquely match requested evidence")

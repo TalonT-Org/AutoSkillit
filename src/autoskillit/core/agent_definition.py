@@ -15,6 +15,7 @@ from .types import (
     CODEX_MODEL_ALIASES,
     CODEX_VALID_MODEL_IDS,
     CODEX_VALID_REASONING_EFFORTS,
+    PARENT_SANDBOX_MODES,
 )
 
 __all__ = [
@@ -31,7 +32,6 @@ __all__ = [
 AGENT_DEFINITION_DIGEST_DOMAIN = "autoskillit.agent-definition.v1"
 _AGENT_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 _READ_ONLY_AGENT_TOOLS = frozenset({"Read", "Grep", "Glob", "LSP"})
-_CODEX_SANDBOX_MODES = frozenset({"read-only", "workspace-write"})
 _LUNA_READ_ONLY_PROJECTION = ("gpt-5.6-luna", "max", "read-only")
 _CODEX_DISABLEABLE_FEATURES = (
     "apps",
@@ -92,7 +92,7 @@ class CodexAgentProjectionDef:
             raise AgentDefinitionError(
                 f"unsupported Codex reasoning effort: {self.reasoning_effort!r}"
             )
-        if self.sandbox_mode not in _CODEX_SANDBOX_MODES:
+        if self.sandbox_mode not in PARENT_SANDBOX_MODES:
             raise AgentDefinitionError(f"unsupported Codex sandbox mode: {self.sandbox_mode!r}")
         if self.reasoning_effort is not None and self.model is None:
             raise AgentDefinitionError("Codex reasoning effort requires a native model")

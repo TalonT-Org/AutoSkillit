@@ -2085,7 +2085,8 @@ class CodexBackend(BackendCmdBuilderBase):
         )
         if explorer_binding_envs and parent_sandbox_mode != "read-only":
             raise ValueError("explorer shared-principal projection requires a read-only parent")
-        AgentDef.validate_injected_parent_policy(definitions, parent_sandbox_mode)
+        policy_definitions = definitions if explorer_binding_envs else agent_defs
+        AgentDef.validate_injected_parent_policy(policy_definitions, parent_sandbox_mode)
         _preflight_agent_projection(session_dir, definitions)
         rendered_parent_config = _render_parent_sandbox_config(
             config_path.read_text(encoding="utf-8"),

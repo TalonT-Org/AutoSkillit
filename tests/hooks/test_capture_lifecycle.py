@@ -6,6 +6,7 @@ import concurrent.futures
 import errno
 import hashlib
 import json
+import math
 import os
 import stat
 import subprocess
@@ -22,6 +23,7 @@ from typing import cast
 import pytest
 
 import autoskillit.hooks._capture._capacity as capture_capacity
+import autoskillit.hooks._capture._orphan_scan as orphan_scan
 import autoskillit.hooks._capture._reconcile as capture_reconcile
 import autoskillit.hooks._capture._sweep_cursor as sweep_cursor
 import autoskillit.hooks._capture_lifecycle as capture_lifecycle
@@ -2498,20 +2500,123 @@ def test_sweep_continues_after_failed_due_record(
         anchor.close()
 
 
-def test_sweep_defers_without_blocking_on_contended_ledger_lock(tmp_path: Path) -> None:
+def _reserve_many(store: CaptureLifecycleStore, count: int, *, offset: int = 0) -> list[str]:
+    """Seed ``count`` lightweight (file-less) RESERVED records via the store API.
+
+    No backing files are ever created — when swept, both a record's staging
+    and public names are absent, so ``normalize_abandoned``'s no-lease-target
+    branch (invoked via the abandoned-state shortcut inside ``sweep_one``)
+    transitions it straight to DELETED with no quarantine step. Fast and
+    subprocess-free: real ledger records exercise the real due-key, budget,
+    and cursor machinery without the I/O cost of a full artifact-creation
+    cycle per record — what production-scale convergence testing needs.
+    """
+    ids = []
+    for index in range(count):
+        capture_id = f"{index + 1 + offset:016x}"
+        store.reserve_capture(capture_id)
+        ids.append(capture_id)
+    return ids
+
+
+def test_production_scale_backlog_converges_within_bounded_invocations(
+    tmp_path: Path,
+) -> None:
+    """The documented "one record cannot starve the backlog" guarantee, at scale.
+
+    Regression guard for issue #4440 (cleanup self-starved at the
+    active-record cap, blocking every native command): proves cleanup
+    capacity outpaces a static backlog of production scale — remaining_due
+    strictly decreases every invocation, and convergence happens within the
+    invocation count the budget's own max_attempts implies, not merely
+    "eventually" over an unbounded number of passes.
+    """
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    record_count = 1024
+    budget = capture_reconcile.SESSION_START_BUDGET
+    try:
+        _reserve_many(store, record_count)
+        clock.advance(3601)
+
+        invocation_bound = math.ceil(record_count / budget.max_attempts) + 2
+        remaining_history: list[int] = []
+        total_deleted = 0
+        invocations = 0
+        while True:
+            invocations += 1
+            outcome = store.sweep(budget)
+            assert outcome.duration <= budget.max_duration_seconds
+            if remaining_history:
+                assert outcome.remaining_due < remaining_history[-1], (
+                    f"remaining_due did not strictly decrease: "
+                    f"{remaining_history[-1]} -> {outcome.remaining_due}"
+                )
+            remaining_history.append(outcome.remaining_due)
+            total_deleted += outcome.deleted
+            assert invocations <= invocation_bound, (
+                f"convergence took {invocations} invocations, exceeding the "
+                f"budget-implied bound of {invocation_bound}"
+            )
+            if outcome.remaining_due == 0:
+                break
+
+        assert total_deleted == record_count
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_runner_tail_budget_always_retires_at_least_one_record_from_a_backlog(
+    tmp_path: Path,
+) -> None:
+    """Starvation guard at production budget values: a single per-command
+    RUNNER_TAIL_BUDGET sweep against a non-empty backlog always retires at
+    least one record."""
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    try:
+        _reserve_many(store, 5)
+        clock.advance(3601)
+
+        outcome = store.sweep(capture_reconcile.RUNNER_TAIL_BUDGET)
+
+        assert outcome.deleted >= 1
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_sweep_lock_contention_recovers_within_budget_and_makes_progress(
+    tmp_path: Path,
+) -> None:
+    """Lock released a few ms into a sweep: retry acquires within the same
+    invocation and the sweep still makes real progress.
+
+    Fails before 2a's bounded retry: a single non-blocking flock() attempt
+    raised LockContended immediately (examined=0, remaining_due>=1) even
+    though the lock became available well within the sweep's own budget.
+    """
     project = tmp_path / "project"
     clock = _Clock()
     anchor, root, store, artifact = _finalized_capture(project, clock)
     artifact.close_artifact_fd()
     artifact.release_lease()
     clock.advance(3601)
+    # A real (not frozen) monotonic clock so the retry loop's deadline
+    # accounting reflects genuine elapsed wall time against a real
+    # cross-process flock; wall_clock stays the fake clock so due-dates
+    # remain fully controllable.
+    store._monotonic = time.monotonic
     lock_path = _capture_dir(project) / capture_lifecycle.LOCK_NAME
     holder_script = (
         "import fcntl, os, sys, time\n"
         "fd = os.open(sys.argv[1], os.O_RDWR)\n"
         "fcntl.flock(fd, fcntl.LOCK_EX)\n"
         "print('ready', flush=True)\n"
-        "time.sleep(1.0)\n"
+        "time.sleep(0.03)\n"
         "os.close(fd)\n"
     )
     holder = subprocess.Popen(
@@ -2525,13 +2630,66 @@ def test_sweep_defers_without_blocking_on_contended_ledger_lock(tmp_path: Path) 
         assert holder.stdout.readline() == "ready\n"
 
         started = time.monotonic()
-        outcome = store.sweep(_sweep_budget(8, 0.05))
+        outcome = store.sweep(_sweep_budget(8, 1.0))
+        elapsed = time.monotonic() - started
+
+        assert outcome.blocker is CleanupBlocker.NONE
+        assert outcome.examined == 1
+        assert outcome.deleted == 1
+        assert elapsed < 1.0
+        assert not (_capture_dir(project) / artifact.name).exists()
+    finally:
+        try:
+            holder.communicate(timeout=3)
+        except subprocess.TimeoutExpired:
+            holder.terminate()
+            holder.communicate(timeout=3)
+        root.close()
+        anchor.close()
+
+
+def test_sweep_lock_held_for_whole_budget_reports_bounded_stalled_outcome(
+    tmp_path: Path,
+) -> None:
+    """Lock held for the entire budget: LOCK_CONTENDED, errors=0, bounded
+    duration, and a clean STALLED classification — never silent, never an
+    unbounded wait. Companion to the retry-succeeds case above."""
+    project = tmp_path / "project"
+    anchor, root, store = _open_store(project, _Clock())
+    store._monotonic = time.monotonic
+    lock_path = _capture_dir(project) / capture_lifecycle.LOCK_NAME
+    holder_script = (
+        "import fcntl, os, sys, time\n"
+        "fd = os.open(sys.argv[1], os.O_RDWR)\n"
+        "fcntl.flock(fd, fcntl.LOCK_EX)\n"
+        "print('ready', flush=True)\n"
+        "time.sleep(0.3)\n"
+        "os.close(fd)\n"
+    )
+    holder = subprocess.Popen(
+        [sys.executable, "-c", holder_script, str(lock_path)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert holder.stdout is not None
+        assert holder.stdout.readline() == "ready\n"
+
+        budget = _sweep_budget(8, 0.05)
+        started = time.monotonic()
+        outcome = store.sweep(budget)
         elapsed = time.monotonic() - started
 
         assert elapsed < 0.5
         assert outcome.examined == 0
+        assert outcome.blocker is CleanupBlocker.LOCK_CONTENDED
+        assert outcome.errors == 0
         assert outcome.remaining_due >= 1
-        assert (_capture_dir(project) / artifact.name).exists()
+        assert (
+            classify_cleanup_outcome(outcome.progress, outcome.blocker, outcome.errors)
+            is CleanupSeverity.STALLED
+        )
     finally:
         try:
             holder.communicate(timeout=3)
@@ -2667,6 +2825,193 @@ def test_sweep_record_budget_is_hard_and_content_free(tmp_path: Path) -> None:
         serialized = json.dumps(asdict(outcome), sort_keys=True)
         assert _CAPTURE_ID not in serialized
         assert str(project) not in serialized
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_orphan_scan_adopts_aged_files_and_leaves_everything_else_untouched(
+    tmp_path: Path,
+) -> None:
+    """Directory-reconciliation adoption against the plan's exact corpus:
+
+    20 unledgered files aged past the adoption threshold, 5 fresh unledgered
+    files, 3 files belonging to ``active`` records, 1 aged file belonging to
+    a ``DELETING``-phase record (still on disk mid-quarantine), 1 aged
+    symlink, 1 aged non-matching filename. Only the 20 aged orphans are ever
+    adopted and eventually deleted; everything else survives the scan phase
+    untouched, and no duplicate ledger record is ever created for the
+    ``DELETING``-tracked name.
+    """
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    try:
+        # A DELETING-phase record whose file is deliberately kept on disk —
+        # inject a quarantine-delete failure after the DELETING transition
+        # commits, mirroring test_sweep_continues_after_failed_due_record's
+        # pattern, so the file never actually moves off its public name.
+        deleting_capture_id = "d" * 16
+        deleting_artifact = create_capture_artifact(root, deleting_capture_id, store)
+        os.write(deleting_artifact.fd, b"still-quarantining")
+        _commit_verified(store, deleting_artifact, b"still-quarantining", clock)
+        deleting_artifact.close_artifact_fd()
+        deleting_artifact.release_lease()
+        clock.advance(3601)
+
+        real_quarantine_delete = store._quarantine_delete
+
+        def fail_delete(
+            record: CaptureLifecycleRecord,
+            authorize_delete: Callable[[], None] | None = None,
+            *,
+            preleased: capture_lifecycle._ObservedArtifact | None = None,
+            lease_checked: bool = False,
+        ) -> int:
+            if record.capture_id == deleting_capture_id:
+                if authorize_delete is not None:
+                    authorize_delete()
+                raise OSError("injected — keep this record mid-quarantine")
+            return real_quarantine_delete(
+                record,
+                authorize_delete,
+                preleased=preleased,
+                lease_checked=lease_checked,
+            )
+
+        store._quarantine_delete = fail_delete
+        store.sweep(SweepBudgetSpec(max_directory_entries_scanned=0))
+        deleting_record = store.get_record(deleting_capture_id)
+        assert deleting_record is not None
+        assert deleting_record.state is CaptureState.DELETING
+        del store._quarantine_delete
+
+        # 3 active (real, file-backed) records — created after the clock
+        # advance above so their own retention window stays well beyond any
+        # "now" used by the scan passes below.
+        active_names = _seed_finalized_captures(root, store, count=3)
+
+        old = clock.wall() - orphan_scan.ADOPTION_AGE_SECONDS - 10
+        fresh = clock.wall() - 10
+
+        aged_orphan_names = [f"shell_{index:016x}.log" for index in range(0xA000, 0xA000 + 20)]
+        for name in aged_orphan_names:
+            fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=root.fd)
+            os.write(fd, b"orphan")
+            os.close(fd)
+            os.utime(name, (old, old), dir_fd=root.fd)
+
+        fresh_names = [f"shell_{index:016x}.log" for index in range(0xB000, 0xB000 + 5)]
+        for name in fresh_names:
+            fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=root.fd)
+            os.close(fd)
+            os.utime(name, (fresh, fresh), dir_fd=root.fd)
+
+        # Age the DELETING-tracked file too — it would be a scan candidate
+        # on mtime alone; only the tracked-name exclusion protects it.
+        os.utime(deleting_record.public_name, (old, old), dir_fd=root.fd)
+
+        symlink_name = f"shell_{0xC001:016x}.log"
+        symlink_target = "symlink-target-file"
+        fd = os.open(symlink_target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=root.fd)
+        os.close(fd)
+        os.symlink(symlink_target, symlink_name, dir_fd=root.fd)
+
+        nonmatching_name = "not-a-capture-artifact.log"
+        fd = os.open(nonmatching_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=root.fd)
+        os.close(fd)
+        os.utime(nonmatching_name, (old, old), dir_fd=root.fd)
+
+        scan_budget = SweepBudgetSpec(max_directory_entries_scanned=32, max_duration_seconds=5.0)
+        for _ in range(10):
+            store.sweep(scan_budget)
+
+        remaining_shell_files = {
+            entry.name for entry in os.scandir(root.fd) if entry.name.startswith("shell_")
+        }
+        assert set(aged_orphan_names).isdisjoint(remaining_shell_files)
+        assert set(fresh_names) <= remaining_shell_files
+        assert set(active_names) <= remaining_shell_files
+        assert deleting_record.public_name in remaining_shell_files
+        assert symlink_name in remaining_shell_files
+        assert os.path.lexists(str(_capture_dir(project) / symlink_name))
+
+        with store._locked():
+            records, _epoch, _size = store._load_locked()
+        deleting_matches = [
+            record
+            for record in records.values()
+            if record.public_name == deleting_record.public_name
+        ]
+        assert len(deleting_matches) == 1, "no duplicate ledger record for a DELETING-tracked name"
+        assert not any(record.public_name in fresh_names for record in records.values())
+        assert not any(record.public_name == nonmatching_name for record in records.values())
+        assert not any(record.public_name == symlink_name for record in records.values())
+        adopted_names = {
+            record.public_name
+            for record in records.values()
+            if record.public_name in aged_orphan_names
+        }
+        assert adopted_names == set(aged_orphan_names)
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_orphan_scan_examines_at_most_the_configured_batch_and_cursor_resumes(
+    tmp_path: Path,
+) -> None:
+    """Scan is budget-bounded: with a small max_directory_entries_scanned,
+    one invocation examines at most that many entries, and a persisted
+    cursor makes successive invocations cover the whole directory without
+    rescanning from zero."""
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    try:
+        old = clock.wall() - orphan_scan.ADOPTION_AGE_SECONDS - 10
+        names = [f"shell_{index:016x}.log" for index in range(30)]
+        for name in names:
+            fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=root.fd)
+            os.close(fd)
+            os.utime(name, (old, old), dir_fd=root.fd)
+
+        budget = SweepBudgetSpec(max_directory_entries_scanned=8)
+        seen: set[str] = set()
+        invocations = 0
+        while True:
+            invocations += 1
+            result = orphan_scan.scan_for_orphans(root.fd, frozenset(), budget, now=clock.wall())
+            assert result.examined <= budget.max_directory_entries_scanned
+            seen.update(result.candidates)
+            if result.directory_complete:
+                break
+            assert invocations < 10, "cursor did not converge within a reasonable invocation count"
+
+        assert seen == set(names)
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_runner_tail_budget_performs_no_directory_scanning(tmp_path: Path) -> None:
+    """RUNNER_TAIL_BUDGET's max_directory_entries_scanned=0 disables the scan
+    phase entirely — no cursor file is ever created, and an aged unledgered
+    file survives untouched (per-command latency unaffected)."""
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    try:
+        old = clock.wall() - orphan_scan.ADOPTION_AGE_SECONDS - 10
+        name = f"shell_{1:016x}.log"
+        fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=root.fd)
+        os.close(fd)
+        os.utime(name, (old, old), dir_fd=root.fd)
+
+        store.sweep(capture_reconcile.RUNNER_TAIL_BUDGET)
+
+        assert not (_capture_dir(project) / orphan_scan.CURSOR_NAME).exists()
+        assert (_capture_dir(project) / name).exists()
     finally:
         root.close()
         anchor.close()

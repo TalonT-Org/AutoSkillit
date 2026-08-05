@@ -147,7 +147,7 @@ semantic_requirements:
 - Modify any source code files
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-reproducibility-artifacts/`
-- Execute target code, experiment workflows, or target test commands to gather exploration evidence
+- Import or execute target code, tests, experiments, models, or benchmarks
 - Detach child delegations instead of joining them (joining every child is required)
 - Run exploration leaves in the background
 - Start independent child delegations sequentially

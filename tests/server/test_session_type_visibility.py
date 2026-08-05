@@ -615,6 +615,7 @@ class TestExplorerBindingVisibility:
     async def test_unverified_explorer_environment_reveals_no_broker_tools(
         self,
         monkeypatch: pytest.MonkeyPatch,
+        tmp_path,
         role: str,
     ) -> None:
         from autoskillit.server import _apply_session_type_visibility, mcp
@@ -624,7 +625,7 @@ class TestExplorerBindingVisibility:
         monkeypatch.setenv("AUTOSKILLIT_EXPLORATION_SESSION_ID", "headless-test")
         monkeypatch.setenv(
             "AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH",
-            "/tmp/.autoskillit-exploration-authority.json",
+            str(tmp_path / ".autoskillit-exploration-authority.json"),
         )
         _apply_session_type_visibility()
 
@@ -706,6 +707,7 @@ class TestExplorerBindingVisibility:
     async def test_missing_explorer_authority_fails_closed(
         self,
         monkeypatch: pytest.MonkeyPatch,
+        tmp_path,
     ) -> None:
         from types import SimpleNamespace
         from unittest.mock import AsyncMock
@@ -723,7 +725,7 @@ class TestExplorerBindingVisibility:
             "AUTOSKILLIT_EXPLORATION_CAPABILITY": "not-a-capability",
             "AUTOSKILLIT_EXPLORATION_ROLE": "semantic-code-navigator",
             "AUTOSKILLIT_EXPLORATION_SESSION_ID": "session-a",
-            "AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH": "/tmp/missing-authority.json",
+            "AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH": str(tmp_path / "missing-authority.json"),
         }.items():
             monkeypatch.setenv(name, value)
         gate = DefaultGateState()

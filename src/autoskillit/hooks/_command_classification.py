@@ -1552,83 +1552,31 @@ _GH_KNOWN_VALUE_FLAGS: frozenset[str] = frozenset(
         "--visibility",
     }
 )
-# gh subcommands that mutate remote state, keyed by noun -> mutating verbs.
-# `pr create` remains owned by pr_create_guard and `pr review` is handled
-# separately by the review-kind machinery below.
-_GH_MUTATION_SUBCOMMANDS: dict[str, frozenset[str]] = {
-    "cache": frozenset({"delete"}),
-    "codespace": frozenset({"create", "delete", "edit", "rebuild", "stop"}),
-    "gist": frozenset({"create", "delete", "edit", "rename"}),
-    "gpg-key": frozenset({"add", "delete"}),
-    "issue": frozenset(
-        {
-            "close",
-            "comment",
-            "create",
-            "delete",
-            "develop",
-            "edit",
-            "lock",
-            "pin",
-            "reopen",
-            "transfer",
-            "unlock",
-            "unpin",
-        }
-    ),
-    "label": frozenset({"clone", "create", "delete", "edit"}),
-    "pr": frozenset({"close", "comment", "edit", "lock", "merge", "ready", "reopen", "unlock"}),
-    "project": frozenset(
-        {
-            "close",
-            "copy",
-            "create",
-            "delete",
-            "edit",
-            "field-create",
-            "field-delete",
-            "item-add",
-            "item-archive",
-            "item-create",
-            "item-delete",
-            "item-edit",
-            "link",
-            "mark-template",
-            "unlink",
-        }
-    ),
-    "release": frozenset({"create", "delete", "delete-asset", "edit", "upload"}),
-    "repo": frozenset(
-        {"archive", "create", "delete", "edit", "fork", "rename", "sync", "unarchive"}
-    ),
-    "run": frozenset({"cancel", "delete", "rerun"}),
-    "secret": frozenset({"delete", "set"}),
-    "ssh-key": frozenset({"add", "delete"}),
-    "variable": frozenset({"delete", "set"}),
-    "workflow": frozenset({"disable", "enable", "run"}),
-}
 
-# Explicit reads for every mutation-capable noun above. An unlisted verb for
-# one of these nouns is unresolved rather than silently counted as zero: gh
-# can add mutating verbs over time, and nested command groups such as
-# `repo deploy-key` need deeper parsing before they can be proven read-only.
-_GH_READ_ONLY_SUBCOMMANDS: dict[str, frozenset[str]] = {
-    "cache": frozenset({"list"}),
-    "codespace": frozenset({"code", "cp", "jupyter", "list", "logs", "ports", "ssh", "view"}),
-    "gist": frozenset({"clone", "list", "view"}),
-    "gpg-key": frozenset({"list"}),
-    "issue": frozenset({"list", "status", "view"}),
-    "label": frozenset({"list"}),
-    "pr": frozenset({"checkout", "checks", "diff", "list", "status", "view"}),
-    "project": frozenset({"field-list", "item-list", "list", "view"}),
-    "release": frozenset({"download", "list", "verify", "verify-asset", "view"}),
-    "repo": frozenset({"clone", "list", "set-default", "view"}),
-    "run": frozenset({"download", "list", "view", "watch"}),
-    "secret": frozenset({"list"}),
-    "ssh-key": frozenset({"list"}),
-    "variable": frozenset({"list"}),
-    "workflow": frozenset({"list", "view"}),
-}
+
+def _gh_subcommand_table(spec: str) -> dict[str, frozenset[str]]:
+    pairs = (row.split(":", 1) for row in spec.split(";"))
+    return {noun: frozenset(verbs.split()) for noun, verbs in pairs}
+
+
+_GH_MUTATION_SUBCOMMANDS = _gh_subcommand_table(
+    "cache:delete;codespace:create delete edit rebuild stop;gist:create delete edit "
+    "rename;gpg-key:add delete;issue:close comment create delete develop edit lock pin reopen "
+    "transfer unlock unpin;label:clone create delete edit;pr:close comment edit lock merge "
+    "ready reopen unlock;project:close copy create delete edit field-create field-delete "
+    "item-add item-archive item-create item-delete item-edit link mark-template "
+    "unlink;release:create delete delete-asset edit upload;repo:archive create delete edit "
+    "fork rename sync unarchive;run:cancel delete rerun;secret:delete set;ssh-key:add "
+    "delete;variable:delete set;workflow:disable enable run"
+)
+# `pr create` has its own guard; other unlisted mutation-capable verbs fail closed.
+_GH_READ_ONLY_SUBCOMMANDS = _gh_subcommand_table(
+    "cache:list;codespace:code cp jupyter list logs ports ssh view;gist:clone list "
+    "view;gpg-key:list;issue:list status view;label:list;pr:checkout checks diff list status "
+    "view;project:field-list item-list list view;release:download list verify verify-asset "
+    "view;repo:clone list set-default view;run:download list view "
+    "watch;secret:list;ssh-key:list;variable:list;workflow:list view"
+)
 
 
 def _gh_args_have_bare_help_flag(args: Sequence[str]) -> bool:

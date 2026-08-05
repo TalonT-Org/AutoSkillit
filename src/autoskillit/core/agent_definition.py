@@ -236,12 +236,16 @@ def _derived_codex_projection(
 def load_agent_definition(path: Path) -> AgentDef:
     """Load one Markdown definition through the canonical fail-closed parser."""
     content = path.read_text(encoding="utf-8")
-    if not content.startswith("---"):
+    lines = content.splitlines(keepends=True)
+    if not lines or lines[0].rstrip("\r\n") != "---":
         raise AgentDefinitionError(f"{path}: missing YAML frontmatter")
-    parts = content.split("---", 2)
-    if len(parts) != 3:
+    closing_index = next(
+        (index for index, line in enumerate(lines[1:], start=1) if line.rstrip("\r\n") == "---"),
+        None,
+    )
+    if closing_index is None:
         raise AgentDefinitionError(f"{path}: malformed YAML frontmatter")
-    raw_meta = load_yaml(parts[1])
+    raw_meta = load_yaml("".join(lines[1:closing_index]))
     if not isinstance(raw_meta, dict):
         raise AgentDefinitionError(f"{path}: YAML frontmatter must be a mapping")
     meta = {str(key): value for key, value in raw_meta.items()}
@@ -260,7 +264,7 @@ def load_agent_definition(path: Path) -> AgentDef:
         tools=tools,
         model=model,
         max_turns=max_turns,
-        body=parts[2].strip(),
+        body="".join(lines[closing_index + 1 :]).strip(),
         codex=_derived_codex_projection(meta, tools),
     )
 

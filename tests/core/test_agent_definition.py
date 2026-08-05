@@ -89,6 +89,24 @@ def test_explicit_luna_projection_is_independent_from_claude_model(tmp_path: Pat
     )
 
 
+def test_frontmatter_delimiter_must_occupy_its_own_line(tmp_path: Path) -> None:
+    path = tmp_path / "delimiter-in-description.md"
+    path.write_text(
+        "---\n"
+        "name: delimiter-reader\n"
+        "description: Preserve before---after as metadata\n"
+        "tools: [Read]\n"
+        "---\n\n"
+        "Return the complete body.\n",
+        encoding="utf-8",
+    )
+
+    definition = load_agent_definition(path)
+
+    assert definition.description == "Preserve before---after as metadata"
+    assert definition.body == "Return the complete body."
+
+
 def test_uppercase_lsp_is_read_only_for_derived_codex_projection(tmp_path: Path) -> None:
     path = tmp_path / "lsp-reader.md"
     path.write_text(

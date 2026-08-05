@@ -2,7 +2,7 @@
 
 Companion to the doctor battery's read-only capture-store check
 (``cli/doctor/_doctor_capture_store.py``): both call
-``hooks._capture._reconcile.capture_store_stats`` so neither surface can
+``hooks.capture_store_stats`` so neither surface can
 drift from what a real reconciliation pass would find. ``--reclaim`` is the
 one-time bulk path for pre-existing debris — the SessionStart sweep's
 directory-reconciliation scan phase keeps new debris from ever accumulating
@@ -14,8 +14,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from autoskillit.hooks._capture import _reconcile as _capture_reconcile
-from autoskillit.hooks._capture._types import CleanupBlocker, CleanupProgress, SweepBudgetSpec
+from autoskillit.hooks import (
+    CaptureStoreStats,
+    CleanupBlocker,
+    CleanupProgress,
+    SweepBudgetSpec,
+    capture_store_stats,
+    reconcile_capture_store,
+)
 
 # Generous relative to the standing budgets (RUNNER_TAIL_BUDGET,
 # SESSION_START_BUDGET): this command runs once, deliberately, from a
@@ -39,7 +45,7 @@ RECLAIM_BUDGET = SweepBudgetSpec(
 _MAX_RECLAIM_PASSES = 5000
 
 
-def _print_stats(stats: _capture_reconcile.CaptureStoreStats) -> None:
+def _print_stats(stats: CaptureStoreStats) -> None:
     if stats.blocker is CleanupBlocker.STORE_ABSENT:
         print("capture-store: no store yet — nothing has been captured in this project")
         return
@@ -61,7 +67,7 @@ def _print_stats(stats: _capture_reconcile.CaptureStoreStats) -> None:
 def run_capture_store(*, reclaim: bool = False) -> None:
     """Report capture-store ledger/directory statistics, or reclaim with ``reclaim=True``."""
     project_cwd = str(Path.cwd())
-    stats = _capture_reconcile.capture_store_stats(project_cwd)
+    stats = capture_store_stats(project_cwd)
     _print_stats(stats)
     if not reclaim:
         return
@@ -71,7 +77,7 @@ def run_capture_store(*, reclaim: bool = False) -> None:
     print("capture-store: reclaiming...")
     converged = False
     for pass_index in range(1, _MAX_RECLAIM_PASSES + 1):
-        outcome = _capture_reconcile.reconcile_capture_store(project_cwd, RECLAIM_BUDGET)
+        outcome = reconcile_capture_store(project_cwd, RECLAIM_BUDGET)
         print(
             f"  pass {pass_index}: deleted={outcome.deleted} transitions={outcome.transitions} "
             f"remaining_due={outcome.remaining_due} errors={outcome.errors} "
@@ -93,4 +99,4 @@ def run_capture_store(*, reclaim: bool = False) -> None:
         )
     if converged:
         print("capture-store: converged")
-    _print_stats(_capture_reconcile.capture_store_stats(project_cwd))
+    _print_stats(capture_store_stats(project_cwd))

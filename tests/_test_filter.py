@@ -964,6 +964,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "hooks",
             "cli/test_cli_hooks.py",
             "cli/test_install.py",
+            "cli/test_capture_store.py",
             "recipe",
             "server/test_kitchen_lifecycle.py",
             "server/test_tools_kitchen_gate.py",
@@ -1003,6 +1004,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # docs/ file-level entries
             "docs/test_doc_counts.py",
             "docs/test_shell_capture_snapshot_authority_decision.py",
+            "docs/test_guard_fail_mode_docs.py",
         }
     ),
     # Standalone modules (not subpackage directories)

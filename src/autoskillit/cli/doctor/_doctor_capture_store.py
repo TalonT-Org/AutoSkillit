@@ -5,8 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from autoskillit.core import Severity, get_logger
-from autoskillit.hooks._capture._reconcile import capture_store_stats
-from autoskillit.hooks._capture._types import CleanupBlocker
+from autoskillit.hooks import CleanupBlocker, capture_store_stats
 
 from ._doctor_types import DoctorResult
 

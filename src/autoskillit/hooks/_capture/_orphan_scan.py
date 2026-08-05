@@ -45,7 +45,6 @@ CURSOR_NAME = ".orphan-scan-cursor"
 # mid-write when the scan passes over it is never a candidate.
 ADOPTION_AGE_SECONDS = 24 * 3600.0
 
-_NAME_RE = _syntax.PUBLIC_NAME_RE
 _MAX_CURSOR_BYTES = 512
 _VERSION = 1
 _NOFOLLOW = os.O_NOFOLLOW
@@ -186,7 +185,7 @@ def clear_cursor(root_fd: int) -> bool:
 
 
 def _adoptable(root_fd: int, name: str, tracked: frozenset[str], now: float) -> bool:
-    if _NAME_RE.fullmatch(name) is None or name in tracked:
+    if _syntax.PUBLIC_NAME_RE.fullmatch(name) is None or name in tracked:
         return False
     try:
         value = os.lstat(name, dir_fd=root_fd)

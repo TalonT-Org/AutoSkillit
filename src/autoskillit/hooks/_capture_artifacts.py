@@ -42,6 +42,11 @@ if TYPE_CHECKING:
         validate_lineage_reference,
     )
     from autoskillit.hooks._capture._reader import VerifiedCaptureReader
+    from autoskillit.hooks._capture._reconcile import (
+        CaptureStoreStats,
+        capture_store_stats,
+        reconcile_capture_store,
+    )
     from autoskillit.hooks._capture._snapshot import (
         CaptureWriteAuthority,
         CommandOutcome,
@@ -51,7 +56,12 @@ if TYPE_CHECKING:
         UnavailableCaptureReference,
         verify_capture_snapshot,
     )
-    from autoskillit.hooks._capture._types import CaptureFailureEvidence
+    from autoskillit.hooks._capture._types import (
+        CaptureFailureEvidence,
+        CleanupBlocker,
+        CleanupProgress,
+        SweepBudgetSpec,
+    )
     from autoskillit.hooks._capture_contract import (
         _CAPTURE_ID_RE,
         _MAX_COMMAND_BYTES,
@@ -113,6 +123,11 @@ else:
         validate_lineage_reference,
     )
     from _capture._reader import VerifiedCaptureReader
+    from _capture._reconcile import (
+        CaptureStoreStats,
+        capture_store_stats,
+        reconcile_capture_store,
+    )
     from _capture._snapshot import (
         CaptureWriteAuthority,
         CommandOutcome,
@@ -122,7 +137,12 @@ else:
         UnavailableCaptureReference,
         verify_capture_snapshot,
     )
-    from _capture._types import CaptureFailureEvidence
+    from _capture._types import (
+        CaptureFailureEvidence,
+        CleanupBlocker,
+        CleanupProgress,
+        SweepBudgetSpec,
+    )
     from _capture_contract import (
         _CAPTURE_ID_RE,
         _MAX_COMMAND_BYTES,
@@ -167,12 +187,18 @@ __all__ = [
     "CapturePolicy",
     "CaptureRoot",
     "CaptureSetupError",
+    "CaptureStoreStats",
+    "CleanupBlocker",
+    "CleanupProgress",
     "ProjectAnchor",
+    "SweepBudgetSpec",
+    "capture_store_stats",
     "create_capture_artifact",
     "open_capture_lifecycle",
     "open_capture_root",
     "open_project_anchor",
     "read_capture_policy",
+    "reconcile_capture_store",
     "run_capture",
     "verify_reference_publication_binding",
 ]

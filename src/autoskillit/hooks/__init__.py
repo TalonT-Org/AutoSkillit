@@ -11,6 +11,14 @@ from autoskillit.hook_registry import (
     HookDef,
     generate_hooks_json,
 )
+from autoskillit.hooks._capture_artifacts import (
+    CaptureStoreStats,
+    CleanupBlocker,
+    CleanupProgress,
+    SweepBudgetSpec,
+    capture_store_stats,
+    reconcile_capture_store,
+)
 from autoskillit.hooks._command_classification import (
     _INTERPRETER_LINE_RE,
     _WRITE_APIS_RE,
@@ -31,9 +39,15 @@ __all__ = [
     "QUOTA_POST_WARNING_TRIGGER",
     "QUOTA_POST_BUDGET_EXCEEDED_TRIGGER",
     "REVIEW_LOOP_DENY_TRIGGER",
+    "CaptureStoreStats",
+    "CleanupBlocker",
+    "CleanupProgress",
+    "SweepBudgetSpec",
     "_HOOK_CONFIG_PATH_COMPONENTS",
     "_INTERPRETER_LINE_RE",
     "_WRITE_APIS_RE",
+    "capture_store_stats",
     "command_has_blocked_protected_path_read",
     "generate_hooks_json",
+    "reconcile_capture_store",
 ]

@@ -86,6 +86,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_update_checks_fetch",  # cli/_update_checks_fetch.py: _HTTP_TIMEOUT constant
         "_terminal",  # cli/_terminal.py: _BASE_RESET = "".join(...) derived from _RESET_SPEC
         "_reconcile",  # hooks/_capture/_reconcile.py: immutable owner budget contracts
+        "_capture_store",  # cli/_capture_store.py: RECLAIM_BUDGET = SweepBudgetSpec(...)
         "hook_registry",  # hook_registry.py: HOOK_REGISTRY_HASH = compute_registry_hash(...)
         "_fleet",  # cli/_fleet.py: fleet_app = App(name="fleet", ...)
         "_features",  # cli/_features.py: features_app = App(name="features", ...)
@@ -950,13 +951,16 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +GitHub review types, portable launch authority, stable contract,
         # closed skill semantics, and the non-executable projection binding shard.
         "core/types": 49,
-        "cli": 23,  # +_install_contract typed install process boundary (#4409)
-        "cli/doctor": 11,  # +_doctor_skills capability declaration authenticity checks
+        "cli": 24,  # +_install_contract typed install process boundary (#4409);
+        # +_capture_store capture-store stats/reclaim command
+        "cli/doctor": 12,  # +_doctor_skills capability declaration authenticity checks;
+        # +_doctor_capture_store read-only capture-store stats check
         "workspace": 15,  # +_installed_artifact exact lease-protected authority (#4409);
         # +_install_state (single install-state consistency authority,
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
-        "hooks": 21,  # +_capture_process owned shell process-group boundary  # noqa: E501
+        "hooks": 22,  # +_capture_process owned shell process-group boundary;
+        # +_hook_payload shared payload parser for guards  # noqa: E501
         "pipeline": 16,  # +context/audit admission ledgers +recipe initialization
         # +kitchen transition authority
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
@@ -1036,14 +1040,38 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "REQ-CNST-010-E1: canonical type registry — wide surface required to prevent "
         "circular imports; all enums/protocols/constants consolidated here",
     ),
+    "hooks/_capture_artifacts.py": (
+        1050,
+        "REQ-CNST-010-E22: descriptor-anchored capture authority and isolated runner — "
+        "re-exports capture_store_stats, reconcile_capture_store, CaptureStoreStats, "
+        "CleanupBlocker, CleanupProgress, and SweepBudgetSpec from its own dual-mode "
+        "(flat sys.path / dotted package) _capture import bootstrap so hooks/__init__.py "
+        "can gateway them to cli/_capture_store.py without importing _capture submodules "
+        "directly, which would race the standalone hook scripts' own flat-style bootstrap "
+        "of sys.modules['_capture'].",
+    ),
+    "hooks/_capture_lifecycle.py": (
+        1150,
+        "REQ-CNST-010-E21: capture lifecycle store — the lock-retry primitive "
+        "(_acquire_flock, jittered exponential backoff bounded by the active sweep's "
+        "own budget) and directory-reconciliation orphan admission "
+        "(_admission_reason, _admit_new_record, _scan_and_adopt_orphans) must stay "
+        "adjacent to the transition/capacity accounting they share; splitting would "
+        "separate self-accounting invariants from the store methods that enforce them.",
+    ),
     "hooks/_command_classification.py": (
-        1750,
+        1900,
         "REQ-CNST-010-E10: shared command-classification primitive consumed by all "
         "command-inspecting guards — tokenization, shell-payload extraction, "
         "interpreter-write detection, protected-path reads, recursive payload "
         "segmentation, descriptor-flow output-budget analysis, and #4432's recursive "
         "GitHub mutation cardinality/route analysis; the stdlib-only hook boundary and "
-        "shared parser prevent policy drift across guard processes.",
+        "shared parser prevent policy drift across guard processes. Bumped to 1900 for "
+        "the gh/curl possible-exec token check narrowed to command position: "
+        "_segment_has_possible_github_exec_token, "
+        "_segments_have_possible_github_exec_token, "
+        "_segments_have_dispatch_word_exec_risk, and _gh_args_have_bare_help_flag "
+        "must stay adjacent to the tokenizer they share.",
     ),
     "session.py": (
         1060,

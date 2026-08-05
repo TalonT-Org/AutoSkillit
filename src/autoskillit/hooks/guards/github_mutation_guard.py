@@ -52,6 +52,8 @@ _REVIEW_KINDS: frozenset[GitHubMutationKind] = frozenset(
     }
 )
 
+GITHUB_MUTATION_DENY_TRIGGER: str = "Unsafe raw GitHub mutation is prohibited"
+
 
 class DenyTrigger(StrEnum):
     """Exhaustive machine-readable reasons this guard denies a command."""

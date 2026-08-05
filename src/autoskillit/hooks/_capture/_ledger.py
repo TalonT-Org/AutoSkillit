@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import os
+import secrets
 import struct
 from dataclasses import dataclass, replace
 from typing import Any, cast
@@ -64,6 +65,7 @@ __all__ = [
     "DecodedLedger",
     "LedgerCodecError",
     "LedgerFrame",
+    "adopted_orphan_record",
     "canonical_json",
     "decode_ledger",
     "encode_frame",
@@ -668,6 +670,65 @@ def legacy_record_from_dict(
     except (KeyError, TypeError, ValueError, RuntimeError) as exc:
         raise LedgerCodecError("invalid legacy lifecycle record fields") from exc
     validate_record(record)
+    return record
+
+
+_ORPHAN_NAME_PREFIX = "shell_"
+_ORPHAN_NAME_SUFFIX = ".log"
+
+
+def adopted_orphan_record(
+    *,
+    public_name: str,
+    project_identity: tuple[int, int],
+    root_identity: tuple[int, int],
+    artifact_identity: tuple[int, int],
+    observed_size: int,
+    now: float,
+) -> CaptureLifecycleRecord:
+    """Build a first-revision record adopting an unledgered capture file.
+
+    Directory-reconciliation precedent for a record that was never written —
+    the mirror image of `legacy_record_from_dict`, which decodes a record
+    that predates the current ledger *format*. Both land in the same
+    `LEGACY_CLEANUP_ONLY` shape: no manifest or failure authority, nothing
+    but bounded deletion evidence. `capture_id` is derived from `public_name`
+    itself (the one name the scan actually observed) rather than accepted as
+    a second parameter, so the two can never disagree.
+
+    `retention_phase` is unconditionally `ELIGIBLE`: an adopted orphan has
+    already passed the scan's mtime-age gate, so — unlike a freshly reserved
+    capture — there is no active-writer window left to wait out; it is
+    immediately due for the existing two-phase quarantine deletion. Unlike
+    the legacy decode path there is no prior ledger JSON to derive a stable
+    incarnation from, so a fresh one is minted the same way
+    `reserve_capture()` mints its own.
+    """
+    if _PUBLIC_NAME_RE.fullmatch(public_name) is None:
+        raise LedgerCodecError("invalid orphan adoption public name")
+    capture_id = public_name[len(_ORPHAN_NAME_PREFIX) : -len(_ORPHAN_NAME_SUFFIX)]
+    try:
+        record = CaptureLifecycleRecord(
+            capture_id=capture_id,
+            state=CaptureState.ABANDONED,
+            staging_name=f".capture-staging-{capture_id}-{secrets.token_hex(8)}",
+            public_name=public_name,
+            project_identity=project_identity,
+            root_identity=root_identity,
+            created_at=now,
+            next_attempt_at=now,
+            incarnation=secrets.token_hex(16),
+            revision=1,
+            artifact_identity=artifact_identity,
+            retention_at=now,
+            observed_size=observed_size,
+            legacy_cleanup=LegacyCleanupOnly(observed_size),
+            capture_status=CaptureStatus.LEGACY_CLEANUP_ONLY,
+            snapshot_status=CaptureSnapshotStatus.ABSENT,
+            retention_phase=CaptureRetentionPhase.ELIGIBLE,
+        )
+    except (KeyError, TypeError, ValueError, RuntimeError) as exc:
+        raise LedgerCodecError("invalid orphan adoption record fields") from exc
     return record
 
 

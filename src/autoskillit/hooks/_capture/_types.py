@@ -88,6 +88,11 @@ class SweepBudgetSpec:
     max_transitions: int = 128
     max_cursor_writes: int = 32
     max_duration_seconds: float = 0.05
+    # 0 disables the directory-reconciliation orphan-scan phase entirely (the
+    # RUNNER_TAIL_BUDGET default): unlike the record-centric fields above,
+    # zero is a valid, meaningful value, so it is validated separately below
+    # rather than folded into the positive-only integer_values tuple.
+    max_directory_entries_scanned: int = 0
 
     def __post_init__(self) -> None:
         integer_values = (
@@ -99,6 +104,8 @@ class SweepBudgetSpec:
         )
         if (
             any(type(value) is not int or value <= 0 for value in integer_values)
+            or type(self.max_directory_entries_scanned) is not int
+            or self.max_directory_entries_scanned < 0
             or not isinstance(self.max_duration_seconds, (int, float))
             or isinstance(self.max_duration_seconds, bool)
             or not math.isfinite(self.max_duration_seconds)

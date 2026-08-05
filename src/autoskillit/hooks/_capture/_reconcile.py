@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import os
+import stat
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from . import _authority, _migration
+from . import _authority, _migration, _orphan_scan
 from ._failure_policy import CaptureFailureReason, runtime_failure_reason
+from ._lifecycle_policy import CaptureRetentionPhase
 from ._module_identity import register_module_aliases
+from ._syntax import PUBLIC_NAME_RE
 from ._types import (
     CaptureCleanupOutcome,
     CleanupBlocker,
@@ -32,6 +37,10 @@ SESSION_START_BUDGET = SweepBudgetSpec(
     max_transitions=1024,
     max_cursor_writes=256,
     max_duration_seconds=1.0,
+    # Only SESSION_START scans for directory-reconciliation orphans — the
+    # runner-tail budget above stays at the SweepBudgetSpec default (0,
+    # disabled) so per-command latency is unaffected.
+    max_directory_entries_scanned=512,
 )
 
 # Single shared byte bound for every capture-cleanup diagnostic, regardless of
@@ -44,6 +53,8 @@ __all__ = [
     "DIAGNOSTIC_MAX_BYTES",
     "RUNNER_TAIL_BUDGET",
     "SESSION_START_BUDGET",
+    "CaptureStoreStats",
+    "capture_store_stats",
     "cleanup_diagnostic",
     "emit_bounded_diagnostic",
     "emit_owner_diagnostic",
@@ -92,6 +103,98 @@ def reconcile_capture_store(
         OSError,
     ) as exc:
         return _failure_outcome(_failure_blocker(runtime_failure_reason(exc)))
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureStoreStats:
+    """Read-only ledger and directory statistics for the capture store.
+
+    ``blocker`` reuses the sweep-owner vocabulary: ``NONE`` means every
+    other field is populated, ``STORE_ABSENT`` means no store exists yet
+    (a healthy nothing-to-report case, matching ``reconcile_capture_store``),
+    any other value means stats could not be gathered.
+    """
+
+    blocker: CleanupBlocker
+    live_records: int = 0
+    eligible_records: int = 0
+    deleting_records: int = 0
+    ledger_bytes: int = 0
+    directory_files: int = 0
+    unledgered_aged_files: int = 0
+    unledgered_aged_bytes: int = 0
+
+
+def capture_store_stats(project_cwd: str) -> CaptureStoreStats:
+    """Report capture-store ledger and directory statistics without mutating.
+
+    No cursor writes, no admission checks, no deletions, no ledger appends —
+    the doctor battery's read-only check and ``autoskillit capture-store``
+    (without ``--reclaim``) both call this and only this, so neither surface
+    can drift from what a real reconciliation pass would find.
+    """
+    if not isinstance(project_cwd, str) or not project_cwd:
+        return CaptureStoreStats(CleanupBlocker.FILESYSTEM_AUTHORITY)
+    try:
+        with _authority.open_capture_lifecycle(project_cwd, create=False) as store:
+            with store._locked():
+                records, _compaction_epoch, ledger_bytes = store._load_locked()
+            tracked = frozenset(
+                record.public_name
+                for record in records.values()
+                if record.retention_phase is not CaptureRetentionPhase.DELETED
+            )
+            now = store._wall_clock()
+            directory_files = 0
+            unledgered_aged_files = 0
+            unledgered_aged_bytes = 0
+            for entry in os.scandir(store._root_fd):
+                directory_files += 1
+                if PUBLIC_NAME_RE.fullmatch(entry.name) is None or entry.name in tracked:
+                    continue
+                try:
+                    value = entry.stat(follow_symlinks=False)
+                except OSError:
+                    continue
+                if not stat.S_ISREG(value.st_mode):
+                    continue
+                if now - value.st_mtime >= _orphan_scan.ADOPTION_AGE_SECONDS:
+                    unledgered_aged_files += 1
+                    unledgered_aged_bytes += value.st_size
+            return CaptureStoreStats(
+                blocker=CleanupBlocker.NONE,
+                live_records=sum(
+                    1
+                    for record in records.values()
+                    if record.retention_phase is not CaptureRetentionPhase.DELETED
+                ),
+                eligible_records=sum(
+                    1
+                    for record in records.values()
+                    if record.retention_phase is CaptureRetentionPhase.ELIGIBLE
+                ),
+                deleting_records=sum(
+                    1
+                    for record in records.values()
+                    if record.retention_phase is CaptureRetentionPhase.DELETING
+                ),
+                ledger_bytes=ledger_bytes,
+                directory_files=directory_files,
+                unledgered_aged_files=unledgered_aged_files,
+                unledgered_aged_bytes=unledgered_aged_bytes,
+            )
+    except _authority.CaptureStoreAbsentError:
+        return CaptureStoreStats(CleanupBlocker.STORE_ABSENT)
+    except _migration.MigrationBlockedError:
+        return CaptureStoreStats(CleanupBlocker.MIGRATION_BLOCKED)
+    except (
+        _authority.CaptureSetupError,
+        _migration.MigrationAuthorityError,
+        _migration.MigrationIntegrityError,
+        _authority.CaptureLifecycleError,
+        OSError,
+    ) as exc:
+        return CaptureStoreStats(_failure_blocker(runtime_failure_reason(exc)))
 
 
 def _outcome_severity(outcome: CaptureCleanupOutcome) -> CleanupSeverity | None:

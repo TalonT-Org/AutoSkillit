@@ -130,6 +130,14 @@ class SweepStorePort(TransitionStorePort, Protocol):
         lease_checked: bool = False,
     ) -> int: ...
 
+    def _admit_new_record(
+        self,
+        record: Record,
+        records: Records,
+        compaction_epoch: int,
+        size: int,
+    ) -> bool: ...
+
 
 class MigrationStorePort(SweepStorePort, Protocol):
     _capacity: CaptureCapacitySpec

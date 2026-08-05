@@ -4,6 +4,7 @@ import errno
 import fcntl
 import importlib
 import os
+import random
 import re
 import secrets
 import stat
@@ -102,6 +103,14 @@ _OBSERVE_FLAGS = os.O_RDWR | _CLOEXEC | _NOFOLLOW | _NONBLOCK
 _ARTIFACT_FLAGS = os.O_RDWR | os.O_CREAT | os.O_EXCL | _CLOEXEC | _NOFOLLOW
 _UNTRUSTED_WRITE_BITS = stat.S_IWGRP | stat.S_IWOTH
 _STORE_FACTORY_TOKEN = object()
+# Jittered exponential backoff for non-blocking lock retry during an active
+# sweep: base delay uniformly chosen in [5ms, 20ms), doubling each retry, capped.
+# `random` (not `secrets`) is the deliberate choice — its per-process state is
+# already seeded from os.urandom at interpreter start, giving OS-entropy jitter
+# without the per-call cost of a CSPRNG, and never a wall-clock-derived source.
+_LOCK_RETRY_MIN_SECONDS = 0.005
+_LOCK_RETRY_MAX_SECONDS = 0.020
+_LOCK_RETRY_CAP_SECONDS = 0.25
 
 
 class CaptureLifecycleError(RuntimeError):
@@ -184,6 +193,7 @@ class CaptureLifecycleStore:
         self._ledger_view = _capture_ledger_view.LedgerView()
         self._capacity = _capture_types.CaptureCapacitySpec()
         self._sweep_budget: SweepBudgetSpec | None = None
+        self._sweep_started_monotonic: float | None = None
         self._sweep_records_inspected = self._sweep_replay_bytes = 0
         self._sweep_transitions = self._sweep_cursor_writes = 0
 
@@ -220,6 +230,49 @@ class CaptureLifecycleStore:
     def capture_finalization_window(self) -> tuple[float, float]:
         return (now := self._wall_clock()), now + _RETENTION_SECONDS
 
+    def _acquire_flock(self, fd: int, *, blocking: bool) -> None:
+        """Acquire ``fd``'s advisory lock, retrying non-blocking contention.
+
+        Blocking callers (the overwhelming majority — every non-sweep
+        transition) get today's single kernel-blocking ``flock()`` call
+        unchanged. Non-blocking callers exist only inside an active sweep
+        (``self._sweep_budget`` is set for their whole duration): on
+        ``EAGAIN``/``EWOULDBLOCK`` they retry with jittered, doubling backoff
+        until the *sweep's own* ``max_duration_seconds`` budget — not a new
+        knob — is exhausted, then raise ``LockContended``. A non-blocking call
+        outside a sweep (should not happen given the current call graph) falls
+        back to today's single-attempt behavior rather than retrying forever.
+        """
+        operation = fcntl.LOCK_EX
+        if not blocking:
+            operation |= fcntl.LOCK_NB
+        try:
+            fcntl.flock(fd, operation)
+            return
+        except OSError as exc:
+            if blocking or exc.errno not in (errno.EAGAIN, errno.EWOULDBLOCK):
+                raise
+            contended = exc
+        budget = self._sweep_budget
+        started = self._sweep_started_monotonic
+        if budget is None or started is None:
+            raise _capture_types.LockContended from contended
+        deadline = started + budget.max_duration_seconds
+        delay = random.uniform(_LOCK_RETRY_MIN_SECONDS, _LOCK_RETRY_MAX_SECONDS)
+        while True:
+            remaining = deadline - self._monotonic()
+            if remaining <= 0:
+                raise _capture_types.LockContended from contended
+            time.sleep(min(delay, remaining))
+            try:
+                fcntl.flock(fd, operation)
+                return
+            except OSError as exc:
+                if exc.errno not in (errno.EAGAIN, errno.EWOULDBLOCK):
+                    raise
+                contended = exc
+            delay = min(delay * 2.0, _LOCK_RETRY_CAP_SECONDS)
+
     @contextmanager
     def _locked(self, *, blocking: bool = True) -> Iterator[None]:
         _capture_sweep.validate_store_root(self, CaptureLifecycleError)
@@ -232,13 +285,10 @@ class CaptureLifecycleStore:
                 fd, LOCK_NAME, _UNTRUSTED_WRITE_BITS, CaptureLifecycleError
             )
             try:
-                operation = fcntl.LOCK_EX
-                if not blocking:
-                    operation |= fcntl.LOCK_NB
-                fcntl.flock(fd, operation)
+                self._acquire_flock(fd, blocking=blocking)
+            except _capture_types.LockContended:
+                raise
             except OSError as exc:
-                if not blocking and exc.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
-                    raise _capture_types.LockContended from exc
                 raise CaptureLifecycleError.from_os_error(
                     "cannot acquire lifecycle lock", exc
                 ) from exc
@@ -977,6 +1027,47 @@ class CaptureLifecycleStore:
         assert self._sweep_budget is not None
         _capture_sweep.advance_cursor(self, due_key, self._sweep_budget)
 
+    def _admission_reason(
+        self,
+        records: Mapping[str, CaptureLifecycleRecord],
+        candidate: CaptureLifecycleRecord,
+        compaction_epoch: int,
+    ) -> CaptureCapacityReason | None:
+        return _capture_capacity.admission_reason(
+            records,
+            candidate,
+            compaction_epoch=compaction_epoch,
+            spec=self._capacity,
+            active_limit=min(MAX_ACTIVE_RECORDS, self._capacity.max_operational_records),
+        )
+
+    def _admit_new_record(
+        self,
+        record: CaptureLifecycleRecord,
+        records: dict[str, CaptureLifecycleRecord],
+        compaction_epoch: int,
+        size: int,
+    ) -> bool:
+        """Admit a brand-new (never-before-tracked) record if capacity allows.
+
+        Mirrors ``_transition_locked``'s self-accounting: a successful
+        admission during an active sweep counts against the same
+        ``max_transitions`` budget a state transition does, so
+        directory-reconciliation orphan adoption can only ever consume from
+        the same active-record capacity real reservations compete for, never
+        bypass it (#4440) — capacity-exhausted candidates are silently
+        skipped, deferred to a later invocation once cleanup frees room.
+        """
+        if self._admission_reason(records, record, compaction_epoch) is not None:
+            return False
+        self._append_locked(record, records, compaction_epoch, size)
+        if self._sweep_budget is not None:
+            self._sweep_transitions += 1
+        return True
+
+    def _scan_and_adopt_orphans(self) -> tuple[int, int]:
+        return _capture_sweep.scan_and_adopt_orphans(self, lifecycle_error=CaptureLifecycleError)
+
     def sweep(
         self,
         budget: SweepBudgetSpec,
@@ -984,6 +1075,7 @@ class CaptureLifecycleStore:
         if type(budget) is not SweepBudgetSpec:
             raise CaptureLifecycleError("cleanup requires one SweepBudgetSpec")
         self._sweep_budget = budget
+        self._sweep_started_monotonic = self._monotonic()
         self._sweep_records_inspected = self._sweep_replay_bytes = 0
         self._sweep_transitions = self._sweep_cursor_writes = 0
         try:
@@ -995,6 +1087,8 @@ class CaptureLifecycleStore:
                 before_attempt=self._advance_sweep_cursor,
                 sweep_one=self._sweep_one,
                 work_counters=lambda: _capture_sweep.sweep_work_counters(self),
+                scan_and_adopt_orphans=self._scan_and_adopt_orphans,
             )
         finally:
             self._sweep_budget = None
+            self._sweep_started_monotonic = None

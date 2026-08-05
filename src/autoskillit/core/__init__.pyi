@@ -74,12 +74,14 @@ from ._terminal_table import _render_gfm_table as _render_gfm_table
 from ._terminal_table import _render_terminal_table as _render_terminal_table
 from ._version_snapshot import collect_version_snapshot as collect_version_snapshot
 from .agent_definition import AGENT_DEFINITION_DIGEST_DOMAIN as AGENT_DEFINITION_DIGEST_DOMAIN
+from .agent_definition import CODEX_EXPLORER_IDENTITY as CODEX_EXPLORER_IDENTITY
 from .agent_definition import AgentDef as AgentDef
 from .agent_definition import AgentDefinitionError as AgentDefinitionError
 from .agent_definition import CodexAgentProjectionDef as CodexAgentProjectionDef
 from .agent_definition import agent_definition_digest as agent_definition_digest
 from .agent_definition import load_agent_definition as load_agent_definition
 from .agent_definition import load_agent_definitions as load_agent_definitions
+from .agent_definition import normalize_codex_cli_version as normalize_codex_cli_version
 from .audit_cycle_verifier import ArtifactByteReader as ArtifactByteReader
 from .audit_cycle_verifier import AuditCycleVerificationError as AuditCycleVerificationError
 from .audit_cycle_verifier import AuditCycleVerifier as AuditCycleVerifier

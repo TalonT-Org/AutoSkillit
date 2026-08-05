@@ -1,4 +1,4 @@
-"""Canonical bundled-agent definitions and Codex projection policy."""
+"""Canonical bundled-agent definitions and Codex explorer identity policy."""
 
 from __future__ import annotations
 
@@ -20,19 +20,23 @@ from .types import (
 
 __all__ = [
     "AGENT_DEFINITION_DIGEST_DOMAIN",
+    "CODEX_EXPLORER_IDENTITY",
     "AgentDef",
     "AgentDefinitionError",
     "CodexAgentProjectionDef",
     "agent_definition_digest",
     "load_agent_definition",
     "load_agent_definitions",
+    "normalize_codex_cli_version",
 ]
 
 
 AGENT_DEFINITION_DIGEST_DOMAIN = "autoskillit.agent-definition.v1"
+CODEX_EXPLORER_IDENTITY: tuple[str, str] = ("gpt-5.6-luna", "max")
 _AGENT_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+_CODEX_CLI_VERSION_RE = re.compile(r"(?:codex-cli )?(?P<version>[0-9]+\.[0-9]+\.[0-9]+)")
 _READ_ONLY_AGENT_TOOLS = frozenset({"Read", "Grep", "Glob", "LSP"})
-_LUNA_READ_ONLY_PROJECTION = ("gpt-5.6-luna", "max", "read-only")
+_LUNA_READ_ONLY_PROJECTION = (*CODEX_EXPLORER_IDENTITY, "read-only")
 _CODEX_DISABLEABLE_FEATURES = (
     "apps",
     "apps_mcp_path_override",
@@ -70,6 +74,18 @@ _CODEX_DISABLEABLE_FEATURE_SET = frozenset(_CODEX_DISABLEABLE_FEATURES)
 
 class AgentDefinitionError(ValueError):
     """Raised when an agent definition cannot be validated canonically."""
+
+
+def normalize_codex_cli_version(value: str) -> str:
+    """Return the bare version for one exact supported Codex CLI token.
+
+    Accepted inputs are ``X.Y.Z`` and ``codex-cli X.Y.Z`` only. Any other
+    prefix, suffix, whitespace, or additional version component is rejected.
+    """
+    match = _CODEX_CLI_VERSION_RE.fullmatch(value)
+    if match is None:
+        raise ValueError(f"invalid Codex CLI version token: {value!r}")
+    return match.group("version")
 
 
 @dataclass(frozen=True, slots=True)

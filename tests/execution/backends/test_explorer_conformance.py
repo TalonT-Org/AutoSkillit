@@ -10,6 +10,7 @@ from threading import Barrier
 
 import pytest
 
+from autoskillit.core import CODEX_EXPLORER_IDENTITY
 from autoskillit.execution.backends import _explorer_conformance as conformance
 from autoskillit.execution.backends._explorer_conformance import (
     EXPLORER_ATTESTATION_FILENAME,
@@ -40,6 +41,10 @@ from tests.execution.backends._explorer_conformance_assertions import (
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 _DEFINITION_DIGEST = explorer_probe_definition_digest()
+
+
+def test_conformance_identity_matches_agent_definition_authority() -> None:
+    assert (EXPLORER_MODEL, EXPLORER_REASONING_EFFORT) == CODEX_EXPLORER_IDENTITY
 
 
 def _catalog() -> bytes:

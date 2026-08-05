@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import (
+    CODEX_EXPLORER_IDENTITY,
     AgentDef,
     CodexAgentProjectionDef,
     agent_definition_digest,
@@ -24,8 +25,7 @@ EXPLORER_ATTESTATION_SHA256_FILENAME = f"{EXPLORER_ATTESTATION_FILENAME}.sha256"
 EXPLORER_ATTESTATION_MAX_AGE_SECONDS = 24 * 60 * 60
 EXPLORER_ATTESTATION_FUTURE_SKEW_SECONDS = 5 * 60
 EXPLORER_PARENT_MODEL = "gpt-5.6-sol"
-EXPLORER_MODEL = "gpt-5.6-luna"
-EXPLORER_REASONING_EFFORT = "max"
+EXPLORER_MODEL, EXPLORER_REASONING_EFFORT = CODEX_EXPLORER_IDENTITY
 EXPLORER_SANDBOX_MODE = "read-only"
 EXPLORER_PROBE_ROLE = "semantic-code-navigator"
 EXPLORER_PROBE_TASK_NAME = "capability_probe"

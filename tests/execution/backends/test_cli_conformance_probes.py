@@ -39,6 +39,7 @@ from autoskillit.core import (
     CLAUDE_CODE_CAPABILITIES,
     OUTPUT_DISCIPLINE_DIGEST,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+    normalize_codex_cli_version,
     pkg_root,
 )
 from autoskillit.execution.backends._codex_config import (
@@ -1294,9 +1295,9 @@ def _assert_generated_child_probe(output: _GeneratedChildProbeOutput) -> None:
         expected_sandbox_mode=EXPLORER_SANDBOX_MODE,
         expected_definition_digest=output.definition_digest,
     )
-    assert output.cli_version.endswith(evidence.cli_version), (
-        f"Codex CLI version mismatch: {output.cli_version!r} vs {evidence.cli_version!r}"
-    )
+    assert normalize_codex_cli_version(output.cli_version) == normalize_codex_cli_version(
+        evidence.cli_version
+    ), f"Codex CLI version mismatch: {output.cli_version!r} vs {evidence.cli_version!r}"
     assert output.read_marker in output.child_tool_outputs.get("bounded_literal_search", ""), (
         "bounded native text read did not succeed"
     )

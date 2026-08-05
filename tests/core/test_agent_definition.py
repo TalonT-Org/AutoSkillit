@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    CODEX_EXPLORER_IDENTITY,
     AgentDef,
     AgentDefinitionError,
     CodexAgentProjectionDef,
@@ -42,6 +43,10 @@ def test_specialized_explorers_are_terminal_luna_broker_roles(
     assert definition.model == "sonnet"
     assert definition.codex.model == "gpt-5.6-luna"
     assert definition.codex.reasoning_effort == "max"
+    assert (
+        definition.codex.model,
+        definition.codex.reasoning_effort,
+    ) == CODEX_EXPLORER_IDENTITY
     assert definition.codex.sandbox_mode == "read-only"
     assert not definition.codex.agents_enabled
     assert role_boundary in definition.body

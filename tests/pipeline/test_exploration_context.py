@@ -406,13 +406,9 @@ def test_launch_rejects_untrusted_repository_root(tmp_path: Path) -> None:
         )
 
 
-@pytest.mark.parametrize("terminal_path", ("success", "failure", "timeout", "cancellation"))
-def test_every_terminal_path_cleans_up_launch_capabilities(
-    tmp_path: Path,
-    terminal_path: str,
-) -> None:
+def test_cleanup_session_revokes_launch_capability(tmp_path: Path) -> None:
     project_dir = tmp_path / "project"
-    authority_home = tmp_path / f"generated-session-{terminal_path}"
+    authority_home = tmp_path / "generated-session"
     authority_home.mkdir()
     store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
         trusted_root=project_dir,
@@ -421,21 +417,21 @@ def test_every_terminal_path_cleans_up_launch_capabilities(
     binding = store.bind_launch(
         owner_id="uid:1000",
         role="semantic-code-navigator",
-        session_id=f"session-{terminal_path}",
+        session_id="session-a",
         cwd=project_dir,
         repository_root=project_dir,
         source_identity="bundled:semantic-code-navigator:definition-digest",
         authority_home=authority_home,
     )
 
-    store.cleanup_session(f"session-{terminal_path}")
+    store.cleanup_session("session-a")
 
     assert (
         store.resolve(
             capability=binding.capability,
             owner_id="uid:1000",
             role="semantic-code-navigator",
-            session_id=f"session-{terminal_path}",
+            session_id="session-a",
         ).status
         is CapabilityResolutionStatus.INVALID
     )

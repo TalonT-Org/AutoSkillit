@@ -104,7 +104,7 @@ _ARTIFACT_FLAGS = os.O_RDWR | os.O_CREAT | os.O_EXCL | _CLOEXEC | _NOFOLLOW
 _UNTRUSTED_WRITE_BITS = stat.S_IWGRP | stat.S_IWOTH
 _STORE_FACTORY_TOKEN = object()
 # Jittered exponential backoff for non-blocking lock retry during an active
-# sweep: base delay uniformly chosen in [5ms, 20ms), doubling each retry, capped.
+# sweep: base delay uniformly chosen in [5ms, 20ms], doubling each retry, capped.
 # `random` (not `secrets`) is the deliberate choice — its per-process state is
 # already seeded from os.urandom at interpreter start, giving OS-entropy jitter
 # without the per-call cost of a CSPRNG, and never a wall-clock-derived source.

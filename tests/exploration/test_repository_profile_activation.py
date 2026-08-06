@@ -119,6 +119,44 @@ def test_identity_and_profile_activation_digests_preserve_golden_bytes(
     )
 
 
+@pytest.mark.parametrize("suffix", [".py", ".pyi"])
+def test_profile_activation_detects_real_python_sources(
+    tmp_path: Path,
+    suffix: str,
+) -> None:
+    (tmp_path / f"module{suffix}").write_text("value: int = 1\n")
+
+    first = activate_repository_profiles(tmp_path)
+    second = activate_repository_profiles(tmp_path)
+    generic = next(
+        activation
+        for activation in first.activations
+        if activation.profile.value == "generic-python"
+    )
+
+    assert generic.applicability.value == "applicable"
+    assert f"python_source:module{suffix}" in first.evidence
+    assert first.activation_digest == second.activation_digest
+
+
+@pytest.mark.parametrize("ignored_directory", [".venv", "node_modules", "__pycache__"])
+def test_profile_activation_ignores_generated_python_directories(
+    tmp_path: Path,
+    ignored_directory: str,
+) -> None:
+    directory = tmp_path / ignored_directory
+    directory.mkdir()
+    (directory / "ignored.py").write_text("value = 1\n")
+
+    activation = activate_repository_profiles(tmp_path)
+    generic = next(
+        item for item in activation.activations if item.profile.value == "generic-python"
+    )
+
+    assert generic.applicability.value == "not-applicable"
+    assert "python_source_absent" in activation.evidence
+
+
 def test_offline_profile_contract_has_exact_fixed_paths() -> None:
     assert OFFLINE_DECLARATION_PATH == ".autoskillit/repository-profile.v1.json"
     assert OFFLINE_REQUIRED_MARKER_PATHS == (

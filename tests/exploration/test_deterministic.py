@@ -32,7 +32,7 @@ from autoskillit.exploration._deterministic import (
 from autoskillit.exploration._digest import qualified_digest
 from autoskillit.exploration.completeness import evaluate_completeness
 from autoskillit.exploration.graph import build_canonical_evidence_graph
-from autoskillit.exploration.pagination import page_evidence
+from autoskillit.exploration.pagination import normalize_query, page_evidence
 from autoskillit.exploration.router import readiness_waves, reclassify_cross_leaf, route_frontier
 
 pytestmark = [
@@ -174,6 +174,42 @@ def test_router_reclassifies_then_schedules_scope_disjoint_work() -> None:
     assert plan.tasks[0].profile is RepositoryProfileId.AUTOSKILLIT
 
 
+def test_router_rejects_unknown_handoffs_and_profile_boundaries() -> None:
+    snapshot = RepositorySnapshot(RepositoryIdentity("repo", "rev"), "tree", "collectors")
+    query = ExplorationQuerySpec(
+        "find impact",
+        required_profiles=(RepositoryProfileId.GENERIC_PYTHON,),
+    )
+    item = FrontierItem("impact", query, RepositoryProfileId.LANGUAGE_NEUTRAL)
+    applicable = ProfileActivation(
+        RepositoryProfileId.LANGUAGE_NEUTRAL,
+        ExplorationApplicability.APPLICABLE,
+        "all",
+    )
+
+    with pytest.raises(DeterministicGraphError, match="unknown frontier items"):
+        reclassify_cross_leaf((item,), handoffs={"missing": RepositoryProfileId.AUTOSKILLIT})
+    with pytest.raises(DeterministicGraphError, match="outside query scope"):
+        route_frontier(snapshot, (item,), (applicable,))
+
+    unrestricted = replace(item, query=ExplorationQuerySpec("find impact"))
+    with pytest.raises(DeterministicGraphError, match="not applicable"):
+        route_frontier(snapshot, (unrestricted,), ())
+    with pytest.raises(DeterministicGraphError, match="not applicable"):
+        route_frontier(
+            snapshot,
+            (unrestricted,),
+            (
+                replace(
+                    applicable,
+                    applicability=ExplorationApplicability.NOT_APPLICABLE,
+                ),
+            ),
+        )
+    with pytest.raises(DeterministicGraphError, match="ambiguous"):
+        route_frontier(snapshot, (unrestricted,), (applicable, applicable))
+
+
 def test_completeness_and_pagination_are_closed_world_and_digest_bound() -> None:
     report = CollectorReport("symbols", CollectorStatus.SUCCEEDED, "snapshot")
     completeness = evaluate_completeness(("symbols",), (report,), snapshot_digest="snapshot")
@@ -194,6 +230,118 @@ def test_completeness_and_pagination_are_closed_world_and_digest_bound() -> None
     assert not incomplete.complete
     with pytest.raises(CursorValidationError, match="stale"):
         page_evidence(evidence, incomplete, page_size=1, cursor=first.continuation)
+
+
+def test_completeness_rejects_closed_world_contract_violations() -> None:
+    succeeded = CollectorReport("symbols", CollectorStatus.SUCCEEDED, "snapshot")
+    with pytest.raises(ValueError, match="required collectors must be allowed"):
+        evaluate_completeness(
+            ("symbols",),
+            (succeeded,),
+            snapshot_digest="snapshot",
+            allowed_collectors=("imports",),
+        )
+    with pytest.raises(ValueError, match="reports must have unique"):
+        evaluate_completeness(
+            ("symbols",),
+            (succeeded, succeeded),
+            snapshot_digest="snapshot",
+        )
+    with pytest.raises(ValueError, match="unexpected collector reports"):
+        evaluate_completeness(
+            ("symbols",),
+            (succeeded, CollectorReport("imports", CollectorStatus.EMPTY, "snapshot")),
+            snapshot_digest="snapshot",
+        )
+    with pytest.raises(ValueError, match="different repository snapshot"):
+        evaluate_completeness(
+            ("symbols",),
+            (replace(succeeded, snapshot_digest="other"),),
+            snapshot_digest="snapshot",
+        )
+
+
+def test_completeness_classifies_empty_as_complete_and_failed_as_incomplete() -> None:
+    empty = evaluate_completeness(
+        ("symbols",),
+        (CollectorReport("symbols", CollectorStatus.EMPTY, "snapshot"),),
+        snapshot_digest="snapshot",
+    )
+    failed = evaluate_completeness(
+        ("symbols",),
+        (CollectorReport("symbols", CollectorStatus.FAILED, "snapshot"),),
+        snapshot_digest="snapshot",
+    )
+
+    assert empty.complete
+    assert failed.failed_collectors == ("symbols",)
+
+
+def test_normalize_query_applies_nfkc_and_whitespace_canonicalization() -> None:
+    assert normalize_query("  Ａ\tquery\n") == "A query"
+    with pytest.raises(ValueError, match="non-empty"):
+        normalize_query("   ")
+
+
+@pytest.mark.parametrize(
+    ("query", "snapshot_field", "snapshot_value"),
+    [
+        (ExplorationQuerySpec("other"), None, None),
+        (ExplorationQuerySpec("needle"), "tree_digest", "tree-b"),
+        (ExplorationQuerySpec("needle"), "profile_activation_digest", "profiles-b"),
+        (ExplorationQuerySpec("needle"), "profile_versions", (("generic-python", "2"),)),
+        (ExplorationQuerySpec("needle"), "schema_version", "schema-b"),
+        (ExplorationQuerySpec("needle"), "collector_manifest_digest", "manifest-b"),
+        (ExplorationQuerySpec("needle"), "pagination_identity", "pagination-b"),
+    ],
+)
+def test_live_cursor_invalidates_on_every_result_authority(
+    query: ExplorationQuerySpec,
+    snapshot_field: str | None,
+    snapshot_value: object,
+) -> None:
+    snapshot = RepositorySnapshot(
+        RepositoryIdentity("repo", "revision"),
+        "tree-a",
+        "manifest-a",
+        profile_activation_digest="profiles-a",
+        profile_versions=(("generic-python", "1"),),
+        schema_version="schema-a",
+        pagination_identity="pagination-a",
+    )
+    report = CollectorReport("symbols", CollectorStatus.SUCCEEDED, snapshot.digest)
+    completeness = evaluate_completeness(
+        ("symbols",),
+        (report,),
+        snapshot_digest=snapshot.digest,
+    )
+    evidence = (
+        EvidenceRecord("e1", MethodProvenance.COLLECTOR, snapshot.digest),
+        EvidenceRecord("e2", MethodProvenance.COLLECTOR, snapshot.digest),
+    )
+    first = page_evidence(
+        evidence,
+        completeness,
+        page_size=1,
+        query=ExplorationQuerySpec("needle"),
+        snapshot=snapshot,
+    )
+    assert first.continuation is not None
+    changed_snapshot = (
+        snapshot
+        if snapshot_field is None
+        else replace(snapshot, **{snapshot_field: snapshot_value})
+    )
+
+    with pytest.raises(CursorValidationError, match="stale"):
+        page_evidence(
+            evidence,
+            completeness,
+            page_size=1,
+            cursor=first.continuation,
+            query=query,
+            snapshot=changed_snapshot,
+        )
 
 
 def test_canonical_evidence_graph_preserves_contradictions_and_high_fanout() -> None:

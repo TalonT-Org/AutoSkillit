@@ -3,8 +3,16 @@
 from __future__ import annotations
 
 import json
+from typing import TypedDict
 
-from autoskillit.core import ContinuationCursor, EvidencePage, ExplorationQuerySpec, get_logger
+from autoskillit.core import (
+    ContinuationCursor,
+    EvidencePage,
+    ExplorationContextStoreProtocol,
+    ExplorationQuerySpec,
+    NodeKey,
+    get_logger,
+)
 from autoskillit.pipeline import CapabilityResolutionStatus
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
@@ -12,7 +20,42 @@ from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 _MAX_QUERY_LENGTH = 4_096
 _MAX_PAGE_SIZE = 100
+_FAILURE_INVALID_REQUEST = "invalid_exploration_request"
+_FAILURE_CONTEXT_UNAVAILABLE = "exploration_context_unavailable"
+_FAILURE_BROKER_UNAVAILABLE = "exploration_broker_unavailable"
 logger = get_logger(__name__)
+
+
+class _NodeKeyPayload(TypedDict):
+    namespace: str
+    value: str
+
+
+class _NodePayload(TypedDict):
+    key: _NodeKeyPayload
+    label: str
+    facts: list[str]
+    inferences: list[str]
+    unknowns: list[str]
+    conflicts: list[str]
+    evidence_ids: list[str]
+
+
+class _EdgePayload(TypedDict):
+    source: _NodeKeyPayload
+    target: _NodeKeyPayload
+    relationship: str
+    facts: list[str]
+    inferences: list[str]
+    unknowns: list[str]
+    conflicts: list[str]
+    evidence_ids: list[str]
+
+
+class _GraphPayload(TypedDict):
+    nodes: list[_NodePayload]
+    edges: list[_EdgePayload]
+    conflicts: list[str]
 
 
 def _failure(code: str) -> str:
@@ -31,7 +74,7 @@ def _query(query: str, max_results: int) -> ExplorationQuerySpec | None:
         return None
 
 
-def _get_store():
+def _get_store() -> ExplorationContextStoreProtocol[object] | None:
     from autoskillit.server import _get_ctx  # circular-break: server composition root
 
     return _get_ctx().exploration_context_store
@@ -41,11 +84,11 @@ def _bounded_terms(values: tuple[str, ...]) -> list[str]:
     return [value[:512] for value in values[:16]]
 
 
-def _node_key_payload(key) -> dict[str, str]:
+def _node_key_payload(key: NodeKey) -> _NodeKeyPayload:
     return {"namespace": key.namespace[:512], "value": key.value[:512]}
 
 
-def _graph_payload(page: EvidencePage) -> dict[str, object]:
+def _graph_payload(page: EvidencePage) -> _GraphPayload:
     """Return the bounded, page-scoped canonical graph without dropping fanout."""
 
     return {
@@ -133,17 +176,19 @@ async def submit_exploration_query(
         request = _query(query, max_results)
         store = _get_store()
         if request is None:
-            return _failure("invalid_exploration_request")
+            return _failure(_FAILURE_INVALID_REQUEST)
+        if store is None:
+            raise RuntimeError("exploration context store is unavailable")
         status, page = store.submit_from_launch_environment(
             query=request,
             page_size=request.max_results,
         )
         if status is not CapabilityResolutionStatus.OK or page is None:
-            return _failure("exploration_context_unavailable")
+            return _failure(_FAILURE_CONTEXT_UNAVAILABLE)
         return _page_payload(page, status="accepted")
     except Exception:
         logger.warning("exploration query submission failed", exc_info=True)
-        return _failure("exploration_broker_unavailable")
+        return _failure(_FAILURE_BROKER_UNAVAILABLE)
 
 
 @mcp.tool(
@@ -166,18 +211,20 @@ async def get_exploration_page(
             return gate
         store = _get_store()
         if not 0 < page_size <= _MAX_PAGE_SIZE:
-            return _failure("invalid_exploration_request")
+            return _failure(_FAILURE_INVALID_REQUEST)
+        if store is None:
+            raise RuntimeError("exploration context store is unavailable")
         cursor = None if continuation is None else ContinuationCursor.decode(continuation)
         status, page = store.get_page_from_launch_environment(
             page_size=page_size,
             cursor=cursor,
         )
         if status is not CapabilityResolutionStatus.OK or page is None:
-            return _failure("exploration_context_unavailable")
+            return _failure(_FAILURE_CONTEXT_UNAVAILABLE)
         return _page_payload(page, status="ready")
     except Exception:
         logger.warning("exploration page retrieval failed", exc_info=True)
-        return _failure("exploration_broker_unavailable")
+        return _failure(_FAILURE_BROKER_UNAVAILABLE)
 
 
 @mcp.tool(
@@ -200,13 +247,15 @@ async def resume_exploration_context(
             return gate
         store = _get_store()
         if not 0 < page_size <= _MAX_PAGE_SIZE:
-            return _failure("invalid_exploration_request")
+            return _failure(_FAILURE_INVALID_REQUEST)
+        if store is None:
+            raise RuntimeError("exploration context store is unavailable")
         status, page = store.get_page_from_launch_environment(
             page_size=page_size,
         )
         if status is CapabilityResolutionStatus.OK and page is not None:
             return _page_payload(page, status="resumed")
-        return _failure("exploration_context_unavailable")
+        return _failure(_FAILURE_CONTEXT_UNAVAILABLE)
     except Exception:
         logger.warning("exploration context resumption failed", exc_info=True)
-        return _failure("exploration_broker_unavailable")
+        return _failure(_FAILURE_BROKER_UNAVAILABLE)

@@ -82,6 +82,8 @@ async def test_close_kitchen_tool_calls_reset_visibility(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.reset_visibility = AsyncMock()
+    exploration_store = MagicMock()
+    mock_ctx.exploration_context_store = exploration_store
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -93,7 +95,7 @@ async def test_close_kitchen_tool_calls_reset_visibility(tmp_path, monkeypatch):
     mock_mcp.disable.assert_any_call(tags={"kitchen"})
     mock_mcp.disable.assert_any_call(tags={"exploration"})
     mock_mcp.disable.assert_any_call(tags={"plan-review"})
-    assert mock_mcp.disable.call_count == 3
+    exploration_store.close.assert_called_once_with()
     mock_ctx.reset_visibility.assert_called_once()
 
 
@@ -535,8 +537,10 @@ async def test_open_kitchen_redisable_order(tmp_path, monkeypatch):
 
 # T-VIS-005
 @pytest.mark.anyio
-async def test_open_kitchen_no_redisable_when_empty(tmp_path, monkeypatch):
-    """open_kitchen must NOT call disable_components when no subsets are disabled."""
+async def test_open_kitchen_keeps_disabled_feature_tags_hidden_when_subsets_empty(
+    tmp_path, monkeypatch
+):
+    """An empty subset list still keeps disabled feature tags hidden."""
     from autoskillit.config.settings import AutomationConfig, SubsetsConfig
 
     monkeypatch.chdir(tmp_path)

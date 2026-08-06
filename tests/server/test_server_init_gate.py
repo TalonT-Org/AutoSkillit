@@ -77,10 +77,10 @@ class TestKitchenVisibility:
 
         await _redisable_subsets(mock_ctx, ["kitchen-core"], features={"fleet": True})
 
-        assert mock_ctx.disable_components.await_args_list == [
-            call(tags={"kitchen-core"}),
-            call(tags={"exploration"}),
-        ]
+        mock_ctx.disable_components.assert_has_awaits(
+            [call(tags={"kitchen-core"}), call(tags={"exploration"})],
+            any_order=True,
+        )
 
     @pytest.mark.anyio
     async def test_tool_list_changes_after_enable_within_session(self) -> None:

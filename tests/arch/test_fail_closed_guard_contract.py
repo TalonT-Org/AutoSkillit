@@ -109,10 +109,8 @@ def test_fail_closed_guard_basenames_are_registered() -> None:
 def test_every_fail_closed_guard_has_an_allow_test() -> None:
     """Every fail-closed guard's test file exists and pins at least one allow case.
 
-    A guard authored without a matched allow-test neighbor is exactly how
-    github_mutation_guard.py's cwd-equality over-block shipped undetected —
-    this makes that gap a standing, self-enforcing invariant instead of a
-    one-time fix.
+    A behavioral allow-test neighbor keeps false-positive protection paired
+    with every fail-closed guard as a standing, self-enforcing invariant.
     """
     missing_files: list[str] = []
     missing_allow_tests: list[str] = []

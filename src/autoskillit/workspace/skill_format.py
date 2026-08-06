@@ -25,6 +25,11 @@ _NAME_MAX_LEN = 64
 _DESCRIPTION_MAX_LEN = 1024
 
 
+def _normalize_exploration_vector_body(value: str) -> str:
+    """Return the canonical newline form for exploration vector bodies."""
+    return value.replace("\r\n", "\n").replace("\r", "\n").strip("\n")
+
+
 SkillFrontmatterParseError = Literal[
     "unreadable",
     "missing_opening_delimiter",

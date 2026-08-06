@@ -43,6 +43,7 @@ from autoskillit.core import (
 )
 from autoskillit.workspace.skill_format import (
     SkillFrontmatterParseResult,
+    _normalize_exploration_vector_body,
     parse_frontmatter_content,
     read_skill_frontmatter,
 )
@@ -558,11 +559,6 @@ def _bind_exploration_vector_markers(
     if missing:
         raise SkillContractError(f"missing exploration vector markers: {sorted(missing)!r}")
     return tuple(replace(vector, body=bodies[vector.id]) for vector in vectors)
-
-
-def _normalize_exploration_vector_body(value: str) -> str:
-    """Return the canonical newline form shared by source and replacement bodies."""
-    return value.replace("\r\n", "\n").replace("\r", "\n").strip("\n")
 
 
 def replace_exploration_vector_bodies(

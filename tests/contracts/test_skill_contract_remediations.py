@@ -24,7 +24,12 @@ from autoskillit.core import (
     SkillSourceRef,
 )
 from autoskillit.migration.engine import MigrationFile, SkillMigrationAdapter
-from autoskillit.workspace.skills import DefaultSkillResolver, _skill_info_from_frontmatter
+from autoskillit.workspace import validate_skill_capability_authenticity
+from autoskillit.workspace.skills import (
+    DefaultSkillResolver,
+    SkillInfo,
+    _skill_info_from_frontmatter,
+)
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
@@ -135,17 +140,23 @@ async def test_migration_adapter_rejects_a_kind_it_does_not_know(
         await adapter.migrate(file, temp_dir=tmp_path / "temp")
 
 
-def test_capability_registry_is_fully_kinded() -> None:
-    """Adding a 10th capability without a matching failure-kind story must
-    not silently bypass the forcing function: an unrecognized-capability
-    contract violation must still resolve to UNKNOWN_CAPABILITY or
-    UNDECLARED_CAPABILITY, both of which are registered kinds."""
-    assert SkillInvalidityKind.UNKNOWN_CAPABILITY in SKILL_CONTRACT_REMEDIATIONS
-    assert SkillInvalidityKind.UNDECLARED_CAPABILITY in SKILL_CONTRACT_REMEDIATIONS
-    # SKILL_CAPABILITY_REGISTRY itself has no direct per-entry kind mapping —
-    # every entry's contract violations (unknown name, missing declaration,
-    # unsupported declaration) all resolve to one of the two kinds above.
-    assert SKILL_CAPABILITY_REGISTRY  # non-empty: there is something to cover
+def test_capability_registry_authenticity_findings_are_typed(tmp_path: Path) -> None:
+    """Every registered declaration is classified when genuine evidence is absent."""
+    skill = SkillInfo(
+        name="registry-contract",
+        source=SkillSource.BUNDLED,
+        path=tmp_path / "SKILL.md",
+        uses_capabilities=frozenset(SKILL_CAPABILITY_REGISTRY),
+        execution_role=SkillExecutionRole.ORCHESTRATOR,
+        canonical_content="---\nname: registry-contract\n---\nNo capability behavior.\n",
+    )
+
+    diagnostics = validate_skill_capability_authenticity(skill)
+
+    assert {diagnostic.capability for diagnostic in diagnostics} == set(SKILL_CAPABILITY_REGISTRY)
+    assert {diagnostic.kind for diagnostic in diagnostics} == {
+        SkillInvalidityKind.UNDECLARED_CAPABILITY
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -127,7 +127,7 @@ _INVENTORY: dict[str, tuple[InventoryRow, ...]] = {
             "dependency-analysis",
             "migrated",
             "semantic-code-navigator",
-            "planner-elaborate-phase-dependencies",
+            "planner-elaborate-phase-dependency-analysis",
         ),
         (
             "test-coverage",
@@ -139,13 +139,13 @@ _INVENTORY: dict[str, tuple[InventoryRow, ...]] = {
             "pattern-discovery",
             "migrated",
             "repository-impact-profiler",
-            "planner-elaborate-phase-patterns",
+            "planner-elaborate-phase-pattern-discovery",
         ),
         (
             "cross-phase-boundaries",
             "migrated",
             "semantic-code-navigator",
-            "planner-elaborate-phase-boundaries",
+            "planner-elaborate-phase-cross-phase-boundaries",
         ),
     ),
 }
@@ -1265,6 +1265,24 @@ _RAW_MIGRATED_AGENT_SYNTAX = (
     re.compile(r"(?i)\bgeneric[- ]explore\s+(?:subagent|agent)\b"),
 )
 
+_MISSING_CONTEXT_INVARIANTS = (
+    "absent",
+    "never rediscover",
+    "override",
+    "not applicable",
+    "search",
+    "unavailable",
+    "unrelated",
+    "without widening scope",
+    "inferring meaning",
+    "importing or executing target code",
+)
+_EXPERIMENT_MISSING_CONTEXT_INVARIANTS = (
+    *_MISSING_CONTEXT_INVARIANTS,
+    "tests",
+    "experiments",
+)
+
 
 def _load_phase_d_skill(skill_name: str) -> SkillInfo:
     skill_path = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
@@ -1320,6 +1338,47 @@ def _marker_body(content: str, vector: ExplorationVectorDef) -> str:
         .split("<!-- /autoskillit:exploration-vector -->", 1)[0]
         .strip("\n")
     )
+
+
+def _assert_lens_vector_contracts(skill_name: str, expected_count: int) -> SkillInfo:
+    info = _load_phase_d_skill(skill_name)
+    content = info.path.read_text(encoding="utf-8")
+
+    for vector in info.exploration_vectors:
+        assert content.count(vector.marker_line) == 1
+        if vector.disposition is ExplorationVectorDisposition.MIGRATED:
+            for pattern in _RAW_MIGRATED_AGENT_SYNTAX:
+                assert pattern.search(vector.body) is None, (
+                    skill_name,
+                    vector.id,
+                    pattern.pattern,
+                )
+    assert content.count("<!-- /autoskillit:exploration-vector -->") == expected_count
+    return info
+
+
+def _assert_acyclic_task_graph(
+    graph: Mapping[str, set[str]],
+    expected_count: int,
+    family: str,
+) -> None:
+    assert set[str]().union(*graph.values()) <= set(graph), (
+        f"unknown dependency in {family} exploration graph"
+    )
+
+    remaining = {task_id: set(dependencies) for task_id, dependencies in graph.items()}
+    scheduled: list[str] = []
+    while remaining:
+        ready = tuple(task_id for task_id, dependencies in remaining.items() if not dependencies)
+        assert ready, f"cycle in {family} exploration graph: {remaining}"
+        scheduled.extend(ready)
+        remaining = {
+            task_id: dependencies.difference(ready)
+            for task_id, dependencies in remaining.items()
+            if task_id not in ready
+        }
+
+    assert len(scheduled) == expected_count, family
 
 
 @pytest.fixture
@@ -1554,12 +1613,17 @@ def test_architecture_selectors_filesystem_inventory_and_native_matrix_are_exact
             vector.id for vector in info.exploration_vectors if vector.native_dispatch
         )
 
-    assert (
-        selector_slugs
-        == filesystem_slugs
-        == tuple(_ARCHITECTURE_LENS_INVENTORY)
-        == tuple(actual_native_dispatch_matrix)
-        == _ARCHITECTURE_SELECTOR_SLUGS
+    assert selector_slugs == _ARCHITECTURE_SELECTOR_SLUGS, (
+        "selector table differs from selector fixture"
+    )
+    assert filesystem_slugs == _ARCHITECTURE_SELECTOR_SLUGS, (
+        "filesystem inventory differs from selector fixture"
+    )
+    assert tuple(_ARCHITECTURE_LENS_INVENTORY) == _ARCHITECTURE_SELECTOR_SLUGS, (
+        "reviewed inventory differs from selector fixture"
+    )
+    assert tuple(actual_native_dispatch_matrix) == _ARCHITECTURE_SELECTOR_SLUGS, (
+        "native dispatch matrix differs from selector fixture"
     )
     assert actual_native_dispatch_matrix == {
         slug: tuple(row[0] for row in rows) for slug, rows in _ARCHITECTURE_LENS_INVENTORY.items()
@@ -1612,8 +1676,8 @@ def test_experiment_lens_bundled_alias_and_prepare_research_families_are_exact()
 def test_phase_f_experiment_vectors_match_complete_reviewed_inventory(
     skill_name: str,
 ) -> None:
-    info = _load_phase_d_skill(skill_name)
     expected = _EXPERIMENT_VECTOR_INVENTORY[skill_name]
+    info = _assert_lens_vector_contracts(skill_name, len(expected))
 
     assert tuple((vector.id, vector.role) for vector in info.exploration_vectors) == expected
     assert tuple(
@@ -1643,32 +1707,8 @@ def test_phase_f_experiment_vectors_match_complete_reviewed_inventory(
         _MISSING_CONTEXT_FIELDS_BODY_DIGESTS
     )
     normalized_missing_body = missing_fields.body.lower().replace("-", " ")
-    for invariant in (
-        "absent",
-        "never rediscover",
-        "override",
-        "not applicable",
-        "search",
-        "unavailable",
-        "unrelated",
-        "without widening scope",
-        "inferring meaning",
-        "importing or executing target code",
-        "tests",
-        "experiments",
-    ):
+    for invariant in _EXPERIMENT_MISSING_CONTEXT_INVARIANTS:
         assert invariant in normalized_missing_body, (skill_name, invariant)
-
-    content = info.path.read_text(encoding="utf-8")
-    for vector in info.exploration_vectors:
-        assert content.count(vector.marker_line) == 1
-        for pattern in _RAW_MIGRATED_AGENT_SYNTAX:
-            assert pattern.search(vector.body) is None, (
-                skill_name,
-                vector.id,
-                pattern.pattern,
-            )
-    assert content.count("<!-- /autoskillit:exploration-vector -->") == len(expected)
 
 
 def test_phase_f_experiment_inventory_is_complete_unique_and_acyclic() -> None:
@@ -1689,21 +1729,7 @@ def test_phase_f_experiment_inventory_is_complete_unique_and_acyclic() -> None:
     assert step_zero_count == 18
     assert step_one_count == 90
     assert len(graph) == 108
-    assert set[str]().union(*graph.values()) <= set(graph)
-
-    remaining = dict(graph)
-    scheduled: list[str] = []
-    while remaining:
-        ready = tuple(task_id for task_id, dependencies in remaining.items() if not dependencies)
-        assert ready, f"cycle in experiment exploration graph: {remaining}"
-        scheduled.extend(ready)
-        remaining = {
-            task_id: dependencies.difference(ready)
-            for task_id, dependencies in remaining.items()
-            if task_id not in ready
-        }
-
-    assert len(scheduled) == 108
+    _assert_acyclic_task_graph(graph, 108, "experiment")
 
 
 def test_visualization_family_reachability_pins_and_filter_coverage_are_exact() -> None:
@@ -1742,8 +1768,8 @@ def test_visualization_family_reachability_pins_and_filter_coverage_are_exact() 
 
 @pytest.mark.parametrize("skill_name", _VISUALIZATION_LENS_SKILLS)
 def test_visualization_vectors_match_complete_reviewed_inventory(skill_name: str) -> None:
-    info = _load_phase_d_skill(skill_name)
     expected = _VISUALIZATION_VECTOR_INVENTORY[skill_name]
+    info = _assert_lens_vector_contracts(skill_name, len(expected))
 
     assert (
         tuple(
@@ -1782,32 +1808,11 @@ def test_visualization_vectors_match_complete_reviewed_inventory(skill_name: str
         _MISSING_CONTEXT_FIELDS_BODY_DIGESTS
     )
     normalized_missing_body = missing_fields.body.lower().replace("-", " ")
-    for invariant in (
-        "absent",
-        "never rediscover",
-        "override",
-        "not applicable",
-        "search",
-        "unavailable",
-        "unrelated",
-        "without widening scope",
-        "inferring meaning",
-        "importing or executing target code",
-    ):
+    for invariant in _MISSING_CONTEXT_INVARIANTS:
         assert invariant in normalized_missing_body, (skill_name, invariant)
 
     content = info.path.read_text(encoding="utf-8")
     assert "Retain parent authority over" in content
-    for vector in info.exploration_vectors:
-        assert content.count(vector.marker_line) == 1
-        if vector.disposition is ExplorationVectorDisposition.MIGRATED:
-            for pattern in _RAW_MIGRATED_AGENT_SYNTAX:
-                assert pattern.search(vector.body) is None, (
-                    skill_name,
-                    vector.id,
-                    pattern.pattern,
-                )
-    assert content.count("<!-- /autoskillit:exploration-vector -->") == len(expected)
 
 
 def test_visualization_retained_context_and_judgment_authorities_are_exact() -> None:
@@ -1858,27 +1863,14 @@ def test_visualization_task_inventory_is_complete_unique_and_acyclic() -> None:
     assert len(graph) == 58
     assert migrated_count == 47
     assert retained_count == 11
-    assert set[str]().union(*graph.values()) <= set(graph)
-
-    remaining = dict(graph)
-    scheduled: list[str] = []
-    while remaining:
-        ready = tuple(task_id for task_id, dependencies in remaining.items() if not dependencies)
-        assert ready, f"cycle in visualization exploration graph: {remaining}"
-        scheduled.extend(ready)
-        remaining = {
-            task_id: dependencies.difference(ready)
-            for task_id, dependencies in remaining.items()
-            if task_id not in ready
-        }
-
-    assert len(scheduled) == 58
+    _assert_acyclic_task_graph(graph, 58, "visualization")
 
 
 @pytest.mark.parametrize("slug", _ARCHITECTURE_SELECTOR_SLUGS)
 def test_architecture_lens_vectors_match_complete_reviewed_inventory(slug: str) -> None:
     expected = _ARCHITECTURE_LENS_INVENTORY[slug]
-    info = _load_phase_d_skill(f"arch-lens-{slug}")
+    skill_name = f"arch-lens-{slug}"
+    info = _assert_lens_vector_contracts(skill_name, len(expected))
 
     assert [
         (
@@ -1903,13 +1895,6 @@ def test_architecture_lens_vectors_match_complete_reviewed_inventory(slug: str) 
     )
     assert _review_digest(info) == _ARCHITECTURE_REVIEW_DIGESTS[slug]
 
-    content = info.path.read_text(encoding="utf-8")
-    for vector in info.exploration_vectors:
-        assert content.count(vector.marker_line) == 1
-        for pattern in _RAW_MIGRATED_AGENT_SYNTAX:
-            assert pattern.search(vector.body) is None, (slug, vector.id, pattern.pattern)
-    assert content.count("<!-- /autoskillit:exploration-vector -->") == len(expected)
-
 
 def test_architecture_lens_task_inventory_is_unique_and_acyclic() -> None:
     graph: dict[str, set[str]] = {}
@@ -1923,21 +1908,7 @@ def test_architecture_lens_task_inventory_is_unique_and_acyclic() -> None:
             graph[vector.task.task_id] = set(vector.task.depends_on)
 
     assert vector_count == len(graph) == 76
-    assert set[str]().union(*graph.values()) <= set(graph)
-
-    remaining = dict(graph)
-    scheduled: list[str] = []
-    while remaining:
-        ready = tuple(task_id for task_id, dependencies in remaining.items() if not dependencies)
-        assert ready, f"cycle in architecture exploration graph: {remaining}"
-        scheduled.extend(ready)
-        remaining = {
-            task_id: dependencies.difference(ready)
-            for task_id, dependencies in remaining.items()
-            if task_id not in ready
-        }
-
-    assert len(scheduled) == vector_count
+    _assert_acyclic_task_graph(graph, vector_count, "architecture")
 
 
 def test_phase_d_inventory_and_architecture_recipe_step_pins_are_explicit() -> None:

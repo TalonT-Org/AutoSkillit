@@ -41,8 +41,8 @@ exploration_vectors:
     role: semantic-code-navigator
     profile: auto
     relationship_classes: [imports, calls, references]
-    task_id: planner-elaborate-phase-dependencies
-    frontier_item_id: planner-elaborate-phase-dependencies-frontier
+    task_id: planner-elaborate-phase-dependency-analysis
+    frontier_item_id: planner-elaborate-phase-dependency-analysis-frontier
     depends_on: []
     scope: [.]
     max_results: 100
@@ -71,8 +71,8 @@ exploration_vectors:
     role: repository-impact-profiler
     profile: auto
     relationship_classes: [references, affects]
-    task_id: planner-elaborate-phase-patterns
-    frontier_item_id: planner-elaborate-phase-patterns-frontier
+    task_id: planner-elaborate-phase-pattern-discovery
+    frontier_item_id: planner-elaborate-phase-pattern-discovery-frontier
     depends_on: []
     scope: [.]
     max_results: 100
@@ -86,8 +86,8 @@ exploration_vectors:
     role: semantic-code-navigator
     profile: auto
     relationship_classes: [imports, calls, references]
-    task_id: planner-elaborate-phase-boundaries
-    frontier_item_id: planner-elaborate-phase-boundaries-frontier
+    task_id: planner-elaborate-phase-cross-phase-boundaries
+    frontier_item_id: planner-elaborate-phase-cross-phase-boundaries-frontier
     depends_on: []
     scope: [.]
     max_results: 100

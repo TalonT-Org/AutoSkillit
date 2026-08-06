@@ -240,6 +240,13 @@ def test_phase_d_neutral_plan_renders_each_backend_native_form(
         assert "Return bounded typed evidence only" in replacement
 
 
+def test_phase_d_renderer_rejects_unknown_canonical_roles() -> None:
+    unknown = replace(_STANDARD_NAVIGATOR, role="unregistered-explorer-role")
+
+    with pytest.raises(ValueError, match="unknown roles.*unregistered-explorer-role"):
+        CodexBackend().exploration_dispatch_renderer.render(_plan((unknown,)), (unknown,))
+
+
 def test_phase_d_backends_preserve_neutral_plan_and_role_identities() -> None:
     plan = _plan(_VECTORS)
 

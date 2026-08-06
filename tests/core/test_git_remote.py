@@ -110,7 +110,7 @@ def test_remote_resolution_preserves_precedence_conflicts_and_probe_diagnostics(
 @pytest.mark.parametrize(
     ("upstream", "origin", "expected_selected", "expected_diagnostics"),
     [
-        ("", "https://gitlab.com/owner/repo\n", "origin", ("empty", "non_github_remote")),
+        ("\n", "https://gitlab.com/owner/repo\n", "origin", ("empty", "non_github_remote")),
         (
             "https://github.com/one/repo\nhttps://github.com/two/repo\n",
             "file:///tmp/repo\n",

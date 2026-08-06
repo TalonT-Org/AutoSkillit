@@ -341,6 +341,38 @@ def _scan_strenum_compare(path: Path) -> list[Violation]:
 _SOURCE_FILES = sorted(SRC_ROOT.rglob("*.py"))
 
 
+def _function_local_imports(tree: ast.AST) -> list[ast.Import | ast.ImportFrom]:
+    """Return import nodes nested within synchronous or asynchronous functions."""
+    imports: list[ast.Import | ast.ImportFrom] = []
+
+    class _Visitor(ast.NodeVisitor):
+        def __init__(self) -> None:
+            self.function_depth = 0
+
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            self.function_depth += 1
+            self.generic_visit(node)
+            self.function_depth -= 1
+
+        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+            self.function_depth += 1
+            self.generic_visit(node)
+            self.function_depth -= 1
+
+        def visit_Import(self, node: ast.Import) -> None:
+            if self.function_depth:
+                imports.append(node)
+            self.generic_visit(node)
+
+        def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+            if self.function_depth:
+                imports.append(node)
+            self.generic_visit(node)
+
+    _Visitor().visit(tree)
+    return imports
+
+
 def _extract_module_level_internal_imports(path: Path) -> list[tuple[str, int]]:
     """Return (imported_module_stem, lineno) for all autoskillit imports at module level.
 

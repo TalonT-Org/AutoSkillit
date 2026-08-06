@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.arch._helpers import _function_local_imports
+
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _STDLIB = frozenset(sys.stdlib_module_names) | frozenset(sys.builtin_module_names)
@@ -26,35 +28,13 @@ def _is_third_party(module_name: str) -> bool:
 def _function_local_third_party_imports(path: Path) -> list[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     violations: list[str] = []
-
-    class _Visitor(ast.NodeVisitor):
-        def __init__(self) -> None:
-            self.depth = 0
-
-        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-            self.depth += 1
-            self.generic_visit(node)
-            self.depth -= 1
-
-        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-            self.depth += 1
-            self.generic_visit(node)
-            self.depth -= 1
-
-        def visit_Import(self, node: ast.Import) -> None:
-            if self.depth > 0:
-                for alias in node.names:
-                    if _is_third_party(alias.name):
-                        violations.append(f"{path.name}:{node.lineno}: import {alias.name}")
-            self.generic_visit(node)
-
-        def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-            if self.depth > 0 and node.module is not None and node.level == 0:
-                if _is_third_party(node.module):
-                    violations.append(f"{path.name}:{node.lineno}: from {node.module} import ...")
-            self.generic_visit(node)
-
-    _Visitor().visit(tree)
+    for node in _function_local_imports(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if _is_third_party(alias.name):
+                    violations.append(f"{path.name}:{node.lineno}: import {alias.name}")
+        elif node.module is not None and node.level == 0 and _is_third_party(node.module):
+            violations.append(f"{path.name}:{node.lineno}: from {node.module} import ...")
     return violations
 
 

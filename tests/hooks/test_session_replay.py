@@ -341,6 +341,10 @@ def dispatch_capture_lifecycle_hook(project_root: Path) -> GuardRunResult:
         env=os.environ,
         timeout=_TIMEOUT_SECONDS,
     )
+    assert proc.returncode == 0, (
+        "capture lifecycle hook exited "
+        f"{proc.returncode}: {proc.stderr.decode('utf-8', errors='replace')}"
+    )
     return GuardRunResult(
         script="capture_lifecycle_hook.py",
         stdout=proc.stdout.decode("utf-8", errors="replace"),

@@ -375,11 +375,8 @@ def test_catalog_projection_context_defaults_to_pkg_root_when_unspecified(
     )
 
 
-@pytest.mark.parametrize("has_binding", [True, False])
 def test_cook_session_passes_behavioral_durable_root_to_projection(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    has_binding: bool,
 ) -> None:
     from types import SimpleNamespace
 
@@ -388,13 +385,7 @@ def test_cook_session_passes_behavioral_durable_root_to_projection(
     from autoskillit.workspace import EffectiveSkillCatalog, SkillsDirectoryProvider
 
     installed_root = tmp_path / "installed"
-    source_root = tmp_path / "source"
-    binding = (
-        SimpleNamespace(identity=SimpleNamespace(managed_path=installed_root))
-        if has_binding
-        else None
-    )
-    monkeypatch.setattr("autoskillit.core.pkg_root", lambda: source_root)
+    binding = SimpleNamespace(identity=SimpleNamespace(managed_path=installed_root))
 
     provider = SkillsDirectoryProvider(
         temp_dir_relpath=".autoskillit/temp",
@@ -410,8 +401,31 @@ def test_cook_session_passes_behavioral_durable_root_to_projection(
         binding,
     )
 
-    expected_root = installed_root if has_binding else source_root
     assert context.substitutions is not None
     assert context.substitutions["{{AUTOSKILLIT_SCRIPTS}}"] == str(
-        expected_root / "recipes" / "scripts"
+        installed_root / "recipes" / "scripts"
     )
+
+
+def test_cook_session_rejects_projection_without_retained_binding(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    from autoskillit.cli.session._session_cook import _build_cook_projection_context
+    from autoskillit.core import SkillExecutionRole
+    from autoskillit.workspace import EffectiveSkillCatalog, SkillsDirectoryProvider
+
+    provider = SkillsDirectoryProvider(
+        temp_dir_relpath=".autoskillit/temp",
+        default_base_branch="develop",
+    )
+    catalog = EffectiveSkillCatalog(skills=(), execution_role=SkillExecutionRole.SESSION)
+    backend: Any = SimpleNamespace(conventions=None)
+
+    with pytest.raises(RuntimeError, match="retained plugin artifact binding"):
+        _build_cook_projection_context(
+            provider,
+            catalog,
+            tmp_path,
+            backend,
+            None,
+        )

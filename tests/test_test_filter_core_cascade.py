@@ -787,25 +787,10 @@ class TestBuildTestScopeCoreCascade:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        for pkg in [
-            "cli",
-            "core",
-            "execution",
-            "fleet",
-            "migration",
-            "recipe",
-            "server",
-            "workspace",
-        ]:
-            assert pkg in dir_names, f"_type_exceptions cascade should include {pkg}"
-        for excluded in [
-            "config",
-            "pipeline",
-            "hooks",
-        ]:
-            assert excluded not in dir_names, (
-                f"_type_exceptions cascade should not include {excluded}"
-            )
+        required = set("cli core execution fleet migration recipe server workspace".split())
+        assert required <= dir_names
+        excluded = {"config", "pipeline", "hooks"}
+        assert dir_names.isdisjoint(excluded)
 
     def test_step_context_narrow_cascade(self, tmp_path: Path) -> None:
         """_step_context → narrow cascade of 4 dirs."""

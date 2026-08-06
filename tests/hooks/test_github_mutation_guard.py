@@ -56,6 +56,29 @@ def _decision(event: dict, monkeypatch: pytest.MonkeyPatch) -> str | None:
 
 
 @pytest.mark.parametrize(
+    "event",
+    [
+        {"tool_name": "Bash", "tool_input": {"command": "gh pr list"}, "cwd": "relative"},
+        {"tool_name": "Bash", "tool_input": {"command": "gh pr list"}, "cwd": 42},
+        {
+            "tool_name": _RUN_CMD_TOOL,
+            "tool_input": {"cmd": "gh pr list", "cwd": "relative"},
+        },
+        {"tool_name": _RUN_CMD_TOOL, "tool_input": {"cmd": "gh pr list", "cwd": 42}},
+    ],
+    ids=["bash-relative", "bash-non-string", "run-cmd-relative", "run-cmd-non-string"],
+)
+def test_malformed_execution_cwd_is_denied(
+    event: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _run_hook(event, monkeypatch)
+
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "malformed_cwd" in result["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+@pytest.mark.parametrize(
     "command",
     [
         "gh pr review 7 --comment --body 'review body'",

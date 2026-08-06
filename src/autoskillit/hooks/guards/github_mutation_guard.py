@@ -60,6 +60,7 @@ class DenyTrigger(StrEnum):
 
     FIELD_CONFUSION = "field_confusion"
     MALFORMED_COMMAND = "malformed_command"
+    MALFORMED_CWD = "malformed_cwd"
     UNRESOLVED_MUTATION = "unresolved_mutation"
     MULTIPLE_MUTATIONS = "multiple_mutations"
     REVIEW_MUTATION = "review_mutation"
@@ -86,6 +87,10 @@ _DENY_MESSAGES: dict[DenyTrigger, str] = {
     DenyTrigger.MALFORMED_COMMAND: (
         "malformed_command: the payload's command field is missing or not a "
         "string, so no command text could be inspected."
+    ),
+    DenyTrigger.MALFORMED_CWD: (
+        "malformed_cwd: the command's execution cwd is non-string or relative, "
+        "so path-sensitive mutation inputs cannot be inspected safely."
     ),
     DenyTrigger.UNRESOLVED_MUTATION: (
         "unresolved_mutation: this command's GitHub mutation cardinality or "
@@ -116,6 +121,11 @@ def decide(parsed: ParsedHookCommand) -> GuardDecision:
         return GuardDecision(allow=False, trigger=DenyTrigger.MALFORMED_COMMAND)
     if PayloadAnomaly.FIELD_CONFUSION in parsed.anomalies:
         return GuardDecision(allow=False, trigger=DenyTrigger.FIELD_CONFUSION)
+    if any(
+        anomaly in parsed.anomalies
+        for anomaly in (PayloadAnomaly.NON_STRING_CWD, PayloadAnomaly.RELATIVE_CWD)
+    ):
+        return GuardDecision(allow=False, trigger=DenyTrigger.MALFORMED_CWD)
 
     analysis = analyze_github_mutations(parsed.command, cwd=parsed.execution_cwd)
 

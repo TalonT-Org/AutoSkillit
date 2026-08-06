@@ -183,7 +183,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_plugin_ids": frozenset({"core", "cli", "hook_registry", "server", "workspace"}),
     "_terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
     "_plugin_artifact_identity": frozenset(
-        {"core", "cli", "hook_registry", "server", "workspace"}
+        {"core", "cli", "execution", "hook_registry", "server", "workspace"}
     ),
     "_plugin_cache": frozenset({"core", "cli", "server", "workspace"}),
     "git_remote": frozenset({"core", "execution"}),

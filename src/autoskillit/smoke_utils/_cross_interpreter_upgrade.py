@@ -40,16 +40,8 @@ def _cache_incarnations(cache_root: Path) -> set[str]:
 
 
 def _preserve_pre_upgrade_incarnation(cache_root: Path, source_name: str, minor: str) -> str:
-    """Create a valid distinct prior-version artifact for retention testing."""
-    from autoskillit.core import (
-        _AUTOSKILLIT_PLUGIN_KEY,
-        ArtifactLease,
-        installed_plugin_artifact_lease_path,
-        installed_plugin_semantic_key,
-    )
-    from autoskillit.workspace._projected_artifact._manifest_publication import (
-        write_installed_plugin_artifact_manifest_locked,
-    )
+    """Create a distinct prior-version snapshot for retention testing."""
+    from autoskillit.core import atomic_write
 
     retained_name = f"0.0.0+preupgrade.py{minor.replace('.', '')}"
     source_dir = cache_root / source_name
@@ -60,19 +52,7 @@ def _preserve_pre_upgrade_incarnation(cache_root: Path, source_name: str, minor:
     metadata_path = retained_dir / ".claude-plugin" / "plugin.json"
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     metadata["version"] = retained_name
-    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
-    with ArtifactLease.acquire_exclusive(
-        installed_plugin_artifact_lease_path(retained_dir),
-        blocking=True,
-    ):
-        write_installed_plugin_artifact_manifest_locked(
-            retained_dir,
-            semantic_key=installed_plugin_semantic_key(
-                _AUTOSKILLIT_PLUGIN_KEY,
-                retained_name,
-            ),
-            action="publish",
-        )
+    atomic_write(metadata_path, json.dumps(metadata))
     return retained_name
 
 

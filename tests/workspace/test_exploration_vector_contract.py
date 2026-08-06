@@ -21,6 +21,7 @@ from autoskillit.workspace.skills import (
     EffectiveSkillCatalog,
     SkillCatalogEntry,
     SkillInfo,
+    _parse_exploration_vector_frontmatter,
     _skill_info_from_frontmatter,
 )
 
@@ -81,6 +82,28 @@ def _parse(tmp_path: Path, content: str = _FRONTMATTER + _BODY) -> SkillInfo:
     path = tmp_path / "SKILL.md"
     path.write_text(content, encoding="utf-8")
     return _skill_info_from_frontmatter("vector-skill", SkillSource.PROJECT_LOCAL, path)
+
+
+def _raw_vector(**changes: object) -> dict[str, object]:
+    vector: dict[str, object] = {
+        "id": "trace-consumers",
+        "disposition": "migrated",
+        "rationale": "Inspect consumers.",
+        "applicability": "always",
+        "role": "semantic-code-navigator",
+        "profile": "generic-python",
+        "relationship_classes": ["references"],
+        "task_id": "trace-consumers-task",
+        "frontier_item_id": "trace-consumers-frontier",
+        "depends_on": [],
+        "scope": ["src"],
+        "max_results": 100,
+        "max_report_bytes": 20_000,
+        "evidence_version": 1,
+        "native_dispatch": True,
+    }
+    vector.update(changes)
+    return vector
 
 
 def test_vector_contract_builds_phase_b_task_and_survives_catalog_projection(
@@ -236,6 +259,50 @@ def test_frontmatter_vector_schema_rejects_unknown_keys(tmp_path: Path) -> None:
 
     assert info.invalid_reason is not None
     assert "exactly the registered keys" in info.invalid_reason
+
+
+def test_frontmatter_vector_parser_requires_a_list_of_closed_mappings() -> None:
+    with pytest.raises(SkillContractError, match="must be a list"):
+        _parse_exploration_vector_frontmatter({})
+    with pytest.raises(SkillContractError, match="exactly the registered keys"):
+        _parse_exploration_vector_frontmatter(["not-a-mapping"])
+    with pytest.raises(SkillContractError, match="exactly the registered keys"):
+        _parse_exploration_vector_frontmatter([_raw_vector(extra="unexpected")])
+    missing = _raw_vector()
+    missing.pop("task_id")
+    with pytest.raises(SkillContractError, match="exactly the registered keys"):
+        _parse_exploration_vector_frontmatter([missing])
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("disposition", "unknown"),
+        ("profile", "unknown"),
+        ("applicability", "unknown"),
+        ("relationship_classes", [1]),
+        ("scope", [1]),
+        ("max_results", True),
+        ("max_report_bytes", False),
+        ("evidence_version", True),
+        ("native_dispatch", "true"),
+        ("role", 7),
+    ],
+)
+def test_frontmatter_vector_parser_rejects_invalid_closed_schema_values(
+    field: str,
+    value: object,
+) -> None:
+    with pytest.raises(SkillContractError):
+        _parse_exploration_vector_frontmatter([_raw_vector(**{field: value})])
+
+
+def test_frontmatter_vector_parser_accepts_valid_values_and_rejects_duplicate_ids() -> None:
+    parsed = _parse_exploration_vector_frontmatter([_raw_vector()])
+
+    assert parsed[0].id == "trace-consumers"
+    with pytest.raises(SkillContractError, match="ids must be unique"):
+        _parse_exploration_vector_frontmatter([_raw_vector(), _raw_vector()])
 
 
 def test_replacement_requires_complete_migrated_set_and_rejects_marker_injection(

@@ -2606,12 +2606,10 @@ def test_runner_tail_budget_always_retires_at_least_one_record_from_a_backlog(
 def test_sweep_lock_contention_recovers_within_budget_and_makes_progress(
     tmp_path: Path,
 ) -> None:
-    """Lock released a few ms into a sweep: retry acquires within the same
-    invocation and the sweep still makes real progress.
+    """A lock released within the retry budget is acquired in the same sweep.
 
-    Fails before 2a's bounded retry: a single non-blocking flock() attempt
-    raised LockContended immediately (examined=0, remaining_due>=1) even
-    though the lock became available well within the sweep's own budget.
+    The invocation must make real progress rather than reporting the initial
+    contention while the lock becomes available within its deadline.
     """
     project = tmp_path / "project"
     clock = _Clock()
@@ -3389,14 +3387,11 @@ def test_reconcile_adapter_opens_existing_store_without_creation(tmp_path: Path)
 
 
 def test_reconcile_capture_store_bounds_store_open_lock_contention(tmp_path: Path) -> None:
-    """The store-open lock acquisition — CaptureLifecycleStore.from_open_authorities'
-    interrupted-delivery normalization, which runs before .sweep() is ever
-    reached — must also be bounded by the caller's budget, not just the
-    later sweep body. Regression guard: before this fix, _sweep_budget and
-    _sweep_started_monotonic were only set inside .sweep() itself, so a
-    contended lock at store-open time blocked reconcile_capture_store
-    indefinitely (matching the external holder's release time exactly)
-    regardless of how tight budget.max_duration_seconds was.
+    """Store-open lock acquisition honors the caller's sweep budget.
+
+    Interrupted-delivery normalization runs before ``sweep()``; contention
+    there must still stop at ``budget.max_duration_seconds`` rather than wait
+    for the external holder's release.
     """
     project = tmp_path / "project"
     clock = _Clock()

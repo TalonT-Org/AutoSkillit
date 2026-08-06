@@ -98,7 +98,6 @@ from autoskillit.execution.session import parse_session_result
 
 log = logging.getLogger(__name__)  # noqa: TID251 — stdlib fallback: used before configure_logging(); structlog proxy would emit to stderr via import-time WriteLoggerFactory
 _EXPLORER_BINDING_REJECTION_MESSAGE = "Claude Code does not support explorer binding projection"
-
 _ORDER_GREETING_PREFIXES = (
     "Today's special:",
     "Order up! Today's special:",

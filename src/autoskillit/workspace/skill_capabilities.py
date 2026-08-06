@@ -95,6 +95,15 @@ class SkillCapabilityValidation:
 
 
 @dataclass(frozen=True, slots=True)
+class SkillCapabilityAuthenticityDiagnostic:
+    """One typed declaration/evidence mismatch for a concrete capability."""
+
+    kind: SkillInvalidityKind
+    capability: str
+    detail: str
+
+
+@dataclass(frozen=True, slots=True)
 class _SkillCapabilityEvidenceCacheEntry:
     evidence: tuple[SkillCapabilityEvidence, ...]
     weight_bytes: int
@@ -778,14 +787,14 @@ def validate_skill_capability_declarations(
 
 def validate_skill_capability_authenticity(
     skill_info: SkillInfo,
-) -> tuple[str, ...]:
+) -> tuple[SkillCapabilityAuthenticityDiagnostic, ...]:
     """Return stable diagnostics for declaration/evidence mismatches."""
     validation = validate_skill_capability_declarations(
         skill_info.canonical_content,
         skill_info.name,
         skill_info.uses_capabilities,
     )
-    diagnostics: list[str] = []
+    diagnostics: list[SkillCapabilityAuthenticityDiagnostic] = []
     for capability in sorted(validation.missing):
         genuine = next(
             item
@@ -793,9 +802,15 @@ def validate_skill_capability_authenticity(
             if item.capability == capability and item.is_genuine
         )
         diagnostics.append(
-            f"{skill_info.name}: missing declaration for {capability!r}; "
-            f"lines {genuine.source_span[0]}-{genuine.source_span[1]}: "
-            f"{genuine.source.strip()!r}"
+            SkillCapabilityAuthenticityDiagnostic(
+                kind=SkillInvalidityKind.UNDECLARED_CAPABILITY,
+                capability=capability,
+                detail=(
+                    f"{skill_info.name}: missing declaration for {capability!r}; "
+                    f"lines {genuine.source_span[0]}-{genuine.source_span[1]}: "
+                    f"{genuine.source.strip()!r}"
+                ),
+            )
         )
     for capability in sorted(validation.unsupported):
         artifact = next(
@@ -810,8 +825,14 @@ def validate_skill_capability_authenticity(
             else "no source span: no recognizable evidence"
         )
         diagnostics.append(
-            f"{skill_info.name}: declaration {capability!r} lacks genuine evidence; "
-            f"{evidence_detail}"
+            SkillCapabilityAuthenticityDiagnostic(
+                kind=SkillInvalidityKind.UNDECLARED_CAPABILITY,
+                capability=capability,
+                detail=(
+                    f"{skill_info.name}: declaration {capability!r} lacks genuine evidence; "
+                    f"{evidence_detail}"
+                ),
+            )
         )
     return tuple(diagnostics)
 
@@ -1075,6 +1096,7 @@ __all__ = [
     "CapabilityDirection",
     "CapabilitySourceClassification",
     "RETIRED_SEMANTIC_CAPABILITIES",
+    "SkillCapabilityAuthenticityDiagnostic",
     "SkillCapabilityEvidence",
     "SkillCapabilityValidation",
     "classify_skill_capability_evidence",

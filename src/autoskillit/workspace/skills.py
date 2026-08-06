@@ -75,6 +75,7 @@ class SkillInvalidity:
 
     kind: SkillInvalidityKind
     detail: str
+    capability: str | None = None
 
 
 def invalidity_hints(invalidities: Iterable[SkillInvalidity]) -> tuple[str, ...]:
@@ -557,8 +558,12 @@ def _skill_info_from_frontmatter(
             info,
             invalidities=info.invalidities
             + tuple(
-                SkillInvalidity(SkillInvalidityKind.UNDECLARED_CAPABILITY, reason)
-                for reason in authenticity_diagnostics
+                SkillInvalidity(
+                    diagnostic.kind,
+                    diagnostic.detail,
+                    capability=diagnostic.capability,
+                )
+                for diagnostic in authenticity_diagnostics
             ),
         )
     return info

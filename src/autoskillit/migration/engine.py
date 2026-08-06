@@ -33,7 +33,6 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-_MISSING_CAPABILITY_RE = re.compile(r"missing declaration for '([^']+)'")
 _SKILL_SEARCH_DIR_PARTS: tuple[tuple[str, ...], ...] = tuple(
     Path(d).parts for d in ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
 )
@@ -490,9 +489,13 @@ class SkillMigrationAdapter(DeterministicMigrationAdapter):
                 missing: set[str] = set()
                 for item in info.invalidities:
                     if item.kind is kind:
-                        match = _MISSING_CAPABILITY_RE.search(item.detail)
-                        if match:
-                            missing.add(match.group(1))
+                        if item.capability is None:
+                            return MigrationResult(
+                                success=False,
+                                name=file.name,
+                                error="undeclared capability invalidity has no typed capability",
+                            )
+                        missing.add(item.capability)
                 existing_caps = set(data.get("uses_capabilities") or [])
                 data["uses_capabilities"] = sorted(existing_caps | missing)
             elif kind is SkillInvalidityKind.SEMANTIC_MISSING_VERSION:

@@ -37,7 +37,9 @@ def _check_skill_capability_authenticity(
                 )
             except SkillContractError as exc:
                 diagnostics.append(str(exc))
-        diagnostics.extend(validate_skill_capability_authenticity(skill))
+        diagnostics.extend(
+            diagnostic.detail for diagnostic in validate_skill_capability_authenticity(skill)
+        )
         emitted: list[str] = []
         for diagnostic in diagnostics:
             if diagnostic is None or any(diagnostic in existing for existing in emitted):

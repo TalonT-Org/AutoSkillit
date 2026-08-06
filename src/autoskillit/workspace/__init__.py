@@ -76,6 +76,7 @@ from autoskillit.workspace.session_skills import (
 )
 from autoskillit.workspace.skill_capabilities import (
     RETIRED_SEMANTIC_CAPABILITIES,
+    SkillCapabilityAuthenticityDiagnostic,
     SkillCapabilityEvidence,
     SkillCapabilityValidation,
     classify_skill_capability_evidence,
@@ -162,6 +163,7 @@ __all__ = [
     "SkillInfo",
     "SkillInvalidity",
     "SkillUnavailableMetadata",
+    "SkillCapabilityAuthenticityDiagnostic",
     "SkillCapabilityEvidence",
     "SkillCapabilityValidation",
     "RETIRED_SEMANTIC_CAPABILITIES",

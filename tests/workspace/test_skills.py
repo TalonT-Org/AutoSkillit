@@ -779,6 +779,7 @@ def test_stale_precontract_copy_of_bundled_tier_skill_does_not_crash_composition
     assert any(
         item.kind is SkillInvalidityKind.UNDECLARED_CAPABILITY for item in exclusion.invalidities
     )
+    assert {item.capability for item in exclusion.invalidities} == {"claude_dir"}
 
 
 def test_local_only_invalid_skill_is_excluded_with_a_record(tmp_path: Path) -> None:

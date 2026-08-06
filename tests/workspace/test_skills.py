@@ -1060,6 +1060,8 @@ class TestSkillInfoSchemaExhaustiveness:
         constructor_only = {"name", "source", "path", "source_ref"}
         derived_fields = {
             "execution_role",
+            "exploration_sidecar_digest",
+            "exploration_vectors",
             "frontmatter",
             "invalidities",
             "semantic_plan",
@@ -1527,6 +1529,8 @@ def test_projection_strips_all_machine_authority_and_preserves_private_deps(
             "activate_deps",
             "execution_role",
             "exploration_vectors",
+            "semantic_requirements",
+            "semantic_version",
             "uses_capabilities",
         }
     )
@@ -1539,7 +1543,6 @@ def test_projection_strips_all_machine_authority_and_preserves_private_deps(
         "uses_capabilities: []\n"
         "execution_role: session\n"
         "activate_deps: [dependency]\n"
-        "exploration_vectors: []\n"
         "---\n"
         "public body\n",
         encoding="utf-8",

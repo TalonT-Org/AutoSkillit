@@ -103,6 +103,15 @@ _READ_SIDE_EXCEPTIONS: dict[str, str] = {
     "src/autoskillit/workspace/session_skills.py": (
         "Per-session consumer metadata is written once and never read by AutoSkillit"
     ),
+    "src/autoskillit/workspace/_projected_artifact/_manifest_publication.py": (
+        "Writes the installed-plugin manifest via the shared write_installed_plugin_"
+        "artifact_manifest_locked() core (one implementation, two callers: publish and "
+        "repair); the read-side validator for this exact schema is the already-registered "
+        "read_installed_plugin_artifact_identity (see _SHARED_READ_SIDE_VALIDATORS), called "
+        "from cli/_plugin_artifact.py and workspace/_installed_artifact.py at every launch-"
+        "time binding acquisition — the write/read split lives across modules by design, "
+        "not a missing read side."
+    ),
 }
 
 

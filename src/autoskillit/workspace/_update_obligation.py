@@ -23,12 +23,11 @@ one-off in-memory decision that vanishes if the process dies.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from autoskillit.core import atomic_write, get_logger
+from autoskillit.core import get_logger, read_versioned_json, write_versioned_json
 
 __all__ = [
     "PublicationObligation",
@@ -41,6 +40,7 @@ __all__ = [
 logger = get_logger(__name__)
 
 _OBLIGATION_FILENAME = "update_obligation.json"
+_OBLIGATION_SCHEMA_VERSION = 1
 
 
 def _obligation_path(home: Path) -> Path:
@@ -116,33 +116,33 @@ def update_obligation_expected_version(home: Path, *, expected_version: str) -> 
 def read_obligation(home: Path) -> PublicationObligation | None:
     """Return the pending obligation, or ``None`` if none is recorded.
 
-    A corrupt/unreadable file reads as "pending, version unknown" — fail
-    toward repair, which is idempotent — never silently as "no obligation".
+    A corrupt, unreadable, or schema-version-mismatched file reads as
+    "pending, version unknown" — fail toward repair, which is idempotent —
+    never silently as "no obligation". ``path.exists()`` is checked first so
+    only a *missing* file (the common, safe case: no obligation was ever
+    written) returns ``None``; every other failure mode of
+    ``read_versioned_json`` (corrupt JSON, non-dict, schema drift) is
+    collapsed into the degraded-but-pending record below instead.
     """
     path = _obligation_path(home)
     if not path.exists():
         return None
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            raise ValueError("obligation record is not a JSON object")
-        expected_version = data.get("expected_version")
-        return PublicationObligation(
-            previous_version=str(data.get("previous_version") or "unknown"),
-            expected_version=(
-                str(expected_version) if isinstance(expected_version, str) else None
-            ),
-            written_at=str(data.get("written_at") or "unknown"),
-            originating_phase=str(data.get("originating_phase") or "unknown"),
-        )
-    except (OSError, json.JSONDecodeError, ValueError, TypeError):
-        logger.warning("update_obligation_read_corrupt", exc_info=True)
+    data = read_versioned_json(path, _OBLIGATION_SCHEMA_VERSION, logger=logger)
+    if data is None:
+        logger.warning("update_obligation_read_corrupt")
         return PublicationObligation(
             previous_version="unknown",
             expected_version=None,
             written_at="unknown",
             originating_phase="unknown",
         )
+    expected_version = data.get("expected_version")
+    return PublicationObligation(
+        previous_version=str(data.get("previous_version") or "unknown"),
+        expected_version=(str(expected_version) if isinstance(expected_version, str) else None),
+        written_at=str(data.get("written_at") or "unknown"),
+        originating_phase=str(data.get("originating_phase") or "unknown"),
+    )
 
 
 def clear_obligation(home: Path) -> None:
@@ -162,15 +162,14 @@ def clear_obligation(home: Path) -> None:
 
 def _write(home: Path, record: PublicationObligation) -> None:
     path = _obligation_path(home)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write(
+    write_versioned_json(
         path,
-        json.dumps(
-            {
-                "previous_version": record.previous_version,
-                "expected_version": record.expected_version,
-                "written_at": record.written_at,
-                "originating_phase": record.originating_phase,
-            }
-        ),
+        {
+            "previous_version": record.previous_version,
+            "expected_version": record.expected_version,
+            "written_at": record.written_at,
+            "originating_phase": record.originating_phase,
+        },
+        schema_version=_OBLIGATION_SCHEMA_VERSION,
+        strict_durability=True,
     )

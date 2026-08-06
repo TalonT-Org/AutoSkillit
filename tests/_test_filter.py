@@ -186,6 +186,8 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_plugin_cache": frozenset({"core", "cli", "server", "workspace"}),
     "git_remote": frozenset({"core", "execution"}),
     "github_url": frozenset({"core", "cli", "execution", "fleet", "server"}),
+    # +smoke_utils: _cross_interpreter_upgrade resolves the repo root above the
+    # installed package via pkg_root() for the live uv upgrade smoke step.
     "paths": frozenset(
         {
             "core",
@@ -198,6 +200,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
             "recipe",
             "report",
             "server",
+            "smoke_utils",
             "workspace",
             "infra/test_generated_file_write_guard.py",
             "infra/test_generated_files.py",
@@ -987,6 +990,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "hooks",
             "cli",
             "execution",
+            # +workspace: _hook_repair repairs a broken plugin-cache hooks.json by
+            # calling find_broken_hook_scripts/generate_hooks_json directly.
+            "workspace",
             # server/ narrowed to 4 files
             "server/test_tools_kitchen_envelope.py",
             "server/test_tools_kitchen_preflight.py",

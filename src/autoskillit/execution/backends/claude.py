@@ -97,6 +97,7 @@ from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import parse_session_result
 
 log = logging.getLogger(__name__)  # noqa: TID251 — stdlib fallback: used before configure_logging(); structlog proxy would emit to stderr via import-time WriteLoggerFactory
+_EXPLORER_BINDING_REJECTION_MESSAGE = "Claude Code does not support explorer binding projection"
 
 _ORDER_GREETING_PREFIXES = (
     "Today's special:",
@@ -414,7 +415,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
     ) -> None:
         if explorer_binding_env:
-            raise ValueError("Claude Code does not support explorer binding projection")
+            raise ValueError(_EXPLORER_BINDING_REJECTION_MESSAGE)
 
     def refresh_explorer_binding_env(
         self,
@@ -422,11 +423,11 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         explorer_binding_env: Mapping[str, Mapping[str, str]],
     ) -> None:
         if explorer_binding_env:
-            raise ValueError("Claude Code does not support explorer binding projection")
+            raise ValueError(_EXPLORER_BINDING_REJECTION_MESSAGE)
 
     def clear_explorer_binding_env(self, session_dir: Path, roles: frozenset[str]) -> None:
         if roles:
-            raise ValueError("Claude Code does not support explorer binding projection")
+            raise ValueError(_EXPLORER_BINDING_REJECTION_MESSAGE)
 
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:
         spec = self.build_headless_cmd(skill_command)

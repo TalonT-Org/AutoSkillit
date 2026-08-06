@@ -17,10 +17,13 @@ from autoskillit.core import (
     agent_definition_digest,
     atomic_write,
 )
-from autoskillit.execution.backends._probe_cache import PROBE_POLICY_IDENTITY
+from autoskillit.execution.backends._probe_cache import (
+    GENERATED_CODEX_CHILD_PROBE_CONTRACT,
+    PROBE_POLICY_IDENTITY,
+)
 
 EXPLORER_ATTESTATION_SCHEMA_VERSION = 7
-EXPLORER_PROBE_CONTRACT = "generated-codex-child-v7"
+EXPLORER_PROBE_CONTRACT = GENERATED_CODEX_CHILD_PROBE_CONTRACT
 EXPLORER_ATTESTATION_FILENAME = "codex-explorer-conformance-v7.json"
 EXPLORER_ATTESTATION_SHA256_FILENAME = f"{EXPLORER_ATTESTATION_FILENAME}.sha256"
 EXPLORER_ATTESTATION_MAX_AGE_SECONDS = 24 * 60 * 60

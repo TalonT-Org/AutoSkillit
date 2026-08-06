@@ -34,7 +34,10 @@ from autoskillit.execution.backends._explorer_conformance import (
     validate_explorer_release_readiness,
     validate_published_explorer_release_readiness,
 )
-from autoskillit.execution.backends._probe_cache import PROBE_POLICY_IDENTITY
+from autoskillit.execution.backends._probe_cache import (
+    GENERATED_CODEX_CHILD_PROBE_CONTRACT,
+    PROBE_POLICY_IDENTITY,
+)
 from tests.execution.backends._explorer_conformance_assertions import (
     assert_generated_codex_child_delivery,
 )
@@ -45,6 +48,7 @@ _DEFINITION_DIGEST = explorer_probe_definition_digest()
 
 def test_conformance_identity_matches_agent_definition_authority() -> None:
     assert (EXPLORER_MODEL, EXPLORER_REASONING_EFFORT) == CODEX_EXPLORER_IDENTITY
+    assert EXPLORER_PROBE_CONTRACT == GENERATED_CODEX_CHILD_PROBE_CONTRACT
 
 
 def _catalog() -> bytes:

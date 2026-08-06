@@ -34,8 +34,9 @@ from autoskillit.execution.backends._codex_config import (
 logger = get_logger(__name__)
 
 PROBE_CACHE_TTL: timedelta = timedelta(hours=24)
+GENERATED_CODEX_CHILD_PROBE_CONTRACT = "generated-codex-child-v7"
 PROBE_SUITE_CONTRACT: tuple[str, ...] = (
-    "generated-codex-child-v7",
+    GENERATED_CODEX_CHILD_PROBE_CONTRACT,
     "deep-investigate-codex-v2",
     "deep-investigate-claude-200k-v2",
     "claude-startup-readiness-v1",

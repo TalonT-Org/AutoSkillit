@@ -215,7 +215,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         {"_llm_triage", "cli", "core", "execution", "fleet", "pipeline", "server", "workspace"}
     ),
     "_type_skill_semantics": frozenset(
-        {"cli", "core", "execution", "fleet", "pipeline", "server", "workspace"}
+        {"cli", "core", "execution", "fleet", "migration", "pipeline", "server", "workspace"}
     ),
     "_type_inspector": frozenset({"core", "execution"}),
     "_type_intake_policy": frozenset({"core", "execution"}),
@@ -252,7 +252,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         }
     ),
     "_type_results_execution": frozenset({"core", "execution", "server", "pipeline"}),
-    "_type_backend": frozenset({"core", "execution", "cli", "recipe", "server", "workspace"}),
+    "_type_backend": frozenset(
+        {"core", "execution", "cli", "migration", "recipe", "server", "workspace"}
+    ),
     "_type_launch": frozenset(
         {"core", "execution", "pipeline", "server", "fleet", "cli", "recipe", "workspace"}
     ),
@@ -292,7 +294,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         }
     ),
     "_type_exceptions": frozenset(
-        {"cli", "core", "execution", "fleet", "recipe", "server", "workspace"}
+        {"cli", "core", "execution", "fleet", "migration", "recipe", "server", "workspace"}
     ),
     "_type_skill_contract": frozenset(
         {"cli", "config", "core", "execution", "recipe", "server", "workspace"}
@@ -773,6 +775,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     "workspace": frozenset(
         {
             "workspace",
+            "migration",
             # recipe direct-import entries (import autoskillit.workspace at AST level):
             "recipe/test_contracts.py",
             "recipe/test_recipe_backend_composition_matrix.py",

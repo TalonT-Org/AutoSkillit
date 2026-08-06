@@ -158,6 +158,9 @@ tests/arch/fixtures/*:
 tests/recipe/fixtures/*:
   - recipe/
 
+tests/contracts/fixtures/skill_contract_corpus/*:
+  - contracts/
+
 tests/fixtures/codex/*.ndjson:
   - execution/
 

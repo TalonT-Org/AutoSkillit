@@ -242,15 +242,15 @@ def test_quota_thresholds_defaults() -> None:
     assert long_ == pytest.approx(95.0)
 
 
-def test_doctor_check_count_is_48() -> None:
-    # 48 total = 22 numbered (16 remaining base + 18–21 ambient env + 22–23 feature)
+def test_doctor_check_count_is_49() -> None:
+    # 49 total = 22 numbered (16 remaining base + 18–21 ambient env + 22–23 feature)
     # + 7 lettered sub-checks (2b–2e, 4b, 7b, 7c)
-    # + 6 gated fleet (24–29) + 12 backend/runtime checks (30–40, including
-    # Check 31b claude CLI binary availability for capability-driven rerouting)
-    # + Check 41 capture-store statistics.
+    # + 6 gated fleet (24–29) + 14 backend/runtime checks (30–42, including
+    # Check 31b claude CLI binary availability, Check 41 capture-store statistics,
+    # and Check 42 project-local skills).
     # Update both tests whenever a new doctor check is added.
     count = _count_doctor_checks()
-    assert count == 48, f"Expected 48 doctor checks; found {count}"
+    assert count == 49, f"Expected 49 doctor checks; found {count}"
 
 
 def test_bundled_recipe_count_is_15() -> None:

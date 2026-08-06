@@ -35,7 +35,7 @@ from autoskillit.core import (
 from autoskillit.execution import _has_active_execution_marker
 
 if TYPE_CHECKING:
-    from autoskillit.core import FleetLock
+    from autoskillit.core import FleetLock, SkillResult
 
 app = App(
     name="autoskillit",
@@ -431,7 +431,7 @@ def _migrate_skills(project_dir: Path, *, fix: bool) -> None:
 
     from autoskillit.core import resolve_temp_dir
 
-    async def _no_headless_runner(*_args: object, **_kwargs: object) -> None:
+    async def _no_headless_runner(*_args: object, **_kwargs: object) -> SkillResult:
         raise RuntimeError("skill migrations never require a headless runner")
 
     temp_dir = resolve_temp_dir(project_dir, None)
@@ -440,7 +440,7 @@ def _migrate_skills(project_dir: Path, *, fix: bool) -> None:
         result = asyncio.run(
             engine.migrate_file(
                 skill_file,
-                run_headless=_no_headless_runner,  # type: ignore[arg-type]
+                run_headless=_no_headless_runner,
                 temp_dir=temp_dir,
             )
         )

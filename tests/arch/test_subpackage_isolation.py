@@ -1258,10 +1258,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "the sole skill-frontmatter validation boundary.",
     ),
     "workspace/skills.py": (
-        1050,
+        1250,
         "REQ-SEM-SCHEMA-002: semantic-plan threading and invalid-override fallback remain "
         "inside the existing precedence resolver so a rejected project-local declaration "
-        "cannot poison unrelated skills or bypass the valid bundled fallback.",
+        "cannot poison unrelated skills or bypass the valid bundled fallback; typed "
+        "invalidity and exclusion records remain adjacent to the resolver transitions "
+        "whose rejected candidates they describe.",
     ),
     "execution/backends/_codex_session_storage.py": (
         1400,

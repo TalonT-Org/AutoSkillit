@@ -75,6 +75,7 @@ from autoskillit.workspace.session_skills import (
     write_skill_unavailability_metadata,
 )
 from autoskillit.workspace.skill_capabilities import (
+    RETIRED_SEMANTIC_CAPABILITIES,
     SkillCapabilityEvidence,
     SkillCapabilityValidation,
     classify_skill_capability_evidence,
@@ -163,6 +164,7 @@ __all__ = [
     "SkillUnavailableMetadata",
     "SkillCapabilityEvidence",
     "SkillCapabilityValidation",
+    "RETIRED_SEMANTIC_CAPABILITIES",
     "SkillFrontmatterParseError",
     "PROJECTION_CACHE_KEY_EXCLUSIONS",
     "InstallStateFinding",

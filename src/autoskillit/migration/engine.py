@@ -444,10 +444,10 @@ class SkillMigrationAdapter(DeterministicMigrationAdapter):
         # step: resolve_effective() would fall through to a valid bundled
         # twin (or a valid lower-precedence local copy) and validate that
         # instead of the stale file this adapter was asked to fix.
-        from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
+        from autoskillit.workspace import default_skill_resolver  # noqa: PLC0415
 
         project_dir = _skill_project_dir(file.path)
-        return DefaultSkillResolver().resolve_local_candidate(file.name, project_dir)
+        return default_skill_resolver().resolve_local_candidate(file.name, project_dir)
 
     def needs_migration(self, file: MigrationFile) -> bool:
         info = self._resolve_candidate(file)
@@ -508,7 +508,7 @@ class SkillMigrationAdapter(DeterministicMigrationAdapter):
                 # retired capability triggered this kind, the only possible
                 # cause is such a raw body token, so report failure instead
                 # of silently claiming a fix that never happened.
-                from autoskillit.workspace.skill_capabilities import (  # noqa: PLC0415
+                from autoskillit.workspace import (  # noqa: PLC0415
                     RETIRED_SEMANTIC_CAPABILITIES,
                 )
 
@@ -542,7 +542,7 @@ class SkillMigrationAdapter(DeterministicMigrationAdapter):
         return MigrationResult(success=True, name=file.name, migrated_content=migrated_content)
 
     def validate(self, path: Path) -> tuple[bool, str]:
-        from autoskillit.workspace.skill_format import read_skill_frontmatter  # noqa: PLC0415
+        from autoskillit.workspace import read_skill_frontmatter  # noqa: PLC0415
 
         parsed = read_skill_frontmatter(path)
         if not parsed.is_valid:

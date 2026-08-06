@@ -4,12 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from autoskillit.core import Severity, get_logger
+from autoskillit.core import Severity
 from autoskillit.hooks import CleanupBlocker, capture_store_stats
 
 from ._doctor_types import DoctorResult
-
-logger = get_logger(__name__)
 
 # Above this many aged unledgered files, surface a WARNING nudging toward
 # `autoskillit capture-store --reclaim` rather than staying silently OK —

@@ -12,7 +12,9 @@ from autoskillit.core import resolve_repository_remote_identity_sync
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
-def test_timeout_diagnostic_preserves_detail_and_remote_fallback(monkeypatch) -> None:
+def test_timeout_diagnostic_preserves_detail_and_remote_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import autoskillit.core.git_remote as mod
 
     def _run(command, **kwargs):
@@ -37,7 +39,9 @@ def test_timeout_diagnostic_preserves_detail_and_remote_fallback(monkeypatch) ->
     assert len(timeout_diagnostic) <= 256
 
 
-def test_os_error_diagnostic_is_sanitized_and_bounded(monkeypatch) -> None:
+def test_os_error_diagnostic_is_sanitized_and_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import autoskillit.core.git_remote as mod
 
     def _run(*args, **kwargs):

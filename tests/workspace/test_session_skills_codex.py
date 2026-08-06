@@ -43,6 +43,7 @@ def _make_codex_backend() -> MagicMock:
     b.ensure_pre_launch.return_value = []
     b.validate_session_layout.return_value = []
     b.adapt_skill_semantics.side_effect = CodexBackend().adapt_skill_semantics
+    b.exploration_dispatch_renderer = CodexBackend().exploration_dispatch_renderer
     return b
 
 

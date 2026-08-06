@@ -43,6 +43,14 @@ def _has_exact_identity_field(content: str, field: str, value: str) -> bool:
     return any(line.strip() == expected for line in content.splitlines())
 
 
+def _extract_identity_field(content: str, field: str) -> str | None:
+    prefix = f"{field}: "
+    for line in content.splitlines():
+        if line.strip().startswith(prefix):
+            return line.strip()[len(prefix) :]
+    return None
+
+
 def _explorer_launch_identity(
     invocation: EffectiveSkillInvocationAuthority | None,
 ) -> tuple[Path, str] | None:
@@ -303,17 +311,34 @@ def _build_requested_execution_identity(
                     f"Expected {len(requested_children)} native exploration packets "
                     f"but found {len(decoded_prompts)} message arguments"
                 )
-            for child, decoded_prompt in zip(requested_children, decoded_prompts):
-                if (
-                    not _has_exact_identity_field(decoded_prompt, "task_id", child.task_id)
-                    or not _has_exact_identity_field(
-                        decoded_prompt, "router_plan_digest", child.plan_digest
+            # Packets are embedded in SKILL.md marker/document order, which does not
+            # generally match the task_id-sorted `requested_children` order, so pair
+            # them by their declared task_id rather than by position.
+            decoded_by_task_id: dict[str, str] = {}
+            for decoded_prompt in decoded_prompts:
+                packet_task_id = _extract_identity_field(decoded_prompt, "task_id")
+                if packet_task_id is None:
+                    raise SkillContractError(
+                        "Projected native exploration packet message is missing a task_id field"
                     )
-                    or not _has_exact_identity_field(
-                        decoded_prompt,
-                        "role_definition_digest",
-                        child.definition_digest,
+                if packet_task_id in decoded_by_task_id:
+                    raise SkillContractError(
+                        "Projected native exploration packet messages duplicate task_id "
+                        f"{packet_task_id!r}"
                     )
+                decoded_by_task_id[packet_task_id] = decoded_prompt
+            if set(decoded_by_task_id) != {child.task_id for child in requested_children}:
+                raise SkillContractError(
+                    "Projected native exploration packet task ids do not match requested children"
+                )
+            for child in requested_children:
+                decoded_prompt = decoded_by_task_id[child.task_id]
+                if not _has_exact_identity_field(
+                    decoded_prompt, "router_plan_digest", child.plan_digest
+                ) or not _has_exact_identity_field(
+                    decoded_prompt,
+                    "role_definition_digest",
+                    child.definition_digest,
                 ):
                     raise SkillContractError(
                         "Projected native exploration packet identity is incomplete"

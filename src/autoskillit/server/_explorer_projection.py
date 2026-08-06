@@ -20,6 +20,7 @@ from autoskillit.core import (
     ExecutionIdentity,
     ExplorationContextStoreProtocol,
     ExplorationVectorApplicabilityId,
+    ExplorationVectorDisposition,
     RepositoryProfileId,
     SkillContractError,
     ValidatedAddDir,
@@ -59,12 +60,19 @@ def _explorer_launch_identity(
 def _resolve_exploration_profile(
     tool_ctx: ToolContext,
     projection_context: SkillProjectionContext,
+    *,
+    active_applicabilities: frozenset[ExplorationVectorApplicabilityId],
 ) -> RepositoryProfileId | None:
-    """Resolve profile:auto only from the factory-owned trusted repository root."""
+    """Resolve active migrated profile:auto from the trusted invocation root."""
     vectors = tuple(
         vector for members in projection_context.exploration_vectors.values() for vector in members
     )
-    if not any(vector.profile is RepositoryProfileId.AUTO for vector in vectors):
+    if not any(
+        vector.disposition is ExplorationVectorDisposition.MIGRATED
+        and vector.applicability in active_applicabilities
+        and vector.profile is RepositoryProfileId.AUTO
+        for vector in vectors
+    ):
         return None
     store = tool_ctx.exploration_context_store
     project_root = projection_context.project_root
@@ -88,7 +96,8 @@ def _resolve_exploration_applicabilities(
         vector for members in projection_context.exploration_vectors.values() for vector in members
     )
     if not any(
-        vector.applicability is ExplorationVectorApplicabilityId.PLANNER_EXTRACT_DOMAIN_DEEP
+        vector.disposition is ExplorationVectorDisposition.MIGRATED
+        and vector.applicability is ExplorationVectorApplicabilityId.PLANNER_EXTRACT_DOMAIN_DEEP
         for vector in vectors
     ):
         return frozenset(active)

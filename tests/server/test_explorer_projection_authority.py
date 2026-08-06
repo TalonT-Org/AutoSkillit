@@ -10,6 +10,7 @@ import pytest
 
 from autoskillit.core import (
     ExplorationVectorApplicabilityId,
+    ExplorationVectorDisposition,
     RepositoryProfileId,
     SkillContractError,
 )
@@ -21,10 +22,17 @@ from autoskillit.server._explorer_projection import (
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
-def _projection(*, project_root, profile=RepositoryProfileId.AUTO, applicability=None):
+def _projection(
+    *,
+    project_root,
+    profile=RepositoryProfileId.AUTO,
+    applicability=None,
+    disposition=ExplorationVectorDisposition.MIGRATED,
+):
     vector = SimpleNamespace(
         profile=profile,
         applicability=applicability or ExplorationVectorApplicabilityId.ALWAYS,
+        disposition=disposition,
     )
     return SimpleNamespace(
         project_root=project_root,
@@ -43,14 +51,75 @@ def test_profile_auto_uses_only_factory_trusted_repository(
     tool_ctx = SimpleNamespace(exploration_context_store=SimpleNamespace(trusted_root=tmp_path))
 
     assert (
-        _resolve_exploration_profile(tool_ctx, _projection(project_root=tmp_path))
+        _resolve_exploration_profile(
+            tool_ctx,
+            _projection(project_root=tmp_path),
+            active_applicabilities=frozenset({ExplorationVectorApplicabilityId.ALWAYS}),
+        )
         is RepositoryProfileId.AUTOSKILLIT
     )
     with pytest.raises(SkillContractError, match="not the trusted repository root"):
         _resolve_exploration_profile(
             tool_ctx,
             _projection(project_root=tmp_path / "unrelated"),
+            active_applicabilities=frozenset({ExplorationVectorApplicabilityId.ALWAYS}),
         )
+
+
+@pytest.mark.parametrize(
+    ("disposition", "applicability"),
+    [
+        (
+            ExplorationVectorDisposition.RETAINED,
+            ExplorationVectorApplicabilityId.ALWAYS,
+        ),
+        (
+            ExplorationVectorDisposition.EXCLUDED,
+            ExplorationVectorApplicabilityId.ALWAYS,
+        ),
+        (
+            ExplorationVectorDisposition.MIGRATED,
+            ExplorationVectorApplicabilityId.PLANNER_EXTRACT_DOMAIN_DEEP,
+        ),
+    ],
+)
+def test_profile_auto_ignores_vectors_that_cannot_render(
+    disposition: ExplorationVectorDisposition,
+    applicability: ExplorationVectorApplicabilityId,
+) -> None:
+    tool_ctx = SimpleNamespace(exploration_context_store=None)
+
+    resolved = _resolve_exploration_profile(
+        tool_ctx,
+        _projection(
+            project_root=None,
+            disposition=disposition,
+            applicability=applicability,
+        ),
+        active_applicabilities=frozenset({ExplorationVectorApplicabilityId.ALWAYS}),
+    )
+
+    assert resolved is None
+
+
+@pytest.mark.parametrize(
+    "disposition",
+    [ExplorationVectorDisposition.RETAINED, ExplorationVectorDisposition.EXCLUDED],
+)
+def test_non_migrated_applicability_does_not_require_invocation_inputs(
+    disposition: ExplorationVectorDisposition,
+) -> None:
+    active = _resolve_exploration_applicabilities(
+        _projection(
+            project_root=None,
+            disposition=disposition,
+            applicability=ExplorationVectorApplicabilityId.PLANNER_EXTRACT_DOMAIN_DEEP,
+        ),
+        skill_inputs=None,
+        output_dir="",
+    )
+
+    assert active == frozenset({ExplorationVectorApplicabilityId.ALWAYS})
 
 
 @pytest.mark.parametrize(

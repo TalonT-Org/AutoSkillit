@@ -1582,6 +1582,11 @@ async def run_skill(
                     if tool_ctx.read_only_resolver and tool_ctx.read_only_resolver(skill_command)
                     else "workspace-write"
                 )
+                _active_exploration_applicabilities = _resolve_exploration_applicabilities(
+                    projection_context,
+                    skill_inputs=skill_inputs,
+                    output_dir=output_dir,
+                )
                 projection_context = bind_projection_backend(
                     projection_context,
                     _effective_backend_obj,
@@ -1590,14 +1595,9 @@ async def run_skill(
                     resolved_exploration_profile=_resolve_exploration_profile(
                         tool_ctx,
                         projection_context,
+                        active_applicabilities=_active_exploration_applicabilities,
                     ),
-                    active_exploration_applicabilities=(
-                        _resolve_exploration_applicabilities(
-                            projection_context,
-                            skill_inputs=skill_inputs,
-                            output_dir=output_dir,
-                        )
-                    ),
+                    active_exploration_applicabilities=_active_exploration_applicabilities,
                 )
             _explorer_parent_identity = _explorer_launch_identity(invocation)
             if invocation is not None and _stored_contract is None:

@@ -647,10 +647,7 @@ def _run_generated_child_probe(
 ) -> _GeneratedChildProbeOutput:
     source_auth = _CODEX_AUTH_PATH
     sterile_workspace = tmp_path / "sterile-workspace"
-    repository_root = pkg_root().parents[1] / ".autoskillit" / "temp" / "explorer-probe"
-    repository = repository_root / hashlib.sha256(str(tmp_path).encode()).hexdigest()[:16]
-    shutil.rmtree(repository, ignore_errors=True)
-    request.addfinalizer(lambda: shutil.rmtree(repository, ignore_errors=True))
+    repository = tmp_path / "repository"
     for directory in (sterile_workspace, repository):
         directory.mkdir(parents=True)
     agent_role = EXPLORER_PROBE_ROLE

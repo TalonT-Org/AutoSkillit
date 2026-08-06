@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import unicodedata
+from collections.abc import Iterable, Mapping, Sequence
 
 from autoskillit.core import (
     CompletenessReport,
@@ -14,8 +15,44 @@ from autoskillit.core import (
 )
 
 from ._deterministic import CursorValidationError, page_slice, stable_digest
+from ._digest import qualified_digest
 from .graph import build_canonical_evidence_graph
-from .snapshot import normalize_query
+
+PAGINATION_DIGEST_DOMAIN = b"autoskillit.exploration-page.v1\0"
+
+
+def normalize_query(query: str) -> str:
+    """Return the stable Unicode/whitespace form used by pagination authority."""
+    if not isinstance(query, str) or not query.strip():
+        raise ValueError("query must be a non-empty string")
+    return " ".join(unicodedata.normalize("NFKC", query).split())
+
+
+def pagination_identity(
+    *,
+    query: str,
+    ordered_item_identities: Sequence[str],
+    snapshot_identity: str,
+    profile_identity: str,
+    schema_identity: str,
+    collector_manifest_digest: str,
+) -> str:
+    """Bind a page sequence to stable order and every invalidation authority."""
+    if len(set(ordered_item_identities)) != len(ordered_item_identities):
+        raise ValueError("pagination item identities must be unique")
+    payload: Mapping[str, object] = {
+        "normalized_query": normalize_query(query),
+        "stable_order": list(ordered_item_identities),
+        "total_count": len(ordered_item_identities),
+        "snapshot_identity": snapshot_identity,
+        "profile_identity": profile_identity,
+        "schema_identity": schema_identity,
+        "collector_manifest_digest": collector_manifest_digest,
+    }
+    for name, value in payload.items():
+        if name not in {"stable_order", "total_count"} and not value:
+            raise ValueError(f"pagination authority {name} must be non-empty")
+    return qualified_digest(PAGINATION_DIGEST_DOMAIN, payload)
 
 
 def evidence_result_digest(

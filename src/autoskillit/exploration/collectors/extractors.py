@@ -33,6 +33,9 @@ _COLLECTOR_VERSION: Final = "autoskillit.collector-extractors.v3"
 _OBSERVATION_UNCERTAINTY: Final = (
     "collector observations do not establish semantic relationships",
 )
+_RG_DECODE_DETAIL_MAX_BYTES: Final = 96
+_RG_DECODE_RAW_LINE_MAX_BYTES: Final = 160
+_RG_DECODE_DIAGNOSTIC_MAX_BYTES: Final = 320
 
 
 _InvocationReports: TypeAlias = tuple[tuple[tuple[str, ...], CollectorReport], ...]
@@ -124,6 +127,25 @@ def _report(
     return CollectorReport(
         collector_id, status, snapshot_digest, evidence, "; ".join(diagnostics) or None
     )
+
+
+def _bounded_diagnostic_text(value: str, max_bytes: int) -> str:
+    """Return a UTF-8-safe diagnostic fragment within an exact byte ceiling."""
+
+    encoded = value.encode("utf-8", "backslashreplace")
+    if len(encoded) <= max_bytes:
+        return encoded.decode("utf-8")
+    marker = b"..."
+    return encoded[: max_bytes - len(marker)].decode("utf-8", "ignore") + marker.decode()
+
+
+def _invalid_rg_json_diagnostic(raw_line: bytes, exc: Exception) -> str:
+    detail = _bounded_diagnostic_text(repr(str(exc)), _RG_DECODE_DETAIL_MAX_BYTES)
+    raw_repr = _bounded_diagnostic_text(repr(raw_line), _RG_DECODE_RAW_LINE_MAX_BYTES)
+    diagnostic = (
+        f"invalid rg json output ({type(exc).__name__}: detail={detail}; raw_line={raw_repr})"
+    )
+    return _bounded_diagnostic_text(diagnostic, _RG_DECODE_DIAGNOSTIC_MAX_BYTES)
 
 
 def _evidence(
@@ -269,12 +291,12 @@ def collect_search(
             path = data["path"]["text"]
             line = data["line_number"]
             text = data["lines"]["text"].rstrip("\n")
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError) as exc:
             return _report(
                 collector_id,
                 snapshot_digest,
                 CollectorStatus.FAILED,
-                ("invalid rg json output",),
+                (_invalid_rg_json_diagnostic(raw_line, exc),),
                 tuple(evidence),
             )
         evidence.append(

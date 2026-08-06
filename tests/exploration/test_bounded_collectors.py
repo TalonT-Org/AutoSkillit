@@ -6,14 +6,17 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.exploration.collectors.extractors as extractors_module
 from autoskillit.core import CollectorStatus, RelationshipKind
 from autoskillit.exploration.collectors import (
     COLLECTOR_PROFILES,
+    BoundedCommandResult,
     CollectorInvocation,
     CollectorLimits,
     CollectorSafetyError,
     _bounded,
     list_contained_files,
+    open_contained_regular_file,
     read_contained_file,
     resolve_contained_path,
 )
@@ -134,7 +137,7 @@ def test_contained_open_rejects_special_file_without_reading_it(tmp_path: Path) 
     os.mkfifo(pipe)
 
     with pytest.raises(CollectorSafetyError, match="non-symlink regular file"):
-        _bounded._open_contained_regular_file(root, pipe.name)
+        open_contained_regular_file(root, pipe.name)
 
 
 def test_list_contained_files_is_sorted_and_skips_symlinks(tmp_path: Path) -> None:
@@ -242,6 +245,42 @@ def test_search_reports_invalid_scope_as_a_failed_collection(tmp_path: Path) -> 
 
     assert report.status is CollectorStatus.FAILED
     assert report.diagnostic == "collector scope must be a contained literal path"
+
+
+@pytest.mark.parametrize(
+    ("raw_line", "exception_type", "detail"),
+    [
+        (b'{"type":', "JSONDecodeError", "Expecting"),
+        (
+            b'{"type":"match","data":{"path":{},"line_number":1,"lines":{"text":"'
+            + b"x" * 5_000
+            + b'"}}}',
+            "KeyError",
+            "text",
+        ),
+    ],
+)
+def test_search_reports_bounded_rg_decode_diagnostics(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    raw_line: bytes,
+    exception_type: str,
+    detail: str,
+) -> None:
+    monkeypatch.setattr(
+        extractors_module,
+        "run_bounded_rg",
+        lambda *_args, **_kwargs: BoundedCommandResult(0, raw_line + b"\n", b""),
+    )
+
+    report = collect_search(tmp_path, "snapshot", "needle", CollectorLimits())
+
+    assert report.status is CollectorStatus.FAILED
+    assert report.diagnostic is not None
+    assert exception_type in report.diagnostic
+    assert detail in report.diagnostic
+    assert "raw_line=b'" in report.diagnostic
+    assert len(report.diagnostic.encode("utf-8")) <= 320
 
 
 def test_seeded_collectors_observe_structural_and_artifact_inputs_without_claiming_execution(

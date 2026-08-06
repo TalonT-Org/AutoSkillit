@@ -6,8 +6,6 @@ import hashlib
 import os
 import stat
 import subprocess
-import unicodedata
-from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
@@ -16,14 +14,14 @@ from typing import Literal
 from autoskillit.core import RepositoryIdentity, RepositorySnapshot
 
 from ._digest import qualified_digest
-from .collectors._bounded import _open_contained_regular_file
+from .collectors import open_contained_regular_file
 from .identity import resolve_repository_identity
+from .pagination import PAGINATION_DIGEST_DOMAIN
 from .profile import RepositoryProfileActivation, activate_repository_profiles
 
 SNAPSHOT_SCHEMA_VERSION = 1
 SNAPSHOT_SCHEMA_ID = "autoskillit.repository-snapshot.v1"
 SNAPSHOT_DIGEST_DOMAIN = b"autoskillit.repository-snapshot.v1\0"
-PAGINATION_DIGEST_DOMAIN = b"autoskillit.exploration-page.v1\0"
 DEFAULT_IGNORE_POLICY = "ignored-names-modes-collapsed-v1"
 
 
@@ -193,7 +191,7 @@ def _index_records(value: bytes) -> tuple[tuple[str, str, str, str], ...]:
 def _hash_file(root: Path, relative_path: str, limits: SnapshotCaptureLimits) -> tuple[str, int]:
     digest = hashlib.sha256()
     total = 0
-    descriptor = _open_contained_regular_file(root, relative_path)
+    descriptor = open_contained_regular_file(root, relative_path)
     try:
         while total <= limits.max_file_bytes:
             chunk = os.read(
@@ -684,37 +682,3 @@ def resolve_repository_path(root: str | Path, relative_path: str) -> Path:
     if not candidate.is_relative_to(resolved_root):
         raise ValueError("repository path resolves outside the worktree")
     return candidate
-
-
-def normalize_query(query: str) -> str:
-    """Return the stable Unicode/whitespace form used by pagination authority."""
-    if not isinstance(query, str) or not query.strip():
-        raise ValueError("query must be a non-empty string")
-    return " ".join(unicodedata.normalize("NFKC", query).split())
-
-
-def pagination_identity(
-    *,
-    query: str,
-    ordered_item_identities: Sequence[str],
-    snapshot_identity: str,
-    profile_identity: str,
-    schema_identity: str,
-    collector_manifest_digest: str,
-) -> str:
-    """Bind a page sequence to stable order and every invalidation authority."""
-    if len(set(ordered_item_identities)) != len(ordered_item_identities):
-        raise ValueError("pagination item identities must be unique")
-    payload: Mapping[str, object] = {
-        "normalized_query": normalize_query(query),
-        "stable_order": list(ordered_item_identities),
-        "total_count": len(ordered_item_identities),
-        "snapshot_identity": snapshot_identity,
-        "profile_identity": profile_identity,
-        "schema_identity": schema_identity,
-        "collector_manifest_digest": collector_manifest_digest,
-    }
-    for name, value in payload.items():
-        if name not in {"stable_order", "total_count"} and not value:
-            raise ValueError(f"pagination authority {name} must be non-empty")
-    return qualified_digest(PAGINATION_DIGEST_DOMAIN, payload)

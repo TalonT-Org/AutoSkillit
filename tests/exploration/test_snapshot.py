@@ -10,11 +10,11 @@ import pytest
 
 import autoskillit.exploration.snapshot as snapshot_module
 from autoskillit.exploration.collectors import _bounded
+from autoskillit.exploration.pagination import pagination_identity
 from autoskillit.exploration.snapshot import (
     SnapshotCaptureLimits,
     SnapshotCaptureStatus,
     capture_repository_snapshot,
-    pagination_identity,
 )
 
 pytestmark = [

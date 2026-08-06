@@ -17,7 +17,7 @@ from .identity import (
     RepositoryIdentityResolution,
     resolve_repository_identity,
 )
-from .pagination import page_evidence
+from .pagination import normalize_query, page_evidence, pagination_identity
 from .profile import (
     RepositoryProfileActivation,
     activate_repository_profiles,
@@ -28,8 +28,6 @@ from .snapshot import (
     SnapshotCaptureLimits,
     SnapshotCaptureResult,
     capture_repository_snapshot,
-    normalize_query,
-    pagination_identity,
     resolve_repository_path,
 )
 

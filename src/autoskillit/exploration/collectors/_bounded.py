@@ -89,9 +89,10 @@ def _contained_parts(relative_path: str) -> tuple[str, ...]:
     return relative.parts
 
 
-def _open_contained_regular_file(root: Path, relative_path: str) -> int:
+def open_contained_regular_file(root: Path, relative_path: str) -> int:
     """Open a contained regular file without following a mutable path component.
 
+    The caller owns the returned descriptor and must close it.
     Every directory is held by descriptor before the next component is resolved.
     The final path entry is checked before and after the no-follow open, then compared
     with the opened descriptor.  A swap therefore fails closed rather than changing
@@ -195,7 +196,7 @@ def read_contained_file(root: Path, relative_path: str, limits: CollectorLimits)
     # validation as read authority: a replacement after this check is handled by the
     # descriptor-relative open below.
     resolve_contained_path(root, relative_path)
-    artifact_fd = _open_contained_regular_file(root, relative_path)
+    artifact_fd = open_contained_regular_file(root, relative_path)
     try:
         size = os.fstat(artifact_fd).st_size
     except OSError as exc:

@@ -181,11 +181,9 @@ class BackendCmdBuilderBase(ABC):
         ``AUTOSKILLIT_ALLOWED_WRITE_PREFIX``, ``AUTOSKILLIT_ALLOWED_WRITE_PREFIXES``,
         ``AUTOSKILLIT_CWD``, ``AUTOSKILLIT_STATE_ROOT_ENV_VAR``. Each is included
         only when its input is non-empty (campaign/kitchen IDs are also read
-        from the ambient ``os.environ``). ``cwd`` is the orchestrating project
-        root at every current call site (``build_skill_session_cmd``,
-        ``build_food_truck_cmd`` on both backends), so it doubles as the
-        production ``AUTOSKILLIT_STATE_ROOT`` signal guards use to locate
-        ``.autoskillit/`` state in worktree topologies.
+        from the ambient ``os.environ``). A non-empty ``cwd`` supplies both the
+        command's project context and the ``AUTOSKILLIT_STATE_ROOT`` signal
+        guards use to locate ``.autoskillit/`` state in worktree topologies.
         """
         extras: dict[str, str] = dict(SHARED_BASELINE_ENV)
         extras["AUTOSKILLIT_HEADLESS"] = "1"

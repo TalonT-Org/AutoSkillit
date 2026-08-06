@@ -353,7 +353,7 @@ def dispatch_capture_lifecycle_hook(project_root: Path) -> GuardRunResult:
 # ---------------------------------------------------------------------------
 
 
-def test_incident_transcript_replay_is_clean(tmp_path: Path) -> None:
+def test_incident_transcript_replay_is_clean_and_denies_genuine_mutation(tmp_path: Path) -> None:
     """The incident-modeled transcript — dual-cwd worktree run_cmd calls,
     Bash reads, a benign loop, and one genuine gh pr review deny — must
     replay with zero spurious denials and zero unwarranted failure-grade
@@ -369,22 +369,6 @@ def test_incident_transcript_replay_is_clean(tmp_path: Path) -> None:
     }
     replayed = replay(INCIDENT_TRANSCRIPT, mapping, process_cwd=orchestrating_root)
     assert_replay_clean(replayed)
-
-
-def test_incident_transcript_genuine_mutation_is_actually_denied(tmp_path: Path) -> None:
-    """Companion to the clean-replay assertion: the one event expected to be
-    denied really is — assert_replay_clean only checks allowed:true events,
-    so this closes the loop on the fixture's one deny case."""
-    orchestrating_root = tmp_path / "orchestrating-project"
-    worktree_root = tmp_path / "worktrees" / "impl-something"
-    orchestrating_root.mkdir(parents=True)
-    worktree_root.mkdir(parents=True)
-
-    mapping = {
-        "{{ORCHESTRATING_ROOT}}": str(orchestrating_root),
-        "{{WORKTREE_ROOT}}": str(worktree_root),
-    }
-    replayed = replay(INCIDENT_TRANSCRIPT, mapping, process_cwd=orchestrating_root)
     deny_events = [(e, r) for e, r in replayed if not e.allowed]
     assert deny_events, "fixture must contain at least one deny-expected event"
     for event, results in deny_events:

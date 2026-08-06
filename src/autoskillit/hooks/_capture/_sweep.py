@@ -942,8 +942,6 @@ def run_bounded_sweep(
         progress = CleanupProgress.CURSOR_REPAIRED
     elif cursor_writes:
         progress = CleanupProgress.CURSOR_ADVANCED
-    elif not orphan_outcome.directory_complete:
-        progress = CleanupProgress.CURSOR_ADVANCED
     else:
         progress = CleanupProgress.NONE
     return CaptureCleanupOutcome(

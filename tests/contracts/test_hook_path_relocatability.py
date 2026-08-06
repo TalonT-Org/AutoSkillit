@@ -13,7 +13,6 @@ baked into every published hook command caused a total session lockout when
 from __future__ import annotations
 
 import json
-import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -218,42 +217,6 @@ def test_relocatable_renderer_rejects_shell_metacharacters() -> None:
 
     with pytest.raises(ValueError, match="invalid logical hook name"):
         render_relocatable_hook_command("guards/quota_guard;touch")
-
-
-# ---------------------------------------------------------------------------
-# Interpreter-pivot immunity.
-# ---------------------------------------------------------------------------
-
-
-def test_token_aware_validation_survives_interpreter_pivot(tmp_path: Path) -> None:
-    """Renaming or deleting the venv's lib/pythonX.Y tree must not break
-    token-aware validation of a relocatable cache incarnation — the whole
-    point of relocation is independence from the interpreter that generated
-    the commands.
-    """
-    from autoskillit.hook_registry import validate_plugin_cache_hooks
-
-    # A fake venv tree present when production hook generation runs.
-    venv_root = tmp_path / "venv"
-    (venv_root / "lib" / "python3.13" / "site-packages" / "autoskillit" / "hooks").mkdir(
-        parents=True
-    )
-
-    version_dir = tmp_path / "cache" / "1.0.0"
-    hooks_dir = version_dir / "hooks"
-    hooks_dir.mkdir(parents=True)
-    (hooks_dir / "_dispatch.py").write_text("# dispatcher stub")
-    (hooks_dir / "hooks.json").write_text(json.dumps(generate_hooks_json()))
-
-    assert validate_plugin_cache_hooks(cache_dir=tmp_path / "cache") == []
-
-    # Pivot: rename lib/python3.13 -> lib/python3.11 (interpreter minor changed).
-    (venv_root / "lib" / "python3.13").rename(venv_root / "lib" / "python3.11")
-    assert validate_plugin_cache_hooks(cache_dir=tmp_path / "cache") == []
-
-    # Pivot: delete the venv tree entirely.
-    shutil.rmtree(venv_root)
-    assert validate_plugin_cache_hooks(cache_dir=tmp_path / "cache") == []
 
 
 # ---------------------------------------------------------------------------

@@ -130,8 +130,8 @@ def run_startup_hook_health_check() -> list[str]:
     clears it; the in-process repair alone cannot perform that full
     publication, so it never clears the obligation itself.
     """
+    broken: list[str] = []
     try:
-        broken: list[str] = []
         for scope_label, settings_path in iter_all_scope_paths(None):
             scope_broken = find_broken_hook_scripts(settings_path)
             if scope_broken:
@@ -151,8 +151,13 @@ def run_startup_hook_health_check() -> list[str]:
             )
 
         pending_obligation = read_obligation(Path.home())
-        if cache_broken or pending_obligation is not None:
-            cache_dir = installed_plugin_cache_dir(Path.home(), "autoskillit")
+    except Exception:
+        logger.exception("startup_hook_health_check_failed")
+        return []
+
+    if cache_broken or pending_obligation is not None:
+        cache_dir = installed_plugin_cache_dir(Path.home(), "autoskillit")
+        try:
             for outcome in repair_broken_plugin_cache_hooks(cache_dir):
                 if outcome.repaired:
                     logger.info(
@@ -165,10 +170,9 @@ def run_startup_hook_health_check() -> list[str]:
                         incarnation=str(outcome.incarnation_dir),
                         reason=outcome.skipped_reason,
                     )
-        return broken
-    except Exception:
-        logger.exception("startup_hook_health_check_failed")
-        return []
+        except Exception:
+            logger.exception("startup_hook_repair_failed")
+    return broken
 
 
 def run_startup_install_state_check() -> list[str]:

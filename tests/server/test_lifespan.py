@@ -194,10 +194,7 @@ def test_startup_hook_health_check_survives_repair_primitive_raising(monkeypatch
     """run_startup_hook_health_check must not propagate if the in-process repair
     primitive (repair_broken_plugin_cache_hooks) itself raises.
 
-    The whole health-check body is wrapped in a never-fail-startup
-    except Exception -> return [] contract; this pins that the repair call
-    site added for the detection-repair loop closure is inside that same
-    net, not a hole that can crash server startup.
+    Detection remains authoritative even when best-effort repair fails.
     """
     from autoskillit.server._lifespan import run_startup_hook_health_check
 
@@ -220,10 +217,7 @@ def test_startup_hook_health_check_survives_repair_primitive_raising(monkeypatch
 
     broken = run_startup_hook_health_check()  # must not raise
 
-    assert broken == [], (
-        "the outer except-Exception contract swallows the whole check when the "
-        "repair primitive raises"
-    )
+    assert broken == ["python3 /stale/cache/path/hooks/quota_guard.py"]
 
 
 def test_serve_startup_regenerates_on_hash_mismatch(tmp_path: Path, monkeypatch) -> None:

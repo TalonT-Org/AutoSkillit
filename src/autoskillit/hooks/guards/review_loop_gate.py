@@ -36,11 +36,12 @@ _STATE_FILE_RELPATH = (".autoskillit", "temp", "review_gate_state.json")
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
+        if not isinstance(data, dict):
+            sys.exit(0)
+        payload_cwd = parse_hook_command(data).payload_cwd
+        project_root = resolve_state_root(payload_cwd)
     except Exception:
         sys.exit(0)
-
-    payload_cwd = parse_hook_command(data if isinstance(data, dict) else {}).payload_cwd
-    project_root = resolve_state_root(payload_cwd)
 
     state_file = project_root.joinpath(*_STATE_FILE_RELPATH)
     if not state_file.exists():

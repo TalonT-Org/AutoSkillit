@@ -20,7 +20,9 @@ from autoskillit.migration.engine import (
     DiagramMigrationAdapter,
     HeadlessMigrationAdapter,
     MigrationAdapter,
+    MigrationEngine,
     MigrationFile,
+    MigrationResult,
     RecipeMigrationAdapter,
     SkillMigrationAdapter,
     default_migration_engine,
@@ -468,6 +470,60 @@ class TestMigrationEngine:
         assert result.error is not None
         assert "output" in result.error.lower()
 
+    @pytest.mark.anyio
+    async def test_engine_reports_post_write_validation_failure(self, tmp_path: Path) -> None:
+        class InvalidOutputAdapter(DeterministicMigrationAdapter):
+            file_type = "invalid-output"
+
+            def discover(self, project_dir: Path) -> list[MigrationFile]:
+                return []
+
+            def needs_migration(self, file: MigrationFile) -> bool:
+                return True
+
+            async def migrate(self, file: MigrationFile, *, temp_dir: Path) -> MigrationResult:
+                return MigrationResult(
+                    success=True,
+                    name=file.name,
+                    migrated_content="invalid migrated content\n",
+                )
+
+            def validate(self, path: Path) -> tuple[bool, str]:
+                return False, "contract remains invalid"
+
+        source = tmp_path / "artifact.txt"
+        source.write_text("original\n")
+        file = MigrationFile(
+            name="artifact",
+            path=source,
+            file_type="invalid-output",
+            current_version=None,
+        )
+        engine = MigrationEngine([InvalidOutputAdapter()])
+
+        result = await engine.migrate_file(
+            file,
+            run_headless=AsyncMock(),
+            temp_dir=tmp_path / "temp",
+        )
+
+        assert result.success is False
+        assert result.error == "post-migration validation failed: contract remains invalid"
+        assert source.read_text() == "invalid migrated content\n"
+
+
+def test_skill_validation_checks_deterministic_contract(tmp_path: Path) -> None:
+    skill_dir = tmp_path / ".claude" / "skills" / "missing-declaration"
+    skill_dir.mkdir(parents=True)
+    skill_path = skill_dir / "SKILL.md"
+    skill_path.write_text("---\nname: missing-declaration\n---\nRead .claude/settings.json.\n")
+
+    is_valid, error = SkillMigrationAdapter().validate(skill_path)
+
+    assert is_valid is False
+    assert "deterministic skill invalidities remain" in error
+    assert "claude_dir" in error
+
 
 class TestAdapterHierarchy:
     # ME-ADP1
@@ -652,8 +708,6 @@ async def test_advisory_dispatch_does_not_write_file(tmp_path: Path) -> None:
         file_type="diagram",
         current_version=None,
     )
-    from autoskillit.migration.engine import MigrationEngine
-
     engine = MigrationEngine([DiagramMigrationAdapter()])
     result = await engine.migrate_file(
         file,

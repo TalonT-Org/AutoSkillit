@@ -181,6 +181,16 @@ class MigrationEngine:
             atomic_write(file.path, result.migrated_content)
             logger.info("migration.written_back", name=file.name, path=str(file.path))
 
+            is_valid, validation_error = adapter.validate(file.path)
+            if not is_valid:
+                return MigrationResult(
+                    success=False,
+                    name=result.name,
+                    error=f"post-migration validation failed: {validation_error}",
+                    retries_attempted=result.retries_attempted,
+                    advisory=result.advisory,
+                )
+
         return result
 
 
@@ -553,11 +563,28 @@ class SkillMigrationAdapter(DeterministicMigrationAdapter):
         return MigrationResult(success=True, name=file.name, migrated_content=migrated_content)
 
     def validate(self, path: Path) -> tuple[bool, str]:
-        from autoskillit.workspace import read_skill_frontmatter  # noqa: PLC0415
+        from autoskillit.workspace import (  # noqa: PLC0415
+            default_skill_resolver,
+            read_skill_frontmatter,
+        )
 
         parsed = read_skill_frontmatter(path)
         if not parsed.is_valid:
             return False, f"frontmatter still invalid: {parsed.error}"
+        info = default_skill_resolver().resolve_local_candidate(
+            path.parent.name,
+            _skill_project_dir(path),
+        )
+        if info is None:
+            return False, "migrated skill candidate could not be resolved"
+        remaining = tuple(
+            item
+            for item in info.invalidities
+            if SKILL_CONTRACT_REMEDIATIONS[item.kind].action is RemediationAction.DETERMINISTIC
+        )
+        if remaining:
+            details = "; ".join(item.detail for item in remaining)
+            return False, f"deterministic skill invalidities remain: {details}"
         return True, ""
 
 

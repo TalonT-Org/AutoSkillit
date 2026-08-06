@@ -747,7 +747,6 @@ def test_live_production_explorer_mcp_gate_isolated_for_both_roles(
 
     network = http.server.ThreadingHTTPServer(("127.0.0.1", 0), NetworkCanary)
     network_thread = threading.Thread(target=network.serve_forever, daemon=True)
-    network_thread.start()
     sterile_parent_cwd = tmp_path / "sterile-parent-cwd"
     sterile_parent_cwd.mkdir()
     initialized = subprocess.run(  # noqa: S603
@@ -832,6 +831,7 @@ def test_live_production_explorer_mcp_gate_isolated_for_both_roles(
     stdout_path = tmp_path / "codex.stdout.jsonl"
     stderr_path = tmp_path / "codex.stderr.txt"
     parent_model = os.environ.get("AUTOSKILLIT_EXPLORER_LIVE_GATE_MODEL", "gpt-5.6-sol")
+    network_thread.start()
     try:
         with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
             completed = run_live_codex_parent(

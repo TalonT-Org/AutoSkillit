@@ -199,8 +199,7 @@ def test_t_c3_manifest_failure_rolls_back_hooks_and_manifest(
     assert manifest_path.read_text() == original_manifest
 
 
-def test_t_c3_missing_dispatcher_rolls_back_failed_repair(tmp_path: Path) -> None:
-    from autoskillit.core import installed_plugin_artifact_manifest_path
+def test_t_c3_repair_refuses_to_bless_unrelated_tampering(tmp_path: Path) -> None:
     from autoskillit.workspace._projected_artifact._hook_repair import (
         repair_broken_plugin_cache_hooks,
     )
@@ -208,10 +207,73 @@ def test_t_c3_missing_dispatcher_rolls_back_failed_repair(tmp_path: Path) -> Non
     cache_dir = tmp_path / ".claude/plugins/cache/autoskillit-local/autoskillit"
     version_dir = _publish_cache_incarnation(cache_dir, "1.0.0", broken=True)
     hooks_path = version_dir / "hooks/hooks.json"
+    original_hooks = hooks_path.read_text()
+    (version_dir / "skills" / "tampered").mkdir(parents=True)
+    (version_dir / "skills" / "tampered" / "SKILL.md").write_text("modified")
+
+    outcomes = repair_broken_plugin_cache_hooks(cache_dir)
+
+    assert outcomes[0].repaired is False
+    assert "content digest mismatch" in (outcomes[0].skipped_reason or "")
+    assert hooks_path.read_text() == original_hooks
+
+
+def test_t_c3_repair_rejects_unsafe_logical_hook_names(tmp_path: Path) -> None:
+    from autoskillit.workspace._projected_artifact._hook_repair import (
+        repair_broken_plugin_cache_hooks,
+    )
+
+    cache_dir = tmp_path / ".claude/plugins/cache/autoskillit-local/autoskillit"
+    version_dir = _publish_cache_incarnation(
+        cache_dir,
+        "1.0.0",
+        broken=True,
+        logical_name="legacy/version_specific;touch",
+    )
+    hooks_path = version_dir / "hooks/hooks.json"
+    original_hooks = hooks_path.read_text()
+
+    outcomes = repair_broken_plugin_cache_hooks(cache_dir)
+
+    assert outcomes[0].repaired is False
+    assert "invalid logical hook name" in (outcomes[0].skipped_reason or "")
+    assert hooks_path.read_text() == original_hooks
+
+
+def test_t_c3_missing_dispatcher_rolls_back_failed_repair(tmp_path: Path) -> None:
+    from autoskillit.core import (
+        _AUTOSKILLIT_PLUGIN_KEY,
+        ArtifactLease,
+        installed_plugin_artifact_lease_path,
+        installed_plugin_artifact_manifest_path,
+        installed_plugin_semantic_key,
+    )
+    from autoskillit.workspace._projected_artifact._hook_repair import (
+        repair_broken_plugin_cache_hooks,
+    )
+    from autoskillit.workspace._projected_artifact._manifest_publication import (
+        write_installed_plugin_artifact_manifest_locked,
+    )
+
+    cache_dir = tmp_path / ".claude/plugins/cache/autoskillit-local/autoskillit"
+    version_dir = _publish_cache_incarnation(cache_dir, "1.0.0", broken=True)
+    hooks_path = version_dir / "hooks/hooks.json"
     manifest_path = installed_plugin_artifact_manifest_path(version_dir)
+    (version_dir / "hooks/_dispatch.py").unlink()
+    with ArtifactLease.acquire_exclusive(
+        installed_plugin_artifact_lease_path(version_dir),
+        blocking=True,
+    ):
+        write_installed_plugin_artifact_manifest_locked(
+            version_dir,
+            semantic_key=installed_plugin_semantic_key(
+                _AUTOSKILLIT_PLUGIN_KEY,
+                "1.0.0",
+            ),
+            action="publish",
+        )
     original_hooks = hooks_path.read_text()
     original_manifest = manifest_path.read_text()
-    (version_dir / "hooks/_dispatch.py").unlink()
 
     outcomes = repair_broken_plugin_cache_hooks(cache_dir)
 

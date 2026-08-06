@@ -10,6 +10,7 @@ from autoskillit.cli._hooks_codex import (
     sync_hooks_to_codex_config,
 )
 from autoskillit.execution.backends._codex_config import _serialize_toml
+from autoskillit.execution.backends._codex_hooks import _resolve_codex_hooks_dir
 from autoskillit.hooks import HOOK_REGISTRY
 
 pytestmark = [pytest.mark.medium]
@@ -24,6 +25,40 @@ def fake_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 class TestCodexHooksConfigRoundTrip:
+    def test_retained_cache_dispatcher_is_preferred(
+        self,
+        fake_home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        retained_root = fake_home / "cache-root"
+        hooks_dir = retained_root / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "_dispatch.py").write_text("# retained", encoding="utf-8")
+        monkeypatch.setattr(
+            "autoskillit.execution.backends._codex_hooks.installed_plugin_artifact_root",
+            lambda *_args: retained_root,
+        )
+
+        assert _resolve_codex_hooks_dir() == hooks_dir
+
+    def test_source_dispatcher_is_fallback_without_retained_cache(
+        self,
+        fake_home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        missing_root = fake_home / "missing"
+        source_hooks = fake_home / "source-hooks"
+        monkeypatch.setattr(
+            "autoskillit.execution.backends._codex_hooks.installed_plugin_artifact_root",
+            lambda *_args: missing_root,
+        )
+        monkeypatch.setattr(
+            "autoskillit.execution.backends._codex_hooks.HOOKS_DIR",
+            source_hooks,
+        )
+
+        assert _resolve_codex_hooks_dir() == source_hooks
+
     def test_returns_dict_not_list(self):
         result = generate_codex_hooks_config()
         assert isinstance(result, dict)

@@ -35,19 +35,23 @@ from autoskillit.core import (
     installed_plugin_artifact_lease_path,
     installed_plugin_artifact_manifest_path,
     installed_plugin_semantic_key,
+    read_installed_plugin_artifact_identity,
 )
-from autoskillit.hook_registry import PLUGIN_ROOT_TOKEN, find_broken_hook_scripts
+from autoskillit.hook_registry import (
+    find_broken_hook_scripts,
+    render_relocatable_hook_command,
+)
 from autoskillit.workspace._projected_artifact._manifest_publication import (
     write_installed_plugin_artifact_manifest_locked,
 )
 
-__all__ = ["RepairOutcome", "repair_broken_plugin_cache_hooks"]
+__all__ = ["PluginHookRepairOutcome", "repair_broken_plugin_cache_hooks"]
 
 logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
-class RepairOutcome:
+class PluginHookRepairOutcome:
     """Per-incarnation repair result."""
 
     incarnation_dir: Path
@@ -90,9 +94,7 @@ def _relocate_existing_hooks(payload: Any) -> dict[str, Any]:
                 if not isinstance(hook, dict) or not isinstance(hook.get("command"), str):
                     raise ValueError("hooks.json command entry is malformed")
                 logical_name = _logical_hook_name(hook["command"])
-                hook["command"] = (
-                    f'python3 "{PLUGIN_ROOT_TOKEN}/hooks/_dispatch.py" {logical_name}'
-                )
+                hook["command"] = render_relocatable_hook_command(logical_name)
     return payload
 
 
@@ -129,7 +131,9 @@ def _rollback_repair(
     return tuple(failures)
 
 
-def repair_broken_plugin_cache_hooks(cache_dir: Path) -> tuple[RepairOutcome, ...]:
+def repair_broken_plugin_cache_hooks(
+    cache_dir: Path,
+) -> tuple[PluginHookRepairOutcome, ...]:
     """Regenerate broken hooks.json for every incarnation under ``cache_dir``.
 
     For each ``<version>`` incarnation with broken hook commands (token-aware
@@ -146,7 +150,7 @@ def repair_broken_plugin_cache_hooks(cache_dir: Path) -> tuple[RepairOutcome, ..
     """
     if not cache_dir.is_dir():
         return ()
-    outcomes: list[RepairOutcome] = []
+    outcomes: list[PluginHookRepairOutcome] = []
     for version_dir in sorted(
         p for p in cache_dir.iterdir() if p.is_dir() and not p.name.startswith(".")
     ):
@@ -163,12 +167,16 @@ def repair_broken_plugin_cache_hooks(cache_dir: Path) -> tuple[RepairOutcome, ..
                 original_hooks = hooks_json_path.read_text(encoding="utf-8")
                 if not find_broken_hook_scripts(hooks_json_path, expansion_root=version_dir):
                     continue
+                semantic_key = installed_plugin_semantic_key(_AUTOSKILLIT_PLUGIN_KEY, version)
+                read_installed_plugin_artifact_identity(
+                    version_dir,
+                    expected_semantic_key=semantic_key,
+                )
                 manifest_path = installed_plugin_artifact_manifest_path(version_dir)
                 original_manifest = (
                     manifest_path.read_text(encoding="utf-8") if manifest_path.is_file() else None
                 )
                 fresh = _relocate_existing_hooks(json.loads(original_hooks))
-                semantic_key = installed_plugin_semantic_key(_AUTOSKILLIT_PLUGIN_KEY, version)
                 try:
                     atomic_write(
                         hooks_json_path,
@@ -201,7 +209,7 @@ def repair_broken_plugin_cache_hooks(cache_dir: Path) -> tuple[RepairOutcome, ..
                     raise RuntimeError(detail) from exc
         except ArtifactLeaseContention:
             outcomes.append(
-                RepairOutcome(
+                PluginHookRepairOutcome(
                     incarnation_dir=version_dir,
                     repaired=False,
                     skipped_reason="lease contended",
@@ -211,7 +219,7 @@ def repair_broken_plugin_cache_hooks(cache_dir: Path) -> tuple[RepairOutcome, ..
             continue
         except Exception as exc:
             outcomes.append(
-                RepairOutcome(
+                PluginHookRepairOutcome(
                     incarnation_dir=version_dir,
                     repaired=False,
                     skipped_reason=str(exc),
@@ -219,6 +227,6 @@ def repair_broken_plugin_cache_hooks(cache_dir: Path) -> tuple[RepairOutcome, ..
             )
             logger.warning("plugin_cache_hooks_repair_failed", version=version, exc_info=True)
             continue
-        outcomes.append(RepairOutcome(incarnation_dir=version_dir, repaired=True))
+        outcomes.append(PluginHookRepairOutcome(incarnation_dir=version_dir, repaired=True))
         logger.info("plugin_cache_hooks_repaired", version=version)
     return tuple(outcomes)

@@ -29,5 +29,5 @@ Two-form path contract, enforced by `hook_registry._build_hook_command`:
 
 Codex's `config.toml` hooks are a separate consumer (`execution/backends/_codex_hooks.py`)
 with no expansion-token equivalent; its commands always bake a real absolute path via
-`hook_registry.resolve_codex_hooks_dir()` (retained plugin-cache incarnation when installed,
+`execution.backends._codex_hooks._resolve_codex_hooks_dir()` (retained plugin-cache incarnation when installed,
 else the dev-source checkout).

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shlex
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
@@ -467,32 +468,6 @@ never does — the token has no meaning there (see ``cli/_hooks.py``).
 """
 
 
-def resolve_codex_hooks_dir() -> Path:
-    """Return the hooks/ directory Codex hook commands should bake in.
-
-    Codex has no runtime path-expansion token (no ``${CLAUDE_PLUGIN_ROOT}``
-    equivalent) and hashes the dispatcher's real bytes into ``trusted_hash``
-    at generation time (``execution/backends/_codex_hooks.py``), so its
-    commands must always resolve to a real, locally-readable absolute path —
-    unlike hooks.json, Codex config.toml is out of scope for token-based
-    relocation entirely.
-
-    Prefer the retained versioned plugin-cache artifact for the currently
-    running version (durable across autoskillit updates via retire-don't-
-    delete: the cache directory outlives the venv that published it) when one
-    exists on disk; fall back to ``HOOKS_DIR`` (the source checkout) in
-    dev-source mode, where the checkout itself is the durable root.
-    """
-    from autoskillit import __version__
-
-    cache_hooks_dir = (
-        installed_plugin_cache_dir(Path.home(), "autoskillit") / __version__ / "hooks"
-    )
-    if (cache_hooks_dir / "_dispatch.py").is_file():
-        return cache_hooks_dir
-    return HOOKS_DIR
-
-
 RETIRED_SCRIPT_BASENAMES: frozenset[str] = frozenset(
     {
         "quota_check.py",
@@ -850,7 +825,7 @@ def _build_hook_command(
     """
     logical_name = script.removesuffix(".py")
     if relocatable:
-        command = f'python3 "{PLUGIN_ROOT_TOKEN}/hooks/_dispatch.py" {logical_name}'
+        command = render_relocatable_hook_command(logical_name)
     else:
         if hooks_dir is None:
             raise ValueError("hooks_dir is required when relocatable=False")
@@ -862,6 +837,20 @@ def _build_hook_command(
     if timeout_seconds is not None:
         cmd["timeout"] = timeout_seconds
     return cmd
+
+
+_LOGICAL_HOOK_COMPONENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
+
+
+def render_relocatable_hook_command(logical_name: str) -> str:
+    """Render one validated dispatcher command for a plugin hooks artifact."""
+    logical_name = logical_name.removesuffix(".py").strip("/")
+    components = logical_name.split("/")
+    if not logical_name or any(
+        _LOGICAL_HOOK_COMPONENT.fullmatch(component) is None for component in components
+    ):
+        raise ValueError(f"invalid logical hook name: {logical_name!r}")
+    return f'python3 "{PLUGIN_ROOT_TOKEN}/hooks/_dispatch.py" {shlex.quote(logical_name)}'
 
 
 def generate_hooks_json(
@@ -1061,7 +1050,14 @@ def find_broken_hook_scripts(
                     script_path_str = script_path_str.replace(
                         PLUGIN_ROOT_TOKEN, str(expansion_root)
                     )
-                if not Path(script_path_str).is_file():
+                    expansion_root_resolved = expansion_root.resolve()
+                    script_path = Path(script_path_str).resolve()
+                    if not script_path.is_relative_to(expansion_root_resolved):
+                        broken.append(cmd)
+                        continue
+                else:
+                    script_path = Path(script_path_str)
+                if not script_path.is_file():
                     broken.append(cmd)
     return broken
 

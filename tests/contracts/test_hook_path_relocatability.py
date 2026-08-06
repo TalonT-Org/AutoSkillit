@@ -202,6 +202,34 @@ def test_validate_plugin_cache_hooks_token_without_expansion_root_is_broken() ->
         assert PLUGIN_ROOT_TOKEN in broken[0]
 
 
+def test_token_expansion_cannot_escape_the_plugin_incarnation(tmp_path: Path) -> None:
+    from autoskillit.hook_registry import find_broken_hook_scripts
+
+    incarnation = tmp_path / "cache" / "1.0.0"
+    hooks_dir = incarnation / "hooks"
+    outside_dispatcher = tmp_path / "cache" / "outside" / "_dispatch.py"
+    outside_dispatcher.parent.mkdir(parents=True)
+    outside_dispatcher.write_text("# outside dispatcher", encoding="utf-8")
+    _write_cache_hooks_json(
+        hooks_dir,
+        commands=[f'python3 "{PLUGIN_ROOT_TOKEN}/../outside/_dispatch.py" guards/quota_guard'],
+    )
+
+    broken = find_broken_hook_scripts(
+        hooks_dir / "hooks.json",
+        expansion_root=incarnation,
+    )
+
+    assert len(broken) == 1
+
+
+def test_relocatable_renderer_rejects_shell_metacharacters() -> None:
+    from autoskillit.hook_registry import render_relocatable_hook_command
+
+    with pytest.raises(ValueError, match="invalid logical hook name"):
+        render_relocatable_hook_command("guards/quota_guard;touch")
+
+
 # ---------------------------------------------------------------------------
 # T-A4 — Interpreter-pivot immunity.
 # ---------------------------------------------------------------------------

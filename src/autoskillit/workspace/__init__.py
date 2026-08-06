@@ -28,10 +28,10 @@ from autoskillit.workspace._installed_artifact import (
 )
 from autoskillit.workspace._projected_artifact import (
     PROJECTION_CACHE_KEY_EXCLUSIONS,
+    PluginHookRepairOutcome,
     ProjectedPluginArtifactAuthority,
     ProjectedPluginRetirementOwner,
     ProjectionCacheKey,
-    RepairOutcome,
     iter_public_plugin_asset_files,
     project_default_plugin_authority,
     project_direct_install_authority,
@@ -187,7 +187,7 @@ __all__ = [
     "ProjectionCacheKey",
     "ProjectedPluginArtifactAuthority",
     "ProjectedPluginRetirementOwner",
-    "RepairOutcome",
+    "PluginHookRepairOutcome",
     "SkillFrontmatterParseResult",
     "SkillProjectionContext",
     "iter_public_plugin_asset_files",

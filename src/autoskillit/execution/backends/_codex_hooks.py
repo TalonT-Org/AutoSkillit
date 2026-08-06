@@ -10,7 +10,7 @@ import hashlib
 from collections.abc import Sequence
 from pathlib import Path
 
-from autoskillit.core import atomic_write
+from autoskillit.core import atomic_write, installed_plugin_artifact_root
 from autoskillit.execution.backends._codex_config import (
     _read_codex_config,
     _serialize_toml,
@@ -19,14 +19,26 @@ from autoskillit.execution.backends._codex_config import (
 from autoskillit.execution.backends._codex_config_lock import CodexConfigLock
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
+    HOOKS_DIR,
     LIFECYCLE_CONTRACTS,
     HookDef,
     LifecycleContractDef,
     _build_hook_entry,
     hook_applies_to_backend,
-    resolve_codex_hooks_dir,
     validate_lifecycle_contracts,
 )
+
+
+def _resolve_codex_hooks_dir() -> Path:
+    """Select a durable absolute dispatcher root for Codex configuration."""
+    from autoskillit import __version__
+
+    cache_hooks_dir = (
+        installed_plugin_artifact_root(Path.home(), "autoskillit", __version__) / "hooks"
+    )
+    if (cache_hooks_dir / "_dispatch.py").is_file():
+        return cache_hooks_dir
+    return HOOKS_DIR
 
 
 def _build_codex_hook_command(hooks_dir: Path, script: str, timeout_seconds: int | None) -> dict:
@@ -60,7 +72,7 @@ def generate_codex_hooks_config(
         lifecycle_contracts,
         backend="codex",
     )
-    hooks_dir = resolve_codex_hooks_dir()
+    hooks_dir = _resolve_codex_hooks_dir()
     groups: dict[str, dict[tuple[str, str], dict]] = {}
     for hook_def in registry:
         if not hook_applies_to_backend(
@@ -88,7 +100,7 @@ def generate_codex_hooks_config(
 def _is_autoskillit_hook_entry(entry: dict) -> bool:
     """Check if a Codex hooks config entry belongs to autoskillit.
 
-    ``resolve_codex_hooks_dir()`` varies by install state (dev checkout vs.
+    ``_resolve_codex_hooks_dir()`` varies by install state (dev checkout vs.
     retained plugin-cache incarnation), so detection cannot pin one literal
     directory string — the ``_dispatch.py`` suffix match already covers every
     autoskillit-generated command regardless of which root produced it.

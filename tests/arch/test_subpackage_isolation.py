@@ -1377,7 +1377,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "module rather than a sub-package (a package split would change how hook scripts "
         "resolve the import on the low-latency startup path). Relocatable hook commands "
         "(${CLAUDE_PLUGIN_ROOT} token generation in _build_hook_command, "
-        "resolve_codex_hooks_dir, and token-aware find_broken_hook_scripts/"
+        "relocatable command rendering, and token-aware find_broken_hook_scripts/"
         "validate_plugin_cache_hooks) add 114 net lines to the existing registry+drift-"
         "detection surface.",
     ),

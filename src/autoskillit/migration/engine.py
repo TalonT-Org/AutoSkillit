@@ -483,6 +483,14 @@ class SkillMigrationAdapter(DeterministicMigrationAdapter):
                 success=False, name=file.name, error="frontmatter did not parse"
             )
         data = dict(parsed.data)
+        declared_caps_raw = data.get("uses_capabilities", [])
+        if not isinstance(declared_caps_raw, list):
+            return MigrationResult(
+                success=False,
+                name=file.name,
+                error="uses_capabilities must be a list before deterministic migration",
+            )
+        declared_caps = {str(capability) for capability in declared_caps_raw}
 
         for kind in applicable_kinds:
             if kind is SkillInvalidityKind.UNDECLARED_CAPABILITY:
@@ -496,8 +504,8 @@ class SkillMigrationAdapter(DeterministicMigrationAdapter):
                                 error="undeclared capability invalidity has no typed capability",
                             )
                         missing.add(item.capability)
-                existing_caps = set(data.get("uses_capabilities") or [])
-                data["uses_capabilities"] = sorted(existing_caps | missing)
+                declared_caps.update(missing)
+                data["uses_capabilities"] = sorted(declared_caps)
             elif kind is SkillInvalidityKind.SEMANTIC_MISSING_VERSION:
                 data["semantic_version"] = SKILL_SEMANTIC_SCHEMA_VERSION
             elif kind is SkillInvalidityKind.SEMANTIC_UNDECLARED_TOKENS:
@@ -515,7 +523,6 @@ class SkillMigrationAdapter(DeterministicMigrationAdapter):
                     RETIRED_SEMANTIC_CAPABILITIES,
                 )
 
-                declared_caps = set(data.get("uses_capabilities") or [])
                 retired = declared_caps & RETIRED_SEMANTIC_CAPABILITIES.keys()
                 if not retired:
                     return MigrationResult(
@@ -528,7 +535,8 @@ class SkillMigrationAdapter(DeterministicMigrationAdapter):
                             "operator-visible advisory"
                         ),
                     )
-                data["uses_capabilities"] = sorted(declared_caps - retired)
+                declared_caps.difference_update(retired)
+                data["uses_capabilities"] = sorted(declared_caps)
                 data.setdefault("semantic_version", SKILL_SEMANTIC_SCHEMA_VERSION)
                 requirements = dict(data.get("semantic_requirements") or {})
                 for capability in retired:

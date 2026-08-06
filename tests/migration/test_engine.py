@@ -666,6 +666,31 @@ async def test_advisory_dispatch_does_not_write_file(tmp_path: Path) -> None:
     assert diagram_md.read_text() == original_content
 
 
+@pytest.mark.anyio
+async def test_skill_migration_rejects_non_list_capabilities(tmp_path: Path) -> None:
+    skill_dir = tmp_path / ".claude" / "skills" / "malformed-capabilities"
+    skill_dir.mkdir(parents=True)
+    skill_path = skill_dir / "SKILL.md"
+    skill_path.write_text(
+        "---\n"
+        "name: malformed-capabilities\n"
+        "uses_capabilities: claude_dir\n"
+        "---\n"
+        "Read .claude/settings.json.\n"
+    )
+    file = MigrationFile(
+        name="malformed-capabilities",
+        path=skill_path,
+        file_type="skill",
+        current_version=None,
+    )
+
+    result = await SkillMigrationAdapter().migrate(file, temp_dir=tmp_path / "temp")
+
+    assert result.success is False
+    assert result.error == "uses_capabilities must be a list before deterministic migration"
+
+
 class TestMigrateRecipesConstant:
     @pytest.mark.anyio
     async def test_failed_headless_retries_match_constant(

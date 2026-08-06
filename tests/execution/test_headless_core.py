@@ -106,6 +106,52 @@ def test_effective_execution_identity_dispatches_through_backend_protocol() -> N
     assert bound.execution_identity is effective
 
 
+@pytest.mark.parametrize("error", [OSError("missing rollout"), ValueError("invalid rollout")])
+def test_effective_execution_identity_falls_back_on_backend_evidence_errors(
+    error: Exception,
+) -> None:
+    from autoskillit.execution.headless._headless_launch import (
+        _bind_effective_execution_identity,
+    )
+
+    requested = ExecutionIdentity(
+        requested_parent_backend="codex",
+        children=(ChildExecutionIdentity("task", "role", "plan", "definition"),),
+    )
+    backend = Mock()
+    backend.resolve_effective_execution_identity.side_effect = error
+    skill_result = SkillResult.crashed(RuntimeError("test"), session_id="parent-session")
+
+    bound = _bind_effective_execution_identity(skill_result, backend, requested)
+
+    assert bound.execution_identity is requested
+
+
+@pytest.mark.parametrize(
+    ("children", "session_id"),
+    [
+        ((), "parent-session"),
+        ((ChildExecutionIdentity("task", "role", "plan", "definition"),), ""),
+    ],
+)
+def test_effective_execution_identity_skips_incomplete_resolution_inputs(
+    children: tuple[ChildExecutionIdentity, ...],
+    session_id: str,
+) -> None:
+    from autoskillit.execution.headless._headless_launch import (
+        _bind_effective_execution_identity,
+    )
+
+    requested = ExecutionIdentity(requested_parent_backend="codex", children=children)
+    backend = Mock()
+    skill_result = SkillResult.crashed(RuntimeError("test"), session_id=session_id)
+
+    bound = _bind_effective_execution_identity(skill_result, backend, requested)
+
+    backend.resolve_effective_execution_identity.assert_not_called()
+    assert bound.execution_identity is requested
+
+
 def test_neutral_backend_preserves_requested_execution_identity() -> None:
     requested = ExecutionIdentity(requested_parent_backend="claude-code")
 

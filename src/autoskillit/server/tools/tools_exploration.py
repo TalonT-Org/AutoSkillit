@@ -153,6 +153,26 @@ def _page_payload(page: EvidencePage, *, status: str) -> str:
     return json.dumps(payload, separators=(",", ":"))
 
 
+def _fetch_page_from_launch_environment(
+    *,
+    page_size: int,
+    cursor: ContinuationCursor | None = None,
+    success_status: str,
+) -> str:
+    store = _get_store()
+    if not 0 < page_size <= _MAX_PAGE_SIZE:
+        return _failure(_FAILURE_INVALID_REQUEST)
+    if store is None:
+        raise RuntimeError("exploration context store is unavailable")
+    status, page = store.get_page_from_launch_environment(
+        page_size=page_size,
+        cursor=cursor,
+    )
+    if status is not CapabilityResolutionStatus.OK or page is None:
+        return _failure(_FAILURE_CONTEXT_UNAVAILABLE)
+    return _page_payload(page, status=success_status)
+
+
 @mcp.tool(
     tags={"autoskillit", "kitchen", "exploration"},
     annotations={"readOnlyHint": True},
@@ -209,19 +229,12 @@ async def get_exploration_page(
     try:
         if (gate := _require_enabled()) is not None:
             return gate
-        store = _get_store()
-        if not 0 < page_size <= _MAX_PAGE_SIZE:
-            return _failure(_FAILURE_INVALID_REQUEST)
-        if store is None:
-            raise RuntimeError("exploration context store is unavailable")
         cursor = None if continuation is None else ContinuationCursor.decode(continuation)
-        status, page = store.get_page_from_launch_environment(
+        return _fetch_page_from_launch_environment(
             page_size=page_size,
             cursor=cursor,
+            success_status="ready",
         )
-        if status is not CapabilityResolutionStatus.OK or page is None:
-            return _failure(_FAILURE_CONTEXT_UNAVAILABLE)
-        return _page_payload(page, status="ready")
     except Exception:
         logger.warning("exploration page retrieval failed", exc_info=True)
         return _failure(_FAILURE_BROKER_UNAVAILABLE)
@@ -245,17 +258,10 @@ async def resume_exploration_context(
     try:
         if (gate := _require_enabled()) is not None:
             return gate
-        store = _get_store()
-        if not 0 < page_size <= _MAX_PAGE_SIZE:
-            return _failure(_FAILURE_INVALID_REQUEST)
-        if store is None:
-            raise RuntimeError("exploration context store is unavailable")
-        status, page = store.get_page_from_launch_environment(
+        return _fetch_page_from_launch_environment(
             page_size=page_size,
+            success_status="resumed",
         )
-        if status is CapabilityResolutionStatus.OK and page is not None:
-            return _page_payload(page, status="resumed")
-        return _failure(_FAILURE_CONTEXT_UNAVAILABLE)
     except Exception:
         logger.warning("exploration context resumption failed", exc_info=True)
         return _failure(_FAILURE_BROKER_UNAVAILABLE)

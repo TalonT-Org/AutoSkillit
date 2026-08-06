@@ -803,19 +803,19 @@ _ARCHITECTURE_LENS_INVENTORY: dict[str, tuple[PhaseDInventoryRow, ...]] = {
 }
 
 _ARCHITECTURE_REVIEW_DIGESTS = {
-    "c4-container": "4c7887d31e4985ad477addf1bca29090f37f3112e138c60e555953406db1550e",
-    "concurrency": "d658d1a536229e9ed1989344e281eeb6ad14f6b725d5bbdf08cc59e8f825146b",
-    "data-lineage": "bb5ef95363c401b18e5ee363646ac980a13989846fdf462162f2ba73b5578f00",
-    "deployment": "8289193279a3c93bf1c9fe5eaf85bfc63187eb087aebded20a666b14152ca3eb",
-    "development": "4000d322e44c3fff6c881e95746a7cfe45868da09fa5f70d70f38a8b9af438c6",
-    "error-resilience": "299889750ff1479e90584a514721b4531c60a71563dd56fa36a26a7a853a414b",
-    "module-dependency": "05567682369b69529f851ce30a065db5eedb3129fd4a1c275804af520340e134",
-    "operational": "e786d263fd36dc6eb50d6714af4374ea5316decaf9afa0b3f9095d7b3f9c7ca4",
-    "process-flow": "b0499eb27c252fbf375e8c492663340ade97f17c612eeb8c3d300274a913cb41",
-    "repository-access": "8368535ccb2f3fd487bf9dcde31c1d4d2624d6f0dac523410abab2c99cc26497",
-    "scenarios": "65104e406718a7f5a69b35e0b1803bd98c984feec0829f9f1f4066e5319248e8",
-    "security": "ec63aaa15a281515113f45df23990816d4a71fea8a945798a9f7cd3b0b351f23",
-    "state-lifecycle": "710fe5d3b5b2db56f9224e48b8138900fc279b4ba17330d49df4156661127f50",
+    "c4-container": "67a02b5577994ac2a615871ceb633f456536fbfb25ec6c9d6136bcbaf60686c3",
+    "concurrency": "08e120b079c45e82416c5f86b11ba4804e25ec9105e2bbe5df52472fd1d362ce",
+    "data-lineage": "5b7ac2e32320d3a82bf38d6f12e4277823e2d868c0bc00c8e9acfe6025ef7132",
+    "deployment": "8ef06c7e164e495c17d91cb197b8e081c51f010a7a0fb561a5911eec93f6581c",
+    "development": "62fce705d8b7292561dc44d5dabec6436334b081cac725cebd999676c4009fc6",
+    "error-resilience": "fae9d01f12b2f6e3a9a7091a9f7249a66114c8f834f01e7b5929868f4f47f187",
+    "module-dependency": "0906197b52200c9af01aefe7e73b954d14eaf3ff520f108990634256371ebaa1",
+    "operational": "1456102221b81b2e3b3df240687342f48adf27f480aa49899717d96ad1db210c",
+    "process-flow": "cc5afc815f03c4df1de2b1e5841412856085225b446f4b919489871976fea788",
+    "repository-access": "b64369dcfcc8e5e8bb87dc66b784ff02daac7948fa93e9dd6ab551f6408c41f4",
+    "scenarios": "2f8d649845a081da5d92807da906721cdac3d47045a45521cc7782ca38e225d8",
+    "security": "15b331b3aac8e57a86f50683d570f2a3b206fbce0c418585cd66e2f3400080c6",
+    "state-lifecycle": "774a419edb0502863dd0d86d5b072aa2e4fe6079f6addd47d6106c1665e0af36",
 }
 
 _ARCHITECTURE_RECIPE_STEP_PINS = {
@@ -1039,56 +1039,56 @@ _EXPERIMENT_VECTOR_INVENTORY: dict[str, tuple[ExperimentInventoryRow, ...]] = {
 
 _EXPERIMENT_REVIEW_DIGESTS = {
     "exp-lens-estimand-clarity": (
-        "557cc95b34a0a5c0b7f097cdfd95aa997463f978672c6ceb77099dce926bd9c7"
+        "adea2c13317bd089d66bde08d23999afd92a15a3a63e5fc3de2f7fef7ef408fd"
     ),
     "exp-lens-causal-assumptions": (
-        "0a80c86cfced5a1a498e1c52ff5d9d7f34fc1f0a7da80b6149e2e8cd82190383"
+        "0ffa8a302a004551e3f3d1047032b0884ffd338957b66e4e0cff02c89f009cbc"
     ),
     "exp-lens-comparator-construction": (
-        "5e020f47bfb5667ecf01b1cf884688c00c31ec12e39a6eee6457fe004bf4bf37"
+        "d7a2491f6f289957419cc43017c467c0ee6d69038f4f0c4792aaded536e62e06"
     ),
     "exp-lens-pipeline-integrity": (
-        "a60b756fdfe12f2d1fa56142a9171ec9c878ac8346560824b9ede6036f95709e"
+        "0da452196ade9066331166675e9ee13c684e508dfd8a52ef078e01a534daa6d2"
     ),
     "exp-lens-variance-stability": (
-        "b17eeb0e5ce6760e7992ac95b1dc34252fda56e0bff8df464f92117bf1fd4621"
+        "53f5cc17a866441d9c32a885af036c352b2609730ab7446e0522c14fc6d3caf1"
     ),
     "exp-lens-fair-comparison": (
-        "dd363783aaaaa01f1153e49317b744ea945d631a9646e821183a2b0fe84271dc"
+        "66885994e8a08d1fbede4982b72bf05abab31c88229e7c3aeac2710dd8b3ce86"
     ),
     "exp-lens-reproducibility-artifacts": (
-        "c2fd7d6cbce206a9849113c652717048aafcb9d1f4d6cdd66819a8f3ade09cca"
+        "fa4604b518ad6614bb0e184aa72c340913e4d6579ece0f71f47c518c8bf05666"
     ),
     "exp-lens-measurement-validity": (
-        "36ae3fb5c87a9e59f8adccbe3ba09db5096f05dd95e48ac18c3e0910154d7320"
+        "ce31d75424c90b7b33e7f079a10cbab196494f402329abc4fa32e0da34760c5c"
     ),
     "exp-lens-sensitivity-robustness": (
-        "e67bb315fe21ebcce96957671a7c4d03e16a54dded09eaf311315902f01a9391"
+        "3a39f90bac84fe19fd44dfadde19a0235ee1e90f2f07aa094d88ab820f26fe2d"
     ),
     "exp-lens-benchmark-representativeness": (
-        "cad7643ae5347ac78758419a1938e076ec11dd8a7bc5d99ec0272a455f576bf9"
+        "4846390e2073a2bb0c467c501f6421040f1b33a30d3977b43c396f3a73b35af6"
     ),
     "exp-lens-unit-interference": (
-        "550cc401fc95c628b4696b42ecbcb651e64015dce7ceb39714bd01cb99ca4575"
+        "2d4aa7606833bb73185c25a96edf7a0fc3d5658868f1cb50ea21a30f0953e5f6"
     ),
-    "exp-lens-error-budget": ("cc890a9d1aa9bc42db7078777cac30ee383436aa1779ec7ae63f164372cd1347"),
+    "exp-lens-error-budget": ("60cd3e77ee5f2f1195dd7a52b08f8cc73a691f47864d9675ada0dae31a52e7ee"),
     "exp-lens-severity-testing": (
-        "a5d01f4d32f1b802154ae547b903ba4b119e44110532c5c93263e25a98fc288a"
+        "10ca2b28a3855d694b5b639a85f1889c80c8f2bff0cd9864245422602409128c"
     ),
     "exp-lens-randomization-blocking": (
-        "3c0085eed60e00d244cc94c9d765052347c04733ecb7becb85f7d5513338d62d"
+        "dc404626d7852d7eebecac31173aaf6778dbbc118649c5154e3ea17b3bdb610b"
     ),
     "exp-lens-validity-threats": (
-        "b27165e3d909f5ae3e6d35291a5c55a5ad8e65a2a7bf7bb7d7199d49a349fcd0"
+        "0f875fa4a12f07161536d8551c1aaac080aff0cab1d36259b767baef74b5a2fa"
     ),
     "exp-lens-iterative-learning": (
-        "05279f937ccc38d6d93ad76f01c72d2e8bd3c898b1aad1c367b3c78fcf25e9be"
+        "174878db7f640ae29590f177d433f17d55b1b8f53161ada51f67bdff90a93034"
     ),
     "exp-lens-exploratory-confirmatory": (
-        "78399ce7436727b0eb4163e2347e0e452c278fab94039ba520a802e537a941ab"
+        "56aebdd702018d3c19f7edf8379a05d9d4ff7b781f64c5254d0f236a43c0dfa2"
     ),
     "exp-lens-governance-risk": (
-        "eaac60091afedce9402f8c63a2b1706b5207528a592595898dffbecfcd4a64ef"
+        "9fe55c185e3bb7dfd2c81f0061e4160081a8886e529c67aaba07c63afe553a3e"
     ),
 }
 
@@ -1189,22 +1189,22 @@ _VISUALIZATION_VECTOR_INVENTORY: dict[str, tuple[VisualizationInventoryRow, ...]
 }
 
 _VISUALIZATION_REVIEW_DIGESTS = {
-    "vis-lens-always-on": "b6c4fe3ad42b0017b167dcd47be7fd21355e6354e85584b8614f8f802e7acb57",
-    "vis-lens-antipattern": "79bbe3d69e46f54bca6314d83dc7e7452c66e81c8572eeb44394ecaf5860555d",
-    "vis-lens-caption-annot": "b10efa30f17d908295f1817877759ec00f7df062d5d04fcf42e1b5eedc37dbd9",
-    "vis-lens-chart-select": "3d4bfc9235b0bbab56cc3af617fd2674dd371b6bfc328d5059917113cc5e9511",
-    "vis-lens-color-access": "ddf1f0614dacd2115a8b3d22c79a24a7d9fb941dff356681082c62adbff5102e",
-    "vis-lens-figure-table": "0323ca2d21fdc49a39c7ed4fe48d5513f897e21e104967ae792b7d83f936c810",
+    "vis-lens-always-on": "bb631b4089215cc7862fae6510375196ba2f6d5f07eca09e40d7def638dddb16",
+    "vis-lens-antipattern": "6bc948219ec78e9b9b51048fe596b86fe0220015852347e405b6b5ea0ea5a7e0",
+    "vis-lens-caption-annot": "b041b62130b211ec819a78827796eacf349bbcdceabf45ba4ba92222654164c2",
+    "vis-lens-chart-select": "47a5e8aafcf32ce6508cf6899016e07b162091cc7e7d1c162e58621dec5e20ce",
+    "vis-lens-color-access": "e94e7f559fd2975abd3a9fc484e063c6be55636f16919dc2c745448f367a95e5",
+    "vis-lens-figure-table": "1d69193874c4c77eb323e0ee9cde662aa841425ef8222975b9dad536f50bab4d",
     "vis-lens-methodology-norms": (
-        "d8618744ce8649542be534a40d7698b306dcb3dc1807083f4dd327d07e31061c"
+        "d387d876ceeca25d3a7baeec87e39e3da635683c5586b013daf012ac0553dba7"
     ),
-    "vis-lens-multi-compare": "feceb6d0724c90de00b5112a5f5bac6cf3b7e54598c8fb667822f53effc5434a",
+    "vis-lens-multi-compare": "e6ee5c06f6c401b929aab13ec28643f620c937b682673158b3f5601fa335ccfd",
     "vis-lens-reproducibility": (
-        "d8ba9ffb50b2e315270f8e2cca9ab6323d4ef58f94231997be66eddd0730a829"
+        "a077c788bc34dc29715c90da8b123650a05b85c2307b6d56a9520e02036fff73"
     ),
-    "vis-lens-story-arc": "5c9e5832916bdc368fcc8faf2b8327ee4ad2cf02023480c34e4452c61035d466",
-    "vis-lens-temporal": "6de30267108dd985f46a10c52e8ba7acaca4f9f9f160775ca8574d246c0c1704",
-    "vis-lens-uncertainty": "e8c3108dbb5d0ccefa3de5f5b1fd0b3830bc76de391f7d6b53594f25da61738a",
+    "vis-lens-story-arc": "7ad24361119770d790a7c98d730a44e1d84c48af047905feb8045296eea468e1",
+    "vis-lens-temporal": "9d2a14ae7389896827acd6a67a98189efb81cf3607a57f3795cdcb7ad58a0578",
+    "vis-lens-uncertainty": "3d45a8f0f6013a244f94521351dc37a29ed4375b4a0ee78921050c27dfc8f0e8",
 }
 
 _VISUALIZATION_RETAINED_BODY_AUTHORITIES = {

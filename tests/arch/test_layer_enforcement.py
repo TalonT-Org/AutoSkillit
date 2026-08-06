@@ -1710,6 +1710,9 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/execution/test_session_log_fields.py": frozenset(
         {"autoskillit.hooks", "autoskillit.pipeline"}
     ),
+    # phase D dispatch rendering contract loads real bundled skills' exploration.yaml
+    # sidecars to build authentic vector fixtures — needs the skill parser
+    "tests/execution/test_explorer_dispatch.py": frozenset({"autoskillit.workspace"}),
 }
 
 

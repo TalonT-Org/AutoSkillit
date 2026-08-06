@@ -78,10 +78,10 @@ def _attestation(catalog_digest: str) -> ExplorerConformanceAttestation:
         parent_thread_id="parent",
         child_thread_id="child",
         parent_model=EXPLORER_PARENT_MODEL,
-        model=EXPLORER_MODEL,
-        reasoning_effort=EXPLORER_REASONING_EFFORT,
+        child_model=EXPLORER_MODEL,
+        child_reasoning_effort=EXPLORER_REASONING_EFFORT,
         parent_sandbox_mode=EXPLORER_SANDBOX_MODE,
-        sandbox_mode=EXPLORER_SANDBOX_MODE,
+        child_sandbox_mode=EXPLORER_SANDBOX_MODE,
         approval_policy="never",
         network_policy="restricted",
         native_target_execution_isolation="enforced",
@@ -332,7 +332,7 @@ def test_publish_is_atomic_unique_and_round_trips(tmp_path: Path) -> None:
         attestation,
         **_expected(digest),
     )
-    assert output.name == "codex-explorer-conformance-v6.json"
+    assert output.name == "codex-explorer-conformance-v7.json"
     assert (tmp_path / f"{output.name}.sha256").is_file()
     assert read_explorer_attestation(output) == attestation
     assert validate_published_explorer_release_readiness(output) == attestation
@@ -439,10 +439,10 @@ def test_publication_rejects_a_tampered_expected_authority(tmp_path: Path) -> No
     expected["expected_child_thread_id"] = "wrong-child"
     with pytest.raises(ValueError, match="child_thread_id"):
         publish_explorer_attestation(tmp_path, attestation, **expected)
-    assert not (tmp_path / "codex-explorer-conformance-v6.json").exists()
+    assert not (tmp_path / "codex-explorer-conformance-v7.json").exists()
 
 
-def test_read_requires_the_exact_v6_schema(tmp_path: Path) -> None:
+def test_read_requires_the_exact_v7_schema(tmp_path: Path) -> None:
     digest = validate_codex_luna_catalog(_catalog())
     attestation = _attestation(digest)
     raw = json.loads(
@@ -453,8 +453,8 @@ def test_read_requires_the_exact_v6_schema(tmp_path: Path) -> None:
         ).read_text(encoding="utf-8")
     )
     missing_field = dict(raw)
-    missing_field.pop("parent_sandbox_mode")
-    extra_field = {**raw, "legacy_parent_sandbox": EXPLORER_SANDBOX_MODE}
+    missing_field.pop("child_sandbox_mode")
+    extra_field = {**raw, "sandbox_mode": EXPLORER_SANDBOX_MODE}
     invalid_path = tmp_path / "invalid.json"
     for invalid in (missing_field, extra_field):
         invalid_path.write_text(json.dumps(invalid), encoding="utf-8")

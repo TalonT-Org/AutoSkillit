@@ -26,7 +26,6 @@ from autoskillit.core import (
     get_logger,
     plugin_launch_binding_scope,
 )
-from autoskillit.execution.backends import extract_codex_execution_identity
 from autoskillit.execution.headless._headless_helpers import (
     _resolve_pty_mode,
     _resolve_session_log_dir,
@@ -63,23 +62,15 @@ def _bind_effective_execution_identity(
     requested: ExecutionIdentity,
 ) -> SkillResult:
     effective = requested
-    if (
-        backend.capabilities.terminal_explorer_capable
-        and requested.children
-        and skill_result.session_id
-    ):
+    if requested.children and skill_result.session_id:
         try:
-            locator = backend.session_locator()
-            parent_rollout = locator.locate_session(skill_result.session_id)
-            if parent_rollout is not None:
-                effective = extract_codex_execution_identity(
-                    parent_rollout,
-                    requested=requested,
-                    child_rollout_resolver=locator.locate_session,
-                )
+            effective = backend.resolve_effective_execution_identity(
+                requested=requested,
+                session_id=skill_result.session_id,
+            )
         except (OSError, ValueError):
             logger.warning(
-                "codex_execution_identity_extraction_failed",
+                "effective_execution_identity_resolution_failed",
                 session_id=skill_result.session_id,
                 exc_info=True,
             )

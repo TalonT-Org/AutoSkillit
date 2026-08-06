@@ -74,13 +74,19 @@ from ._terminal_table import _render_gfm_table as _render_gfm_table
 from ._terminal_table import _render_terminal_table as _render_terminal_table
 from ._version_snapshot import collect_version_snapshot as collect_version_snapshot
 from .agent_definition import AGENT_DEFINITION_DIGEST_DOMAIN as AGENT_DEFINITION_DIGEST_DOMAIN
+from .agent_definition import BUNDLED_EXPLORER_ROLES as BUNDLED_EXPLORER_ROLES
 from .agent_definition import CODEX_EXPLORER_IDENTITY as CODEX_EXPLORER_IDENTITY
+from .agent_definition import (
+    REPOSITORY_IMPACT_PROFILER_ROLE as REPOSITORY_IMPACT_PROFILER_ROLE,
+)
+from .agent_definition import SEMANTIC_CODE_NAVIGATOR_ROLE as SEMANTIC_CODE_NAVIGATOR_ROLE
 from .agent_definition import AgentDef as AgentDef
 from .agent_definition import AgentDefinitionError as AgentDefinitionError
 from .agent_definition import CodexAgentProjectionDef as CodexAgentProjectionDef
 from .agent_definition import agent_definition_digest as agent_definition_digest
 from .agent_definition import load_agent_definition as load_agent_definition
 from .agent_definition import load_agent_definitions as load_agent_definitions
+from .agent_definition import load_bundled_agent_definitions as load_bundled_agent_definitions
 from .agent_definition import normalize_codex_cli_version as normalize_codex_cli_version
 from .audit_cycle_verifier import ArtifactByteReader as ArtifactByteReader
 from .audit_cycle_verifier import AuditCycleVerificationError as AuditCycleVerificationError
@@ -346,6 +352,7 @@ from .types import DATA_MANIFEST_SOURCE_TYPES as DATA_MANIFEST_SOURCE_TYPES
 from .types import DISPATCH_ID_ENV_VAR as DISPATCH_ID_ENV_VAR
 from .types import DRY_WALKTHROUGH_VERIFIED_MARKER as DRY_WALKTHROUGH_VERIFIED_MARKER
 from .types import DYNAMIC_RECIPE_SECTION_DEF as DYNAMIC_RECIPE_SECTION_DEF
+from .types import EXPLORATION_TOOLS as EXPLORATION_TOOLS
 from .types import FEATURE_REGISTRY as FEATURE_REGISTRY
 from .types import FLEET_DISPATCH_MODE as FLEET_DISPATCH_MODE
 from .types import FLEET_DISPATCH_TOOLS as FLEET_DISPATCH_TOOLS
@@ -363,6 +370,7 @@ from .types import HEADLESS_ENV_VAR as HEADLESS_ENV_VAR
 from .types import HEADLESS_TOOLS as HEADLESS_TOOLS
 from .types import INVARIANT_REGISTRY as INVARIANT_REGISTRY
 from .types import INVESTIGATION_COMPLETE_MARKER as INVESTIGATION_COMPLETE_MARKER
+from .types import KITCHEN_GATED_TOOLS as KITCHEN_GATED_TOOLS
 from .types import KITCHEN_SESSION_ID_ENV_VAR as KITCHEN_SESSION_ID_ENV_VAR
 from .types import KNOWN_BACKEND_NAMES as KNOWN_BACKEND_NAMES
 from .types import KNOWN_CI_EVENTS as KNOWN_CI_EVENTS
@@ -613,6 +621,7 @@ from .types import ChannelConfirmation as ChannelConfirmation
 from .types import ChargeCommittedEffect as ChargeCommittedEffect
 from .types import ChargeDomain as ChargeDomain
 from .types import ChildExecutionIdentity as ChildExecutionIdentity
+from .types import ChildExecutionIdentityDict as ChildExecutionIdentityDict
 from .types import ChildModelPolicySpec as ChildModelPolicySpec
 from .types import ChildSpawnSpec as ChildSpawnSpec
 from .types import CIRunScope as CIRunScope
@@ -681,6 +690,7 @@ from .types import EpochFenceProof as EpochFenceProof
 from .types import EvidenceSpec as EvidenceSpec
 from .types import ExecutableLaunchBinding as ExecutableLaunchBinding
 from .types import ExecutionIdentity as ExecutionIdentity
+from .types import ExecutionIdentityDict as ExecutionIdentityDict
 from .types import ExecutionInstallSiteDef as ExecutionInstallSiteDef
 from .types import ExpiredIdempotencyTombstone as ExpiredIdempotencyTombstone
 from .types import ExpireIdempotencyKeyEvent as ExpireIdempotencyKeyEvent

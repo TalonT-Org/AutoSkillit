@@ -7,16 +7,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from autoskillit.core import KITCHEN_GATED_TOOLS
 from autoskillit.core.types._type_constants import SOUS_CHEF_MANDATORY_SECTIONS
 from tests.server._helpers import _with_finalized_projection
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
-
-EXPLORATION_TOOLS = frozenset(
-    {"submit_exploration_query", "get_exploration_page", "resume_exploration_context"}
-)
-
 
 # ---------------------------------------------------------------------------
 # Group C — visibility + component management
@@ -106,14 +102,14 @@ async def test_close_kitchen_tool_calls_reset_visibility(tmp_path, monkeypatch):
 async def test_close_kitchen_hides_pre_revealed_tools(tmp_path, monkeypatch):
     """close_kitchen must remove pre-revealed kitchen tools from list_tools() roundtrip."""
     monkeypatch.chdir(tmp_path)
-    from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS, GATED_TOOLS
     from autoskillit.server import mcp
     from autoskillit.server.tools.tools_kitchen import close_kitchen
 
     mcp.enable(tags={"kitchen"})
     tools_before = {t.name for t in await mcp.list_tools()}
-    kitchen_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EXPLORATION_TOOLS
-    assert kitchen_gated.issubset(tools_before), "kitchen tools should be visible after enable"
+    assert KITCHEN_GATED_TOOLS.issubset(tools_before), (
+        "kitchen tools should be visible after enable"
+    )
 
     mock_ctx = _make_mock_ctx()
     mock_ctx.reset_visibility = AsyncMock()
@@ -126,7 +122,7 @@ async def test_close_kitchen_hides_pre_revealed_tools(tmp_path, monkeypatch):
             await close_kitchen(ctx=mock_ctx)
 
     tools_after = {t.name for t in await mcp.list_tools()}
-    assert not kitchen_gated.intersection(tools_after), (
+    assert not KITCHEN_GATED_TOOLS.intersection(tools_after), (
         "kitchen tools should be hidden after close_kitchen"
     )
 
@@ -153,7 +149,6 @@ async def test_close_open_roundtrip_restores_tools_via_session(tool_ctx):
 
     from fastmcp.client import Client
 
-    from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS, GATED_TOOLS
     from autoskillit.server import mcp
 
     # Mirror production Claude Code / Codex: backend present and
@@ -176,12 +171,10 @@ async def test_close_open_roundtrip_restores_tools_via_session(tool_ctx):
     # unconditionally flips it back to False (line 612), so the subsequent open_kitchen
     # correctly enters `if not _skip_handler:` and exercises the _use_global_enable path.
     tool_ctx.gate_infrastructure_ready = True
-    kitchen_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EXPLORATION_TOOLS
-
     async with Client(mcp) as client:
         # Step 3: tools visible after global pre-reveal.
         tools_before = {t.name for t in await client.list_tools()}
-        assert kitchen_gated.issubset(tools_before), (
+        assert KITCHEN_GATED_TOOLS.issubset(tools_before), (
             "kitchen tools should be visible after pre-reveal enable"
         )
 
@@ -190,7 +183,7 @@ async def test_close_open_roundtrip_restores_tools_via_session(tool_ctx):
 
         # Step 5: tools hidden after close_kitchen's notification propagates.
         tools_after_close = {t.name for t in await client.list_tools()}
-        assert not kitchen_gated.intersection(tools_after_close), (
+        assert not KITCHEN_GATED_TOOLS.intersection(tools_after_close), (
             "kitchen tools should be hidden after close_kitchen"
         )
 
@@ -202,7 +195,7 @@ async def test_close_open_roundtrip_restores_tools_via_session(tool_ctx):
         # server-side but no notification reaches the Client, so the Client keeps
         # serving the stale post-close cache.
         tools_after_reopen = {t.name for t in await client.list_tools()}
-        assert kitchen_gated.issubset(tools_after_reopen), (
+        assert KITCHEN_GATED_TOOLS.issubset(tools_after_reopen), (
             "kitchen tools should be visible after open_kitchen restores pre-revealed tags"
         )
 
@@ -217,7 +210,6 @@ async def test_open_kitchen_after_close_restores_pre_revealed_tools(tmp_path, mo
     message and never calls `mcp.enable()`, leaving tools invisible.
     """
     monkeypatch.chdir(tmp_path)
-    from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS, GATED_TOOLS
     from autoskillit.server import mcp
     from autoskillit.server.tools.tools_kitchen import close_kitchen
 
@@ -225,8 +217,7 @@ async def test_open_kitchen_after_close_restores_pre_revealed_tools(tmp_path, mo
     mcp.enable(tags={"kitchen"})
     mcp.enable(tags={"plan-review"})
     tools_before = {t.name for t in await mcp.list_tools()}
-    kitchen_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EXPLORATION_TOOLS
-    assert kitchen_gated.issubset(tools_before), (
+    assert KITCHEN_GATED_TOOLS.issubset(tools_before), (
         "kitchen tools should be visible after pre-reveal enable"
     )
 
@@ -245,7 +236,7 @@ async def test_open_kitchen_after_close_restores_pre_revealed_tools(tmp_path, mo
     assert mock_ctx.gate_infrastructure_ready is False
 
     tools_after_close = {t.name for t in await mcp.list_tools()}
-    assert not kitchen_gated.intersection(tools_after_close), (
+    assert not KITCHEN_GATED_TOOLS.intersection(tools_after_close), (
         "kitchen tools should be hidden after close_kitchen"
     )
 
@@ -274,7 +265,7 @@ async def test_open_kitchen_after_close_restores_pre_revealed_tools(tmp_path, mo
 
     # Pre-revealed tools must be visible again — this is the assertion that fails before the fix.
     tools_after_reopen = {t.name for t in await mcp.list_tools()}
-    assert kitchen_gated.issubset(tools_after_reopen), (
+    assert KITCHEN_GATED_TOOLS.issubset(tools_after_reopen), (
         "kitchen tools should be visible after open_kitchen restores pre-revealed tags"
     )
 

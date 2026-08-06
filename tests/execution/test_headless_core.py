@@ -1,6 +1,7 @@
 """Tests for execution/headless/ extracted helper functions."""
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -9,6 +10,8 @@ import pytest
 from autoskillit.core.types import (
     CONTEXT_EXHAUSTION_MARKER,
     ChannelConfirmation,
+    ChildExecutionIdentity,
+    ExecutionIdentity,
     RetryReason,
     SkillResult,
     SubprocessResult,
@@ -67,6 +70,51 @@ def _make_locator_backend(project_log_dir_return: Path) -> Mock:
     backend = Mock()
     backend.session_locator.return_value.project_log_dir.return_value = project_log_dir_return
     return backend
+
+
+def test_effective_execution_identity_dispatches_through_backend_protocol() -> None:
+    from autoskillit.execution.headless._headless_launch import (
+        _bind_effective_execution_identity,
+    )
+
+    requested = ExecutionIdentity(
+        requested_parent_backend="codex",
+        children=(
+            ChildExecutionIdentity(
+                task_id="task-a",
+                role="semantic-code-navigator",
+                plan_digest="plan-a",
+                definition_digest="definition-a",
+            ),
+        ),
+    )
+    effective = replace(
+        requested,
+        effective_parent_backend="codex",
+        parent_session_id="parent-session",
+    )
+    backend = Mock()
+    backend.resolve_effective_execution_identity.return_value = effective
+    skill_result = SkillResult.crashed(RuntimeError("test"), session_id="parent-session")
+
+    bound = _bind_effective_execution_identity(skill_result, backend, requested)
+
+    backend.resolve_effective_execution_identity.assert_called_once_with(
+        requested=requested,
+        session_id="parent-session",
+    )
+    assert bound.execution_identity is effective
+
+
+def test_neutral_backend_preserves_requested_execution_identity() -> None:
+    requested = ExecutionIdentity(requested_parent_backend="claude-code")
+
+    effective = ClaudeCodeBackend().resolve_effective_execution_identity(
+        requested=requested,
+        session_id="parent-session",
+    )
+
+    assert effective is requested
 
 
 class TestSessionLogDir:

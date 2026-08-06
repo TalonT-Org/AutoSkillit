@@ -21,10 +21,12 @@ from autoskillit.core import (
     AgentDef,
     BackendCapabilities,
     BackendConventions,
+    ChildExecutionIdentity,
     CmdSpec,
     CodexAgentProjectionDef,
     CodingAgentBackend,
     EnvPolicy,
+    ExecutionIdentity,
     OutputFormat,
     ResultParser,
     SessionCheckpoint,
@@ -83,6 +85,48 @@ class TestCodexBackend:
 
     def test_name_property(self) -> None:
         assert CodexBackend().name == AGENT_BACKEND_CODEX
+
+    def test_effective_execution_identity_uses_codex_rollout_authority(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+
+        requested = ExecutionIdentity(
+            requested_parent_backend=AGENT_BACKEND_CODEX,
+            children=(
+                ChildExecutionIdentity(
+                    task_id="task-a",
+                    role="semantic-code-navigator",
+                    plan_digest="plan-a",
+                    definition_digest="definition-a",
+                ),
+            ),
+        )
+        effective = ExecutionIdentity(effective_parent_backend=AGENT_BACKEND_CODEX)
+        rollout_path = Path("rollout-parent.jsonl")
+        locate_session = Mock(return_value=rollout_path)
+        locator = SimpleNamespace(locate_session=locate_session)
+        extract_identity = Mock(return_value=effective)
+        monkeypatch.setattr(CodexBackend, "session_locator", lambda _self: locator)
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.extract_codex_execution_identity",
+            extract_identity,
+        )
+
+        observed = CodexBackend().resolve_effective_execution_identity(
+            requested=requested,
+            session_id="parent-session",
+        )
+
+        locate_session.assert_called_once_with("parent-session")
+        extract_identity.assert_called_once_with(
+            rollout_path,
+            requested=requested,
+            child_rollout_resolver=locate_session,
+        )
+        assert observed is effective
 
     def test_capabilities_channel_b_false(self) -> None:
         assert CodexBackend().capabilities.channel_b_capable is False
@@ -1983,6 +2027,42 @@ class TestCodexBackendSetupSessionDir:
         assert {
             relative: (self.session_dir / relative).read_text() for relative in before
         } == before
+
+    def test_refresh_explorer_binding_env_chains_rollback_failure_from_install_failure(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        definitions = self._explorer_definitions()
+        first = self._explorer_binding_envs(definitions, generation="first")
+        second = self._explorer_binding_envs(definitions, generation="second")
+        self._write_all_source_files()
+        CodexBackend().setup_session_dir(
+            self.session_dir,
+            parent_sandbox_mode="read-only",
+            agent_defs=definitions,
+            explorer_binding_env=first,
+        )
+        real_replace = os.replace
+
+        def fail_install_and_restore(src: Path | str, dst: Path | str) -> None:
+            source = Path(src)
+            destination = Path(dst)
+            if source.name == "session" and destination == self.session_dir:
+                raise OSError("simulated staged install failure")
+            if source.name == "previous-session" and destination == self.session_dir:
+                raise OSError("simulated rollback failure")
+            real_replace(src, dst)
+
+        monkeypatch.setattr(os, "replace", fail_install_and_restore)
+
+        with pytest.raises(OSError, match="simulated rollback failure") as exc_info:
+            refresh_explorer_binding_env(self.session_dir, second)
+
+        assert isinstance(exc_info.value.__cause__, OSError)
+        assert "simulated staged install failure" in str(exc_info.value.__cause__)
+        recovery_roots = tuple(self.session_dir.parent.glob(".autoskillit-explorer-refresh-*"))
+        assert len(recovery_roots) == 1
+        assert (recovery_roots[0] / "previous-session").is_dir()
 
     @pytest.mark.parametrize("operation", ["refresh", "scrub"])
     def test_persisted_ambient_mcp_server_fails_closed_before_projection_rewrite(

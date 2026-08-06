@@ -73,7 +73,9 @@ class TestExecutionTypesNotInResults:
             BackendAuthorityKind,
             BackendPinResolution,
             ChildExecutionIdentity,
+            ChildExecutionIdentityDict,
             ExecutionIdentity,
+            ExecutionIdentityDict,
         )
         from autoskillit.core.types._type_execution_identity import __all__ as identity_all
 
@@ -86,7 +88,9 @@ class TestExecutionTypesNotInResults:
             "BackendAuthorityKind",
             "BackendPinResolution",
             "ChildExecutionIdentity",
+            "ChildExecutionIdentityDict",
             "ExecutionIdentity",
+            "ExecutionIdentityDict",
         }
         children = (
             ChildExecutionIdentity("b", "role", "plan", "definition"),
@@ -96,3 +100,25 @@ class TestExecutionTypesNotInResults:
             child["task_id"]
             for child in ExecutionIdentity(children=children).to_dict()["children"]
         ] == ["a", "b"]
+        assert (
+            get_type_hints(ChildExecutionIdentity.to_dict)["return"] is ChildExecutionIdentityDict
+        )
+        assert get_type_hints(ExecutionIdentity.to_dict)["return"] is ExecutionIdentityDict
+        assert (
+            get_type_hints(ExecutionIdentityDict)["children"] == list[ChildExecutionIdentityDict]
+        )
+
+    def test_execution_identity_typed_dicts_match_persisted_keys(self):
+        from autoskillit.core import (
+            ChildExecutionIdentity,
+            ChildExecutionIdentityDict,
+            ExecutionIdentity,
+            ExecutionIdentityDict,
+        )
+
+        child = ChildExecutionIdentity("task", "role", "plan", "definition")
+        identity = ExecutionIdentity(children=(child,))
+
+        assert set(child.to_dict()) == set(ChildExecutionIdentityDict.__annotations__)
+        assert set(identity.to_dict()) == set(ExecutionIdentityDict.__annotations__)
+        assert identity.to_dict()["children"] == [child.to_dict()]

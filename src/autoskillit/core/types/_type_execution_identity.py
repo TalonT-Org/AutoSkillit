@@ -9,13 +9,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import NamedTuple
+from typing import NamedTuple, TypedDict
 
 __all__ = [
     "BackendAuthorityKind",
     "BackendPinResolution",
     "ChildExecutionIdentity",
+    "ChildExecutionIdentityDict",
     "ExecutionIdentity",
+    "ExecutionIdentityDict",
 ]
 
 
@@ -35,6 +37,38 @@ class BackendPinResolution(NamedTuple):
     tier: str
     key_path: str
     kind: BackendAuthorityKind | None = None
+
+
+class ChildExecutionIdentityDict(TypedDict):
+    """Stable persistence schema for one child execution identity."""
+
+    task_id: str
+    role: str
+    plan_digest: str
+    definition_digest: str
+    requested_backend: str
+    effective_backend: str
+    requested_model: str
+    effective_model: str
+    requested_effort: str
+    effective_effort: str
+    session_id: str
+
+
+class ExecutionIdentityDict(TypedDict):
+    """Stable persistence schema for a parent execution identity."""
+
+    requested_parent_backend: str
+    effective_parent_backend: str
+    requested_parent_model: str
+    effective_parent_model: str
+    requested_parent_effort: str
+    effective_parent_effort: str
+    cli_version: str
+    override_tier: str
+    override_key_path: str
+    parent_session_id: str
+    children: list[ChildExecutionIdentityDict]
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +97,7 @@ class ChildExecutionIdentity:
         if not self.definition_digest:
             raise ValueError("child execution identity requires a definition digest")
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> ChildExecutionIdentityDict:
         """Return the stable child persistence representation."""
         return {
             "task_id": self.task_id,
@@ -114,7 +148,7 @@ class ExecutionIdentity:
         """Return the explicit zero-value identity used by non-specialized sessions."""
         return cls()
 
-    def to_dict(self) -> dict[str, object]:
+    def to_dict(self) -> ExecutionIdentityDict:
         """Return the stable persistence representation."""
         return {
             "requested_parent_backend": self.requested_parent_backend,

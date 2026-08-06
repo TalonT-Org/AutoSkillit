@@ -1,4 +1,4 @@
-"""Canonical bundled-agent definitions and Codex explorer identity policy."""
+"""Canonical bundled-agent definitions and catalog loading authority."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .io import load_yaml
+from .paths import pkg_root
 from .types import (
     CODEX_EFFORT_MAPPING,
     CODEX_MODEL_ALIASES,
@@ -20,23 +21,31 @@ from .types import (
 
 __all__ = [
     "AGENT_DEFINITION_DIGEST_DOMAIN",
+    "BUNDLED_EXPLORER_ROLES",
     "CODEX_EXPLORER_IDENTITY",
+    "REPOSITORY_IMPACT_PROFILER_ROLE",
+    "SEMANTIC_CODE_NAVIGATOR_ROLE",
     "AgentDef",
     "AgentDefinitionError",
     "CodexAgentProjectionDef",
     "agent_definition_digest",
     "load_agent_definition",
     "load_agent_definitions",
+    "load_bundled_agent_definitions",
     "normalize_codex_cli_version",
 ]
 
 
 AGENT_DEFINITION_DIGEST_DOMAIN = "autoskillit.agent-definition.v1"
 CODEX_EXPLORER_IDENTITY: tuple[str, str] = ("gpt-5.6-luna", "max")
+SEMANTIC_CODE_NAVIGATOR_ROLE: str = "semantic-code-navigator"
+REPOSITORY_IMPACT_PROFILER_ROLE: str = "repository-impact-profiler"
+BUNDLED_EXPLORER_ROLES: frozenset[str] = frozenset(
+    {SEMANTIC_CODE_NAVIGATOR_ROLE, REPOSITORY_IMPACT_PROFILER_ROLE}
+)
 _AGENT_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 _CODEX_CLI_VERSION_RE = re.compile(r"(?:codex-cli )?(?P<version>[0-9]+\.[0-9]+\.[0-9]+)")
 _READ_ONLY_AGENT_TOOLS = frozenset({"Read", "Grep", "Glob", "LSP"})
-_LUNA_READ_ONLY_PROJECTION = (*CODEX_EXPLORER_IDENTITY, "read-only")
 _CODEX_DISABLEABLE_FEATURES = (
     "apps",
     "apps_mcp_path_override",
@@ -157,29 +166,6 @@ class AgentDef:
         if "'''" in self.body:
             raise AgentDefinitionError("agent body cannot contain TOML triple single quotes")
 
-    @staticmethod
-    def validate_injected_parent_policy(
-        agent_defs: tuple[AgentDef, ...] | None,
-        parent_sandbox_mode: str,
-    ) -> None:
-        """Reject a parent policy Codex would apply over the Phase A probe role."""
-        if agent_defs is None:
-            return
-        requires_read_only_parent = any(
-            (
-                definition.codex.model,
-                definition.codex.reasoning_effort,
-                definition.codex.sandbox_mode,
-            )
-            == _LUNA_READ_ONLY_PROJECTION
-            for definition in agent_defs
-        )
-        if requires_read_only_parent and parent_sandbox_mode != "read-only":
-            raise ValueError(
-                "gpt-5.6-luna/max/read-only agent projection requires "
-                "parent_sandbox_mode='read-only'"
-            )
-
 
 def _required_text(meta: dict[str, Any], key: str) -> str:
     value = meta.get(key)
@@ -297,6 +283,11 @@ def load_agent_definitions(agents_dir: Path) -> tuple[AgentDef, ...]:
     if duplicates:
         raise AgentDefinitionError(f"duplicate agent names: {duplicates}")
     return definitions
+
+
+def load_bundled_agent_definitions() -> tuple[AgentDef, ...]:
+    """Load the canonical agent catalog bundled with this package."""
+    return load_agent_definitions(pkg_root() / "agents")
 
 
 def agent_definition_digest(definition: AgentDef) -> str:

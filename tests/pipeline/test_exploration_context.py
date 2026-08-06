@@ -8,8 +8,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.pipeline as pipeline_module
 import autoskillit.pipeline.exploration_context as exploration_context_module
-from autoskillit.core import RepositoryIdentity, RepositorySnapshot
+from autoskillit.core import ExplorationQuerySpec, RepositoryIdentity, RepositorySnapshot
 from autoskillit.pipeline.exploration_context import (
     EXPLORATION_AUTHORITY_PATH_ENV,
     EXPLORATION_CAPABILITY_ENV,
@@ -23,13 +24,16 @@ from autoskillit.pipeline.exploration_context import (
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
 
-def test_raw_exploration_environment_names_are_internal() -> None:
-    assert {
+def test_exploration_environment_names_are_public_pipeline_contracts() -> None:
+    environment_names = {
         "EXPLORATION_AUTHORITY_PATH_ENV",
         "EXPLORATION_CAPABILITY_ENV",
         "EXPLORATION_ROLE_ENV",
         "EXPLORATION_SESSION_ENV",
-    }.isdisjoint(exploration_context_module.__all__)
+    }
+
+    assert environment_names <= set(exploration_context_module.__all__)
+    assert environment_names <= set(pipeline_module.__all__)
 
 
 def _snapshot_service() -> MagicMock:
@@ -531,6 +535,58 @@ def test_launch_authority_denies_a_different_process_cwd(
 
     monkeypatch.chdir(execution_cwd)
     assert child.validate_launch_environment() is True
+
+
+def test_submit_failure_is_fail_closed_and_logs_only_bounded_safe_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    project_dir = tmp_path / "project"
+    execution_cwd = tmp_path / "sterile-agent-cwd"
+    authority_home = tmp_path / "generated-session"
+    for path in (project_dir, execution_cwd, authority_home):
+        path.mkdir()
+    service = _snapshot_service()
+    store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+        trusted_root=project_dir,
+        service=service,
+    )
+    binding = store.bind_launch(
+        owner_id="uid:1000",
+        role="semantic-code-navigator",
+        session_id="session-a",
+        cwd=execution_cwd,
+        repository_root=project_dir,
+        source_identity="bundled:definition-digest",
+        authority_home=authority_home,
+    )
+    for key, value in binding.provider_extras().items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.chdir(execution_cwd)
+    failure_reason = (
+        f"collector rejected capability {binding.capability} at {binding.authority_path}: "
+        + "x" * 1_024
+    )
+    service.collect.side_effect = ValueError(failure_reason)
+    logger = MagicMock()
+    monkeypatch.setattr(exploration_context_module, "logger", logger)
+
+    status, page = store.submit_from_launch_environment(
+        query=ExplorationQuerySpec("needle"),
+        page_size=10,
+    )
+
+    assert status is CapabilityResolutionStatus.INVALID
+    assert page is None
+    logger.warning.assert_called_once()
+    (event,) = logger.warning.call_args.args
+    fields = logger.warning.call_args.kwargs
+    assert event == "exploration_submit_failed"
+    assert fields["exception_type"] == "ValueError"
+    assert len(fields["reason"]) < 600
+    assert binding.capability not in fields["reason"]
+    assert str(binding.authority_path) not in fields["reason"]
+    assert set(fields) == {"exception_type", "reason"}
 
 
 @pytest.mark.parametrize("snapshot_field", ("tampered", "missing"))

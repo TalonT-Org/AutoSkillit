@@ -58,6 +58,7 @@ from autoskillit.core import (
     CmdSpec,
     CookSessionHandle,
     ExecutableLaunchBinding,
+    ExecutionIdentity,
     ExplorationDispatchRenderer,
     HookTrustPolicy,
     ManagedHeadlessSessionLineageRef,
@@ -81,8 +82,7 @@ from autoskillit.core import (
     default_log_dir,
     extract_skill_name,
     get_logger,
-    load_agent_definitions,
-    pkg_root,
+    load_bundled_agent_definitions,
 )
 from autoskillit.execution.backends._backend_cmd_builder_base import (
     SHARED_BASELINE_ENV,
@@ -110,6 +110,7 @@ from autoskillit.execution.backends._codex.explorer_projection import (
     _canonical_explorer_mcp_transport,
     _explorer_mcp_projection,
     _render_parent_explorer_config,
+    _validate_injected_explorer_parent_policy,
     _validated_explorer_binding_env,
     _validated_explorer_binding_envs,
 )
@@ -117,6 +118,9 @@ from autoskillit.execution.backends._codex_config import (
     CODEX_RECIPE_DELIVERY_BUDGET,
     _format_toml_value,
     ensure_codex_mcp_registered,
+)
+from autoskillit.execution.backends._codex_execution_identity import (
+    extract_codex_execution_identity,
 )
 from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
 from autoskillit.execution.backends._codex_prelaunch import codex_prelaunch_transaction
@@ -845,7 +849,7 @@ def _validate_inert_rollout_paths(
 
 
 def _bundled_agent_definitions() -> tuple[AgentDef, ...]:
-    return load_agent_definitions(pkg_root() / "agents")
+    return load_bundled_agent_definitions()
 
 
 def _canonical_codex_model_effort(
@@ -1150,7 +1154,6 @@ def _atomically_replace_explorer_projection(
     )
     staged_session = stage_root / "session"
     backup_session = stage_root / "previous-session"
-    swapped = False
     moved_original = False
     try:
         shutil.copytree(session_dir, staged_session, symlinks=True)
@@ -1161,15 +1164,17 @@ def _atomically_replace_explorer_projection(
         moved_original = True
         try:
             os.replace(staged_session, session_dir)
-            swapped = True
-        except OSError:
-            os.replace(backup_session, session_dir)
+        except OSError as install_error:
+            try:
+                os.replace(backup_session, session_dir)
+            except OSError as restore_error:
+                raise restore_error from install_error
             moved_original = False
             raise
+        moved_original = False
     finally:
-        if not swapped and moved_original and backup_session.exists() and not session_dir.exists():
-            os.replace(backup_session, session_dir)
-        shutil.rmtree(stage_root, ignore_errors=True)
+        if not moved_original:
+            shutil.rmtree(stage_root, ignore_errors=True)
 
 
 def refresh_explorer_binding_env(
@@ -1451,6 +1456,25 @@ class CodexBackend(BackendCmdBuilderBase):
     def session_locator(self) -> CodexSessionLocator:
         return CodexSessionLocator(
             store_root=default_log_dir(),
+        )
+
+    def resolve_effective_execution_identity(
+        self,
+        *,
+        requested: ExecutionIdentity,
+        session_id: str,
+    ) -> ExecutionIdentity:
+        """Resolve effective parent and child identity from Codex rollout records."""
+        if not requested.children or not session_id:
+            return requested
+        locator = self.session_locator()
+        parent_rollout = locator.locate_session(session_id)
+        if parent_rollout is None:
+            return requested
+        return extract_codex_execution_identity(
+            parent_rollout,
+            requested=requested,
+            child_rollout_resolver=locator.locate_session,
         )
 
     def write_tool_names(self) -> frozenset[str]:
@@ -2086,7 +2110,7 @@ class CodexBackend(BackendCmdBuilderBase):
         if explorer_binding_envs and parent_sandbox_mode != "read-only":
             raise ValueError("explorer shared-principal projection requires a read-only parent")
         policy_definitions = definitions if explorer_binding_envs else agent_defs
-        AgentDef.validate_injected_parent_policy(policy_definitions, parent_sandbox_mode)
+        _validate_injected_explorer_parent_policy(policy_definitions, parent_sandbox_mode)
         _preflight_agent_projection(session_dir, definitions)
         rendered_parent_config = _render_parent_sandbox_config(
             config_path.read_text(encoding="utf-8"),

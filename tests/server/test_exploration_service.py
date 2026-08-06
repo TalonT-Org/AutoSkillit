@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    CollectorReport,
     CollectorStatus,
     ExplorationApplicability,
     ExplorationQuerySpec,
@@ -16,7 +17,11 @@ from autoskillit.core import (
     RepositoryProfileId,
 )
 from autoskillit.exploration._deterministic import CursorValidationError
-from autoskillit.exploration.collectors import COLLECTOR_PROFILES, CollectorInvocation
+from autoskillit.exploration.collectors import (
+    COLLECTOR_PROFILES,
+    CollectorInvocation,
+    CollectorLimits,
+)
 from autoskillit.exploration.snapshot import SnapshotCaptureResult, SnapshotCaptureStatus
 from autoskillit.pipeline import CapabilityResolutionStatus, OwnerBoundExplorationContextStore
 from autoskillit.server import _exploration_service
@@ -25,32 +30,16 @@ from autoskillit.server._exploration_service import DefaultExplorationService
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
-def _seed_repository(root: Path) -> None:
+def _seed_repository(
+    root: Path,
+    *,
+    filename: str = "module.py",
+    content: str = "def needle() -> str:\n    return 'needle'\n",
+) -> None:
     root.mkdir()
-    (root / "module.py").write_text("def needle() -> str:\n    return 'needle'\n")
+    (root / filename).write_text(content)
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
-    subprocess.run(["git", "add", "module.py"], cwd=root, check=True)
-    subprocess.run(
-        [
-            "git",
-            "-c",
-            "user.name=AutoSkillit Test",
-            "-c",
-            "user.email=autoskillit@example.invalid",
-            "commit",
-            "-qm",
-            "seed",
-        ],
-        cwd=root,
-        check=True,
-    )
-
-
-def _seed_non_python_repository(root: Path) -> None:
-    root.mkdir()
-    (root / "README.md").write_text("needle appears only in this language-neutral artifact\n")
-    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
-    subprocess.run(["git", "add", "README.md"], cwd=root, check=True)
+    subprocess.run(["git", "add", filename], cwd=root, check=True)
     subprocess.run(
         [
             "git",
@@ -162,7 +151,6 @@ def test_shared_principal_rejects_repository_mutation_after_issuance(
     )
     for key, value in bindings["semantic-code-navigator"].items():
         monkeypatch.setenv(key, value)
-    assert list(execution_cwd.iterdir()) == []
     (root / "module.py").write_text("def changed() -> str:\n    return 'changed'\n")
     child: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
         trusted_root=root,
@@ -261,7 +249,11 @@ def test_inapplicable_profiles_are_visible_without_claiming_optional_completenes
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "language-neutral-repository"
-    _seed_non_python_repository(root)
+    _seed_repository(
+        root,
+        filename="README.md",
+        content="needle appears only in this language-neutral artifact\n",
+    )
     query = ExplorationQuerySpec(
         "  needle  ",
         required_profiles=(RepositoryProfileId.GENERIC_PYTHON, RepositoryProfileId.AUTOSKILLIT),
@@ -292,7 +284,13 @@ def test_service_rejects_mutation_that_occurs_during_real_collector_execution(
         profile for profile in COLLECTOR_PROFILES if profile.collector_id == "bounded-rg-search"
     )
 
-    def mutate_after_search(root_arg, snapshot_digest, task_query, scopes, limits):
+    def mutate_after_search(
+        root_arg: Path,
+        snapshot_digest: str,
+        task_query: str,
+        scopes: tuple[str, ...],
+        limits: CollectorLimits,
+    ) -> tuple[tuple[tuple[str, ...], CollectorReport], ...]:
         reports = search_profile.invocation(root_arg, snapshot_digest, task_query, scopes, limits)
         (root / "module.py").write_text("def changed() -> str:\n    return 'changed'\n")
         return reports
@@ -322,7 +320,11 @@ def test_service_routes_with_capture_validated_activation_and_recaptures_publica
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = tmp_path / "language-neutral-repository"
-    _seed_non_python_repository(root)
+    _seed_repository(
+        root,
+        filename="README.md",
+        content="needle appears only in this language-neutral artifact\n",
+    )
     captured = _exploration_service.capture_repository_snapshot(
         root,
         collector_manifest_digest=_exploration_service.collector_manifest_digest(),

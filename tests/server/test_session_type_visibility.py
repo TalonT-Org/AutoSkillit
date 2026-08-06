@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
+from autoskillit.core import EXPLORATION_TOOLS, KITCHEN_GATED_TOOLS
 
-EXPLORATION_TOOLS = frozenset(
-    {"submit_exploration_query", "get_exploration_page", "resume_exploration_context"}
-)
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
 @pytest.mark.feature("fleet")
@@ -460,9 +460,6 @@ class TestSessionTypeVisibility:
         from unittest.mock import AsyncMock, MagicMock, patch
 
         from autoskillit.core import (
-            FLEET_DISPATCH_TOOLS,
-            FLEET_TOOLS,
-            GATED_TOOLS,
             HEADLESS_ENV_VAR,
         )
         from autoskillit.pipeline.gate import DefaultGateState
@@ -487,8 +484,7 @@ class TestSessionTypeVisibility:
 
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
-        kitchen_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EXPLORATION_TOOLS
-        assert kitchen_gated.issubset(tool_names), (
+        assert KITCHEN_GATED_TOOLS.issubset(tool_names), (
             "All kitchen-tagged gated tools should be visible for non-notification backend"
         )
 
@@ -615,7 +611,7 @@ class TestExplorerBindingVisibility:
     async def test_unverified_explorer_environment_reveals_no_broker_tools(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        tmp_path,
+        tmp_path: Path,
         role: str,
     ) -> None:
         from autoskillit.server import _apply_session_type_visibility, mcp
@@ -636,7 +632,7 @@ class TestExplorerBindingVisibility:
     async def test_verified_explorer_authority_reveals_only_broker_tools(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        tmp_path,
+        tmp_path: Path,
     ) -> None:
         import asyncio
         from types import SimpleNamespace
@@ -707,7 +703,7 @@ class TestExplorerBindingVisibility:
     async def test_missing_explorer_authority_fails_closed(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        tmp_path,
+        tmp_path: Path,
     ) -> None:
         from types import SimpleNamespace
         from unittest.mock import AsyncMock

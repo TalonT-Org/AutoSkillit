@@ -11,6 +11,7 @@ from typing import Any
 
 from autoskillit.core import (
     CODEX_EXPLORER_IDENTITY,
+    SEMANTIC_CODE_NAVIGATOR_ROLE,
     AgentDef,
     CodexAgentProjectionDef,
     agent_definition_digest,
@@ -18,16 +19,16 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends._probe_cache import PROBE_POLICY_IDENTITY
 
-EXPLORER_ATTESTATION_SCHEMA_VERSION = 6
+EXPLORER_ATTESTATION_SCHEMA_VERSION = 7
 EXPLORER_PROBE_CONTRACT = "generated-codex-child-v7"
-EXPLORER_ATTESTATION_FILENAME = "codex-explorer-conformance-v6.json"
+EXPLORER_ATTESTATION_FILENAME = "codex-explorer-conformance-v7.json"
 EXPLORER_ATTESTATION_SHA256_FILENAME = f"{EXPLORER_ATTESTATION_FILENAME}.sha256"
 EXPLORER_ATTESTATION_MAX_AGE_SECONDS = 24 * 60 * 60
 EXPLORER_ATTESTATION_FUTURE_SKEW_SECONDS = 5 * 60
 EXPLORER_PARENT_MODEL = "gpt-5.6-sol"
 EXPLORER_MODEL, EXPLORER_REASONING_EFFORT = CODEX_EXPLORER_IDENTITY
 EXPLORER_SANDBOX_MODE = "read-only"
-EXPLORER_PROBE_ROLE = "semantic-code-navigator"
+EXPLORER_PROBE_ROLE = SEMANTIC_CODE_NAVIGATOR_ROLE
 EXPLORER_PROBE_TASK_NAME = "capability_probe"
 _LUNA_BUNDLED_TOOL_MODE = "code_mode_only"
 _LUNA_EFFECTIVE_TOOL_MODE = "direct"
@@ -130,10 +131,10 @@ class ExplorerConformanceAttestation:
     parent_thread_id: str
     child_thread_id: str
     parent_model: str
-    model: str
-    reasoning_effort: str
+    child_model: str
+    child_reasoning_effort: str
     parent_sandbox_mode: str
-    sandbox_mode: str
+    child_sandbox_mode: str
     approval_policy: str
     network_policy: str
     native_target_execution_isolation: str
@@ -320,10 +321,10 @@ def validate_explorer_attestation(
         "parent_thread_id": expected_parent_thread_id,
         "child_thread_id": expected_child_thread_id,
         "parent_model": EXPLORER_PARENT_MODEL,
-        "model": EXPLORER_MODEL,
-        "reasoning_effort": EXPLORER_REASONING_EFFORT,
+        "child_model": EXPLORER_MODEL,
+        "child_reasoning_effort": EXPLORER_REASONING_EFFORT,
         "parent_sandbox_mode": EXPLORER_SANDBOX_MODE,
-        "sandbox_mode": EXPLORER_SANDBOX_MODE,
+        "child_sandbox_mode": EXPLORER_SANDBOX_MODE,
         "approval_policy": "never",
         "network_policy": "restricted",
         "native_target_execution_isolation": expected_native_target_execution_isolation,
@@ -431,10 +432,10 @@ def validate_explorer_release_readiness(
         "probe_contract": EXPLORER_PROBE_CONTRACT,
         "cache_miss": True,
         "parent_model": EXPLORER_PARENT_MODEL,
-        "model": EXPLORER_MODEL,
-        "reasoning_effort": EXPLORER_REASONING_EFFORT,
+        "child_model": EXPLORER_MODEL,
+        "child_reasoning_effort": EXPLORER_REASONING_EFFORT,
         "parent_sandbox_mode": EXPLORER_SANDBOX_MODE,
-        "sandbox_mode": EXPLORER_SANDBOX_MODE,
+        "child_sandbox_mode": EXPLORER_SANDBOX_MODE,
         "approval_policy": "never",
         "network_policy": "restricted",
         "tool_surface_digest": EXPLORER_TOOL_SURFACE_DIGEST,

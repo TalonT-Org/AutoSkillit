@@ -13,8 +13,7 @@ from autoskillit.core import (
     ExplorationVectorDef,
     ExplorationVectorDisposition,
     agent_definition_digest,
-    load_agent_definitions,
-    pkg_root,
+    load_bundled_agent_definitions,
 )
 
 _PARENT_ROUTING_INSTRUCTIONS = (
@@ -30,9 +29,7 @@ _PARENT_ROUTING_INSTRUCTIONS = (
 
 
 def _canonical_definitions(vectors: tuple[ExplorationVectorDef, ...]) -> dict[str, AgentDef]:
-    definitions = {
-        definition.name: definition for definition in load_agent_definitions(pkg_root() / "agents")
-    }
+    definitions = {definition.name: definition for definition in load_bundled_agent_definitions()}
     roles: set[str] = set()
     for vector in vectors:
         if vector.role is None:

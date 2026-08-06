@@ -22,6 +22,7 @@ from ._type_backend import (
 )
 from ._type_checkpoint import SessionCheckpoint
 from ._type_enums import ObserverStatus, OutputFormat
+from ._type_execution_identity import ExecutionIdentity
 from ._type_exploration import ExplorationRouterPlan
 from ._type_native_shell_capture import (
     ManagedHeadlessSessionLineageRef,
@@ -212,6 +213,15 @@ class CodingAgentBackend(Protocol):
     def env_policy(self) -> EnvPolicy: ...
 
     def session_locator(self) -> SessionLocator: ...
+
+    def resolve_effective_execution_identity(
+        self,
+        *,
+        requested: ExecutionIdentity,
+        session_id: str,
+    ) -> ExecutionIdentity:
+        """Resolve backend-owned effective identity from authoritative session evidence."""
+        ...
 
     def write_tool_names(self) -> frozenset[str]: ...
 

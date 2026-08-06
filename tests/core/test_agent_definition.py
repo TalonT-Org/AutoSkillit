@@ -8,30 +8,30 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    BUNDLED_EXPLORER_ROLES,
     CODEX_EXPLORER_IDENTITY,
+    EXPLORATION_TOOLS,
+    REPOSITORY_IMPACT_PROFILER_ROLE,
+    SEMANTIC_CODE_NAVIGATOR_ROLE,
     AgentDef,
     AgentDefinitionError,
     CodexAgentProjectionDef,
     agent_definition_digest,
     load_agent_definition,
-    load_agent_definitions,
+    load_bundled_agent_definitions,
     pkg_root,
 )
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
-_EXPLORATION_BROKER_TOOLS = (
-    "mcp__autoskillit__submit_exploration_query",
-    "mcp__autoskillit__get_exploration_page",
-    "mcp__autoskillit__resume_exploration_context",
-)
+_EXPLORATION_BROKER_TOOLS = frozenset(f"mcp__autoskillit__{tool}" for tool in EXPLORATION_TOOLS)
 
 
 @pytest.mark.parametrize(
     ("name", "role_boundary"),
     [
-        ("semantic-code-navigator", "structural and semantic"),
-        ("repository-impact-profiler", "registrations, configuration"),
+        (SEMANTIC_CODE_NAVIGATOR_ROLE, "structural and semantic"),
+        (REPOSITORY_IMPACT_PROFILER_ROLE, "registrations, configuration"),
     ],
 )
 def test_specialized_explorers_are_terminal_luna_broker_roles(
@@ -39,7 +39,7 @@ def test_specialized_explorers_are_terminal_luna_broker_roles(
 ) -> None:
     definition = load_agent_definition(pkg_root() / "agents" / f"{name}.md")
 
-    assert definition.tools == _EXPLORATION_BROKER_TOOLS
+    assert frozenset(definition.tools) == _EXPLORATION_BROKER_TOOLS
     assert definition.model == "sonnet"
     assert definition.codex.model == "gpt-5.6-luna"
     assert definition.codex.reasoning_effort == "max"
@@ -56,8 +56,9 @@ def test_specialized_explorers_are_terminal_luna_broker_roles(
 
 
 def test_bundled_agent_catalog_loads_with_unique_digests() -> None:
-    definitions = load_agent_definitions(pkg_root() / "agents")
+    definitions = load_bundled_agent_definitions()
     assert definitions
+    assert BUNDLED_EXPLORER_ROLES <= {definition.name for definition in definitions}
     assert len({definition.name for definition in definitions}) == len(definitions)
     assert len({agent_definition_digest(definition) for definition in definitions}) == len(
         definitions

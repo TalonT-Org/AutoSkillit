@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Generic, Protocol, TypeVar, cast, runtime_checkable
 
 from autoskillit.core import (
+    BUNDLED_EXPLORER_ROLES,
     CapabilityResolution,
     CapabilityResolutionStatus,
     CompletenessReport,
@@ -31,7 +32,9 @@ from autoskillit.core import (
     ExplorationQuerySpec,
     RepositorySnapshot,
     canonical_json_bytes,
+    get_logger,
     read_versioned_json,
+    truncate_text,
     write_versioned_json,
 )
 
@@ -39,7 +42,11 @@ __all__ = [
     "CapabilityResolution",
     "CapabilityResolutionStatus",
     "EXPLORER_ROLE_NAMES",
+    "EXPLORATION_AUTHORITY_PATH_ENV",
+    "EXPLORATION_CAPABILITY_ENV",
     "EXPLORATION_PRINCIPAL_ROLE",
+    "EXPLORATION_ROLE_ENV",
+    "EXPLORATION_SESSION_ENV",
     "ExplorationLaunchBinding",
     "ExplorationContext",
     "ExplorationContextStoreProtocol",
@@ -57,11 +64,14 @@ _AUTHORITY_SCHEMA_VERSION = 1
 _AUTHORITY_FILENAME = ".autoskillit-exploration-authority.json"
 _AUTHORITY_SIGNATURE_DOMAIN = b"autoskillit.exploration.launch-authority.v1\x00"
 _SHARED_SOURCE_IDENTITY_DOMAIN = b"autoskillit.exploration.shared-source.v1\x00"
+_MAX_SUBMIT_FAILURE_REASON_LENGTH = 512
+
+logger = get_logger(__name__)
 
 # These names are an intentionally narrow launch adapter contract.  Codex may
 # preserve them while materializing an explorer child, but never mint or alter
 # their authority.
-EXPLORER_ROLE_NAMES = frozenset({"semantic-code-navigator", "repository-impact-profiler"})
+EXPLORER_ROLE_NAMES = BUNDLED_EXPLORER_ROLES
 EXPLORATION_CAPABILITY_ENV = "AUTOSKILLIT_EXPLORATION_CAPABILITY"
 EXPLORATION_ROLE_ENV = "AUTOSKILLIT_EXPLORATION_ROLE"
 EXPLORATION_SESSION_ENV = "AUTOSKILLIT_EXPLORATION_SESSION_ID"
@@ -103,6 +113,31 @@ class _ReopenedLaunchAuthority:
     snapshot_digest: str
     generation: str
     expires_at: float
+
+
+def _safe_submit_failure_reason(
+    exc: RuntimeError | ValueError,
+    *,
+    capability: str,
+    authority: _ReopenedLaunchAuthority,
+) -> str:
+    """Return a bounded diagnostic with all launch-authority material removed."""
+    reason = str(exc)
+    sensitive_values = (
+        capability,
+        str(authority.authority_path),
+        authority.session_id,
+        str(authority.cwd),
+        str(authority.repository_root),
+        authority.source_identity,
+        authority.snapshot_digest,
+        authority.generation,
+        str(authority.expires_at),
+    )
+    for value in sensitive_values:
+        if value:
+            reason = reason.replace(value, "[redacted]")
+    return truncate_text(reason, _MAX_SUBMIT_FAILURE_REASON_LENGTH)
 
 
 class _ExplorationLaunchAuthorityStore:
@@ -692,14 +727,23 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
         reopened = self._reopen_launch_environment()
         if reopened is None:
             return CapabilityResolutionStatus.INVALID, None
-        capability, _authority = reopened
+        capability, authority = reopened
         try:
             _replacement, page = self.submit_for_capability(
                 capability=capability,
                 query=query,
                 page_size=page_size,
             )
-        except (RuntimeError, ValueError):
+        except (RuntimeError, ValueError) as exc:
+            logger.warning(
+                "exploration_submit_failed",
+                exception_type=type(exc).__name__,
+                reason=_safe_submit_failure_reason(
+                    exc,
+                    capability=capability,
+                    authority=authority,
+                ),
+            )
             return CapabilityResolutionStatus.INVALID, None
         # A terminal cleanup or replacement may have occurred while collecting.
         if self._reopen_launch_environment() != reopened:

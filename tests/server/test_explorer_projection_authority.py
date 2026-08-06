@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -31,7 +32,10 @@ def _projection(*, project_root, profile=RepositoryProfileId.AUTO, applicability
     )
 
 
-def test_profile_auto_uses_only_factory_trusted_repository(monkeypatch, tmp_path) -> None:
+def test_profile_auto_uses_only_factory_trusted_repository(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     monkeypatch.setattr(
         "autoskillit.server._explorer_projection.resolve_repository_profile",
         lambda root: RepositoryProfileId.AUTOSKILLIT,
@@ -54,7 +58,7 @@ def test_profile_auto_uses_only_factory_trusted_repository(monkeypatch, tmp_path
     [(20, "monolith", False), (21, "monolith", True), (3, "hexagonal", True)],
 )
 def test_extract_domain_applicability_is_evaluated_from_bounded_analysis(
-    tmp_path,
+    tmp_path: Path,
     module_count: int,
     architecture_style: str,
     deep: bool,

@@ -6,10 +6,15 @@ import tomllib
 from collections.abc import Mapping
 from pathlib import Path
 
-from autoskillit.core import AgentDef
+from autoskillit.core import (
+    BUNDLED_EXPLORER_ROLES,
+    CODEX_EXPLORER_IDENTITY,
+    AgentDef,
+)
 from autoskillit.execution.backends._codex_config import _serialize_toml
 
-_EXPLORER_ROLE_NAMES = frozenset({"semantic-code-navigator", "repository-impact-profiler"})
+_EXPLORER_ROLE_NAMES = BUNDLED_EXPLORER_ROLES
+_LUNA_READ_ONLY_PROJECTION = (*CODEX_EXPLORER_IDENTITY, "read-only")
 _EXPLORATION_TOOL_PREFIX = "mcp__autoskillit__"
 _EXPLORER_BROKER_TOOLS = (
     "submit_exploration_query",
@@ -33,6 +38,28 @@ _EXPLORER_BINDING_ENV_KEYS = frozenset(
         "AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH",
     }
 )
+
+
+def _validate_injected_explorer_parent_policy(
+    agent_defs: tuple[AgentDef, ...] | None,
+    parent_sandbox_mode: str,
+) -> None:
+    """Reject a writable Codex parent for a Luna read-only child projection."""
+    if agent_defs is None:
+        return
+    requires_read_only_parent = any(
+        (
+            definition.codex.model,
+            definition.codex.reasoning_effort,
+            definition.codex.sandbox_mode,
+        )
+        == _LUNA_READ_ONLY_PROJECTION
+        for definition in agent_defs
+    )
+    if requires_read_only_parent and parent_sandbox_mode != "read-only":
+        raise ValueError(
+            "gpt-5.6-luna/max/read-only agent projection requires parent_sandbox_mode='read-only'"
+        )
 
 
 def _validated_explorer_binding_env(label: str, binding: Mapping[str, str]) -> dict[str, str]:

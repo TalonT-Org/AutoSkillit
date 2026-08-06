@@ -9,6 +9,7 @@ import pytest
 
 from autoskillit.core import (
     BackendPinResolution,
+    CodingAgentBackend,
     ExplorationApplicability,
     ExplorationRouterPlan,
     ExplorationTaskSpec,
@@ -97,7 +98,11 @@ def _skill(tmp_path: Path, *, vector: ExplorationVectorDef | None) -> SkillInfo:
     )
 
 
-def _context(tmp_path: Path, skill: SkillInfo, backend=None) -> SkillProjectionContext:
+def _context(
+    tmp_path: Path,
+    skill: SkillInfo,
+    backend: CodingAgentBackend | None = None,
+) -> SkillProjectionContext:
     invocation = EffectiveSkillInvocation(
         root=skill,
         closure=(skill,),

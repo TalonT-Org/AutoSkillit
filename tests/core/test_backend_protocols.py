@@ -86,6 +86,7 @@ def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
         CodingAgentBackend,
         CookSessionHandle,
         ExecutableLaunchBinding,
+        ExecutionIdentity,
         ResumeSpec,
     )
 
@@ -143,6 +144,16 @@ def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
         "return": AbstractContextManager[CookSessionHandle],
     }
 
+    identity = inspect.signature(CodingAgentBackend.resolve_effective_execution_identity)
+    assert tuple(identity.parameters) == ("self", "requested", "session_id")
+    assert identity.parameters["requested"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert identity.parameters["session_id"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert typing.get_type_hints(CodingAgentBackend.resolve_effective_execution_identity) == {
+        "requested": ExecutionIdentity,
+        "session_id": str,
+        "return": ExecutionIdentity,
+    }
+
 
 def test_no_autoskillit_imports_in_protocols_backend():
     from autoskillit.core import paths
@@ -176,6 +187,7 @@ def test_stub_class_satisfies_coding_agent_backend():
         CmdSpec,
         CodingAgentBackend,
         EnvPolicy,
+        ExecutionIdentity,
         ExplorationDispatchRenderer,
         NoResume,
         OutputFormat,
@@ -217,6 +229,15 @@ def test_stub_class_satisfies_coding_agent_backend():
         def env_policy(self) -> EnvPolicy: ...
 
         def session_locator(self) -> SessionLocator: ...
+
+        def resolve_effective_execution_identity(
+            self,
+            *,
+            requested: ExecutionIdentity,
+            session_id: str,
+        ) -> ExecutionIdentity:
+            del session_id
+            return requested
 
         def write_tool_names(self) -> frozenset[str]: ...
 

@@ -21,16 +21,23 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.core import session_type as _resolve_session_type
-from autoskillit.pipeline import EXPLORATION_PRINCIPAL_ROLE, EXPLORER_ROLE_NAMES
+from autoskillit.pipeline import (
+    EXPLORATION_AUTHORITY_PATH_ENV,
+    EXPLORATION_CAPABILITY_ENV,
+    EXPLORATION_PRINCIPAL_ROLE,
+    EXPLORATION_ROLE_ENV,
+    EXPLORATION_SESSION_ENV,
+    EXPLORER_ROLE_NAMES,
+)
 
 logger = get_logger(__name__)
 
 _EXPLORER_BINDING_ENV_KEYS = frozenset(
     {
-        "AUTOSKILLIT_EXPLORATION_CAPABILITY",
-        "AUTOSKILLIT_EXPLORATION_ROLE",
-        "AUTOSKILLIT_EXPLORATION_SESSION_ID",
-        "AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH",
+        EXPLORATION_CAPABILITY_ENV,
+        EXPLORATION_ROLE_ENV,
+        EXPLORATION_SESSION_ENV,
+        EXPLORATION_AUTHORITY_PATH_ENV,
     }
 )
 
@@ -39,7 +46,7 @@ def _has_explorer_binding_env() -> bool:
     """Return whether this MCP process is the bound endpoint of an explorer child."""
     values = {key: os.environ.get(key, "") for key in _EXPLORER_BINDING_ENV_KEYS}
     accepted_roles = EXPLORER_ROLE_NAMES | {EXPLORATION_PRINCIPAL_ROLE}
-    return all(values.values()) and values["AUTOSKILLIT_EXPLORATION_ROLE"] in accepted_roles
+    return all(values.values()) and values[EXPLORATION_ROLE_ENV] in accepted_roles
 
 
 def _collect_fleet_tool_tags() -> frozenset[str]:

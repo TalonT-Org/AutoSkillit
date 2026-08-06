@@ -12,6 +12,7 @@ from autoskillit.config import (
     AutomationConfig,
     SafetyConfig,
 )
+from autoskillit.core import EXPLORATION_TOOLS
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_status import (
     get_quota_events,
@@ -115,10 +116,7 @@ class TestToolRegistration:
             "write_audit_disposition_bundle",
             "write_audit_semantic_result",
             "write_standalone_audit_evidence",
-            "submit_exploration_query",
-            "get_exploration_page",
-            "resume_exploration_context",
-        }
+        } | EXPLORATION_TOOLS
         assert expected == tool_names
 
     @pytest.mark.anyio

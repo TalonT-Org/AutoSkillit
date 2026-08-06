@@ -19,7 +19,7 @@ from ..closure_hashing import HASH_RE as _HASH_RE
 from ._type_audit_admission import AuditAttemptId, AuditOutcomeStatus
 from ._type_audit_cycle import AuditVerdict
 from ._type_enums import KillReason, RetryReason, SessionOutcome
-from ._type_execution_identity import ExecutionIdentity
+from ._type_execution_identity import ChildExecutionIdentityDict, ExecutionIdentity
 
 T = TypeVar("T")
 
@@ -824,7 +824,7 @@ class SessionIndexEntry(TypedDict):
     backend_override_tier: str
     backend_override_key_path: str
     parent_session_id: str
-    child_executions: list[dict[str, str]]
+    child_executions: list[ChildExecutionIdentityDict]
     skill_command: str
     success: bool
     subtype: str

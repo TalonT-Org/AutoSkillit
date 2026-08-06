@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 import regex as re
 
 from autoskillit.core import (
+    BUNDLED_EXPLORER_ROLES,
     CODEX_EFFORT_MAPPING,
     BackendPinResolution,
     ChildExecutionIdentity,
@@ -24,12 +25,10 @@ from autoskillit.core import (
     ValidatedAddDir,
     agent_definition_digest,
     get_logger,
-    load_agent_definitions,
-    pkg_root,
+    load_bundled_agent_definitions,
     strip_context_window_suffix,
 )
 from autoskillit.exploration import resolve_repository_profile
-from autoskillit.pipeline import EXPLORER_ROLE_NAMES
 from autoskillit.server._misc import SkillProjectionContext
 
 if TYPE_CHECKING:
@@ -142,10 +141,10 @@ def _issue_explorer_binding_env(
     repository_root, parent_source_identity = identity
     definitions = tuple(
         definition
-        for definition in load_agent_definitions(pkg_root() / "agents")
-        if definition.name in EXPLORER_ROLE_NAMES
+        for definition in load_bundled_agent_definitions()
+        if definition.name in BUNDLED_EXPLORER_ROLES
     )
-    if {definition.name for definition in definitions} != EXPLORER_ROLE_NAMES:
+    if {definition.name for definition in definitions} != BUNDLED_EXPLORER_ROLES:
         raise SkillContractError("Canonical explorer AgentDef registry is incomplete")
     bindings = store.bind_launches(
         owner_id=f"uid:{os.getuid()}",
@@ -183,7 +182,7 @@ def _cleanup_explorer_launch(
         if backend is None or session_home is None:
             return
         try:
-            backend.clear_explorer_binding_env(session_home, EXPLORER_ROLE_NAMES)
+            backend.clear_explorer_binding_env(session_home, BUNDLED_EXPLORER_ROLES)
         except Exception:
             logger.warning(
                 "exploration_binding_scrub_failed",
@@ -221,8 +220,7 @@ def _build_requested_execution_identity(
         )
         if native_vectors:
             definitions = {
-                definition.name: definition
-                for definition in load_agent_definitions(pkg_root() / "agents")
+                definition.name: definition for definition in load_bundled_agent_definitions()
             }
             missing_roles = {
                 str(vector.role)

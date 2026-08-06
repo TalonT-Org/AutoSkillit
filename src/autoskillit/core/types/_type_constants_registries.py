@@ -23,6 +23,8 @@ __all__ = [
     "FLEET_TOOLS",
     "FLEET_DISPATCH_TOOLS",
     "FLEET_MENU_TOOLS",
+    "EXPLORATION_TOOLS",
+    "KITCHEN_GATED_TOOLS",
     "FLEET_ERROR_CODES",
     "FREE_RANGE_TOOLS",
     "UNGATED_TOOLS",
@@ -817,6 +819,13 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "get_exploration_page": frozenset({"exploration"}),
     "resume_exploration_context": frozenset({"exploration"}),
 }
+
+EXPLORATION_TOOLS: frozenset[str] = frozenset(
+    name for name, tags in TOOL_SUBSET_TAGS.items() if "exploration" in tags
+)
+KITCHEN_GATED_TOOLS: frozenset[str] = (
+    GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EXPLORATION_TOOLS
+)
 
 ALL_VISIBILITY_TAGS: frozenset[str] = frozenset(
     {

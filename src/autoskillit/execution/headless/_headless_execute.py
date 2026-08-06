@@ -67,10 +67,8 @@ from autoskillit.execution.headless._headless_helpers import (
 )
 from autoskillit.execution.headless._headless_launch import (
     _attempt_contract_nudge,
+    _bind_effective_execution_identity,
     _run_headless_attempt,
-)
-from autoskillit.execution.headless._headless_launch import (
-    _bind_effective_execution_identity as _bind_execution_identity,
 )
 from autoskillit.execution.headless._headless_result import _build_skill_result
 from autoskillit.execution.headless._managed import _attempt as _diag
@@ -472,7 +470,11 @@ async def _execute_claude_headless(
         break
 
     assert skill_result is not None
-    skill_result = _bind_execution_identity(skill_result, _step_backend, execution_identity)
+    skill_result = _bind_effective_execution_identity(
+        skill_result,
+        _step_backend,
+        execution_identity,
+    )
     provider_outcome = ProviderOutcome(
         provider_used=current_provider_name,
         fallback_activated=fallback_activated,

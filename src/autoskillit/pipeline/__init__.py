@@ -27,7 +27,11 @@ from autoskillit.pipeline.context_admission_ledger import (
     DefaultContextAdmissionLedger,
 )
 from autoskillit.pipeline.exploration_context import (
+    EXPLORATION_AUTHORITY_PATH_ENV,
+    EXPLORATION_CAPABILITY_ENV,
     EXPLORATION_PRINCIPAL_ROLE,
+    EXPLORATION_ROLE_ENV,
+    EXPLORATION_SESSION_ENV,
     EXPLORER_ROLE_NAMES,
     CapabilityResolution,
     CapabilityResolutionStatus,
@@ -131,7 +135,11 @@ __all__ = [
     "CapabilityResolution",
     "CapabilityResolutionStatus",
     "EXPLORER_ROLE_NAMES",
+    "EXPLORATION_AUTHORITY_PATH_ENV",
+    "EXPLORATION_CAPABILITY_ENV",
     "EXPLORATION_PRINCIPAL_ROLE",
+    "EXPLORATION_ROLE_ENV",
+    "EXPLORATION_SESSION_ENV",
     "ExplorationContext",
     "ExplorationContextStoreProtocol",
     "ExplorationLaunchBinding",

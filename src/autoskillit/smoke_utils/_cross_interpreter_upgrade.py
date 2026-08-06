@@ -41,18 +41,12 @@ def _cache_incarnations(cache_root: Path) -> set[str]:
 
 def _preserve_pre_upgrade_incarnation(cache_root: Path, source_name: str, minor: str) -> str:
     """Create a distinct prior-version snapshot for retention testing."""
-    from autoskillit.core import atomic_write
-
     retained_name = f"0.0.0+preupgrade.py{minor.replace('.', '')}"
     source_dir = cache_root / source_name
     retained_dir = cache_root / retained_name
     if retained_dir.exists():
         raise RuntimeError(f"pre-upgrade retention fixture already exists: {retained_dir}")
     shutil.copytree(source_dir, retained_dir)
-    metadata_path = retained_dir / ".claude-plugin" / "plugin.json"
-    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    metadata["version"] = retained_name
-    atomic_write(metadata_path, json.dumps(metadata))
     return retained_name
 
 

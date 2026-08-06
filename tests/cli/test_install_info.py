@@ -17,6 +17,7 @@ from autoskillit.cli._install_info import (
     comparison_branch,
     detect_install,
     dismissal_window,
+    resolve_autoskillit_entrypoint,
     upgrade_command,
 )
 
@@ -505,9 +506,7 @@ def test_upgrade_command_arbitrary_dev_revision(revision: str) -> None:
     assert result[result.index("--python") + 1] == _PYTHON_PIN
 
 
-# ---------------------------------------------------------------------------
-# InstallInfo.entrypoint — T-B4 (interpreter-pivot immunity for cli/_install_info.py)
-# ---------------------------------------------------------------------------
+# InstallInfo.entrypoint
 
 
 def test_detect_install_prefers_absolute_invocation_identity(
@@ -531,15 +530,38 @@ def test_detect_install_prefers_absolute_invocation_identity(
     invoked = tmp_path / "invoked" / "autoskillit"
     invoked.parent.mkdir()
     invoked.write_text("#!/bin/sh\n", encoding="utf-8")
+    invoked.chmod(0o755)
     path_entrypoint = tmp_path / "path" / "autoskillit"
     path_entrypoint.parent.mkdir()
     path_entrypoint.write_text("#!/bin/sh\n", encoding="utf-8")
+    path_entrypoint.chmod(0o755)
     monkeypatch.setattr("sys.argv", [str(invoked)])
     monkeypatch.setenv("PATH", str(path_entrypoint.parent))
 
     info = detect_install()
 
     assert info.entrypoint == invoked
+
+
+def test_entrypoint_resolver_accepts_direct_relative_invocation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    invoked = tmp_path / "autoskillit"
+    invoked.write_text("#!/bin/sh\n", encoding="utf-8")
+    invoked.chmod(0o755)
+    monkeypatch.chdir(tmp_path)
+
+    assert resolve_autoskillit_entrypoint("./autoskillit", search_path="") == invoked
+
+
+def test_entrypoint_resolver_rejects_non_executable_invocation(
+    tmp_path: Path,
+) -> None:
+    invoked = tmp_path / "autoskillit"
+    invoked.write_text("#!/bin/sh\n", encoding="utf-8")
+
+    assert resolve_autoskillit_entrypoint(invoked, search_path="") is None
 
 
 def test_detect_install_populates_entrypoint_from_ambient_path(

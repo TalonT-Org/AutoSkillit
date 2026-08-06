@@ -26,9 +26,13 @@ from autoskillit.workspace._installed_artifact import (
     InstallStateSpec,
     verify_installed_plugin_artifact,
 )
+from autoskillit.workspace._installed_artifact_manifest import (
+    write_installed_plugin_artifact_manifest_locked,
+)
 from autoskillit.workspace._projected_artifact import (
     PROJECTION_CACHE_KEY_EXCLUSIONS,
     PluginHookRepairOutcome,
+    PluginHookRepairStatus,
     ProjectedPluginArtifactAuthority,
     ProjectedPluginRetirementOwner,
     ProjectionCacheKey,
@@ -38,7 +42,6 @@ from autoskillit.workspace._projected_artifact import (
     prune_stale_projections,
     public_plugin_asset_digest,
     repair_broken_plugin_cache_hooks,
-    write_installed_plugin_artifact_manifest_locked,
 )
 from autoskillit.workspace._update_obligation import (
     PublicationObligation,
@@ -188,6 +191,7 @@ __all__ = [
     "ProjectedPluginArtifactAuthority",
     "ProjectedPluginRetirementOwner",
     "PluginHookRepairOutcome",
+    "PluginHookRepairStatus",
     "SkillFrontmatterParseResult",
     "SkillProjectionContext",
     "iter_public_plugin_asset_files",

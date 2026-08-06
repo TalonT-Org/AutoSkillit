@@ -1,12 +1,4 @@
-"""Contract: the detection→repair loop closes — the incident's own end state
-heals automatically instead of requiring a manual `autoskillit install`.
-
-Sibling idiom to tests/contracts/test_install_state_consistency.py. Covers
-T-C3 (startup repair heals a stale cache) and T-C4 (CLI startup obligation
-observer, both expected_version branches). T-C2's failure matrix belongs to
-the canonical update-transaction suite; C-I4 belongs to the hook-registry
-contract suite.
-"""
+"""Contract tests for persisted publication-obligation detection and repair."""
 
 from __future__ import annotations
 
@@ -47,7 +39,7 @@ def _publish_cache_incarnation(
     metadata.parent.mkdir(parents=True)
     metadata.write_text(json.dumps({"name": "autoskillit", "version": version}))
     from autoskillit.core import ArtifactLease, installed_plugin_artifact_lease_path
-    from autoskillit.workspace._projected_artifact._manifest_publication import (
+    from autoskillit.workspace._installed_artifact_manifest import (
         write_installed_plugin_artifact_manifest_locked,
     )
 
@@ -147,6 +139,22 @@ def test_malformed_persisted_obligation_degrades_to_pending_unknown(
     )
 
 
+def test_dangling_obligation_symlink_degrades_to_pending_unknown(tmp_path: Path) -> None:
+    from autoskillit.workspace import PublicationObligation, read_obligation
+    from autoskillit.workspace._update_obligation import _obligation_path
+
+    path = _obligation_path(tmp_path)
+    path.parent.mkdir(parents=True)
+    path.symlink_to(tmp_path / "missing-obligation.json")
+
+    assert read_obligation(tmp_path) == PublicationObligation(
+        previous_version="unknown",
+        expected_version=None,
+        written_at="unknown",
+        originating_phase="unknown",
+    )
+
+
 def test_obligation_clear_maps_non_oserror_to_false(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -167,7 +175,7 @@ def test_obligation_clear_maps_non_oserror_to_false(
 
 
 # ---------------------------------------------------------------------------
-# T-C3 — startup repair heals a stale cache.
+# Per-incarnation hook repair and containment.
 # ---------------------------------------------------------------------------
 
 
@@ -222,7 +230,7 @@ def test_t_c3_repair_preserves_version_owned_logical_hooks(tmp_path: Path) -> No
 
     payload = json.loads((version_dir / "hooks/hooks.json").read_text())
     command = payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-    assert outcomes[0].repaired is True
+    assert outcomes[0].status.value == "repaired"
     assert command.endswith(" legacy/version_specific")
 
 
@@ -247,8 +255,8 @@ def test_t_c3_manifest_failure_rolls_back_hooks_and_manifest(
 
     outcomes = repair_module.repair_broken_plugin_cache_hooks(cache_dir)
 
-    assert outcomes[0].repaired is False
-    assert "manifest write failed" in (outcomes[0].skipped_reason or "")
+    assert outcomes[0].status.value == "failed"
+    assert "manifest write failed" in (outcomes[0].detail or "")
     assert hooks_path.read_text() == original_hooks
     assert manifest_path.read_text() == original_manifest
 
@@ -267,8 +275,8 @@ def test_t_c3_repair_refuses_to_bless_unrelated_tampering(tmp_path: Path) -> Non
 
     outcomes = repair_broken_plugin_cache_hooks(cache_dir)
 
-    assert outcomes[0].repaired is False
-    assert "content digest mismatch" in (outcomes[0].skipped_reason or "")
+    assert outcomes[0].status.value == "failed"
+    assert "content digest mismatch" in (outcomes[0].detail or "")
     assert hooks_path.read_text() == original_hooks
 
 
@@ -289,8 +297,8 @@ def test_t_c3_repair_rejects_unsafe_logical_hook_names(tmp_path: Path) -> None:
 
     outcomes = repair_broken_plugin_cache_hooks(cache_dir)
 
-    assert outcomes[0].repaired is False
-    assert "invalid logical hook name" in (outcomes[0].skipped_reason or "")
+    assert outcomes[0].status.value == "failed"
+    assert "invalid logical hook name" in (outcomes[0].detail or "")
     assert hooks_path.read_text() == original_hooks
 
 
@@ -302,11 +310,11 @@ def test_t_c3_missing_dispatcher_rolls_back_failed_repair(tmp_path: Path) -> Non
         installed_plugin_artifact_manifest_path,
         installed_plugin_semantic_key,
     )
+    from autoskillit.workspace._installed_artifact_manifest import (
+        write_installed_plugin_artifact_manifest_locked,
+    )
     from autoskillit.workspace._projected_artifact._hook_repair import (
         repair_broken_plugin_cache_hooks,
-    )
-    from autoskillit.workspace._projected_artifact._manifest_publication import (
-        write_installed_plugin_artifact_manifest_locked,
     )
 
     cache_dir = tmp_path / ".claude/plugins/cache/autoskillit-local/autoskillit"
@@ -331,8 +339,8 @@ def test_t_c3_missing_dispatcher_rolls_back_failed_repair(tmp_path: Path) -> Non
 
     outcomes = repair_broken_plugin_cache_hooks(cache_dir)
 
-    assert outcomes[0].repaired is False
-    assert "remain after repair" in (outcomes[0].skipped_reason or "")
+    assert outcomes[0].status.value == "failed"
+    assert "remain after repair" in (outcomes[0].detail or "")
     assert hooks_path.read_text() == original_hooks
     assert manifest_path.read_text() == original_manifest
 
@@ -361,13 +369,26 @@ def test_t_c3_repair_skips_a_contended_lease(
         held_lease.close()
 
     assert len(outcomes) == 1
-    assert outcomes[0].repaired is False
-    assert outcomes[0].skipped_reason == "lease contended"
+    assert outcomes[0].status.value == "contended"
+    assert outcomes[0].detail == "lease contended"
     assert (version_dir / "hooks" / "hooks.json").read_text() == original_content
 
 
+def test_hook_repair_does_not_follow_incarnation_symlinks(tmp_path: Path) -> None:
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    version_dir = _publish_cache_incarnation(tmp_path / "external", "1.0.0", broken=True)
+    (cache_dir / "1.0.0").symlink_to(version_dir, target_is_directory=True)
+    original = (version_dir / "hooks" / "hooks.json").read_text()
+
+    from autoskillit.workspace import repair_broken_plugin_cache_hooks
+
+    assert repair_broken_plugin_cache_hooks(cache_dir) == ()
+    assert (version_dir / "hooks" / "hooks.json").read_text() == original
+
+
 # ---------------------------------------------------------------------------
-# T-C4 — CLI startup obligation observer.
+# Cross-process publication-obligation repair.
 # ---------------------------------------------------------------------------
 
 
@@ -422,16 +443,35 @@ def test_t_c4_expected_version_present_uses_full_verification(tmp_path: Path) ->
     assert captured_kwargs[0]["env"] == {"HOME": str(home)}
 
 
-def test_t_c4_expected_version_none_probes_then_verifies_exact_state(tmp_path: Path) -> None:
-    """With expected_version None (probe never succeeded / backfill failed),
-    the fresh version probe supplies the version for exact installed-state
-    verification before the obligation can be cleared.
-    """
+@pytest.mark.parametrize("persisted_version", [None, "not a version"])
+def test_t_c4_unknown_version_probes_then_verifies_exact_state(
+    tmp_path: Path,
+    persisted_version: str | None,
+) -> None:
+    """Unknown or invalid persisted versions trigger a fresh exact probe."""
     from autoskillit.cli.update import _obligation_repair as m
-    from autoskillit.workspace import read_obligation, write_obligation
+    from autoskillit.workspace import (
+        read_obligation,
+        update_obligation_expected_version,
+        write_obligation,
+    )
 
     home = tmp_path
-    write_obligation(home, previous_version="1.0.0", originating_phase="upgrade-subprocess-gate")
+    obligation = write_obligation(
+        home,
+        previous_version="1.0.0",
+        originating_phase="upgrade-subprocess-gate",
+    )
+    if persisted_version is not None:
+        update_obligation_expected_version(
+            home,
+            expected=obligation,
+            expected_version=persisted_version,
+        )
+    entrypoint = tmp_path / "bin" / "autoskillit"
+    entrypoint.parent.mkdir()
+    entrypoint.write_text("#!/bin/sh\n")
+    entrypoint.chmod(0o755)
 
     captured_specs: list[object] = []
 
@@ -451,9 +491,8 @@ def test_t_c4_expected_version_none_probes_then_verifies_exact_state(tmp_path: P
     try:
         result = m.attempt_obligation_repair(
             home,
-            environment={},
+            environment={"PATH": str(entrypoint.parent)},
             process_runner=runner,
-            entrypoint=Path("autoskillit"),
         )
     finally:
         m.verify_installed_plugin_artifact = original
@@ -462,8 +501,8 @@ def test_t_c4_expected_version_none_probes_then_verifies_exact_state(tmp_path: P
     assert read_obligation(home) is None
     assert captured_specs[0].expected_version == "1.1.0"  # type: ignore[attr-defined]
     assert calls == [
-        ["autoskillit", "install", "--maintenance-update"],
-        ["autoskillit", "--version"],
+        [str(entrypoint), "install", "--maintenance-update"],
+        [str(entrypoint), "--version"],
     ]
 
 

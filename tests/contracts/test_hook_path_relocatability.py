@@ -233,8 +233,7 @@ def test_token_aware_validation_survives_interpreter_pivot(tmp_path: Path) -> No
     """
     from autoskillit.hook_registry import validate_plugin_cache_hooks
 
-    # A fake venv tree, present at generation time — never actually
-    # referenced by the relocatable command, but simulates the incident.
+    # A fake venv tree present when production hook generation runs.
     venv_root = tmp_path / "venv"
     (venv_root / "lib" / "python3.13" / "site-packages" / "autoskillit" / "hooks").mkdir(
         parents=True
@@ -244,10 +243,7 @@ def test_token_aware_validation_survives_interpreter_pivot(tmp_path: Path) -> No
     hooks_dir = version_dir / "hooks"
     hooks_dir.mkdir(parents=True)
     (hooks_dir / "_dispatch.py").write_text("# dispatcher stub")
-    _write_cache_hooks_json(
-        hooks_dir,
-        commands=[f'python3 "{PLUGIN_ROOT_TOKEN}/hooks/_dispatch.py" guards/quota_guard'],
-    )
+    (hooks_dir / "hooks.json").write_text(json.dumps(generate_hooks_json()))
 
     assert validate_plugin_cache_hooks(cache_dir=tmp_path / "cache") == []
 
@@ -379,18 +375,11 @@ def test_catalog_projection_context_defaults_to_pkg_root_when_unspecified(
     )
 
 
-@pytest.mark.parametrize(
-    ("installed_exists", "expected_kind"),
-    [
-        (True, "installed"),
-        (False, "source"),
-    ],
-)
+@pytest.mark.parametrize("has_binding", [True, False])
 def test_cook_session_passes_behavioral_durable_root_to_projection(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    installed_exists: bool,
-    expected_kind: str,
+    has_binding: bool,
 ) -> None:
     from types import SimpleNamespace
 
@@ -400,11 +389,10 @@ def test_cook_session_passes_behavioral_durable_root_to_projection(
 
     installed_root = tmp_path / "installed"
     source_root = tmp_path / "source"
-    if installed_exists:
-        installed_root.mkdir()
-    monkeypatch.setattr(
-        "autoskillit.cli._plugin_artifact.current_installed_plugin_root",
-        lambda: installed_root,
+    binding = (
+        SimpleNamespace(identity=SimpleNamespace(managed_path=installed_root))
+        if has_binding
+        else None
     )
     monkeypatch.setattr("autoskillit.core.pkg_root", lambda: source_root)
 
@@ -419,9 +407,10 @@ def test_cook_session_passes_behavioral_durable_root_to_projection(
         catalog,
         tmp_path,
         backend,
+        binding,
     )
 
-    expected_root = installed_root if expected_kind == "installed" else source_root
+    expected_root = installed_root if has_binding else source_root
     assert context.substitutions is not None
     assert context.substitutions["{{AUTOSKILLIT_SCRIPTS}}"] == str(
         expected_root / "recipes" / "scripts"

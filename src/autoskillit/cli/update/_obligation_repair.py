@@ -1,25 +1,16 @@
-"""Shared CLI-triggered repair helper for a pending publication obligation.
-
-The single owner of attempt/defer/clear policy for both CLI trigger sites
-(the update-failure handler in ``_update.py`` and ``cli/app.py``'s
-``main()``). Server startup (``server/_lifespan.py``) uses the lower-level,
-in-process ``repair_broken_plugin_cache_hooks`` primitive directly instead —
-the server must not shell out, per its existing design — and never clears
-the obligation itself: an in-process hook-artifact repair cannot perform the
-full publication the obligation may demand, so clear-authority stays here,
-with the code that actually verified it.
-"""
+"""CLI repair and verified clearing of pending publication obligations."""
 
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
+
+from packaging.version import InvalidVersion, Version
 
 from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
@@ -45,13 +36,22 @@ _ProcessRunner = Callable[..., "subprocess.CompletedProcess[Any]"]
 
 def _resolve_repair_entrypoint(environment: Mapping[str, str]) -> Path | None:
     """Resolve the executable while the current interpreter is still valid."""
-    from autoskillit.cli._install_info import detect_install
+    from autoskillit.cli._install_info import detect_install, resolve_autoskillit_entrypoint
 
-    entrypoint = detect_install().entrypoint
-    if entrypoint is not None:
-        return entrypoint
-    resolved = shutil.which("autoskillit", path=environment.get("PATH"))
-    return Path(resolved) if resolved is not None else None
+    return resolve_autoskillit_entrypoint(
+        detect_install().entrypoint,
+        search_path=environment.get("PATH"),
+    )
+
+
+def _valid_version_or_unknown(value: str | None) -> str | None:
+    if value is None:
+        return None
+    try:
+        Version(value)
+    except InvalidVersion:
+        return None
+    return value
 
 
 class ObligationRepairOutcome(StrEnum):
@@ -79,24 +79,7 @@ def attempt_obligation_repair(
     process_runner: _ProcessRunner | None = None,
     entrypoint: Path | None = None,
 ) -> ObligationRepairResult:
-    """Attempt to satisfy a pending publication obligation, or defer/report.
-
-    No-op (``"no_obligation"``) when nothing is pending. Under
-    ``CLAUDECODE`` a registered plugin cannot be safely replaced from inside
-    a headless session (mirrors the same policy the update transaction
-    itself applies pre-pivot) — defers with an instruction finding, leaving
-    the obligation untouched. Otherwise spawns one
-    ``autoskillit install --maintenance-update`` subprocess (the same child
-    shape the update transaction's own ``INSTALL_CHILD_INVOCATION`` uses);
-    on success, verifies health and ONLY THEN clears the obligation — the
-    second and final clear-authority named in the journal's contract. On
-    child failure or verification failure, reports and leaves the
-    obligation pending.
-
-    When the obligation lacks an expected version, a fresh version probe
-    supplies one. Both branches then perform the same exact installed-state
-    verification before compare-and-clearing the obligation.
-    """
+    """Repair and verify a pending publication obligation before clearing it."""
     env = environment if environment is not None else os.environ
     obligation = read_obligation(home)
     if obligation is None:
@@ -142,14 +125,21 @@ def attempt_obligation_repair(
         )
 
     cache_dir = installed_plugin_cache_dir(home, "autoskillit")
-    broken = validate_plugin_cache_hooks(cache_dir=cache_dir)
+    try:
+        broken = validate_plugin_cache_hooks(cache_dir=cache_dir)
+    except Exception as exc:
+        logger.warning("publication_obligation_hook_validation_failed", exc_info=True)
+        return ObligationRepairResult(
+            outcome=ObligationRepairOutcome.FAILED,
+            findings=(f"Installed hook validation could not run: {exc}",),
+        )
     if broken:
         return ObligationRepairResult(
             outcome=ObligationRepairOutcome.FAILED,
             findings=(f"{len(broken)} broken hook command(s) remain after repair install",),
         )
 
-    expected_version = obligation.expected_version
+    expected_version = _valid_version_or_unknown(obligation.expected_version)
     if expected_version is None:
         try:
             version_check = runner(
@@ -173,10 +163,10 @@ def attempt_obligation_repair(
                 ),
             )
         expected_version = (version_check.stdout or "").strip()
-        if not expected_version:
+        if not expected_version or _valid_version_or_unknown(expected_version) is None:
             return ObligationRepairResult(
                 outcome=ObligationRepairOutcome.FAILED,
-                findings=("autoskillit --version produced no output after repair install",),
+                findings=("autoskillit --version produced no valid version after repair install",),
             )
 
     try:

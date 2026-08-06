@@ -26,7 +26,12 @@ from autoskillit.cli._install_contract import (
     InstallResult,
     result_from_process_status,
 )
-from autoskillit.cli._install_info import InstallInfo, detect_install, upgrade_command
+from autoskillit.cli._install_info import (
+    InstallInfo,
+    detect_install,
+    resolve_autoskillit_entrypoint,
+    upgrade_command,
+)
 from autoskillit.cli._installed_plugins import InstalledPluginsFile
 from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
@@ -237,29 +242,11 @@ def _default_fresh_version_prober(
     maintenance_env: Mapping[str, str],
     runner: _ProcessRunner,
 ) -> str:
-    """Resolve the post-pivot environment's version via a fresh subprocess.
-
-    Never consults in-process metadata: the parent's own import machinery is
-    invalid past the pivot by construction (the upgrade that just ran may
-    have deleted the tree backing it — issue #4469). Runs the new
-    ``autoskillit`` entrypoint under the maintenance environment and parses
-    its ``--version`` stdout.
-
-    Entrypoint resolution is explicit, not bare-PATH-dependent:
-    ``build_maintenance_env`` copies ``PATH`` verbatim from the ambient
-    caller, which for a background MCP-server caller may lack ``uv``'s
-    tool-shim directory. Prefers ``info.entrypoint`` (resolved pre-pivot
-    against the ambient, richest-PATH environment — see
-    ``InstallInfo.entrypoint``'s docstring); falls back to resolving against
-    the maintenance environment's own ``PATH``. Neither resolving, or the
-    probe subprocess itself failing, raises ``RuntimeError`` — mapped to a
-    failure finding by the caller's ``except`` handler, never left
-    unhandled.
-    """
-    entrypoint = info.entrypoint
-    if entrypoint is None:
-        resolved = shutil.which("autoskillit", path=maintenance_env.get("PATH"))
-        entrypoint = Path(resolved) if resolved is not None else None
+    """Read the post-pivot version from a newly launched CLI process."""
+    entrypoint = resolve_autoskillit_entrypoint(
+        info.entrypoint,
+        search_path=maintenance_env.get("PATH"),
+    )
     if entrypoint is None:
         raise RuntimeError(
             "Could not resolve an autoskillit entrypoint to probe the "
@@ -291,16 +278,7 @@ def _resolve_fresh_version(
     runner: _ProcessRunner,
     fresh_version_prober: _VersionProber | None,
 ) -> str:
-    """Resolve the post-pivot environment's autoskillit version.
-
-    Always out-of-process: ``fresh_version_prober`` if injected, otherwise
-    the production default (``_default_fresh_version_prober``). Never
-    ``version_reader`` — that parameter is a pre-pivot-only API. The
-    parent's own import machinery is invalid past the pivot by construction
-    (the upgrade that just ran may have deleted the tree backing it —
-    issue #4469), so post-pivot truth can only come from a fresh subprocess,
-    never an in-process metadata read.
-    """
+    """Resolve post-pivot version truth through the configured subprocess probe."""
     if fresh_version_prober is not None:
         return fresh_version_prober(info, maintenance_env, runner)
     return _default_fresh_version_prober(info, maintenance_env, runner)

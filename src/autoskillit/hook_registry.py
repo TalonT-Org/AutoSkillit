@@ -449,23 +449,10 @@ LIFECYCLE_CONTRACTS: tuple[LifecycleContractDef, ...] = (
 )
 
 HOOKS_DIR: Path = pkg_root() / "hooks"
-"""The source checkout's hooks/ directory.
-
-Correct for settings.json generation (``sync_hooks_to_settings``, dev-mode,
-machine-local — never redistributed) and for dev-source doctor/health checks.
-Never pass this as the destination for hooks.json generation: hooks.json is
-the redistributed plugin artifact and must use ``PLUGIN_ROOT_TOKEN`` instead
-(see ``generate_hooks_json``), which stays valid independent of where this
-venv's interpreter or install path happens to live.
-"""
+"""Source hooks used by machine-local settings and development checks."""
 
 PLUGIN_ROOT_TOKEN = "${CLAUDE_PLUGIN_ROOT}"
-"""Claude Code expansion token for the directory of the plugin version that
-supplied the currently-executing hooks.json, substituted at hook-invocation
-time (not by autoskillit). hooks.json is only ever consumed as a plugin
-artifact, so every hooks.json copy uses this form exclusively; settings.json
-never does — the token has no meaning there (see ``cli/_hooks.py``).
-"""
+"""Claude Code's runtime root for the plugin supplying ``hooks.json``."""
 
 
 RETIRED_SCRIPT_BASENAMES: frozenset[str] = frozenset(
@@ -1008,7 +995,7 @@ def _count_hook_registry_drift(settings_path: Path) -> HookDriftResult:
 
 
 def find_broken_hook_scripts(
-    settings_path: Path,
+    hook_config_path: Path,
     *,
     expansion_root: Path | None = None,
 ) -> list[str]:
@@ -1024,7 +1011,7 @@ def find_broken_hook_scripts(
     plain absolute path (settings.json, dev-mode) are checked as before,
     independent of ``expansion_root``.
     """
-    data = _load_settings_data(settings_path)
+    data = _load_settings_data(hook_config_path)
     broken: list[str] = []
     for event_type in ("PreToolUse", "PostToolUse", "SessionStart"):
         for entry in data.get("hooks", {}).get(event_type, []):
@@ -1037,11 +1024,16 @@ def find_broken_hook_scripts(
                 except ValueError:
                     broken.append(cmd)
                     continue
+                has_dispatcher = any(part.endswith("_dispatch.py") for part in parts)
                 if len(parts) >= 3 and parts[-2].endswith("_dispatch.py"):
                     script_path_str = parts[-2]
+                elif has_dispatcher:
+                    broken.append(cmd)
+                    continue
                 elif len(parts) >= 2:
                     script_path_str = parts[-1]
                 else:
+                    broken.append(cmd)
                     continue
                 if PLUGIN_ROOT_TOKEN in script_path_str:
                     if expansion_root is None:

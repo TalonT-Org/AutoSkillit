@@ -75,8 +75,6 @@ def interactive_plugin_authority(
     capabilities = backend.capabilities
     if not capabilities.skill_injection_capable:
         return None, PluginLoadMode.NONE
-    if not capabilities.plugin_install_capable and generated_home_available:
-        return None, PluginLoadMode.GENERATED_HOME
     if capabilities.plugin_install_capable and (
         detect_autoskillit_mcp_prefix(capabilities) == MARKETPLACE_PREFIX
     ):
@@ -89,11 +87,12 @@ def interactive_plugin_authority(
         catalog=skill_catalog,
         cwd=project_dir,
     )
-    load_mode = (
-        PluginLoadMode.EXPLICIT_PLUGIN_DIR
-        if capabilities.plugin_install_capable
-        else PluginLoadMode.PROJECTED_HOME
-    )
+    if not capabilities.plugin_install_capable and generated_home_available:
+        load_mode = PluginLoadMode.GENERATED_HOME
+    elif capabilities.plugin_install_capable:
+        load_mode = PluginLoadMode.EXPLICIT_PLUGIN_DIR
+    else:
+        load_mode = PluginLoadMode.PROJECTED_HOME
     return authority, load_mode
 
 

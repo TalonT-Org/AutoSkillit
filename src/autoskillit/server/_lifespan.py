@@ -70,6 +70,7 @@ from autoskillit.pipeline import (
 from autoskillit.server._guards import _backend_supports_quota
 from autoskillit.server._state import _get_ctx_or_none, deferred_initialize
 from autoskillit.workspace import (
+    PluginHookRepairStatus,
     read_obligation,
     repair_broken_plugin_cache_hooks,
     verify_install_state,
@@ -141,6 +142,12 @@ def run_startup_hook_health_check() -> list[str]:
                     scope=scope_label,
                     broken=scope_broken,
                 )
+        pending_obligation = read_obligation(Path.home())
+    except Exception:
+        logger.exception("startup_hook_health_check_failed")
+        return []
+
+    try:
         cache_broken = validate_plugin_cache_hooks()
         if cache_broken:
             broken.extend(cache_broken)
@@ -149,26 +156,30 @@ def run_startup_hook_health_check() -> list[str]:
                 broken=cache_broken,
                 remediation="Run `autoskillit install` from an external terminal",
             )
-
-        pending_obligation = read_obligation(Path.home())
     except Exception:
-        logger.exception("startup_hook_health_check_failed")
-        return []
+        logger.exception("startup_plugin_cache_hook_validation_failed")
+        cache_broken = ["plugin cache hook validation failed"]
 
     if cache_broken or pending_obligation is not None:
         cache_dir = installed_plugin_cache_dir(Path.home(), "autoskillit")
         try:
             for outcome in repair_broken_plugin_cache_hooks(cache_dir):
-                if outcome.repaired:
+                if outcome.status is PluginHookRepairStatus.REPAIRED:
                     logger.info(
                         "plugin_cache_hooks_repaired_at_startup",
                         incarnation=str(outcome.incarnation_dir),
                     )
-                else:
+                elif outcome.status is PluginHookRepairStatus.CONTENDED:
                     logger.warning(
-                        "plugin_cache_hooks_repair_skipped_at_startup",
+                        "plugin_cache_hooks_repair_contended_at_startup",
                         incarnation=str(outcome.incarnation_dir),
-                        reason=outcome.skipped_reason,
+                        reason=outcome.detail,
+                    )
+                else:
+                    logger.error(
+                        "plugin_cache_hooks_repair_failed_at_startup",
+                        incarnation=str(outcome.incarnation_dir),
+                        reason=outcome.detail,
                     )
         except Exception:
             logger.exception("startup_hook_repair_failed")

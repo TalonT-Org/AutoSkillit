@@ -82,16 +82,7 @@ def _assert_incarnation_hooks_execute(incarnation_dir: Path) -> None:
 
 
 def run_cross_interpreter_upgrade_smoke(*, work_dir: str) -> bool:
-    """Install on one Python minor, upgrade on another, verify hooks survive.
-
-    In a scratch HOME: ``uv tool install`` the current source tree with
-    ``--python <A>``, publish the plugin, then upgrade with
-    ``--python <B>`` (a genuinely different minor). Asserts the new cache
-    incarnation exists and that executing the retained incarnation's
-    PreToolUse commands verbatim (``${CLAUDE_PLUGIN_ROOT}`` expanded against
-    that incarnation's own directory) exits 0 — the live-session-safety
-    property Phase A's relocatable commands exist to guarantee.
-    """
+    """Verify retained hooks survive an upgrade between Python minors."""
     root = Path(work_dir)
     scratch_home = root / "scratch-home"
     scratch_home.mkdir(parents=True, exist_ok=True)
@@ -136,9 +127,9 @@ def run_cross_interpreter_upgrade_smoke(*, work_dir: str) -> bool:
     if publish.returncode != 0:
         raise RuntimeError(f"initial plugin publish failed: {publish.stderr}")
 
-    cache_root = (
-        scratch_home / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
-    )
+    from autoskillit.core import installed_plugin_cache_dir
+
+    cache_root = installed_plugin_cache_dir(scratch_home, "autoskillit")
     pre_upgrade = _cache_incarnations(cache_root)
     if not pre_upgrade:
         raise RuntimeError(

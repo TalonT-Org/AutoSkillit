@@ -1,31 +1,12 @@
-"""Publication obligation journal — "republication owed" as a persisted fact.
-
-Before this module, a crash between the update transaction's irreversible
-pivot and a completed republication child left NO on-disk breadcrumb
-distinguishing "never updated" from "republication still owed" — the exact
-blind spot behind issue #4469's total session lockout (the incident's
-republication child never ran, and nothing recorded that it was supposed
-to).
-
-Layer note (IL-1, workspace): the obligation must be writable by the update
-transaction (cli/update/, IL-3) and readable by MCP server startup
-(server/_lifespan.py, IL-3) without a server → cli import edge (REQ-ARCH-003b
-forbids that). Living here — the same layer verify_install_state() already
-lives at, and that server/_lifespan.py already imports unconditionally — is
-the precedented, legal home for both callers.
-
-Idiom: the same registry-plus-repair pattern as
-``RETIRED_INSTALL_ARTIFACT_SHAPES`` (core/types/_type_constants.py) /
-``reconcile_install_artifacts()`` (workspace/_install_state.py) — a durable
-record that gives a repair loop something concrete to act on, instead of a
-one-off in-memory decision that vanishes if the process dies.
-"""
+"""Durable journal recording that plugin republication remains owed."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+
+from packaging.version import InvalidVersion, Version
 
 from autoskillit.core import ArtifactLease, get_logger, read_versioned_json, write_versioned_json
 
@@ -132,14 +113,14 @@ def read_obligation(home: Path) -> PublicationObligation | None:
 
     A corrupt, unreadable, or schema-version-mismatched file reads as
     "pending, version unknown" — fail toward repair, which is idempotent —
-    never silently as "no obligation". ``path.exists()`` is checked first so
+    never silently as "no obligation". File presence is checked first so
     only a *missing* file (the common, safe case: no obligation was ever
     written) returns ``None``; every other failure mode of
     ``read_versioned_json`` (corrupt JSON, non-dict, schema drift) is
     collapsed into the degraded-but-pending record below instead.
     """
     path = _obligation_path(home)
-    if not path.exists():
+    if not path.exists() and not path.is_symlink():
         return None
     data = read_versioned_json(path, _OBLIGATION_SCHEMA_VERSION, logger=logger)
     if data is None:
@@ -165,6 +146,12 @@ def read_obligation(home: Path) -> PublicationObligation | None:
         if isinstance(expected_version, str) and expected_version.strip()
         else None
     )
+    if normalized_expected_version is not None:
+        try:
+            Version(normalized_expected_version)
+        except InvalidVersion:
+            logger.warning("update_obligation_read_invalid_expected_version")
+            normalized_expected_version = None
     return PublicationObligation(
         previous_version=previous_version,
         expected_version=normalized_expected_version,

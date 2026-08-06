@@ -103,7 +103,7 @@ _READ_SIDE_EXCEPTIONS: dict[str, str] = {
     "src/autoskillit/workspace/session_skills.py": (
         "Per-session consumer metadata is written once and never read by AutoSkillit"
     ),
-    "src/autoskillit/workspace/_projected_artifact/_manifest_publication.py": (
+    "src/autoskillit/workspace/_installed_artifact_manifest.py": (
         "Writes the installed-plugin manifest via the shared write_installed_plugin_"
         "artifact_manifest_locked() core (one implementation, two callers: publish and "
         "repair); the read-side validator for this exact schema is the already-registered "

@@ -19,7 +19,7 @@ from tests.arch._rules import (
     _STRENUM_SRC_COMPARE_EXEMPT_PATHS,
     RuleDescriptor,
     Violation,
-    _rel,  # noqa: F401  # re-exported for test_layer_enforcement, test_subpackage_isolation
+    _rel,  # noqa: F401  # shared by layer and subpackage checks
 )
 
 # ── Path constants ────────────────────────────────────────────────────────────
@@ -202,7 +202,9 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
         is_broad = node.type is None or (
             isinstance(node.type, ast.Name) and node.type.id in _BROAD_EXCEPTION_TYPES
         )
-        scoped_post_pivot_exempt = self.filepath.name == "_transaction.py" and (
+        scoped_post_pivot_exempt = self.filepath == (
+            SRC_ROOT / "cli" / "update" / "_transaction.py"
+        ) and (
             self._function_stack[-1:] == ["_report_post_pivot_failure"]
             or _has_named_call(node.body, "_report_post_pivot_failure")
         )

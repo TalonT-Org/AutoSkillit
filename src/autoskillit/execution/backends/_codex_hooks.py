@@ -10,7 +10,13 @@ import hashlib
 from collections.abc import Sequence
 from pathlib import Path
 
-from autoskillit.core import atomic_write, installed_plugin_artifact_root
+from autoskillit.core import (
+    _AUTOSKILLIT_PLUGIN_KEY,
+    atomic_write,
+    installed_plugin_artifact_root,
+    installed_plugin_semantic_key,
+    read_installed_plugin_artifact_identity,
+)
 from autoskillit.execution.backends._codex_config import (
     _read_codex_config,
     _serialize_toml,
@@ -33,9 +39,18 @@ def _resolve_codex_hooks_dir() -> Path:
     """Select a durable absolute dispatcher root for Codex configuration."""
     from autoskillit import __version__
 
-    cache_hooks_dir = (
-        installed_plugin_artifact_root(Path.home(), "autoskillit", __version__) / "hooks"
-    )
+    cache_root = installed_plugin_artifact_root(Path.home(), "autoskillit", __version__)
+    try:
+        identity = read_installed_plugin_artifact_identity(
+            cache_root,
+            expected_semantic_key=installed_plugin_semantic_key(
+                _AUTOSKILLIT_PLUGIN_KEY,
+                __version__,
+            ),
+        )
+    except Exception:
+        return HOOKS_DIR
+    cache_hooks_dir = identity.managed_path / "hooks"
     if (cache_hooks_dir / "_dispatch.py").is_file():
         return cache_hooks_dir
     return HOOKS_DIR

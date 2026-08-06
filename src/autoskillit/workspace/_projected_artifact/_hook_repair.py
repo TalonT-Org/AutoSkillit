@@ -1,28 +1,11 @@
-"""Repair primitive for broken published hook artifacts in the plugin cache.
-
-Placement is constrained by an enforced architectural guard
-(``tests/arch/test_layer_enforcement.py``, REQ-ARCH-003b): no non-``tools_*``
-module under ``server/`` may import ``autoskillit.cli`` — and
-``server/_lifespan.py`` is this repair primitive's primary caller. It
-therefore cannot live in ``cli/_plugin_artifact.py``; ``workspace/`` (IL-1)
-is the same layer ``server/_lifespan.py`` already imports unconditionally
-for ``verify_install_state()`` (see ``workspace/_install_state.py``), so the
-edge is precedented and legal.
-
-The manifest refresh itself delegates to
-``_manifest_publication.write_installed_plugin_artifact_manifest_locked``,
-the same shared core ``cli/_plugin_artifact.py``'s
-``publish_installed_plugin_artifact`` delegates to (a legal downward
-``cli → workspace`` import) — one implementation, two callers, so a
-rewritten cache ``hooks.json`` can never desync from the manifest that
-guards its tamper detection.
-"""
+"""Repair broken published hook artifacts and refresh their manifests."""
 
 from __future__ import annotations
 
 import json
 import shlex
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -41,13 +24,25 @@ from autoskillit.hook_registry import (
     find_broken_hook_scripts,
     render_relocatable_hook_command,
 )
-from autoskillit.workspace._projected_artifact._manifest_publication import (
+from autoskillit.workspace._installed_artifact_manifest import (
     write_installed_plugin_artifact_manifest_locked,
 )
 
-__all__ = ["PluginHookRepairOutcome", "repair_broken_plugin_cache_hooks"]
+__all__ = [
+    "PluginHookRepairOutcome",
+    "PluginHookRepairStatus",
+    "repair_broken_plugin_cache_hooks",
+]
 
 logger = get_logger(__name__)
+
+
+class PluginHookRepairStatus(StrEnum):
+    """Closed outcomes for an incarnation considered by hook repair."""
+
+    REPAIRED = "repaired"
+    CONTENDED = "contended"
+    FAILED = "failed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,8 +50,8 @@ class PluginHookRepairOutcome:
     """Per-incarnation repair result."""
 
     incarnation_dir: Path
-    repaired: bool
-    skipped_reason: str | None = None
+    status: PluginHookRepairStatus
+    detail: str | None = None
 
 
 def _logical_hook_name(command: str) -> str:
@@ -65,8 +60,11 @@ def _logical_hook_name(command: str) -> str:
         parts = shlex.split(command)
     except ValueError as exc:
         raise ValueError(f"cannot parse hook command: {command!r}") from exc
+    has_dispatcher = any(part.endswith("_dispatch.py") for part in parts)
     if len(parts) >= 3 and parts[-2].endswith("_dispatch.py"):
         logical_name = parts[-1]
+    elif has_dispatcher:
+        logical_name = ""
     elif len(parts) >= 2:
         script_path = parts[-1].replace("\\", "/")
         marker = "/hooks/"
@@ -142,26 +140,25 @@ def repair_broken_plugin_cache_hooks(
     Hooks and manifest are updated as one rollback-protected operation and
     the repaired artifact is revalidated before success is reported.
 
-    Lease contention or any other per-incarnation error is a skip with a
-    structured diagnostic; this primitive never raises out. It repairs hook
-    artifacts only — it does not clear a publication obligation (see
-    ``workspace._update_obligation``), because it cannot perform the full
-    publication that obligation may demand.
+    Per-incarnation errors are returned as closed outcomes. This primitive
+    repairs hook artifacts only and never clears publication obligations.
     """
     if not cache_dir.is_dir():
         return ()
     outcomes: list[PluginHookRepairOutcome] = []
     for version_dir in sorted(
-        p for p in cache_dir.iterdir() if p.is_dir() and not p.name.startswith(".")
+        p
+        for p in cache_dir.iterdir()
+        if p.is_dir() and not p.is_symlink() and not p.name.startswith(".")
     ):
-        hooks_json_path = version_dir / "hooks" / "hooks.json"
-        if not hooks_json_path.is_file():
-            continue
-        broken = find_broken_hook_scripts(hooks_json_path, expansion_root=version_dir)
-        if not broken:
-            continue
         version = version_dir.name
+        hooks_json_path = version_dir / "hooks" / "hooks.json"
         try:
+            if not hooks_json_path.is_file():
+                continue
+            broken = find_broken_hook_scripts(hooks_json_path, expansion_root=version_dir)
+            if not broken:
+                continue
             lease_path = installed_plugin_artifact_lease_path(version_dir)
             with ArtifactLease.acquire_exclusive(lease_path, blocking=False):
                 original_hooks = hooks_json_path.read_text(encoding="utf-8")
@@ -211,8 +208,8 @@ def repair_broken_plugin_cache_hooks(
             outcomes.append(
                 PluginHookRepairOutcome(
                     incarnation_dir=version_dir,
-                    repaired=False,
-                    skipped_reason="lease contended",
+                    status=PluginHookRepairStatus.CONTENDED,
+                    detail="lease contended",
                 )
             )
             logger.warning("plugin_cache_hooks_repair_skipped_contended", version=version)
@@ -221,12 +218,17 @@ def repair_broken_plugin_cache_hooks(
             outcomes.append(
                 PluginHookRepairOutcome(
                     incarnation_dir=version_dir,
-                    repaired=False,
-                    skipped_reason=str(exc),
+                    status=PluginHookRepairStatus.FAILED,
+                    detail=str(exc),
                 )
             )
             logger.warning("plugin_cache_hooks_repair_failed", version=version, exc_info=True)
             continue
-        outcomes.append(PluginHookRepairOutcome(incarnation_dir=version_dir, repaired=True))
+        outcomes.append(
+            PluginHookRepairOutcome(
+                incarnation_dir=version_dir,
+                status=PluginHookRepairStatus.REPAIRED,
+            )
+        )
         logger.info("plugin_cache_hooks_repaired", version=version)
     return tuple(outcomes)

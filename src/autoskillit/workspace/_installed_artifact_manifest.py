@@ -1,8 +1,4 @@
-"""Publish installed-plugin artifact manifests from one shared authority.
-
-Both initial publication and in-process repair use this module. Callers must
-hold the incarnation's exclusive publication lease before writing.
-"""
+"""Publish installed-plugin manifests under the installed-artifact authority."""
 
 from __future__ import annotations
 
@@ -33,13 +29,7 @@ def write_installed_plugin_artifact_manifest_locked(
     semantic_key: str,
     action: str,
 ) -> PluginArtifactIdentity:
-    """Build a fresh identity and persist its manifest for one incarnation.
-
-    Caller must already own the incarnation's exclusive publication lease.
-    ``action`` is the structured-logging verb recorded via
-    ``log_plugin_artifact_lifecycle`` (``"publish"`` for a first publish,
-    ``"repair"`` for a post-repair manifest refresh).
-    """
+    """Persist a fresh identity while the caller owns the publication lease."""
     manifest_path = installed_plugin_artifact_manifest_path(managed_path)
     identity = PluginArtifactIdentity(
         semantic_key=semantic_key,

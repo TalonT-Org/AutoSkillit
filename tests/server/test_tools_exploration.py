@@ -17,6 +17,7 @@ from autoskillit.core import (
     ContinuationCursor,
     EvidencePage,
     EvidenceRecord,
+    ExplorationQuerySpec,
     MethodProvenance,
     NodeKey,
     RepositoryIdentity,
@@ -37,6 +38,8 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 class _Store:
     def __init__(self) -> None:
         self.submit_calls = 0
+        self.submitted_query: ExplorationQuerySpec | None = None
+        self.submitted_page_size: int | None = None
         self.get_status = CapabilityResolutionStatus.OK
 
     @staticmethod
@@ -48,9 +51,14 @@ class _Store:
         )
 
     def submit_from_launch_environment(
-        self, **_kwargs: object
+        self,
+        *,
+        query: ExplorationQuerySpec,
+        page_size: int,
     ) -> tuple[CapabilityResolutionStatus, EvidencePage | None]:
         self.submit_calls += 1
+        self.submitted_query = query
+        self.submitted_page_size = page_size
         return CapabilityResolutionStatus.OK, self._page()
 
     def get_page_from_launch_environment(
@@ -261,6 +269,76 @@ async def test_submit_is_gated_before_any_store_access(monkeypatch: pytest.Monke
 
 
 @pytest.mark.asyncio
+async def test_submit_preserves_default_query_and_page_limits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.server.tools import tools_exploration
+
+    store = _Store()
+    monkeypatch.setattr(tools_exploration, "_get_store", lambda: store)
+    monkeypatch.setattr(tools_exploration, "_require_enabled", lambda: None)
+
+    result = await tools_exploration.submit_exploration_query("needle")
+
+    assert json.loads(result)["status"] == "accepted"
+    assert store.submitted_query is not None
+    assert store.submitted_query.max_results == 100
+    assert store.submitted_page_size == 100
+
+
+@pytest.mark.asyncio
+async def test_submit_keeps_query_and_response_page_ceilings_independent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.server.tools import tools_exploration
+
+    store = _Store()
+    monkeypatch.setattr(tools_exploration, "_MAX_QUERY_RESULTS", 5)
+    monkeypatch.setattr(tools_exploration, "_MAX_RESPONSE_PAGE_SIZE", 3)
+    monkeypatch.setattr(tools_exploration, "_get_store", lambda: store)
+    monkeypatch.setattr(tools_exploration, "_require_enabled", lambda: None)
+
+    result = await tools_exploration.submit_exploration_query("needle", max_results=9)
+
+    assert json.loads(result)["status"] == "accepted"
+    assert store.submitted_query is not None
+    assert store.submitted_query.max_results == 5
+    assert store.submitted_page_size == 3
+
+
+@pytest.mark.parametrize(
+    "max_results",
+    [
+        pytest.param(True, id="bool-true"),
+        pytest.param(False, id="bool-false"),
+        pytest.param(0, id="zero"),
+        pytest.param(-1, id="negative"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_submit_rejects_invalid_max_results(
+    monkeypatch: pytest.MonkeyPatch,
+    max_results: int,
+) -> None:
+    from autoskillit.server.tools import tools_exploration
+
+    store = _Store()
+    monkeypatch.setattr(tools_exploration, "_get_store", lambda: store)
+    monkeypatch.setattr(tools_exploration, "_require_enabled", lambda: None)
+
+    result = await tools_exploration.submit_exploration_query(
+        "needle",
+        max_results=max_results,
+    )
+
+    assert json.loads(result) == {
+        "status": "error",
+        "code": "invalid_exploration_request",
+    }
+    assert store.submit_calls == 0
+
+
+@pytest.mark.asyncio
 async def test_page_uses_only_server_issued_launch_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -288,6 +366,60 @@ async def test_page_uses_only_server_issued_launch_environment(
 
     assert store.calls == [(7, cursor)]
     assert result == tools_exploration._page_payload(issued_page, status="ready")
+
+
+@pytest.mark.parametrize("page_size", [0, -1, 101])
+@pytest.mark.asyncio
+async def test_page_rejects_sizes_outside_current_wire_bounds(
+    monkeypatch: pytest.MonkeyPatch,
+    page_size: int,
+) -> None:
+    from autoskillit.server.tools import tools_exploration
+
+    store = _RecordingPageStore(_Store._page())
+    monkeypatch.setattr(tools_exploration, "_get_store", lambda: store)
+    monkeypatch.setattr(tools_exploration, "_require_enabled", lambda: None)
+
+    result = await tools_exploration.get_exploration_page(page_size=page_size)
+
+    assert json.loads(result) == {
+        "status": "error",
+        "code": "invalid_exploration_request",
+    }
+    assert store.calls == []
+
+
+@pytest.mark.asyncio
+async def test_response_page_ceiling_controls_slicing_and_retrieval_independently(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.server.tools import tools_exploration
+
+    page = EvidencePage(
+        evidence=tuple(
+            EvidenceRecord(
+                f"evidence-{index}",
+                MethodProvenance.COLLECTOR,
+                "snapshot-1",
+                subject=NodeKey("repository-path", f"src/module_{index}.py"),
+            )
+            for index in range(3)
+        ),
+        result_digest="result-digest",
+        completeness=CompletenessReport((), (), True),
+    )
+    store = _RecordingPageStore(page)
+    monkeypatch.setattr(tools_exploration, "_MAX_QUERY_RESULTS", 1)
+    monkeypatch.setattr(tools_exploration, "_MAX_RESPONSE_PAGE_SIZE", 2)
+    monkeypatch.setattr(tools_exploration, "_get_store", lambda: store)
+    monkeypatch.setattr(tools_exploration, "_require_enabled", lambda: None)
+
+    accepted = await tools_exploration.get_exploration_page(page_size=2)
+    rejected = await tools_exploration.get_exploration_page(page_size=3)
+
+    assert len(json.loads(accepted)["evidence"]) == 2
+    assert json.loads(rejected)["code"] == "invalid_exploration_request"
+    assert store.calls == [(2, None)]
 
 
 def test_page_payload_preserves_evidence_authority_fields() -> None:

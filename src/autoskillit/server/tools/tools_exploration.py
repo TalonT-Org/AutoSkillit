@@ -19,7 +19,8 @@ from autoskillit.server._guards import _require_enabled
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 _MAX_QUERY_LENGTH = 4_096
-_MAX_PAGE_SIZE = 100
+_MAX_QUERY_RESULTS = 100
+_MAX_RESPONSE_PAGE_SIZE = 100
 _FAILURE_INVALID_REQUEST = "invalid_exploration_request"
 _FAILURE_CONTEXT_UNAVAILABLE = "exploration_context_unavailable"
 _FAILURE_BROKER_UNAVAILABLE = "exploration_broker_unavailable"
@@ -69,7 +70,10 @@ def _query(query: str, max_results: int) -> ExplorationQuerySpec | None:
     if not isinstance(max_results, int) or isinstance(max_results, bool):
         return None
     try:
-        return ExplorationQuerySpec(query=query, max_results=min(max_results, _MAX_PAGE_SIZE))
+        return ExplorationQuerySpec(
+            query=query,
+            max_results=min(max_results, _MAX_QUERY_RESULTS),
+        )
     except ValueError:
         return None
 
@@ -142,7 +146,7 @@ def _page_payload(page: EvidencePage, *, status: str) -> str:
                 "unknowns": _bounded_terms(record.unknowns),
                 "conflicts": _bounded_terms(record.conflicts),
             }
-            for record in page.evidence[:_MAX_PAGE_SIZE]
+            for record in page.evidence[:_MAX_RESPONSE_PAGE_SIZE]
         ],
         "complete": page.completeness.complete,
         "missing_collectors": list(page.completeness.missing_collectors[:16]),
@@ -160,7 +164,7 @@ def _fetch_page_from_launch_environment(
     success_status: str,
 ) -> str:
     store = _get_store()
-    if not 0 < page_size <= _MAX_PAGE_SIZE:
+    if not 0 < page_size <= _MAX_RESPONSE_PAGE_SIZE:
         return _failure(_FAILURE_INVALID_REQUEST)
     if store is None:
         raise RuntimeError("exploration context store is unavailable")
@@ -180,7 +184,7 @@ def _fetch_page_from_launch_environment(
 @_cancellation_shield()
 async def submit_exploration_query(
     query: str,
-    max_results: int = _MAX_PAGE_SIZE,
+    max_results: int = _MAX_QUERY_RESULTS,
 ) -> str:
     """Submit one bounded repository query to the server-owned exploration broker.
 
@@ -201,7 +205,7 @@ async def submit_exploration_query(
             raise RuntimeError("exploration context store is unavailable")
         status, page = store.submit_from_launch_environment(
             query=request,
-            page_size=request.max_results,
+            page_size=min(request.max_results, _MAX_RESPONSE_PAGE_SIZE),
         )
         if status is not CapabilityResolutionStatus.OK or page is None:
             return _failure(_FAILURE_CONTEXT_UNAVAILABLE)
@@ -217,7 +221,7 @@ async def submit_exploration_query(
 )
 @_cancellation_shield()
 async def get_exploration_page(
-    page_size: int = _MAX_PAGE_SIZE,
+    page_size: int = _MAX_RESPONSE_PAGE_SIZE,
     continuation: str | None = None,
 ) -> str:
     """Retrieve bounded state for an active brokered exploration capability.
@@ -246,7 +250,7 @@ async def get_exploration_page(
 )
 @_cancellation_shield()
 async def resume_exploration_context(
-    page_size: int = _MAX_PAGE_SIZE,
+    page_size: int = _MAX_RESPONSE_PAGE_SIZE,
 ) -> str:
     """Resume an active context without accepting caller-supplied identity.
 

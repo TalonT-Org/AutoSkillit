@@ -10,6 +10,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from autoskillit.workspace import EffectiveSkillCatalog
 
 __all__ = [
     "STALE_VERSION",
@@ -21,8 +25,13 @@ __all__ = [
 STALE_VERSION = "0.0.1-stale"
 
 
-def non_exploration_catalog(catalog):
-    """Return the explicit catalog used by projection tests unrelated to exploration."""
+def non_exploration_catalog(
+    catalog: EffectiveSkillCatalog,
+) -> EffectiveSkillCatalog:
+    """Return the explicit catalog for tests unrelated to exploration.
+
+    The runtime import stays local to avoid collection-time cross-layer loading.
+    """
     from autoskillit.workspace import EffectiveSkillCatalog
 
     skills = tuple(skill for skill in catalog.skills if not skill.exploration_vectors)

@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -191,6 +192,16 @@ from autoskillit.server.tools._native_shell_capture import (
 from autoskillit.server.tools._types import ToolFailureEnvelope, deny_envelope
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class _ExplorerLaunchLease:
+    """Cleanup authority for one bound explorer launch."""
+
+    session_id: str
+    session_home: Path
+    backend: CodingAgentBackend | None
+
 
 _PURE_SLEEP_RE = re.compile(
     r'^(?:python3?\s+-c\s+["\']import time;\s*time\.sleep\((?P<py_secs>\d+(?:\.\d+)?)\)["\']'
@@ -916,9 +927,7 @@ async def run_skill(
 
         _cleanup_session_id: str | None = None
         _explorer_parent_identity: tuple[Path, str] | None = None
-        _exploration_bound_session_id: str | None = None
-        _exploration_bound_session_home: Path | None = None
-        _explorer_backend_for_cleanup: CodingAgentBackend | None = None
+        _explorer_launch_lease: _ExplorerLaunchLease | None = None
         tool_ctx = _get_ctx()
         _installed_execution = get_recipe_execution(tool_ctx)
         _contract_store = tool_ctx.skill_session_contract_store
@@ -1804,9 +1813,7 @@ async def run_skill(
                     def _mint_fresh_explorer_binding(
                         authority_home: Path,
                     ) -> dict[str, dict[str, str]] | None:
-                        nonlocal _exploration_bound_session_id
-                        nonlocal _exploration_bound_session_home
-                        nonlocal _explorer_backend_for_cleanup
+                        nonlocal _explorer_launch_lease
                         binding_env = _issue_explorer_binding_env(
                             tool_ctx,
                             session_id=session_id,
@@ -1818,9 +1825,11 @@ async def run_skill(
                             # ``bind_launches`` persists authority before it
                             # returns. Transfer cleanup ownership before Codex
                             # validates or writes any projected config.
-                            _exploration_bound_session_id = session_id
-                            _exploration_bound_session_home = authority_home
-                            _explorer_backend_for_cleanup = _effective_backend_obj
+                            _explorer_launch_lease = _ExplorerLaunchLease(
+                                session_id=session_id,
+                                session_home=authority_home,
+                                backend=_effective_backend_obj,
+                            )
                             if _effective_backend_obj is None:
                                 raise SkillContractError(
                                     "Explorer launch requires the bound Codex backend"
@@ -1881,9 +1890,11 @@ async def run_skill(
                     # As on the fresh path, launch authority exists before
                     # backend injection.  Make the outer finally block own it
                     # first so refresh failures and cancellations revoke it.
-                    _exploration_bound_session_id = resume_session_id
-                    _exploration_bound_session_home = restored_session_root.parent
-                    _explorer_backend_for_cleanup = _effective_backend_obj
+                    _explorer_launch_lease = _ExplorerLaunchLease(
+                        session_id=resume_session_id,
+                        session_home=restored_session_root.parent,
+                        backend=_effective_backend_obj,
+                    )
                     if _effective_backend_obj is None:
                         raise SkillContractError(
                             "Explorer resume requires the bound Codex backend"
@@ -2309,19 +2320,19 @@ async def run_skill(
         ).to_json()
     finally:
         contract_lifecycle.cleanup()
-        if _exploration_bound_session_id is not None:
+        if _explorer_launch_lease is not None:
             exploration_store = tool_ctx.exploration_context_store
             if exploration_store is None:
                 logger.warning(
                     "explorer_context_store_unavailable_during_cleanup",
-                    session_id=_exploration_bound_session_id,
+                    session_id=_explorer_launch_lease.session_id,
                 )
             else:
                 _cleanup_explorer_launch(
                     exploration_store,
-                    session_id=_exploration_bound_session_id,
-                    session_home=_exploration_bound_session_home,
-                    backend=_explorer_backend_for_cleanup,
+                    session_id=_explorer_launch_lease.session_id,
+                    session_home=_explorer_launch_lease.session_home,
+                    backend=_explorer_launch_lease.backend,
                 )
         if _sn_token is not None:
             _current_step_name.reset(_sn_token)  # type: ignore[possibly-undefined]

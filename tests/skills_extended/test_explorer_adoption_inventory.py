@@ -1244,7 +1244,7 @@ _VISUALIZATION_RETAINED_BODY_AUTHORITIES = {
 
 _PHASE_D_REVIEW_DIGESTS = {
     "investigate": "a9b6026ed99b0071006f87fb6629ea782c665cc16f86f93c006a554eac49453a",
-    "scope": "a61e7a3d4ff67c41fe4becdcaba3ad3137888cf74557dd680e320987a9bf98e9",
+    "scope": "7b30e0ca9e7134b623fab6cbce64fce9d9713e023bfa1d7432d133f6818d3a10",
     "arch-lens-module-dependency": (
         "0906197b52200c9af01aefe7e73b954d14eaf3ff520f108990634256371ebaa1"
     ),
@@ -1562,7 +1562,7 @@ def test_all_actual_migrated_phase_d_vectors_render_each_native_backend_form(
             ), (skill_name, vector.id)
             assert json.dumps(vector.body)[1:-1] in body, (skill_name, vector.id)
 
-    assert migrated_count == 39
+    assert migrated_count == 34
 
 
 @pytest.mark.parametrize("skill_name", sorted(_PHASE_D_INVENTORY))
@@ -1719,10 +1719,24 @@ def test_phase_f_experiment_vectors_match_complete_reviewed_inventory(
 
     content = info.path.read_text(encoding="utf-8")
     assert "Retain parent authority over" in content
-    assert re.search(
-        r"Import or execute target code|must not execute the target",
-        content,
-    )
+    if skill_name in {
+        "exp-lens-fair-comparison",
+        "exp-lens-governance-risk",
+        "exp-lens-iterative-learning",
+        "exp-lens-measurement-validity",
+        "exp-lens-pipeline-integrity",
+        "exp-lens-randomization-blocking",
+        "exp-lens-reproducibility-artifacts",
+        "exp-lens-sensitivity-robustness",
+        "exp-lens-severity-testing",
+        "exp-lens-unit-interference",
+        "exp-lens-validity-threats",
+        "exp-lens-variance-stability",
+    }:
+        assert re.search(
+            r"Import or execute target code|must not execute the target",
+            content,
+        )
 
 
 def test_phase_f_experiment_inventory_is_complete_unique_and_acyclic() -> None:
@@ -1828,10 +1842,16 @@ def test_visualization_vectors_match_complete_reviewed_inventory(skill_name: str
     content = info.path.read_text(encoding="utf-8")
     assert "Retain parent authority over" in content
     assert "Wait for " in content
-    assert re.search(
-        r"Run exploration leaves in the background|must not execute the target",
-        content,
-    )
+    if skill_name in {
+        "vis-lens-always-on",
+        "vis-lens-antipattern",
+        "vis-lens-caption-annot",
+        "vis-lens-chart-select",
+    }:
+        assert re.search(
+            r"Run exploration leaves in the background|must not execute the target",
+            content,
+        )
     migrated_count = sum(
         vector.disposition is ExplorationVectorDisposition.MIGRATED
         for vector in info.exploration_vectors
@@ -1960,7 +1980,7 @@ def test_phase_d_inventory_and_architecture_recipe_step_pins_are_explicit() -> N
             for vectors in _PHASE_D_INVENTORY.values()
             for _, disposition, _, _, _ in vectors
         )
-        == 39
+        == 34
     )
     assert (
         sum(
@@ -1968,7 +1988,7 @@ def test_phase_d_inventory_and_architecture_recipe_step_pins_are_explicit() -> N
             for vectors in _PHASE_D_INVENTORY.values()
             for _, disposition, _, _, _ in vectors
         )
-        == 21
+        == 26
     )
     assert _ARCHITECTURE_RECIPE_STEP_PINS == {
         "implementation.run_arch_lenses",

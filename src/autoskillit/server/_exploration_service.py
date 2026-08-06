@@ -70,8 +70,7 @@ class DefaultExplorationService:
             if activation.applicability.value == "applicable"
         }
         selected_profiles = set(query.required_profiles).union(applicable)
-        # The language-neutral observation layer supplies bounded repository context for every
-        # specialized profile. It is always applicable and its inclusion is deterministic.
+        # The language-neutral layer supplies bounded context for every specialized profile.
         selected_profiles.add(RepositoryProfileId.LANGUAGE_NEUTRAL)
         return tuple(
             sorted(

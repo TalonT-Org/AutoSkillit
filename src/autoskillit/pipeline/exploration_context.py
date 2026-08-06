@@ -313,6 +313,8 @@ class _ExplorationLaunchAuthorityStore:
 
 @dataclass(frozen=True, slots=True)
 class _CapabilityLease(Generic[_T]):
+    """In-memory owner-bound capability over a typed value and snapshot scope."""
+
     owner_id: str
     role: str
     session_id: str
@@ -401,7 +403,6 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
         return authority.repository_root
 
     def __enter__(self) -> OwnerBoundExplorationContextStore[_T]:
-        """Return the lifecycle owner for a scoped server construction."""
         return self
 
     def __exit__(self, *_unused: object) -> None:
@@ -807,7 +808,6 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
             self._discard_locked(capability)
 
     def cleanup_session(self, session_id: str) -> None:
-        """Remove every capability associated with a finished or replaced launch."""
         self._validate_binding(owner_id="server", role="server", session_id=session_id)
         with self._lock:
             authority_path = self._session_authority_paths.pop(session_id, None)
@@ -816,7 +816,6 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
             self._discard_session_locked(session_id)
 
     def cleanup_expired(self) -> int:
-        """Remove expired entries and return only the removal count."""
         with self._lock:
             return self._cleanup_expired_locked()
 
@@ -970,8 +969,8 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
         return f"sha256:{digest}"
 
     def _new_capability_locked(self) -> str:
-        # A collision is cryptographically implausible, but a loop preserves the
-        # dictionary's single-source-of-truth invariant without relying on that.
+        # Cryptographic collision is implausible; the loop preserves the
+        # dictionary's single-source-of-truth invariant.
         while True:
             capability = f"explore_{secrets.token_urlsafe(32)}"
             if capability not in self._leases:

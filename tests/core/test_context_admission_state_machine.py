@@ -1125,6 +1125,16 @@ class ContextAdmissionStateMachine(RuleBasedStateMachine):
                     AdmissionState.ROLLED_BACK,
                     AdmissionState.QUARANTINED,
                 }
+                or any(
+                    generation.batch_id == batch.batch_id
+                    and generation.state
+                    in {
+                        GenerationState.RESERVED,
+                        GenerationState.STREAMING,
+                        GenerationState.INDETERMINATE,
+                    }
+                    for generation in self.state.generation_reservations
+                )
             ):
                 continue
             event = ExpireIdempotencyKeyEvent(

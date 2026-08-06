@@ -192,6 +192,7 @@ class CaptureLifecycleStore:
         self._monotonic = monotonic
         self._ledger_view = _capture_ledger_view.LedgerView()
         self._capacity = _capture_types.CaptureCapacitySpec()
+        self._capacity_frame_sizes: _capture_capacity.CompactedFrameSizeCache = {}
         self._sweep_budget: SweepBudgetSpec | None = None
         self._sweep_started_monotonic: float | None = None
         self._sweep_records_inspected = self._sweep_replay_bytes = 0
@@ -503,6 +504,7 @@ class CaptureLifecycleStore:
             candidate,
             compaction_epoch=compaction_epoch,
             spec=self._capacity,
+            frame_size_cache=self._capacity_frame_sizes,
         )
         if reason is not None:
             raise CaptureCapacityError(reason)
@@ -1055,6 +1057,7 @@ class CaptureLifecycleStore:
             compaction_epoch=compaction_epoch,
             spec=self._capacity,
             active_limit=min(MAX_ACTIVE_RECORDS, self._capacity.max_operational_records),
+            frame_size_cache=self._capacity_frame_sizes,
         )
 
     def _admit_new_record(

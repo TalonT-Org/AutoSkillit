@@ -168,6 +168,58 @@ def test_capacity_spec_derives_total_recovery_headroom() -> None:
     assert spec.recovery_headroom_bytes == 7168
 
 
+def test_compacted_byte_cache_reuses_unchanged_record_frames(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    try:
+        store.reserve_capture(_CAPTURE_ID)
+        store.reserve_capture("1" * 16)
+        with store._locked():
+            records, compaction_epoch, _size = store._load_locked()
+
+        original_encode_frame = capture_capacity._ledger.encode_frame
+        encoded_capture_ids: list[str] = []
+
+        def counted_encode_frame(payload: dict[str, object], *, compaction_epoch: int) -> bytes:
+            encoded_capture_ids.append(str(payload["capture_id"]))
+            return original_encode_frame(payload, compaction_epoch=compaction_epoch)
+
+        monkeypatch.setattr(capture_capacity._ledger, "encode_frame", counted_encode_frame)
+        cache: capture_capacity.CompactedFrameSizeCache = {}
+
+        capture_capacity.compacted_bytes(
+            records,
+            compaction_epoch,
+            store._capacity,
+            frame_size_cache=cache,
+        )
+        candidate = replace(records[_CAPTURE_ID], revision=records[_CAPTURE_ID].revision + 1)
+        projected = dict(records)
+        projected[_CAPTURE_ID] = candidate
+        capture_capacity.compacted_bytes(
+            projected,
+            compaction_epoch,
+            store._capacity,
+            frame_size_cache=cache,
+        )
+        capture_capacity.compacted_bytes(
+            projected,
+            compaction_epoch,
+            store._capacity,
+            frame_size_cache=cache,
+        )
+
+        assert encoded_capture_ids.count(_CAPTURE_ID) == 2
+        assert encoded_capture_ids.count("1" * 16) == 1
+    finally:
+        root.close()
+        anchor.close()
+
+
 @pytest.mark.parametrize("reason", tuple(CaptureCapacityReason))
 def test_capacity_error_preserves_internal_and_transported_reasons(
     reason: CaptureCapacityReason,

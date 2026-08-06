@@ -1414,6 +1414,8 @@ def test_planner_skill_vectors_match_reviewed_inventory(
     for vector in info.exploration_vectors:
         assert content.count(vector.marker_line) == 1
     assert content.count("<!-- /autoskillit:exploration-vector -->") == len(expected)
+    if skill_name == "planner-extract-domain":
+        assert "Use the registered exploration roles for all repository reads" in content
 
 
 def test_dynamic_deep_mode_vectors_have_closed_conditional_applicability() -> None:
@@ -1502,6 +1504,11 @@ def test_phase_d_skill_vectors_match_reviewed_inventory(skill_name: str) -> None
     )
 
     content = skill_path.read_text(encoding="utf-8")
+    if skill_name == "investigate":
+        assert (
+            "Spawn all retained subagents through child delegation under the declared "
+            "`sonnet` model-class policy"
+        ) in content
     for vector in info.exploration_vectors:
         assert content.count(vector.marker_line) == 1
     assert content.count("<!-- /autoskillit:exploration-vector -->") == len(expected)
@@ -1710,6 +1717,13 @@ def test_phase_f_experiment_vectors_match_complete_reviewed_inventory(
     for invariant in _EXPERIMENT_MISSING_CONTEXT_INVARIANTS:
         assert invariant in normalized_missing_body, (skill_name, invariant)
 
+    content = info.path.read_text(encoding="utf-8")
+    assert "Retain parent authority over" in content
+    assert re.search(
+        r"Import or execute target code|must not execute the target",
+        content,
+    )
+
 
 def test_phase_f_experiment_inventory_is_complete_unique_and_acyclic() -> None:
     graph: dict[str, set[str]] = {}
@@ -1813,6 +1827,18 @@ def test_visualization_vectors_match_complete_reviewed_inventory(skill_name: str
 
     content = info.path.read_text(encoding="utf-8")
     assert "Retain parent authority over" in content
+    assert "Wait for " in content
+    assert re.search(
+        r"Run exploration leaves in the background|must not execute the target",
+        content,
+    )
+    migrated_count = sum(
+        vector.disposition is ExplorationVectorDisposition.MIGRATED
+        for vector in info.exploration_vectors
+    )
+    if migrated_count:
+        suffix = "vector" if migrated_count == 1 else "vectors"
+        assert f"Dispatch exactly {migrated_count} migrated exploration {suffix}" in content
 
 
 def test_visualization_retained_context_and_judgment_authorities_are_exact() -> None:
@@ -1894,6 +1920,14 @@ def test_architecture_lens_vectors_match_complete_reviewed_inventory(slug: str) 
         for vector in info.exploration_vectors
     )
     assert _review_digest(info) == _ARCHITECTURE_REVIEW_DIGESTS[slug]
+
+    content = info.path.read_text(encoding="utf-8")
+    assert "Retain parent authority over" in content
+    assert "Detach child delegations instead of joining them" in content
+    assert "Start all independent child delegations before awaiting any result" in content
+    assert "Wait for every exploration result" in content
+    if slug != "module-dependency":
+        assert f"Dispatch exactly {len(expected)} exploration vectors" in content
 
 
 def test_architecture_lens_task_inventory_is_unique_and_acyclic() -> None:

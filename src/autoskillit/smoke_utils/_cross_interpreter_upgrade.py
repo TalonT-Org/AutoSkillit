@@ -152,19 +152,17 @@ def run_cross_interpreter_upgrade_smoke(*, work_dir: str) -> bool:
         raise RuntimeError(f"post-upgrade republication failed: {republish.stderr}")
 
     post_upgrade = _cache_incarnations(cache_root)
-    new_incarnations = post_upgrade - pre_upgrade
-    if not new_incarnations:
+    missing_incarnations = pre_upgrade - post_upgrade
+    if missing_incarnations:
         raise RuntimeError(
-            "expected a new cache incarnation after upgrading to a different "
-            f"interpreter minor; pre={sorted(pre_upgrade)}, post={sorted(post_upgrade)}"
+            "cross-interpreter republication removed retained cache incarnation(s): "
+            f"missing={sorted(missing_incarnations)}, post={sorted(post_upgrade)}"
         )
 
-    # The live-session-safety property: retained (pre-upgrade) incarnations'
-    # hooks must still execute after the interpreter that generated them is
-    # gone — this is the exact incident scenario.
-    for name in pre_upgrade:
-        _assert_incarnation_hooks_execute(cache_root / name)
-    for name in new_incarnations:
+    # A same-source reinstall normally reuses the version-keyed directory.
+    # The live-session-safety property is that every retained/current
+    # incarnation still executes after its generating interpreter is gone.
+    for name in post_upgrade:
         _assert_incarnation_hooks_execute(cache_root / name)
 
     return True

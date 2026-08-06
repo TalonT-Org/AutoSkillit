@@ -19,6 +19,7 @@ from autoskillit.core import (
     resolve_repository_remote_identity_sync,
 )
 
+from ._deterministic import canonical_json
 from ._digest import qualified_digest
 
 AUTOSKILLIT_REPOSITORY_IDENTITY = "github.com/talont-org/autoskillit"
@@ -186,12 +187,7 @@ def _remote_evidence(resolution: RemoteIdentityResolution) -> tuple[IdentityEvid
 
 def _canonical_declaration_payload(raw: dict[str, object]) -> bytes:
     payload = {key: value for key, value in raw.items() if key != "content_digest"}
-    return json.dumps(
-        payload,
-        ensure_ascii=True,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("ascii")
+    return canonical_json(payload).encode("ascii")
 
 
 def _validate_offline_declaration(root: Path) -> tuple[bool, tuple[IdentityEvidence, ...]]:

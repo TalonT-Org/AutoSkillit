@@ -32,6 +32,7 @@ from autoskillit.core import (
     AUTOSKILLIT_APPLICABLE_GUARDS,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
     AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES,
+    BUNDLED_EXPLORER_ROLES,
     CODEX_COOK_RESERVED_ENV_VARS,
     CODEX_EFFORT_MAPPING,
     CODEX_INTERACTIVE_REQUIRED_ENV,
@@ -871,8 +872,10 @@ _CODEX_BUILT_IN_AGENT_NAMES = frozenset({"default", "explorer", "review", "revie
 def _preflight_agent_projection(
     session_dir: Path,
     definitions: tuple[AgentDef, ...],
-) -> None:
-    """Reject the complete role set before mutating a generated Codex home."""
+    *,
+    exact_definitions: bool,
+) -> tuple[AgentDef, ...]:
+    """Validate the complete role set and select roles safe to project."""
     names = tuple(definition.name for definition in definitions)
     duplicates = sorted({name for name in names if names.count(name) > 1})
     if duplicates:
@@ -886,7 +889,8 @@ def _preflight_agent_projection(
     configured_agents = config.get("agents", {})
     if not isinstance(configured_agents, dict):
         raise ValueError("Codex config agents table must be a mapping")
-    ambient_collisions = sorted(set(names) & set(configured_agents))
+    protected_names = set(names) if exact_definitions else set(BUNDLED_EXPLORER_ROLES)
+    ambient_collisions = sorted(set(names) & set(configured_agents) & protected_names)
     if ambient_collisions:
         raise ValueError(f"ambient Codex agent name collision: {ambient_collisions}")
 
@@ -900,6 +904,9 @@ def _preflight_agent_projection(
     )
     if artifact_collisions:
         raise ValueError(f"ambient Codex agent artifact collision: {artifact_collisions}")
+    return tuple(
+        definition for definition in definitions if definition.name not in configured_agents
+    )
 
 
 def _render_agent_toml(
@@ -2111,7 +2118,11 @@ class CodexBackend(BackendCmdBuilderBase):
             raise ValueError("explorer shared-principal projection requires a read-only parent")
         policy_definitions = definitions if explorer_binding_envs else agent_defs
         _validate_injected_explorer_parent_policy(policy_definitions, parent_sandbox_mode)
-        _preflight_agent_projection(session_dir, definitions)
+        projected_definitions = _preflight_agent_projection(
+            session_dir,
+            definitions,
+            exact_definitions=agent_defs is not None,
+        )
         rendered_parent_config = _render_parent_sandbox_config(
             config_path.read_text(encoding="utf-8"),
             parent_sandbox_mode,
@@ -2142,11 +2153,11 @@ class CodexBackend(BackendCmdBuilderBase):
 
         _generate_agent_tomls(
             session_dir,
-            definitions,
+            projected_definitions,
             explorer_binding_envs=explorer_binding_envs,
             explorer_mcp_transport=explorer_mcp_transport,
         )
-        registered = _register_agent_tomls(session_dir, definitions)
+        registered = _register_agent_tomls(session_dir, projected_definitions)
         logger.debug("codex_agents_registered", count=registered)
         _materialize_profile_skills(
             session_dir,

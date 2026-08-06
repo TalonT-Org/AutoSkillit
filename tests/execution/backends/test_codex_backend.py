@@ -2256,11 +2256,48 @@ class TestCodexBackendSetupSessionDir:
         assert config_path.read_text(encoding="utf-8") == original_config
         assert {path.name for path in self.session_dir.iterdir()} == {"config.toml"}
 
-    def test_ambient_agent_registration_fails_before_mutation(self) -> None:
+    def test_ordinary_bundled_ambient_agent_takes_precedence(self) -> None:
         (self.session_dir / "config.toml").write_text(
             '[agents."wp-elaborator"]\n'
             'description = "profile role"\n'
             'config_file = "/profile/wp-elaborator.toml"\n'
+        )
+        CodexBackend().setup_session_dir(self.session_dir)
+
+        config = tomllib.loads((self.session_dir / "config.toml").read_text(encoding="utf-8"))
+        assert config["agents"]["wp-elaborator"] == {
+            "description": "profile role",
+            "config_file": "/profile/wp-elaborator.toml",
+        }
+        assert not (self.session_dir / "agents" / "wp-elaborator.toml").exists()
+        assert (self.session_dir / "agents" / "semantic-code-navigator.toml").is_file()
+
+    def test_unrelated_ambient_agent_is_preserved_with_bundled_projection(self) -> None:
+        (self.session_dir / "config.toml").write_text(
+            '[agents."profile-specialist"]\n'
+            'description = "unrelated profile role"\n'
+            'config_file = "/profile/profile-specialist.toml"\n'
+        )
+
+        CodexBackend().setup_session_dir(self.session_dir)
+
+        config = tomllib.loads((self.session_dir / "config.toml").read_text(encoding="utf-8"))
+        assert config["agents"]["profile-specialist"] == {
+            "description": "unrelated profile role",
+            "config_file": "/profile/profile-specialist.toml",
+        }
+        assert config["agents"]["wp-elaborator"]["config_file"] == ("agents/wp-elaborator.toml")
+        assert not (self.session_dir / "agents" / "profile-specialist.toml").exists()
+
+    @pytest.mark.parametrize(
+        "role",
+        ("semantic-code-navigator", "repository-impact-profiler"),
+    )
+    def test_bundled_explorer_ambient_collision_fails_before_mutation(self, role: str) -> None:
+        (self.session_dir / "config.toml").write_text(
+            f'[agents."{role}"]\n'
+            'description = "ambient explorer"\n'
+            f'config_file = "/profile/{role}.toml"\n'
         )
         original_config = (self.session_dir / "config.toml").read_text(encoding="utf-8")
 
@@ -2269,6 +2306,45 @@ class TestCodexBackendSetupSessionDir:
 
         assert (self.session_dir / "config.toml").read_text(encoding="utf-8") == original_config
         assert {path.name for path in self.session_dir.iterdir()} == {"config.toml"}
+
+    def test_explicit_agent_ambient_collision_fails_before_mutation(self) -> None:
+        definition = next(
+            definition
+            for definition in load_agent_definitions(pkg_root() / "agents")
+            if definition.name == "wp-elaborator"
+        )
+        (self.session_dir / "config.toml").write_text(
+            '[agents."wp-elaborator"]\n'
+            'description = "profile role"\n'
+            'config_file = "/profile/wp-elaborator.toml"\n'
+        )
+        original_config = (self.session_dir / "config.toml").read_text(encoding="utf-8")
+
+        with pytest.raises(ValueError, match="ambient Codex agent name collision"):
+            CodexBackend().setup_session_dir(
+                self.session_dir,
+                agent_defs=(definition,),
+            )
+
+        assert (self.session_dir / "config.toml").read_text(encoding="utf-8") == original_config
+        assert {path.name for path in self.session_dir.iterdir()} == {"config.toml"}
+
+    def test_agent_artifact_collision_fails_before_mutation(self) -> None:
+        agents_dir = self.session_dir / "agents"
+        agents_dir.mkdir()
+        artifact = agents_dir / "wp-elaborator.toml"
+        artifact.write_text('name = "ambient"\n', encoding="utf-8")
+        original_config = (self.session_dir / "config.toml").read_text(encoding="utf-8")
+
+        with pytest.raises(ValueError, match="ambient Codex agent artifact collision"):
+            CodexBackend().setup_session_dir(self.session_dir)
+
+        assert (self.session_dir / "config.toml").read_text(encoding="utf-8") == original_config
+        assert artifact.read_text(encoding="utf-8") == 'name = "ambient"\n'
+        assert {path.name for path in self.session_dir.iterdir()} == {
+            "agents",
+            "config.toml",
+        }
 
     def test_duplicate_injected_roles_fail_before_mutation(self) -> None:
         original_config = (self.session_dir / "config.toml").read_text(encoding="utf-8")

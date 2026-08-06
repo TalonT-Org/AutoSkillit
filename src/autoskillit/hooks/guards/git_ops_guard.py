@@ -160,10 +160,12 @@ def main() -> None:
 
     try:
         data = json.loads(sys.stdin.read())
-    except (json.JSONDecodeError, AttributeError, OSError):
+        if not isinstance(data, dict):
+            sys.exit(0)
+        parsed = parse_hook_command(data)
+    except (json.JSONDecodeError, AttributeError, OSError, TypeError, ValueError):
         sys.exit(0)
 
-    parsed = parse_hook_command(data)
     cmd = parsed.command or ""
 
     if not cmd:

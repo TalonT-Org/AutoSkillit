@@ -1439,8 +1439,7 @@ def test_dynamic_deep_mode_vectors_have_closed_conditional_applicability() -> No
         "cross-cutting-impact",
     )
     assert all(
-        vector.disposition is ExplorationVectorDisposition.MIGRATED and vector.native_dispatch
-        for vector in conditional
+        vector.disposition is ExplorationVectorDisposition.MIGRATED for vector in conditional
     )
     assert {vector.role for vector in conditional} == {
         "semantic-code-navigator",
@@ -1495,11 +1494,10 @@ def test_phase_d_skill_vectors_match_reviewed_inventory(skill_name: str) -> None
     assert all(
         (
             vector.role is not None
-            and vector.native_dispatch
             and vector.role in {"semantic-code-navigator", "repository-impact-profiler"}
         )
         if vector.disposition is ExplorationVectorDisposition.MIGRATED
-        else vector.role is None and not vector.native_dispatch
+        else vector.role is None
         for vector in info.exploration_vectors
     )
 
@@ -1617,7 +1615,9 @@ def test_architecture_selectors_filesystem_inventory_and_native_matrix_are_exact
     for slug in _ARCHITECTURE_SELECTOR_SLUGS:
         info = _load_phase_d_skill(f"arch-lens-{slug}")
         actual_native_dispatch_matrix[slug] = tuple(
-            vector.id for vector in info.exploration_vectors if vector.native_dispatch
+            vector.id
+            for vector in info.exploration_vectors
+            if vector.disposition is ExplorationVectorDisposition.MIGRATED
         )
 
     assert selector_slugs == _ARCHITECTURE_SELECTOR_SLUGS, (

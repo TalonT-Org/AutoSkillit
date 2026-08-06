@@ -355,6 +355,7 @@ def test_live_cursor_invalidates_on_every_result_authority(
 
 
 def test_canonical_evidence_graph_preserves_contradictions_and_high_fanout() -> None:
+    high_fanout_count = 128
     records = tuple(
         EvidenceRecord(
             f"evidence-{index}",
@@ -365,7 +366,7 @@ def test_canonical_evidence_graph_preserves_contradictions_and_high_fanout() -> 
             conflicts=("contradictory observation",) if index == 0 else (),
             location=f"module.py:{index + 1}",
         )
-        for index in range(128)
+        for index in range(high_fanout_count)
     ) + (
         EvidenceRecord(
             "evidence-contradiction",
@@ -391,7 +392,7 @@ def test_canonical_evidence_graph_preserves_contradictions_and_high_fanout() -> 
                 and edge.relationship is not RelationshipKind.CONFLICTS_WITH
             ]
         )
-        == 128
+        == high_fanout_count
     )
     assert (
         len(

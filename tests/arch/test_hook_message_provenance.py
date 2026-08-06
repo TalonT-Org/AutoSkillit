@@ -26,6 +26,19 @@ _PROVENANCE_TOKEN_RE = re.compile(r"AutoSkillit")
 _EXEMPT_LITERALS = frozenset(
     {
         "AutoSkillit shell capture request rejected before execution",
+        # Pre-existing non-capture control messages remain exact-value
+        # exemptions; scanning the full hook tree still rejects any new or
+        # altered branded literal outside the typed policy-event formatter.
+        "Use post_pr_review for pull-request review publication, or the appropriate "
+        "structured AutoSkillit mutation tool.",
+        "AutoSkillit MCP server appears disconnected — all registered server PIDs "
+        "for this project are dead. Kitchen state has been lost. Ask the user to run "
+        "/MCP to reconnect, then re-open the kitchen with open_kitchen.",
+        "RESUME REMINDER: You are resuming a previous AutoSkillit session. MCP tool "
+        "access (kitchen) is not automatically restored on resume. ",
+        "Call /autoskillit:open-kitchen first to regain access to all AutoSkillit MCP "
+        "tools before continuing your work.",
+        "') to regain access to all AutoSkillit MCP tools before continuing your work.",
     }
 )
 
@@ -62,9 +75,17 @@ def _policy_event_importers() -> tuple[Path, ...]:
     )
 
 
+def _provenance_scan_paths() -> tuple[Path, ...]:
+    return tuple(
+        path
+        for path in sorted(_HOOKS_DIR.rglob("*.py"))
+        if path.name not in {"__init__.py", "_policy_event.py"}
+    )
+
+
 def test_no_ad_hoc_provenance_literal_outside_policy_event() -> None:
     violations: list[str] = []
-    for path in _policy_event_importers():
+    for path in _provenance_scan_paths():
         offending = [
             literal
             for literal in _string_literals(path)
@@ -73,7 +94,7 @@ def test_no_ad_hoc_provenance_literal_outside_policy_event() -> None:
         if offending:
             violations.append(f"{path.relative_to(_REPO_ROOT)}: {offending!r}")
     assert not violations, (
-        "production _policy_event importers contain raw AutoSkillit-branded "
+        "production hook sources contain raw AutoSkillit-branded "
         "literals outside hooks/_policy_event.py — construct these via "
         "PolicyEvent + render_provenance_prefix instead:\n" + "\n".join(violations)
     )
@@ -83,7 +104,7 @@ def test_exempt_literals_are_still_present_and_narrow() -> None:
     """The exemption list must track real content, not accumulate stale entries."""
     all_literals = {
         literal
-        for path in _policy_event_importers()
+        for path in _provenance_scan_paths()
         for literal in _string_literals(path)
         if _PROVENANCE_TOKEN_RE.search(literal)
     }

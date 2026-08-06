@@ -37,7 +37,13 @@ from ._syntax import (
     INCARNATION_RE as _INCARNATION_RE,
 )
 from ._syntax import (
+    PUBLIC_NAME_PREFIX as _PUBLIC_NAME_PREFIX,
+)
+from ._syntax import (
     PUBLIC_NAME_RE as _PUBLIC_NAME_RE,
+)
+from ._syntax import (
+    PUBLIC_NAME_SUFFIX as _PUBLIC_NAME_SUFFIX,
 )
 from ._syntax import (
     QUARANTINE_NAME_RE as _QUARANTINE_NAME_RE,
@@ -673,10 +679,6 @@ def legacy_record_from_dict(
     return record
 
 
-_ORPHAN_NAME_PREFIX = "shell_"
-_ORPHAN_NAME_SUFFIX = ".log"
-
-
 def adopted_orphan_record(
     *,
     public_name: str,
@@ -706,7 +708,7 @@ def adopted_orphan_record(
     """
     if _PUBLIC_NAME_RE.fullmatch(public_name) is None:
         raise LedgerCodecError("invalid orphan adoption public name")
-    capture_id = public_name[len(_ORPHAN_NAME_PREFIX) : -len(_ORPHAN_NAME_SUFFIX)]
+    capture_id = public_name[len(_PUBLIC_NAME_PREFIX) : -len(_PUBLIC_NAME_SUFFIX)]
     try:
         record = CaptureLifecycleRecord(
             capture_id=capture_id,

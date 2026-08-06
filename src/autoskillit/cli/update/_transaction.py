@@ -219,15 +219,9 @@ def _report_post_pivot_failure(message: str) -> None:
     """Log a post-pivot failure without ever raising past this call.
 
     Must be called from within an active ``except:`` block — relies on
-    ``sys.exc_info()`` via ``exc_info=True`` to attach the traceback. Tries
-    the structured logger first; on ANY exception from logging itself (the
-    exact crash class core/logging.py's exception-rendering contract exists
-    to prevent, but this is the last line of defense if it were ever
-    reintroduced) falls back to a single plain line on ``sys.stderr``. Never
-    ``print()``: this module is not in ARCH-001's ``_PRINT_EXEMPT`` set and
-    the AST visitor flags bare ``print()`` calls — ``sys.stderr.write()`` is
-    not caught by that visitor and depends on nothing beyond ``sys``,
-    already imported at module top.
+    ``sys.exc_info()`` via ``exc_info=True`` to attach the traceback. If the
+    structured logger itself fails, emits one plain stderr line. Reporting
+    never masks the original post-pivot failure.
     """
     try:
         logger.warning(message, exc_info=True)

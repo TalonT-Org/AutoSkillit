@@ -73,11 +73,7 @@ def _function_local_third_party_imports(path: Path) -> list[str]:
 
 
 def test_no_function_local_third_party_imports_in_update_package() -> None:
-    """Every third-party import in cli/update/*.py must be at module top.
-
-    Fails today on cli/update/_update_checks.py:92,204
-    (``from packaging.version import Version``) before B-I4 hoists them.
-    """
+    """Every third-party import in cli/update/*.py must be at module top."""
     violations: list[str] = []
     for path in sorted(_UPDATE_PKG.glob("*.py")):
         violations.extend(_function_local_third_party_imports(path))

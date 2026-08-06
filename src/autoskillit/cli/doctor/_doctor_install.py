@@ -197,12 +197,10 @@ def _check_install_classification() -> DoctorResult:
 def _check_publication_obligation(home: Path | None = None) -> DoctorResult:
     """Report a pending publication obligation, if any (diagnostic only).
 
-    No auto-fix here: repair lives at the three lifecycle triggers (MCP
-    server startup, the update-failure handler, and this CLI's own
-    startup — see cli.app.main() and cli.update._obligation_repair). This
-    check's role is explaining state; the advice text is accurate because
-    the advice — restart or `autoskillit install` — also self-executes at
-    those triggers.
+    No auto-fix here: full publication repair lives at the update-failure
+    handler and non-server CLI startup (see cli.app.main() and
+    cli.update._obligation_repair). MCP startup can repair broken hook
+    commands but cannot satisfy or clear the broader publication obligation.
     """
     check_name = "publication_obligation"
     _home = home or Path.home()
@@ -218,8 +216,8 @@ def _check_publication_obligation(home: Path | None = None) -> DoctorResult:
             f"Publication owed since {obligation.written_at} "
             f"(previous_version={obligation.previous_version}, "
             f"expected_version={obligation.expected_version or 'unknown'}). "
-            f"Run `autoskillit install` from an external terminal, or restart "
-            f"a healthy CLI/MCP-server process to trigger automatic repair.",
+            f"Run `autoskillit install` from an external terminal, or run a "
+            f"healthy non-server CLI command to trigger automatic repair.",
         )
     except Exception as exc:
         logger.debug("Publication obligation check failed", exc_info=True)

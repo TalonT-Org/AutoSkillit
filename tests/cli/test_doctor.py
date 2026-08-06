@@ -1467,6 +1467,7 @@ def test_check_publication_obligation_warning_when_obligation_pending(tmp_path: 
     assert "1.0.0" in result.message
     assert "1.1.0" in result.message
     assert "autoskillit install" in result.message
+    assert "MCP-server" not in result.message
 
 
 def test_check_publication_obligation_warns_when_state_is_unreadable(

@@ -39,6 +39,25 @@ from tests.fixtures.plugin_artifact_state import (
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
+def test_post_pivot_reporter_falls_back_when_logger_raises(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from autoskillit.cli.update import _transaction as transaction_module
+
+    def fail_logger(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("logger unavailable")
+
+    monkeypatch.setattr(transaction_module.logger, "warning", fail_logger)
+
+    try:
+        raise RuntimeError("original failure")
+    except RuntimeError:
+        transaction_module._report_post_pivot_failure("post-pivot operation failed")
+
+    assert capsys.readouterr().err == "post-pivot operation failed\n"
+
+
 def _info() -> InstallInfo:
     return InstallInfo(
         install_type=InstallType.GIT_VCS,

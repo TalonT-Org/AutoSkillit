@@ -28,16 +28,13 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 
 # ---------------------------------------------------------------------------
-# T-A1 — Architectural guard: no process-local path in any published hook
-# artifact.
+# Published hook artifacts never embed process-local paths.
 # ---------------------------------------------------------------------------
 
 
 def test_generate_hooks_json_commands_are_relocatable() -> None:
     """Every command produced by generate_hooks_json() uses the plugin-root
     token and contains no process-local path segment.
-
-    Fails before A-I1: commands embed the pkg_root()-derived absolute path.
     """
     forbidden_segments = (
         "site-packages",
@@ -69,8 +66,7 @@ def test_compute_registry_hash_is_identical_for_absolute_and_relocatable_renderi
     type, matcher, timeout) — never the rendered command string — so the
     embedded ``_autoskillit_registry_hash`` must be identical whether the
     hooks are rendered in relocatable (hooks.json) form or absolute
-    (settings.json, dev-mode) form. A-I1 states this needs no
-    implementation change; this test pins the invariant so a future
+    (settings.json, dev-mode) form. This test pins the invariant so a future
     refactor that accidentally threads the rendered command into the hash
     cannot regress silently.
     """
@@ -96,13 +92,7 @@ def test_compute_registry_hash_is_identical_for_absolute_and_relocatable_renderi
 
 
 # ---------------------------------------------------------------------------
-# T-A2 — Self-healed bundled hooks.json is canonical and machine-independent.
-#
-# Adapted from the plan's original wording ("checked-in bundled hooks.json"):
-# src/autoskillit/hooks/hooks.json is a generated, gitignored artifact in
-# this repo (core.paths.GENERATED_FILES), never checked in — there is no
-# committed file to compare against. This pins the equivalent property
-# against the real self-heal write path instead (run_startup_drift_check).
+# Self-healed bundled hooks.json is canonical and machine-independent.
 # ---------------------------------------------------------------------------
 
 
@@ -135,7 +125,7 @@ def test_self_healed_bundled_hooks_json_is_relocatable(
 
 
 # ---------------------------------------------------------------------------
-# T-A3 — Token-aware validation.
+# Token-aware validation.
 # ---------------------------------------------------------------------------
 
 
@@ -231,7 +221,7 @@ def test_relocatable_renderer_rejects_shell_metacharacters() -> None:
 
 
 # ---------------------------------------------------------------------------
-# T-A4 — Interpreter-pivot immunity.
+# Interpreter-pivot immunity.
 # ---------------------------------------------------------------------------
 
 
@@ -271,7 +261,7 @@ def test_token_aware_validation_survives_interpreter_pivot(tmp_path: Path) -> No
 
 
 # ---------------------------------------------------------------------------
-# T-A5 — Live-session-safety contract (hard acceptance requirement).
+# Live-session safety across retained versions.
 # ---------------------------------------------------------------------------
 
 
@@ -333,7 +323,7 @@ def test_retained_incarnation_hooks_resolve_independently_of_newer_version(
 
 
 # ---------------------------------------------------------------------------
-# T-A6 — Session-skills placeholder provenance.
+# Session-skills placeholder provenance.
 # ---------------------------------------------------------------------------
 
 
@@ -341,8 +331,7 @@ def test_catalog_projection_context_accepts_durable_scripts_root(tmp_path: Path)
     """catalog_projection_context() resolves {{AUTOSKILLIT_SCRIPTS}} against an
     explicitly supplied durable_scripts_root when one is given, instead of
     always hardcoding pkg_root() (the venv tree, deletable mid-session by a
-    concurrent autoskillit update). Fails before A-I5: no such parameter
-    exists and pkg_root() is unconditionally hardcoded.
+    concurrent autoskillit update).
     """
     from autoskillit.core import SkillExecutionRole
     from autoskillit.workspace import EffectiveSkillCatalog, SkillsDirectoryProvider

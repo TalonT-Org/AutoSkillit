@@ -77,6 +77,8 @@ def _is_refused(dispatch_id: str, project_root: Path) -> bool:
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
+        if not isinstance(data, dict):
+            sys.exit(0)
     except Exception:
         sys.exit(0)
 
@@ -85,6 +87,8 @@ def main() -> None:
         sys.exit(0)
 
     tool_input: dict = data.get("tool_input", {}) or {}
+    if not isinstance(tool_input, dict):
+        sys.exit(0)
 
     if tool_input.get("force"):
         sys.exit(0)
@@ -93,8 +97,11 @@ def main() -> None:
     if not dispatch_id:
         sys.exit(0)
 
-    payload_cwd = parse_hook_command(data).payload_cwd
-    project_root = resolve_state_root(payload_cwd)
+    try:
+        payload_cwd = parse_hook_command(data).payload_cwd
+        project_root = resolve_state_root(payload_cwd)
+    except Exception:
+        sys.exit(0)
 
     if _is_refused(dispatch_id, project_root):
         sys.exit(0)

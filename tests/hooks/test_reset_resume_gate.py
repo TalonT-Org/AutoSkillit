@@ -145,6 +145,12 @@ def test_fails_open_on_malformed_stdin(tmp_path: Path) -> None:
     assert out.strip() == ""
 
 
+def test_fails_open_on_non_object_stdin(tmp_path: Path) -> None:
+    _write_state(tmp_path, {_DISPATCH_UUID: True})
+    out = _run_guard(tmp_dir=tmp_path, raw_stdin="[]")
+    assert out.strip() == ""
+
+
 # T2.7 — Allow when tool name does not match reset_dispatch
 
 

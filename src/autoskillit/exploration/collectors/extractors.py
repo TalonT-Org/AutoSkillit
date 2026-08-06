@@ -20,6 +20,7 @@ from autoskillit.core import (
     RepositoryProfileId,
 )
 
+from .._deterministic import canonical_json
 from ..graph import SubjectNamespace
 from ._bounded import (
     CollectorLimits,
@@ -111,7 +112,7 @@ def collector_manifest_digest(
     ]
     if len({record["id"] for record in records}) != len(records):
         raise ValueError("collector manifest contains duplicate collector identifiers")
-    encoded = json.dumps(records, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+    encoded = canonical_json(records)
     return hashlib.sha256(
         b"autoskillit.collector-manifest.v2\0" + encoded.encode("ascii")
     ).hexdigest()

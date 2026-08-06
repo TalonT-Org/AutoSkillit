@@ -544,7 +544,7 @@ def _bind_exploration_vector_markers(
         if line == _EXPLORATION_VECTOR_CLOSE:
             if active_id is None:
                 raise SkillContractError("mismatched exploration vector closing marker")
-            body = "".join(body_lines).replace("\r\n", "\n").replace("\r", "\n").strip("\n")
+            body = _normalize_exploration_vector_body("".join(body_lines))
             if not body.strip():
                 raise SkillContractError(f"exploration vector {active_id!r} has an empty body")
             bodies[active_id] = body
@@ -558,6 +558,11 @@ def _bind_exploration_vector_markers(
     if missing:
         raise SkillContractError(f"missing exploration vector markers: {sorted(missing)!r}")
     return tuple(replace(vector, body=bodies[vector.id]) for vector in vectors)
+
+
+def _normalize_exploration_vector_body(value: str) -> str:
+    """Return the canonical newline form shared by source and replacement bodies."""
+    return value.replace("\r\n", "\n").replace("\r", "\n").strip("\n")
 
 
 def replace_exploration_vector_bodies(
@@ -585,7 +590,7 @@ def replace_exploration_vector_bodies(
     for marker_id, replacement_body in replacements.items():
         if not isinstance(replacement_body, str) or not replacement_body.strip():
             raise SkillContractError(f"replacement for exploration vector {marker_id!r} is empty")
-        replacement_body = replacement_body.replace("\r\n", "\n").replace("\r", "\n").strip("\n")
+        replacement_body = _normalize_exploration_vector_body(replacement_body)
         if _EXPLORATION_VECTOR_MARKER_TOKEN in replacement_body:
             raise SkillContractError("exploration vector replacement contains a marker token")
         normalized[marker_id] = replacement_body

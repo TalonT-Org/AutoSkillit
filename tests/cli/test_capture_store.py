@@ -320,7 +320,7 @@ def test_capture_store_stats_surfaces_entry_authority_errors(
     _seed_store_with_backlog_and_orphans(project)
 
     class DeniedEntry:
-        name = "shell_0000000000000001.log"
+        name = "shell_ffffffffffffffff.log"
 
         @staticmethod
         def stat(*, follow_symlinks: bool):

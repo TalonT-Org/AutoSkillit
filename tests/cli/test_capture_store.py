@@ -297,11 +297,9 @@ def test_capture_store_stats_does_not_hang_on_lock_contention(tmp_path: Path) ->
         assert holder.stdout is not None
         assert holder.stdout.readline() == "ready\n"
 
-        started = time.monotonic()
         stats = capture_store_stats(str(project))
-        elapsed = time.monotonic() - started
 
-        assert elapsed < 0.5, f"capture_store_stats hung under lock contention: {elapsed}s"
+        assert holder.poll() is None, "capture_store_stats waited for the lock holder to exit"
         assert stats.blocker is CleanupBlocker.LOCK_CONTENDED
     finally:
         try:

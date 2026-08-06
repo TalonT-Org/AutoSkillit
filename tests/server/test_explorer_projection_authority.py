@@ -13,10 +13,19 @@ from autoskillit.core import (
     ExplorationVectorDisposition,
     RepositoryProfileId,
     SkillContractError,
+    SkillSource,
+    pkg_root,
 )
 from autoskillit.server._explorer_projection import (
     _resolve_exploration_applicabilities,
     _resolve_exploration_profile,
+)
+from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+# Applicability IDs removed from ExplorationVectorApplicabilityId by the
+# exploration-vector sidecar migration (SKILL_PROJECTION_VERSION bump to 6).
+_REMOVED_EXPLORATION_APPLICABILITY_IDS = frozenset(
+    {"investigate-standard", "investigate-deep", "scope-software", "scope-non-software"}
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -155,3 +164,30 @@ def test_extract_domain_applicability_is_evaluated_from_bounded_analysis(
 
     assert ExplorationVectorApplicabilityId.ALWAYS in active
     assert (ExplorationVectorApplicabilityId.PLANNER_EXTRACT_DOMAIN_DEEP in active) is deep
+
+
+def test_investigate_activation_projects_all_migrated_vectors_as_dispatch() -> None:
+    path = pkg_root() / "skills_extended" / "investigate" / "SKILL.md"
+    info = _skill_info_from_frontmatter("investigate", SkillSource.BUNDLED, path)
+
+    assert info.invalid_reason is None
+    migrated = [
+        vector
+        for vector in info.exploration_vectors
+        if vector.disposition is ExplorationVectorDisposition.MIGRATED
+    ]
+    retained = [
+        vector
+        for vector in info.exploration_vectors
+        if vector.disposition is ExplorationVectorDisposition.RETAINED
+    ]
+
+    assert len(migrated) == 15
+    assert len(retained) == 14
+    assert not any(
+        vector.applicability.value in _REMOVED_EXPLORATION_APPLICABILITY_IDS
+        for vector in info.exploration_vectors
+    )
+    assert all(
+        vector.applicability is ExplorationVectorApplicabilityId.ALWAYS for vector in migrated
+    )

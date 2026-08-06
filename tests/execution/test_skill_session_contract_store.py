@@ -412,3 +412,28 @@ def test_store_rejects_exploration_vector_body_digest_tampering(tmp_path: Path) 
 
     with pytest.raises(ValueError, match="Invalid serialized"):
         store.finalize(correlation_key, "tampered-vector")
+
+
+def test_stale_projection_version_rejected_before_enum_construction(tmp_path: Path) -> None:
+    """The raw pre-gate must reject a stale projection_version before
+    ``_contract_from_dict`` attempts to construct enum members that no longer
+    exist (here, the retired ``investigate-standard`` applicability id)."""
+    from autoskillit.execution.session import DefaultSkillSessionContractStore
+    from autoskillit.execution.session._skill_session_contract_store import _digest_json
+
+    text = "projected\n"
+    store = DefaultSkillSessionContractStore(root=tmp_path / "contracts")
+    correlation_key = store.create_provisional(
+        contract=_contract(tmp_path, text),
+        snapshot={".claude/skills/root/SKILL.md": text},
+    )
+    entry = store._provisional_path(correlation_key)  # noqa: SLF001
+    manifest = store._read_manifest(entry)  # noqa: SLF001
+    contract_data = manifest["contract"]
+    contract_data["projection_version"] = 5
+    contract_data["active_exploration_applicabilities"] = ["investigate-standard"]
+    manifest["contract_digest"] = _digest_json(contract_data)
+    store._write_manifest(entry, manifest)  # noqa: SLF001
+
+    with pytest.raises(ValueError, match="unsupported projection_version 5; expected 6"):
+        store.finalize(correlation_key, "stale-projection")

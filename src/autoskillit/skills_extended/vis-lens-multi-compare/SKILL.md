@@ -75,7 +75,7 @@ semantic_requirements:
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool — this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Use the registered exploration roles for all repository reads
-- Dispatch exactly 3 migrated exploration vectors through the deterministic router
+- Dispatch every migrated exploration vector below through the deterministic router
 - Keep series-overlap assessment as a retained parent-owned source block
 - Route mixed declarative factor evidence through the parent for bounded profiler handoff without creating extra vectors
 - Wait for every migrated exploration result before choosing overlay, small multiples, grouped bars, or stacked bars

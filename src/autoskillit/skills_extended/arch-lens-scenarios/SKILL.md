@@ -78,7 +78,7 @@ semantic_requirements:
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
 - Use the registered exploration roles for all repository reads
-- Dispatch exactly 5 exploration vectors through the deterministic router
+- Dispatch every exploration vector below through the deterministic router
 - Allow parent-boundary handoff of declarative entry-point, integration-registration, and configuration-consumer artifacts to `repository-impact-profiler` without creating extra vectors
 - Wait for every exploration result before selecting scenarios, mapping component touchpoints, analyzing read/write direction, or creating the diagram
 - Retain parent authority over scenario selection, cooperation validation, component-touchpoint and data-direction synthesis, and diagram creation
@@ -97,13 +97,13 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch 5 Routed Exploration Vectors (SINGLE MESSAGE)
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
 
 Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Dispatch exactly these five vectors under their registered role policies. When a navigator finds a declarative entry point, integration registration, or configuration-consumer surface, the parent/router may reclassify that bounded handoff to `repository-impact-profiler`; it must not create another vector. Each leaf returns bounded terminal evidence only and must not select representative scenarios, validate component cooperation, interpret read/write direction, synthesize journeys, create diagrams, or write lens output.
+Dispatch every vector below under their registered role policies. When a navigator finds a declarative entry point, integration registration, or configuration-consumer surface, the parent/router may reclassify that bounded handoff to `repository-impact-profiler`; it must not create another vector. Each leaf returns bounded terminal evidence only and must not select representative scenarios, validate component cooperation, interpret read/write direction, synthesize journeys, create diagrams, or write lens output.
 
 <!-- autoskillit:exploration-vector id="primary-use-cases" -->
 1. **Primary use cases** — Find the main user-facing operations, CLI commands, API endpoints, primary workflows, and repository-supported user stories; include bounded declarative entry-point handoffs for profiler evidence.

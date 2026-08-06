@@ -77,7 +77,7 @@ semantic_requirements:
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
 - Use the registered exploration roles for all repository reads
-- Dispatch exactly 6 exploration vectors through the deterministic router
+- Dispatch every exploration vector below through the deterministic router
 - Route bounded declarative configuration, registry, generated-artifact, test, fixture, and consumer handoffs to `repository-impact-profiler` through the parent-owned plan
 - Wait for every exploration result before mapping concurrency boundaries, evaluating thread safety, or creating the diagram
 - Retain parent authority over concurrency and thread-safety judgments, Mermaid generation, and output writing
@@ -96,13 +96,13 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch 6 Routed Exploration Vectors (SINGLE MESSAGE)
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
 
 Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Dispatch exactly these six authored vectors under their registered role policies. Mixed code and declarative evidence remains one parent-owned plan; bounded profiler handoffs return to the originating vector and do not add graph dependencies.
+Dispatch every authored vector below under their registered role policies. Mixed code and declarative evidence remains one parent-owned plan; bounded profiler handoffs return to the originating vector and do not add graph dependencies.
 
 <!-- autoskillit:exploration-vector id="concurrency-model" -->
 1. **Concurrency Model** — Find the primary concurrency approach: threading, asyncio, multiprocessing, coroutines, goroutines, or executors. Trace definitions, imports, and calls; the parent determines the documented model.

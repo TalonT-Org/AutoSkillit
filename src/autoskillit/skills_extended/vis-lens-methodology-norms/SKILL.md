@@ -223,7 +223,7 @@ when a tradition is loaded (either via `tradition_slug` or via `classify_methodo
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Use the registered exploration roles for all repository reads
-- Dispatch exactly 4 migrated exploration vectors through the deterministic router
+- Dispatch every migrated exploration vector below through the deterministic router
 - Keep tradition resolution and mandatory-figure coverage as retained parent-owned source blocks
 - Route mixed code and declarative figure evidence through the parent without creating extra vectors
 - Wait for every migrated exploration result before assigning present, partial, or absent status

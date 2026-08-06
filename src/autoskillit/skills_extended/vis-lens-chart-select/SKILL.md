@@ -128,7 +128,7 @@ metadata:
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Start all independent child delegations before awaiting any result to maximize concurrency
 - Use the registered exploration roles for all repository reads
-- Dispatch exactly 5 migrated exploration vectors through the deterministic router
+- Dispatch every migrated exploration vector below through the deterministic router
 - Route semantic plotting-code, symbol, and data-control-flow handoffs to `semantic-code-navigator` and bounded schema, configuration, generated-figure, table, test, fixture, reproduction, planning-document, and pre-existing artifact handoffs to `repository-impact-profiler` through the parent-owned plan
 - Wait for every exploration result before classifying data types, selecting chart types, ranking encodings, or creating the diagram
 - Retain parent authority over data-type classification, chart selection, perceptual ranking, encoding assignment, Mermaid, `yaml:figure-spec`, and output decisions
@@ -157,13 +157,13 @@ methodology. Use this structured context as the foundation for Steps 1–4.
 After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
 <!-- /autoskillit:exploration-vector -->
 
-### Step 1: Launch 4 Routed Exploration Vectors (SINGLE MESSAGE)
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
 
 Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Dispatch exactly these four authored vectors under their registered role policies. Mixed code and declarative evidence remains one parent-owned plan; bounded role handoffs return to the originating vector and do not add graph dependencies.
+Dispatch every authored vector below under their registered role policies. Mixed code and declarative evidence remains one parent-owned plan; bounded role handoffs return to the originating vector and do not add graph dependencies.
 
 <!-- autoskillit:exploration-vector id="existing-figure-inventory" -->
 1. **Existing Figure Inventory** — Find all existing figures, plots, and visualizations through `fig`, `figure`, `plot`, `chart`, `image`, `png`, `svg`, `pdf`, `matplotlib`, `seaborn`, and `plotly` artifacts. Route semantic plotting-code relationships through the parent to the navigator. Use static repository evidence only; do not import or execute target code, tests, visualization pipelines, experiments, models, or benchmarks.

@@ -78,7 +78,7 @@ semantic_requirements:
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
 - Use the registered exploration roles for all repository reads
-- Dispatch exactly 7 exploration vectors through the deterministic router
+- Dispatch every exploration vector below through the deterministic router
 - Allow parent-boundary handoff of declarative path policy, process configuration, and credential-consumer artifacts to `repository-impact-profiler` without creating extra vectors
 - Wait for every exploration result before mapping trust boundaries, assessing validation layers, analyzing read/write direction, or creating the diagram
 - Retain parent authority over threat and trust-boundary interpretation, validation-layer synthesis, security judgment, and diagram creation
@@ -97,13 +97,13 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch 7 Routed Exploration Vectors (SINGLE MESSAGE)
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
 
 Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Dispatch exactly these seven vectors under their registered role policies. When a navigator finds declarative path policy, process configuration, or credential-consumer artifacts, the parent/router may reclassify that bounded handoff to `repository-impact-profiler`; it must not create another vector. Each leaf returns bounded terminal evidence only and must not expose secret values, assess threats, judge security adequacy, map final trust boundaries, create diagrams, or write lens output.
+Dispatch every vector below under their registered role policies. When a navigator finds declarative path policy, process configuration, or credential-consumer artifacts, the parent/router may reclassify that bounded handoff to `repository-impact-profiler`; it must not create another vector. Each leaf returns bounded terminal evidence only and must not expose secret values, assess threats, judge security adequacy, map final trust boundaries, create diagrams, or write lens output.
 
 <!-- autoskillit:exploration-vector id="input-validation" -->
 1. **Input validation** — Trace input-validation and sanitization definitions, call sites, guarded inputs, and failure paths, including validate, sanitize, clean, and escape patterns.

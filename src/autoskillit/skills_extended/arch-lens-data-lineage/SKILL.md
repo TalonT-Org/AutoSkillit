@@ -77,7 +77,7 @@ semantic_requirements:
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
 - Use the registered exploration roles for all repository reads
-- Dispatch exactly 5 exploration vectors through the deterministic router
+- Dispatch every exploration vector below through the deterministic router
 - Route mixed semantic and declarative subfrontiers through the parent-owned plan; bounded handoffs return evidence to the originating vector without adding dependencies
 - Wait for every exploration result before mapping data flow, identifying conversion boundaries, or creating the diagram
 - Retain parent authority over lineage, source-of-truth, read/write, artifact, Mermaid, and output judgments
@@ -96,13 +96,13 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch 5 Routed Exploration Vectors (SINGLE MESSAGE)
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
 
 Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Dispatch exactly these five authored vectors under their registered role policies. The parent routes code definitions, calls, and control flow to the navigator and declarative schemas, configuration, generated artifacts, tests, fixtures, and consumers to the profiler.
+Dispatch every authored vector below under their registered role policies. The parent routes code definitions, calls, and control flow to the navigator and declarative schemas, configuration, generated artifacts, tests, fixtures, and consumers to the profiler.
 
 <!-- autoskillit:exploration-vector id="data-origins-inputs" -->
 1. **Data Origins (Inputs)** — Find user-input handling, external data sources, CLI arguments, API requests, file reads, imports, and ingestion call paths. The parent classifies the final origin categories.

@@ -89,7 +89,7 @@ semantic_requirements:
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Use the registered exploration roles for all repository reads
-- Dispatch exactly 2 migrated exploration vectors through the deterministic router
+- Dispatch every migrated exploration vector below through the deterministic router
 - Route semantic plotting-code, symbol, and data-control-flow handoffs to `semantic-code-navigator` and bounded schema, configuration, generated-figure, table, test, fixture, reproduction, planning-document, and pre-existing artifact handoffs to `repository-impact-profiler` through the parent-owned plan
 - Wait for the exploration result before matching anti-patterns, sorting severity, or creating the diagram
 - Retain parent authority over anti-pattern classification, severity, remediation, Mermaid, `yaml:figure-spec`, and output decisions

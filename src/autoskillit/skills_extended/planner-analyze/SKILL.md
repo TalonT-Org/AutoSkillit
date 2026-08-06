@@ -94,7 +94,7 @@ Dispatch all five concurrently under their registered role policies:
 
 ### Step 2: Synthesize results
 
-Merge all four agent outputs into a single `analysis.json` document matching the output schema.
+Merge all exploration agent outputs into a single `analysis.json` document matching the output schema.
 
 ### Step 3: Write output
 

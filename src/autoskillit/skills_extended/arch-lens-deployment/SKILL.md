@@ -77,7 +77,7 @@ semantic_requirements:
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
 - Use the registered exploration roles for all repository reads
-- Dispatch exactly 6 exploration vectors through the deterministic router
+- Dispatch every exploration vector below through the deterministic router
 - Route mixed semantic and declarative deployment subfrontiers through the parent-owned plan; bounded handoffs return evidence to the originating vector without adding dependencies
 - Wait for every exploration result before mapping physical topology, identifying communication paths, or creating the diagram
 - Retain parent authority over deployment boundaries, locations, protocols, read/write classification, Mermaid generation, and output writing
@@ -96,13 +96,13 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch 6 Routed Exploration Vectors (SINGLE MESSAGE)
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
 
 Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Dispatch exactly these six authored vectors under their registered role policies. The parent routes code definitions, imports, calls, and control flow to the navigator and deployment manifests, configuration, registries, generated artifacts, tests, fixtures, and consumers to the profiler.
+Dispatch every authored vector below under their registered role policies. The parent routes code definitions, imports, calls, and control flow to the navigator and deployment manifests, configuration, registries, generated artifacts, tests, fixtures, and consumers to the profiler.
 
 <!-- autoskillit:exploration-vector id="process-boundaries" -->
 1. **Process Boundaries** — Find main process entry points, subprocess creation, process spawning, daemon processes, and their call paths. Route declarative entry-point and process configuration through the parent to the profiler.

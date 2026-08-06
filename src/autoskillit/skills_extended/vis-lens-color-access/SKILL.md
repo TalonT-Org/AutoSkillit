@@ -74,7 +74,7 @@ semantic_requirements:
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool — this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Use the registered exploration roles for all repository reads
-- Dispatch exactly 6 migrated exploration vectors through the deterministic router
+- Dispatch every migrated exploration vector below through the deterministic router
 - Route mixed declarative and generated-artifact evidence through the parent for bounded profiler handoff without creating extra vectors
 - Wait for every migrated exploration result before applying accessibility thresholds or emitting figure specifications
 - Retain parent authority over accessibility, palette, annotation, and visualization judgments in Steps 1–4

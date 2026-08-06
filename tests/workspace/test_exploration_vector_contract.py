@@ -21,7 +21,7 @@ from autoskillit.workspace.skills import (
     EffectiveSkillCatalog,
     SkillCatalogEntry,
     SkillInfo,
-    _parse_exploration_vector_frontmatter,
+    _parse_exploration_sidecar,
     _skill_info_from_frontmatter,
 )
 
@@ -32,38 +32,18 @@ _FRONTMATTER = """---
 name: vector-skill
 description: Exercises exploration vector authoring.
 execution_role: session
-exploration_vectors:
-  - id: trace-consumers
-    disposition: migrated
-    rationale: Native semantic navigation covers the reviewed vector.
-    applicability: always
-    role: semantic-code-navigator
-    profile: generic-python
-    relationship_classes: [references, affects]
-    task_id: trace-consumers-task
-    frontier_item_id: trace-consumers-frontier
-    depends_on: []
-    scope: [src]
-    max_results: 100
-    max_report_bytes: 20000
-    evidence_version: 1
-    native_dispatch: true
-  - id: inspect-release-notes
-    disposition: retained
-    rationale: Human interpretation remains clearer for this prose-only vector.
-    applicability: always
-    role: null
-    profile: language-neutral
-    relationship_classes: [references]
-    task_id: inspect-release-notes-task
-    frontier_item_id: inspect-release-notes-frontier
-    depends_on: []
-    scope: [CHANGELOG.md]
-    max_results: 20
-    max_report_bytes: 5000
-    evidence_version: 1
-    native_dispatch: false
 ---
+"""
+
+_SIDECAR = """vectors:
+- id: trace-consumers
+  role: semantic-code-navigator
+  relationship_classes: [references, affects]
+  rationale: Native semantic navigation covers the reviewed vector.
+  applicability: always
+retained:
+- id: inspect-release-notes
+  rationale: Human interpretation remains clearer for this prose-only vector.
 """
 
 _BODY = """# Vector skill
@@ -78,29 +58,25 @@ Read the release notes and explain the relevant historical intent.
 """
 
 
-def _parse(tmp_path: Path, content: str = _FRONTMATTER + _BODY) -> SkillInfo:
+def _parse(
+    tmp_path: Path,
+    content: str = _FRONTMATTER + _BODY,
+    sidecar: str | None = _SIDECAR,
+) -> SkillInfo:
     path = tmp_path / "SKILL.md"
     path.write_text(content, encoding="utf-8")
+    if sidecar is not None:
+        (tmp_path / "exploration.yaml").write_text(sidecar, encoding="utf-8")
     return _skill_info_from_frontmatter("vector-skill", SkillSource.PROJECT_LOCAL, path)
 
 
 def _raw_vector(**changes: object) -> dict[str, object]:
     vector: dict[str, object] = {
         "id": "trace-consumers",
-        "disposition": "migrated",
+        "role": "semantic-code-navigator",
+        "relationship_classes": ["references"],
         "rationale": "Inspect consumers.",
         "applicability": "always",
-        "role": "semantic-code-navigator",
-        "profile": "generic-python",
-        "relationship_classes": ["references"],
-        "task_id": "trace-consumers-task",
-        "frontier_item_id": "trace-consumers-frontier",
-        "depends_on": [],
-        "scope": ["src"],
-        "max_results": 100,
-        "max_report_bytes": 20_000,
-        "evidence_version": 1,
-        "native_dispatch": True,
     }
     vector.update(changes)
     return vector
@@ -115,8 +91,8 @@ def test_vector_contract_builds_phase_b_task_and_survives_catalog_projection(
     assert len(info.exploration_vectors) == 2
     migrated = info.exploration_vectors[0]
     assert migrated.disposition is ExplorationVectorDisposition.MIGRATED
-    assert migrated.profile is RepositoryProfileId.GENERIC_PYTHON
-    assert migrated.task.profile is RepositoryProfileId.GENERIC_PYTHON
+    assert migrated.profile is RepositoryProfileId.AUTO
+    assert migrated.task.profile is RepositoryProfileId.AUTO
     assert migrated.relationship_classes == (
         RelationshipKind.REFERENCES,
         RelationshipKind.AFFECTS,
@@ -129,13 +105,13 @@ def test_vector_contract_builds_phase_b_task_and_survives_catalog_projection(
 def test_planner_extract_domain_deep_is_the_exact_closed_applicability_value(
     tmp_path: Path,
 ) -> None:
-    content = (_FRONTMATTER + _BODY).replace(
-        "    applicability: always\n",
-        "    applicability: planner-extract-domain-deep\n",
+    sidecar = _SIDECAR.replace(
+        "  applicability: always\n",
+        "  applicability: planner-extract-domain-deep\n",
         1,
     )
 
-    info = _parse(tmp_path, content)
+    info = _parse(tmp_path, sidecar=sidecar)
 
     assert info.invalid_reason is None
     assert (
@@ -248,61 +224,65 @@ def test_marker_contract_rejects_missing_unknown_nested_and_escaped_tokens(
     assert info.exploration_vectors == ()
 
 
-def test_frontmatter_vector_schema_rejects_unknown_keys(tmp_path: Path) -> None:
-    content = (_FRONTMATTER + _BODY).replace(
-        "    native_dispatch: true\n",
-        "    native_dispatch: true\n    arbitrary_condition: branch == 'develop'\n",
+def test_sidecar_vector_schema_rejects_unknown_keys(tmp_path: Path) -> None:
+    sidecar = _SIDECAR.replace(
+        "  applicability: always\n",
+        "  applicability: always\n  arbitrary_condition: branch == 'develop'\n",
         1,
     )
 
-    info = _parse(tmp_path, content)
+    info = _parse(tmp_path, sidecar=sidecar)
 
     assert info.invalid_reason is not None
-    assert "exactly the registered keys" in info.invalid_reason
+    assert "unknown keys" in info.invalid_reason
 
 
-def test_frontmatter_vector_parser_requires_a_list_of_closed_mappings() -> None:
-    with pytest.raises(SkillContractError, match="must be a list"):
-        _parse_exploration_vector_frontmatter({})
-    with pytest.raises(SkillContractError, match="exactly the registered keys"):
-        _parse_exploration_vector_frontmatter(["not-a-mapping"])
-    with pytest.raises(SkillContractError, match="exactly the registered keys"):
-        _parse_exploration_vector_frontmatter([_raw_vector(extra="unexpected")])
+def test_sidecar_vector_parser_requires_a_mapping_with_valid_entries() -> None:
+    assert _parse_exploration_sidecar(None, "vector-skill") == ()
+    assert _parse_exploration_sidecar({}, "vector-skill") == ()
+    with pytest.raises(SkillContractError, match="must be a YAML mapping"):
+        _parse_exploration_sidecar(["not-a-mapping"], "vector-skill")
+    with pytest.raises(SkillContractError, match="unknown top-level keys"):
+        _parse_exploration_sidecar({"unexpected": []}, "vector-skill")
+    with pytest.raises(SkillContractError, match="vectors\\[0\\] must be a mapping"):
+        _parse_exploration_sidecar({"vectors": ["not-a-mapping"]}, "vector-skill")
+    with pytest.raises(SkillContractError, match="retained\\[0\\] must be a mapping"):
+        _parse_exploration_sidecar({"retained": ["not-a-mapping"]}, "vector-skill")
+    with pytest.raises(SkillContractError, match="unknown keys"):
+        _parse_exploration_sidecar({"vectors": [_raw_vector(extra="unexpected")]}, "vector-skill")
     missing = _raw_vector()
-    missing.pop("task_id")
-    with pytest.raises(SkillContractError, match="exactly the registered keys"):
-        _parse_exploration_vector_frontmatter([missing])
+    del missing["role"]
+    with pytest.raises(SkillContractError, match="contains an invalid value"):
+        _parse_exploration_sidecar({"vectors": [missing]}, "vector-skill")
 
 
 @pytest.mark.parametrize(
     ("field", "value"),
     [
-        ("disposition", "unknown"),
-        ("profile", "unknown"),
+        ("id", 7),
+        ("role", 7),
+        ("rationale", ""),
         ("applicability", "unknown"),
         ("relationship_classes", [1]),
-        ("scope", [1]),
-        ("max_results", True),
-        ("max_report_bytes", False),
-        ("evidence_version", True),
-        ("native_dispatch", "true"),
-        ("role", 7),
     ],
 )
-def test_frontmatter_vector_parser_rejects_invalid_closed_schema_values(
+def test_sidecar_vector_parser_rejects_invalid_migrated_field_values(
     field: str,
     value: object,
 ) -> None:
-    with pytest.raises(SkillContractError):
-        _parse_exploration_vector_frontmatter([_raw_vector(**{field: value})])
+    with pytest.raises(SkillContractError, match="contains an invalid value"):
+        _parse_exploration_sidecar({"vectors": [_raw_vector(**{field: value})]}, "vector-skill")
 
 
-def test_frontmatter_vector_parser_accepts_valid_values_and_rejects_duplicate_ids() -> None:
-    parsed = _parse_exploration_vector_frontmatter([_raw_vector()])
+def test_sidecar_vector_parser_accepts_valid_values_and_rejects_duplicate_ids() -> None:
+    parsed = _parse_exploration_sidecar({"vectors": [_raw_vector()]}, "vector-skill")
 
     assert parsed[0].id == "trace-consumers"
     with pytest.raises(SkillContractError, match="ids must be unique"):
-        _parse_exploration_vector_frontmatter([_raw_vector(), _raw_vector()])
+        _parse_exploration_sidecar(
+            {"vectors": [_raw_vector(), _raw_vector()]},
+            "vector-skill",
+        )
 
 
 def test_replacement_requires_complete_migrated_set_and_rejects_marker_injection(

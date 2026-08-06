@@ -77,7 +77,7 @@ semantic_requirements:
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
 - Use the registered exploration roles for all repository reads
-- Dispatch exactly 5 exploration vectors through the deterministic router
+- Dispatch every exploration vector below through the deterministic router
 - Route bounded declarative, configuration, registry, generated-artifact, test, fixture, and consumer handoffs to `repository-impact-profiler` through the parent-owned plan
 - Wait for every exploration result before identifying containers, mapping relationships, or creating the diagram
 - Retain parent authority over C4 container boundaries, technology and responsibility judgments, Mermaid generation, and output writing
@@ -96,13 +96,13 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch 5 Routed Exploration Vectors (SINGLE MESSAGE)
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
 
 Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Dispatch exactly these five authored vectors under their registered role policies. Mixed code and declarative work remains one parent-owned plan: navigator findings may produce bounded profiler handoffs, which return evidence to the same vector rather than creating another vector.
+Dispatch every authored vector below under their registered role policies. Mixed code and declarative work remains one parent-owned plan: navigator findings may produce bounded profiler handoffs, which return evidence to the same vector rather than creating another vector.
 
 <!-- autoskillit:exploration-vector id="application-layer" -->
 1. **Application Layer** — Find CLI entry points and commands, web applications and APIs, frontend technologies, main files, and app servers. Trace code-defined entry and call paths; route declarative entry-point or frontend-manifest evidence through the parent to the profiler.

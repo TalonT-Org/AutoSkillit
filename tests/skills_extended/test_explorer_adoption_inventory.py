@@ -71,13 +71,13 @@ _INVENTORY: dict[str, tuple[InventoryRow, ...]] = {
             "domain-vocabulary",
             "migrated",
             "repository-impact-profiler",
-            "planner-extract-domain-vocabulary",
+            "planner-extract-domain-domain-vocabulary",
         ),
         (
             "existing-abstractions",
             "migrated",
             "semantic-code-navigator",
-            "planner-extract-domain-abstractions",
+            "planner-extract-domain-existing-abstractions",
         ),
         (
             "integration-points",
@@ -95,13 +95,13 @@ _INVENTORY: dict[str, tuple[InventoryRow, ...]] = {
             "cross-cutting-concerns",
             "migrated",
             "semantic-code-navigator",
-            "planner-extract-domain-cross-cutting",
+            "planner-extract-domain-cross-cutting-concerns",
         ),
         (
             "data-flow-patterns",
             "migrated",
             "semantic-code-navigator",
-            "planner-extract-domain-data-flow",
+            "planner-extract-domain-data-flow-patterns",
         ),
         (
             "cross-cutting-impact",
@@ -157,203 +157,203 @@ _PHASE_D_INVENTORY: dict[str, tuple[PhaseDInventoryRow, ...]] = {
             "migrated",
             "semantic-code-navigator",
             "investigate-standard-core-implementation",
-            "investigate-standard",
+            "always",
         ),
         (
             "standard-dependencies",
             "migrated",
             "semantic-code-navigator",
             "investigate-standard-dependencies",
-            "investigate-standard",
+            "always",
         ),
         (
             "standard-consumer-impact",
             "migrated",
             "repository-impact-profiler",
             "investigate-standard-consumer-impact",
-            "investigate-standard",
+            "always",
         ),
         (
             "standard-test-coverage",
             "migrated",
             "repository-impact-profiler",
             "investigate-standard-test-coverage",
-            "investigate-standard",
+            "always",
         ),
         (
             "standard-error-provenance",
             "migrated",
             "semantic-code-navigator",
             "investigate-standard-error-provenance",
-            "investigate-standard",
+            "always",
         ),
         (
             "standard-similar-patterns",
             "migrated",
             "semantic-code-navigator",
             "investigate-standard-similar-patterns",
-            "investigate-standard",
+            "always",
         ),
         (
             "standard-architecture-constraints",
             "migrated",
             "repository-impact-profiler",
             "investigate-standard-architecture-constraints",
-            "investigate-standard",
-        ),
-        (
-            "standard-web-research",
-            "retained",
-            None,
-            "investigate-standard-web-research",
-            "investigate-standard",
+            "always",
         ),
         (
             "standard-design-intent-history",
             "migrated",
             "repository-impact-profiler",
             "investigate-standard-design-intent-history",
-            "investigate-standard",
-        ),
-        (
-            "standard-design-intent-reasoning",
-            "retained",
-            None,
-            "investigate-standard-design-intent-reasoning",
-            "investigate-standard",
+            "always",
         ),
         (
             "standard-recurrence-history",
             "migrated",
             "repository-impact-profiler",
             "investigate-standard-recurrence-history",
-            "investigate-standard",
-        ),
-        (
-            "standard-recurrence-reasoning",
-            "retained",
-            None,
-            "investigate-standard-recurrence-reasoning",
-            "investigate-standard",
+            "always",
         ),
         (
             "deep-code-paths",
             "migrated",
             "semantic-code-navigator",
             "investigate-deep-code-paths",
-            "investigate-deep",
+            "always",
         ),
         (
             "deep-log-history",
             "migrated",
             "repository-impact-profiler",
             "investigate-deep-log-history",
-            "investigate-deep",
+            "always",
         ),
         (
             "deep-dependencies",
             "migrated",
             "semantic-code-navigator",
             "investigate-deep-dependencies",
-            "investigate-deep",
+            "always",
         ),
         (
             "deep-related-components",
             "migrated",
             "repository-impact-profiler",
             "investigate-deep-related-components",
-            "investigate-deep",
-        ),
-        (
-            "deep-web-research",
-            "retained",
-            None,
-            "investigate-deep-web-research",
-            "investigate-deep",
-        ),
-        (
-            "deep-design-intent-reasoning",
-            "retained",
-            None,
-            "investigate-deep-design-intent-reasoning",
-            "investigate-deep",
-        ),
-        (
-            "deep-recurrence-reasoning",
-            "retained",
-            None,
-            "investigate-deep-recurrence-reasoning",
-            "investigate-deep",
+            "always",
         ),
         (
             "deep-code-deepening",
             "migrated",
             "semantic-code-navigator",
             "investigate-deep-code-deepening",
-            "investigate-deep",
-        ),
-        (
-            "deep-informed-web-research",
-            "retained",
-            None,
-            "investigate-deep-informed-web-research",
-            "investigate-deep",
-        ),
-        (
-            "deep-design-intent-refresh",
-            "retained",
-            None,
-            "investigate-deep-design-intent-refresh",
-            "investigate-deep",
-        ),
-        (
-            "deep-hypothesis-challenge",
-            "retained",
-            None,
-            "investigate-deep-hypothesis-challenge",
-            "investigate-deep",
-        ),
-        (
-            "deep-solution-generation",
-            "retained",
-            None,
-            "investigate-deep-solution-generation",
-            "investigate-deep",
+            "always",
         ),
         (
             "deep-candidate-blast-radius",
             "migrated",
             "repository-impact-profiler",
             "investigate-deep-candidate-blast-radius",
-            "investigate-deep",
+            "always",
+        ),
+        (
+            "standard-web-research",
+            "retained",
+            None,
+            "investigate-standard-web-research",
+            "always",
+        ),
+        (
+            "standard-design-intent-reasoning",
+            "retained",
+            None,
+            "investigate-standard-design-intent-reasoning",
+            "always",
+        ),
+        (
+            "standard-recurrence-reasoning",
+            "retained",
+            None,
+            "investigate-standard-recurrence-reasoning",
+            "always",
+        ),
+        (
+            "deep-web-research",
+            "retained",
+            None,
+            "investigate-deep-web-research",
+            "always",
+        ),
+        (
+            "deep-design-intent-reasoning",
+            "retained",
+            None,
+            "investigate-deep-design-intent-reasoning",
+            "always",
+        ),
+        (
+            "deep-recurrence-reasoning",
+            "retained",
+            None,
+            "investigate-deep-recurrence-reasoning",
+            "always",
+        ),
+        (
+            "deep-informed-web-research",
+            "retained",
+            None,
+            "investigate-deep-informed-web-research",
+            "always",
+        ),
+        (
+            "deep-design-intent-refresh",
+            "retained",
+            None,
+            "investigate-deep-design-intent-refresh",
+            "always",
+        ),
+        (
+            "deep-hypothesis-challenge",
+            "retained",
+            None,
+            "investigate-deep-hypothesis-challenge",
+            "always",
+        ),
+        (
+            "deep-solution-generation",
+            "retained",
+            None,
+            "investigate-deep-solution-generation",
+            "always",
         ),
         (
             "deep-breakage-reasoning",
             "retained",
             None,
             "investigate-deep-breakage-reasoning",
-            "investigate-deep",
+            "always",
         ),
         (
             "deep-factual-validation",
             "retained",
             None,
             "investigate-deep-factual-validation",
-            "investigate-deep",
+            "always",
         ),
         (
             "deep-recommendation-validation",
             "retained",
             None,
             "investigate-deep-recommendation-validation",
-            "investigate-deep",
+            "always",
         ),
         (
             "deep-gap-validation",
             "retained",
             None,
             "investigate-deep-gap-validation",
-            "investigate-deep",
+            "always",
         ),
     ),
     "scope": (
@@ -362,14 +362,14 @@ _PHASE_D_INVENTORY: dict[str, tuple[PhaseDInventoryRow, ...]] = {
             "retained",
             None,
             "scope-prior-art-codebase",
-            "scope-software",
+            "always",
         ),
         (
             "prior-art-literature",
             "retained",
             None,
             "scope-prior-art-literature",
-            "scope-non-software",
+            "always",
         ),
         ("external-research", "retained", None, "scope-external-research", "always"),
         (
@@ -377,49 +377,49 @@ _PHASE_D_INVENTORY: dict[str, tuple[PhaseDInventoryRow, ...]] = {
             "retained",
             None,
             "scope-domain-context-architecture",
-            "scope-software",
+            "always",
         ),
         (
             "domain-context-domain-knowledge",
             "retained",
             None,
             "scope-domain-context-domain-knowledge",
-            "scope-non-software",
+            "always",
         ),
         (
             "evaluation-framework-software",
             "retained",
             None,
             "scope-evaluation-framework-software",
-            "scope-software",
+            "always",
         ),
         (
             "evaluation-framework-domain-assessment",
             "retained",
             None,
             "scope-evaluation-framework-domain-assessment",
-            "scope-non-software",
+            "always",
         ),
         (
             "computational-complexity-local",
             "retained",
             None,
             "scope-computational-complexity-local",
-            "scope-software",
+            "always",
         ),
         (
             "computational-complexity-external",
             "retained",
             None,
             "scope-computational-complexity-external",
-            "scope-software",
+            "always",
         ),
         (
             "data-availability-repository",
             "retained",
             None,
             "scope-data-availability-repository",
-            "scope-software",
+            "always",
         ),
         (
             "data-availability-external",
@@ -428,7 +428,7 @@ _PHASE_D_INVENTORY: dict[str, tuple[PhaseDInventoryRow, ...]] = {
             "scope-data-availability-external",
             "always",
         ),
-        ("custom-research", "retained", None, "scope-custom-research", "scope-non-software"),
+        ("custom-research", "retained", None, "scope-custom-research", "always"),
     ),
     "arch-lens-module-dependency": (
         (
@@ -1243,8 +1243,8 @@ _VISUALIZATION_RETAINED_BODY_AUTHORITIES = {
 }
 
 _PHASE_D_REVIEW_DIGESTS = {
-    "investigate": "a9b6026ed99b0071006f87fb6629ea782c665cc16f86f93c006a554eac49453a",
-    "scope": "7b30e0ca9e7134b623fab6cbce64fce9d9713e023bfa1d7432d133f6818d3a10",
+    "investigate": "2042be22a51bf8ac8cc9e95b3dd3db6efe77d06a93957027da983effb2af9eea",
+    "scope": "d176850d2fe3fa933c4416fe9ce2c1dc747b0380ad4a91d8dd90029f24f90585",
     "arch-lens-module-dependency": (
         "0906197b52200c9af01aefe7e73b954d14eaf3ff520f108990634256371ebaa1"
     ),
@@ -1688,7 +1688,9 @@ def test_phase_f_experiment_vectors_match_complete_reviewed_inventory(
 
     assert tuple((vector.id, vector.role) for vector in info.exploration_vectors) == expected
     assert tuple(
-        vector.id for vector in info.exploration_vectors if vector.native_dispatch
+        vector.id
+        for vector in info.exploration_vectors
+        if vector.disposition is ExplorationVectorDisposition.MIGRATED
     ) == tuple(vector_id for vector_id, _ in expected)
     assert len({vector.id for vector in info.exploration_vectors}) == len(expected) == 6
     assert all(
@@ -1700,7 +1702,6 @@ def test_phase_f_experiment_vectors_match_complete_reviewed_inventory(
         and vector.task.frontier_item_id == f"{skill_name}-{vector.id}-frontier"
         and vector.task.depends_on == ()
         and vector.task.scope == (".",)
-        and vector.native_dispatch
         and vector.rationale.strip()
         and vector.relationship_classes
         for vector in info.exploration_vectors
@@ -1819,12 +1820,9 @@ def test_visualization_vectors_match_complete_reviewed_inventory(skill_name: str
         for vector in info.exploration_vectors
     )
     assert all(
-        (
-            vector.role in {"semantic-code-navigator", "repository-impact-profiler"}
-            and vector.native_dispatch
-        )
+        vector.role in {"semantic-code-navigator", "repository-impact-profiler"}
         if vector.disposition is ExplorationVectorDisposition.MIGRATED
-        else vector.role is None and not vector.native_dispatch
+        else vector.role is None
         for vector in info.exploration_vectors
     )
     assert _review_digest(info) == _VISUALIZATION_REVIEW_DIGESTS[skill_name]
@@ -1856,14 +1854,8 @@ def test_visualization_vectors_match_complete_reviewed_inventory(skill_name: str
         vector.disposition is ExplorationVectorDisposition.MIGRATED
         for vector in info.exploration_vectors
     )
-    if migrated_count and skill_name not in {
-        "vis-lens-reproducibility",
-        "vis-lens-story-arc",
-        "vis-lens-temporal",
-        "vis-lens-uncertainty",
-    }:
-        suffix = "vector" if migrated_count == 1 else "vectors"
-        assert f"Dispatch exactly {migrated_count} migrated exploration {suffix}" in content
+    if migrated_count:
+        assert "Dispatch every migrated exploration vector below" in content
 
 
 def test_visualization_retained_context_and_judgment_authorities_are_exact() -> None:
@@ -1941,7 +1933,6 @@ def test_architecture_lens_vectors_match_complete_reviewed_inventory(slug: str) 
     assert all(
         vector.disposition is ExplorationVectorDisposition.MIGRATED
         and vector.role in {"semantic-code-navigator", "repository-impact-profiler"}
-        and vector.native_dispatch
         for vector in info.exploration_vectors
     )
     assert _review_digest(info) == _ARCHITECTURE_REVIEW_DIGESTS[slug]
@@ -1952,7 +1943,7 @@ def test_architecture_lens_vectors_match_complete_reviewed_inventory(slug: str) 
     assert "Start all independent child delegations before awaiting any result" in content
     assert "Wait for every exploration result" in content
     if slug != "module-dependency":
-        assert f"Dispatch exactly {len(expected)} exploration vectors" in content
+        assert "Dispatch every migrated exploration vector below" in content
 
 
 def test_architecture_lens_task_inventory_is_unique_and_acyclic() -> None:
@@ -2004,13 +1995,7 @@ def test_phase_d_inventory_and_architecture_recipe_step_pins_are_explicit() -> N
         applicability
         for vectors in _PHASE_D_INVENTORY.values()
         for _, _, _, _, applicability in vectors
-    } == {
-        "always",
-        "investigate-standard",
-        "investigate-deep",
-        "scope-software",
-        "scope-non-software",
-    }
+    } == {"always"}
     assert {
         disposition
         for vectors in _PHASE_D_INVENTORY.values()

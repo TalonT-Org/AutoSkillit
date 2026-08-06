@@ -70,7 +70,7 @@ semantic_requirements:
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Start all independent child delegations before awaiting any result to maximize concurrency
 - Use the registered exploration roles for all repository reads
-- Dispatch exactly 6 exploration vectors through the deterministic router
+- Dispatch every exploration vector below through the deterministic router
 - Route mixed sequential-design evidence through the parent for bounded profiler handoff without creating extra vectors
 - Wait for every exploration result before mapping design space, assessing learning efficiency, recommending experiments, or creating the diagram
 - Retain parent authority over experimental, statistical, cost-efficiency, and stopping judgments in Steps 2+
@@ -103,7 +103,7 @@ inferring meaning, or importing or executing target code, tests, experiments, mo
 or benchmarks.
 <!-- /autoskillit:exploration-vector -->
 
-### Step 1: Launch 5 Authored Discovery Vectors (SINGLE MESSAGE)
+### Step 1: Launch the Authored Discovery Vectors (SINGLE MESSAGE)
 
 Dispatch the five authored Step-1 vectors with the ready fallback vector through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 

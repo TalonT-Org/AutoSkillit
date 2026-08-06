@@ -325,6 +325,18 @@ def test_fleet_default_enabled_is_false() -> None:
     assert FEATURE_REGISTRY["fleet"].default_enabled is False
 
 
+def test_exploration_feature_definition_pins_loading_and_visibility_policy() -> None:
+    from autoskillit.core import FEATURE_REGISTRY
+
+    definition = FEATURE_REGISTRY["exploration"]
+
+    assert definition.tier == 1
+    assert definition.import_package == "autoskillit.exploration"
+    assert definition.tool_tags == frozenset({"exploration"})
+    assert definition.default_enabled is False
+    assert definition.requires_backend_alignment is False
+
+
 def test_is_feature_enabled_fleet_defaults_false() -> None:
     """Without explicit config, fleet resolves to disabled when experimental_enabled=False."""
     from autoskillit.core.feature_flags import is_feature_enabled

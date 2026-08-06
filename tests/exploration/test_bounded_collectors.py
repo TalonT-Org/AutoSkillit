@@ -168,6 +168,106 @@ def test_list_contained_files_is_sorted_and_skips_symlinks(tmp_path: Path) -> No
     assert list_contained_files(root, CollectorLimits()) == ("nested/a.txt", "z.txt")
 
 
+@pytest.mark.skipif(
+    os.name == "nt" or os.scandir not in os.supports_fd,
+    reason="requires POSIX directory descriptors and renaming an open directory",
+)
+def test_list_contained_files_does_not_follow_replaced_queued_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "repo"
+    queued = root / "queued"
+    queued.mkdir(parents=True)
+    (queued / "safe.txt").write_text("safe")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("secret")
+    detached = root / "detached"
+    original_scandir = _bounded.os.scandir
+    original_is_symlink = Path.is_symlink
+    scandir_calls = 0
+    replaced = False
+
+    def replace_queued_directory() -> None:
+        nonlocal replaced
+        if not replaced:
+            queued.rename(detached)
+            queued.symlink_to(outside, target_is_directory=True)
+            replaced = True
+
+    def replace_after_path_validation(path: Path) -> bool:
+        is_symlink = original_is_symlink(path)
+        if path == queued:
+            replace_queued_directory()
+        return is_symlink
+
+    def replace_before_queued_enumeration(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes] | int,
+    ) -> os.ScandirIterator[str]:
+        nonlocal scandir_calls
+        scandir_calls += 1
+        if scandir_calls == 2:
+            replace_queued_directory()
+        return original_scandir(path)
+
+    # The Path hook reproduces the original queue-after-lstat gap.  The scandir hook
+    # keeps the same regression deterministic for the descriptor-based implementation.
+    monkeypatch.setattr(Path, "is_symlink", replace_after_path_validation)
+    monkeypatch.setattr(_bounded.os, "scandir", replace_before_queued_enumeration)
+
+    result = list_contained_files(root, CollectorLimits())
+
+    assert replaced
+    assert result == ("queued/safe.txt",)
+
+
+@pytest.mark.skipif(
+    os.name == "nt" or os.scandir not in os.supports_fd,
+    reason="requires POSIX directory descriptors and symlinks",
+)
+def test_list_contained_files_rejects_replacement_before_queued_directory_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "repo"
+    queued = root / "queued"
+    queued.mkdir(parents=True)
+    (queued / "safe.txt").write_text("safe")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("secret")
+    detached = root / "detached"
+    original_open = _bounded._open_verified_directory_at
+    replaced = False
+
+    def replace_before_open(
+        parent_fd: int,
+        component: str,
+        *,
+        expected: os.stat_result | None,
+        invalid_message: str,
+        changed_message: str,
+    ) -> int:
+        nonlocal replaced
+        if component == queued.name and expected is not None and not replaced:
+            queued.rename(detached)
+            queued.symlink_to(outside, target_is_directory=True)
+            replaced = True
+        return original_open(
+            parent_fd,
+            component,
+            expected=expected,
+            invalid_message=invalid_message,
+            changed_message=changed_message,
+        )
+
+    monkeypatch.setattr(_bounded, "_open_verified_directory_at", replace_before_open)
+
+    with pytest.raises(CollectorSafetyError, match="entry cannot be inspected"):
+        list_contained_files(root, CollectorLimits())
+
+    assert replaced
+
+
 def test_list_contained_files_fails_closed_at_limit(tmp_path: Path) -> None:
     root = tmp_path / "repo"
     root.mkdir()

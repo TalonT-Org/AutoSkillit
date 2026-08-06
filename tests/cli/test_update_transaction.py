@@ -1701,10 +1701,27 @@ def test_t_c1_obligation_survives_failures_at_or_after_upgrade_subprocess(
     version was never established, and the record must say so rather than
     guess).
     """
+    from autoskillit.hook_registry import generate_hooks_json, validate_plugin_cache_hooks
     from autoskillit.workspace import read_obligation
 
     _prepare(monkeypatch)
     _register_plugin(tmp_path)
+    hooks_dir = (
+        tmp_path
+        / ".claude"
+        / "plugins"
+        / "cache"
+        / "autoskillit-local"
+        / "autoskillit"
+        / "1.0.0"
+        / "hooks"
+    )
+    hooks_dir.mkdir(parents=True)
+    (hooks_dir / "_dispatch.py").write_text("# dispatcher stub", encoding="utf-8")
+    (hooks_dir / "hooks.json").write_text(
+        json.dumps(generate_hooks_json()),
+        encoding="utf-8",
+    )
     if failure_point == "verifier_raises_after_probe":
         monkeypatch.setattr(
             "autoskillit.cli.update._transaction.verify_installed_plugin_artifact",
@@ -1746,6 +1763,7 @@ def test_t_c1_obligation_survives_failures_at_or_after_upgrade_subprocess(
         assert obligation.expected_version == "1.1.0", failure_point
     else:
         assert obligation.expected_version is None, failure_point
+    assert validate_plugin_cache_hooks(cache_dir=hooks_dir.parent.parent) == [], failure_point
 
 
 @pytest.mark.parametrize(

@@ -2,16 +2,15 @@
 heals automatically instead of requiring a manual `autoskillit install`.
 
 Sibling idiom to tests/contracts/test_install_state_consistency.py. Covers
-T-C2 (failure-path postcondition: hooks valid or repair owed), T-C3
-(startup repair heals a stale cache), T-C4 (CLI startup obligation
-observer, both expected_version branches), and C-I4's in-suite
-rename-approximation of T-C5's real cross-interpreter upgrade smoke.
+T-C3 (startup repair heals a stale cache) and T-C4 (CLI startup obligation
+observer, both expected_version branches). T-C2's failure matrix belongs to
+the canonical update-transaction suite; C-I4 belongs to the hook-registry
+contract suite.
 """
 
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -111,154 +110,6 @@ def test_empty_persisted_expected_version_degrades_to_unknown(tmp_path: Path) ->
     persisted = read_obligation(tmp_path)
     assert persisted is not None
     assert persisted.expected_version is None
-
-
-# ---------------------------------------------------------------------------
-# T-C2 — failure-path postcondition contract.
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "fault",
-    [
-        "upgrade_nonzero_exit",
-        "uv_oserror",
-        "raising_probe",
-        "child_failure_after_probe",
-        "child_oserror",
-        "verifier_raises_after_probe",
-    ],
-)
-def test_t_c2_hooks_valid_or_repair_owed_after_any_failure(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, fault: str
-) -> None:
-    """For every fault-injected failure of run_update_transaction, the
-    system is never in the incident's state: broken-and-nobody-knows.
-
-    Phase A's relocatable commands are a per-incarnation invariant
-    independent of the transaction's outcome (the already-published
-    incarnation's hooks.json never becomes broken as a *side effect* of a
-    failed update attempt against it) — this test pins that a PUBLISHED
-    incarnation's hooks stay valid regardless of what the transaction does,
-    AND (for post-pivot failures) that the obligation journal records the
-    republication debt.
-    """
-    from autoskillit.cli._install_info import InstallInfo, InstallType
-    from autoskillit.cli.update._transaction import (
-        UpdateTransactionOutcome,
-        run_update_transaction,
-    )
-    from autoskillit.hook_registry import validate_plugin_cache_hooks
-    from autoskillit.workspace import read_obligation
-
-    home = tmp_path
-    cache_dir = home / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
-    _publish_cache_incarnation(cache_dir, "1.0.0", broken=False)
-    registry = home / ".claude" / "plugins" / "installed_plugins.json"
-    registry.parent.mkdir(parents=True, exist_ok=True)
-    registry.write_text(
-        json.dumps(
-            {
-                "version": 2,
-                "plugins": {
-                    "autoskillit@autoskillit-local": [{"installPath": str(cache_dir / "1.0.0")}]
-                },
-            }
-        )
-    )
-
-    monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.detect_install",
-        lambda: InstallInfo(InstallType.GIT_VCS, "abc", "stable", "https://x", None),
-    )
-    monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.upgrade_command",
-        lambda _info: ["uv", "tool", "upgrade", "autoskillit"],
-    )
-    monkeypatch.setattr("autoskillit.cli.update._transaction.is_git_worktree", lambda _p: False)
-    monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.is_git_main_checkout", lambda _p: False
-    )
-    if fault == "verifier_raises_after_probe":
-        monkeypatch.setattr(
-            "autoskillit.cli.update._transaction.verify_installed_plugin_artifact",
-            lambda _spec: (_ for _ in ()).throw(RuntimeError("simulated verify crash")),
-        )
-
-    calls: list[list[str]] = []
-
-    def runner(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
-        calls.append(list(cmd))
-        if fault == "upgrade_nonzero_exit" and len(calls) == 1:
-            return subprocess.CompletedProcess(cmd, 7)
-        if fault == "uv_oserror" and len(calls) == 1:
-            raise OSError("simulated uv-install launch failure")
-        if fault == "child_failure_after_probe" and len(calls) == 2:
-            return subprocess.CompletedProcess(cmd, 9)
-        if fault == "child_oserror" and len(calls) == 2:
-            raise OSError("simulated child install launch failure")
-        return subprocess.CompletedProcess(cmd, 0)
-
-    prober = (
-        (lambda _i, _e, _r: (_ for _ in ()).throw(RuntimeError("simulated probe failure")))
-        if fault == "raising_probe"
-        else (lambda _i, _e, _r: "1.1.0")
-    )
-
-    result = run_update_transaction(
-        home=home,
-        base_env={"PATH": "/bin"},
-        version_reader=lambda _name: "1.0.0",
-        fresh_version_prober=prober,
-        process_runner=runner,
-    )
-
-    assert result.outcome is not UpdateTransactionOutcome.COMPLETED, fault
-
-    # The published incarnation's hooks must never be broken as a side
-    # effect of a failed transaction that never touched it.
-    assert validate_plugin_cache_hooks(cache_dir=cache_dir) == [], fault
-
-    # Post-pivot failures (everything at/after the upgrade subprocess) must
-    # leave the obligation recorded — the system knows publication is owed.
-    assert read_obligation(home) is not None, fault
-
-
-# ---------------------------------------------------------------------------
-# C-I4 — in-suite rename-approximation of T-C5's real cross-interpreter
-# upgrade smoke (the smoke recipe step itself requires a live `uv` and two
-# provisioned Python minors; this pins the same property cheaply in CI).
-# ---------------------------------------------------------------------------
-
-
-def test_publication_obligation_loop_survives_interpreter_pivot(tmp_path: Path) -> None:
-    """A published, relocatable-command cache incarnation must keep
-    validating clean after the venv that generated it is renamed to a
-    different interpreter minor, or deleted outright — the exact fault
-    T-C5's live smoke exercises with a real `uv` upgrade across two Python
-    minors, approximated here with a fake venv tree rename/delete.
-    """
-    from autoskillit.hook_registry import validate_plugin_cache_hooks
-
-    # A fake venv tree, present at generation time — never actually
-    # referenced by the relocatable command, but simulates the incident.
-    venv_root = tmp_path / "venv"
-    (venv_root / "lib" / "python3.13" / "site-packages" / "autoskillit" / "hooks").mkdir(
-        parents=True
-    )
-
-    cache_dir = tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
-    _publish_cache_incarnation(cache_dir, "1.0.0", broken=False)
-
-    assert validate_plugin_cache_hooks(cache_dir=cache_dir) == []
-
-    # Pivot: rename lib/python3.13 -> lib/python3.11 (interpreter minor changed).
-    (venv_root / "lib" / "python3.13").rename(venv_root / "lib" / "python3.11")
-    assert validate_plugin_cache_hooks(cache_dir=cache_dir) == []
-
-    # Pivot: delete the venv tree entirely.
-    shutil.rmtree(venv_root)
-    assert validate_plugin_cache_hooks(cache_dir=cache_dir) == []
 
 
 # ---------------------------------------------------------------------------

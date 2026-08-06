@@ -127,7 +127,7 @@ def test_fresh_launch_injects_only_server_issued_role_bindings(
 
     roles = ("semantic-code-navigator", "repository-impact-profiler")
     definitions = tuple(SimpleNamespace(name=role) for role in roles)
-    monkeypatch.setattr(explorer_projection, "load_agent_definitions", lambda _path: definitions)
+    monkeypatch.setattr(explorer_projection, "load_bundled_agent_definitions", lambda: definitions)
     monkeypatch.setattr(
         explorer_projection,
         "agent_definition_digest",

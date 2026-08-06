@@ -70,7 +70,8 @@ def test_repository_identity_accepts_production_fallback_digest_anchors() -> Non
     identity = RepositoryIdentity("local-repository", "unborn")
 
     assert identity.digest == RepositoryIdentity("local-repository", "unborn").digest
-    assert identity.digest.startswith("sha256:")
+    assert len(identity.digest) == 64
+    assert all(character in "0123456789abcdef" for character in identity.digest)
 
 
 def test_stable_kahn_waves_respect_dependencies_and_scope_conflicts() -> None:

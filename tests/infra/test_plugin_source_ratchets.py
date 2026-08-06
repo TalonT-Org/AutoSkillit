@@ -205,7 +205,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "_atomically_replace_explorer_projection",
         "os.replace",
     ): (
-        4,
+        3,
         "The parent and role projections are swapped as one staged server-owned Codex "
         "session-root transaction with rollback.",
     ),

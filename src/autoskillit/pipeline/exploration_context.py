@@ -16,7 +16,7 @@ import stat
 import threading
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Generic, Protocol, TypeVar, cast, runtime_checkable
 
@@ -123,16 +123,8 @@ def _safe_submit_failure_reason(
 ) -> str:
     """Return a bounded diagnostic with all launch-authority material removed."""
     reason = str(exc)
-    sensitive_values = (
-        capability,
-        str(authority.authority_path),
-        authority.session_id,
-        str(authority.cwd),
-        str(authority.repository_root),
-        authority.source_identity,
-        authority.snapshot_digest,
-        authority.generation,
-        str(authority.expires_at),
+    sensitive_values = (capability,) + tuple(
+        str(getattr(authority, field.name)) for field in fields(authority)
     )
     for value in sensitive_values:
         if value:

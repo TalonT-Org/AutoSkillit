@@ -196,10 +196,10 @@ def test_attestation_rejects_replayed_or_future_evidence(observed_at: str, messa
     [
         ("cache_miss", False),
         ("schema_version", 1),
-        ("model", "gpt-5.6-sol"),
-        ("reasoning_effort", "high"),
+        ("child_model", "gpt-5.6-sol"),
+        ("child_reasoning_effort", "high"),
         ("parent_sandbox_mode", "workspace-write"),
-        ("sandbox_mode", "workspace-write"),
+        ("child_sandbox_mode", "workspace-write"),
         ("network_policy", "unrestricted"),
         ("native_target_execution_isolation", "failed-open"),
         ("native_credential_isolation", "failed-open"),

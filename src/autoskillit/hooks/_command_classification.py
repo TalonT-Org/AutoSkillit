@@ -1867,7 +1867,9 @@ def analyze_github_mutations(
         if (
             _REPEATABLE_SHELL_RE.search(payload) or _PROCESS_SUBSTITUTION_RE.search(payload)
         ) and _segments_have_possible_github_exec_token(segments):
-            reasons.append("mutation cardinality is unresolved in a shell wrapper")
+            reasons.append(
+                "mutation cardinality is unresolved in a repeatable shell loop or wrapper"
+            )
         if _segments_have_dispatch_word_exec_risk(segments):
             reasons.append("mutation cardinality is unresolved in a shell wrapper")
 

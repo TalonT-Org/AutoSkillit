@@ -544,9 +544,14 @@ def test_deny_messages_mapping_is_exhaustive() -> None:
     assert set(_DENY_MESSAGES.keys()) == set(DenyTrigger)
 
 
-@pytest.mark.parametrize("tool_cwd", [None, "relative/dir"], ids=["omitted", "relative"])
+@pytest.mark.parametrize(
+    ("tool_cwd", "expected_reason"),
+    [(None, "unresolved_mutation"), ("relative/dir", "malformed_cwd")],
+    ids=["omitted", "relative"],
+)
 def test_relative_input_file_unresolved_without_an_absolute_tool_cwd(
     tool_cwd: str | None,
+    expected_reason: str,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -567,7 +572,7 @@ def test_relative_input_file_unresolved_without_an_absolute_tool_cwd(
     result = _run_hook(event, monkeypatch)
 
     assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "unresolved_mutation" in result["hookSpecificOutput"]["permissionDecisionReason"]
+    assert expected_reason in result["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_literal_input_file_resolves_against_tool_cwd_not_payload_cwd(

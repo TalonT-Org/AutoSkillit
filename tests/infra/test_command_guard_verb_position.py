@@ -11,10 +11,8 @@ from ``test_command_guard_completeness``. Shared command-classification
 internals live outside this ratchet — they are the implementation that
 guards must consume.
 
-The detector must be non-vacuous: synthetic self-tests prove that the
-parser rejects literal-membership, generator-expression aliases, and the
-post-shlex-tokenization pattern, and accepts token-list / positional-arg
-comparisons.
+Synthetic self-tests keep the detector non-vacuous even when every production
+guard has completed the shared-classifier migration and discovery is empty.
 """
 
 from __future__ import annotations
@@ -152,7 +150,6 @@ class TestRawCommandMembershipRatchet:
 
     def test_no_raw_membership_in_command_inspecting_guards(self) -> None:
         guards = _find_command_inspecting_guards()
-        assert guards, "Discovery helper must return at least one guard (non-vacuous ratchet)"
 
         offenders: list[str] = []
         for guard_name, script_path in guards:

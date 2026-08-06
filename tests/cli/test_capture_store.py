@@ -22,10 +22,10 @@ import pytest
 
 import autoskillit.cli._capture_store as capture_store_command
 import autoskillit.cli.doctor._doctor_capture_store as doctor_capture_store
-import autoskillit.hooks._capture._reconcile as capture_reconcile
 from autoskillit.cli._capture_store import run_capture_store
 from autoskillit.cli.doctor._doctor_capture_store import _check_capture_store_stats
 from autoskillit.core import Severity
+from autoskillit.hooks._capture import _reconcile as capture_reconcile
 from autoskillit.hooks._capture._authority import open_capture_root, open_project_anchor
 from autoskillit.hooks._capture._orphan_scan import ADOPTION_AGE_SECONDS
 from autoskillit.hooks._capture._reconcile import CaptureStoreStats, capture_store_stats

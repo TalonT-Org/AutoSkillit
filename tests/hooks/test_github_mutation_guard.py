@@ -388,9 +388,9 @@ def test_proven_single_non_review_mutation_is_preserved(
         "fp6-bash-chained-benign",
         "fp7-bash-benign-loop",
         "fp8-bash-dynamic-echo",
-        "fp8-bash-dynamic-git-log",
-        "fp9-bash-gh-in-quoted-loop-string",
-        "fp10-run-cmd-source-then-gh-read",
+        "fp9-bash-dynamic-git-log",
+        "fp10-bash-gh-in-quoted-loop-string",
+        "fp11-run-cmd-source-then-gh-read",
     ],
 )
 def test_false_positive_corpus_is_allowed(
@@ -432,15 +432,15 @@ def test_false_positive_corpus_is_allowed(
         event = make_hook_event(tool="Bash", command="for n in 1 2; do ls; done", payload_cwd=repo)
     elif case_id == "fp8-bash-dynamic-echo":
         event = make_hook_event(tool="Bash", command='echo "$X"', payload_cwd=repo)
-    elif case_id == "fp8-bash-dynamic-git-log":
+    elif case_id == "fp9-bash-dynamic-git-log":
         event = make_hook_event(tool="Bash", command='git log "$REF"', payload_cwd=repo)
-    elif case_id == "fp9-bash-gh-in-quoted-loop-string":
+    elif case_id == "fp10-bash-gh-in-quoted-loop-string":
         event = make_hook_event(
             tool="Bash",
             command='for f in *; do echo "see gh docs"; done',
             payload_cwd=repo,
         )
-    elif case_id == "fp10-run-cmd-source-then-gh-read":
+    elif case_id == "fp11-run-cmd-source-then-gh-read":
         event = make_hook_event(
             tool="run_cmd",
             command="source .venv/bin/activate && gh pr view --json state",

@@ -19,6 +19,8 @@ from pathlib import Path
 
 import pytest
 
+# Mirror the standalone hook process import mode: guards place the hooks directory
+# on sys.path and import sibling support modules without package initialization.
 _HOOKS_SRC = str(Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks")
 if _HOOKS_SRC not in sys.path:
     sys.path.insert(0, _HOOKS_SRC)

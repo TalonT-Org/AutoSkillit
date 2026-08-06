@@ -280,17 +280,18 @@ def test_capture_store_stats_does_not_hang_on_lock_contention(tmp_path: Path) ->
 
     lock_path = project / ".autoskillit" / "temp" / "shell_capture" / LOCK_NAME
     holder_script = (
-        "import fcntl, os, sys, time\n"
+        "import fcntl, os, sys\n"
         "fd = os.open(sys.argv[1], os.O_RDWR)\n"
         "fcntl.flock(fd, fcntl.LOCK_EX)\n"
         "print('ready', flush=True)\n"
-        "time.sleep(1.0)\n"
+        "sys.stdin.readline()\n"
         "os.close(fd)\n"
     )
     holder = subprocess.Popen(
         [sys.executable, "-c", holder_script, str(lock_path)],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        stdin=subprocess.PIPE,
         text=True,
     )
     try:
@@ -303,7 +304,7 @@ def test_capture_store_stats_does_not_hang_on_lock_contention(tmp_path: Path) ->
         assert stats.blocker is CleanupBlocker.LOCK_CONTENDED
     finally:
         try:
-            holder.communicate(timeout=3)
+            holder.communicate(input="\n", timeout=3)
         except subprocess.TimeoutExpired:
             holder.terminate()
             holder.communicate(timeout=3)

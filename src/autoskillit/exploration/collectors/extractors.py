@@ -132,10 +132,14 @@ def _report(
 def _bounded_diagnostic_text(value: str, max_bytes: int) -> str:
     """Return a UTF-8-safe diagnostic fragment within an exact byte ceiling."""
 
+    if max_bytes <= 0:
+        return ""
     encoded = value.encode("utf-8", "backslashreplace")
     if len(encoded) <= max_bytes:
         return encoded.decode("utf-8")
     marker = b"..."
+    if max_bytes <= len(marker):
+        return marker[:max_bytes].decode("ascii")
     return encoded[: max_bytes - len(marker)].decode("utf-8", "ignore") + marker.decode()
 
 

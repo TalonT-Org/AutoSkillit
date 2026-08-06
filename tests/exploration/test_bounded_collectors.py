@@ -239,6 +239,29 @@ def test_collector_metadata_rejects_unregistered_identifiers() -> None:
         extractors_module._collector_metadata("unregistered-collector")
 
 
+@pytest.mark.parametrize(
+    ("value", "max_bytes", "expected"),
+    [
+        ("abcdef", 0, ""),
+        ("abcdef", 1, "."),
+        ("abcdef", 2, ".."),
+        ("abcdef", 3, "..."),
+        ("abcdef", 4, "a..."),
+        ("ééé", 4, "..."),
+        ("ééé", 5, "é..."),
+    ],
+)
+def test_bounded_diagnostic_text_honors_every_byte_ceiling(
+    value: str,
+    max_bytes: int,
+    expected: str,
+) -> None:
+    result = extractors_module._bounded_diagnostic_text(value, max_bytes)
+
+    assert result == expected
+    assert len(result.encode("utf-8")) <= max_bytes
+
+
 def test_search_reports_invalid_scope_as_a_failed_collection(tmp_path: Path) -> None:
     report = collect_search(
         tmp_path,

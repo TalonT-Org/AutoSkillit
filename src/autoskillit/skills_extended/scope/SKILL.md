@@ -7,10 +7,10 @@ description: Survey codebase and web sources to build a known/unknown matrix for
   recipe.
 exploration_vectors:
   - id: prior-art-codebase
-    disposition: migrated
+    disposition: retained
     rationale: Repository impact evidence covers existing implementations, tests, benchmarks, documentation, and the gaps between them.
     applicability: scope-software
-    role: repository-impact-profiler
+    role: null
     profile: auto
     relationship_classes: [defines, references, affects]
     task_id: scope-prior-art-codebase
@@ -20,7 +20,7 @@ exploration_vectors:
     max_results: 100
     max_report_bytes: 20000
     evidence_version: 1
-    native_dispatch: true
+    native_dispatch: false
   - id: prior-art-literature
     disposition: retained
     rationale: Published literature, established protocols, and known methods require external domain research rather than repository exploration.
@@ -52,10 +52,10 @@ exploration_vectors:
     evidence_version: 1
     native_dispatch: false
   - id: domain-context-architecture
-    disposition: migrated
+    disposition: retained
     rationale: Semantic navigation covers local architecture, modules, data structures, algorithms, and their relationships.
     applicability: scope-software
-    role: semantic-code-navigator
+    role: null
     profile: auto
     relationship_classes: [defines, imports, calls, references]
     task_id: scope-domain-context-architecture
@@ -65,7 +65,7 @@ exploration_vectors:
     max_results: 100
     max_report_bytes: 20000
     evidence_version: 1
-    native_dispatch: true
+    native_dispatch: false
   - id: domain-context-domain-knowledge
     disposition: retained
     rationale: Non-software structures, mechanisms, organisms, pathways, models, and processes require domain assessment outside repository exploration.
@@ -82,10 +82,10 @@ exploration_vectors:
     evidence_version: 1
     native_dispatch: false
   - id: evaluation-framework-software
-    disposition: migrated
+    disposition: retained
     rationale: Repository impact evidence covers local metrics, benchmarks, evaluation modules, scoring configuration, and their consumers.
     applicability: scope-software
-    role: repository-impact-profiler
+    role: null
     profile: auto
     relationship_classes: [declares, references, affects]
     task_id: scope-evaluation-framework-software
@@ -95,7 +95,7 @@ exploration_vectors:
     max_results: 100
     max_report_bytes: 20000
     evidence_version: 1
-    native_dispatch: true
+    native_dispatch: false
   - id: evaluation-framework-domain-assessment
     disposition: retained
     rationale: Domain-standard scales, assays, indices, and rubrics require non-software assessment rather than repository exploration.
@@ -112,10 +112,10 @@ exploration_vectors:
     evidence_version: 1
     native_dispatch: false
   - id: computational-complexity-local
-    disposition: migrated
+    disposition: retained
     rationale: Semantic navigation covers local algorithms, library calls, data structures, and baseline or reference computations needed for complexity analysis.
     applicability: scope-software
-    role: semantic-code-navigator
+    role: null
     profile: auto
     relationship_classes: [defines, calls, references]
     task_id: scope-computational-complexity-local
@@ -125,7 +125,7 @@ exploration_vectors:
     max_results: 100
     max_report_bytes: 20000
     evidence_version: 1
-    native_dispatch: true
+    native_dispatch: false
   - id: computational-complexity-external
     disposition: retained
     rationale: Complexity claims and pitfalls from library documentation or prior art require external research under parent authority.
@@ -142,10 +142,10 @@ exploration_vectors:
     evidence_version: 1
     native_dispatch: false
   - id: data-availability-repository
-    disposition: migrated
+    disposition: retained
     rationale: Repository impact evidence covers local datasets, fixtures, synthetic generators, manifests, and their consumers.
     applicability: scope-software
-    role: repository-impact-profiler
+    role: null
     profile: auto
     relationship_classes: [declares, references, affects]
     task_id: scope-data-availability-repository
@@ -155,7 +155,7 @@ exploration_vectors:
     max_results: 100
     max_report_bytes: 20000
     evidence_version: 1
-    native_dispatch: true
+    native_dispatch: false
   - id: data-availability-external
     disposition: retained
     rationale: External datasets, repositories, and domain-standard corpora require acquisition-oriented research beyond local repository exploration.
@@ -291,7 +291,7 @@ vectors must not be dispatched to `semantic-code-navigator` or
 `repository-impact-profiler`. Join every result before Step 2.
 
 <!-- autoskillit:exploration-vector id="prior-art-codebase" -->
-**[PRIOR ART — Codebase]** (`scope-software`, routed) — Search the repository for
+**[PRIOR ART — Codebase]** (`scope-software`, retained) — Search the repository for
 existing implementations, tests, benchmarks, and documentation related to the research
 question. Report what exists, its consumers and verification surfaces, and remaining
 gaps. Return bounded evidence only; do not decide which prior art should govern the
@@ -311,7 +311,7 @@ findings with source links and state explicitly when no credible source is found
 <!-- /autoskillit:exploration-vector -->
 
 <!-- autoskillit:exploration-vector id="domain-context-architecture" -->
-**[DOMAIN CONTEXT — Software Architecture]** (`scope-software`, routed) — Trace the
+**[DOMAIN CONTEXT — Software Architecture]** (`scope-software`, retained) — Trace the
 architecture surrounding the research area, including key modules, data structures,
 algorithms, imports, calls, and their relationships. Document current behavior and
 evidence-backed limitations without choosing a solution.
@@ -324,7 +324,7 @@ research question. Separate established facts from interpretations.
 <!-- /autoskillit:exploration-vector -->
 
 <!-- autoskillit:exploration-vector id="evaluation-framework-software" -->
-**[EVALUATION FRAMEWORK — Software Metrics]** (`scope-software`, routed) — Find local
+**[EVALUATION FRAMEWORK — Software Metrics]** (`scope-software`, retained) — Find local
 metrics, benchmarks, evaluation or scoring modules, configuration, tests, and consumers.
 Report measurement mechanisms, thresholds, and gaps; if none exist, say so explicitly.
 <!-- /autoskillit:exploration-vector -->
@@ -336,7 +336,7 @@ Report the available standards and gaps; if none are credible, say so explicitly
 <!-- /autoskillit:exploration-vector -->
 
 <!-- autoskillit:exploration-vector id="computational-complexity-local" -->
-**[COMPUTATIONAL COMPLEXITY — Local Algorithm]** (`scope-software`, routed) — Identify
+**[COMPUTATIONAL COMPLEXITY — Local Algorithm]** (`scope-software`, retained) — Identify
 the most expensive local operation, including focal, baseline, and reference
 computations. Report the concrete library call or algorithm, time and space scaling,
 local bottlenecks, and repository-evidenced pitfalls without selecting an approach.
@@ -350,7 +350,7 @@ costs. Cite sources and distinguish documented guarantees from inference.
 <!-- /autoskillit:exploration-vector -->
 
 <!-- autoskillit:exploration-vector id="data-availability-repository" -->
-**[DATA AVAILABILITY — Repository Datasets and Fixtures]** (`scope-software`, routed) —
+**[DATA AVAILABILITY — Repository Datasets and Fixtures]** (`scope-software`, retained) —
 Inventory local datasets, fixtures, synthetic generators, manifests, and their
 consumers. Report availability, provenance visible in the repository, and gaps needed
 for a meaningful experiment.

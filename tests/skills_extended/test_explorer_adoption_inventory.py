@@ -359,8 +359,8 @@ _PHASE_D_INVENTORY: dict[str, tuple[PhaseDInventoryRow, ...]] = {
     "scope": (
         (
             "prior-art-codebase",
-            "migrated",
-            "repository-impact-profiler",
+            "retained",
+            None,
             "scope-prior-art-codebase",
             "scope-software",
         ),
@@ -374,8 +374,8 @@ _PHASE_D_INVENTORY: dict[str, tuple[PhaseDInventoryRow, ...]] = {
         ("external-research", "retained", None, "scope-external-research", "always"),
         (
             "domain-context-architecture",
-            "migrated",
-            "semantic-code-navigator",
+            "retained",
+            None,
             "scope-domain-context-architecture",
             "scope-software",
         ),
@@ -388,8 +388,8 @@ _PHASE_D_INVENTORY: dict[str, tuple[PhaseDInventoryRow, ...]] = {
         ),
         (
             "evaluation-framework-software",
-            "migrated",
-            "repository-impact-profiler",
+            "retained",
+            None,
             "scope-evaluation-framework-software",
             "scope-software",
         ),
@@ -402,8 +402,8 @@ _PHASE_D_INVENTORY: dict[str, tuple[PhaseDInventoryRow, ...]] = {
         ),
         (
             "computational-complexity-local",
-            "migrated",
-            "semantic-code-navigator",
+            "retained",
+            None,
             "scope-computational-complexity-local",
             "scope-software",
         ),
@@ -416,8 +416,8 @@ _PHASE_D_INVENTORY: dict[str, tuple[PhaseDInventoryRow, ...]] = {
         ),
         (
             "data-availability-repository",
-            "migrated",
-            "repository-impact-profiler",
+            "retained",
+            None,
             "scope-data-availability-repository",
             "scope-software",
         ),

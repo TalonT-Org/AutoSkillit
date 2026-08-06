@@ -152,6 +152,48 @@ def test_offline_profile_requires_both_mandatory_and_three_cross_layer_markers(
 
 
 @pytest.mark.parametrize(
+    ("marker_state", "expected_diagnostic"),
+    [
+        ("missing", "missing"),
+        ("unreadable", "unreadable:PermissionError"),
+        ("mismatched", "digest_mismatch"),
+    ],
+)
+def test_offline_marker_evidence_distinguishes_failure_modes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    marker_state: str,
+    expected_diagnostic: str,
+) -> None:
+    _write_profile_declaration(tmp_path, quorum_matches=3)
+    marker_path = OFFLINE_REQUIRED_MARKER_PATHS[0]
+    marker = tmp_path / marker_path
+    if marker_state == "missing":
+        marker.unlink()
+    elif marker_state == "mismatched":
+        marker.write_bytes(b"different content")
+    else:
+        original_read_bytes = Path.read_bytes
+
+        def fail_selected_marker(path: Path) -> bytes:
+            if path == marker:
+                raise PermissionError("blocked for test")
+            return original_read_bytes(path)
+
+        monkeypatch.setattr(Path, "read_bytes", fail_selected_marker)
+
+    resolution = resolve_repository_identity(tmp_path)
+    evidence = next(
+        item
+        for item in resolution.evidence
+        if item.source == "offline_required_marker" and item.value == marker_path
+    )
+
+    assert not evidence.accepted
+    assert evidence.diagnostic == expected_diagnostic
+
+
+@pytest.mark.parametrize(
     ("url", "expected_source", "expected_active"),
     [
         ("https://github.com/TalonT-Org/AutoSkillit.git", "remote", True),

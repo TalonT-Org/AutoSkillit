@@ -284,19 +284,24 @@ def _validate_offline_declaration(root: Path) -> tuple[bool, tuple[IdentityEvide
 
     def marker_matches(marker_path: str, declared_digest: str, source: str) -> bool:
         marker = root / marker_path
-        try:
-            if marker.is_symlink() or not marker.is_file():
-                raise FileNotFoundError
-            digest = f"sha256:{hashlib.sha256(marker.read_bytes()).hexdigest()}"
-        except (FileNotFoundError, OSError):
-            digest = ""
-        accepted = digest == declared_digest
+        if marker.is_symlink() or not marker.is_file():
+            accepted = False
+            diagnostic = "missing"
+        else:
+            try:
+                digest = f"sha256:{hashlib.sha256(marker.read_bytes()).hexdigest()}"
+            except OSError as exc:
+                accepted = False
+                diagnostic = f"unreadable:{type(exc).__name__}"
+            else:
+                accepted = digest == declared_digest
+                diagnostic = "digest_match" if accepted else "digest_mismatch"
         marker_evidence.append(
             IdentityEvidence(
                 source=source,
                 value=marker_path,
                 accepted=accepted,
-                diagnostic="digest_match" if accepted else "missing_or_digest_mismatch",
+                diagnostic=diagnostic,
             )
         )
         return accepted

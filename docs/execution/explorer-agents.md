@@ -12,8 +12,8 @@ synthesis. Explorer leaves do not call each other, spawn descendants, or make re
 
 ## Skill adoption
 
-An adopting `SKILL.md` declares each reviewed exploration vector in the flat
-`exploration_vectors` frontmatter schema and binds its canonical prose to an exact marker pair:
+An adopting skill declares each reviewed exploration vector in a per-skill `exploration.yaml`
+sidecar (slim schema) and binds its canonical prose to exact HTML marker pairs in `SKILL.md`:
 
 ```markdown
 <!-- autoskillit:exploration-vector id="affected-files" -->
@@ -21,11 +21,12 @@ Canonical task prose retained in source control.
 <!-- /autoskillit:exploration-vector -->
 ```
 
-Every vector records its disposition, rationale, applicability, role, repository profile,
-relationship classes, task and frontier identities, dependencies, scope, result/report bounds,
-evidence version, and native-dispatch decision. Migrated vectors name one registered role and are
-replaced only after the session backend and exploration router plan are bound. Retained or excluded
-vectors keep their reviewed prose and cannot request native dispatch.
+The sidecar schema is slim: migrated entries carry `{id, role, relationship_classes, rationale}`
+with an optional `applicability` (defaults to `always`); retained entries carry `{id, rationale}`.
+Task/frontier identities, profile, dependencies, scope, and evidence version are derived constants
+in the parser. Migrated vectors name one registered role and are replaced only after the session
+backend and exploration router plan are bound. Retained vectors keep their reviewed prose and are
+never dispatched.
 
 Planner vectors author `profile: auto`. The server resolves that selector only from the
 factory-owned trusted repository root: exact AutoSkillit repositories receive the AutoSkillit
@@ -40,33 +41,17 @@ selection, waiting, evidence merge, synthesis, and output writes. The three deep
 preserves their existing `module_count > 20` or layered/hexagonal architecture condition while
 still giving applicable sessions native dispatch.
 
-Phase D extends reviewed adoption to `investigate`, `scope`, and the representative
-`arch-lens-module-dependency`, `arch-lens-state-lifecycle`, and `arch-lens-development` skills.
-Every migrated Phase D vector authors `profile: auto` and keeps one stable task/frontier identity.
-The source marker body is canonical review prose; backend projection replaces it with either the
-Claude `Agent` launch or the Codex `spawn_agent` launch only after the router plan is bound.
+`investigate` and `scope` vectors are all `always`-active. Investigate's standard-mode and
+deep-mode vectors both render dispatch packets; mode selection is handled by the SKILL.md section
+structure (a deep-mode session routes through the deep-mode section). Scope's vectors are all
+retained (its software/non-software split is an in-session judgment, not a projection-time
+condition).
 
-`investigate` uses the closed `investigate-standard` and `investigate-deep` applicability IDs.
-Local implementation and error provenance, dependencies, consumers, tests, repeated code
-patterns, architecture constraints, history, and blast-radius collection route to typed explorer
-packets. Web research, design and recurrence interpretation, hypothesis challenge, solution
-generation, recommendation synthesis, breakage judgment, and post-report validation stay with
-the existing reasoning agents. Explorer leaves return evidence only and cannot diagnose the root
-cause, rank candidates, or select a fix.
-
-`scope` uses the closed `scope-software` and `scope-non-software` applicability IDs so its runtime
-branch choice activates only the corresponding migrated vectors. Retained and excluded vectors
-keep their reviewed marker prose and never receive a native dispatch replacement. The three lens
-skills preserve parent-owned synthesis and diagram output while routing only their reviewed local
-repository evidence leaves.
-
-Phase E completes the same reviewed adoption across the exact thirteen architecture selectors in
-`prepare-pr`: `c4-container`, `concurrency`, `data-lineage`, `deployment`, `development`,
-`error-resilience`, `module-dependency`, `operational`, `process-flow`, `repository-access`,
-`scenarios`, `security`, and `state-lifecycle`. Each lens keeps its post-exploration analysis,
-diagram construction, output path, and parent-owned synthesis unchanged. Its ordered vector
-inventory, review rationale and relationship classes, dependency graph, and native-dispatch
-decision are test-frozen against the skill frontmatter.
+The full adoption covers all thirteen architecture selectors, eighteen experiment lenses, twelve
+visualization lenses, investigate, scope, and the planner skills. Each lens keeps its
+post-exploration analysis, diagram construction, output path, and parent-owned synthesis unchanged.
+Its ordered vector inventory, review rationale, and relationship classes are test-frozen against the
+exploration sidecar.
 
 Architecture orchestration is pinned to Codex only at the three reviewed recipe-step authorities:
 `implementation.run_arch_lenses`, `implementation-groups.run_arch_lenses`, and

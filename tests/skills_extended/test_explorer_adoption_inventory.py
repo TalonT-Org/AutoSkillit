@@ -1301,7 +1301,7 @@ def _review_digest(info: SkillInfo) -> str:
             vector.id,
             vector.rationale,
             [relationship.value for relationship in vector.relationship_classes],
-            vector.native_dispatch,
+            vector.disposition is ExplorationVectorDisposition.MIGRATED,
         )
         for vector in info.exploration_vectors
     ]

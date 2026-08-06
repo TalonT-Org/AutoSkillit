@@ -23,12 +23,6 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _HOOKS_DIR = _REPO_ROOT / "src" / "autoskillit" / "hooks"
 _PROVENANCE_TOKEN_RE = re.compile(r"AutoSkillit")
 
-_SCANNED_FILES = (
-    _HOOKS_DIR / "_capture" / "_reconcile.py",
-    _HOOKS_DIR / "shell_capture_hook.py",
-    _HOOKS_DIR / "capture_lifecycle_hook.py",
-)
-
 # Pre-existing, out-of-scope for this rule: a shell-embedded emergency
 # literal baked into the generated harness itself (runs via `printf ... >&2`
 # inside the *wrapped command*, not emitted as a hook policy/diagnostic
@@ -64,17 +58,28 @@ def _imports_policy_event(path: Path) -> bool:
     return False
 
 
-@pytest.mark.parametrize("path", _SCANNED_FILES, ids=lambda p: p.name)
-def test_no_ad_hoc_provenance_literal_outside_policy_event(path: Path) -> None:
-    offending = [
-        literal
-        for literal in _string_literals(path)
-        if _PROVENANCE_TOKEN_RE.search(literal) and literal not in _EXEMPT_LITERALS
-    ]
-    assert not offending, (
-        f"{path.relative_to(_REPO_ROOT)} contains raw AutoSkillit-branded string "
-        f"literal(s) outside hooks/_policy_event.py: {offending!r} — construct these "
-        "via PolicyEvent + render_provenance_prefix instead"
+def _policy_event_importers() -> tuple[Path, ...]:
+    return tuple(
+        path
+        for path in sorted(_HOOKS_DIR.rglob("*.py"))
+        if path.name != "_policy_event.py" and _imports_policy_event(path)
+    )
+
+
+def test_no_ad_hoc_provenance_literal_outside_policy_event() -> None:
+    violations: list[str] = []
+    for path in _policy_event_importers():
+        offending = [
+            literal
+            for literal in _string_literals(path)
+            if _PROVENANCE_TOKEN_RE.search(literal) and literal not in _EXEMPT_LITERALS
+        ]
+        if offending:
+            violations.append(f"{path.relative_to(_REPO_ROOT)}: {offending!r}")
+    assert not violations, (
+        "production _policy_event importers contain raw AutoSkillit-branded "
+        "literals outside hooks/_policy_event.py — construct these via "
+        "PolicyEvent + render_provenance_prefix instead:\n" + "\n".join(violations)
     )
 
 
@@ -82,7 +87,7 @@ def test_exempt_literals_are_still_present_and_narrow() -> None:
     """The exemption list must track real content, not accumulate stale entries."""
     all_literals = {
         literal
-        for path in _SCANNED_FILES
+        for path in _policy_event_importers()
         for literal in _string_literals(path)
         if _PROVENANCE_TOKEN_RE.search(literal)
     }
@@ -92,11 +97,7 @@ def test_exempt_literals_are_still_present_and_narrow() -> None:
 
 def test_policy_event_module_has_a_production_importer() -> None:
     """hooks/_policy_event.py must not be an orphaned component."""
-    importers = [
-        path
-        for path in _HOOKS_DIR.rglob("*.py")
-        if path.name != "_policy_event.py" and _imports_policy_event(path)
-    ]
+    importers = _policy_event_importers()
     assert importers, "hooks/_policy_event.py has zero production importers"
 
 

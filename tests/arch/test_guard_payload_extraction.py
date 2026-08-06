@@ -25,7 +25,7 @@ _GUARDS_DIR = _REPO_ROOT / "src" / "autoskillit" / "hooks" / "guards"
 _TRACKED_KEYS: frozenset[str] = frozenset({"cmd", "command", "cwd"})
 
 
-class _TrackedTooInputReadVisitor(ast.NodeVisitor):
+class _TrackedToolInputReadVisitor(ast.NodeVisitor):
     """Collects (lineno, key) for every direct tool_input["cmd"/"command"/"cwd"]
     subscript or .get("cmd"/"command"/"cwd", ...) call found in the module.
 
@@ -40,7 +40,25 @@ class _TrackedTooInputReadVisitor(ast.NodeVisitor):
 
     @staticmethod
     def _is_tool_input_name(node: ast.expr) -> bool:
-        return isinstance(node, ast.Name) and node.id == "tool_input"
+        if isinstance(node, ast.Name):
+            return node.id == "tool_input"
+        if (
+            isinstance(node, ast.Subscript)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "data"
+            and isinstance(node.slice, ast.Constant)
+        ):
+            return node.slice.value == "tool_input"
+        return (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "data"
+            and bool(node.args)
+            and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value == "tool_input"
+        )
 
     def visit_Subscript(self, node: ast.Subscript) -> None:
         if self._is_tool_input_name(node.value):
@@ -65,7 +83,7 @@ class _TrackedTooInputReadVisitor(ast.NodeVisitor):
 
 def _scan_guard(path: Path) -> list[tuple[int, str]]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
-    visitor = _TrackedTooInputReadVisitor()
+    visitor = _TrackedToolInputReadVisitor()
     visitor.visit(tree)
     return visitor.hits
 
@@ -86,3 +104,13 @@ def test_no_direct_tool_input_command_cwd_reads() -> None:
         "Guards reading tool_input cmd/command/cwd keys directly instead of via "
         "hooks/_hook_payload.py's parse_hook_command:\n" + "\n".join(violations)
     )
+
+
+def test_nested_data_tool_input_reads_are_detected(tmp_path: Path) -> None:
+    source = tmp_path / "nested.py"
+    source.write_text(
+        "a = data['tool_input']['cmd']\nb = data.get('tool_input', {}).get('command')\n",
+        encoding="utf-8",
+    )
+
+    assert _scan_guard(source) == [(1, "cmd"), (2, "command")]

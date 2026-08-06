@@ -25,6 +25,8 @@ _TESTS_ROOT = _REPO_ROOT / "tests"
 # "approve" is included alongside the plan's allow/permit/not_blocked vocabulary:
 # tests/infra/test_skill_command_guard.py already pairs each deny test with an
 # approve-named allow test, predating this contract.
+# This is deliberately a structural neighbor check; assertion quality remains
+# the responsibility of each guard's behavioral test suite.
 _ALLOW_TEST_NAME_RE = re.compile(r"test_.*(allow|permit|not_blocked|approve)")
 
 

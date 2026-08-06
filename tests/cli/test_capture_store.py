@@ -21,12 +21,14 @@ from pathlib import Path
 import pytest
 
 import autoskillit.cli._capture_store as capture_store_command
+import autoskillit.cli.doctor._doctor_capture_store as doctor_capture_store
 import autoskillit.hooks._capture._reconcile as capture_reconcile
 from autoskillit.cli._capture_store import run_capture_store
 from autoskillit.cli.doctor._doctor_capture_store import _check_capture_store_stats
+from autoskillit.core import Severity
 from autoskillit.hooks._capture._authority import open_capture_root, open_project_anchor
 from autoskillit.hooks._capture._orphan_scan import ADOPTION_AGE_SECONDS
-from autoskillit.hooks._capture._reconcile import capture_store_stats
+from autoskillit.hooks._capture._reconcile import CaptureStoreStats, capture_store_stats
 from autoskillit.hooks._capture._types import CleanupBlocker
 from autoskillit.hooks._capture_lifecycle import LOCK_NAME, CaptureLifecycleStore
 
@@ -83,6 +85,95 @@ def test_doctor_capture_store_check_reports_stats_without_mutating(tmp_path: Pat
     assert after == before
     assert "live=5" in result.message
     assert "unledgered_aged=10" in result.message
+
+    stats = capture_store_stats(str(project))
+    assert stats.blocker is CleanupBlocker.NONE
+    assert stats.live_records == 5
+    assert stats.ledger_bytes > 0
+    assert stats.unledgered_aged_files == 10
+    assert stats.unledgered_aged_bytes == 10 * len(b"orphan-debris")
+
+
+def test_doctor_capture_store_reports_absent_store(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def absent(project: str) -> CaptureStoreStats:
+        calls.append(project)
+        return CaptureStoreStats(CleanupBlocker.STORE_ABSENT)
+
+    monkeypatch.setattr(doctor_capture_store, "capture_store_stats", absent)
+
+    result = doctor_capture_store._check_capture_store_stats(tmp_path)
+
+    assert calls == [str(tmp_path)]
+    assert result.severity is Severity.OK
+    assert result.check == "capture_store_stats"
+    assert result.message == "No capture store yet"
+
+
+@pytest.mark.parametrize(
+    "blocker",
+    [
+        blocker
+        for blocker in CleanupBlocker
+        if blocker not in {CleanupBlocker.NONE, CleanupBlocker.STORE_ABSENT}
+    ],
+)
+def test_doctor_capture_store_maps_unavailable_blockers_to_warning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    blocker: CleanupBlocker,
+) -> None:
+    monkeypatch.setattr(
+        doctor_capture_store,
+        "capture_store_stats",
+        lambda _project: CaptureStoreStats(blocker),
+    )
+
+    result = doctor_capture_store._check_capture_store_stats(tmp_path)
+
+    assert result.severity is Severity.WARNING
+    assert result.check == "capture_store_stats"
+    assert f"blocker={blocker.value}" in result.message
+
+
+@pytest.mark.parametrize(
+    ("unledgered", "expected_severity", "expects_remediation"),
+    [(99, Severity.OK, False), (100, Severity.WARNING, True)],
+)
+def test_doctor_capture_store_warning_threshold(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    unledgered: int,
+    expected_severity: Severity,
+    expects_remediation: bool,
+) -> None:
+    monkeypatch.setattr(
+        doctor_capture_store,
+        "capture_store_stats",
+        lambda _project: CaptureStoreStats(
+            blocker=CleanupBlocker.NONE,
+            live_records=3,
+            eligible_records=2,
+            deleting_records=1,
+            ledger_bytes=123,
+            directory_files=7,
+            unledgered_aged_files=unledgered,
+            unledgered_aged_bytes=456,
+        ),
+    )
+
+    result = doctor_capture_store._check_capture_store_stats(tmp_path)
+
+    assert result.severity is expected_severity
+    assert result.check == "capture_store_stats"
+    assert "live=3" in result.message
+    assert "eligible=2" in result.message
+    assert "deleting=1" in result.message
+    assert ("--reclaim" in result.message) is expects_remediation
 
 
 def test_capture_store_command_without_reclaim_does_not_mutate(

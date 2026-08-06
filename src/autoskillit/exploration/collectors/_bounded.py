@@ -169,10 +169,8 @@ def resolve_contained_path(root: Path, relative_path: str) -> Path:
 
     if not root.is_dir() or root.is_symlink():
         raise CollectorSafetyError("collector root must be a real directory")
-    relative = PurePosixPath(relative_path)
-    if relative.is_absolute() or not relative.parts or ".." in relative.parts:
-        raise CollectorSafetyError("path must be a non-empty contained relative path")
-    candidate = root.joinpath(*relative.parts)
+    parts = _contained_parts(relative_path)
+    candidate = root.joinpath(*parts)
     try:
         resolved_root = root.resolve(strict=True)
         resolved_candidate = candidate.resolve(strict=True)

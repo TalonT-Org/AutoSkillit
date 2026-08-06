@@ -58,6 +58,24 @@ def test_read_contained_file_rejects_parent_escape_and_symlink(tmp_path: Path) -
         read_contained_file(root, "linked.txt", CollectorLimits())
 
 
+@pytest.mark.parametrize(
+    "relative_path", ["", "/absolute", "../escape", "safe/../escape", "bad\0path"]
+)
+def test_contained_path_entrypoints_share_lexical_rejection(
+    tmp_path: Path,
+    relative_path: str,
+) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+
+    for entrypoint in (resolve_contained_path, open_contained_regular_file):
+        with pytest.raises(
+            CollectorSafetyError,
+            match="non-empty contained relative path",
+        ):
+            entrypoint(root, relative_path)
+
+
 def test_read_contained_file_enforces_byte_limit(tmp_path: Path) -> None:
     root = tmp_path / "repo"
     root.mkdir()

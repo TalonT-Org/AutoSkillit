@@ -654,26 +654,7 @@ def main() -> None:
 
         evict_direct_mcp_entry(_user_claude_json_path())
 
-        # The natural "next healthy process" observer: if a prior update
-        # left a publication obligation pending (crashed between the pivot
-        # and a completed republication child — issue #4469), this is the
-        # first opportunity a plain CLI invocation gets to close the loop.
-        # attempt_obligation_repair() is a no-op when nothing is pending and
-        # defers under CLAUDECODE on its own.
-        #
-        # Excluded for `install` and `--version`: attempt_obligation_repair() itself spawns
-        # `autoskillit install --maintenance-update` as a subprocess, and
-        # that child's own main() call would otherwise observe the SAME
-        # still-pending obligation and recurse into another repair attempt
-        # — either an unbounded chain of child processes, or a deadlock if
-        # the outer install() invocation already holds the exclusive
-        # publication lease the recursive repair's install() child also
-        # needs. Every `install` invocation IS itself already an attempt to
-        # satisfy the obligation (the transaction's own success path clears
-        # it), so re-observing here would only ever be redundant at best.
-        # The unknown-version verification branch also launches `autoskillit
-        # --version` while the obligation is pending, so that probe must not
-        # recursively observe and repair the same record.
+        # Repair on the next safe CLI process; exclude recursive child paths.
         if _first_arg not in {"install", "--version"}:
             from autoskillit.cli.update._obligation_repair import (
                 ObligationRepairOutcome,

@@ -42,9 +42,7 @@ def test_hook_command_executable(command: str) -> None:
     generate_hooks_json() emits ${CLAUDE_PLUGIN_ROOT}-relative commands — the
     form Claude Code expands at hook-invocation time against the plugin
     version that supplied the file. This test simulates that expansion
-    against the source checkout (which ships the real hooks/ tree) before
-    splitting/executing, restoring the pattern this test used in the
-    original token era (commit 4e52f191e).
+    against the source checkout before splitting and executing it.
     """
     resolved_command = command.replace("${CLAUDE_PLUGIN_ROOT}", str(pkg_root()))
     parts = shlex.split(resolved_command)

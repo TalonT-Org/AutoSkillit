@@ -215,7 +215,7 @@ def test_startup_hook_health_check_survives_repair_primitive_raising(monkeypatch
         _raise_repair,
     )
 
-    broken = run_startup_hook_health_check()  # must not raise
+    broken = run_startup_hook_health_check()
 
     assert broken == ["python3 /stale/cache/path/hooks/quota_guard.py"]
 

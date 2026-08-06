@@ -187,21 +187,11 @@ def _recording_success_runner(
 
 
 # ---------------------------------------------------------------------------
-# Phase B — pivot-safe update verification and crash-proof failure reporting.
+# Pivot-safe update verification and failure reporting.
 # ---------------------------------------------------------------------------
 
-# A meta_path blocker alone cannot reproduce the incident: Python consults
-# sys.modules before sys.meta_path, and the pinned structlog eagerly imports
-# the rich tree as a side effect of `import structlog` (verified against
-# this repo's venv: rich._emoji_codes, rich.traceback land in sys.modules
-# from the bare import) — by the time a driver script runs, there may be no
-# not-yet-imported rich.* module left for a naive blocker to catch. Purging
-# sys.modules AND installing the blocker together simulates the deleted
-# site-packages tree regardless of whether the runtime rich version imports
-# lazily or eagerly. Runs in a real subprocess (xdist-safe, and faithfully
-# models the fresh CLI process the incident occurred in) — this fault class
-# is structurally impossible for in-process pytest to inflict on itself
-# (the test runner's own import roots being destroyed).
+# Purge imported Rich modules before blocking imports so eager and lazy
+# dependency versions exercise the same missing-site-packages behavior.
 _POISON_RICH_PREFIX = """\
 import sys
 
@@ -237,18 +227,7 @@ def _run_poisoned_subprocess(driver_body: str) -> subprocess.CompletedProcess[st
 
 
 def test_t_b1_incident_reproduction_raising_probe_survives_real_logging_chain() -> None:
-    """T-B1: the exact incident (raising post-pivot version probe, rendered
-    through the REAL configured logging chain, with rich unimportable) can
-    no longer double-crash.
-
-    Fails before B-I1+B-I3: the old FRESH_VERSION_METADATA_GATE consulted
-    in-process metadata directly and logged the failure via
-    ``logger.warning(..., exc_info=True)`` under structlog's default
-    rich-capable ConsoleRenderer — rendering that log record itself raised
-    ModuleNotFoundError from the deleted tree, escaping the except handler
-    and crashing the process a second time (the incident's exact double-
-    crash: PackageNotFoundError, then ModuleNotFoundError in the handler).
-    """
+    """A raising post-pivot probe remains reportable without Rich imports."""
     driver = """
 import importlib.metadata
 import subprocess
@@ -1652,7 +1631,7 @@ def test_update_consumers_compose_with_registered_real_child_transaction(
 
 
 # ---------------------------------------------------------------------------
-# Phase C — publication obligation journal lifecycle (T-C1).
+# Publication-obligation journal lifecycle.
 # ---------------------------------------------------------------------------
 
 

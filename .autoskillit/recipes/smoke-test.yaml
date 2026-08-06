@@ -81,14 +81,8 @@ steps:
     on_success: implement_task
     on_failure: register_clone_failure
     note: >-
-      The only test in the system that exercises real uv venv replacement
-      under a real interpreter flip (issue #4469's exact fault class,
-      structurally impossible to inflict from in-process pytest). Installs
-      on one Python minor in a scratch HOME, upgrades on another, and
-      asserts the retained incarnation's hook commands still execute.
-      Requires both Python minors provisioned on the runner (uv python
-      install) — fails loudly rather than silently skipping if either is
-      missing.
+      Replaces a real uv tool environment across Python minors and verifies
+      retained hook commands. Both minors must be provisioned on the runner.
 
   implement_task:
     tool: run_skill

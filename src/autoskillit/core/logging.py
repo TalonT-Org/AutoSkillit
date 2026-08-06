@@ -16,19 +16,8 @@ MCP server constraint:
     stdout is the MCP protocol wire. Logging MUST go to stderr exclusively.
     configure_logging() enforces this — it always routes to sys.stderr.
 
-Exception-rendering contract:
-    Every processor chain configured here — the module-import-time default
-    below and configure_logging()'s console branch — renders exceptions with
-    structlog.dev.plain_traceback (wraps the stdlib `traceback` module,
-    imported eagerly at module load), never structlog's default
-    RichTracebackFormatter. Rich's exception formatter lazily imports
-    submodules (e.g. rich._emoji_codes) on first use; autoskillit's own
-    self-update deletes and rebuilds its installed package tree mid-process
-    (issue #4469), so an except handler that reaches for a not-yet-imported
-    rich submodule from a since-deleted site-packages tree crashes a SECOND
-    time inside the crash handler itself. This is a crash class here, not a
-    cosmetic choice — never reintroduce a rich-capable exception formatter
-    into either processor chain.
+Exception rendering uses the eagerly imported stdlib traceback path so update
+pivots cannot invalidate a lazily imported formatter.
 """
 
 from __future__ import annotations
@@ -63,10 +52,7 @@ _PLUGIN_ARTIFACT_OUTCOMES = frozenset(
     }
 )
 
-# The single sanctioned exception formatter for every processor chain this
-# module configures — see the module docstring's exception-rendering
-# contract. Defined once and reused so the two configure sites can never
-# drift apart.
+# Shared by every console processor chain.
 _EXCEPTION_FORMATTER = structlog.dev.plain_traceback
 
 # Ensure all module-level get_logger() calls return lazy proxies rather than
@@ -246,10 +232,6 @@ def configure_logging(
     use_json = json_output or not is_tty
 
     if use_json:
-        # dict_tracebacks renders via the stdlib traceback module (structured
-        # frame dicts, not text) — rich-free by construction, so it is not
-        # subject to the exception-rendering contract above and needs no
-        # exception_formatter.
         final_processors: list[Any] = [
             structlog.processors.dict_tracebacks,
             structlog.processors.JSONRenderer(),

@@ -980,9 +980,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # and per-attempt storage concerns out of the public backend gateway:
         # +_codex_config_lock, +_codex_prelaunch, +_codex_session_storage.
         "execution/backends": 16,
-        "smoke_utils": 11,  # +_cross_interpreter_upgrade (C-I4 live uv venv-replacement
-        # smoke step, issue #4469's exact fault class — one cohesive 170-line callable
-        # with no internal seam to extract)
+        "smoke_utils": 11,  # cross-interpreter upgrade smoke support
     }
     violations: list[str] = []
     dirs_to_check: list[Path] = []

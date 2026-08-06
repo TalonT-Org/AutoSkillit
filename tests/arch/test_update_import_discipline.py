@@ -1,18 +1,4 @@
-"""T-B6: cli/update/*.py must import every third-party module at module top.
-
-The update transaction's failure path runs across an irreversible pivot
-(``uv tool install --force``/``upgrade`` may rebuild the venv mid-process —
-issue #4469). A function-local third-party import deferred until a
-post-pivot ``except`` handler runs is the exact landmine shape B-I1 fixes
-for structlog/rich in ``core/logging.py``: an import that can raise for
-reasons unrelated to the condition being handled, at the worst possible
-moment. The seams to inject failure and observe this exist (B-I2/B-I3); this
-guard makes sure nothing reintroduces the underlying import-timing hazard.
-
-First-party (``autoskillit.*``) lazy imports are unaffected — deferred
-imports to avoid import cycles are a pervasive, deliberate pattern
-throughout this codebase and are not the hazard this guard targets.
-"""
+"""Require update modules to import third-party dependencies before pivots."""
 
 from __future__ import annotations
 

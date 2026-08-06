@@ -6,6 +6,7 @@ import tomllib
 from collections.abc import Mapping
 from enum import StrEnum
 from pathlib import Path
+from typing import cast
 
 import pytest
 import structlog.testing
@@ -2197,6 +2198,18 @@ class TestCodexBackendSetupSessionDir:
             }
         )
         assert second_scrub == first_scrub
+
+    def test_clear_explorer_binding_env_validates_role_set_before_filesystem_access(self) -> None:
+        missing_session_dir = self.session_dir / "not-created"
+
+        with pytest.raises(ValueError, match="must be a frozenset"):
+            clear_explorer_binding_env(
+                missing_session_dir,
+                cast(frozenset[str], {"semantic-code-navigator"}),
+            )
+        clear_explorer_binding_env(missing_session_dir, frozenset())
+
+        assert not missing_session_dir.exists()
 
     def test_injected_luna_disabled_features_generate_toml_feature_table(self) -> None:
         definition = self._luna_definition(disabled_features=("apps", "shell_tool"))

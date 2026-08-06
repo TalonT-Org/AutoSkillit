@@ -4028,7 +4028,7 @@ def test_ledger_reload_rejects_conflicting_final_manifest(tmp_path: Path) -> Non
         anchor.close()
 
 
-# --- Diagnostic severity classifier + emission-policy contract (W2) --------
+# --- Diagnostic severity classifier + emission-policy contract -------------
 
 _SEVERITY_RANK = {
     CleanupSeverity.HEALTHY: 0,

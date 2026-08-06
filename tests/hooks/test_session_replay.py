@@ -2,7 +2,7 @@
 full PreToolUse hook chain via the real dispatcher, asserting no benign
 command is blocked and no failure-grade message appears without errors.
 
-Remediation item 5c. Each fixture event is dispatched to every PreToolUse
+Each fixture event is dispatched to every PreToolUse
 guard whose HOOK_REGISTRY matcher matches the tool name and whose
 session_scope is compatible with the fixture's simulated session (mirroring
 which guards would actually be wired for that session type, since
@@ -12,7 +12,7 @@ Code would invoke it.
 
 One narrow exception to the PreToolUse-only scope: ``dispatch_capture_lifecycle_hook``
 additionally dispatches the SessionStart ``capture_lifecycle_hook.py`` once
-per replay, the only consumer of the W2/W3 diagnostic-severity and
+per replay, the only consumer of the capture diagnostic-severity and
 convergence machinery (``reconcile_capture_store`` / ``classify_cleanup_outcome``)
 — unreachable through the per-event PreToolUse loop above.
 """
@@ -256,7 +256,7 @@ def assert_replay_clean(replayed: list[tuple[ReplayEvent, list[GuardRunResult]]]
 
 
 # ---------------------------------------------------------------------------
-# Capture-lifecycle backlog seeding (W2/W3 convergence machinery)
+# Capture-lifecycle backlog seeding and convergence machinery
 # ---------------------------------------------------------------------------
 
 _RETENTION_SECONDS = 3600.0
@@ -325,7 +325,7 @@ def dispatch_capture_lifecycle_hook(project_root: Path) -> GuardRunResult:
     """Dispatch the SessionStart ``capture_lifecycle_hook.py`` once via the
     real ``_dispatch.py``, exactly as a real session start would.
 
-    This is the only consumer of the W2/W3 diagnostic-severity and
+    This is the only consumer of the capture diagnostic-severity and
     convergence machinery (``reconcile_capture_store`` /
     ``classify_cleanup_outcome``); the per-event loop above only ever
     dispatches PreToolUse hooks, so this is a deliberate, narrow addition
@@ -385,12 +385,12 @@ def test_incident_transcript_replay_is_clean_and_denies_genuine_mutation(tmp_pat
 def test_incident_transcript_capture_wrapped_command_over_seeded_backlog_is_clean(
     tmp_path: Path,
 ) -> None:
-    """W4 Step 1c: the transcript's capture-wrapped Bash event (routed
+    """The transcript's capture-wrapped Bash event (routed
     through shell_capture_hook.py's rewrite-into-runner path) must stay
     clean even when the capture-lifecycle store already carries a
-    genuinely eligible (past-retention) backlog -- exercising the W2/W3
-    diagnostic-severity and convergence machinery end-to-end, not only the
-    W1 guard-decision path the other replay tests cover.
+    genuinely eligible (past-retention) backlog -- exercising capture
+    diagnostic-severity and convergence end-to-end, not only the guard-decision
+    path the other replay tests cover.
     """
     orchestrating_root = tmp_path / "orchestrating-project"
     worktree_root = tmp_path / "worktrees" / "impl-something"

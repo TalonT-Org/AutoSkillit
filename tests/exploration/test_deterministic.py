@@ -29,6 +29,7 @@ from autoskillit.exploration._deterministic import (
     stable_kahn_waves,
     validate_cursor_payload,
 )
+from autoskillit.exploration._digest import qualified_digest
 from autoskillit.exploration.completeness import evaluate_completeness
 from autoskillit.exploration.graph import build_canonical_evidence_graph
 from autoskillit.exploration.pagination import page_evidence
@@ -46,6 +47,30 @@ class _Work:
     key: str
     dependencies: tuple[str, ...] = ()
     scopes: tuple[str, ...] = ()
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_qualified_digest_rejects_non_finite_floats(value: float) -> None:
+    with pytest.raises(ValueError, match="canonically serializable"):
+        qualified_digest(b"test-domain\0", {"value": value})
+
+
+@pytest.mark.parametrize(
+    ("repository", "revision", "message"),
+    [("", "revision", "repository"), ("repository", "", "revision")],
+)
+def test_repository_identity_rejects_empty_digest_anchors(
+    repository: str, revision: str, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        RepositoryIdentity(repository, revision)
+
+
+def test_repository_identity_accepts_production_fallback_digest_anchors() -> None:
+    identity = RepositoryIdentity("local-repository", "unborn")
+
+    assert identity.digest == RepositoryIdentity("local-repository", "unborn").digest
+    assert identity.digest.startswith("sha256:")
 
 
 def test_stable_kahn_waves_respect_dependencies_and_scope_conflicts() -> None:

@@ -111,7 +111,9 @@ class ExplorationContextStoreProtocol(Protocol[_T]):
         session_id: str,
         value: _T,
         ttl_seconds: float | None = None,
-    ) -> str: ...
+    ) -> str:
+        """Issue a capability or raise when binding, TTL, capacity, or state is invalid."""
+        ...
 
     def resolve(
         self,
@@ -120,7 +122,9 @@ class ExplorationContextStoreProtocol(Protocol[_T]):
         owner_id: str,
         role: str,
         session_id: str,
-    ) -> CapabilityResolution[_T]: ...
+    ) -> CapabilityResolution[_T]:
+        """Return owner-safe status for capability mismatch; invalid bindings raise."""
+        ...
 
     def discard(self, capability: str) -> None: ...
 
@@ -133,21 +137,27 @@ class ExplorationContextStoreProtocol(Protocol[_T]):
         repository_root: Path,
         source_identities: Mapping[str, str],
         authority_home: Path,
-    ) -> Mapping[str, Mapping[str, str]]: ...
+    ) -> Mapping[str, Mapping[str, str]]:
+        """Issue launch bindings or raise when trusted authority cannot be established."""
+        ...
 
     def submit_from_launch_environment(
         self,
         *,
         query: ExplorationQuerySpec,
         page_size: int,
-    ) -> tuple[CapabilityResolutionStatus, EvidencePage | None]: ...
+    ) -> tuple[CapabilityResolutionStatus, EvidencePage | None]:
+        """Submit from launch authority, failing closed to a status and no page."""
+        ...
 
     def get_page_from_launch_environment(
         self,
         *,
         page_size: int,
         cursor: ContinuationCursor | None = None,
-    ) -> tuple[CapabilityResolutionStatus, EvidencePage | None]: ...
+    ) -> tuple[CapabilityResolutionStatus, EvidencePage | None]:
+        """Fail closed on launch authority; page or cursor validation errors may raise."""
+        ...
 
     def cleanup_session(self, session_id: str) -> None: ...
 
@@ -163,7 +173,9 @@ class ExplorationContextStoreProtocol(Protocol[_T]):
         session_id: str,
         query: ExplorationQuerySpec,
         page_size: int,
-    ) -> tuple[str, EvidencePage]: ...
+    ) -> tuple[str, EvidencePage]:
+        """Collect and issue a capability, raising when collection or issuance fails."""
+        ...
 
     def get_page(
         self,
@@ -174,7 +186,9 @@ class ExplorationContextStoreProtocol(Protocol[_T]):
         session_id: str,
         page_size: int,
         cursor: ContinuationCursor | None = None,
-    ) -> tuple[CapabilityResolutionStatus, EvidencePage | None]: ...
+    ) -> tuple[CapabilityResolutionStatus, EvidencePage | None]:
+        """Return owner-safe resolution status; page or cursor validation may raise."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,6 +200,12 @@ class RepositoryIdentity:
     repo: str = ""
     common_git_dir: str = ""
     worktree_path: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.repository, str) or not self.repository:
+            raise ValueError("repository must be a non-empty string")
+        if not isinstance(self.revision, str) or not self.revision:
+            raise ValueError("revision must be a non-empty string")
 
     @property
     def digest(self) -> str:

@@ -1469,6 +1469,24 @@ def test_check_publication_obligation_warning_when_obligation_pending(tmp_path: 
     assert "autoskillit install" in result.message
 
 
+def test_check_publication_obligation_warns_when_state_is_unreadable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from autoskillit.cli.doctor import _check_publication_obligation
+    from autoskillit.core import Severity
+
+    monkeypatch.setattr(
+        "autoskillit.workspace.read_obligation",
+        lambda _home: (_ for _ in ()).throw(PermissionError("denied")),
+    )
+
+    result = _check_publication_obligation(home=tmp_path)
+
+    assert result.severity is Severity.WARNING
+    assert "could not determine" in result.message.lower()
+    assert "denied" in result.message
+
+
 # T-CACHE-INTEGRITY-1: doctor detects plugin cache hooks.json with broken paths
 def test_doctor_plugin_cache_integrity(tmp_path: Path) -> None:
     """_check_plugin_cache_integrity must return ERROR when cached hooks.json has broken paths.

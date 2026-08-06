@@ -221,10 +221,12 @@ def _check_publication_obligation(home: Path | None = None) -> DoctorResult:
             f"Run `autoskillit install` from an external terminal, or restart "
             f"a healthy CLI/MCP-server process to trigger automatic repair.",
         )
-    except Exception:
+    except Exception as exc:
         logger.debug("Publication obligation check failed", exc_info=True)
         return DoctorResult(
-            Severity.OK, check_name, "Publication obligation check skipped (unexpected error)"
+            Severity.WARNING,
+            check_name,
+            f"Could not determine publication obligation state: {exc}",
         )
 
 

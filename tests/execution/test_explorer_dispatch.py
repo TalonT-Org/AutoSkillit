@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from typing import Any, cast
 
 import pytest
 
@@ -20,9 +19,13 @@ from autoskillit.core import (
     RepositoryProfileId,
     pkg_root,
 )
-from autoskillit.core.io import load_yaml
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
+from autoskillit.workspace.skills import (
+    _bind_exploration_vector_markers,
+    _load_exploration_sidecar,
+    _parse_exploration_sidecar,
+)
 
 pytestmark = [
     pytest.mark.layer("execution"),
@@ -53,10 +56,6 @@ def _vector(
             RepositoryProfileId.AUTOSKILLIT,
             scope=(".",),
         ),
-        max_results=100,
-        max_report_bytes=20_000,
-        evidence_version=1,
-        native_dispatch=True,
         body=(
             "Return bounded typed evidence only; do not diagnose the root cause, "
             "rank candidates, or select a fix."
@@ -82,13 +81,13 @@ def _plan(vectors: tuple[ExplorationVectorDef, ...]) -> ExplorationRouterPlan:
 _STANDARD_NAVIGATOR = _vector(
     "phase-d-standard-navigation",
     role="semantic-code-navigator",
-    applicability=ExplorationVectorApplicabilityId.INVESTIGATE_STANDARD,
+    applicability=ExplorationVectorApplicabilityId.ALWAYS,
     relationships=(RelationshipKind.DEFINES, RelationshipKind.CALLS),
 )
 _DEEP_PROFILER = _vector(
     "phase-d-deep-impact",
     role="repository-impact-profiler",
-    applicability=ExplorationVectorApplicabilityId.INVESTIGATE_DEEP,
+    applicability=ExplorationVectorApplicabilityId.ALWAYS,
     relationships=(RelationshipKind.REFERENCES, RelationshipKind.AFFECTS),
 )
 _VECTORS = (_STANDARD_NAVIGATOR, _DEEP_PROFILER)
@@ -162,43 +161,9 @@ _VISUALIZATION_LENS_SKILLS = (
 def _vectors_from_skill(skill_name: str) -> tuple[ExplorationVectorDef, ...]:
     path = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
     content = path.read_text(encoding="utf-8")
-    frontmatter = cast(dict[str, Any], load_yaml(content.split("---", 2)[1]))
-    rows = cast(list[dict[str, Any]], frontmatter["exploration_vectors"])
-    vectors: list[ExplorationVectorDef] = []
-
-    for row in rows:
-        vector_id = cast(str, row["id"])
-        profile = RepositoryProfileId(cast(str, row["profile"]))
-        marker = f'<!-- autoskillit:exploration-vector id="{vector_id}" -->'
-        body = content.split(marker, 1)[1].split("<!-- /autoskillit:exploration-vector -->", 1)[0]
-        vectors.append(
-            ExplorationVectorDef(
-                id=vector_id,
-                disposition=ExplorationVectorDisposition(cast(str, row["disposition"])),
-                rationale=cast(str, row["rationale"]),
-                applicability=ExplorationVectorApplicabilityId(cast(str, row["applicability"])),
-                role=cast(str | None, row["role"]),
-                profile=profile,
-                relationship_classes=tuple(
-                    RelationshipKind(value)
-                    for value in cast(list[str], row["relationship_classes"])
-                ),
-                task=ExplorationTaskSpec(
-                    task_id=cast(str, row["task_id"]),
-                    frontier_item_id=cast(str, row["frontier_item_id"]),
-                    profile=profile,
-                    depends_on=tuple(cast(list[str], row["depends_on"])),
-                    scope=tuple(cast(list[str], row["scope"])),
-                ),
-                max_results=cast(int, row["max_results"]),
-                max_report_bytes=cast(int, row["max_report_bytes"]),
-                evidence_version=cast(int, row["evidence_version"]),
-                native_dispatch=cast(bool, row["native_dispatch"]),
-                body=body,
-            )
-        )
-
-    return tuple(vectors)
+    sidecar_data, _digest = _load_exploration_sidecar(path)
+    vectors = _parse_exploration_sidecar(sidecar_data, skill_name)
+    return _bind_exploration_vector_markers(content, vectors)
 
 
 def _actual_skill_vectors(skill_name: str) -> tuple[ExplorationVectorDef, ...]:
@@ -211,7 +176,7 @@ def _actual_skill_vectors(skill_name: str) -> tuple[ExplorationVectorDef, ...]:
             task=replace(vector.task, profile=RepositoryProfileId.AUTOSKILLIT),
         )
         for vector in vectors
-        if vector.disposition is ExplorationVectorDisposition.MIGRATED and vector.native_dispatch
+        if vector.disposition is ExplorationVectorDisposition.MIGRATED
     )
 
 
@@ -388,7 +353,4 @@ def test_branch_selection_builds_a_plan_only_for_the_selected_vector(
 
     assert plan.tasks == (selected.task,)
     assert set(rendered.replacements) == {selected.id}
-    assert selected.applicability in {
-        ExplorationVectorApplicabilityId.INVESTIGATE_STANDARD,
-        ExplorationVectorApplicabilityId.INVESTIGATE_DEEP,
-    }
+    assert selected.applicability is ExplorationVectorApplicabilityId.ALWAYS

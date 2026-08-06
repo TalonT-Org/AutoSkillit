@@ -60,10 +60,6 @@ Inspect consumers.
             profile=RepositoryProfileId.GENERIC_PYTHON,
             scope=("src",),
         ),
-        max_results=100,
-        max_report_bytes=20_000,
-        evidence_version=1,
-        native_dispatch=True,
         body="Inspect consumers.",
     )
     project_root = tmp_path / "project"

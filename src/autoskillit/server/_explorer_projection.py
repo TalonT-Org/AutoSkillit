@@ -218,7 +218,7 @@ def _build_requested_execution_identity(
                     vector
                     for vector in projection_context.exploration_vectors.get(target_name, ())
                     if (
-                        vector.native_dispatch
+                        vector.disposition is ExplorationVectorDisposition.MIGRATED
                         and vector.role is not None
                         and vector.applicability
                         in projection_context.active_exploration_applicabilities
@@ -244,6 +244,8 @@ def _build_requested_execution_identity(
                 raise SkillContractError(
                     "Native exploration identity requires projected skill bytes"
                 )
+            if effective_backend is None:
+                raise SkillContractError("Native exploration identity requires a bound backend")
             projected_skill_path = (
                 Path(skill_add_dirs[0].path)
                 / projection_context.conventions.skills_subdir
@@ -259,6 +261,29 @@ def _build_requested_execution_identity(
                     "Projected native exploration packets must bind one router-plan digest"
                 )
             router_plan_digest = next(iter(router_digests))
+            # Decode each native packet's JSON-embedded message argument once
+            # and verify identity fields against the decoded prompt text.
+            # The renderer embeds prompts via json.dumps(), so the projected
+            # SKILL.md contains escaped newlines — exact-line matching against
+            # the raw projected text cannot work for the Claude backend.
+            dispatch_conventions = effective_backend.exploration_dispatch_renderer.conventions
+            message_arg = dispatch_conventions.message_argument
+            # Pattern: message_argument=<JSON string literal>
+            # Anchored to the dispatch conventions' message argument name.
+            message_pattern = re.compile(rf'{re.escape(message_arg)}=("(?:[^"\\]|\\.)*")')
+            decoded_prompts: list[str] = []
+            for match in message_pattern.finditer(projected_skill):
+                try:
+                    decoded = json.loads(match.group(1))
+                except (json.JSONDecodeError, ValueError):
+                    raise SkillContractError(
+                        "Projected native exploration packet message is not valid JSON"
+                    )
+                if not isinstance(decoded, str):
+                    raise SkillContractError(
+                        "Projected native exploration packet message is not a string"
+                    )
+                decoded_prompts.append(decoded)
             requested_children = tuple(
                 ChildExecutionIdentity(
                     task_id=vector.task.task_id,
@@ -273,14 +298,19 @@ def _build_requested_execution_identity(
                 )
                 for vector in native_vectors
             )
-            for child in requested_children:
+            if len(decoded_prompts) != len(requested_children):
+                raise SkillContractError(
+                    f"Expected {len(requested_children)} native exploration packets "
+                    f"but found {len(decoded_prompts)} message arguments"
+                )
+            for child, decoded_prompt in zip(requested_children, decoded_prompts):
                 if (
-                    not _has_exact_identity_field(projected_skill, "task_id", child.task_id)
+                    not _has_exact_identity_field(decoded_prompt, "task_id", child.task_id)
                     or not _has_exact_identity_field(
-                        projected_skill, "router_plan_digest", child.plan_digest
+                        decoded_prompt, "router_plan_digest", child.plan_digest
                     )
                     or not _has_exact_identity_field(
-                        projected_skill,
+                        decoded_prompt,
                         "role_definition_digest",
                         child.definition_digest,
                     )

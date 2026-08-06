@@ -326,7 +326,7 @@ class ProjectedPluginArtifactAuthority:
                 f"direct plugin has no bundled skills: {source_root}"
             )
         skill_identity = "\n".join(
-            f"{info.name}:{info.canonical_digest}"
+            f"{info.name}:{info.canonical_digest}:{info.exploration_sidecar_digest}"
             for info in sorted(catalog.skills, key=lambda skill: skill.name)
         )
         adaptation_identity_parts: list[str] = []

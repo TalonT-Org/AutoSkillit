@@ -54,10 +54,6 @@ def _vector() -> ExplorationVectorDef:
             RepositoryProfileId.AUTOSKILLIT,
             scope=("src",),
         ),
-        max_results=25,
-        max_report_bytes=8_000,
-        evidence_version=1,
-        native_dispatch=True,
         body="Trace definitions and references with bounded evidence.",
     )
 

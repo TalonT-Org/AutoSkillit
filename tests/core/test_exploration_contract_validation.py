@@ -115,6 +115,7 @@ def test_dispatch_contracts_validate_native_vocabulary_and_digests() -> None:
         {"semantic-code-navigator": "replacement"},
         "plan-digest",
         {"semantic-code-navigator": "definition-digest"},
+        "test preamble",
     )
 
     assert conventions.launcher == "spawn_agent"
@@ -146,10 +147,6 @@ def _valid_vector() -> ExplorationVectorDef:
             RepositoryProfileId.GENERIC_PYTHON,
             scope=("src",),
         ),
-        max_results=10,
-        max_report_bytes=1000,
-        evidence_version=1,
-        native_dispatch=True,
         body="Inspect symbols.",
     )
 
@@ -159,12 +156,8 @@ def _valid_vector() -> ExplorationVectorDef:
     [
         ("rationale", ""),
         ("relationship_classes", (RelationshipKind.REFERENCES, RelationshipKind.REFERENCES)),
-        ("max_results", 0),
-        ("max_report_bytes", 0),
-        ("evidence_version", 0),
         ("body", "autoskillit:exploration-vector"),
         ("role", None),
-        ("native_dispatch", False),
     ],
 )
 def test_exploration_vector_rejects_invalid_invariant_families(

@@ -177,6 +177,9 @@ class SkillAuthority(Protocol):
     def exploration_vectors(self) -> tuple[ExplorationVectorDef, ...]: ...
 
     @property
+    def exploration_sidecar_digest(self) -> str: ...
+
+    @property
     def canonical_content(self) -> str: ...
 
     @property

@@ -66,9 +66,7 @@ def _task_prompt(
             f"relationship_classes: {relationships}",
             f"depends_on: {dependencies}",
             f"scope: {scope}",
-            f"max_results: {vector.max_results}",
-            f"max_report_bytes: {vector.max_report_bytes}",
-            f"evidence_version: {vector.evidence_version}",
+            "Follow the parent routing contract in the exploration dispatch preamble above.",
             "Task:",
             vector.body,
         )
@@ -123,14 +121,23 @@ class _NativeExplorationDispatchRenderer:
                 role_definition_digest=definition_digest,
                 launch_context_ref=launch_context_ref,
             )
-            replacements[vector.id] = (
-                f"{_PARENT_ROUTING_INSTRUCTIONS}\n\n{self._native_call(definition, prompt)}"
-            )
+            replacements[vector.id] = self._native_call(definition, prompt)
             definition_digests[vector.id] = definition_digest
+        # Build shared preamble — routing contract + task constants
+        context_ref = launch_context_ref or "runtime-bound"
+        preamble = (
+            f"{_PARENT_ROUTING_INSTRUCTIONS}\n\n"
+            f"Shared exploration task constants:\n"
+            f"profile: {migrated[0].profile.value}\n"
+            f"depends_on: none\n"
+            f"scope: {','.join(migrated[0].task.scope) or 'repository'}\n"
+            f"launch_context_ref: {context_ref}"
+        )
         return ExplorationDispatchMaterialization(
             replacements=replacements,
             router_plan_digest=plan.digest,
             role_definition_digests=definition_digests,
+            preamble=preamble,
             launch_context_ref=launch_context_ref,
         )
 

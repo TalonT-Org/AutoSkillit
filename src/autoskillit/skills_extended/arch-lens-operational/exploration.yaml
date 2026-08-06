@@ -1,0 +1,53 @@
+vectors:
+- id: cli-entry-points
+  role: semantic-code-navigator
+  relationship_classes:
+  - declares
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces CLI command definitions, groups, subcommands,
+    and dispatch calls while parent-owned handoff covers declarative entry-point registration.
+- id: configuration
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers configuration files, environment-variable
+    declarations, defaults, override sources, and affected consumers.
+- id: task-automation
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - calls
+  - references
+  - affects
+  rationale: Repository impact evidence covers task-runner definitions, automation
+    scripts, invoked commands, generated artifacts, and workflow consumers.
+- id: logging-monitoring
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - calls
+  - references
+  - affects
+  rationale: Repository impact evidence covers logging and monitoring configuration,
+    metrics, activity logs, output artifacts, tests, and their consumers.
+- id: status-health
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces status and health command definitions, diagnostic
+    calls, and returned outputs while the parent judges operational coverage.
+- id: reset-recovery
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces reset, cleanup, purge, and restore command
+    definitions and call paths while the parent evaluates recovery safety.

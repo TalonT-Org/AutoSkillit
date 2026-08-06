@@ -8,37 +8,6 @@ activate_deps:
 description: 'Create Decisional Layout visualization planning spec showing figure-vs-table selection heuristics: tables win
   for exact values, ≤5 items, leaderboards, and ablation matrices; figures win for trends, distributions, and spatial patterns;
   borderline cases recommend both. Decisional lens answering "Should this result be a figure or a table?"'
-exploration_vectors:
-  - id: missing-context-fields
-    disposition: migrated
-    rationale: Repository impact evidence locates revision-scoped context and experiment-plan artifacts and reports only fields still absent after direct caller-context parsing.
-    applicability: always
-    role: repository-impact-profiler
-    profile: auto
-    relationship_classes: [declares, references, affects]
-    task_id: vis-lens-figure-table-missing-context-fields
-    frontier_item_id: vis-lens-figure-table-missing-context-fields-frontier
-    depends_on: []
-    scope: [.]
-    max_results: 100
-    max_report_bytes: 20000
-    evidence_version: 1
-    native_dispatch: true
-  - id: result-slot-inventory
-    disposition: retained
-    rationale: Result-slot classification is direct interpretation of caller-supplied experiment-plan content, not repository discovery, so it remains lens-owned prose.
-    applicability: always
-    role: null
-    profile: auto
-    relationship_classes: [references, affects]
-    task_id: vis-lens-figure-table-result-slot-inventory
-    frontier_item_id: vis-lens-figure-table-result-slot-inventory-frontier
-    depends_on: []
-    scope: [.]
-    max_results: 100
-    max_report_bytes: 20000
-    evidence_version: 1
-    native_dispatch: false
 hooks:
   PreToolUse:
   - matcher: '*'

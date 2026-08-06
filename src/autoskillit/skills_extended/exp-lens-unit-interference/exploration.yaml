@@ -1,0 +1,58 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence fills only experiment-context fields missing
+    after parent-side argument parsing, leaving unit and interference interpretation
+    to the parent.
+- id: unit-definition
+  role: semantic-code-navigator
+  relationship_classes:
+  - declares
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation identifies experimental-unit definitions and traces
+    how user, request, session, query, item, sample, trial, or instance symbols are
+    consumed.
+- id: cluster-group-structure
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces cluster and group definitions, membership
+    calls, and structural boundaries while the parent assesses interference risk.
+- id: shared-resources
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies shared cache, queue, pool, database,
+    service, load-balancer, accelerator, and memory access declarations and affected
+    consumers.
+- id: network-social-connections
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces graph, neighbor, messaging, recommendation,
+    and influence definitions and call paths that may connect units.
+- id: treatment-assignment-boundary
+  role: semantic-code-navigator
+  relationship_classes:
+  - declares
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces treatment bucket, hash, experiment, variant,
+    flag, and rollout definitions and control paths while parent-owned handoff covers
+    declarative registrations.

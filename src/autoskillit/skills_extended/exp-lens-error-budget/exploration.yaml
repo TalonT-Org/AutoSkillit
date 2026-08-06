@@ -1,0 +1,52 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence retrieves only IV/DV, hypothesis, control,
+    and success-criterion fields absent from supplied context while the parent preserves
+    statistical interpretation.
+- id: sample-size-power
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories sample-size, power, effect-size,
+    and minimum-detectable-effect declarations while the parent evaluates their adequacy.
+- id: multiple-comparisons
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces statistical-test and correction symbols and
+    call paths while the parent routes declarative correction artifacts to the profiler
+    and evaluates multiplicity.
+- id: sequential-analysis
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces interim analysis, early stopping, alpha spending,
+    peeking, and monitoring control flow while the parent evaluates error control.
+- id: decision-thresholds
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories alpha levels, p-value thresholds,
+    significance declarations, and decision-rule artifacts while the parent judges
+    appropriateness.
+- id: effect-size-context
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories effect-size and practical-significance
+    declarations and reports while the parent determines substantive meaning.

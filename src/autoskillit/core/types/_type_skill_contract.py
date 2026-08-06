@@ -20,6 +20,7 @@ from ._type_native_shell_capture import ManagedHeadlessSessionLineageRef
 from ._type_results import WriteBehaviorSpec
 
 __all__ = [
+    "AUTHORING_RESERVED_EXPLORATION_APPLICABILITIES",
     "MACHINE_ONLY_SKILL_FRONTMATTER_KEYS",
     "PARENT_SANDBOX_MODES",
     "SKILL_PROJECTION_VERSION",
@@ -41,18 +42,20 @@ MACHINE_ONLY_SKILL_FRONTMATTER_KEYS = frozenset(
         "activate_deps",
         "execution_role",
         "exploration_vectors",
+        "semantic_version",
+        "semantic_requirements",
         "uses_capabilities",
     }
 )
-# Bumped for both package-owned semantic projection and marker-bound exploration
-# vectors. Stored contracts also gained typed launch and execution identities.
-SKILL_PROJECTION_VERSION = 5
+# Bumped when: applicability enum narrowed (INVESTIGATE_STANDARD, INVESTIGATE_DEEP,
+# SCOPE_SOFTWARE, SCOPE_NON_SOFTWARE removed); vector metadata moved to per-skill
+# exploration.yaml sidecars; vector schema slimmed (max_results, max_report_bytes,
+# native_dispatch removed). Stale contracts may carry removed enum values/fields.
+SKILL_PROJECTION_VERSION = 6
 SKILL_SESSION_CONTRACT_SCHEMA_VERSION = 5
 PARENT_SANDBOX_MODES: frozenset[str] = frozenset({"read-only", "workspace-write"})
 _CANONICAL_IDENTIFIER_RE = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*\Z")
 _VECTOR_MARKER_TOKEN = "autoskillit:exploration-vector"
-_MAX_VECTOR_RESULTS = 10_000
-_MAX_VECTOR_REPORT_BYTES = 10_000_000
 
 
 class ExplorationVectorApplicabilityId(StrEnum):
@@ -60,10 +63,17 @@ class ExplorationVectorApplicabilityId(StrEnum):
 
     ALWAYS = "always"
     PLANNER_EXTRACT_DOMAIN_DEEP = "planner-extract-domain-deep"
-    INVESTIGATE_STANDARD = "investigate-standard"
-    INVESTIGATE_DEEP = "investigate-deep"
-    SCOPE_SOFTWARE = "scope-software"
-    SCOPE_NON_SOFTWARE = "scope-non-software"
+
+
+AUTHORING_RESERVED_EXPLORATION_APPLICABILITIES: Mapping[ExplorationVectorApplicabilityId, str] = (
+    MappingProxyType({})
+)
+"""Registry of applicability members whose activation wiring is deferred.
+
+A member may appear here only with a tracking-issue citation (#NNNN)
+while its activation wiring is deferred.  Every member absent from this
+registry must be producible by ``_resolve_exploration_applicabilities``.
+"""
 
 
 class ExplorationVectorDisposition(StrEnum):
@@ -95,10 +105,6 @@ class ExplorationVectorDef:
     profile: RepositoryProfileId
     relationship_classes: tuple[RelationshipKind, ...]
     task: ExplorationTaskSpec
-    max_results: int
-    max_report_bytes: int
-    evidence_version: int
-    native_dispatch: bool
     body: str = ""
 
     def __post_init__(self) -> None:
@@ -128,25 +134,12 @@ class ExplorationVectorDef:
             raise SkillContractError("exploration vector requires relationship classes")
         if len(set(self.relationship_classes)) != len(self.relationship_classes):
             raise SkillContractError("exploration vector relationship classes must be unique")
-        if type(self.max_results) is not int or not 0 < self.max_results <= _MAX_VECTOR_RESULTS:
-            raise SkillContractError("exploration vector max_results is outside its bound")
-        if (
-            type(self.max_report_bytes) is not int
-            or not 0 < self.max_report_bytes <= _MAX_VECTOR_REPORT_BYTES
-        ):
-            raise SkillContractError("exploration vector max_report_bytes is outside its bound")
-        if type(self.evidence_version) is not int or self.evidence_version < 1:
-            raise SkillContractError("exploration vector evidence_version must be positive")
-        if type(self.native_dispatch) is not bool:
-            raise SkillContractError("exploration vector native_dispatch must be boolean")
         if self.disposition is ExplorationVectorDisposition.MIGRATED:
-            if self.role is None or not self.native_dispatch:
-                raise SkillContractError(
-                    "migrated exploration vectors require a role and native dispatch coverage"
-                )
-        elif self.role is not None or self.native_dispatch:
+            if self.role is None:
+                raise SkillContractError("migrated exploration vectors require a role")
+        elif self.role is not None:
             raise SkillContractError(
-                "retained and excluded exploration vectors remain prose without native dispatch"
+                "retained and excluded exploration vectors remain prose without a role"
             )
         if _VECTOR_MARKER_TOKEN in self.body or "/autoskillit:exploration-vector" in self.body:
             raise SkillContractError("exploration vector body contains an embedded marker token")
@@ -282,6 +275,7 @@ class SkillSessionContract:
     exploration_vectors: Mapping[str, tuple[ExplorationVectorDef, ...]] = field(
         default_factory=dict
     )
+    exploration_sidecar_digests: Mapping[str, str] = field(default_factory=dict)
     resolved_exploration_profile: RepositoryProfileId | None = None
     active_exploration_applicabilities: frozenset[ExplorationVectorApplicabilityId] = field(
         default_factory=lambda: frozenset({ExplorationVectorApplicabilityId.ALWAYS})
@@ -377,6 +371,12 @@ class SkillSessionContract:
             MappingProxyType(
                 {name: tuple(vectors) for name, vectors in exploration_vectors.items()}
             ),
+        )
+        sidecar_digests = self.exploration_sidecar_digests or {name: "" for name in self.closure}
+        object.__setattr__(
+            self,
+            "exploration_sidecar_digests",
+            MappingProxyType(dict(sidecar_digests)),
         )
         if not isinstance(self.execution_identity, ExecutionIdentity):
             raise SkillContractError("execution identity must be typed")

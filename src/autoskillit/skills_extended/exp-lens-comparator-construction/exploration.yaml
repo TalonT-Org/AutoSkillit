@@ -1,0 +1,54 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence retrieves only IV/DV, hypothesis, control,
+    and success-criterion fields absent from supplied context while the parent preserves
+    comparator interpretation.
+- id: baseline-control-definitions
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories baseline and control declarations,
+    references, and consumers while the parent judges whether each comparator is fair
+    and relevant.
+- id: implementation-parity
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories reproduction provenance, tuning
+    artifacts, and baseline implementation references while the parent routes semantic
+    implementation traces to the navigator and assesses parity.
+- id: version-environment-match
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories version, library, framework, hardware,
+    environment, and checkpoint artifacts without deciding whether environments are
+    comparable.
+- id: tuning-protocol-symmetry
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories search spaces, tuning budgets,
+    trials, sweeps, and epoch settings while the parent evaluates protocol symmetry.
+- id: temporal-baseline-drift
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories dates, versions, deprecations,
+    updates, and pre-existing revision-scoped baseline artifacts while the parent
+    judges temporal relevance.

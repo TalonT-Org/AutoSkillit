@@ -1,0 +1,55 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence locates revision-scoped context and experiment-plan
+    artifacts and identifies only missing declared fields without executing target
+    code.
+- id: assignment-mechanism
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces assignment, allocation, split, stratification,
+    blocking, hashing, and bucketing control flow without judging comparability.
+- id: blocking-stratification
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces block, strata, matching, pairing, covariate,
+    and grouping definitions and data-control paths.
+- id: replication-structure
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers declared replicates, trials, runs,
+    seeds, folds, fixtures, result artifacts, and revision-scoped replication manifests.
+- id: order-timing-effects
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces ordering, sequencing, carryover, period, washout,
+    crossover, and timing control flow without assessing causal adequacy.
+- id: exclusion-attrition
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces exclusion, dropout, missingness, censoring,
+    incomplete-unit, and filtering paths while parent-owned handoff covers affected
+    data artifacts.

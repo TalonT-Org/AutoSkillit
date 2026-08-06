@@ -1,0 +1,51 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence locates revision-scoped context and experiment-plan
+    artifacts and identifies only missing declared fields without executing target
+    code.
+- id: factor-space
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers declared factors, parameters, levels,
+    conditions, treatments, and revision-scoped design artifacts.
+- id: interaction-structure
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers pre-existing interaction analyses,
+    factorial declarations, result artifacts, datasets, and tested factor combinations.
+- id: cost-resource-model
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers cost, budget, runtime, compute, trial,
+    epoch, and sample declarations and revision-scoped usage artifacts.
+- id: sequential-decision-logic
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces adaptive selection, acquisition, exploration-exploitation,
+    and next-experiment control flow without recommending an experiment.
+- id: learning-objectives
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers declared objectives, uncertainties,
+    information goals, optimization targets, and their experiment-plan consumers.

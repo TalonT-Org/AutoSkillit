@@ -299,6 +299,17 @@ class DefaultSkillSessionContractStore:
         expected_contract_digest = _digest_json(contract_data)
         if manifest.get("contract_digest") != expected_contract_digest:
             raise ValueError("Skill session contract manifest digest mismatch")
+        # Raw pre-gate: reject stale projection versions before _contract_from_dict
+        # tries to construct enum values that may no longer exist.
+        raw_projection_version = contract_data.get("projection_version")
+        if (
+            type(raw_projection_version) is not int
+            or raw_projection_version != SKILL_PROJECTION_VERSION
+        ):
+            raise ValueError(
+                f"unsupported projection_version {raw_projection_version}; "
+                f"expected {SKILL_PROJECTION_VERSION}"
+            )
         contract = _contract_from_dict(contract_data)
         _validate_contract(contract)
 
@@ -416,6 +427,8 @@ def _validate_contract(contract: SkillSessionContract) -> None:
         raise SkillContractError("canonical_contents keys must exactly match closure")
     if set(contract.exploration_vectors) != closure:
         raise SkillContractError("exploration_vectors keys must exactly match closure")
+    if set(contract.exploration_sidecar_digests) != closure:
+        raise SkillContractError("exploration_sidecar_digests keys must exactly match closure")
     for name in contract.closure:
         source_ref = contract.source_refs[name]
         if not isinstance(source_ref, SkillSourceRef):
@@ -531,10 +544,6 @@ _SERIALIZED_EXPLORATION_VECTOR_KEYS = frozenset(
         "frontier_item_id",
         "depends_on",
         "scope",
-        "max_results",
-        "max_report_bytes",
-        "evidence_version",
-        "native_dispatch",
         "body",
         "digest",
     }
@@ -571,10 +580,6 @@ def _exploration_vector_to_dict(vector: ExplorationVectorDef) -> dict[str, Any]:
         "frontier_item_id": task.frontier_item_id,
         "depends_on": list(task.depends_on),
         "scope": list(task.scope),
-        "max_results": vector.max_results,
-        "max_report_bytes": vector.max_report_bytes,
-        "evidence_version": vector.evidence_version,
-        "native_dispatch": vector.native_dispatch,
         "body": vector.body,
         "digest": vector.digest,
     }
@@ -604,11 +609,6 @@ def _exploration_vector_from_dict(value: object) -> ExplorationVectorDef:
             raise ValueError(f"serialized exploration vector {field_name} is invalid")
     if value["role"] is not None and not isinstance(value["role"], str):
         raise ValueError("serialized exploration vector role is invalid")
-    if not isinstance(value["native_dispatch"], bool):
-        raise ValueError("serialized exploration vector native_dispatch is invalid")
-    for field_name in ("max_results", "max_report_bytes", "evidence_version"):
-        if type(value[field_name]) is not int:
-            raise ValueError(f"serialized exploration vector {field_name} is invalid")
     profile = RepositoryProfileId(value["profile"])
     vector = ExplorationVectorDef(
         id=value["id"],
@@ -627,10 +627,6 @@ def _exploration_vector_from_dict(value: object) -> ExplorationVectorDef:
             depends_on=tuple(value["depends_on"]),
             scope=tuple(value["scope"]),
         ),
-        max_results=value["max_results"],
-        max_report_bytes=value["max_report_bytes"],
-        evidence_version=value["evidence_version"],
-        native_dispatch=value["native_dispatch"],
         body=value["body"],
     )
     if value["digest"] != vector.digest:
@@ -691,6 +687,7 @@ def _contract_to_dict(contract: SkillSessionContract) -> dict[str, Any]:
             name: [_exploration_vector_to_dict(vector) for vector in vectors]
             for name, vectors in sorted(contract.exploration_vectors.items())
         },
+        "exploration_sidecar_digests": dict(sorted(contract.exploration_sidecar_digests.items())),
         "resolved_exploration_profile": (
             contract.resolved_exploration_profile.value
             if contract.resolved_exploration_profile is not None
@@ -811,6 +808,10 @@ def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
             exploration_vectors={
                 str(name): tuple(_exploration_vector_from_dict(vector) for vector in vectors)
                 for name, vectors in exploration_vectors_raw.items()
+            },
+            exploration_sidecar_digests={
+                str(name): str(digest)
+                for name, digest in data.get("exploration_sidecar_digests", {}).items()
             },
             resolved_exploration_profile=(
                 RepositoryProfileId(resolved_exploration_profile_raw)

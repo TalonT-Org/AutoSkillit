@@ -74,6 +74,7 @@ class ExplorationDispatchMaterialization:
     replacements: Mapping[str, str]
     router_plan_digest: str
     role_definition_digests: Mapping[str, str]
+    preamble: str
     launch_context_ref: str | None = field(default=None, compare=False)
 
     def __post_init__(self) -> None:

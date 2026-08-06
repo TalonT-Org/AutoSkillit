@@ -1,0 +1,60 @@
+vectors:
+- id: domain-vocabulary
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - defines
+  - references
+  rationale: Repository impact evidence covers vocabulary across documentation, schemas,
+    registries, configuration, and generated consumers.
+- id: existing-abstractions
+  role: semantic-code-navigator
+  relationship_classes:
+  - declares
+  - defines
+  - references
+  rationale: Semantic navigation covers base types, protocols, interfaces, and their
+    implementations.
+- id: integration-points
+  role: semantic-code-navigator
+  relationship_classes:
+  - imports
+  - calls
+  - references
+  rationale: Semantic navigation covers imported boundaries, adapters, and call relationships
+    to external systems.
+- id: integration-consumers
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers declarative integration configuration,
+    registries, manifests, tests, fixtures, and downstream consumers.
+- id: cross-cutting-concerns
+  role: semantic-code-navigator
+  relationship_classes:
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation covers calls, error handling, logging, and asynchronous
+    relationships when planner deep mode applies.
+  applicability: planner-extract-domain-deep
+- id: data-flow-patterns
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - affects
+  rationale: Semantic navigation covers transformation definitions, call chains, and
+    affected schemas when planner deep mode applies.
+  applicability: planner-extract-domain-deep
+- id: cross-cutting-impact
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers logging configuration, exception registries,
+    tests, fixtures, and declarative consumers when planner deep mode applies.
+  applicability: planner-extract-domain-deep

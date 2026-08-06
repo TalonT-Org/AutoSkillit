@@ -1,0 +1,52 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence locates revision-scoped context and experiment-plan
+    artifacts and identifies only missing declared fields without executing target
+    code.
+- id: compute-resource-allocation
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers declared compute budgets, hardware,
+    cost, runtime, resource manifests, and revision-scoped usage reports.
+- id: tuning-protocol-per-method
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces tuning procedures, trial control flow, budgets,
+    and stopping calls while parent-owned handoff covers declarative sweep configuration.
+- id: data-access-preprocessing
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces data access and preprocessing flow while parent-owned
+    handoff covers datasets, manifests, fixtures, and declared auxiliary inputs.
+- id: engineering-effort-indicators
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces specialized implementations, ensembles, post-processing,
+    calibration, and threshold-tuning call paths without judging comparative fairness.
+- id: reporting-completeness
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers resource disclosures, computational-cost
+    reports, timing artifacts, parameter counts, and revision-scoped result consumers.

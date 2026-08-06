@@ -1,0 +1,24 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence retrieves only IV/DV, hypothesis, control,
+    and success-criterion fields absent after direct caller-context parsing while
+    the parent preserves visualization interpretation.
+- id: chart-visualization-clues
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces repository-local plotting, axis, seed, smoothing,
+    embedding, and encoding symbols while the parent routes planning and generated-artifact
+    evidence to the profiler and judges anti-patterns.
+retained:
+- id: caller-context
+  rationale: Caller-provided context and experiment plans are explicit inputs read
+    directly, so parsing and interpretation remain parent-owned without native exploration
+    dispatch.

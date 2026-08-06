@@ -1,0 +1,51 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence retrieves only IV/DV, hypothesis, control,
+    and success-criterion fields absent after direct caller-context parsing while
+    the parent preserves visualization interpretation.
+- id: figure-title-inventory
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories current figure-title strings in
+    plans, plotting configuration, code references, and generated artifacts while
+    the parent classifies title quality.
+- id: axis-label-unit-evidence
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories axis labels, continuous units,
+    and categorical scale descriptions across figure specifications, plotting configuration,
+    and generated artifacts while the parent audits completeness.
+- id: uncertainty-definition-evidence
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories error-bar, shaded-region, confidence-interval,
+    legend, and caption declarations while the parent determines whether uncertainty
+    is adequately defined.
+- id: baseline-sample-disclosure
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories baseline names, cited sources,
+    plotted conditions, and disclosed sample sizes while the parent judges disclosure
+    sufficiency.
+retained:
+- id: caller-context
+  rationale: Caller-provided context and experiment plans are explicit inputs read
+    directly, so parsing and interpretation remain parent-owned without native exploration
+    dispatch.

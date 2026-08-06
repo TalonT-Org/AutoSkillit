@@ -1,0 +1,54 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence fills only experiment-context fields missing
+    after parent-side argument parsing, without interpreting the experimental design.
+- id: environment-dependencies
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies dependency manifests, lockfiles,
+    container definitions, environment setup, and their consumers.
+- id: data-provenance
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies data manifests, download and checksum
+    artifacts, version declarations, and affected consumers while the parent assesses
+    provenance.
+- id: execution-entry-points
+  role: semantic-code-navigator
+  relationship_classes:
+  - declares
+  - defines
+  - imports
+  - calls
+  - references
+  rationale: Semantic navigation traces run-script and command entry definitions,
+    imports, and invocation paths while parent-owned handoff covers declarative workflow
+    registrations.
+- id: random-seed-determinism
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces random-seed setup and nondeterminism-control
+    definitions, calls, and guarded execution paths without judging reproducibility.
+- id: output-artifacts-logging
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies result, log, figure, checkpoint,
+    and tracking artifacts plus their declarations and consumers.

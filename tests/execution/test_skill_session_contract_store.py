@@ -17,7 +17,7 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 def test_exploration_vector_contract_versions_invalidate_stale_artifacts() -> None:
     from autoskillit.core import SKILL_SESSION_CONTRACT_SCHEMA_VERSION
 
-    assert SKILL_PROJECTION_VERSION == 5
+    assert SKILL_PROJECTION_VERSION == 6
     assert SKILL_SESSION_CONTRACT_SCHEMA_VERSION == 5
 
 
@@ -79,10 +79,6 @@ def _contract(tmp_path: Path, projected_text: str):
                         profile=RepositoryProfileId.GENERIC_PYTHON,
                         scope=("src",),
                     ),
-                    max_results=100,
-                    max_report_bytes=20_000,
-                    evidence_version=1,
-                    native_dispatch=True,
                     body="Inspect consumers.",
                 ),
             )

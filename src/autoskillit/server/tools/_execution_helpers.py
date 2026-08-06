@@ -344,6 +344,7 @@ def build_skill_session_contract(
     member_activate_deps: dict[str, tuple[str, ...]] = {}
     canonical_contents: dict[str, str] = {}
     exploration_vectors: dict[str, tuple[ExplorationVectorDef, ...]] = {}
+    exploration_sidecar_digests: dict[str, str] = {}
     session_path = Path(session_root.path)
     for member in closure:
         relative_path = Path(conventions.skills_subdir) / member.name / "SKILL.md"
@@ -361,6 +362,7 @@ def build_skill_session_contract(
         member_activate_deps[member.name] = member.activate_deps
         canonical_contents[member.name] = member.canonical_content
         exploration_vectors[member.name] = member.exploration_vectors
+        exploration_sidecar_digests[member.name] = member.exploration_sidecar_digest
     project_root = getattr(invocation, "project_root")
     if project_root is None:
         raise SkillContractError("Effective invocation requires a project root")
@@ -382,6 +384,7 @@ def build_skill_session_contract(
         member_activate_deps=member_activate_deps,
         canonical_contents=canonical_contents,
         exploration_vectors=exploration_vectors,
+        exploration_sidecar_digests=exploration_sidecar_digests,
         resolved_exploration_profile=projection_context.resolved_exploration_profile,
         active_exploration_applicabilities=(projection_context.active_exploration_applicabilities),
         expected_output_patterns=expected_output_patterns,
@@ -513,6 +516,7 @@ def rehydrate_skill_invocation(
             execution_role=contract.member_roles[name],
             activate_deps=contract.member_activate_deps[name],
             exploration_vectors=contract.exploration_vectors[name],
+            exploration_sidecar_digest=contract.exploration_sidecar_digests.get(name, ""),
             canonical_content=contract.canonical_contents[name],
             canonical_digest=contract.canonical_digests[name],
         )

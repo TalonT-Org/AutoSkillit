@@ -8,52 +8,6 @@ activate_deps:
 description: Create Always-On visualization triage report running three sequential analysis passes (anti-pattern, accessibility,
   annotation completeness) and emitting a combined PASS|WARN_N|FAIL_N verdict. Composite lens answering "What are the blocking
   visualization issues?"
-exploration_vectors:
-  - id: caller-context
-    disposition: retained
-    rationale: Caller-provided context and experiment plans are explicit inputs read directly, so parsing and interpretation remain parent-owned without native exploration dispatch.
-    applicability: always
-    role: null
-    profile: auto
-    relationship_classes: [references]
-    task_id: vis-lens-always-on-caller-context
-    frontier_item_id: vis-lens-always-on-caller-context-frontier
-    depends_on: []
-    scope: [.]
-    max_results: 100
-    max_report_bytes: 20000
-    evidence_version: 1
-    native_dispatch: false
-  - id: missing-context-fields
-    disposition: migrated
-    rationale: Repository impact evidence retrieves only IV/DV, hypothesis, control, and success-criterion fields absent after direct caller-context parsing while the parent preserves visualization interpretation.
-    applicability: always
-    role: repository-impact-profiler
-    profile: auto
-    relationship_classes: [declares, references, affects]
-    task_id: vis-lens-always-on-missing-context-fields
-    frontier_item_id: vis-lens-always-on-missing-context-fields-frontier
-    depends_on: []
-    scope: [.]
-    max_results: 100
-    max_report_bytes: 20000
-    evidence_version: 1
-    native_dispatch: true
-  - id: figure-inventory
-    disposition: migrated
-    rationale: Repository impact evidence inventories planned and existing figure, plotting-configuration, and output artifacts while the parent owns completeness and triage judgments.
-    applicability: always
-    role: repository-impact-profiler
-    profile: auto
-    relationship_classes: [declares, references, affects]
-    task_id: vis-lens-always-on-figure-inventory
-    frontier_item_id: vis-lens-always-on-figure-inventory-frontier
-    depends_on: []
-    scope: [.]
-    max_results: 100
-    max_report_bytes: 20000
-    evidence_version: 1
-    native_dispatch: true
 hooks:
   PreToolUse:
   - matcher: '*'

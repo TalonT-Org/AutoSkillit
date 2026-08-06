@@ -425,6 +425,27 @@ def project_agent_skill_document(
                     vectors,
                     replacements,
                 )
+                # Splice the preamble as the first body content after the
+                # frontmatter close delimiter. This placement is mode-neutral
+                # and section-agnostic — it precedes every marker regardless
+                # of which section the marker belongs to.
+                if materialized.preamble:
+                    frontmatter_close = "---\n"
+                    # Find the second occurrence of "---\n" (closing delimiter)
+                    first_idx = content.find(frontmatter_close)
+                    if first_idx >= 0:
+                        second_idx = content.find(
+                            frontmatter_close, first_idx + len(frontmatter_close)
+                        )
+                        if second_idx >= 0:
+                            splice_point = second_idx + len(frontmatter_close)
+                            content = (
+                                content[:splice_point]
+                                + "\n"
+                                + materialized.preamble
+                                + "\n\n"
+                                + content[splice_point:]
+                            )
 
     projected_digest = hashlib.sha256(content.encode()).hexdigest()
     canonical_digest = (

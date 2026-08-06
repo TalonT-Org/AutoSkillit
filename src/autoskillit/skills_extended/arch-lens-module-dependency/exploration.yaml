@@ -1,0 +1,48 @@
+vectors:
+- id: project-build-config-artifacts
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies project manifests, build files,
+    and configuration artifacts that declare or constrain module boundaries.
+- id: module-layer-structure
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - imports
+  - references
+  rationale: Semantic navigation identifies modules, package purposes, and structural
+    layer boundaries while the parent retains architectural interpretation.
+- id: import-analysis-by-layer
+  role: semantic-code-navigator
+  relationship_classes:
+  - imports
+  - calls
+  - references
+  rationale: Semantic navigation traces imports, references, and calls needed to distinguish
+    internal, external, and layer-crossing dependencies.
+- id: circular-dependency-detection
+  role: semantic-code-navigator
+  relationship_classes:
+  - imports
+  - calls
+  rationale: Semantic navigation follows import and call cycles, including conditional
+    and deferred edges, without deciding their architectural acceptability.
+- id: high-fan-in-modules
+  role: semantic-code-navigator
+  relationship_classes:
+  - imports
+  - calls
+  - references
+  rationale: Semantic navigation supplies bounded incoming and outgoing import and
+    call evidence for fan-in, fan-out, and instability metrics.
+- id: cross-domain-imports
+  role: semantic-code-navigator
+  relationship_classes:
+  - imports
+  - calls
+  - references
+  rationale: Semantic navigation traces cross-boundary imports and references while
+    the parent retains domain interpretation and violation classification.

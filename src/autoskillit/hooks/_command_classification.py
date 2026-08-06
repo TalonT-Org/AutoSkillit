@@ -1621,7 +1621,7 @@ def _analyze_gh_segment(
     mutation_verbs = _GH_MUTATION_SUBCOMMANDS.get(noun)
     if mutation_verbs is not None and len(args) >= 2:
         verb = args[1]
-        if verb in _GH_READ_ONLY_SUBCOMMANDS[noun]:
+        if verb in _GH_READ_ONLY_SUBCOMMANDS.get(noun, frozenset()):
             return (None, "")
         if verb not in mutation_verbs:
             return (None, f"gh {noun} {verb} mutation classification is unresolved")

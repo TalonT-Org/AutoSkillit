@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.hooks._command_classification as command_classification
 from autoskillit.hooks._command_classification import (
     GitHubMutationAnalysis,
     GitHubMutationKind,
@@ -1293,7 +1294,17 @@ class TestAnalyzeGitHubMutations:
         analysis = analyze_github_mutations("for i in 1; do gh pr merge $i; done")
 
         assert analysis.status is GitHubMutationStatus.UNRESOLVED
-        assert analysis.reason
+        assert "loop" in analysis.reason
+
+    def test_missing_read_only_noun_does_not_crash_mutation_classification(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.delitem(command_classification._GH_READ_ONLY_SUBCOMMANDS, "pr")
+
+        analysis = analyze_github_mutations("gh pr merge 7")
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
 
     def test_gh_command_after_unrelated_source_is_not_hidden_behind_it(self) -> None:
         analysis = analyze_github_mutations("source .venv/bin/activate && gh pr view --json state")

@@ -17,7 +17,7 @@ from collections.abc import Set as AbstractSet
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, NotRequired, TypedDict, cast
+from typing import TYPE_CHECKING, NotRequired, TypeAlias, TypedDict, cast
 
 from autoskillit.core import (
     SESSION_ADD_DIR_SUBDIR,
@@ -77,10 +77,13 @@ logger = get_logger(__name__)
 _SESSION_LEASES_SUBDIR = ".session-leases"
 _SKILL_UNAVAILABILITY_SCHEMA_VERSION = 1
 
+_ExplorerBindingEnv: TypeAlias = Mapping[str, Mapping[str, str]]
+_ExplorerBindingEnvFactory: TypeAlias = Callable[[Path], _ExplorerBindingEnv | None]
+
 
 class _SessionSetupKwargs(TypedDict):
     parent_sandbox_mode: str
-    explorer_binding_env: NotRequired[Mapping[str, Mapping[str, str]]]
+    explorer_binding_env: NotRequired[_ExplorerBindingEnv]
 
 
 def _raise_failures(message: str, failures: list[BaseException]) -> None:
@@ -618,10 +621,8 @@ class DefaultSessionSkillManager:
         invocation: EffectiveSkillInvocationAuthority,
         projection_context: SkillProjectionContextAuthority,
         *,
-        explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
-        explorer_binding_env_factory: (
-            Callable[[Path], Mapping[str, Mapping[str, str]] | None] | None
-        ) = None,
+        explorer_binding_env: _ExplorerBindingEnv | None = None,
+        explorer_binding_env_factory: _ExplorerBindingEnvFactory | None = None,
     ) -> ValidatedAddDir:
         """Write only a prevalidated closure from its captured canonical content."""
         self._validate_session_id(session_id)
@@ -777,10 +778,8 @@ class DefaultSessionSkillManager:
         records: tuple[SkillAuthority, ...],
         projection_context: SkillProjectionContextAuthority,
         *,
-        explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
-        explorer_binding_env_factory: (
-            Callable[[Path], Mapping[str, Mapping[str, str]] | None] | None
-        ) = None,
+        explorer_binding_env: _ExplorerBindingEnv | None = None,
+        explorer_binding_env_factory: _ExplorerBindingEnvFactory | None = None,
     ) -> ValidatedAddDir:
         return self._initialize_bound_records(
             session_id,
@@ -796,10 +795,8 @@ class DefaultSessionSkillManager:
         records: tuple[SkillAuthority, ...],
         projection_context: SkillProjectionContextAuthority,
         *,
-        explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
-        explorer_binding_env_factory: (
-            Callable[[Path], Mapping[str, Mapping[str, str]] | None] | None
-        ) = None,
+        explorer_binding_env: _ExplorerBindingEnv | None = None,
+        explorer_binding_env_factory: _ExplorerBindingEnvFactory | None = None,
     ) -> _InitializedSession:
         self._validate_session_id(session_id)
         if explorer_binding_env is not None and explorer_binding_env_factory is not None:
@@ -906,10 +903,8 @@ class DefaultSessionSkillManager:
         projection_context: SkillProjectionContextAuthority,
         *,
         skills_subdir: Path,
-        explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
-        explorer_binding_env_factory: (
-            Callable[[Path], Mapping[str, Mapping[str, str]] | None] | None
-        ) = None,
+        explorer_binding_env: _ExplorerBindingEnv | None = None,
+        explorer_binding_env_factory: _ExplorerBindingEnvFactory | None = None,
     ) -> ValidatedAddDir:
         backend = projection_context.backend
         add_dir = generated_home / SESSION_ADD_DIR_SUBDIR

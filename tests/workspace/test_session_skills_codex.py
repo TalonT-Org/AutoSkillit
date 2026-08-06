@@ -196,6 +196,31 @@ def test_materialization_mints_explorer_binding_between_prelaunch_and_setup(
     assert events == ["prelaunch", "mint", "setup"]
 
 
+def test_materialization_rejects_multiple_explorer_binding_authorities_before_setup(
+    make_session_skill_manager,
+    codex_env,
+) -> None:
+    manager = make_session_skill_manager()
+    catalog, context = _catalog_context(
+        manager,
+        backend=codex_env.backend,
+        names=frozenset({"investigate"}),
+    )
+    binding_env = {"semantic-code-navigator": {"TOKEN": "opaque"}}
+
+    with pytest.raises(ValueError, match="map or factory, not both"):
+        manager._materialize_bound_records(
+            "sid",
+            catalog.skills,
+            context,
+            explorer_binding_env=binding_env,
+            explorer_binding_env_factory=lambda _home: binding_env,
+        )
+
+    codex_env.backend.ensure_pre_launch.assert_not_called()
+    assert "sid" not in manager._session_roots
+
+
 def test_codex_generated_home_links_projected_catalog_into_discovery_root(
     make_session_skill_manager,
     codex_env,

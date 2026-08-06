@@ -305,8 +305,6 @@ class CaptureLifecycleStore:
             )
             try:
                 self._acquire_flock(fd, blocking=blocking)
-            except _capture_types.LockContended:
-                raise
             except OSError as exc:
                 raise CaptureLifecycleError.from_os_error(
                     "cannot acquire lifecycle lock", exc

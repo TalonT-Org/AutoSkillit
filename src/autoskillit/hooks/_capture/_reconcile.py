@@ -159,7 +159,7 @@ def capture_store_stats(project_cwd: str) -> CaptureStoreStats:
         with _authority.open_capture_lifecycle(
             project_cwd, create=False, open_budget=RUNNER_TAIL_BUDGET
         ) as store:
-            with store._locked(blocking=store._sweep_budget is None):
+            with store._locked(blocking=False):
                 records, _compaction_epoch, ledger_bytes = store._load_locked()
             tracked = frozenset(
                 record.public_name

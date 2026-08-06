@@ -326,8 +326,8 @@ def test_capture_store_stats_surfaces_entry_authority_errors(
         def stat(*, follow_symlinks: bool):
             raise PermissionError(errno.EACCES, "denied")
 
-    monkeypatch.setattr(capture_reconcile.os, "scandir", lambda _fd: [DeniedEntry()])
-
-    stats = capture_reconcile.capture_store_stats(str(project))
+    with monkeypatch.context() as scoped:
+        scoped.setattr(capture_reconcile.os, "scandir", lambda _fd: [DeniedEntry()])
+        stats = capture_reconcile.capture_store_stats(str(project))
 
     assert stats.blocker is CleanupBlocker.PERMISSION_DENIED

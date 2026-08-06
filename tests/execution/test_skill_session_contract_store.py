@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -116,6 +117,31 @@ def _lineage_ref(tmp_path: Path):
         anchor_device=stat_result.st_dev,
         anchor_inode=stat_result.st_ino,
     )
+
+
+def test_skill_session_contract_rejects_incoherent_persisted_authority(tmp_path: Path) -> None:
+    from autoskillit.core import (
+        ExecutionIdentity,
+        ExplorationVectorApplicabilityId,
+        RepositoryProfileId,
+        SkillContractError,
+    )
+
+    contract = _contract(tmp_path, "projected")
+
+    with pytest.raises(SkillContractError, match="does not match.*read_only"):
+        replace(contract, read_only=False)
+    with pytest.raises(SkillContractError, match="cannot be auto"):
+        replace(contract, resolved_exploration_profile=RepositoryProfileId.AUTO)
+    with pytest.raises(SkillContractError, match="must include always"):
+        replace(
+            contract,
+            active_exploration_applicabilities=frozenset(
+                {ExplorationVectorApplicabilityId.PLANNER_EXTRACT_DOMAIN_DEEP}
+            ),
+        )
+    with pytest.raises(SkillContractError, match="execution identity must be typed"):
+        replace(contract, execution_identity=cast(ExecutionIdentity, object()))
 
 
 def test_store_round_trip_preserves_machine_contract_and_projected_snapshot(

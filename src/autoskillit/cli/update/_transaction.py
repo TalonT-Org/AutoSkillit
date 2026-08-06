@@ -461,6 +461,12 @@ def run_update_transaction(
                     originating_phase=UpdateTransactionPhase.UPGRADE_SUBPROCESS_GATE.value,
                 )
             except Exception as exc:
+                # Pre-pivot: the parent's own import machinery is still
+                # intact here (nothing has been mutated yet), so a direct
+                # logger call is safe — unlike the post-pivot except
+                # handlers below, this one predates _report_post_pivot_failure's
+                # crash-proofing concern entirely.
+                logger.warning("update_obligation_write_failed", exc_info=True)
                 return _upgrade_failure(
                     progress,
                     f"Could not record the publication obligation: {exc}",

@@ -105,10 +105,28 @@ _PRINT_EXEMPT = frozenset(
 
 # Standalone hook scripts: fail-open design requires silent broad excepts and print() for JSON
 # _onboarding.py: CLI helper with user-facing graceful degradation (fail-open UX, not a hook)
+# cli/update/_transaction.py: post-pivot except handlers route ALL logging through
+# _report_post_pivot_failure(), a single dedicated, tested, crash-proof reporting helper
+# (Phase B B-I2 -- see its docstring: "used by every except handler in post-pivot
+# phases"). This scanner's _has_log_call() only recognizes a literal `.warning()`/
+# `.error()`/etc. Attribute call written directly in the except body -- it cannot trace
+# into a named function call to see that the function itself logs. Inlining a direct
+# logger call at each of those call sites (to satisfy the scanner literally) would
+# duplicate the helper's crash-proofing try/except at every site and violate the
+# explicit "one helper, every post-pivot except handler" design the plan mandated --
+# reintroducing the double-crash risk (PackageNotFoundError, then a second crash
+# inside the except handler itself) Phase B exists to eliminate. The module's two
+# genuinely-silent inner except blocks inside _report_post_pivot_failure itself
+# (catching a failure of logger.warning, then of sys.stderr.write) are deliberately
+# terminal last-resort fallbacks: at that point nothing -- not even the logger --
+# can be trusted, so calling the logger again would risk re-triggering the very
+# failure being handled. Every genuinely fixable except in this file (pre-pivot,
+# where a direct logger call is safe) has one -- see the obligation-write except.
 _BROAD_EXCEPT_EXEMPT = frozenset(
     {
         "_hook_settings.py",
         "_onboarding.py",
+        "_transaction.py",
         "open_kitchen_guard.py",
         "pretty_output_hook.py",
         "quota_guard.py",

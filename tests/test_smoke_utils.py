@@ -4816,6 +4816,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "REVIEW_HANDOFF_IDENTITY_FIELDS",
         "REQUIRED_CRITERION_KEYS",
         "review_handoff_pair_error",
+        "run_cross_interpreter_upgrade_smoke",
         "select_experimental_review_dispatch",
         "select_review_dimensions",
         "try_load_json",

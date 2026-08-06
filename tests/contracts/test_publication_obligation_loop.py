@@ -112,6 +112,60 @@ def test_empty_persisted_expected_version_degrades_to_unknown(tmp_path: Path) ->
     assert persisted.expected_version is None
 
 
+@pytest.mark.parametrize(
+    "contents",
+    [
+        "not json",
+        "[]",
+        json.dumps({"schema_version": 999}),
+        json.dumps(
+            {
+                "schema_version": 1,
+                "previous_version": ["1.0.0"],
+                "expected_version": None,
+                "written_at": "now",
+                "originating_phase": "upgrade",
+            }
+        ),
+    ],
+)
+def test_malformed_persisted_obligation_degrades_to_pending_unknown(
+    tmp_path: Path,
+    contents: str,
+) -> None:
+    from autoskillit.workspace import PublicationObligation, read_obligation
+
+    path = tmp_path / ".autoskillit" / "update_obligation.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(contents, encoding="utf-8")
+
+    assert read_obligation(tmp_path) == PublicationObligation(
+        previous_version="unknown",
+        expected_version=None,
+        written_at="unknown",
+        originating_phase="unknown",
+    )
+
+
+def test_obligation_clear_maps_non_oserror_to_false(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.workspace import clear_obligation, write_obligation
+
+    obligation = write_obligation(
+        tmp_path,
+        previous_version="1.0.0",
+        originating_phase="upgrade",
+    )
+    monkeypatch.setattr(
+        "autoskillit.workspace._update_obligation.ArtifactLease.acquire_exclusive",
+        MagicMock(side_effect=RuntimeError("lease backend failed")),
+    )
+
+    assert clear_obligation(tmp_path, expected=obligation) is False
+
+
 # ---------------------------------------------------------------------------
 # T-C3 — startup repair heals a stale cache.
 # ---------------------------------------------------------------------------
@@ -335,6 +389,7 @@ def test_t_c4_expected_version_present_uses_full_verification(tmp_path: Path) ->
     update_obligation_expected_version(home, expected=obligation, expected_version="1.1.0")
 
     captured_specs: list[object] = []
+    captured_kwargs: list[dict[str, object]] = []
 
     def fake_verify(spec: object) -> MagicMock:
         captured_specs.append(spec)
@@ -344,6 +399,7 @@ def test_t_c4_expected_version_present_uses_full_verification(tmp_path: Path) ->
 
     def runner(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
         calls.append(list(cmd))
+        captured_kwargs.append(kwargs)
         return subprocess.CompletedProcess(cmd, 0)
 
     original = m.verify_installed_plugin_artifact
@@ -363,6 +419,7 @@ def test_t_c4_expected_version_present_uses_full_verification(tmp_path: Path) ->
     assert len(captured_specs) == 1
     assert captured_specs[0].expected_version == "1.1.0"  # type: ignore[attr-defined]
     assert calls == [["autoskillit", "install", "--maintenance-update"]]
+    assert captured_kwargs[0]["env"] == {"HOME": str(home)}
 
 
 def test_t_c4_expected_version_none_probes_then_verifies_exact_state(tmp_path: Path) -> None:
@@ -441,6 +498,109 @@ def test_t_c4_unknown_version_requires_exact_installed_identity(tmp_path: Path) 
         m.verify_installed_plugin_artifact = original
 
     assert result.outcome is m.ObligationRepairOutcome.FAILED
+    assert read_obligation(tmp_path) is not None
+
+
+def test_t_c4_remaining_broken_hooks_keep_obligation(tmp_path: Path) -> None:
+    from autoskillit.cli.update import _obligation_repair as m
+    from autoskillit.workspace import read_obligation, write_obligation
+
+    write_obligation(
+        tmp_path,
+        previous_version="1.0.0",
+        originating_phase="upgrade-subprocess-gate",
+    )
+    original_validate = m.validate_plugin_cache_hooks
+    m.validate_plugin_cache_hooks = lambda **_kwargs: ["broken command"]
+    try:
+        result = m.attempt_obligation_repair(
+            tmp_path,
+            environment={},
+            process_runner=lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 0),
+            entrypoint=Path("autoskillit"),
+        )
+    finally:
+        m.validate_plugin_cache_hooks = original_validate
+
+    assert result.outcome is m.ObligationRepairOutcome.FAILED
+    assert result.findings == ("1 broken hook command(s) remain after repair install",)
+    assert read_obligation(tmp_path) is not None
+
+
+def test_t_c4_compare_and_clear_occurs_before_verification_lease_release(tmp_path: Path) -> None:
+    from autoskillit.cli.update import _obligation_repair as m
+    from autoskillit.workspace import update_obligation_expected_version, write_obligation
+
+    obligation = write_obligation(
+        tmp_path,
+        previous_version="1.0.0",
+        originating_phase="upgrade-subprocess-gate",
+    )
+    update_obligation_expected_version(
+        tmp_path,
+        expected=obligation,
+        expected_version="1.1.0",
+    )
+    events: list[str] = []
+    lease = MagicMock()
+    lease.close.side_effect = lambda: events.append("close")
+    original_verify = m.verify_installed_plugin_artifact
+    original_clear = m.clear_obligation
+    m.verify_installed_plugin_artifact = lambda _spec: MagicMock(
+        identity=MagicMock(semantic_key="x"),
+        findings=(),
+        lease=lease,
+    )
+    m.clear_obligation = lambda *_args, **_kwargs: events.append("clear") or True
+    try:
+        result = m.attempt_obligation_repair(
+            tmp_path,
+            environment={},
+            process_runner=lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 0),
+            entrypoint=Path("autoskillit"),
+        )
+    finally:
+        m.verify_installed_plugin_artifact = original_verify
+        m.clear_obligation = original_clear
+
+    assert result.outcome is m.ObligationRepairOutcome.CLEARED
+    assert events == ["clear", "close"]
+
+
+def test_t_c4_unexpected_verification_error_is_mapped_to_failure(tmp_path: Path) -> None:
+    from autoskillit.cli.update import _obligation_repair as m
+    from autoskillit.workspace import (
+        read_obligation,
+        update_obligation_expected_version,
+        write_obligation,
+    )
+
+    obligation = write_obligation(
+        tmp_path,
+        previous_version="1.0.0",
+        originating_phase="upgrade-subprocess-gate",
+    )
+    update_obligation_expected_version(
+        tmp_path,
+        expected=obligation,
+        expected_version="1.1.0",
+    )
+    original_verify = m.verify_installed_plugin_artifact
+    m.verify_installed_plugin_artifact = lambda _spec: (_ for _ in ()).throw(
+        RuntimeError("verification backend failed")
+    )
+    try:
+        result = m.attempt_obligation_repair(
+            tmp_path,
+            environment={},
+            process_runner=lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 0),
+            entrypoint=Path("autoskillit"),
+        )
+    finally:
+        m.verify_installed_plugin_artifact = original_verify
+
+    assert result.outcome is m.ObligationRepairOutcome.FAILED
+    assert "verification backend failed" in result.findings[0]
     assert read_obligation(tmp_path) is not None
 
 

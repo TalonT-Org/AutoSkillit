@@ -144,23 +144,41 @@ def read_obligation(home: Path) -> PublicationObligation | None:
     data = read_versioned_json(path, _OBLIGATION_SCHEMA_VERSION, logger=logger)
     if data is None:
         logger.warning("update_obligation_read_corrupt")
-        return PublicationObligation(
-            previous_version="unknown",
-            expected_version=None,
-            written_at="unknown",
-            originating_phase="unknown",
-        )
+        return _degraded_obligation()
+    previous_version = data.get("previous_version")
     expected_version = data.get("expected_version")
+    written_at = data.get("written_at")
+    originating_phase = data.get("originating_phase")
+    if (
+        not isinstance(previous_version, str)
+        or not previous_version.strip()
+        or (expected_version is not None and not isinstance(expected_version, str))
+        or not isinstance(written_at, str)
+        or not written_at.strip()
+        or not isinstance(originating_phase, str)
+        or not originating_phase.strip()
+    ):
+        logger.warning("update_obligation_read_invalid_fields")
+        return _degraded_obligation()
     normalized_expected_version = (
         expected_version.strip()
         if isinstance(expected_version, str) and expected_version.strip()
         else None
     )
     return PublicationObligation(
-        previous_version=str(data.get("previous_version") or "unknown"),
+        previous_version=previous_version,
         expected_version=normalized_expected_version,
-        written_at=str(data.get("written_at") or "unknown"),
-        originating_phase=str(data.get("originating_phase") or "unknown"),
+        written_at=written_at,
+        originating_phase=originating_phase,
+    )
+
+
+def _degraded_obligation() -> PublicationObligation:
+    return PublicationObligation(
+        previous_version="unknown",
+        expected_version=None,
+        written_at="unknown",
+        originating_phase="unknown",
     )
 
 
@@ -179,7 +197,7 @@ def clear_obligation(home: Path, *, expected: PublicationObligation) -> bool:
                 return False
             _obligation_path(home).unlink(missing_ok=True)
             return True
-    except OSError:
+    except Exception:
         logger.warning("update_obligation_clear_failed", exc_info=True)
         return False
 

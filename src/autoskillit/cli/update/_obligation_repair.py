@@ -119,10 +119,13 @@ def attempt_obligation_repair(
             outcome=ObligationRepairOutcome.FAILED,
             findings=("Could not resolve the autoskillit entrypoint for obligation repair.",),
         )
+    child_env = dict(env)
+    child_env["HOME"] = str(home)
     try:
         install_result = runner(
             [str(repair_entrypoint), "install", "--maintenance-update"],
             check=False,
+            env=child_env,
         )
     except OSError as exc:
         return ObligationRepairResult(
@@ -153,6 +156,7 @@ def attempt_obligation_repair(
                 [str(repair_entrypoint), "--version"],
                 check=False,
                 capture_output=True,
+                env=child_env,
                 text=True,
             )
         except OSError as exc:
@@ -185,7 +189,8 @@ def attempt_obligation_repair(
                 lease_mode=InstallStateLeaseMode.SHARED,
             )
         )
-    except (OSError, ValueError) as exc:
+    except Exception as exc:
+        logger.warning("publication_obligation_verification_failed", exc_info=True)
         return ObligationRepairResult(
             outcome=ObligationRepairOutcome.FAILED,
             findings=(f"Installed plugin verification could not run: {exc}",),
@@ -198,13 +203,12 @@ def attempt_obligation_repair(
                 findings=tuple(f"{f.check}: {f.message}" for f in verification.findings)
                 or ("Installed plugin verification returned no exact identity.",),
             )
+        if not clear_obligation(home, expected=obligation):
+            return ObligationRepairResult(
+                outcome=ObligationRepairOutcome.FAILED,
+                findings=("Publication succeeded but its obligation could not be cleared.",),
+            )
+        return ObligationRepairResult(outcome=ObligationRepairOutcome.CLEARED)
     finally:
         if verification.lease is not None:
             verification.lease.close()
-
-    if not clear_obligation(home, expected=obligation):
-        return ObligationRepairResult(
-            outcome=ObligationRepairOutcome.FAILED,
-            findings=("Publication succeeded but its obligation could not be cleared.",),
-        )
-    return ObligationRepairResult(outcome=ObligationRepairOutcome.CLEARED)

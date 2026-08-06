@@ -659,7 +659,7 @@ def main() -> None:
         # attempt_obligation_repair() is a no-op when nothing is pending and
         # defers under CLAUDECODE on its own.
         #
-        # Excluded for `install`: attempt_obligation_repair() itself spawns
+        # Excluded for `install` and `--version`: attempt_obligation_repair() itself spawns
         # `autoskillit install --maintenance-update` as a subprocess, and
         # that child's own main() call would otherwise observe the SAME
         # still-pending obligation and recurse into another repair attempt
@@ -669,7 +669,10 @@ def main() -> None:
         # needs. Every `install` invocation IS itself already an attempt to
         # satisfy the obligation (the transaction's own success path clears
         # it), so re-observing here would only ever be redundant at best.
-        if _first_arg != "install":
+        # The unknown-version verification branch also launches `autoskillit
+        # --version` while the obligation is pending, so that probe must not
+        # recursively observe and repair the same record.
+        if _first_arg not in {"install", "--version"}:
             from autoskillit.cli.update._obligation_repair import attempt_obligation_repair
 
             repair_result = attempt_obligation_repair(Path.home())

@@ -81,10 +81,37 @@ def test_main_install_argv_skips_obligation_repair_to_avoid_reentrancy(
     )
 
 
+def test_main_version_argv_skips_obligation_repair_to_avoid_probe_recursion(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The repair helper's version probe must not recursively repair itself."""
+    app_module = importlib.import_module("autoskillit.cli.app")
+
+    monkeypatch.setattr(app_module, "app", lambda: None)
+    monkeypatch.setattr(
+        "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda *a, **kw: None
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks.run_update_checks", lambda **kwargs: None
+    )
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    repair_calls: list[Path] = []
+    monkeypatch.setattr(
+        "autoskillit.cli.update._obligation_repair.attempt_obligation_repair",
+        lambda home, **kwargs: repair_calls.append(home),
+    )
+    monkeypatch.setattr(sys, "argv", ["autoskillit", "--version"])
+
+    app_module.main()
+
+    assert repair_calls == []
+
+
 def test_main_non_install_argv_still_calls_obligation_repair(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """main() still observes a pending obligation for every OTHER subcommand."""
+    """main() still observes a pending obligation for normal subcommands."""
     app_module = importlib.import_module("autoskillit.cli.app")
 
     monkeypatch.setattr(app_module, "app", lambda: None)

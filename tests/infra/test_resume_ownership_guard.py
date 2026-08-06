@@ -177,6 +177,10 @@ class TestResumeOwnershipGuard:
         out = _run_guard(raw_stdin="not-json", headless=True)
         assert not out.strip()
 
+    def test_non_object_input_fails_open(self) -> None:
+        out = _run_guard(raw_stdin="[]", headless=True)
+        assert not out.strip()
+
     def test_malformed_provenance_lines_skipped(self, tmp_path: Path) -> None:
         prov_path = tmp_path / "session_provenance.jsonl"
         prov_path.parent.mkdir(parents=True, exist_ok=True)

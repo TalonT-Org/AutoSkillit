@@ -66,7 +66,9 @@ def _find_provenance(session_id: str, prov_path: Path) -> dict | None:
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
-    except (json.JSONDecodeError, ValueError):
+        if not isinstance(data, dict):
+            sys.exit(0)
+    except (json.JSONDecodeError, TypeError, ValueError):
         sys.exit(0)
 
     # Interactive sessions bypass ownership — the human user is the implicit owner.
@@ -74,13 +76,18 @@ def main() -> None:
         sys.exit(0)
 
     tool_input = data.get("tool_input", {})
+    if not isinstance(tool_input, dict):
+        sys.exit(0)
     resume_session_id = tool_input.get("resume_session_id")
 
     if not resume_session_id:
         sys.exit(0)
 
-    payload_cwd = parse_hook_command(data).payload_cwd
-    prov_path = _resolve_provenance_path(payload_cwd)
+    try:
+        payload_cwd = parse_hook_command(data).payload_cwd
+        prov_path = _resolve_provenance_path(payload_cwd)
+    except (AttributeError, OSError, TypeError, ValueError):
+        sys.exit(0)
     record = _find_provenance(resume_session_id, prov_path)
 
     if record is None:

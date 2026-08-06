@@ -331,38 +331,6 @@ def test_t_c4_expected_version_present_uses_full_verification(tmp_path: Path) ->
         captured_specs.append(spec)
         return MagicMock(identity=MagicMock(semantic_key="x"), findings=(), lease=None)
 
-    def runner(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
-        return subprocess.CompletedProcess(cmd, 0)
-
-    original = m.verify_installed_plugin_artifact
-    m.verify_installed_plugin_artifact = fake_verify
-    try:
-        result = m.attempt_obligation_repair(home, environment={}, process_runner=runner)
-    finally:
-        m.verify_installed_plugin_artifact = original
-
-    assert result.outcome is m.ObligationRepairOutcome.CLEARED
-    assert read_obligation(home) is None
-    assert len(captured_specs) == 1
-    assert captured_specs[0].expected_version == "1.1.0"  # type: ignore[attr-defined]
-
-
-def test_t_c4_expected_version_none_skips_install_state_spec(tmp_path: Path) -> None:
-    """With expected_version None (probe never succeeded / backfill failed),
-    verification must NOT construct an InstallStateSpec (whose
-    expected_version is a required field, raising on empty) — instead
-    verifies via token-aware hook validation plus a version-subprocess
-    succeeding. No ValueError must surface.
-    """
-    from autoskillit.cli.update import _obligation_repair as m
-    from autoskillit.workspace import read_obligation, write_obligation
-
-    home = tmp_path
-    write_obligation(home, previous_version="1.0.0", originating_phase="upgrade-subprocess-gate")
-
-    def fail_if_called(spec: object) -> None:
-        raise AssertionError("verify_installed_plugin_artifact must not be called")
-
     calls: list[list[str]] = []
 
     def runner(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
@@ -370,15 +338,128 @@ def test_t_c4_expected_version_none_skips_install_state_spec(tmp_path: Path) -> 
         return subprocess.CompletedProcess(cmd, 0)
 
     original = m.verify_installed_plugin_artifact
-    m.verify_installed_plugin_artifact = fail_if_called
+    m.verify_installed_plugin_artifact = fake_verify
     try:
-        result = m.attempt_obligation_repair(home, environment={}, process_runner=runner)
+        result = m.attempt_obligation_repair(
+            home,
+            environment={},
+            process_runner=runner,
+            entrypoint=Path("autoskillit"),
+        )
     finally:
         m.verify_installed_plugin_artifact = original
 
     assert result.outcome is m.ObligationRepairOutcome.CLEARED
     assert read_obligation(home) is None
-    assert calls[-1] == ["autoskillit", "--version"]
+    assert len(captured_specs) == 1
+    assert captured_specs[0].expected_version == "1.1.0"  # type: ignore[attr-defined]
+    assert calls == [["autoskillit", "install", "--maintenance-update"]]
+
+
+def test_t_c4_expected_version_none_probes_then_verifies_exact_state(tmp_path: Path) -> None:
+    """With expected_version None (probe never succeeded / backfill failed),
+    the fresh version probe supplies the version for exact installed-state
+    verification before the obligation can be cleared.
+    """
+    from autoskillit.cli.update import _obligation_repair as m
+    from autoskillit.workspace import read_obligation, write_obligation
+
+    home = tmp_path
+    write_obligation(home, previous_version="1.0.0", originating_phase="upgrade-subprocess-gate")
+
+    captured_specs: list[object] = []
+
+    def fake_verify(spec: object) -> MagicMock:
+        captured_specs.append(spec)
+        return MagicMock(identity=MagicMock(semantic_key="x"), findings=(), lease=None)
+
+    calls: list[list[str]] = []
+
+    def runner(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        calls.append(list(cmd))
+        stdout = "1.1.0\n" if cmd[-1] == "--version" else None
+        return subprocess.CompletedProcess(cmd, 0, stdout=stdout)
+
+    original = m.verify_installed_plugin_artifact
+    m.verify_installed_plugin_artifact = fake_verify
+    try:
+        result = m.attempt_obligation_repair(
+            home,
+            environment={},
+            process_runner=runner,
+            entrypoint=Path("autoskillit"),
+        )
+    finally:
+        m.verify_installed_plugin_artifact = original
+
+    assert result.outcome is m.ObligationRepairOutcome.CLEARED
+    assert read_obligation(home) is None
+    assert captured_specs[0].expected_version == "1.1.0"  # type: ignore[attr-defined]
+    assert calls == [
+        ["autoskillit", "install", "--maintenance-update"],
+        ["autoskillit", "--version"],
+    ]
+
+
+def test_t_c4_unknown_version_requires_exact_installed_identity(tmp_path: Path) -> None:
+    from autoskillit.cli.update import _obligation_repair as m
+    from autoskillit.workspace import read_obligation, write_obligation
+
+    write_obligation(
+        tmp_path,
+        previous_version="1.0.0",
+        originating_phase="upgrade-subprocess-gate",
+    )
+
+    def runner(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        stdout = "1.1.0\n" if cmd[-1] == "--version" else None
+        return subprocess.CompletedProcess(cmd, 0, stdout=stdout)
+
+    original = m.verify_installed_plugin_artifact
+    m.verify_installed_plugin_artifact = lambda _spec: MagicMock(
+        identity=None,
+        findings=(),
+        lease=None,
+    )
+    try:
+        result = m.attempt_obligation_repair(
+            tmp_path,
+            environment={},
+            process_runner=runner,
+            entrypoint=Path("autoskillit"),
+        )
+    finally:
+        m.verify_installed_plugin_artifact = original
+
+    assert result.outcome is m.ObligationRepairOutcome.FAILED
+    assert read_obligation(tmp_path) is not None
+
+
+def test_t_c4_process_launch_error_is_reported_and_keeps_obligation(tmp_path: Path) -> None:
+    from autoskillit.cli.update import _obligation_repair as m
+    from autoskillit.workspace import read_obligation, write_obligation
+
+    write_obligation(
+        tmp_path,
+        previous_version="1.0.0",
+        originating_phase="upgrade-subprocess-gate",
+    )
+
+    def runner(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        raise OSError("entrypoint disappeared")
+
+    result = m.attempt_obligation_repair(
+        tmp_path,
+        environment={},
+        process_runner=runner,
+        entrypoint=Path("/resolved/autoskillit"),
+    )
+
+    assert result.outcome is m.ObligationRepairOutcome.FAILED
+    assert result.findings == (
+        "Could not launch obligation repair install: entrypoint disappeared",
+    )
+    assert read_obligation(tmp_path) is not None
 
 
 def test_t_c4_claudecode_defers_and_leaves_obligation_intact(tmp_path: Path) -> None:

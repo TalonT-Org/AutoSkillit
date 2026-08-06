@@ -13,6 +13,7 @@ with the code that actually verified it.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -42,6 +43,17 @@ logger = get_logger(__name__)
 _ProcessRunner = Callable[..., "subprocess.CompletedProcess[Any]"]
 
 
+def _resolve_repair_entrypoint(environment: Mapping[str, str]) -> Path | None:
+    """Resolve the executable while the current interpreter is still valid."""
+    from autoskillit.cli._install_info import detect_install
+
+    entrypoint = detect_install().entrypoint
+    if entrypoint is not None:
+        return entrypoint
+    resolved = shutil.which("autoskillit", path=environment.get("PATH"))
+    return Path(resolved) if resolved is not None else None
+
+
 class ObligationRepairOutcome(StrEnum):
     """Closed outcomes for one publication-obligation repair attempt."""
 
@@ -65,6 +77,7 @@ def attempt_obligation_repair(
     *,
     environment: Mapping[str, str] | None = None,
     process_runner: _ProcessRunner | None = None,
+    entrypoint: Path | None = None,
 ) -> ObligationRepairResult:
     """Attempt to satisfy a pending publication obligation, or defer/report.
 
@@ -80,14 +93,9 @@ def attempt_obligation_repair(
     child failure or verification failure, reports and leaves the
     obligation pending.
 
-    Verification branches on ``obligation.expected_version``: when it is a
-    known string, verifies via token-aware ``validate_plugin_cache_hooks``
-    (zero broken) plus ``verify_installed_plugin_artifact`` — whose
-    ``InstallStateSpec.expected_version`` is a REQUIRED field, raising on
-    empty. When it is ``None`` (the post-pivot probe never succeeded, or the
-    backfill itself failed), that full spec can never be constructed
-    safely — verifies instead via token-aware ``validate_plugin_cache_hooks``
-    plus a fresh ``autoskillit --version`` subprocess succeeding.
+    When the obligation lacks an expected version, a fresh version probe
+    supplies one. Both branches then perform the same exact installed-state
+    verification before compare-and-clearing the obligation.
     """
     env = environment if environment is not None else os.environ
     obligation = read_obligation(home)
@@ -105,10 +113,22 @@ def attempt_obligation_repair(
         )
 
     runner = process_runner or subprocess.run
-    install_result = runner(
-        ["autoskillit", "install", "--maintenance-update"],
-        check=False,
-    )
+    repair_entrypoint = entrypoint or _resolve_repair_entrypoint(env)
+    if repair_entrypoint is None:
+        return ObligationRepairResult(
+            outcome=ObligationRepairOutcome.FAILED,
+            findings=("Could not resolve the autoskillit entrypoint for obligation repair.",),
+        )
+    try:
+        install_result = runner(
+            [str(repair_entrypoint), "install", "--maintenance-update"],
+            check=False,
+        )
+    except OSError as exc:
+        return ObligationRepairResult(
+            outcome=ObligationRepairOutcome.FAILED,
+            findings=(f"Could not launch obligation repair install: {exc}",),
+        )
     if install_result.returncode != 0:
         return ObligationRepairResult(
             outcome=ObligationRepairOutcome.FAILED,
@@ -126,38 +146,61 @@ def attempt_obligation_repair(
             findings=(f"{len(broken)} broken hook command(s) remain after repair install",),
         )
 
-    if obligation.expected_version is not None:
-        verification = verify_installed_plugin_artifact(
-            InstallStateSpec(
-                home=home,
-                plugin_ref=_AUTOSKILLIT_PLUGIN_KEY,
-                expected_version=obligation.expected_version,
-                require_registered_plugin=True,
-                lease_mode=InstallStateLeaseMode.SHARED,
-            )
-        )
+    expected_version = obligation.expected_version
+    if expected_version is None:
         try:
-            has_error = any(f.severity is Severity.ERROR for f in verification.findings)
-            if has_error or verification.identity is None:
-                return ObligationRepairResult(
-                    outcome=ObligationRepairOutcome.FAILED,
-                    findings=tuple(f"{f.check}: {f.message}" for f in verification.findings)
-                    or ("Installed plugin verification returned no exact identity.",),
-                )
-        finally:
-            if verification.lease is not None:
-                verification.lease.close()
-    else:
-        version_check = runner(["autoskillit", "--version"], check=False)
+            version_check = runner(
+                [str(repair_entrypoint), "--version"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except OSError as exc:
+            return ObligationRepairResult(
+                outcome=ObligationRepairOutcome.FAILED,
+                findings=(f"Could not launch autoskillit --version after repair: {exc}",),
+            )
         if version_check.returncode != 0:
             return ObligationRepairResult(
                 outcome=ObligationRepairOutcome.FAILED,
                 findings=(
                     "autoskillit --version failed after repair install "
-                    "(expected version unknown — probe never succeeded "
-                    "pre-repair)",
+                    "(expected version unknown — probe never succeeded pre-repair)",
                 ),
             )
+        expected_version = (version_check.stdout or "").strip()
+        if not expected_version:
+            return ObligationRepairResult(
+                outcome=ObligationRepairOutcome.FAILED,
+                findings=("autoskillit --version produced no output after repair install",),
+            )
+
+    try:
+        verification = verify_installed_plugin_artifact(
+            InstallStateSpec(
+                home=home,
+                plugin_ref=_AUTOSKILLIT_PLUGIN_KEY,
+                expected_version=expected_version,
+                require_registered_plugin=True,
+                lease_mode=InstallStateLeaseMode.SHARED,
+            )
+        )
+    except (OSError, ValueError) as exc:
+        return ObligationRepairResult(
+            outcome=ObligationRepairOutcome.FAILED,
+            findings=(f"Installed plugin verification could not run: {exc}",),
+        )
+    try:
+        has_error = any(f.severity is Severity.ERROR for f in verification.findings)
+        if has_error or verification.identity is None:
+            return ObligationRepairResult(
+                outcome=ObligationRepairOutcome.FAILED,
+                findings=tuple(f"{f.check}: {f.message}" for f in verification.findings)
+                or ("Installed plugin verification returned no exact identity.",),
+            )
+    finally:
+        if verification.lease is not None:
+            verification.lease.close()
 
     if not clear_obligation(home, expected=obligation):
         return ObligationRepairResult(

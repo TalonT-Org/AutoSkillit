@@ -1097,6 +1097,13 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "splitting into sub-modules would obscure the check sequence and break the test "
         "filter cascade",
     ),
+    "skills.py": (
+        1350,
+        "REQ-CNST-010-E14: skill resolution + sidecar parsing — exploration.yaml sidecar "
+        "loader and parser are tightly coupled to _skill_info_from_frontmatter and the "
+        "marker binder; extracting them would create an artificial module boundary while "
+        "the sidecar is read exactly once in the same parse event as SKILL.md frontmatter",
+    ),
     "fleet/_api.py": (
         1575,
         "REQ-CNST-010-E6: fleet dispatch engine — evaluate_skip_when inlined here to avoid "

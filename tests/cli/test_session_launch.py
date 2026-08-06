@@ -63,6 +63,12 @@ def _stub_artifact_authorities(
         "autoskillit.cli._plugin_artifact.current_installed_plugin_authority",
         lambda: _TestAuthority(None),
     )
+    # Interactive command building copies the ambient os.environ verbatim
+    # (see claude.py build_interactive_cmd), so CLAUDE_CODE_EXECPATH set by a
+    # host Claude Code session running this test suite would otherwise leak
+    # through and pin executable resolution to the real system binary instead
+    # of the fake binaries/ stub above.
+    monkeypatch.delenv("CLAUDE_CODE_EXECPATH", raising=False)
 
 
 class _BackendLifecycleStub:

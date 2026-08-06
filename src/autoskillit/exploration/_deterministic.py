@@ -9,11 +9,12 @@ create a competing public representation.
 from __future__ import annotations
 
 import hashlib
-import json
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Generic, Protocol, TypeVar
+
+from ._digest import canonical_json
 
 KeyT = TypeVar("KeyT")
 ItemT = TypeVar("ItemT")
@@ -40,21 +41,6 @@ class ScheduledWave(Generic[KeyT]):
     """One deterministic concurrent wave of independent work."""
 
     items: tuple[KeyT, ...]
-
-
-def canonical_json(value: object) -> str:
-    """Return the unique JSON representation used at identity boundaries."""
-
-    try:
-        return json.dumps(
-            value,
-            allow_nan=False,
-            ensure_ascii=True,
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-    except (TypeError, ValueError) as exc:
-        raise ValueError("value is not canonically serializable") from exc
 
 
 def stable_digest(value: object) -> str:

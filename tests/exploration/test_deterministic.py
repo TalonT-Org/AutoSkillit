@@ -55,6 +55,16 @@ def test_qualified_digest_rejects_non_finite_floats(value: float) -> None:
         qualified_digest(b"test-domain\0", {"value": value})
 
 
+def test_qualified_digest_is_canonical_qualified_and_domain_separated() -> None:
+    value = {"b": 2, "a": 1}
+    canonical = qualified_digest(b"test.domain.v1\0", value)
+
+    assert canonical == qualified_digest(b"test.domain.v1\0", {"a": 1, "b": 2})
+    assert canonical == "sha256:a5b5ae149be0b13afd1dd4aa70652f0532bc54d5beb3c7fc7c7983249f42836d"
+    assert canonical.startswith("sha256:")
+    assert canonical != qualified_digest(b"other.domain.v1\0", value)
+
+
 @pytest.mark.parametrize(
     ("repository", "revision", "message"),
     [("", "revision", "repository"), ("repository", "", "revision")],

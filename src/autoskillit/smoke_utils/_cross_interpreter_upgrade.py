@@ -39,6 +39,43 @@ def _cache_incarnations(cache_root: Path) -> set[str]:
     return {p.name for p in cache_root.iterdir() if p.is_dir() and not p.name.startswith(".")}
 
 
+def _preserve_pre_upgrade_incarnation(cache_root: Path, source_name: str, minor: str) -> str:
+    """Create a valid distinct prior-version artifact for retention testing."""
+    from autoskillit.core import (
+        _AUTOSKILLIT_PLUGIN_KEY,
+        ArtifactLease,
+        installed_plugin_artifact_lease_path,
+        installed_plugin_semantic_key,
+    )
+    from autoskillit.workspace._projected_artifact._manifest_publication import (
+        write_installed_plugin_artifact_manifest_locked,
+    )
+
+    retained_name = f"0.0.0+preupgrade.py{minor.replace('.', '')}"
+    source_dir = cache_root / source_name
+    retained_dir = cache_root / retained_name
+    if retained_dir.exists():
+        raise RuntimeError(f"pre-upgrade retention fixture already exists: {retained_dir}")
+    shutil.copytree(source_dir, retained_dir)
+    metadata_path = retained_dir / ".claude-plugin" / "plugin.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["version"] = retained_name
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    with ArtifactLease.acquire_exclusive(
+        installed_plugin_artifact_lease_path(retained_dir),
+        blocking=True,
+    ):
+        write_installed_plugin_artifact_manifest_locked(
+            retained_dir,
+            semantic_key=installed_plugin_semantic_key(
+                _AUTOSKILLIT_PLUGIN_KEY,
+                retained_name,
+            ),
+            action="publish",
+        )
+    return retained_name
+
+
 def _assert_incarnation_hooks_execute(incarnation_dir: Path) -> None:
     """Execute every PreToolUse-style command in this incarnation's hooks.json
     verbatim, with ${CLAUDE_PLUGIN_ROOT} expanded against incarnation_dir —
@@ -89,9 +126,9 @@ def run_cross_interpreter_upgrade_smoke(*, work_dir: str) -> bool:
 
     env = dict(os.environ)
     env["HOME"] = str(scratch_home)
-    env.setdefault("XDG_CONFIG_HOME", str(scratch_home / ".config"))
-    env.setdefault("XDG_CACHE_HOME", str(scratch_home / ".cache"))
-    env.setdefault("XDG_DATA_HOME", str(scratch_home / ".local" / "share"))
+    env["XDG_CONFIG_HOME"] = str(scratch_home / ".config")
+    env["XDG_CACHE_HOME"] = str(scratch_home / ".cache")
+    env["XDG_DATA_HOME"] = str(scratch_home / ".local" / "share")
     env["PATH"] = f"{scratch_home / '.local' / 'bin'}{os.pathsep}{env.get('PATH', '')}"
 
     minor_a, minor_b = _REQUIRED_PYTHON_MINORS
@@ -133,6 +170,9 @@ def run_cross_interpreter_upgrade_smoke(*, work_dir: str) -> bool:
         raise RuntimeError(
             f"no plugin cache incarnation found after initial publish: {cache_root}"
         )
+    initial_name = sorted(pre_upgrade)[-1]
+    retained_name = _preserve_pre_upgrade_incarnation(cache_root, initial_name, minor_a)
+    pre_upgrade.add(retained_name)
 
     upgrade = _run(
         ["uv", "tool", "install", "--force", "--python", minor_b, str(source_root)], env=env
@@ -152,9 +192,8 @@ def run_cross_interpreter_upgrade_smoke(*, work_dir: str) -> bool:
             f"missing={sorted(missing_incarnations)}, post={sorted(post_upgrade)}"
         )
 
-    # A same-source reinstall normally reuses the version-keyed directory.
-    # The live-session-safety property is that every retained/current
-    # incarnation still executes after its generating interpreter is gone.
+    # The synthetic prior-version artifact makes retention observable even
+    # though reinstalling the same source reuses its current version key.
     for name in post_upgrade:
         _assert_incarnation_hooks_execute(cache_root / name)
 

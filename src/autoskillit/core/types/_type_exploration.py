@@ -320,6 +320,14 @@ class FrontierItem:
 
 @dataclass(frozen=True, slots=True)
 class ExplorationTaskSpec:
+    """One scheduled exploration task bound to its originating evidence frontier.
+
+    ``task_id`` is the execution and dependency-graph identity, while
+    ``frontier_item_id`` preserves the frontier/evidence identity that caused
+    the task to be scheduled. They may coincide for generic routing but remain
+    distinct persistence fields for authored vectors.
+    """
+
     task_id: str
     frontier_item_id: str
     profile: RepositoryProfileId

@@ -1035,11 +1035,44 @@ def _collect_generated_child_rollout(
     *,
     session_home: Path,
 ) -> _GeneratedChildRollout:
-    rollout = _collect_generated_child_rollout(result, session_home=session_home)
-    parent_events = rollout.parent_events
-    child_events = rollout.child_events
-    parent_id = rollout.parent_id
-    session_ids = rollout.session_ids
+    stdout_events = []
+    for line in result.stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(event, dict):
+            stdout_events.append(event)
+    parent_ids = [
+        str(event.get("thread_id", ""))
+        for event in stdout_events
+        if event.get("type") == "thread.started" and event.get("thread_id")
+    ]
+    assert len(parent_ids) == 1, f"expected one parent thread, got {parent_ids}"
+    parent_id = parent_ids[0]
+
+    rollout_root = (session_home / "sessions").resolve()
+    rollout_events = [_read_ndjson(path) for path in rollout_root.rglob("rollout-*.jsonl")]
+    parent_events: list[dict] = []
+    child_events: list[dict] = []
+    for events in rollout_events:
+        session_metas = [
+            event.get("payload", {}) for event in events if event.get("type") == "session_meta"
+        ]
+        if any(meta.get("id") == parent_id for meta in session_metas):
+            parent_events = events
+        if any(
+            (meta.get("forked_from_id") or meta.get("parent_thread_id")) == parent_id
+            for meta in session_metas
+        ):
+            child_events.extend(events)
+    assert parent_events, f"parent rollout not found for {parent_id} under {rollout_root}"
+    session_ids = {
+        str(event.get("payload", {}).get("id"))
+        for events in rollout_events
+        for event in events
+        if event.get("type") == "session_meta" and event.get("payload", {}).get("id")
+    }
     return _GeneratedChildRollout(parent_events, child_events, parent_id, session_ids)
 
 
@@ -1102,44 +1135,11 @@ def _run_generated_child_probe(
         env=env,
         prompt=prompt,
     )
-    stdout_events = []
-    for line in result.stdout.splitlines():
-        try:
-            event = json.loads(line)
-        except (json.JSONDecodeError, TypeError):
-            continue
-        if isinstance(event, dict):
-            stdout_events.append(event)
-    parent_ids = [
-        str(event.get("thread_id", ""))
-        for event in stdout_events
-        if event.get("type") == "thread.started" and event.get("thread_id")
-    ]
-    assert len(parent_ids) == 1, f"expected one parent thread, got {parent_ids}"
-    parent_id = parent_ids[0]
-
-    rollout_root = (session_home / "sessions").resolve()
-    rollout_events = [_read_ndjson(path) for path in rollout_root.rglob("rollout-*.jsonl")]
-    parent_events: list[dict] = []
-    child_events: list[dict] = []
-    for events in rollout_events:
-        session_metas = [
-            event.get("payload", {}) for event in events if event.get("type") == "session_meta"
-        ]
-        if any(meta.get("id") == parent_id for meta in session_metas):
-            parent_events = events
-        if any(
-            (meta.get("forked_from_id") or meta.get("parent_thread_id")) == parent_id
-            for meta in session_metas
-        ):
-            child_events.extend(events)
-    assert parent_events, f"parent rollout not found for {parent_id} under {rollout_root}"
-    session_ids = {
-        str(event.get("payload", {}).get("id"))
-        for events in rollout_events
-        for event in events
-        if event.get("type") == "session_meta" and event.get("payload", {}).get("id")
-    }
+    rollout = _collect_generated_child_rollout(result, session_home=session_home)
+    parent_events = rollout.parent_events
+    child_events = rollout.child_events
+    parent_id = rollout.parent_id
+    session_ids = rollout.session_ids
     child_calls = [
         event.get("payload", {})
         for event in child_events

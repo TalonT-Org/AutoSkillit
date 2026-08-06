@@ -26,7 +26,7 @@ from autoskillit.core import (
 if TYPE_CHECKING:
     from autoskillit.cli.session._session_startup_trace import StartupTrace
     from autoskillit.cli.session.pty._observer import PtyObserver
-    from autoskillit.core import CodingAgentBackend
+    from autoskillit.core import CodingAgentBackend, RepositoryProfileId
     from autoskillit.workspace import (
         EffectiveSkillCatalog,
         SkillProjectionContext,
@@ -40,6 +40,7 @@ def _build_cook_projection_context(
     project_dir: Path,
     backend: CodingAgentBackend,
     binding: PluginLaunchBinding | None,
+    resolved_exploration_profile: RepositoryProfileId | None,
 ) -> SkillProjectionContext:
     """Bind scripts to the exact artifact selected for this cook session."""
     if binding is None:
@@ -50,6 +51,7 @@ def _build_cook_projection_context(
         project_dir,
         backend=backend,
         durable_scripts_root=binding.identity.managed_path,
+        resolved_exploration_profile=resolved_exploration_profile,
     )
 
 
@@ -177,8 +179,11 @@ def cook(
         PROVIDER_PROFILE_ENV_VAR,
         SESSION_TYPE_ENV_VAR,
         BareResume,
+        ExplorationVectorApplicabilityId,
+        ExplorationVectorDisposition,
         NamedResume,
         NoResume,
+        RepositoryProfileId,
         SessionType,
         SkillExecutionRole,
         configure_logging,
@@ -225,6 +230,18 @@ def cook(
     render_skill_catalog_exclusions(session_catalog.exclusions)
     catalog_compilation = compile_session_skill_catalog(session_catalog, backend)
     session_catalog = catalog_compilation.catalog
+    requires_resolved_exploration_profile = any(
+        vector.disposition is ExplorationVectorDisposition.MIGRATED
+        and vector.applicability is ExplorationVectorApplicabilityId.ALWAYS
+        and vector.profile is RepositoryProfileId.AUTO
+        for member in session_catalog.skills
+        for vector in member.exploration_vectors
+    )
+    resolved_exploration_profile = (
+        resolve_repository_profile(project_dir)
+        if requires_resolved_exploration_profile
+        else None
+    )
 
     from autoskillit.cli._plugin_artifact import interactive_plugin_authority
 
@@ -236,7 +253,6 @@ def cook(
         skill_catalog=session_catalog,
         generated_home_available=True,
         retain_projection_source=True,
-        resolved_exploration_profile=resolve_repository_profile(project_dir),
     )
     session_mgr = DefaultSessionSkillManager(
         skills_provider,
@@ -264,6 +280,7 @@ def cook(
                 project_dir,
                 backend,
                 projection_binding,
+                resolved_exploration_profile,
             ),
         ) as managed_home,
     ):

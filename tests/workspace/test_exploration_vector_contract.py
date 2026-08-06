@@ -77,7 +77,7 @@ Read the release notes and explain the relevant historical intent.
 """
 
 
-def _parse(tmp_path: Path, content: str = _FRONTMATTER + _BODY):
+def _parse(tmp_path: Path, content: str = _FRONTMATTER + _BODY) -> SkillInfo:
     path = tmp_path / "SKILL.md"
     path.write_text(content, encoding="utf-8")
     return _skill_info_from_frontmatter("vector-skill", SkillSource.PROJECT_LOCAL, path)

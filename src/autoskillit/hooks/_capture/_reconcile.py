@@ -241,7 +241,7 @@ def cleanup_diagnostic(
         return None
     if severity is CleanupSeverity.STALLED:
         detail = (
-            f"capture cleanup {owner} deferred without progress: "
+            f"capture cleanup {owner} stalled without progress: "
             f"blocker={outcome.blocker.value} remaining_due={outcome.remaining_due}"
         )
     else:

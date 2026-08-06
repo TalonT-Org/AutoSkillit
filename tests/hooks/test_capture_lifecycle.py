@@ -4229,7 +4229,7 @@ def test_emit_owner_diagnostic_stalled_case_is_neutral() -> None:
 
     assert len(written) == 1
     (line,) = written
-    assert "deferred" in line
+    assert "stalled" in line
     assert "migration_blocked" in line
     assert not _FAILURE_GRADE_RE.search(line)
 

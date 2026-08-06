@@ -7,7 +7,7 @@ import os
 import stat
 from collections.abc import Callable, Collection, Iterable
 from dataclasses import replace
-from typing import Protocol
+from typing import NamedTuple, Protocol
 
 from . import _orphan_scan, _store_port, _sweep_cursor
 from ._cleanup import close_preserving_primary
@@ -41,6 +41,15 @@ register_module_aliases(__name__)
 # deletion, and finally mark it deleted. Orphan admissions reserve the same
 # per-item ceiling because they share the sweep transition budget.
 _MAX_TRANSITIONS_PER_SWEEP_ITEM = 4
+
+
+class OrphanAdoptionOutcome(NamedTuple):
+    """Directory scan state that must participate in sweep convergence."""
+
+    examined: int
+    adopted: int
+    directory_complete: bool
+    pending_candidates: int
 
 
 class SweepRecord(Protocol):
@@ -770,6 +779,8 @@ def adopt_orphan(
             raise lifecycle_error("cannot inspect orphan-adoption candidate") from exc
         if not stat.S_ISREG(value.st_mode):
             return False
+        if store._wall_clock() - value.st_mtime < _orphan_scan.ADOPTION_AGE_SECONDS:
+            return False
         try:
             candidate = adopted_orphan_record(
                 public_name=public_name,
@@ -788,17 +799,18 @@ def scan_and_adopt_orphans(
     store: _store_port.SweepStorePort,
     *,
     lifecycle_error: type[RuntimeError],
-) -> tuple[int, int]:
+) -> OrphanAdoptionOutcome:
     """Scan for unledgered capture files and adopt eligible orphans.
 
-    Returns ``(examined, adopted)``. A zero-cost no-op — no lock taken, no
+    Returns scan/adoption state used by the outer sweep's convergence test. A
+    zero-cost no-op — no lock taken, no
     directory listed — when the active sweep budget disables the phase
     (``max_directory_entries_scanned == 0``, the ``RUNNER_TAIL_BUDGET``
     default), so per-command runner-tail latency is unaffected.
     """
     budget = store._sweep_budget
     if budget is None or budget.max_directory_entries_scanned <= 0:
-        return (0, 0)
+        return OrphanAdoptionOutcome(0, 0, True, 0)
     now = store._wall_clock()
     with store._locked(blocking=False):
         records, _compaction_epoch, _size = store._load_locked()
@@ -815,7 +827,12 @@ def scan_and_adopt_orphans(
             break
         if adopt_orphan(store, name, lifecycle_error=lifecycle_error):
             adopted += 1
-    return (scan.examined, adopted)
+    return OrphanAdoptionOutcome(
+        examined=scan.examined,
+        adopted=adopted,
+        directory_complete=scan.directory_complete,
+        pending_candidates=len(scan.candidates) - adopted,
+    )
 
 
 def run_bounded_sweep(
@@ -827,12 +844,13 @@ def run_bounded_sweep(
     before_attempt: Callable[[DueKey], None],
     sweep_one: Callable[[str], tuple[SweepAttempt, int, int]],
     work_counters: Callable[[], tuple[int, int, int, int]],
-    scan_and_adopt_orphans: Callable[[], tuple[int, int]],
+    scan_and_adopt_orphans: Callable[[], OrphanAdoptionOutcome],
 ) -> CaptureCleanupOutcome:
     started = monotonic()
     examined = deleted = deleted_bytes = carrier_lease_live = 0
     not_due = tampered = errors = retry_count = 0
     blocker = CleanupBlocker.NONE
+    orphan_outcome = OrphanAdoptionOutcome(0, 0, True, 0)
     try:
         pending, discovery_complete, cursor_repair = due_keys(
             wall_clock(),
@@ -903,13 +921,18 @@ def run_bounded_sweep(
     # TRANSITIONED progress signal a real state transition does.
     if monotonic() - started < budget.max_duration_seconds:
         try:
-            scan_and_adopt_orphans()
+            orphan_outcome = scan_and_adopt_orphans()
         except LockContended:
             if blocker is CleanupBlocker.NONE:
                 blocker = CleanupBlocker.LOCK_CONTENDED
     remaining_due = max(0, len(pending) - examined)
-    if lock_contended or not discovery_complete:
+    orphan_work_remains = (
+        not orphan_outcome.directory_complete or orphan_outcome.pending_candidates > 0
+    )
+    if lock_contended or not discovery_complete or orphan_work_remains:
         remaining_due = max(1, remaining_due)
+    if orphan_work_remains and blocker is CleanupBlocker.NONE:
+        blocker = CleanupBlocker.RECORD_BUDGET
     records_inspected, replay_bytes, transitions, cursor_writes = work_counters()
     if deleted:
         progress = CleanupProgress.RETIRED
@@ -918,6 +941,8 @@ def run_bounded_sweep(
     elif cursor_repair and cursor_writes:
         progress = CleanupProgress.CURSOR_REPAIRED
     elif cursor_writes:
+        progress = CleanupProgress.CURSOR_ADVANCED
+    elif not orphan_outcome.directory_complete:
         progress = CleanupProgress.CURSOR_ADVANCED
     else:
         progress = CleanupProgress.NONE

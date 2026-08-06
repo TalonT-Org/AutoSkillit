@@ -14,10 +14,12 @@ import os
 import subprocess
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+import autoskillit.cli._capture_store as capture_store_command
 from autoskillit.cli._capture_store import run_capture_store
 from autoskillit.cli.doctor._doctor_capture_store import _check_capture_store_stats
 from autoskillit.hooks._capture._authority import open_capture_root, open_project_anchor
@@ -117,6 +119,55 @@ def test_capture_store_reclaim_drains_ledger_and_orphan_backlog(
     final_check = _check_capture_store_stats(project)
     assert "live=0" in final_check.message
     assert "unledgered_aged=0" in final_check.message
+
+
+def test_capture_store_reclaim_waits_for_complete_orphan_scan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    capture_dir = _seed_store_with_backlog_and_orphans(project)
+    monkeypatch.chdir(project)
+    monkeypatch.setattr(
+        capture_store_command,
+        "RECLAIM_BUDGET",
+        replace(capture_store_command.RECLAIM_BUDGET, max_directory_entries_scanned=1),
+    )
+
+    capture_store_command.run_capture_store(reclaim=True)
+
+    assert "converged" in capsys.readouterr().out
+    assert list(capture_dir.glob("shell_*.log")) == []
+
+
+def test_capture_store_reclaim_retries_capacity_refusal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    capture_dir = _seed_store_with_backlog_and_orphans(project)
+    monkeypatch.chdir(project)
+    real_admit = CaptureLifecycleStore._admit_new_record
+    refused_once = False
+
+    def refuse_first_orphan(self, record, records, compaction_epoch, size):
+        nonlocal refused_once
+        if not refused_once and record.legacy_cleanup is not None:
+            refused_once = True
+            return False
+        return real_admit(self, record, records, compaction_epoch, size)
+
+    monkeypatch.setattr(CaptureLifecycleStore, "_admit_new_record", refuse_first_orphan)
+
+    capture_store_command.run_capture_store(reclaim=True)
+
+    assert refused_once
+    assert "converged" in capsys.readouterr().out
+    assert list(capture_dir.glob("shell_*.log")) == []
 
 
 def test_capture_store_stats_does_not_hang_on_lock_contention(tmp_path: Path) -> None:

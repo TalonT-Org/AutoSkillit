@@ -251,11 +251,10 @@ def scan_for_orphans(
     window = names[start : start + limit]
     directory_complete = start + len(window) >= len(names)
     candidates = tuple(name for name in window if _adoptable(root_fd, name, tracked, now))
-    if window:
-        if directory_complete:
-            clear_cursor(root_fd)
-        else:
-            write_cursor(root_fd, last_name=window[-1])
+    if directory_complete:
+        clear_cursor(root_fd)
+    elif window:
+        write_cursor(root_fd, last_name=window[-1])
     return OrphanScanResult(
         candidates=candidates,
         examined=len(window),

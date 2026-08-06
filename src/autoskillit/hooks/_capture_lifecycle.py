@@ -1084,7 +1084,7 @@ class CaptureLifecycleStore:
             self._sweep_transitions += 1
         return True
 
-    def _scan_and_adopt_orphans(self) -> tuple[int, int]:
+    def _scan_and_adopt_orphans(self) -> _capture_sweep.OrphanAdoptionOutcome:
         return _capture_sweep.scan_and_adopt_orphans(self, lifecycle_error=CaptureLifecycleError)
 
     def sweep(

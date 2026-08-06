@@ -25,6 +25,7 @@ import pytest
 import autoskillit.hooks._capture._capacity as capture_capacity
 import autoskillit.hooks._capture._orphan_scan as orphan_scan
 import autoskillit.hooks._capture._reconcile as capture_reconcile
+import autoskillit.hooks._capture._sweep as capture_sweep
 import autoskillit.hooks._capture._sweep_cursor as sweep_cursor
 import autoskillit.hooks._capture_lifecycle as capture_lifecycle
 from autoskillit.hooks._capture._failure_policy import (
@@ -2989,6 +2990,76 @@ def test_orphan_scan_examines_at_most_the_configured_batch_and_cursor_resumes(
             assert invocations < 10, "cursor did not converge within a reasonable invocation count"
 
         assert seen == set(names)
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_orphan_scan_clears_complete_cursor_after_directory_shrinks(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, _store = _open_store(project, clock)
+    try:
+        orphan_scan.write_cursor(root.fd, last_name="shell_ffffffffffffffff.log")
+
+        completed = orphan_scan.scan_for_orphans(
+            root.fd,
+            frozenset(),
+            SweepBudgetSpec(max_directory_entries_scanned=8),
+            now=clock.wall(),
+        )
+
+        assert completed.directory_complete
+        assert not (_capture_dir(project) / orphan_scan.CURSOR_NAME).exists()
+
+        name = "shell_0000000000000001.log"
+        fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=root.fd)
+        os.close(fd)
+        old = clock.wall() - orphan_scan.ADOPTION_AGE_SECONDS - 10
+        os.utime(name, (old, old), dir_fd=root.fd)
+
+        resumed = orphan_scan.scan_for_orphans(
+            root.fd,
+            frozenset(),
+            SweepBudgetSpec(max_directory_entries_scanned=8),
+            now=clock.wall(),
+        )
+        assert resumed.candidates == (name,)
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_orphan_adoption_rechecks_age_under_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    try:
+        name = "shell_0000000000000001.log"
+        fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=root.fd)
+        os.close(fd)
+        old = clock.wall() - orphan_scan.ADOPTION_AGE_SECONDS - 10
+        os.utime(name, (old, old), dir_fd=root.fd)
+        real_adopt = capture_sweep.adopt_orphan
+
+        def refresh_before_adoption(*args, **kwargs) -> bool:
+            os.utime(name, (clock.wall(), clock.wall()), dir_fd=root.fd)
+            return real_adopt(*args, **kwargs)
+
+        monkeypatch.setattr(capture_sweep, "adopt_orphan", refresh_before_adoption)
+
+        outcome = store.sweep(
+            SweepBudgetSpec(max_directory_entries_scanned=8, max_duration_seconds=5.0)
+        )
+
+        assert outcome.transitions == 0
+        with store._locked():
+            records, _epoch, _size = store._load_locked()
+        assert records.get("0" * 15 + "1") is None
+        assert (_capture_dir(project) / name).exists()
     finally:
         root.close()
         anchor.close()

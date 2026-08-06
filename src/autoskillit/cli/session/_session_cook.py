@@ -24,7 +24,7 @@ from autoskillit.core import (
 if TYPE_CHECKING:
     from autoskillit.cli.session._session_startup_trace import StartupTrace
     from autoskillit.cli.session.pty._observer import PtyObserver
-    from autoskillit.core import CodingAgentBackend, PluginLoadMode
+    from autoskillit.core import CodingAgentBackend
     from autoskillit.workspace import (
         EffectiveSkillCatalog,
         SkillProjectionContext,
@@ -37,17 +37,13 @@ def _build_cook_projection_context(
     session_catalog: EffectiveSkillCatalog,
     project_dir: Path,
     backend: CodingAgentBackend,
-    load_mode: PluginLoadMode,
 ) -> SkillProjectionContext:
     """Bind projected scripts to a root that outlives the cook session."""
     from autoskillit.cli._plugin_artifact import current_installed_plugin_root
-    from autoskillit.core import PluginLoadMode, pkg_root
+    from autoskillit.core import pkg_root
 
-    durable_scripts_root = (
-        current_installed_plugin_root()
-        if load_mode is PluginLoadMode.IMPLICIT_INSTALLED
-        else pkg_root()
-    )
+    installed_root = current_installed_plugin_root()
+    durable_scripts_root = installed_root if installed_root.is_dir() else pkg_root()
     return skills_provider.catalog_projection_context(
         session_catalog,
         project_dir,
@@ -249,7 +245,6 @@ def cook(
         session_catalog,
         project_dir,
         backend,
-        load_mode,
     )
     session_mgr = DefaultSessionSkillManager(
         skills_provider,

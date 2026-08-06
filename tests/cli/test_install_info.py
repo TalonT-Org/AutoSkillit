@@ -510,6 +510,38 @@ def test_upgrade_command_arbitrary_dev_revision(revision: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_detect_install_prefers_absolute_invocation_identity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    payload = json.dumps(
+        {
+            "url": "https://github.com/TalonT-Org/AutoSkillit.git",
+            "vcs_info": {
+                "vcs": "git",
+                "requested_revision": "stable",
+                "commit_id": "abc123def456",
+            },
+        }
+    )
+    monkeypatch.setattr(
+        "importlib.metadata.Distribution.from_name",
+        lambda _name: _fake_dist(payload),
+    )
+    invoked = tmp_path / "invoked" / "autoskillit"
+    invoked.parent.mkdir()
+    invoked.write_text("#!/bin/sh\n", encoding="utf-8")
+    path_entrypoint = tmp_path / "path" / "autoskillit"
+    path_entrypoint.parent.mkdir()
+    path_entrypoint.write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr("sys.argv", [str(invoked)])
+    monkeypatch.setenv("PATH", str(path_entrypoint.parent))
+
+    info = detect_install()
+
+    assert info.entrypoint == invoked
+
+
 def test_detect_install_populates_entrypoint_from_ambient_path(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

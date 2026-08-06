@@ -2,10 +2,9 @@
 
 Mostly pure — no network, no subprocess. ``detect_install()`` does read-only
 local I/O: ``direct_url.json`` package metadata (via ``parse_direct_url()``)
-and a PATH lookup for the running CLI's own entrypoint (via
-``shutil.which()``, resolved pre-pivot for ``InstallInfo.entrypoint`` — see
-its docstring). Every other function in this module is pure, deriving
-everything from an already-constructed ``InstallInfo``.
+and pre-pivot resolution of the running CLI's own entrypoint. Every other
+function in this module is pure, deriving everything from an
+already-constructed ``InstallInfo``.
 """
 
 from __future__ import annotations
@@ -49,10 +48,10 @@ class InstallInfo:
     entrypoint: Path | None = None
     """The running autoskillit CLI's own executable, resolved pre-pivot.
 
-    Populated by ``detect_install()`` via ``shutil.which("autoskillit")``
-    against the ambient (pre-maintenance, richest-PATH) environment — safe
-    because it runs before any update subprocess. For a ``uv tool``
-    install this resolves to the uv tool shim (typically
+    Populated by ``detect_install()`` from the executable-shaped invocation
+    path when available, with an ambient ``PATH`` lookup as fallback. This
+    runs before any update subprocess. For a ``uv tool`` install it resolves
+    to the uv tool shim (typically
     ``~/.local/bin/autoskillit``), which ``uv`` rewrites in place during an
     upgrade rather than recreating, so the path survives a venv rebuild.
     This is exactly the executable a post-pivot version probe
@@ -65,7 +64,17 @@ class InstallInfo:
 
 
 def _resolve_entrypoint() -> Path | None:
-    """Resolve the running autoskillit CLI's entrypoint against the ambient PATH."""
+    """Resolve invocation identity first, with ambient PATH as fallback."""
+    invoked = Path(sys.argv[0])
+    if invoked.name in {"autoskillit", "autoskillit.exe"}:
+        if invoked.is_absolute():
+            candidate = invoked
+        elif invoked.parent != Path("."):
+            candidate = invoked.absolute()
+        else:
+            candidate = None
+        if candidate is not None and candidate.is_file():
+            return candidate
     resolved = shutil.which("autoskillit")
     return Path(resolved) if resolved is not None else None
 

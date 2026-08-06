@@ -391,26 +391,28 @@ def test_catalog_projection_context_defaults_to_pkg_root_when_unspecified(
 
 
 @pytest.mark.parametrize(
-    ("load_mode", "expected_kind"),
+    ("installed_exists", "expected_kind"),
     [
-        ("implicit", "installed"),
-        ("explicit", "source"),
+        (True, "installed"),
+        (False, "source"),
     ],
 )
 def test_cook_session_passes_behavioral_durable_root_to_projection(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    load_mode: str,
+    installed_exists: bool,
     expected_kind: str,
 ) -> None:
     from types import SimpleNamespace
 
     from autoskillit.cli.session._session_cook import _build_cook_projection_context
-    from autoskillit.core import PluginLoadMode, SkillExecutionRole
+    from autoskillit.core import SkillExecutionRole
     from autoskillit.workspace import EffectiveSkillCatalog, SkillsDirectoryProvider
 
     installed_root = tmp_path / "installed"
     source_root = tmp_path / "source"
+    if installed_exists:
+        installed_root.mkdir()
     monkeypatch.setattr(
         "autoskillit.cli._plugin_artifact.current_installed_plugin_root",
         lambda: installed_root,
@@ -422,19 +424,12 @@ def test_cook_session_passes_behavioral_durable_root_to_projection(
         default_base_branch="develop",
     )
     catalog = EffectiveSkillCatalog(skills=(), execution_role=SkillExecutionRole.SESSION)
-    selected_mode = (
-        PluginLoadMode.IMPLICIT_INSTALLED
-        if load_mode == "implicit"
-        else PluginLoadMode.EXPLICIT_PLUGIN_DIR
-    )
-
     backend: Any = SimpleNamespace(conventions=None)
     context = _build_cook_projection_context(
         provider,
         catalog,
         tmp_path,
         backend,
-        selected_mode,
     )
 
     expected_root = installed_root if expected_kind == "installed" else source_root

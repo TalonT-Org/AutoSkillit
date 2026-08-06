@@ -2006,3 +2006,47 @@ def test_phase_d_inventory_and_architecture_recipe_step_pins_are_explicit() -> N
         for vectors in _PHASE_D_INVENTORY.values()
         for _, disposition, _, _, _ in vectors
     } == {"migrated", "retained"}
+
+
+def test_migration_completeness_census_total_vector_count() -> None:
+    """No skill carries the retired `exploration_vectors` frontmatter key, and
+    every `exploration.yaml` sidecar under `skills/` and `skills_extended/`
+    sums to the reviewed migration census: 264 migrated + 37 retained = 301."""
+    skill_roots = (pkg_root() / "skills", pkg_root() / "skills_extended")
+    skill_md_paths = tuple(
+        sorted(path for root in skill_roots for path in root.glob("*/SKILL.md"))
+    )
+    assert skill_md_paths
+
+    migrated_count = 0
+    retained_count = 0
+    sidecar_count = 0
+
+    for skill_md_path in skill_md_paths:
+        frontmatter_text = skill_md_path.read_text(encoding="utf-8").split("---", 2)[1]
+        frontmatter = load_yaml(frontmatter_text)
+        assert isinstance(frontmatter, dict)
+        assert "exploration_vectors" not in frontmatter, skill_md_path
+
+        source = (
+            SkillSource.BUNDLED
+            if skill_md_path.parents[1].name == "skills"
+            else SkillSource.BUNDLED_EXTENDED
+        )
+        info = _skill_info_from_frontmatter(skill_md_path.parent.name, source, skill_md_path)
+        assert info.invalid_reason is None, (skill_md_path, info.invalid_reason)
+
+        if (skill_md_path.parent / "exploration.yaml").is_file():
+            sidecar_count += 1
+        for vector in info.exploration_vectors:
+            if vector.disposition is ExplorationVectorDisposition.MIGRATED:
+                migrated_count += 1
+            elif vector.disposition is ExplorationVectorDisposition.RETAINED:
+                retained_count += 1
+            else:
+                pytest.fail(f"unexpected disposition {vector.disposition} in {skill_md_path}")
+
+    assert sidecar_count > 0
+    assert migrated_count == 264
+    assert retained_count == 37
+    assert migrated_count + retained_count == 301

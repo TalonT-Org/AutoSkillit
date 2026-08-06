@@ -1457,10 +1457,10 @@ def test_check_publication_obligation_warning_when_obligation_pending(tmp_path: 
     from autoskillit.core import Severity
     from autoskillit.workspace import update_obligation_expected_version, write_obligation
 
-    write_obligation(
+    obligation = write_obligation(
         tmp_path, previous_version="1.0.0", originating_phase="upgrade-subprocess-gate"
     )
-    update_obligation_expected_version(tmp_path, expected_version="1.1.0")
+    update_obligation_expected_version(tmp_path, expected=obligation, expected_version="1.1.0")
 
     result = _check_publication_obligation(home=tmp_path)
     assert result.severity == Severity.WARNING

@@ -159,5 +159,9 @@ def attempt_obligation_repair(
                 ),
             )
 
-    clear_obligation(home)
+    if not clear_obligation(home, expected=obligation):
+        return ObligationRepairResult(
+            outcome=ObligationRepairOutcome.FAILED,
+            findings=("Publication succeeded but its obligation could not be cleared.",),
+        )
     return ObligationRepairResult(outcome=ObligationRepairOutcome.CLEARED)

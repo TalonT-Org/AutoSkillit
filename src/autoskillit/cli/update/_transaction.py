@@ -40,6 +40,7 @@ from autoskillit.core import (
 from autoskillit.workspace import (
     InstallStateLeaseMode,
     InstallStateSpec,
+    PublicationObligation,
     clear_obligation,
     update_obligation_expected_version,
     verify_installed_plugin_artifact,
@@ -447,6 +448,7 @@ def run_update_transaction(
                 f"Refusing to run update maintenance inside a git repository: {working_dir}",
             )
         progress.enter(UpdateTransactionPhase.UPGRADE_SUBPROCESS_GATE)
+        obligation: PublicationObligation | None = None
         if require_registered_plugin:
             # Written only here — every failure/deferral strictly before this
             # point mutates nothing and must leave no obligation; every
@@ -455,7 +457,7 @@ def run_update_transaction(
             # subprocess launches: nothing is yet mutated, so refusing to
             # proceed without the breadcrumb on disk is safe.
             try:
-                write_obligation(
+                obligation = write_obligation(
                     resolved_home,
                     previous_version=current_version,
                     originating_phase=UpdateTransactionPhase.UPGRADE_SUBPROCESS_GATE.value,
@@ -514,7 +516,14 @@ def run_update_transaction(
             # Post-pivot journal touch; update_obligation_expected_version()
             # never raises — a failed backfill leaves expected_version None,
             # which downstream repair code already treats as "unknown".
-            update_obligation_expected_version(resolved_home, expected_version=expected_version)
+            assert obligation is not None
+            updated_obligation = update_obligation_expected_version(
+                resolved_home,
+                expected=obligation,
+                expected_version=expected_version,
+            )
+            if updated_obligation is not None:
+                obligation = updated_obligation
 
         request = InstallRequest(
             scope=request.scope,
@@ -572,11 +581,8 @@ def run_update_transaction(
 
         progress.enter(UpdateTransactionPhase.POST_UPDATE_ARTIFACT_VERIFICATION)
         if not require_registered_plugin:
-            # No obligation was ever written for this branch (require_registered_plugin
-            # was False at UPGRADE_SUBPROCESS_GATE) — clear_obligation() is a no-op
-            # here; called anyway so RESULT_FINALIZATION success has one uniform
-            # success-only clear point regardless of which branch reaches it.
-            clear_obligation(resolved_home)
+            # This transaction created no obligation and therefore has no
+            # authority to clear debt left by an earlier registered update.
             return progress.finish(
                 UpdateTransactionOutcome.COMPLETED,
                 expected_version=expected_version,
@@ -624,7 +630,17 @@ def run_update_transaction(
                     verified_identity=verified_identity,
                     findings=install_result.findings + verification_findings,
                 )
-            clear_obligation(resolved_home)
+            assert obligation is not None
+            if not clear_obligation(resolved_home, expected=obligation):
+                return progress.finish(
+                    UpdateTransactionOutcome.FAILED_POSTCONDITION,
+                    expected_version=expected_version,
+                    install_result=install_result,
+                    verified_identity=verified_identity,
+                    findings=install_result.findings
+                    + verification_findings
+                    + ("Publication succeeded but its obligation could not be cleared.",),
+                )
             return progress.finish(
                 UpdateTransactionOutcome.COMPLETED,
                 expected_version=expected_version,

@@ -44,6 +44,55 @@ def _publish_cache_incarnation(cache_dir: Path, version: str, *, broken: bool) -
     return version_dir
 
 
+def test_obligation_clear_uses_compare_and_delete(tmp_path: Path) -> None:
+    from autoskillit.workspace import clear_obligation, read_obligation, write_obligation
+
+    older = write_obligation(tmp_path, previous_version="1.0.0", originating_phase="older-update")
+    newer = write_obligation(tmp_path, previous_version="1.1.0", originating_phase="newer-update")
+
+    assert clear_obligation(tmp_path, expected=older) is False
+    assert read_obligation(tmp_path) == newer
+    assert clear_obligation(tmp_path, expected=newer) is True
+    assert read_obligation(tmp_path) is None
+
+
+def test_obligation_clear_failure_is_observable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from autoskillit.workspace import clear_obligation, read_obligation, write_obligation
+
+    obligation = write_obligation(tmp_path, previous_version="1.0.0", originating_phase="upgrade")
+    original_unlink = Path.unlink
+
+    def fail_obligation_unlink(path: Path, *args: object, **kwargs: object) -> None:
+        if path.name == "update_obligation.json":
+            raise PermissionError("denied")
+        original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fail_obligation_unlink)
+
+    assert clear_obligation(tmp_path, expected=obligation) is False
+    assert read_obligation(tmp_path) == obligation
+
+
+def test_empty_persisted_expected_version_degrades_to_unknown(tmp_path: Path) -> None:
+    from autoskillit.workspace import (
+        read_obligation,
+        update_obligation_expected_version,
+        write_obligation,
+    )
+
+    obligation = write_obligation(tmp_path, previous_version="1.0.0", originating_phase="upgrade")
+    updated = update_obligation_expected_version(
+        tmp_path, expected=obligation, expected_version="  "
+    )
+
+    assert updated is not None
+    persisted = read_obligation(tmp_path)
+    assert persisted is not None
+    assert persisted.expected_version is None
+
+
 # ---------------------------------------------------------------------------
 # T-C2 — failure-path postcondition contract.
 # ---------------------------------------------------------------------------
@@ -271,8 +320,10 @@ def test_t_c4_expected_version_present_uses_full_verification(tmp_path: Path) ->
     )
 
     home = tmp_path
-    write_obligation(home, previous_version="1.0.0", originating_phase="upgrade-subprocess-gate")
-    update_obligation_expected_version(home, expected_version="1.1.0")
+    obligation = write_obligation(
+        home, previous_version="1.0.0", originating_phase="upgrade-subprocess-gate"
+    )
+    update_obligation_expected_version(home, expected=obligation, expected_version="1.1.0")
 
     captured_specs: list[object] = []
 

@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from autoskillit.core import get_logger, read_versioned_json, write_versioned_json
+from autoskillit.core import ArtifactLease, get_logger, read_versioned_json, write_versioned_json
 
 __all__ = [
     "PublicationObligation",
@@ -45,6 +45,10 @@ _OBLIGATION_SCHEMA_VERSION = 1
 
 def _obligation_path(home: Path) -> Path:
     return home / ".autoskillit" / _OBLIGATION_FILENAME
+
+
+def _obligation_lock_path(home: Path) -> Path:
+    return home / ".autoskillit" / f"{_OBLIGATION_FILENAME}.lock"
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,7 +70,9 @@ class PublicationObligation:
     originating_phase: str
 
 
-def write_obligation(home: Path, *, previous_version: str, originating_phase: str) -> None:
+def write_obligation(
+    home: Path, *, previous_version: str, originating_phase: str
+) -> PublicationObligation:
     """Persist that publication is owed, before the irreversible mutation.
 
     Called once, at entry of ``UPGRADE_SUBPROCESS_GATE`` — immediately
@@ -86,10 +92,17 @@ def write_obligation(home: Path, *, previous_version: str, originating_phase: st
         written_at=datetime.now(UTC).isoformat(),
         originating_phase=originating_phase,
     )
-    _write(home, record)
+    with ArtifactLease.acquire_exclusive(_obligation_lock_path(home), blocking=True):
+        _write(home, record)
+    return record
 
 
-def update_obligation_expected_version(home: Path, *, expected_version: str) -> None:
+def update_obligation_expected_version(
+    home: Path,
+    *,
+    expected: PublicationObligation,
+    expected_version: str,
+) -> PublicationObligation | None:
     """Backfill ``expected_version`` once the post-pivot probe succeeds.
 
     A post-pivot journal touch that must never raise: failure to backfill
@@ -97,20 +110,21 @@ def update_obligation_expected_version(home: Path, *, expected_version: str) -> 
     as "version unknown" — a degraded-but-safe state, not a lost record.
     """
     try:
-        current = read_obligation(home)
-        if current is None:
-            return
-        _write(
-            home,
-            PublicationObligation(
+        with ArtifactLease.acquire_exclusive(_obligation_lock_path(home), blocking=True):
+            current = read_obligation(home)
+            if current != expected:
+                return None
+            updated = PublicationObligation(
                 previous_version=current.previous_version,
                 expected_version=expected_version,
                 written_at=current.written_at,
                 originating_phase=current.originating_phase,
-            ),
-        )
+            )
+            _write(home, updated)
+            return updated
     except Exception:
         logger.warning("update_obligation_backfill_failed", exc_info=True)
+        return None
 
 
 def read_obligation(home: Path) -> PublicationObligation | None:
@@ -137,16 +151,21 @@ def read_obligation(home: Path) -> PublicationObligation | None:
             originating_phase="unknown",
         )
     expected_version = data.get("expected_version")
+    normalized_expected_version = (
+        expected_version.strip()
+        if isinstance(expected_version, str) and expected_version.strip()
+        else None
+    )
     return PublicationObligation(
         previous_version=str(data.get("previous_version") or "unknown"),
-        expected_version=(str(expected_version) if isinstance(expected_version, str) else None),
+        expected_version=normalized_expected_version,
         written_at=str(data.get("written_at") or "unknown"),
         originating_phase=str(data.get("originating_phase") or "unknown"),
     )
 
 
-def clear_obligation(home: Path) -> None:
-    """Clear the obligation after verified publication. Never raises.
+def clear_obligation(home: Path, *, expected: PublicationObligation) -> bool:
+    """Compare-and-delete an obligation after verified publication. Never raises.
 
     Success-only: called from exactly two named sites — the update
     transaction's ``RESULT_FINALIZATION`` (child reported COMPLETED and
@@ -155,9 +174,14 @@ def clear_obligation(home: Path) -> None:
     clears it.
     """
     try:
-        _obligation_path(home).unlink(missing_ok=True)
+        with ArtifactLease.acquire_exclusive(_obligation_lock_path(home), blocking=True):
+            if read_obligation(home) != expected:
+                return False
+            _obligation_path(home).unlink(missing_ok=True)
+            return True
     except OSError:
         logger.warning("update_obligation_clear_failed", exc_info=True)
+        return False
 
 
 def _write(home: Path, record: PublicationObligation) -> None:

@@ -611,6 +611,33 @@ def test_metadata_must_advance_before_install(
     assert result.irreversible_pivot_crossed is True
 
 
+def test_unregistered_success_preserves_preexisting_obligation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from autoskillit.workspace import read_obligation, write_obligation
+
+    _prepare(monkeypatch)
+    existing = write_obligation(
+        tmp_path,
+        previous_version="0.9.0",
+        originating_phase="earlier-registered-update",
+    )
+
+    def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        return subprocess.CompletedProcess(cmd, 0)
+
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: "1.0.0",
+        fresh_version_prober=lambda _info, _env, _runner: "1.1.0",
+        process_runner=runner,
+    )
+
+    assert result.outcome is UpdateTransactionOutcome.COMPLETED
+    assert read_obligation(tmp_path) == existing
+
+
 @pytest.mark.parametrize(
     ("status", "expected", "expected_install"),
     [

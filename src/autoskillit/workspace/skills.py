@@ -20,6 +20,7 @@ from autoskillit.core import (
     FeatureLifecycle,
     SkillContractError,
     SkillExecutionRole,
+    SkillInvalidityAuthority,
     SkillInvalidityKind,
     SkillResolver,
     SkillSemanticPlan,
@@ -84,6 +85,11 @@ def invalidity_hints(invalidities: Iterable[SkillInvalidity]) -> tuple[str, ...]
         SKILL_CONTRACT_REMEDIATIONS[kind].hint
         for kind in dict.fromkeys(item.kind for item in invalidities)
     )
+
+
+def render_skill_invalidities(invalidities: Iterable[SkillInvalidityAuthority]) -> str:
+    """Render typed skill invalidities for operator-facing diagnostics."""
+    return "; ".join(item.detail for item in invalidities)
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,13 +163,6 @@ class SkillInfo:
         return self.canonical_content.encode("utf-8")
 
     @property
-    def invalid_reason(self) -> str | None:
-        """Byte-identical to the accumulated string this field used to be."""
-        if not self.invalidities:
-            return None
-        return "; ".join(item.detail for item in self.invalidities)
-
-    @property
     def source_identity(self) -> SkillSourceIdentity:
         """Return the validated effective source identity."""
         assert self.source_ref is not None
@@ -185,14 +184,15 @@ class SkillCatalogEntry:
     canonical_content: str
     canonical_digest: str
     frontmatter: SkillFrontmatterParseResult
-    invalid_reason: str | None = None
+    invalidities: tuple[SkillInvalidity, ...] = ()
 
     @classmethod
     def from_skill_info(cls, skill: SkillInfo) -> SkillCatalogEntry:
         """Remove private source paths while preserving the parsed contract."""
-        if skill.invalid_reason is not None:
+        if skill.invalidities:
             raise SkillContractError(
-                f"invalid contract for {skill.name!r}: {skill.invalid_reason}"
+                f"invalid contract for {skill.name!r}: "
+                f"{render_skill_invalidities(skill.invalidities)}"
             )
         if skill.execution_role is None:
             raise SkillContractError(f"skill {skill.name!r} has no valid execution role")
@@ -262,9 +262,10 @@ class EffectiveSkillCatalog:
             MappingProxyType(dict(self.namespace_sources)),
         )
         for skill in self.skills:
-            if skill.invalid_reason is not None:
+            if skill.invalidities:
                 raise SkillContractError(
-                    f"invalid catalog contract for {skill.name!r}: {skill.invalid_reason}"
+                    f"invalid catalog contract for {skill.name!r}: "
+                    f"{render_skill_invalidities(skill.invalidities)}"
                 )
             if skill.execution_role is not self.execution_role:
                 raise SkillContractError(
@@ -291,13 +292,17 @@ class EffectiveSkillInvocation:
             raise SkillContractError("effective invocation closure contains duplicate members")
         for member in self.closure:
             if (
-                member.invalid_reason is not None
+                member.invalidities
                 or member.frontmatter is None
                 or not member.frontmatter.is_valid
             ):
+                reason = (
+                    render_skill_invalidities(member.invalidities)
+                    if member.invalidities
+                    else "missing parsed frontmatter"
+                )
                 raise SkillContractError(
-                    f"invalid effective invocation contract for {member.name!r}: "
-                    f"{member.invalid_reason or 'missing parsed frontmatter'}"
+                    f"invalid effective invocation contract for {member.name!r}: {reason}"
                 )
             if member.execution_role is not self.execution_role:
                 actual = (
@@ -355,7 +360,7 @@ def _compute_skill_closure(
         info = skills.get(name)
         if (
             info is None
-            or info.invalid_reason is not None
+            or info.invalidities
             or info.execution_role is not SkillExecutionRole.SESSION
         ):
             continue
@@ -783,13 +788,13 @@ class DefaultSkillResolver:
                         precedence=precedence,
                     ),
                 )
-                if candidate.invalid_reason is None:
+                if not candidate.invalidities:
                     return candidate
                 logger.warning(
                     "project_local_skill_rejected",
                     skill=name,
                     path=str(skill_path),
-                    reason=candidate.invalid_reason,
+                    reason=render_skill_invalidities(candidate.invalidities),
                     hints=invalidity_hints(candidate.invalidities),
                 )
                 if first_invalid is None:
@@ -832,12 +837,12 @@ class DefaultSkillResolver:
                         precedence=precedence,
                     ),
                 )
-                if candidate.invalid_reason is not None:
+                if candidate.invalidities:
                     logger.warning(
                         "project_local_skill_rejected",
                         skill=name,
                         path=str(skill_path),
-                        reason=candidate.invalid_reason,
+                        reason=render_skill_invalidities(candidate.invalidities),
                         hints=invalidity_hints(candidate.invalidities),
                     )
                 return candidate
@@ -883,12 +888,12 @@ class DefaultSkillResolver:
                             precedence=precedence,
                         ),
                     )
-                    if candidate.invalid_reason is not None:
+                    if candidate.invalidities:
                         logger.warning(
                             "project_local_skill_rejected",
                             skill=entry.name,
                             path=str(skill_path),
-                            reason=candidate.invalid_reason,
+                            reason=render_skill_invalidities(candidate.invalidities),
                             hints=invalidity_hints(candidate.invalidities),
                         )
                         pending_exclusions.append(candidate)
@@ -936,9 +941,12 @@ class DefaultSkillResolver:
         # Invalid project-local candidates never reach this point — they were
         # already diverted into `exclusions` above. Any survivor here is a
         # bundled/extended packaging bug, guarded at merge time (T7).
-        invalid = tuple(skill for skill in effective_skills if skill.invalid_reason is not None)
+        invalid = tuple(skill for skill in effective_skills if skill.invalidities)
         if invalid:
-            details = "; ".join(f"{skill.name!r}: {skill.invalid_reason}" for skill in invalid)
+            details = "; ".join(
+                f"{skill.name!r}: {render_skill_invalidities(skill.invalidities)}"
+                for skill in invalid
+            )
             raise SkillContractError(
                 f"bundled skill catalog contains invalid contracts (packaging bug): {details}"
             )
@@ -979,7 +987,7 @@ class DefaultSkillResolver:
                 skill
                 for name in sorted(_INTERNAL_SKILLS)
                 if (skill := self.resolve_effective(name, normalized_root)) is not None
-                and skill.invalid_reason is None
+                and not skill.invalidities
                 and skill.execution_role is execution_role
                 and _skill_is_visible(
                     skill,
@@ -1043,9 +1051,10 @@ class DefaultSkillResolver:
             return member
 
         def validate_member(skill: SkillInfo) -> None:
-            if skill.invalid_reason is not None:
+            if skill.invalidities:
                 raise SkillContractError(
-                    f"invalid contract for {skill.name!r}: {skill.invalid_reason}"
+                    f"invalid contract for {skill.name!r}: "
+                    f"{render_skill_invalidities(skill.invalidities)}"
                 )
             if skill.execution_role is not execution_role:
                 actual = (
@@ -1150,7 +1159,7 @@ def validate_skill_tier_roles(
                 raise SkillContractError(
                     f"configured {tier_name} skill {skill_name!r} was not found"
                 )
-            if effective.invalid_reason is not None:
+            if effective.invalidities:
                 # Only fires now for names whose *every* implementation is
                 # invalid — resolve_effective already fell through to a valid
                 # bundled twin or lower-precedence local copy for every other
@@ -1158,7 +1167,7 @@ def validate_skill_tier_roles(
                 # (the overwhelmingly common case) supplied a real SkillInfo.
                 message = (
                     f"configured {tier_name} skill {skill_name!r} is invalid: "
-                    f"{effective.invalid_reason}"
+                    f"{render_skill_invalidities(effective.invalidities)}"
                 )
                 if isinstance(effective, SkillInfo):
                     kinds = sorted({item.kind.value for item in effective.invalidities})

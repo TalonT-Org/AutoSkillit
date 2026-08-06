@@ -119,6 +119,7 @@ from autoskillit.workspace.skills import (
     detect_project_local_overrides,
     invalidity_hints,
     override_names,
+    render_skill_invalidities,
     validate_skill_tier_roles,
 )
 from autoskillit.workspace.worktree import (
@@ -197,6 +198,7 @@ __all__ = [
     "detect_project_local_overrides",
     "invalidity_hints",
     "override_names",
+    "render_skill_invalidities",
     "ProjectLocalOverride",
     "clone_repo",
     "compile_session_skill_catalog",

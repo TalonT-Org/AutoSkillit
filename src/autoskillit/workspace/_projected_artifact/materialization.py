@@ -36,7 +36,7 @@ from autoskillit.core import (
 )
 from autoskillit.workspace._projection_cache import is_projected_asset
 from autoskillit.workspace.skill_format import parse_frontmatter_content
-from autoskillit.workspace.skills import SkillInfo
+from autoskillit.workspace.skills import SkillInfo, render_skill_invalidities
 
 _SKILL_NAMESPACE_REF_RE = re.compile(r"/autoskillit:([a-z][a-z0-9-]*)")
 
@@ -171,9 +171,10 @@ def project_agent_skill_document(
     context: SkillProjectionContext,
 ) -> AgentSkillDocument:
     """Remove machine authority fields while preserving public YAML and body."""
-    if skill_info.invalid_reason is not None:
+    if skill_info.invalidities:
         raise SkillContractError(
-            f"cannot project invalid contract for {skill_info.name!r}: {skill_info.invalid_reason}"
+            f"cannot project invalid contract for {skill_info.name!r}: "
+            f"{render_skill_invalidities(skill_info.invalidities)}"
         )
     parsed = skill_info.frontmatter
     if parsed is None:

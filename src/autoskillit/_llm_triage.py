@@ -18,6 +18,7 @@ from autoskillit.core import (
     CodingAgentBackend,
     OutputFormat,
     SkillExecutionRole,
+    SkillInvalidityKind,
     SubprocessResult,
     TerminationReason,
     build_agent_env,
@@ -85,8 +86,8 @@ async def triage_staleness(
             skill_info = resolver.resolve_local_candidate(item.skill, effective_project_root)
             if (
                 skill_info is not None
-                and skill_info.invalid_reason is not None
-                and skill_info.invalid_reason.startswith("invalid frontmatter:")
+                and skill_info.invalidities
+                and skill_info.invalidities[0].kind is SkillInvalidityKind.FRONTMATTER_PARSE
             ):
                 synthetic_content = (
                     "---\n"
@@ -103,11 +104,7 @@ async def triage_staleness(
                     execution_role=SkillExecutionRole.SESSION,
                     invalidities=(),
                 )
-            if (
-                skill_info is None
-                or skill_info.invalid_reason is not None
-                or skill_info.execution_role is None
-            ):
+            if skill_info is None or skill_info.invalidities or skill_info.execution_role is None:
                 continue
             try:
                 entry = SkillCatalogEntry.from_skill_info(skill_info)

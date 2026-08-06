@@ -80,7 +80,7 @@ class TestResolvedNamespaceMatchesSkillLocation:
 
     def test_invalid_project_override_renders_as_unresolved(self, tmp_path: Path) -> None:
         """T12d: an invalid project-local override renders as unresolved
-        (no new imports on this IL-0 path — only the invalid_reason field
+        (no new imports on this IL-0 path — only the typed invalidities field
         already visible on the Protocol) instead of resolving to a
         possibly-wrong namespace.
 

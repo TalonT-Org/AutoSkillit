@@ -145,11 +145,13 @@ def check_contract_staleness(
                     "check_staleness called without effective_skills_dir or resolver"
                 )
             info = _resolver.resolve_effective(skill_name, project_root)
-            if info is not None and info.invalid_reason is not None:
+            if info is not None and info.invalidities:
+                from autoskillit.workspace import render_skill_invalidities
+
                 logger.warning(
                     "skill_staleness_check_skipped_invalid_candidate",
                     skill=skill_name,
-                    reason=info.invalid_reason,
+                    reason=render_skill_invalidities(info.invalidities),
                 )
                 info = None
             current_hash = (

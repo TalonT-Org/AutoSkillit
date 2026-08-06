@@ -311,7 +311,7 @@ def test_project_local_rewrite_reclassifies_with_process_cache(tmp_path, monkeyp
     first = resolver.resolve_effective("cache-rewrite-target", project)
 
     assert first is not None
-    assert first.invalid_reason is None
+    assert not first.invalidities
     first_evidence = capability_module.classify_skill_capability_evidence(
         first.canonical_content,
         first.name,
@@ -339,7 +339,7 @@ def test_project_local_rewrite_reclassifies_with_process_cache(tmp_path, monkeyp
     )
     assert second_evidence[0].source == "Call `test_check()` for the second sentinel."
     assert second_evidence[0].source_span == (7, 7)
-    assert second.invalid_reason is None
+    assert not second.invalidities
     assert scan_keys == [
         (first.canonical_content, "cache-rewrite-target"),
         (second.canonical_content, "cache-rewrite-target"),

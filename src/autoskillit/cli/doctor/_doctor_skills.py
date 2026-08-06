@@ -13,6 +13,7 @@ from autoskillit.core import (
 )
 from autoskillit.workspace import (
     DefaultSkillResolver,
+    render_skill_invalidities,
     validate_skill_capability_authenticity,
 )
 
@@ -26,7 +27,7 @@ def _check_skill_capability_authenticity(
     skill_resolver = resolver or DefaultSkillResolver()
     results: list[DoctorResult] = []
     for skill in skill_resolver.list_all():
-        diagnostics = [skill.invalid_reason] if skill.invalid_reason is not None else []
+        diagnostics = [render_skill_invalidities(skill.invalidities)] if skill.invalidities else []
         if skill.execution_role is None:
             diagnostics.append("execution role is missing or invalid")
         else:

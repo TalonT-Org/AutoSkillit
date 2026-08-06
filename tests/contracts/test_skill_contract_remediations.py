@@ -24,7 +24,10 @@ from autoskillit.core import (
     SkillSourceRef,
 )
 from autoskillit.migration.engine import MigrationFile, SkillMigrationAdapter
-from autoskillit.workspace import validate_skill_capability_authenticity
+from autoskillit.workspace import (
+    render_skill_invalidities,
+    validate_skill_capability_authenticity,
+)
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
     SkillInfo,
@@ -50,8 +53,11 @@ def test_every_bundled_and_repo_local_skill_validates_cleanly() -> None:
     offenders: list[str] = []
 
     for skill in resolver.list_all():
-        if skill.invalid_reason is not None:
-            offenders.append(f"bundled: {skill.name} ({skill.path}): {skill.invalid_reason}")
+        if skill.invalidities:
+            offenders.append(
+                f"bundled: {skill.name} ({skill.path}): "
+                f"{render_skill_invalidities(skill.invalidities)}"
+            )
 
     repo_local_dir = _REPO_ROOT / ".claude" / "skills"
     if repo_local_dir.is_dir():
@@ -69,8 +75,11 @@ def test_every_bundled_and_repo_local_skill_validates_cleanly() -> None:
                     skill_path=skill_md,
                 ),
             )
-            if info.invalid_reason is not None:
-                offenders.append(f"repo-local: {info.name} ({info.path}): {info.invalid_reason}")
+            if info.invalidities:
+                offenders.append(
+                    f"repo-local: {info.name} ({info.path}): "
+                    f"{render_skill_invalidities(info.invalidities)}"
+                )
 
     assert not offenders, "Invalid skill contract(s):\n" + "\n".join(offenders)
 
@@ -207,7 +216,7 @@ async def test_corpus_is_valid_or_deterministically_migratable(
         )
 
     info = _current_info()
-    if info.invalid_reason is None:
+    if not info.invalidities:
         return  # validates cleanly today — nothing more to prove
 
     file = MigrationFile(name=skill_name, path=skill_path, file_type="skill", current_version=None)
@@ -218,7 +227,8 @@ async def test_corpus_is_valid_or_deterministically_migratable(
     skill_path.write_text(result.migrated_content, encoding="utf-8")
 
     revalidated = _current_info()
-    assert revalidated.invalid_reason is None, (
-        f"{fixture_name}: still invalid after migration: {revalidated.invalid_reason}"
+    assert not revalidated.invalidities, (
+        f"{fixture_name}: still invalid after migration: "
+        f"{render_skill_invalidities(revalidated.invalidities)}"
     )
     assert revalidated.execution_role is SkillExecutionRole.SESSION

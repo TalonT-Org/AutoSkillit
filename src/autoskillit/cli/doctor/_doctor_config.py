@@ -215,7 +215,11 @@ def _check_standing_backend_pins_feasibility(
     )
     from autoskillit.execution import get_backend
     from autoskillit.recipe import find_recipe_by_name, load_recipe
-    from autoskillit.workspace import DefaultSkillResolver, resolve_persistent_session_root
+    from autoskillit.workspace import (
+        DefaultSkillResolver,
+        render_skill_invalidities,
+        resolve_persistent_session_root,
+    )
 
     root = project_dir or Path.cwd()
     config_paths = [
@@ -344,7 +348,7 @@ def _check_standing_backend_pins_feasibility(
                         )
                     )
                     continue
-                if skill_info.invalid_reason is not None:
+                if skill_info.invalidities:
                     results.append(
                         DoctorResult(
                             Severity.WARNING,
@@ -352,7 +356,7 @@ def _check_standing_backend_pins_feasibility(
                             f"{config_path}: {dotted_key} references skill "
                             f"{skill_name!r} (step {target_step.name!r}) whose contract "
                             f"is invalid, so its semantic-plan feasibility could not be "
-                            f"checked: {skill_info.invalid_reason}",
+                            f"checked: {render_skill_invalidities(skill_info.invalidities)}",
                         )
                     )
                     continue

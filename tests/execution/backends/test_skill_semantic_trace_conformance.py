@@ -340,7 +340,7 @@ def test_codex_semantic_policy_matches_generated_native_role_toml(tmp_path: Path
 def test_real_semantic_skill_materializes_through_codex_adapter(skill_name: str) -> None:
     skill_md = pkg_root() / "skills_extended" / skill_name / "SKILL.md"
     info = _skill_info_from_frontmatter(skill_name, SkillSource.BUNDLED, skill_md)
-    assert info.invalid_reason is None
+    assert not info.invalidities
     entry = SkillCatalogEntry.from_skill_info(info)
     catalog = EffectiveSkillCatalog(
         skills=(entry,),

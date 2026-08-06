@@ -38,7 +38,7 @@ class TestPromoteToMainProjectLocal:
         assert selected is not None
         assert selected.source is SkillSource.PROJECT_LOCAL
         assert selected.path == skill_path.resolve()
-        assert selected.invalid_reason is None
+        assert not selected.invalidities
         assert selected.semantic_plan is not None
         assert selected.frontmatter is not None
         assert selected.frontmatter.data["semantic_version"] == 1

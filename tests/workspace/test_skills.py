@@ -23,6 +23,7 @@ from autoskillit.workspace.skills import (
     DefaultSkillResolver,
     bundled_skills_dir,
     bundled_skills_extended_dir,
+    render_skill_invalidities,
 )
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
@@ -549,7 +550,9 @@ class TestSkillCategories:
             canonical_content="missing frontmatter delimiters",
         )
 
-        assert info.invalid_reason == "invalid frontmatter: missing_opening_delimiter"
+        assert render_skill_invalidities(info.invalidities) == (
+            "invalid frontmatter: missing_opening_delimiter"
+        )
         with pytest.raises(SkillContractError, match="invalid effective invocation contract"):
             EffectiveSkillInvocation(
                 root=info,
@@ -767,7 +770,7 @@ def test_stale_precontract_copy_of_bundled_tier_skill_does_not_crash_composition
     effective = resolver.resolve_effective("audit-bugs", tmp_path)
     assert effective is not None
     assert effective.source in (SkillSource.BUNDLED, SkillSource.BUNDLED_EXTENDED)
-    assert effective.invalid_reason is None
+    assert not effective.invalidities
 
     catalog = resolver.list_effective(tmp_path, SkillExecutionRole.SESSION)
     entry = next(skill for skill in catalog.skills if skill.name == "audit-bugs")
@@ -977,7 +980,7 @@ class TestSkillExecutionRoleParsing:
         skill_md.write_text("---\nname: test\n---\n# body")
         info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
         assert info.execution_role is SkillExecutionRole.SESSION
-        assert info.invalid_reason is None
+        assert not info.invalidities
 
     @pytest.mark.parametrize(
         ("role", "expected"),
@@ -996,7 +999,7 @@ class TestSkillExecutionRoleParsing:
         skill_md.write_text(f"---\nname: test\nexecution_role: {role}\n---\n# body")
         info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
         assert info.execution_role is expected
-        assert info.invalid_reason is None
+        assert not info.invalidities
 
     @pytest.mark.parametrize(
         "content",
@@ -1016,7 +1019,7 @@ class TestSkillExecutionRoleParsing:
         skill_md.write_text(content)
         info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
         assert info.execution_role is None
-        assert info.invalid_reason is not None
+        assert info.invalidities
 
     def test_session_contract_cannot_declare_run_skill(self, tmp_path: Path) -> None:
         from autoskillit.workspace.skills import _skill_info_from_frontmatter
@@ -1026,9 +1029,10 @@ class TestSkillExecutionRoleParsing:
             "---\nname: test\nexecution_role: session\nuses_capabilities: [run_skill]\n---\n# body"
         )
         info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
-        assert info.invalid_reason is not None
-        assert "run_skill" in info.invalid_reason
-        assert "session" in info.invalid_reason
+        assert info.invalidities
+        reason = render_skill_invalidities(info.invalidities)
+        assert "run_skill" in reason
+        assert "session" in reason
 
     def test_orchestrator_contract_may_declare_run_skill(self, tmp_path: Path) -> None:
         from autoskillit.workspace.skills import _skill_info_from_frontmatter
@@ -1040,7 +1044,7 @@ class TestSkillExecutionRoleParsing:
         )
         info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
         assert info.execution_role is SkillExecutionRole.ORCHESTRATOR
-        assert info.invalid_reason is None
+        assert not info.invalidities
 
 
 class TestSkillInfoSchemaExhaustiveness:
@@ -1186,7 +1190,7 @@ def test_invalid_project_only_skill_is_excluded_without_poisoning_catalog(
     assert selected is not None
     assert selected.source is SkillSource.PROJECT_LOCAL
     assert selected.path == skill_path
-    assert selected.invalid_reason is not None
+    assert selected.invalidities
     assert "project-only" not in {skill.name for skill in catalog.skills}
     assert "project-only" not in catalog.namespace_sources
     assert len(catalog.exclusions) == 1

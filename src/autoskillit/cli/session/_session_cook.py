@@ -42,14 +42,14 @@ def _build_cook_projection_context(
     binding: PluginLaunchBinding | None,
 ) -> SkillProjectionContext:
     """Bind scripts to the exact artifact selected for this cook session."""
-    from autoskillit.core import pkg_root
+    if binding is None:
+        raise RuntimeError("cook projection requires a retained plugin artifact binding")
 
-    durable_scripts_root = binding.identity.managed_path if binding is not None else pkg_root()
     return skills_provider.catalog_projection_context(
         session_catalog,
         project_dir,
         backend=backend,
-        durable_scripts_root=durable_scripts_root,
+        durable_scripts_root=binding.identity.managed_path,
     )
 
 
@@ -234,6 +234,7 @@ def cook(
         project_dir=project_dir,
         skill_catalog=session_catalog,
         generated_home_available=True,
+        retain_projection_source=True,
     )
     session_mgr = DefaultSessionSkillManager(
         skills_provider,
@@ -242,9 +243,9 @@ def cook(
     )
     session_mgr.cleanup_stale()
 
-    projection_load_mode = load_mode
-    if not load_mode.consumes_artifact and artifact_authority is not None:
-        projection_load_mode = PluginLoadMode.PROJECTED_HOME
+    projection_load_mode = (
+        load_mode if load_mode.consumes_artifact else PluginLoadMode.PROJECTED_HOME
+    )
 
     with (
         plugin_launch_binding_scope(

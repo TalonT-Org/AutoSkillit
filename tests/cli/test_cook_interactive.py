@@ -280,6 +280,40 @@ def test_cook_uses_managed_home_for_final_child_context(
     assert binding.closed
 
 
+def test_cook_retains_projection_binding_when_launch_consumes_no_artifact(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from autoskillit.core import PluginLoadMode
+
+    backend = _Backend()
+    captured = _install_harness(monkeypatch, tmp_path)
+    binding = _CookBinding(tmp_path / "projected-plugin")
+    authority = _CookAuthority(binding.plugin_dir)
+
+    def acquire_binding(**kwargs: object) -> _CookBinding:
+        assert kwargs["load_mode"] is PluginLoadMode.PROJECTED_HOME
+        return binding
+
+    authority.acquire_launch_binding = acquire_binding  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
+        lambda **_kwargs: (authority, PluginLoadMode.NONE),
+    )
+
+    cli.cook(backend=backend)
+
+    managed_enter = next(
+        event
+        for event in captured["events"]
+        if event[0] == "managed-enter"  # type: ignore[union-attr]
+    )
+    projection_context = managed_enter[3]
+    expected_scripts = str(binding.plugin_dir / "recipes" / "scripts")
+    assert projection_context.substitutions["{{AUTOSKILLIT_SCRIPTS}}"] == expected_scripts
+    assert backend.build_calls[0]["plugin_binding"] is None
+    assert binding.closed
+
+
 def test_cook_real_claude_builder_receives_plugin_and_skills(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

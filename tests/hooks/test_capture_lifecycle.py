@@ -74,7 +74,20 @@ from autoskillit.hooks._capture_lifecycle import (
     CaptureState,
 )
 
+from .conftest import _FAILURE_GRADE_RE
+
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
+
+
+def _assert_holder_exited_cleanly(holder: subprocess.Popen[str]) -> None:
+    try:
+        _stdout, stderr = holder.communicate(timeout=3)
+    except subprocess.TimeoutExpired:
+        holder.terminate()
+        _stdout, stderr = holder.communicate(timeout=3)
+        pytest.fail(f"lock-holder subprocess did not exit: {stderr}")
+    assert holder.returncode == 0, stderr
+
 
 _CAPTURE_ID = "0123456789abcdef"
 
@@ -2640,11 +2653,7 @@ def test_sweep_lock_contention_recovers_within_budget_and_makes_progress(
         assert elapsed < 1.0
         assert not (_capture_dir(project) / artifact.name).exists()
     finally:
-        try:
-            holder.communicate(timeout=3)
-        except subprocess.TimeoutExpired:
-            holder.terminate()
-            holder.communicate(timeout=3)
+        _assert_holder_exited_cleanly(holder)
         root.close()
         anchor.close()
 
@@ -2692,11 +2701,7 @@ def test_sweep_lock_held_for_whole_budget_reports_bounded_stalled_outcome(
             is CleanupSeverity.STALLED
         )
     finally:
-        try:
-            holder.communicate(timeout=3)
-        except subprocess.TimeoutExpired:
-            holder.terminate()
-            holder.communicate(timeout=3)
+        _assert_holder_exited_cleanly(holder)
         root.close()
         anchor.close()
 
@@ -3432,11 +3437,7 @@ def test_reconcile_capture_store_bounds_store_open_lock_contention(tmp_path: Pat
             is CleanupSeverity.STALLED
         )
     finally:
-        try:
-            holder.communicate(timeout=3)
-        except subprocess.TimeoutExpired:
-            holder.terminate()
-            holder.communicate(timeout=3)
+        _assert_holder_exited_cleanly(holder)
 
 
 def test_reconcile_capture_store_recovers_from_store_open_lock_contention(
@@ -3482,11 +3483,7 @@ def test_reconcile_capture_store_recovers_from_store_open_lock_contention(
         assert outcome.errors == 0
         assert elapsed < budget.max_duration_seconds
     finally:
-        try:
-            holder.communicate(timeout=3)
-        except subprocess.TimeoutExpired:
-            holder.terminate()
-            holder.communicate(timeout=3)
+        _assert_holder_exited_cleanly(holder)
 
 
 def test_emit_bounded_diagnostic_normalizes_and_escapes_closing_bracket() -> None:
@@ -4234,8 +4231,7 @@ def test_emit_owner_diagnostic_stalled_case_is_neutral() -> None:
     (line,) = written
     assert "deferred" in line
     assert "migration_blocked" in line
-    for failure_word in ("failed", "error", "invalid"):
-        assert failure_word not in line
+    assert not _FAILURE_GRADE_RE.search(line)
 
 
 def test_emit_owner_diagnostic_failed_case_preserves_failure_wording() -> None:

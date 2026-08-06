@@ -44,18 +44,13 @@ from autoskillit.hooks._capture_artifacts import (
 )
 from autoskillit.hooks._capture_lifecycle import CaptureLifecycleStore
 
+from .conftest import _FAILURE_GRADE_RE
 from .fixtures.session_replays import INCIDENT_TRANSCRIPT, fixture_path
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 _DISPATCH_PATH = pkg_root() / "hooks" / "_dispatch.py"
 _TIMEOUT_SECONDS = 15
-
-# Failure-grade vocabulary the plan's provenance/severity work reserves for
-# genuine errors (W2's classify_cleanup_outcome FAILED severity). Matched as
-# whole words, case-insensitively, so "unresolved" or "erroring" (identifiers,
-# not prose) don't false-positive.
-_FAILURE_GRADE_RE = re.compile(r"\b(failed|error|invalid)\b", re.IGNORECASE)
 
 
 class ReplayEvent:
@@ -194,6 +189,10 @@ def run_event_through_matched_guards(
                 cwd=str(process_cwd),
                 env=child_env,
                 timeout=_TIMEOUT_SECONDS,
+            )
+            assert proc.returncode == 0, (
+                f"guard subprocess {script} exited {proc.returncode}: "
+                f"{proc.stderr.decode('utf-8', errors='replace')}"
             )
             results.append(
                 GuardRunResult(

@@ -27,6 +27,8 @@ from autoskillit.hooks._capture_contract import (
     parse_capture_v2,
 )
 
+from .conftest import _FAILURE_GRADE_RE
+
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 _SENTINEL = "# autoskillit-shell-capture v1"
@@ -252,8 +254,7 @@ def test_resolve_control_undeclared_note_is_neutral(monkeypatch: pytest.MonkeyPa
     assert control.mode == "capture"
     assert control.diagnostic is not None
     assert "native-shell control undeclared; using capture" in control.diagnostic
-    for failure_word in ("failed", "error", "invalid"):
-        assert failure_word not in control.diagnostic
+    assert not _FAILURE_GRADE_RE.search(control.diagnostic)
 
 
 def test_rewrites_on_turn_id_payload(monkeypatch):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Iterator
 
 import pytest
@@ -10,6 +11,7 @@ import pytest
 # production form (codex.py + core/_plugin_ids.py).
 _RUN_CMD_TOOL_MARKETPLACE: str = "mcp__plugin_autoskillit_autoskillit__run_cmd"
 _RUN_CMD_TOOL_DIRECT: str = "mcp__autoskillit__run_cmd"
+_FAILURE_GRADE_RE = re.compile(r"\b(failed|error|invalid)\b", re.IGNORECASE)
 
 
 @pytest.fixture(autouse=True)

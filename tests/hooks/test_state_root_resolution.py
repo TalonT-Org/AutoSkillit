@@ -31,6 +31,14 @@ from _hook_payload import resolve_state_root  # type: ignore[import-not-found]  
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
+_STATE_ROUTING_ENV_VARS = frozenset(
+    {
+        "AUTOSKILLIT_CAMPAIGN_ID",
+        "AUTOSKILLIT_STATE_DIR",
+        "AUTOSKILLIT_STATE_ROOT",
+    }
+)
+
 
 # ---------------------------------------------------------------------------
 # resolve_state_root() resolution order
@@ -280,7 +288,7 @@ class TestAskUserQuestionGuardWorktreeTopology:
                 "cwd": str(sibling_worktree),
             }
         )
-        env = {k: v for k, v in os.environ.items() if k != "AUTOSKILLIT_STATE_DIR"}
+        env = {k: v for k, v in os.environ.items() if k not in _STATE_ROUTING_ENV_VARS}
         env["AUTOSKILLIT_HEADLESS"] = "1"
         env["AUTOSKILLIT_STATE_ROOT"] = str(orchestrating)
         with unittest.mock.patch("pathlib.Path.cwd", return_value=sibling_worktree):
@@ -305,7 +313,7 @@ class TestAskUserQuestionGuardWorktreeTopology:
                 "cwd": str(sibling_worktree),
             }
         )
-        env = {k: v for k, v in os.environ.items() if k != "AUTOSKILLIT_STATE_DIR"}
+        env = {k: v for k, v in os.environ.items() if k not in _STATE_ROUTING_ENV_VARS}
         env["AUTOSKILLIT_HEADLESS"] = "1"
         env["AUTOSKILLIT_STATE_ROOT"] = str(orchestrating)
         out = _run_hook("autoskillit.hooks.guards.ask_user_question_guard", stdin, env)

@@ -121,7 +121,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _hook_repair.py — same hooks.json self-heal, triggered by the in-process repair
     # primitive instead of startup drift detection (co-owned with Claude plugin system;
     # same rationale and format as the _lifespan.py site above)
-    ("src/autoskillit/workspace/_projected_artifact/_hook_repair.py", 175),
+    ("src/autoskillit/workspace/_projected_artifact/_hook_repair.py", 173),
     # tools_kitchen.py — hook config, quota guard, git_ops_policy, ingredient locks overlay
     ("src/autoskillit/server/tools/tools_kitchen.py", 536),
     ("src/autoskillit/server/tools/tools_kitchen.py", 555),

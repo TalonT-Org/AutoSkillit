@@ -100,6 +100,15 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "before reconciliation removes a directory tree.",
     ),
     (
+        "workspace/_update_obligation.py",
+        "clear_obligation",
+        "_obligation_path(home).unlink",
+    ): (
+        1,
+        "Compare-and-delete removes only the matched publication journal while holding "
+        "its exclusive obligation lease after exact publication verification.",
+    ),
+    (
         "workspace/_projected_artifact/_hook_repair.py",
         "_rollback_repair",
         "manifest_path.unlink",

@@ -80,6 +80,8 @@ class DeliveryStorePort(Protocol):
 
 
 class DeliveryNormalizationStorePort(TransitionStorePort, Protocol):
+    _sweep_budget: SweepBudgetSpec | None
+
     def _acquire_cleanup_lease(
         self,
         record: Record,
@@ -129,6 +131,14 @@ class SweepStorePort(TransitionStorePort, Protocol):
         preleased: ObservedArtifact | None = None,
         lease_checked: bool = False,
     ) -> int: ...
+
+    def _admit_new_record(
+        self,
+        record: Record,
+        records: Records,
+        compaction_epoch: int,
+        size: int,
+    ) -> bool: ...
 
 
 class MigrationStorePort(SweepStorePort, Protocol):

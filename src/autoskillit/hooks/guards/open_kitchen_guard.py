@@ -13,22 +13,31 @@ import json
 import os
 import sys
 from datetime import UTC
+from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    parse_hook_command,
+    resolve_state_root,
+)
 
 OPEN_KITCHEN_DENY_TRIGGER: str = "open_kitchen cannot be called"
 
 
-def _write_kitchen_marker(session_id: str, recipe_name: str | None) -> None:
+def _write_kitchen_marker(session_id: str, recipe_name: str | None, payload_cwd: str = "") -> None:
     """Write the kitchen-open session marker (stdlib-only, inline implementation)."""
     import tempfile
     from datetime import datetime
-    from pathlib import Path as _Path
 
     state_override = os.environ.get("AUTOSKILLIT_STATE_DIR")
     if state_override:
-        state_dir = _Path(state_override) / "kitchen_state"
+        state_dir = Path(state_override) / "kitchen_state"
     else:
         campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
-        base = _Path.cwd() / ".autoskillit" / "temp" / "kitchen_state"
+        base = resolve_state_root(payload_cwd) / ".autoskillit" / "temp" / "kitchen_state"
         state_dir = base / campaign_id if campaign_id else base
     state_dir.mkdir(parents=True, exist_ok=True)
     marker_path = state_dir / f"{session_id}.json"
@@ -55,16 +64,17 @@ def _write_kitchen_marker(session_id: str, recipe_name: str | None) -> None:
         raise
 
 
-def _bridge_session_registry(session_id: str) -> None:
+def _bridge_session_registry(session_id: str, payload_cwd: str = "") -> None:
     """Bridge AUTOSKILLIT_LAUNCH_ID to claude_session_id in the session registry."""
     import tempfile
-    from pathlib import Path as _Path
 
     launch_id = os.environ.get("AUTOSKILLIT_LAUNCH_ID", "")
     if not launch_id or not session_id:
         return
 
-    registry_file = _Path.cwd() / ".autoskillit" / "temp" / "session_registry.json"
+    registry_file = (
+        resolve_state_root(payload_cwd) / ".autoskillit" / "temp" / "session_registry.json"
+    )
     try:
         registry: dict = json.loads(registry_file.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -90,13 +100,13 @@ def _bridge_session_registry(session_id: str) -> None:
         raise
 
 
-def _check_recipe_reload_block(session_id: str, tool_input: dict) -> dict | None:
+def _check_recipe_reload_block(
+    session_id: str, tool_input: dict, payload_cwd: str = ""
+) -> dict | None:
     """Block open_kitchen(name=...) if a recipe-confirmed marker exists for this session.
 
     Returns a deny payload dict if blocked, or None if allowed.
     """
-    from pathlib import Path as _Path
-
     recipe_name = tool_input.get("name") or None
     if not recipe_name:
         return None
@@ -106,10 +116,10 @@ def _check_recipe_reload_block(session_id: str, tool_input: dict) -> dict | None
 
     state_override = os.environ.get("AUTOSKILLIT_STATE_DIR")
     if state_override:
-        state_dir = _Path(state_override) / "kitchen_state"
+        state_dir = Path(state_override) / "kitchen_state"
     else:
         campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
-        base = _Path.cwd() / ".autoskillit" / "temp" / "kitchen_state"
+        base = resolve_state_root(payload_cwd) / ".autoskillit" / "temp" / "kitchen_state"
         state_dir = base / campaign_id if campaign_id else base
 
     confirmed_path = state_dir / f"{session_id}_recipe_confirmed.json"
@@ -192,20 +202,21 @@ def main() -> None:
         session_id = data.get("session_id", "")
         recipe_name: str | None = None
         tool_input = data.get("tool_input") or {}
+        payload_cwd = parse_hook_command(data).payload_cwd
         if isinstance(tool_input, dict):
             recipe_name = tool_input.get("name") or None
 
         # Check for recipe reload block before writing the marker
         if session_id and isinstance(tool_input, dict):
-            denial = _check_recipe_reload_block(session_id, tool_input)
+            denial = _check_recipe_reload_block(session_id, tool_input, payload_cwd)
             if denial:
                 sys.stdout.write(json.dumps(denial) + "\n")
                 sys.exit(0)
 
         if session_id:
-            _write_kitchen_marker(session_id, recipe_name)
+            _write_kitchen_marker(session_id, recipe_name, payload_cwd)
             try:
-                _bridge_session_registry(session_id)
+                _bridge_session_registry(session_id, payload_cwd)
             except Exception as _bridge_err:
                 print(
                     f"[open_kitchen_guard] registry bridge failed: {_bridge_err}",

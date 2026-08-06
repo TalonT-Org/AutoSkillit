@@ -9,6 +9,7 @@ from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.core import Severity, get_logger, is_feature_enabled
 from autoskillit.execution import get_backend
 
+from ._doctor_capture_store import _check_capture_store_stats
 from ._doctor_config import (
     _check_config_layers_for_secrets,
     _check_gitignore_completeness,
@@ -228,6 +229,8 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.append(_check_codex_limits_verified(backend=_backend))
     # Check 40: Bundled skill capability declarations match authentic source evidence
     results.extend(_check_skill_capability_authenticity())
+    # Check 41: Capture-store ledger/directory statistics (read-only)
+    results.append(_check_capture_store_stats())
     # Output
     if output_json:
         print(

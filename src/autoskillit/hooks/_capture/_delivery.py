@@ -502,7 +502,13 @@ def normalize_interrupted_deliveries(
     lease_live: type[Exception],
     tampered: type[Exception],
 ) -> None:
-    with store._locked():
+    # A caller-supplied open budget (store._sweep_budget, set by
+    # from_open_authorities before this runs) must bound this store-open
+    # lock acquisition the same way it bounds a later sweep. Blocking is
+    # used only when no budget is active, matching every other non-sweep
+    # caller's semantics.
+    blocking = store._sweep_budget is None
+    with store._locked(blocking=blocking):
         records, _compaction_epoch, _size = store._load_locked()
         candidates = [
             record
@@ -527,7 +533,7 @@ def normalize_interrupted_deliveries(
         except (lease_live, tampered):
             continue
         try:
-            with store._locked():
+            with store._locked(blocking=blocking):
                 records, compaction_epoch, size = store._load_locked()
                 current = records.get(expected.capture_id)
                 if current is None or not _ledger.same_record(expected, current):

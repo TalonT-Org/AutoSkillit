@@ -47,6 +47,10 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     strip_heredoc_bodies,
     tokenize_command_segments,
 )
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    extract_apply_patch_text,
+    parse_hook_command,
+)
 
 WRITE_GUARD_DENY_TRIGGER = "read-only skill session"
 
@@ -165,16 +169,22 @@ def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
     return None
 
 
-def _extract_bash_write_targets(command: str) -> list[str] | None:
+def _extract_bash_write_targets(command: str, execution_cwd: str = "") -> list[str] | None:
     """Return absolute target paths from a bash command, or None if no write command found.
+
+    ``execution_cwd`` (the run_cmd tool's own cwd argument, or Bash's session
+    cwd) is preferred for resolving relative targets when non-empty; falls
+    back to the ``AUTOSKILLIT_CWD`` env var otherwise.
 
     Returns an empty list when a write command is detected but no path can be reliably
     extracted — callers treat this as fail-open (ambiguous = allow).
     """
     segments = tokenize_command_segments(command)
-    cwd = os.environ.get("AUTOSKILLIT_CWD", "")
-    if cwd and not os.path.isabs(cwd):
-        cwd = ""
+    cwd = execution_cwd
+    if not cwd:
+        cwd = os.environ.get("AUTOSKILLIT_CWD", "")
+        if cwd and not os.path.isabs(cwd):
+            cwd = ""
 
     all_targets: list[str] = []
     found_any_write = False
@@ -294,7 +304,8 @@ def main() -> None:
         return any(resolved.startswith(np) or resolved == np.rstrip("/") for np in norm_prefixes)
 
     if tool_name == "Bash" or "run_cmd" in tool_name:
-        command = tool_input.get("command", "") or tool_input.get("cmd", "")
+        parsed = parse_hook_command(data)
+        command = parsed.command or ""
 
         interp_paths = extract_interpreter_write_paths(command)
         if interp_paths is not None:
@@ -305,9 +316,11 @@ def main() -> None:
                 )
                 return
 
-            cwd = os.environ.get("AUTOSKILLIT_CWD", "")
-            if cwd and not os.path.isabs(cwd):
-                cwd = ""
+            cwd = parsed.execution_cwd
+            if not cwd:
+                cwd = os.environ.get("AUTOSKILLIT_CWD", "")
+                if cwd and not os.path.isabs(cwd):
+                    cwd = ""
 
             resolved: list[str] = []
             for p in interp_paths:
@@ -330,7 +343,7 @@ def main() -> None:
                     )
                     return
 
-        targets = _extract_bash_write_targets(command)
+        targets = _extract_bash_write_targets(command, parsed.execution_cwd)
         if targets is None:
             sys.exit(0)
         if not targets:
@@ -345,7 +358,7 @@ def main() -> None:
         sys.exit(0)
 
     if tool_name == "apply_patch":
-        command = tool_input.get("command", "")
+        command = extract_apply_patch_text(data) or ""
         paths = _extract_paths_from_patch(command)
         if not paths:
             _deny(

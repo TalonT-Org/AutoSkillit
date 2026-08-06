@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
+    AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     NamedResume,
     NoResume,
     executable_binding_matches_current_file,
@@ -64,6 +65,11 @@ def _run_interactive_session(
     from autoskillit.core import InfraExitCategory
 
     _project_dir = project_dir if project_dir is not None else Path.cwd()
+    # Injected so PreToolUse guards can locate `.autoskillit/` state from the
+    # orchestrating project root even when a command's own cwd points into a
+    # sibling worktree with its own checked-in `.autoskillit/` — the production
+    # signal resolve_state_root() (hooks/_hook_payload.py) checks first.
+    extra_env = {**(extra_env or {}), AUTOSKILLIT_STATE_ROOT_ENV_VAR: str(_project_dir)}
     if skill_catalog is not None:
         from autoskillit.workspace import compile_session_skill_catalog
 

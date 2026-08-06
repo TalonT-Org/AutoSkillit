@@ -180,6 +180,10 @@ class TestCLIDoctor:
             "autoskillit.cli.doctor._check_fleet_dispatch_guard_registered",
             lambda: DoctorResult(Severity.OK, "fleet_dispatch_guard_registered", "stubbed"),
         )
+        monkeypatch.setattr(
+            "autoskillit.cli.doctor._check_capture_store_stats",
+            lambda: DoctorResult(Severity.OK, "capture_store_stats", "stubbed"),
+        )
         local_bin = str(tmp_path / ".local" / "bin" / "autoskillit")
         with (
             patch(

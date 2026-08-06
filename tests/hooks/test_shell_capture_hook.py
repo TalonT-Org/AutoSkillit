@@ -27,6 +27,8 @@ from autoskillit.hooks._capture_contract import (
     parse_capture_v2,
 )
 
+from .conftest import _FAILURE_GRADE_RE
+
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 _SENTINEL = "# autoskillit-shell-capture v1"
@@ -188,8 +190,71 @@ def test_invalid_or_mismatched_controls_fall_back_atomically_to_capture(
     assert request.attempt_id is None
     assert request.lineage_ref is None
     diagnostic = payload["hookSpecificOutput"]["additionalContext"]
-    assert "using capture" in diagnostic
-    assert len(diagnostic.encode("utf-8")) <= 160
+    assert "incomplete managed native-shell controls" in diagnostic
+    assert "falling back to capture" in diagnostic
+    assert len(diagnostic.encode("utf-8")) <= 320
+
+
+def test_resolve_control_declared_capture_mode_has_no_diagnostic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """(i) mode=capture, no managed-identity vars: a normal declared state —
+    absence of the 4 identity vars is expected, not anomalous."""
+    from autoskillit.hooks.shell_capture_hook import _resolve_control  # noqa: PLC0415
+
+    monkeypatch.setenv(NATIVE_SHELL_CAPTURE_MODE_ENV_VAR, "capture")
+    for var in (
+        MANAGED_LAUNCH_ID_ENV_VAR,
+        MANAGED_ATTEMPT_ID_ENV_VAR,
+        MANAGED_LINEAGE_DIGEST_ENV_VAR,
+        MANAGED_LINEAGE_REF_ENV_VAR,
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+    control = _resolve_control()
+
+    assert control.mode == "capture"
+    assert control.attempt_id is None
+    assert control.lineage_ref is None
+    assert control.diagnostic is None
+
+
+def test_resolve_control_complete_direct_identity_has_no_diagnostic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """(ii) mode=direct + complete valid identity tuple: managed path, no
+    diagnostic."""
+    from autoskillit.hooks.shell_capture_hook import _resolve_control  # noqa: PLC0415
+
+    reference = _set_managed_controls(monkeypatch, mode="direct")
+
+    control = _resolve_control()
+
+    assert control.mode == "direct"
+    assert control.attempt_id == "c" * 32
+    assert control.lineage_ref == reference
+    assert control.diagnostic is None
+
+
+def test_resolve_control_undeclared_note_is_neutral(monkeypatch: pytest.MonkeyPatch) -> None:
+    """(iv) mode unset entirely: a neutral note, no failure-grade words."""
+    from autoskillit.hooks.shell_capture_hook import _resolve_control  # noqa: PLC0415
+
+    for var in (
+        NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
+        MANAGED_LAUNCH_ID_ENV_VAR,
+        MANAGED_ATTEMPT_ID_ENV_VAR,
+        MANAGED_LINEAGE_DIGEST_ENV_VAR,
+        MANAGED_LINEAGE_REF_ENV_VAR,
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+    control = _resolve_control()
+
+    assert control.mode == "capture"
+    assert control.diagnostic is not None
+    assert "native-shell control undeclared; using capture" in control.diagnostic
+    assert not _FAILURE_GRADE_RE.search(control.diagnostic)
 
 
 def test_rewrites_on_turn_id_payload(monkeypatch):

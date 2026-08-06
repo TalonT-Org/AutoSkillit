@@ -6,6 +6,15 @@ import json
 import sys
 from pathlib import Path
 
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    parse_hook_command,
+    resolve_state_root,
+)
+
 RESET_RESUME_DENY_TRIGGER: str = "RESUME ATTEMPT REQUIRED"
 
 _STATE_FILE_RELPATH = (".autoskillit", "temp", "resume_gate_state.json")
@@ -68,6 +77,8 @@ def _is_refused(dispatch_id: str, project_root: Path) -> bool:
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
+        if not isinstance(data, dict):
+            sys.exit(0)
     except Exception:
         sys.exit(0)
 
@@ -76,6 +87,8 @@ def main() -> None:
         sys.exit(0)
 
     tool_input: dict = data.get("tool_input", {}) or {}
+    if not isinstance(tool_input, dict):
+        sys.exit(0)
 
     if tool_input.get("force"):
         sys.exit(0)
@@ -84,7 +97,11 @@ def main() -> None:
     if not dispatch_id:
         sys.exit(0)
 
-    project_root = Path.cwd()
+    try:
+        payload_cwd = parse_hook_command(data).payload_cwd
+        project_root = resolve_state_root(payload_cwd)
+    except Exception:
+        sys.exit(0)
 
     if _is_refused(dispatch_id, project_root):
         sys.exit(0)

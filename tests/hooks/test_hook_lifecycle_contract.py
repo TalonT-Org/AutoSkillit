@@ -163,6 +163,8 @@ def test_every_shell_capture_persistent_path_constant_is_registered() -> None:
         ("_capture_lifecycle.py", "LOCK_NAME"),
         ("_migration.py", "MIGRATION_NAME"),
         ("_sweep_cursor.py", "CURSOR_NAME"),
+        ("_orphan_scan.py", "CURSOR_NAME"),
+        ("_reconcile.py", "_POLICY_EVENT_NAME"),
     }
 
 

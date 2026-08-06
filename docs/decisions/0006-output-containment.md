@@ -49,6 +49,33 @@ lossless mechanism. Claude Code relief is immediate (Phase A).
 Every residual hook message uses a typed policy event rendered by a shared
 formatter. Suggested rewrites are classifier-validated before emission.
 
+**Implemented.** `hooks/_policy_event.py`'s `PolicyEvent`/`render_provenance_prefix`
+is the shared formatter; `hooks/_capture/_reconcile.py`, `shell_capture_hook.py`,
+and `capture_lifecycle_hook.py` construct every residual message through it — no
+ad-hoc `[AutoSkillit ...]` literal exists outside `_policy_event.py` in those
+modules (`tests/arch/test_hook_message_provenance.py`). The classifier is
+`classify_cleanup_outcome` (`hooks/_capture/_types.py`), which derives a
+`CleanupSeverity` from `(progress, blocker, errors)`:
+
+| Severity | Meaning | Emission |
+|---|---|---|
+| `healthy` | no blocker, or store absent | none |
+| `deferred` | bounded budget work exhausted, some progress made this pass | none — backlog remains but isn't attention-grade |
+| `stalled` | externally blocked (lock contention, migration, filesystem authority), or a budget blocker with zero progress | one neutral line |
+| `failed` | `errors > 0` | one failure-worded line — the only severity whose rendered text may contain "failed" |
+
+`hooks/_capture/_reconcile.py`'s `emit_owner_diagnostic(outcome, owner, write)` is
+the single owner-neutral emission path for both cleanup owners: the per-command
+runner-tail sweep (`owner="runner_tail"`) and the SessionStart sweep
+(`owner="session_start"`). `shell_capture_hook.py`'s native-shell control
+resolution (`_resolve_control`) is a separate three-way declared-mode contract,
+also routed through `PolicyEvent`: a declared `capture` mode with no managed
+identity is silent (normal, not anomalous); an undeclared mode emits a neutral
+note; an incomplete/invalid managed-identity tuple emits a distinct neutral
+note naming the fallback. Codex cook sessions (`codex.py build_interactive_cmd`)
+positively declare `AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE=capture`, so absence
+of that declaration is a genuine anomaly again rather than the common case.
+
 ### Pre-Spend Decision
 
 No shape-based pre-execution backstop remains in the end state. Execution cost is
@@ -118,6 +145,23 @@ hook can be retired in favor of that mechanism.
    rejected. Physical path strings are display hints, not filesystem authority.
 6. General retrieval, publication/privacy policy, quota accounting, and upstream
    live visibility remain downstream work identified by ADR-0008.
+
+## Resolved
+
+- **Unledgered orphan files:** a `shell_[0-9a-f]{16}.log` written before a crash, a
+  ledger reset, or a legacy pre-ledger run had no record and was permanently
+  invisible to cleanup. The budget-bounded directory-reconciliation scan phase
+  (`hooks/_capture/_orphan_scan.py`, `docs/safety/hooks.md`) adopts eligible
+  orphans into the same `LEGACY_CLEANUP_ONLY` shape the legacy-ledger decode
+  path already produces, so the existing quarantine-deletion path retires them
+  under normal budgets and invariants.
+- **Lock contention:** a single non-blocking `flock()` attempt aborted a sweep
+  immediately on any contention, including the 256-attempt `SESSION_START_BUDGET`
+  pass, even though `session_scope="any"` makes every concurrent session contend
+  the same lock at startup. Non-blocking lock acquisition now retries with
+  jittered, doubling backoff bounded by the sweep's own `max_duration_seconds`
+  budget — no new configuration knob — so a contended lock recovers within the
+  same invocation instead of zeroing it.
 
 ## Consequences
 

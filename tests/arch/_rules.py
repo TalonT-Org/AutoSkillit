@@ -99,6 +99,7 @@ _PRINT_EXEMPT = frozenset(
         "resume_gate_post_hook.py",
         "reset_resume_gate.py",
         "_fmt_recipe.py",
+        "_capture_store.py",
     }
 )
 

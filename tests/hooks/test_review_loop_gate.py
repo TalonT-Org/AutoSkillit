@@ -134,6 +134,11 @@ class TestReviewLoopGateEdgeCases:
         out = _run_gate(_TOOL_WAIT_FOR_CI, tmp_path, raw_stdin="not-json{{{")
         assert out.strip() == ""
 
+    def test_fails_open_on_non_object_stdin(self, tmp_path):
+        _write_state(tmp_path, gate="LOOP_REQUIRED", called=False)
+        out = _run_gate(_TOOL_WAIT_FOR_CI, tmp_path, raw_stdin="[]")
+        assert out.strip() == ""
+
 
 # ---------------------------------------------------------------------------
 # T1-7 through T1-8: Matcher coverage

@@ -1139,11 +1139,13 @@ _REPEATABLE_SHELL_RE = re.compile(
     r"(?:^|[;&|]\s*)(?:for|while|until)\b"
     r"|\b[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)\s*\{"
 )
-_UNRESOLVED_DISPATCH_RE = re.compile(r"(?:^|[;&|]\s*)(?:eval|xargs|source|\.)\b|[<>]\(")
+_PROCESS_SUBSTITUTION_RE = re.compile(r"[<>]\(")
 _POSSIBLE_GITHUB_EXEC_RE = re.compile(
     r"""(?:^|[\s;&|()'"])(?:[^\s;&|()'"]*/)?(?:gh|curl)(?:[\s'"]|$)""",
     re.IGNORECASE,
 )
+_GH_DISPATCH_WORDS: frozenset[str] = frozenset({"eval", "xargs", "source", "."})
+_POSSIBLE_GITHUB_EXEC_NAMES: frozenset[str] = frozenset({"gh", "curl"})
 _PULL_REVIEW_ROUTE_RE = re.compile(
     r"^/repos/[^/]+/[^/]+/pulls/\d+/reviews"
     r"(?:/\d+(?:/events)?)?/?$",
@@ -1167,6 +1169,70 @@ _GRAPHQL_REVIEW_MUTATIONS: frozenset[str] = frozenset(
         "addPullRequestReviewThread",
     }
 )
+
+
+def _segment_has_possible_github_exec_token(segment: Sequence[str]) -> bool:
+    """True when gh/curl (path-normalized) is in command position within *segment*.
+
+    Checks the segment's own command verb — via ``command_verb_and_args``,
+    which already skips env/wrapper prefixes and loop control words like
+    ``do``/``then`` — not every token. A bare-word argument that merely
+    mentions ``gh``/``curl`` (e.g. ``echo "gh"``, which shlex collapses to
+    the same tokens as an unquoted ``echo gh``) is never in command position
+    and must not trip this check.
+
+    An inline function definition (``name() {``) or a bare compound-command
+    opener (``{``) fuses its body's first command into the same shlex
+    segment as the opener — the segmenter only splits on shell operators
+    like ``;``, never on ``{`` — so the body's own verb would otherwise be
+    invisible to a verb-only check. When the segment's verb is such an
+    opener, the check is re-applied to the token immediately following it.
+    """
+    verb, args = command_verb_and_args(list(segment))
+    if _normalize_executable(verb) in _POSSIBLE_GITHUB_EXEC_NAMES:
+        return True
+    body: list[str] | None = None
+    if verb == "{":
+        body = args
+    elif verb.endswith("()") and args[:1] == ["{"]:
+        body = args[1:]
+    if body is None:
+        return False
+    body_verb, _body_args = command_verb_and_args(body)
+    return _normalize_executable(body_verb) in _POSSIBLE_GITHUB_EXEC_NAMES
+
+
+def _segments_have_possible_github_exec_token(segments: Sequence[Sequence[str]]) -> bool:
+    """True when any segment contains gh/curl as a standalone token.
+
+    Used to bound repeatable shell constructs (for/while/until, an inline
+    function body fused into its opener's segment): a possible-exec token
+    reachable through repetition is cardinality-unresolved regardless of
+    which segment it lands in after shlex splits the payload on ``;``.
+    """
+    return any(_segment_has_possible_github_exec_token(segment) for segment in segments)
+
+
+def _segments_have_dispatch_word_exec_risk(segments: Sequence[Sequence[str]]) -> bool:
+    """True when a segment opened by eval/xargs/source/. also mentions gh/curl.
+
+    Scoped to the dispatch word's own segment, not the whole payload: a
+    ``gh`` command appearing as an unrelated *sibling* segment — e.g.
+    ``source .venv/bin/activate && gh pr view`` — is already independently
+    walked and classified by the normal segment loop and must not be
+    treated as hidden behind an unrelated dispatch word earlier on the
+    same line. ``eval``/``xargs`` genuinely consume or hand off the
+    following text to a fresh command, so their own segment's joined text
+    is searched (not just its tokens) to catch eval's single quoted
+    argument token.
+    """
+    for segment in segments:
+        verb, _args = command_verb_and_args(list(segment))
+        if verb not in _GH_DISPATCH_WORDS:
+            continue
+        if _POSSIBLE_GITHUB_EXEC_RE.search(" ".join(segment)):
+            return True
+    return False
 
 
 def _none_github_analysis() -> GitHubMutationAnalysis:
@@ -1467,6 +1533,67 @@ def _analyze_gh_api(
     )
 
 
+_GH_HELP_FLAGS: frozenset[str] = frozenset({"--help", "-h"})
+# Value-taking flags across the gh subcommands this module classifies below,
+# curated so the --help exemption cannot be spoofed by a flag's own value
+# (e.g. `gh pr review 5 --approve --body --help`) without needing a full
+# per-subcommand flag grammar — mirrors the hardcoded-per-command flag
+# tables already used by _analyze_gh_api/_analyze_curl_segment.
+_GH_KNOWN_VALUE_FLAGS: frozenset[str] = frozenset(
+    {
+        "--body",
+        "-b",
+        "--add-label",
+        "--remove-label",
+        "--add-assignee",
+        "--remove-assignee",
+        "--reason",
+        "--target",
+        "--visibility",
+    }
+)
+
+
+_GH_MUTATION_SUBCOMMANDS: dict[str, frozenset[str]] = {
+    row.partition(":")[0]: frozenset(row.partition(":")[2].split())
+    for row in (
+        "cache:delete;codespace:create delete edit rebuild stop;gist:create delete edit "
+        "rename;gpg-key:add delete;issue:close comment create delete develop edit lock pin reopen "
+        "transfer unlock unpin;label:clone create delete edit;pr:close comment edit lock merge "
+        "ready reopen unlock;project:close copy create delete edit field-create field-delete "
+        "item-add item-archive item-create item-delete item-edit link mark-template "
+        "unlink;release:create delete delete-asset edit upload;repo:archive create delete edit "
+        "fork rename sync unarchive;run:cancel delete rerun;secret:delete set;ssh-key:add "
+        "delete;variable:delete set;workflow:disable enable run"
+    ).split(";")
+}
+_GH_READ_ONLY_SUBCOMMANDS: dict[str, frozenset[str]] = {
+    row.partition(":")[0]: frozenset(row.partition(":")[2].split())
+    for row in (
+        "cache:list;codespace:code cp jupyter list logs ports ssh view;gist:clone list "
+        "view;gpg-key:list;issue:list status view;label:list;pr:checkout checks diff list status "
+        "view;project:field-list item-list list view;release:download list verify verify-asset "
+        "view;repo:clone list set-default view;run:download list view "
+        "watch;secret:list;ssh-key:list;variable:list;workflow:list view"
+    ).split(";")
+}
+
+
+def _gh_args_have_bare_help_flag(args: Sequence[str]) -> bool:
+    """Return True when -h/--help appears as its own flag, not another flag's value."""
+    i = 0
+    n = len(args)
+    while i < n:
+        token = args[i]
+        if token in _GH_HELP_FLAGS:
+            return True
+        if token in _GH_KNOWN_VALUE_FLAGS:
+            i += 2
+            continue
+        i += 1
+    return False
+
+
 def _analyze_gh_segment(
     args: Sequence[str],
     *,
@@ -1475,12 +1602,34 @@ def _analyze_gh_segment(
 ) -> tuple[GitHubMutationRecord | None, str]:
     if not args:
         return (None, "")
+    if _gh_args_have_bare_help_flag(args[1:]):
+        return (None, "")
+    if args[:2] == ["pr", "create"]:
+        return (None, "")
     if args[:2] == ["pr", "review"]:
         return (
             GitHubMutationRecord(
                 method="POST",
                 route="/gh/pr/review",
                 kind=GitHubMutationKind.PULL_REVIEW,
+                request_count=1,
+                review_comment_count=None,
+            ),
+            "",
+        )
+    noun = args[0]
+    mutation_verbs = _GH_MUTATION_SUBCOMMANDS.get(noun)
+    if mutation_verbs is not None and len(args) >= 2:
+        verb = args[1]
+        if verb in _GH_READ_ONLY_SUBCOMMANDS.get(noun, frozenset()):
+            return (None, "")
+        if verb not in mutation_verbs:
+            return (None, f"gh {noun} {verb} mutation classification is unresolved")
+        return (
+            GitHubMutationRecord(
+                method="POST",
+                route=f"/gh/{noun}/{verb}",
+                kind=GitHubMutationKind.OTHER,
                 request_count=1,
                 review_comment_count=None,
             ),
@@ -1716,8 +1865,10 @@ def analyze_github_mutations(
             queue.append((nested, current_cwd, depth + 1))
 
         if (
-            _REPEATABLE_SHELL_RE.search(payload) or _UNRESOLVED_DISPATCH_RE.search(payload)
-        ) and _POSSIBLE_GITHUB_EXEC_RE.search(payload):
+            _REPEATABLE_SHELL_RE.search(payload) or _PROCESS_SUBSTITUTION_RE.search(payload)
+        ) and _segments_have_possible_github_exec_token(segments):
+            reasons.append("shell loop or wrapper has unresolved mutation cardinality")
+        if _segments_have_dispatch_word_exec_risk(segments):
             reasons.append("mutation cardinality is unresolved in a shell wrapper")
 
     for argv, argv_cwd in argv_payloads:

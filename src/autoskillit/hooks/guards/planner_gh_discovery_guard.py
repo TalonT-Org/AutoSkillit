@@ -27,6 +27,7 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     has_interpreter_wrapped_command,
     tokenize_shell_payload_segments,
 )
+from _hook_payload import parse_hook_command  # type: ignore[import-not-found]  # noqa: E402
 
 DISCOVERY_DENY_TRIGGER: str = "Planner skills cannot discover GitHub issues"
 
@@ -128,10 +129,7 @@ def main() -> None:
     if not skill_name.startswith("planner-"):
         sys.exit(0)
 
-    tool_input = data.get("tool_input", {})
-    if not isinstance(tool_input, dict):
-        sys.exit(0)
-    cmd = tool_input.get("command", "") or tool_input.get("cmd", "")
+    cmd = parse_hook_command(data).command or ""
 
     if not _is_gh_discovery(cmd):
         sys.exit(0)

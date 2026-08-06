@@ -286,6 +286,10 @@ class TestGitOpsGuardEdgeCases:
         out = _run_guard("", kitchen_open=False, tmpdir=tmp_path, raw_stdin="not-json{{{")
         assert out.strip() == "", "Malformed JSON must fail open"
 
+    def test_fails_open_on_non_object_stdin(self, tmp_path):
+        out = _run_guard("", kitchen_open=False, tmpdir=tmp_path, raw_stdin="[]")
+        assert out.strip() == "", "Non-object JSON must fail open"
+
     def test_fails_open_on_missing_cmd_field(self, tmp_path):
         stdin = json.dumps({"tool_name": _TOOL_NAME, "tool_input": {}})
         out = _run_guard("", kitchen_open=False, tmpdir=tmp_path, raw_stdin=stdin)

@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.hook_registry import FAIL_CLOSED_GUARD_BASENAMES
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GUARDS_AGENTS = REPO_ROOT / "src/autoskillit/hooks/guards/AGENTS.md"
 SAFETY_HOOKS = REPO_ROOT / "docs/safety/hooks.md"
@@ -32,14 +34,10 @@ class TestGuardsClaudeMd:
         content = GUARDS_AGENTS.read_text()
         assert "### Fail-Mode Contract" in content
 
-    def test_guards_claude_md_fail_mode_matrix_lists_three_fail_closed_guards(self) -> None:
+    def test_guards_claude_md_fail_mode_matrix_lists_all_fail_closed_guards(self) -> None:
         content = GUARDS_AGENTS.read_text()
         section = _extract_section(content, "### Fail-Mode Contract")
-        for guard in [
-            "skill_command_guard.py",
-            "open_kitchen_guard.py",
-            "skill_orchestration_guard.py",
-        ]:
+        for guard in sorted(FAIL_CLOSED_GUARD_BASENAMES):
             assert guard in section, f"{guard} not in Fail-Mode Contract section"
         assert RETIRED_GUARD not in section
 
@@ -62,14 +60,10 @@ class TestSafetyHooksMd:
         content = SAFETY_HOOKS.read_text()
         assert "## Fail Modes" in content
 
-    def test_safety_hooks_md_fail_mode_matrix_lists_three_fail_closed_guards(self) -> None:
+    def test_safety_hooks_md_fail_mode_matrix_lists_all_fail_closed_guards(self) -> None:
         content = SAFETY_HOOKS.read_text()
         section = _extract_section(content, "## Fail Modes")
-        for guard in [
-            "skill_command_guard.py",
-            "open_kitchen_guard.py",
-            "skill_orchestration_guard.py",
-        ]:
+        for guard in sorted(FAIL_CLOSED_GUARD_BASENAMES):
             assert guard in section, f"{guard} not in Fail Modes section"
         assert RETIRED_GUARD not in section
 

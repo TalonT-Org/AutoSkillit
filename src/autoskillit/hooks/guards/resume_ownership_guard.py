@@ -8,6 +8,15 @@ import os
 import sys
 from pathlib import Path
 
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    parse_hook_command,
+    resolve_state_root,
+)
+
 RESUME_OWNERSHIP_DENY_TRIGGER: str = "resume_session_id ownership validation failed"
 
 
@@ -24,12 +33,12 @@ def _deny(reason: str) -> None:
     )
 
 
-def _resolve_provenance_path() -> Path:
+def _resolve_provenance_path(payload_cwd: str = "") -> Path:
     override = os.environ.get("AUTOSKILLIT_STATE_DIR", "")
     if override:
         return Path(override) / "session_provenance.jsonl"
     campaign = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
-    base = Path.cwd() / ".autoskillit" / "temp"
+    base = resolve_state_root(payload_cwd) / ".autoskillit" / "temp"
     if campaign:
         base = base / campaign
     return base / "session_provenance.jsonl"
@@ -57,7 +66,9 @@ def _find_provenance(session_id: str, prov_path: Path) -> dict | None:
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
-    except (json.JSONDecodeError, ValueError):
+        if not isinstance(data, dict):
+            sys.exit(0)
+    except (json.JSONDecodeError, TypeError, ValueError):
         sys.exit(0)
 
     # Interactive sessions bypass ownership — the human user is the implicit owner.
@@ -65,12 +76,18 @@ def main() -> None:
         sys.exit(0)
 
     tool_input = data.get("tool_input", {})
+    if not isinstance(tool_input, dict):
+        sys.exit(0)
     resume_session_id = tool_input.get("resume_session_id")
 
     if not resume_session_id:
         sys.exit(0)
 
-    prov_path = _resolve_provenance_path()
+    try:
+        payload_cwd = parse_hook_command(data).payload_cwd
+        prov_path = _resolve_provenance_path(payload_cwd)
+    except (AttributeError, OSError, TypeError, ValueError):
+        sys.exit(0)
     record = _find_provenance(resume_session_id, prov_path)
 
     if record is None:

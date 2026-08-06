@@ -6,6 +6,15 @@ import json
 import sys
 from pathlib import Path
 
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    parse_hook_command,
+    resolve_state_root,
+)
+
 REVIEW_LOOP_DENY_TRIGGER: str = "REVIEW LOOP REQUIRED"
 
 _DENY_REASON = (
@@ -26,11 +35,15 @@ _STATE_FILE_RELPATH = (".autoskillit", "temp", "review_gate_state.json")
 
 def main() -> None:
     try:
-        json.loads(sys.stdin.read())
+        data = json.loads(sys.stdin.read())
+        if not isinstance(data, dict):
+            sys.exit(0)
+        payload_cwd = parse_hook_command(data).payload_cwd
+        project_root = resolve_state_root(payload_cwd)
     except Exception:
         sys.exit(0)
 
-    state_file = Path.cwd().joinpath(*_STATE_FILE_RELPATH)
+    state_file = project_root.joinpath(*_STATE_FILE_RELPATH)
     if not state_file.exists():
         sys.exit(0)
 

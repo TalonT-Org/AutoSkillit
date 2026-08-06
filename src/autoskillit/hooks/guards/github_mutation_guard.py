@@ -11,10 +11,10 @@ stdlib-only; no autoskillit imports.
 from __future__ import annotations
 
 import json
-import os
 import sys
+from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NoReturn
+from typing import TYPE_CHECKING, NamedTuple, NoReturn
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
@@ -26,16 +26,23 @@ if TYPE_CHECKING:
         GitHubMutationStatus,
         analyze_github_mutations,
     )
+    from autoskillit.hooks._hook_payload import (
+        ParsedHookCommand,
+        PayloadAnomaly,
+        parse_hook_command,
+    )
 else:
     from _command_classification import (  # noqa: E402
         GitHubMutationKind,
         GitHubMutationStatus,
         analyze_github_mutations,
     )
+    from _hook_payload import (  # noqa: E402
+        ParsedHookCommand,
+        PayloadAnomaly,
+        parse_hook_command,
+    )
 
-GITHUB_MUTATION_DENY_TRIGGER: str = "Unsafe raw GitHub mutation is prohibited"
-
-_RUN_CMD_SUFFIX = "__run_cmd"
 _REVIEW_KINDS: frozenset[GitHubMutationKind] = frozenset(
     {
         GitHubMutationKind.PULL_REVIEW,
@@ -44,57 +51,103 @@ _REVIEW_KINDS: frozenset[GitHubMutationKind] = frozenset(
         GitHubMutationKind.GRAPHQL_REVIEW,
     }
 )
-_DENY_REASON = (
-    "Unsafe raw GitHub mutation is prohibited. Use post_pr_review for pull-request "
-    "review publication, or the appropriate structured AutoSkillit mutation tool. "
-    "Raw review writes, multiple writes, and unresolved mutation commands fail closed."
+
+GITHUB_MUTATION_DENY_TRIGGER: str = "Unsafe raw GitHub mutation is prohibited"
+
+
+class DenyTrigger(StrEnum):
+    """Exhaustive machine-readable reasons this guard denies a command."""
+
+    FIELD_CONFUSION = "field_confusion"
+    MALFORMED_COMMAND = "malformed_command"
+    MALFORMED_CWD = "malformed_cwd"
+    UNRESOLVED_MUTATION = "unresolved_mutation"
+    MULTIPLE_MUTATIONS = "multiple_mutations"
+    REVIEW_MUTATION = "review_mutation"
+
+
+class GuardDecision(NamedTuple):
+    """The guard's outcome for one command, plus the trigger that produced it."""
+
+    allow: bool
+    trigger: DenyTrigger | None
+
+
+_POST_PR_REVIEW_POINTER = (
+    "Use post_pr_review for pull-request review publication, or the appropriate "
+    "structured AutoSkillit mutation tool."
 )
 
+_DENY_MESSAGES: dict[DenyTrigger, str] = {
+    DenyTrigger.FIELD_CONFUSION: (
+        "field_confusion: the hook payload carries both the Bash and run_cmd "
+        "command fields, or a stray cwd field inside a Bash tool_input, so which "
+        "text executes is ambiguous. Fail closed rather than guess."
+    ),
+    DenyTrigger.MALFORMED_COMMAND: (
+        "malformed_command: the payload's command field is missing or not a "
+        "string, so no command text could be inspected."
+    ),
+    DenyTrigger.MALFORMED_CWD: (
+        "malformed_cwd: the command's execution cwd is non-string or relative, "
+        "so path-sensitive mutation inputs cannot be inspected safely."
+    ),
+    DenyTrigger.UNRESOLVED_MUTATION: (
+        "unresolved_mutation: this command's GitHub mutation cardinality or "
+        f"target cannot be statically proven safe. {_POST_PR_REVIEW_POINTER} "
+        "Unresolved mutation commands fail closed."
+    ),
+    DenyTrigger.MULTIPLE_MUTATIONS: (
+        "multiple_mutations: this command issues more than one GitHub mutation "
+        f"request. {_POST_PR_REVIEW_POINTER} Multiple writes fail closed."
+    ),
+    DenyTrigger.REVIEW_MUTATION: (
+        "review_mutation: raw pull-request review publication is prohibited. "
+        f"{_POST_PR_REVIEW_POINTER}"
+    ),
+}
 
-def _deny() -> NoReturn:
+
+def decide(parsed: ParsedHookCommand) -> GuardDecision:
+    """Pure decision function: payload facts plus mutation analysis, no I/O.
+
+    Ordering mirrors decide_response_conformance's ordered pure-function
+    shape: structural payload defects (missing command, field confusion)
+    are checked before any command-content classification runs.
+    """
+    if parsed.tool_kind not in ("bash", "run_cmd"):
+        return GuardDecision(allow=True, trigger=None)
+    if parsed.command is None:
+        return GuardDecision(allow=False, trigger=DenyTrigger.MALFORMED_COMMAND)
+    if PayloadAnomaly.FIELD_CONFUSION in parsed.anomalies:
+        return GuardDecision(allow=False, trigger=DenyTrigger.FIELD_CONFUSION)
+    if any(
+        anomaly in parsed.anomalies
+        for anomaly in (PayloadAnomaly.NON_STRING_CWD, PayloadAnomaly.RELATIVE_CWD)
+    ):
+        return GuardDecision(allow=False, trigger=DenyTrigger.MALFORMED_CWD)
+
+    analysis = analyze_github_mutations(parsed.command, cwd=parsed.execution_cwd)
+
+    if analysis.status is GitHubMutationStatus.MULTIPLE:
+        return GuardDecision(allow=False, trigger=DenyTrigger.MULTIPLE_MUTATIONS)
+    if analysis.status is GitHubMutationStatus.UNRESOLVED:
+        return GuardDecision(allow=False, trigger=DenyTrigger.UNRESOLVED_MUTATION)
+    if any(record.kind in _REVIEW_KINDS for record in analysis.mutations):
+        return GuardDecision(allow=False, trigger=DenyTrigger.REVIEW_MUTATION)
+    return GuardDecision(allow=True, trigger=None)
+
+
+def _deny(trigger: DenyTrigger) -> NoReturn:
     payload = {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
-            "permissionDecisionReason": _DENY_REASON,
+            "permissionDecisionReason": _DENY_MESSAGES[trigger],
         }
     }
     sys.stdout.write(json.dumps(payload) + "\n")
     raise SystemExit(0)
-
-
-def _normalized_input(data: dict[str, Any]) -> tuple[str, str] | None:
-    tool_name = data.get("tool_name")
-    tool_input = data.get("tool_input")
-    if not isinstance(tool_name, str) or not isinstance(tool_input, dict):
-        return None
-
-    if tool_name == "Bash":
-        if "cmd" in tool_input:
-            _deny()
-        command = tool_input.get("command")
-        cwd = data.get("cwd", "")
-        if "cwd" in tool_input and tool_input["cwd"] != cwd:
-            _deny()
-    elif tool_name.endswith(_RUN_CMD_SUFFIX) and "autoskillit" in tool_name:
-        if "command" in tool_input:
-            _deny()
-        command = tool_input.get("cmd")
-        cwd = tool_input.get("cwd", "")
-        if "cwd" in data and data["cwd"] != cwd:
-            _deny()
-    else:
-        return None
-
-    if not isinstance(command, str):
-        _deny()
-    if cwd is None:
-        cwd = ""
-    if not isinstance(cwd, str):
-        _deny()
-    if cwd and not os.path.isabs(cwd):
-        _deny()
-    return (command, cwd)
 
 
 def main() -> None:
@@ -105,19 +158,9 @@ def main() -> None:
     if not isinstance(loaded, dict):
         raise SystemExit(0)
 
-    normalized = _normalized_input(loaded)
-    if normalized is None:
-        raise SystemExit(0)
-    command, cwd = normalized
-    analysis = analyze_github_mutations(command, cwd=cwd)
-
-    if analysis.status in {
-        GitHubMutationStatus.MULTIPLE,
-        GitHubMutationStatus.UNRESOLVED,
-    }:
-        _deny()
-    if any(record.kind in _REVIEW_KINDS for record in analysis.mutations):
-        _deny()
+    decision = decide(parse_hook_command(loaded))
+    if not decision.allow and decision.trigger is not None:
+        _deny(decision.trigger)
     raise SystemExit(0)
 
 

@@ -26,6 +26,7 @@ from autoskillit.hooks._capture._snapshot import (
 from autoskillit.hooks._capture._types import (
     CaptureCleanupOutcome,
     CleanupBlocker,
+    CleanupProgress,
     LockContended,
 )
 from autoskillit.hooks._capture_artifacts import (
@@ -1170,7 +1171,8 @@ def test_runner_tail_cleanup_failure_does_not_replace_user_result(
     assert capture_artifacts._main(_runner_args()) == 23
     captured = capfd.readouterr()
     assert captured.out == ""
-    assert "shell capture cleanup failed" in captured.err
+    assert "failed" in captured.err
+    assert "runner-tail reconciliation raised an unexpected exception" in captured.err
     assert len(captured.err.encode("utf-8")) <= 512
 
 
@@ -1193,6 +1195,33 @@ def test_runner_tail_reports_sweep_outcome_errors(
     captured = capfd.readouterr()
     assert captured.out == ""
     assert "blocker=ledger_integrity errors=2" in captured.err
+
+
+def test_runner_tail_deferred_outcome_emits_nothing_per_command(
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """The incident: bounded budget progress with no errors must stay silent
+    on every command, not just occasionally — DEFERRED never produces a
+    per-command runner-tail message."""
+    monkeypatch.setattr(capture_artifacts, "_dispatch_runner", lambda *_args: 23)
+    monkeypatch.setattr(
+        capture_artifacts._capture_reconcile,
+        "reconcile_capture_store",
+        lambda requested_cwd, budget: CaptureCleanupOutcome(
+            examined=2,
+            deleted=2,
+            remaining_due=3,
+            progress=CleanupProgress.RETIRED,
+            blocker=CleanupBlocker.RECORD_BUDGET,
+            errors=0,
+        ),
+    )
+
+    assert capture_artifacts._main(_runner_args()) == 23
+    captured = capfd.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
 
 
 def test_runner_tail_still_sweeps_after_unexpected_dispatch_exception(

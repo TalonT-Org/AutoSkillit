@@ -40,6 +40,7 @@ from autoskillit.core import (
     CODEX_STARTUP_TRACE_ENV_VAR,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     MCP_CLIENT_BACKEND_ENV_VAR,
+    NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
     ORCHESTRATOR_SESSION_REQUIRED_ENV,
     PROVIDER_PROFILE_ENV_VAR,
     RESUME_SESSION_BASELINE_KEYS,
@@ -59,6 +60,7 @@ from autoskillit.core import (
     ManagedHeadlessSessionLineageRef,
     NamedResume,
     NativeShellCaptureDecision,
+    NativeShellCaptureMode,
     NoResume,
     ObserverStatus,
     OutputFormat,
@@ -1540,6 +1542,9 @@ class CodexBackend(BackendCmdBuilderBase):
         env = CodexEnvPolicy().build_env(
             base_env, extras=merged_extras, required=effective_required
         )
+        # build_env strips this key from extras unconditionally, so it must be
+        # injected here, after build_env returns (as the other builders do).
+        env.update({NATIVE_SHELL_CAPTURE_MODE_ENV_VAR: NativeShellCaptureMode.CAPTURE.value})
         if executable is not None and dict(env) != dict(executable.launch_environment):
             raise ValueError("interactive environment changed after executable binding")
         partial = builder.build()

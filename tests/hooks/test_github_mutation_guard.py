@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from .conftest import _RUN_CMD_TOOL_DIRECT, make_hook_event
+
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 _RUN_CMD_TOOL = "mcp__plugin_autoskillit_autoskillit__run_cmd"
@@ -51,6 +53,29 @@ def _decision(event: dict, monkeypatch: pytest.MonkeyPatch) -> str | None:
     if not result:
         return None
     return result["hookSpecificOutput"]["permissionDecision"]
+
+
+@pytest.mark.parametrize(
+    "event",
+    [
+        {"tool_name": "Bash", "tool_input": {"command": "gh pr list"}, "cwd": "relative"},
+        {"tool_name": "Bash", "tool_input": {"command": "gh pr list"}, "cwd": 42},
+        {
+            "tool_name": _RUN_CMD_TOOL,
+            "tool_input": {"cmd": "gh pr list", "cwd": "relative"},
+        },
+        {"tool_name": _RUN_CMD_TOOL, "tool_input": {"cmd": "gh pr list", "cwd": 42}},
+    ],
+    ids=["bash-relative", "bash-non-string", "run-cmd-relative", "run-cmd-non-string"],
+)
+def test_malformed_execution_cwd_is_denied(
+    event: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _run_hook(event, monkeypatch)
+
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "malformed_cwd" in result["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 @pytest.mark.parametrize(
@@ -352,22 +377,242 @@ def test_proven_single_non_review_mutation_is_preserved(
     assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) is None
 
 
-@pytest.mark.parametrize("surface", ["bash", "run-cmd"])
-def test_conflicting_cwd_authorities_fail_closed(
-    surface: str,
+@pytest.mark.parametrize(
+    "case_id",
+    [
+        "fp1-run-cmd-pwd-differing-cwds",
+        "fp2-run-cmd-git-rev-parse",
+        "fp3-run-cmd-sed",
+        "fp4-run-cmd-pwd-tool-cwd-omitted",
+        "fp5-run-cmd-pwd-equal-cwds",
+        "fp6-bash-chained-benign",
+        "fp7-bash-benign-loop",
+        "fp8-bash-dynamic-echo",
+        "fp9-bash-dynamic-git-log",
+        "fp10-bash-gh-in-quoted-loop-string",
+        "fp11-run-cmd-source-then-gh-read",
+    ],
+)
+def test_false_positive_corpus_is_allowed(
+    case_id: str,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    other = tmp_path / "other"
-    command = "gh api --method PATCH /repos/o/r/issues/7 -f title=updated"
-    if surface == "bash":
-        event = _bash_event(command, cwd=str(tmp_path))
-        event["tool_input"]["cwd"] = str(other)
-    else:
-        event = _run_cmd_event(command, cwd=str(tmp_path))
-        event["cwd"] = str(other)
+    """Reproduce the live incident: a worktree run_cmd cwd must not be denied.
 
-    assert _decision(event, monkeypatch) == "deny"
+    Every case here previously denied (or would deny under a content-free
+    envelope-equality check) despite issuing no GitHub mutation at all.
+    """
+    repo = str(tmp_path / "repo")
+    worktree = str(tmp_path / "worktree")
+
+    if case_id == "fp1-run-cmd-pwd-differing-cwds":
+        event = make_hook_event(tool="run_cmd", command="pwd", tool_cwd=worktree, payload_cwd=repo)
+    elif case_id == "fp2-run-cmd-git-rev-parse":
+        event = make_hook_event(
+            tool="run_cmd",
+            command="git rev-parse --show-toplevel 2>&1 | head -c 2000",
+            tool_cwd=worktree,
+            payload_cwd=repo,
+        )
+    elif case_id == "fp3-run-cmd-sed":
+        event = make_hook_event(
+            tool="run_cmd",
+            command="sed -n '1,50p' plan.md",
+            tool_cwd=worktree,
+            payload_cwd=repo,
+        )
+    elif case_id == "fp4-run-cmd-pwd-tool-cwd-omitted":
+        event = make_hook_event(tool="run_cmd", command="pwd", tool_cwd=None, payload_cwd=repo)
+    elif case_id == "fp5-run-cmd-pwd-equal-cwds":
+        event = make_hook_event(tool="run_cmd", command="pwd", tool_cwd=repo, payload_cwd=repo)
+    elif case_id == "fp6-bash-chained-benign":
+        event = make_hook_event(tool="Bash", command="ls && pwd", payload_cwd=repo)
+    elif case_id == "fp7-bash-benign-loop":
+        event = make_hook_event(tool="Bash", command="for n in 1 2; do ls; done", payload_cwd=repo)
+    elif case_id == "fp8-bash-dynamic-echo":
+        event = make_hook_event(tool="Bash", command='echo "$X"', payload_cwd=repo)
+    elif case_id == "fp9-bash-dynamic-git-log":
+        event = make_hook_event(tool="Bash", command='git log "$REF"', payload_cwd=repo)
+    elif case_id == "fp10-bash-gh-in-quoted-loop-string":
+        event = make_hook_event(
+            tool="Bash",
+            command='for f in *; do echo "see gh docs"; done',
+            payload_cwd=repo,
+        )
+    elif case_id == "fp11-run-cmd-source-then-gh-read":
+        event = make_hook_event(
+            tool="run_cmd",
+            command="source .venv/bin/activate && gh pr view --json state",
+            tool_cwd=worktree,
+            payload_cwd=repo,
+        )
+    else:
+        raise AssertionError(f"unhandled false-positive corpus case: {case_id}")
+
+    assert _decision(event, monkeypatch) is None
+
+
+def test_false_positive_corpus_allows_direct_prefix_run_cmd_tool_name(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Codex's direct-prefix run_cmd tool name must satisfy the same matcher."""
+    event = make_hook_event(
+        tool="run_cmd",
+        command="pwd",
+        tool_cwd=str(tmp_path / "worktree"),
+        payload_cwd=str(tmp_path / "repo"),
+        run_cmd_tool_name=_RUN_CMD_TOOL_DIRECT,
+    )
+
+    assert _decision(event, monkeypatch) is None
+
+
+def test_field_confusion_payload_denies_with_field_confusion_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    event = make_hook_event(
+        tool="run_cmd",
+        command="pwd",
+        payload_cwd=str(tmp_path),
+        extra_tool_input={"command": "pwd"},
+    )
+
+    result = _run_hook(event, monkeypatch)
+
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+    reason = result["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "field_confusion" in reason
+    assert "review_mutation" not in reason
+    assert "multiple_mutations" not in reason
+    assert "unresolved_mutation" not in reason
+
+
+def test_review_mutation_denies_with_review_mutation_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    event = make_hook_event(
+        tool="Bash",
+        command="gh pr review --approve",
+        payload_cwd=str(tmp_path),
+    )
+
+    result = _run_hook(event, monkeypatch)
+
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "review_mutation" in result["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_multiple_mutations_deny_with_multiple_mutations_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    command = (
+        "gh api --method PATCH /repos/o/r/issues/7 -f title=x && "
+        "gh api --method DELETE /repos/o/r/issues/8"
+    )
+    event = make_hook_event(tool="Bash", command=command, payload_cwd=str(tmp_path))
+
+    result = _run_hook(event, monkeypatch)
+
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "multiple_mutations" in result["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_unresolved_mutation_denies_with_unresolved_mutation_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    event = make_hook_event(
+        tool="Bash",
+        command='gh api "repos/$OWNER/repo/pulls/1/reviews" -X POST',
+        payload_cwd=str(tmp_path),
+    )
+
+    result = _run_hook(event, monkeypatch)
+
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "unresolved_mutation" in result["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_deny_messages_mapping_is_exhaustive() -> None:
+    from autoskillit.hooks.guards.github_mutation_guard import _DENY_MESSAGES, DenyTrigger
+
+    assert set(_DENY_MESSAGES.keys()) == set(DenyTrigger)
+
+
+@pytest.mark.parametrize(
+    ("tool_cwd", "expected_reason"),
+    [(None, "unresolved_mutation"), ("relative/dir", "malformed_cwd")],
+    ids=["omitted", "relative"],
+)
+def test_relative_input_file_unresolved_without_an_absolute_tool_cwd(
+    tool_cwd: str | None,
+    expected_reason: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A run_cmd's own target-dir argument is the execution cwd, not the payload cwd.
+
+    Resolving a relative --input file requires an absolute execution cwd;
+    an omitted or relative tool_cwd leaves resolution impossible, and the
+    payload's session-level cwd is never substituted as a fallback authority.
+    """
+    command = f"gh api {_OTHER_ROUTE} --method POST --input review.json"
+    event = make_hook_event(
+        tool="run_cmd",
+        command=command,
+        tool_cwd=tool_cwd,
+        payload_cwd=str(tmp_path),
+    )
+
+    result = _run_hook(event, monkeypatch)
+
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert expected_reason in result["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_literal_input_file_resolves_against_tool_cwd_not_payload_cwd(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    worktree = tmp_path / "worktree"
+    repo.mkdir()
+    worktree.mkdir()
+    (worktree / "comment.json").write_text(json.dumps({"body": "one comment"}), encoding="utf-8")
+    command = f"gh api {_OTHER_ROUTE} --method POST --input comment.json"
+    event = make_hook_event(
+        tool="run_cmd",
+        command=command,
+        tool_cwd=str(worktree),
+        payload_cwd=str(repo),
+    )
+
+    assert _decision(event, monkeypatch) is None
+
+
+def test_literal_non_review_mutation_allowed_with_differing_cwds(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A run_cmd's own target-dir argument differing from the session cwd is normal.
+
+    Replaces the old envelope-equality expectation: worktree topology means
+    these two facts differ on essentially every real call.
+    """
+    command = "gh api --method PATCH repos/o/r/issues/1"
+    event = make_hook_event(
+        tool="run_cmd",
+        command=command,
+        tool_cwd=str(tmp_path / "worktree"),
+        payload_cwd=str(tmp_path / "repo"),
+    )
+
+    assert _decision(event, monkeypatch) is None
 
 
 def test_guard_registration_is_exact() -> None:

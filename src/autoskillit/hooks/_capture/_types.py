@@ -12,18 +12,21 @@ from ._module_identity import register_module_aliases
 register_module_aliases(__name__)
 
 __all__ = [
+    "BLOCKER_FAMILY",
     "CaptureCapacitySpec",
     "CaptureCapacityReason",
     "CaptureCleanupOutcome",
     "CaptureFailureEvidence",
     "CleanupBlocker",
     "CleanupProgress",
+    "CleanupSeverity",
     "DueKey",
     "LedgerIncarnation",
     "LedgerSnapshot",
     "LegacyCleanupOnly",
     "SweepAttempt",
     "SweepBudgetSpec",
+    "classify_cleanup_outcome",
 ]
 
 
@@ -85,6 +88,11 @@ class SweepBudgetSpec:
     max_transitions: int = 128
     max_cursor_writes: int = 32
     max_duration_seconds: float = 0.05
+    # 0 disables the directory-reconciliation orphan-scan phase entirely (the
+    # RUNNER_TAIL_BUDGET default): unlike the record-centric fields above,
+    # zero is a valid, meaningful value, so it is validated separately below
+    # rather than folded into the positive-only integer_values tuple.
+    max_directory_entries_scanned: int = 0
 
     def __post_init__(self) -> None:
         integer_values = (
@@ -96,6 +104,8 @@ class SweepBudgetSpec:
         )
         if (
             any(type(value) is not int or value <= 0 for value in integer_values)
+            or type(self.max_directory_entries_scanned) is not int
+            or self.max_directory_entries_scanned < 0
             or not isinstance(self.max_duration_seconds, (int, float))
             or isinstance(self.max_duration_seconds, bool)
             or not math.isfinite(self.max_duration_seconds)
@@ -175,6 +185,61 @@ class CleanupBlocker(StrEnum):
     TRANSITION_BUDGET = "transition_budget"
     CURSOR_WRITE_BUDGET = "cursor_write_budget"
     ELAPSED_DEADLINE = "elapsed_deadline"
+
+
+class CleanupSeverity(StrEnum):
+    """State-derived urgency of a cleanup outcome, for diagnostic emission."""
+
+    HEALTHY = "healthy"  # no residual message
+    DEFERRED = "deferred"  # bounded budget progress made; backlog remains — no per-command message
+    STALLED = "stalled"  # externally blocked, or zero progress without errors — neutral telemetry
+    FAILED = "failed"  # errors > 0 — failure-worded line
+
+
+# Exhaustive: every CleanupBlocker member is assigned exactly one family, so a
+# new member without an assignment raises KeyError in classify_cleanup_outcome
+# instead of silently defaulting.
+BLOCKER_FAMILY: dict[CleanupBlocker, str] = {
+    CleanupBlocker.NONE: "healthy",
+    CleanupBlocker.STORE_ABSENT: "healthy",
+    CleanupBlocker.RECORD_BUDGET: "budget",
+    CleanupBlocker.REPLAY_BYTE_BUDGET: "budget",
+    CleanupBlocker.ATTEMPT_BUDGET: "budget",
+    CleanupBlocker.TRANSITION_BUDGET: "budget",
+    CleanupBlocker.CURSOR_WRITE_BUDGET: "budget",
+    CleanupBlocker.ELAPSED_DEADLINE: "budget",
+    CleanupBlocker.LOCK_CONTENDED: "external",
+    CleanupBlocker.FILESYSTEM_AUTHORITY: "external",
+    CleanupBlocker.PERMISSION_DENIED: "external",
+    CleanupBlocker.FILESYSTEM_IO: "external",
+    CleanupBlocker.LEDGER_INTEGRITY: "external",
+    CleanupBlocker.MIGRATION_BLOCKED: "external",
+}
+
+
+def classify_cleanup_outcome(
+    progress: CleanupProgress,
+    blocker: CleanupBlocker,
+    errors: int,
+) -> CleanupSeverity:
+    """Derive diagnostic severity from cleanup state — total over the full domain.
+
+    ``errors`` wins unconditionally. Otherwise severity is driven by the
+    blocker's family: a healthy-family blocker is always healthy; a
+    budget-family blocker is deferred if some progress was made this pass
+    and stalled if none was; an external-family blocker is always stalled,
+    regardless of progress, so an externally-blocked store never goes silent.
+    """
+    if errors > 0:
+        return CleanupSeverity.FAILED
+    family = BLOCKER_FAMILY[blocker]
+    if family == "healthy":
+        return CleanupSeverity.HEALTHY
+    if family == "budget":
+        if progress is CleanupProgress.NONE:
+            return CleanupSeverity.STALLED
+        return CleanupSeverity.DEFERRED
+    return CleanupSeverity.STALLED
 
 
 class SweepBudgetExceeded(Exception):

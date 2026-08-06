@@ -78,6 +78,10 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     "execution/headless/_headless_evidence.py": (
         "path-aware write-evidence discriminator; mirrors canonical default"
     ),
+    # Justification: docstring for resolve_state_root() explains that callers append
+    # .autoskillit/temp/... themselves; stdlib-only hook module, cannot use
+    # resolve_temp_dir().
+    "hooks/_hook_payload.py": "docstring example",
 }
 
 _LITERAL = ".autoskillit/temp"

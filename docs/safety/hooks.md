@@ -68,11 +68,15 @@ Denies `run_cmd` calls that perform editable installs without `--python
 ### `github_mutation_guard.py`
 **Guarded tools:** `Bash`, `run_cmd`
 Denies raw pull-request review writes and any command containing multiple,
-looped, dynamic, or otherwise unresolved GitHub mutations. Literal
-`gh api --input FILE` payloads are inspected only from an absolute effective
-working directory and fail closed when the request or `comments[]` count
-cannot be proven. Review publication must use the typed `post_pr_review` tool;
-proven single non-review mutations retain their existing policy.
+looped, dynamic, or otherwise unresolved GitHub mutations. Classification
+resolves relative `gh api --input FILE` payloads against the command's own
+*execution cwd* — a run_cmd tool call's own required target-directory
+argument, or a Bash call's payload cwd — never against an unrelated session-
+level field, and fails closed when no absolute execution cwd is available or
+the request/`comments[]` count cannot be proven. Review publication must use
+the typed `post_pr_review` tool; proven single non-review mutations retain
+their existing policy. See "Fail Modes" below for the guard's exhaustive
+deny-trigger vocabulary.
 
 ### `pr_create_guard.py`
 **Guarded tool:** `run_cmd`
@@ -188,6 +192,140 @@ only. Trap isolation (#4323), a rendered ceiling (#4324), public bounded retriev
 (#4325), broader private-publication policy (#4326), partial/quota accounting
 (#4327), upstream live visibility (#4329), and general producer adoption (#4335)
 remain downstream work.
+
+#### Cleanup diagnostic severity
+
+Both cleanup owners (runner-tail and SessionStart) route their outcome through
+one classifier, `classify_cleanup_outcome(progress, blocker, errors)`
+(`hooks/_capture/_types.py`), before emission:
+
+| Severity | Trigger | Emission |
+|---|---|---|
+| `healthy` | no blocker (`NONE`), or the store doesn't exist yet (`STORE_ABSENT`) | none |
+| `deferred` | a bounded work budget (records/attempts/transitions/cursor-writes/replay-bytes/duration) was exhausted, but this pass still made progress | none — a bounded backlog is not, by itself, attention-grade |
+| `stalled` | externally blocked (lock contention, an in-flight migration, filesystem authority/permission/IO/ledger failure), or a budget blocker with *zero* progress this pass | one neutral line naming the blocker |
+| `failed` | `errors > 0` | one failure-worded line — the only severity whose rendered text may contain "failed" |
+
+`errors` always wins regardless of blocker or progress. An externally-blocked
+store (e.g. a held carrier lease blocking migration) stays `stalled` on every
+pass, independent of progress, so it never goes silent the way a merely
+budget-bounded backlog does. Every non-`healthy`, non-`deferred` message is
+rendered through `hooks/_policy_event.py`'s `PolicyEvent` +
+`render_provenance_prefix` — no hook constructs its own `[AutoSkillit ...]`
+literal (`tests/arch/test_hook_message_provenance.py`).
+
+#### Declared native-shell control mode
+
+`shell_capture_hook.py _resolve_control` reads `AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE`
+plus the four managed-identity vars and resolves to one of three outcomes, in
+addition to the fully-managed `direct` path used by managed headless/skill/
+resume/food-truck sessions:
+
+| State | Resolution | Diagnostic |
+|---|---|---|
+| `capture` declared, no managed identity | capture mode | none — this is cook's normal, declared state |
+| mode unset entirely (nothing declared) | capture mode | one neutral note: "native-shell control undeclared; using capture" |
+| declared but incomplete/invalid managed identity | capture mode | one neutral note: "incomplete managed native-shell controls; falling back to capture" |
+
+Codex cook sessions (`codex.py build_interactive_cmd`) positively declare
+`AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE=capture` — injected after
+`CodexEnvPolicy().build_env()` returns, since extras-side injection is
+unconditionally stripped by the managed native-shell env filter. Cook remains
+structurally unmanaged (no managed-identity params), now *declaredly* so:
+absence of the declaration is a genuine anomaly again, not the common case.
+
+#### Directory-reconciliation scan phase
+
+Every prior cleanup path only ever acts on records the ledger already knows
+about — a `shell_[0-9a-f]{16}.log` file written before a crash, a ledger
+reset, or a legacy pre-ledger run has no record and was permanently
+invisible to cleanup. `hooks/_capture/_orphan_scan.py` (stdlib-only) closes
+that gap. `SweepBudgetSpec` gains `max_directory_entries_scanned`
+(`_types.py`) — 0, the `RUNNER_TAIL_BUDGET` default, disables the phase
+entirely, so per-command runner-tail latency is unaffected; `SESSION_START_BUDGET`
+sets it to 512. The scan runs inside `run_bounded_sweep` after record-sweep
+work, only while duration budget remains.
+
+Directory entries are visited in sorted-name order — the only stable,
+restartable position `os.scandir` supports — resumed via a persisted
+`.orphan-scan-cursor` sidecar written through the same descriptor-relative
+atomic helper, `_control_file.publish_private_file()`, that
+`.capture-sweep-cursor` uses (never `.write_text()`), so repeated
+budget-bounded invocations cover the whole directory without rescanning
+from zero.
+
+A candidate name is *adopted*, never deleted directly, only when every gate
+holds jointly:
+
+| Gate | Rule |
+|---|---|
+| Name pattern | matches `^shell_[0-9a-f]{16}\.log$` exactly |
+| No symlink traversal | `lstat` shows a regular file — never `Path.is_file()`, which follows symlinks; a symlinked capture root once let cleanup escape the project (#4319) |
+| Age | mtime at least 24h old — comfortably beyond the one-hour finalize/abandon eligibility grace, so a file mid-write is never a candidate |
+| Not tracked | name is not the public name of any non-`DELETED`-phase ledger record — a `DELETING`-phase record's file, still on disk mid-quarantine, is excluded, or adoption would create a duplicate record for a tracked name; mtime alone is not a liveness signal, so this gate and the age gate above are both required jointly (#4321) |
+
+Adoption re-verifies every gate again under lock — the scan above runs
+unlocked — and constructs a `CaptureStatus.LEGACY_CLEANUP_ONLY` record, the
+same shape the legacy-ledger decode path produces, with
+`retention_phase=ELIGIBLE`: immediately due for the existing two-phase
+quarantine deletion. Admission is capacity-gated exactly like a real
+`reserve_capture()` call and shares the sweep's `max_transitions` budget — a
+capacity-exhausted candidate is silently skipped, deferred to a later
+invocation once cleanup frees room, so orphan adoption can only ever compete
+for the same active-record ceiling real captures do, never bypass or starve
+it (the same class of self-starvation issue #4440 fixed for the
+record-sweep path).
+
+Codex hook generation includes the scan-enabled `SESSION_START_BUDGET` path:
+`capture_lifecycle_hook.py` is registered `codex_status="works-as-is"`,
+`session_scope="any"` — the exclusion issue #4320 fixed no longer applies.
+
+#### Bounded lock-contention retry
+
+A single non-blocking `flock()` attempt used to abort a sweep immediately on
+any contention, including the 256-attempt `SESSION_START_BUDGET` pass —
+`session_scope="any"` means every concurrent session contends the same lock
+at startup. `CaptureLifecycleStore._locked(blocking=False)` now retries on
+`EAGAIN`/`EWOULDBLOCK` with jittered, doubling backoff (5–20ms base, capped,
+jitter from the stdlib `random` module's OS-entropy-seeded per-process
+state, never a wall-clock-derived source) bounded by the sweep's own
+`max_duration_seconds` — no new configuration knob. `RUNNER_TAIL_BUDGET`
+(50ms) naturally permits one or two retries; `SESSION_START_BUDGET` (1.0s)
+rides out startup stampedes. `LOCK_CONTENDED` is only ever returned once the
+entire budget has elapsed without acquisition; every other blocking caller
+(every non-sweep transition — `reserve_capture`, `commit_verified_snapshot`,
+`get_record`, ...) is unaffected and keeps today's kernel-blocking wait.
+
+Store-open lock acquisition is bounded the same way. Opening a store runs
+`_normalize_interrupted_deliveries` — its own `_locked()` calls — before a
+sweep is ever reached, so a contention there was previously unbounded
+regardless of how tight the caller's budget was: the budget only started
+governing retries once `.sweep()` began. `open_capture_lifecycle` and
+`CaptureLifecycleStore.from_open_authorities` accept an `open_budget`
+parameter; when supplied, it primes the retry mechanism (the same
+`_sweep_budget`/deadline fields the sweep body reads) before
+`_normalize_interrupted_deliveries` runs, and `normalize_interrupted_deliveries`
+switches its lock acquisitions to the bounded non-blocking path for exactly
+that window. `reconcile_capture_store` passes its own `budget` as
+`open_budget`, so both `RUNNER_TAIL_BUDGET` and `SESSION_START_BUDGET` bound
+the whole reconciliation operation, not merely the sweep body; a
+`LockContended` that exhausts the budget during store-open surfaces as the
+same `LOCK_CONTENDED` outcome the sweep body reports.
+`capture_store_stats()` opens with `RUNNER_TAIL_BUDGET` as its own
+`open_budget` for the same reason — a diagnostic read must never hang.
+Every other caller (`create_artifact`, direct construction in tests, ...)
+passes nothing and keeps today's blocking-until-acquired open unchanged.
+
+#### Stats and reclamation CLI
+
+`hooks._capture._reconcile.capture_store_stats()` is the single read-only
+adapter both the doctor battery's capture-store check and `autoskillit
+capture-store` (without `--reclaim`) call, so neither surface can drift from
+what a real reconciliation pass would find. `autoskillit capture-store
+--reclaim` loops `reconcile_capture_store` with a generous one-time
+`RECLAIM_BUDGET` until a clean pass — no due records, no adoptable orphans —
+or a hard iteration cap. It exists for bulk pre-existing backlog; the
+SessionStart scan phase above keeps new debris from ever accumulating again.
 
 ### `generated_file_write_guard.py`
 **Guarded tools:** `Write`, `Edit`
@@ -314,7 +452,7 @@ All guard scripts fail-**open** for malformed or unparseable input: a JSON decod
 failure produces exit 0 (approve). This prevents a broken hook from blocking the
 entire tool chain.
 
-Three guards additionally fail-**closed** for valid input with unrecognized values,
+Five guards additionally fail-**closed** for valid input with unrecognized values,
 as a defense-in-depth measure against privilege escalation:
 
 | Guard | Fail-closed condition | Rationale |
@@ -322,6 +460,8 @@ as a defense-in-depth measure against privilege escalation:
 | `skill_command_guard.py` | Unexpected runtime error (not JSON parse) | Unknown failure mode = deny rather than risk executing an unvalidated command |
 | `open_kitchen_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not gain kitchen access |
 | `skill_orchestration_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not call orchestration tools (`run_skill`, `run_cmd`, `run_python`) |
+| `background_exec_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not bypass `run_in_background` prohibition |
+| `github_mutation_guard.py` | Ambiguous or unresolved GitHub mutation command | Unknown mutation scope must not bypass the structured review publisher |
 
 **Design principle:** Garbage-in (malformed hook input) = fail-open. Unknown-tier
 (valid input, unrecognized value) = fail-closed.
@@ -330,6 +470,30 @@ All remaining guards (`fleet_dispatch_guard.py`, `quota_guard.py`,
 `mcp_health_advisor.py`, `branch_protection_guard.py`, etc.) fail-open in every
 failure scenario — malformed input, unrecognized session types, runtime errors,
 and missing data.
+
+### `github_mutation_guard.py` execution-cwd semantics and trigger vocabulary
+
+The guard extracts two independent facts from each payload via the shared
+`hooks/_hook_payload.py` module: the *payload cwd* (the session-level `cwd`
+field) and the *execution cwd* (a run_cmd tool call's own `cwd` argument, or
+a Bash call's payload cwd — the directory the command actually runs in).
+These are never compared against each other; a run_cmd call's target
+directory differing from the session cwd is the normal shape of every
+worktree-topology call, not a conflict. Mutation classification resolves
+relative `--input` files against the execution cwd only; a missing or
+relative execution cwd degrades cleanly to "unresolved" rather than denying
+every command that carries one.
+
+Every deny routes through one of five machine-readable triggers
+(`DenyTrigger` in `github_mutation_guard.py`), each with its own reason text:
+
+| Trigger | Meaning |
+|---------|---------|
+| `field_confusion` | The payload carries both the Bash and run_cmd command fields, or a stray `cwd` inside a Bash `tool_input` — which text executes is ambiguous. |
+| `malformed_command` | The command field is missing or not a string. |
+| `unresolved_mutation` | Mutation cardinality or target cannot be statically proven safe (dynamic values, unresolved `--input`, repeatable/dispatch constructs reaching a possible GitHub exec). |
+| `multiple_mutations` | The command issues more than one GitHub mutation request. |
+| `review_mutation` | The command is a raw pull-request review publication. |
 
 ## Drift detection
 

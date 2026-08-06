@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 from autoskillit.core import (
     AUTOSKILLIT_APPLICABLE_GUARDS,
+    AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES,
     CAMPAIGN_ID_ENV_VAR,
     CODEX_COOK_RESERVED_ENV_VARS,
@@ -174,12 +175,15 @@ class BackendCmdBuilderBase(ABC):
         Always-on keys (three): ``MAX_MCP_OUTPUT_TOKENS``, ``MCP_CONNECTION_NONBLOCKING``,
         ``AUTOSKILLIT_HEADLESS``.
 
-        Conditional keys (nine): ``AUTOSKILLIT_SESSION_TYPE``,
+        Conditional keys (ten): ``AUTOSKILLIT_SESSION_TYPE``,
         ``AUTOSKILLIT_APPLICABLE_GUARDS``, ``AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES``,
         ``SCENARIO_STEP_NAME``, ``CAMPAIGN_ID_ENV_VAR``, ``KITCHEN_SESSION_ID_ENV_VAR``,
         ``AUTOSKILLIT_ALLOWED_WRITE_PREFIX``, ``AUTOSKILLIT_ALLOWED_WRITE_PREFIXES``,
-        ``AUTOSKILLIT_CWD``. Each is included only when its input is non-empty
-        (campaign/kitchen IDs are also read from the ambient ``os.environ``).
+        ``AUTOSKILLIT_CWD``, ``AUTOSKILLIT_STATE_ROOT_ENV_VAR``. Each is included
+        only when its input is non-empty (campaign/kitchen IDs are also read
+        from the ambient ``os.environ``). A non-empty ``cwd`` supplies both the
+        command's project context and the ``AUTOSKILLIT_STATE_ROOT`` signal
+        guards use to locate ``.autoskillit/`` state in worktree topologies.
         """
         extras: dict[str, str] = dict(SHARED_BASELINE_ENV)
         extras["AUTOSKILLIT_HEADLESS"] = "1"
@@ -203,6 +207,7 @@ class BackendCmdBuilderBase(ABC):
             extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIXES"] = ":".join(write_prefixes)
         if cwd:
             extras["AUTOSKILLIT_CWD"] = cwd
+            extras[AUTOSKILLIT_STATE_ROOT_ENV_VAR] = cwd
         return extras
 
     def _apply_config(self, config: SkillSessionConfig) -> dict[str, Any]:

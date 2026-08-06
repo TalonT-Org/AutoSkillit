@@ -11,6 +11,7 @@ __all__ = [
     "AUTOSKILLIT_APPLICABLE_GUARDS",
     "AUTOSKILLIT_INSTALLED_VERSION",
     "AUTOSKILLIT_PRIVATE_ENV_VARS",
+    "AUTOSKILLIT_STATE_ROOT_ENV_VAR",
     "AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES",
     "CLAUDE_MCP_CONNECTION_NONBLOCKING",
     "CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR",
@@ -84,6 +85,13 @@ CODEX_STARTUP_TRACE_ENV_VAR: str = "AUTOSKILLIT_CODEX_STARTUP_TRACE"
 CODEX_COOK_RESERVED_ENV_VARS: frozenset[str] = frozenset({"CODEX_HOME", "CODEX_SQLITE_HOME"})
 AUTOSKILLIT_APPLICABLE_GUARDS: str = "AUTOSKILLIT_APPLICABLE_GUARDS"
 AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES: str = "AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES"
+# The orchestrating project root, injected by launch preparation so guards can
+# locate `.autoskillit/` state in worktree topologies where the hook payload's
+# own cwd points into a sibling worktree with its own checked-in `.autoskillit/`.
+# Read as a bare string literal by hooks/_hook_payload.py's resolve_state_root
+# (stdlib-only boundary prevents importing this constant there) — keep the two
+# string values byte-identical.
+AUTOSKILLIT_STATE_ROOT_ENV_VAR: str = "AUTOSKILLIT_STATE_ROOT"
 KNOWN_BACKEND_NAMES: frozenset[str] = frozenset({AGENT_BACKEND_CLAUDE_CODE, AGENT_BACKEND_CODEX})
 MCP_CLIENT_BACKEND_ENV_VAR: str = "AUTOSKILLIT_MCP_CLIENT_BACKEND"
 NATIVE_SHELL_CAPTURE_MODE_ENV_VAR: str = "AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE"
@@ -128,6 +136,7 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
         AGENT_BACKEND_DYNACONF_ENV_VAR,
         CODEX_STARTUP_TRACE_ENV_VAR,
         NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
+        AUTOSKILLIT_STATE_ROOT_ENV_VAR,
         MANAGED_LAUNCH_ID_ENV_VAR,
         MANAGED_ATTEMPT_ID_ENV_VAR,
         MANAGED_LINEAGE_DIGEST_ENV_VAR,

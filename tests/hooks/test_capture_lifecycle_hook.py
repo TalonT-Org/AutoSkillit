@@ -27,7 +27,11 @@ from autoskillit.hooks._capture._snapshot import (
     CommandOutcome,
     verify_capture_snapshot,
 )
-from autoskillit.hooks._capture._types import CaptureCleanupOutcome, CleanupBlocker
+from autoskillit.hooks._capture._types import (
+    CaptureCleanupOutcome,
+    CleanupBlocker,
+    CleanupProgress,
+)
 from autoskillit.hooks._capture_artifacts import create_capture_artifact
 from autoskillit.hooks._capture_contract import NATIVE_SHELL_CAPTURE_MODE_ENV_VAR
 from autoskillit.hooks._capture_lifecycle import (
@@ -52,8 +56,10 @@ def test_cleanup_hook_imports_narrow_reconcile_api() -> None:
 
     assert len(reconcile_imports) == 1
     assert {alias.name for alias in reconcile_imports[0].names} == {
+        "DIAGNOSTIC_MAX_BYTES",
         "SESSION_START_BUDGET",
-        "cleanup_diagnostic",
+        "emit_bounded_diagnostic",
+        "emit_owner_diagnostic",
         "reconcile_capture_store",
     }
     assert all(
@@ -264,7 +270,8 @@ def test_cleanup_hook_reports_unsafe_capture_store(tmp_path: Path) -> None:
 
     assert completed.returncode == 0
     assert completed.stdout == ""
-    assert "capture lifecycle cleanup deferred" in completed.stderr
+    assert "failed" in completed.stderr
+    assert "blocker=filesystem_authority errors=1" in completed.stderr
     assert len(completed.stderr.encode("utf-8")) <= 512
     assert unsafe_component.read_text(encoding="utf-8") == "not a directory"
 
@@ -282,19 +289,33 @@ def test_cleanup_hook_fails_open_with_bounded_stderr(tmp_path: Path) -> None:
 
     assert completed.returncode == 0
     assert completed.stdout == ""
-    assert "capture lifecycle cleanup deferred" in completed.stderr
+    assert "failed" in completed.stderr
+    assert "blocker=ledger_integrity errors=1" in completed.stderr
     assert len(completed.stderr.encode()) <= 512
     assert artifact.read_bytes() == b"due"
 
 
-def test_cleanup_hook_bounds_multibyte_diagnostic_bytes(
-    capsys: pytest.CaptureFixture[str],
+def test_cleanup_hook_crash_diagnostic_is_bounded_and_provenance_rendered(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    capture_lifecycle_hook._bounded_stderr("🔥" * 512)
+    """The generic except-Exception crash fallback also routes through
+    PolicyEvent — no independent wording or bounding site remains."""
+    payload = json.dumps({"cwd": "/abs/project"}).encode("utf-8")
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(payload)))
 
-    captured = capsys.readouterr()
-    assert captured.err
-    assert len(captured.err.encode("utf-8")) <= 512
+    def _raise(*_args, **_kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(capture_lifecycle_hook, "reconcile_capture_store", _raise)
+
+    written: list[str] = []
+    monkeypatch.setattr(sys.stderr, "write", written.append)
+
+    assert capture_lifecycle_hook.main() == 0
+    text = "".join(written)
+    assert "failed" in text
+    assert "capture lifecycle hook raised an unexpected exception" in text
+    assert len(text.encode("utf-8")) <= capture_lifecycle_hook.DIAGNOSTIC_MAX_BYTES
 
 
 def test_cleanup_hook_reports_sweep_outcome_errors(
@@ -317,6 +338,33 @@ def test_cleanup_hook_reports_sweep_outcome_errors(
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "blocker=ledger_integrity errors=2" in captured.err
+
+
+def test_cleanup_hook_deferred_outcome_produces_no_attention_grade_output(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The incident, through the SessionStart wrapper: bounded budget progress
+    with no errors must stay silent — DEFERRED never surfaces here either."""
+    payload = json.dumps({"cwd": "/abs/project"}).encode("utf-8")
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(payload)))
+    monkeypatch.setattr(
+        capture_lifecycle_hook,
+        "reconcile_capture_store",
+        lambda requested_cwd, budget: CaptureCleanupOutcome(
+            examined=2,
+            deleted=2,
+            remaining_due=3,
+            progress=CleanupProgress.RETIRED,
+            blocker=CleanupBlocker.RECORD_BUDGET,
+            errors=0,
+        ),
+    )
+
+    assert capture_lifecycle_hook.main() == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
 
 
 def test_generated_codex_session_start_executes_cleanup_dispatcher(tmp_path: Path) -> None:

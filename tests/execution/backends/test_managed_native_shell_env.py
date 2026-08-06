@@ -153,11 +153,28 @@ def test_codex_unmanaged_builders_do_not_inject_managed_env() -> None:
             prompt="continue",
             env_extras=hostile_env,
         ),
-        backend.build_interactive_cmd(env_extras=hostile_env),
     )
 
     for spec in specs:
         _assert_no_managed_env(spec.env)
+
+
+def test_codex_interactive_cook_declares_capture_mode_only() -> None:
+    """The cook launch path is structurally unmanaged but now declaredly so.
+
+    build_interactive_cmd injects the capture-mode declaration positively
+    (so shell_capture_hook.py no longer infers "normal" from absence), while
+    still carrying none of the four managed-identity vars — those remain
+    exclusive to the managed builders above.
+    """
+    backend = CodexBackend()
+    hostile_env = _hostile_env()
+
+    spec = backend.build_interactive_cmd(env_extras=hostile_env)
+
+    assert spec.env[NATIVE_SHELL_CAPTURE_MODE_ENV_VAR] == "capture"
+    identity_keys = _PROTECTED_KEYS - {NATIVE_SHELL_CAPTURE_MODE_ENV_VAR}
+    assert identity_keys.isdisjoint(spec.env)
 
 
 def test_codex_ambient_protected_controls_do_not_reach_any_builder(
@@ -185,11 +202,15 @@ def test_codex_ambient_protected_controls_do_not_reach_any_builder(
             resume_session_id="thread-1",
             prompt="continue",
         ),
-        backend.build_interactive_cmd(),
     )
 
     for spec in specs:
         _assert_no_managed_env(spec.env)
+
+    interactive_spec = backend.build_interactive_cmd()
+    assert interactive_spec.env[NATIVE_SHELL_CAPTURE_MODE_ENV_VAR] == "capture"
+    identity_keys = _PROTECTED_KEYS - {NATIVE_SHELL_CAPTURE_MODE_ENV_VAR}
+    assert identity_keys.isdisjoint(interactive_spec.env)
 
 
 def test_claude_managed_parameters_never_inject_managed_env() -> None:

@@ -14,9 +14,15 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _capture._reconcile import (  # type: ignore[import-not-found]  # noqa: E402
+    DIAGNOSTIC_MAX_BYTES,
     SESSION_START_BUDGET,
-    cleanup_diagnostic,
+    emit_bounded_diagnostic,
+    emit_owner_diagnostic,
     reconcile_capture_store,
+)
+from _policy_event import (  # type: ignore[import-not-found]  # noqa: E402
+    PolicyEvent,
+    render_provenance_prefix,
 )
 
 _capture_package = sys.modules["_capture"]
@@ -34,18 +40,22 @@ if _hooks_package is not None:
     setattr(_hooks_package, "_capture", _package_binding)
 
 _MAX_INPUT_BYTES = 64 * 1024
-_MAX_DIAGNOSTIC_BYTES = 512
+_OWNER = "session_start"
 
 
-def _bounded_stderr(message: str) -> None:
-    try:
-        bounded = message.encode("utf-8")[:_MAX_DIAGNOSTIC_BYTES].decode(
-            "utf-8",
-            errors="ignore",
-        )
-        sys.stderr.write(bounded)
-    except (OSError, RuntimeError, UnicodeError):
-        pass
+def _emit_crash_diagnostic() -> None:
+    event = PolicyEvent(
+        hook_id="capture_lifecycle_hook",
+        hook_version=1,
+        event="capture_cleanup",
+        decision="failed",
+        reason_code="capture lifecycle hook raised an unexpected exception",
+    )
+    emit_bounded_diagnostic(
+        render_provenance_prefix(event),
+        maximum_bytes=DIAGNOSTIC_MAX_BYTES,
+        write=sys.stderr.write,
+    )
 
 
 def main() -> int:
@@ -66,11 +76,9 @@ def main() -> int:
         ):
             return 0
         outcome = reconcile_capture_store(payload_cwd, SESSION_START_BUDGET)
-        detail = cleanup_diagnostic(outcome, owner="session_start")
-        if detail is not None:
-            _bounded_stderr(f"[AutoSkillit capture lifecycle cleanup deferred: {detail}]\n")
+        emit_owner_diagnostic(outcome, owner=_OWNER, write=sys.stderr.write)
     except Exception:
-        _bounded_stderr("[AutoSkillit capture lifecycle hook failed]\n")
+        _emit_crash_diagnostic()
     return 0
 
 

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.hooks._command_classification as command_classification
 from autoskillit.hooks._command_classification import (
     GitHubMutationAnalysis,
     GitHubMutationKind,
@@ -1165,6 +1166,151 @@ class TestAnalyzeGitHubMutations:
         assert analysis.request_count == 1
         assert analysis.review_comment_count == 2
         assert analysis.mutations[0].review_comment_count == 2
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "gh pr merge 5",
+            "gh pr close 5",
+            "gh pr comment 5 --body x",
+            "gh issue close 5",
+            "gh issue edit 5 --add-label x",
+            "gh gist create --public note.txt",
+            "gh workflow run ci.yml",
+            "gh run rerun 123",
+            "gh cache delete key",
+            "gh secret set TOKEN --body value",
+            "gh release delete v1 --yes",
+            "gh release upload v1 artifact.whl",
+            "gh repo edit --visibility private",
+            "gh repo sync owner/repo",
+        ],
+        ids=[
+            "pr-merge",
+            "pr-close",
+            "pr-comment",
+            "issue-close",
+            "issue-edit-add-label",
+            "gist-create",
+            "workflow-run",
+            "run-rerun",
+            "cache-delete",
+            "secret-set",
+            "release-delete",
+            "release-upload",
+            "repo-edit-visibility",
+            "repo-sync",
+        ],
+    )
+    def test_widened_gh_subcommands_are_single_resolved_other(self, command: str) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.mutations[0].kind is GitHubMutationKind.OTHER
+        assert analysis.request_count == 1
+
+    def test_pr_review_stays_pull_review_kind_alongside_widened_verbs(self) -> None:
+        analysis = analyze_github_mutations("gh pr review 5 --approve")
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.mutations[0].kind is GitHubMutationKind.PULL_REVIEW
+
+    def test_widened_verb_chain_is_multiple(self) -> None:
+        analysis = analyze_github_mutations("gh pr merge 5 && gh issue close 6")
+
+        assert analysis.status is GitHubMutationStatus.MULTIPLE
+        assert analysis.request_count == 2
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "gh pr view",
+            "gh issue list",
+            "gh gist view 123",
+            "gh workflow view ci.yml",
+            "gh run view 123",
+            "gh pr merge --help",
+            "gh gist create --help",
+        ],
+        ids=[
+            "pr-view",
+            "issue-list",
+            "gist-view",
+            "workflow-view",
+            "run-view",
+            "pr-merge-help",
+            "gist-create-help",
+        ],
+    )
+    def test_read_verbs_and_bare_help_flag_are_none(self, command: str) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.NONE
+        assert analysis.mutations == ()
+
+    def test_pr_create_remains_owned_by_the_dedicated_guard(self) -> None:
+        analysis = analyze_github_mutations("gh pr create --fill")
+
+        assert analysis.status is GitHubMutationStatus.NONE
+        assert analysis.mutations == ()
+
+    @pytest.mark.parametrize(
+        "command",
+        ["gh workflow frobnicate", "gh repo deploy-key list"],
+        ids=["unknown-mutation-capable-verb", "nested-mutation-capable-command"],
+    )
+    def test_unclassified_mutation_capable_subcommands_fail_closed(self, command: str) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert "mutation classification is unresolved" in analysis.reason
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "gh pr review 5 --approve --body=--help",
+            "gh pr review 5 --approve --body --help",
+        ],
+        ids=["help-as-attached-value", "help-as-detached-value"],
+    )
+    def test_help_as_flag_value_does_not_exempt_review_mutation(self, command: str) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.mutations[0].kind is GitHubMutationKind.PULL_REVIEW
+
+    def test_gh_mentioned_inside_a_quoted_loop_string_is_none(self) -> None:
+        analysis = analyze_github_mutations('for f in *; do echo "see gh docs"; done')
+
+        assert analysis.status is GitHubMutationStatus.NONE
+        assert analysis.mutations == ()
+
+    def test_bare_gh_token_as_argument_inside_a_loop_is_none(self) -> None:
+        analysis = analyze_github_mutations('for i in 1; do echo "gh"; done')
+        assert analysis.status is GitHubMutationStatus.NONE
+        assert analysis.mutations == ()
+
+    def test_gh_verb_reachable_through_a_loop_stays_deny_grade(self) -> None:
+        analysis = analyze_github_mutations("for i in 1; do gh pr merge $i; done")
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert "loop" in analysis.reason
+
+    def test_missing_read_only_noun_does_not_crash_mutation_classification(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.delitem(command_classification._GH_READ_ONLY_SUBCOMMANDS, "pr")
+
+        analysis = analyze_github_mutations("gh pr merge 7")
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+
+    def test_gh_command_after_unrelated_source_is_not_hidden_behind_it(self) -> None:
+        analysis = analyze_github_mutations("source .venv/bin/activate && gh pr view --json state")
+
+        assert analysis.status is GitHubMutationStatus.NONE
+        assert analysis.mutations == ()
 
     @pytest.mark.parametrize(
         "payload_kind",

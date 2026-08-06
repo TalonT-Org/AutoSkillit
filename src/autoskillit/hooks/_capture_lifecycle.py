@@ -219,8 +219,7 @@ class CaptureLifecycleStore:
         drawing on the same budget window for its own lock acquisitions;
         ``open_capture_lifecycle`` resets it when its ``with`` block exits.
         Every other caller (``create_artifact``, direct construction in
-        tests, ...) passes nothing and keeps today's blocking-until-acquired
-        behavior unchanged.
+        tests, ...) passes nothing and blocks until the lock is acquired.
         """
         anchor_identity = getattr(anchor, "identity")
         root_identity = getattr(root, "identity")
@@ -253,14 +252,14 @@ class CaptureLifecycleStore:
         """Acquire ``fd``'s advisory lock, retrying non-blocking contention.
 
         Blocking callers (the overwhelming majority — every non-sweep
-        transition) get today's single kernel-blocking ``flock()`` call
-        unchanged. Non-blocking callers exist only inside an active sweep
+        transition) get a single kernel-blocking ``flock()`` call.
+        Non-blocking callers exist only inside an active sweep
         (``self._sweep_budget`` is set for their whole duration): on
         ``EAGAIN``/``EWOULDBLOCK`` they retry with jittered, doubling backoff
         until the *sweep's own* ``max_duration_seconds`` budget — not a new
         knob — is exhausted, then raise ``LockContended``. A non-blocking call
         outside a sweep (should not happen given the current call graph) falls
-        back to today's single-attempt behavior rather than retrying forever.
+        back to single-attempt behavior rather than retrying forever.
         """
         operation = fcntl.LOCK_EX
         if not blocking:

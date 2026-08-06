@@ -267,8 +267,8 @@ def _resolve_control(environment: Mapping[str, str] | None = None) -> _ResolvedC
     values = (mode, launch_id, attempt_id, lineage_digest, serialized_ref)
     identity_values = (launch_id, attempt_id, lineage_digest, serialized_ref)
     if all(value is None for value in values):
-        # Nothing at all was declared — the pre-#4460 ambient state. Neutral,
-        # not a failure: most non-cook Codex launch paths still don't declare.
+        # Nothing at all was declared. Neutral, not a failure: most non-cook
+        # Codex launch paths do not declare native-shell controls.
         return _undeclared_fallback()
     if mode == "capture" and all(value is None for value in identity_values):
         # Cook sessions declare exactly this: capture mode, no managed

@@ -4,9 +4,7 @@
 formatter." No string literal carrying the AutoSkillit provenance token —
 bracketed or bare — may exist outside hooks/_policy_event.py in the capture
 cleanup/control diagnostic call chain; every such message must be built via
-PolicyEvent + render_provenance_prefix instead. This is what permanently
-blocks regression to the ad-hoc "cleanup failed"/"managed launch controls
-missing" wording this rule replaced.
+PolicyEvent + render_provenance_prefix instead.
 """
 
 from __future__ import annotations
@@ -23,10 +21,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _HOOKS_DIR = _REPO_ROOT / "src" / "autoskillit" / "hooks"
 _PROVENANCE_TOKEN_RE = re.compile(r"AutoSkillit")
 
-# Pre-existing, out-of-scope for this rule: a shell-embedded emergency
-# literal baked into the generated harness itself (runs via `printf ... >&2`
-# inside the *wrapped command*, not emitted as a hook policy/diagnostic
-# message by the hook process) — not one of the four sites this rule closed.
+# A shell-embedded emergency literal baked into the generated harness itself
+# runs inside the wrapped command, not as a hook policy/diagnostic message.
 _EXEMPT_LITERALS = frozenset(
     {
         "AutoSkillit shell capture request rejected before execution",

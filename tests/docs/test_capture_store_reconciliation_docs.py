@@ -1,9 +1,8 @@
 """Verify docs/safety/hooks.md documents capture-store reconciliation.
 
-The scan phase, its adoption gates, the contention retry, and the stats/
-reclamation CLI were all undocumented before this test existed — the doc gap
-was itself a finding (rectify plan W3-1e). This test ratchets their presence
-so a future edit cannot silently drop the section.
+The test ratchets documentation of the scan phase, its adoption gates, the
+contention retry, and the stats/reclamation CLI so a future edit cannot
+silently drop the section.
 """
 
 from __future__ import annotations

@@ -46,7 +46,7 @@ SESSION_START_BUDGET = SweepBudgetSpec(
 )
 
 # Single shared byte bound for every capture-cleanup diagnostic, regardless of
-# owner — replaces the runner-tail (240) vs. SessionStart (512) divergence.
+# owner.
 DIAGNOSTIC_MAX_BYTES = 400
 _HOOK_VERSION = 1
 _POLICY_EVENT_NAME = "capture_cleanup"

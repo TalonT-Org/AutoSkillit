@@ -1,9 +1,6 @@
 """Standing invariant: guards extract command/cwd facts via the shared module.
 
-Every command-inspecting guard hand-rolled its own ``json.loads(stdin)`` ->
-``tool_input.get(...)`` parsing before this workstream — the gap that let
-guards diverge on Bash-vs-run_cmd field names and cwd sourcing (see the
-Rectify plan's Related Issues). ``hooks/_hook_payload.py``'s
+``hooks/_hook_payload.py``'s
 ``parse_hook_command`` is now the sole sanctioned extraction point; this test
 makes a regression back to direct ``tool_input`` reads a standing failure.
 """

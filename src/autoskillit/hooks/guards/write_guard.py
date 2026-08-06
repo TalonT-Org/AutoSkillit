@@ -174,9 +174,7 @@ def _extract_bash_write_targets(command: str, execution_cwd: str = "") -> list[s
 
     ``execution_cwd`` (the run_cmd tool's own cwd argument, or Bash's session
     cwd) is preferred for resolving relative targets when non-empty; falls
-    back to the ``AUTOSKILLIT_CWD`` env var otherwise — fixes the cwd-source
-    divergence where this function previously consulted only the env var,
-    ignoring the per-call cwd available in worktree flows.
+    back to the ``AUTOSKILLIT_CWD`` env var otherwise.
 
     Returns an empty list when a write command is detected but no path can be reliably
     extracted — callers treat this as fail-open (ambiguous = allow).

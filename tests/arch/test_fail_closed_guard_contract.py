@@ -1,9 +1,7 @@
 """Standing invariants for the fail-closed guard registry.
 
 Every guard listed in FAIL_CLOSED_GUARD_BASENAMES must be a live, registered
-guard script, and must carry its own false-positive (allow) test corpus —
-the gap that let github_mutation_guard.py ship without one (see the
-Rectify plan's "How Tests Missed This" section).
+guard script, and must carry its own false-positive (allow) test corpus.
 """
 
 from __future__ import annotations
@@ -22,9 +20,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _GUARDS_DIR = _REPO_ROOT / "src" / "autoskillit" / "hooks" / "guards"
 _TESTS_ROOT = _REPO_ROOT / "tests"
 
-# "approve" is included alongside the plan's allow/permit/not_blocked vocabulary:
-# tests/infra/test_skill_command_guard.py already pairs each deny test with an
-# approve-named allow test, predating this contract.
+# "approve" is included because tests/infra/test_skill_command_guard.py pairs
+# each deny test with an approve-named allow test.
 # This is deliberately a structural neighbor check; assertion quality remains
 # the responsibility of each guard's behavioral test suite.
 _ALLOW_TEST_NAME_RE = re.compile(r"test_.*(allow|permit|not_blocked|approve)")

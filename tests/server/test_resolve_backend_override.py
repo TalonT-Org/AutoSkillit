@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import pytest
 
+from tests.server._helpers import (
+    BUNDLED_RECIPE_STEP_BACKEND_PIN_CASES,
+    _bundled_backend,
+)
+
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
@@ -9,15 +14,6 @@ def _make_backend(**kwargs):
     from autoskillit.config.settings import AgentBackendConfig
 
     return AgentBackendConfig(**kwargs)
-
-
-def _bundled_backend():
-    from autoskillit.config.settings import AgentBackendConfig
-    from autoskillit.core.io import load_yaml
-    from autoskillit.core.paths import pkg_root
-
-    defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
-    return AgentBackendConfig(**defaults["agent_backend"])
 
 
 def _backend(result):
@@ -28,58 +24,7 @@ def _backend(result):
 class TestResolveBackendOverride:
     @pytest.mark.parametrize(
         ("recipe_name", "step_name", "key_path"),
-        [
-            (
-                "implementation",
-                "run_arch_lenses",
-                "agent_backend.recipe_overrides.implementation.run_arch_lenses",
-            ),
-            (
-                "implementation-groups",
-                "run_arch_lenses",
-                "agent_backend.recipe_overrides.implementation-groups.run_arch_lenses",
-            ),
-            (
-                "remediation",
-                "investigate",
-                "agent_backend.recipe_overrides.remediation.investigate",
-            ),
-            (
-                "remediation",
-                "run_arch_lenses",
-                "agent_backend.recipe_overrides.remediation.run_arch_lenses",
-            ),
-            (
-                "research",
-                "run_experiment_lenses",
-                "agent_backend.recipe_overrides.research.run_experiment_lenses",
-            ),
-            (
-                "research",
-                "scope",
-                "agent_backend.recipe_overrides.research.scope",
-            ),
-            (
-                "research",
-                "vis_apply",
-                "agent_backend.recipe_overrides.research.vis_apply",
-            ),
-            (
-                "research-design",
-                "scope",
-                "agent_backend.recipe_overrides.research-design.scope",
-            ),
-            (
-                "research-design",
-                "vis_apply",
-                "agent_backend.recipe_overrides.research-design.vis_apply",
-            ),
-            (
-                "research-review",
-                "run_experiment_lenses",
-                "agent_backend.recipe_overrides.research-review.run_experiment_lenses",
-            ),
-        ],
+        BUNDLED_RECIPE_STEP_BACKEND_PIN_CASES,
     )
     def test_bundled_recipe_step_pin_has_exact_authority(
         self, recipe_name: str, step_name: str, key_path: str

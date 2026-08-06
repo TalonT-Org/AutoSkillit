@@ -21,16 +21,22 @@ import pytest
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 
-def _publish_cache_incarnation(cache_dir: Path, version: str, *, broken: bool) -> Path:
+def _publish_cache_incarnation(
+    cache_dir: Path,
+    version: str,
+    *,
+    broken: bool,
+    logical_name: str = "guards/quota_guard",
+) -> Path:
     """Write a minimal <version> incarnation with a real/broken hooks.json."""
     version_dir = cache_dir / version
     hooks_dir = version_dir / "hooks"
     hooks_dir.mkdir(parents=True)
     (hooks_dir / "_dispatch.py").write_text("# dispatcher stub")
     command = (
-        "python3 /deleted/venv/hooks/_dispatch.py guards/quota_guard"
+        f"python3 /deleted/venv/hooks/_dispatch.py {logical_name}"
         if broken
-        else 'python3 "${CLAUDE_PLUGIN_ROOT}/hooks/_dispatch.py" guards/quota_guard'
+        else f'python3 "${{CLAUDE_PLUGIN_ROOT}}/hooks/_dispatch.py" {logical_name}'
     )
     payload = {
         "hooks": {
@@ -41,6 +47,20 @@ def _publish_cache_incarnation(cache_dir: Path, version: str, *, broken: bool) -
     metadata = version_dir / ".claude-plugin" / "plugin.json"
     metadata.parent.mkdir(parents=True)
     metadata.write_text(json.dumps({"name": "autoskillit", "version": version}))
+    from autoskillit.core import ArtifactLease, installed_plugin_artifact_lease_path
+    from autoskillit.workspace._projected_artifact._manifest_publication import (
+        write_installed_plugin_artifact_manifest_locked,
+    )
+
+    with ArtifactLease.acquire_exclusive(
+        installed_plugin_artifact_lease_path(version_dir),
+        blocking=True,
+    ):
+        write_installed_plugin_artifact_manifest_locked(
+            version_dir,
+            semantic_key=f"autoskillit@autoskillit-local:{version}",
+            action="publish",
+        )
     return version_dir
 
 
@@ -253,12 +273,15 @@ def test_t_c3_startup_repair_heals_a_stale_cache(
     incident's exact on-disk state — is regenerated in relocatable form by
     the next server startup, and reported no longer broken.
     """
+    from autoskillit.core import directory_tree_digest, installed_plugin_artifact_manifest_path
     from autoskillit.hook_registry import validate_plugin_cache_hooks
     from autoskillit.server._lifespan import run_startup_hook_health_check
 
     home = tmp_path
     cache_dir = home / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
-    _publish_cache_incarnation(cache_dir, "1.0.0", broken=True)
+    version_dir = _publish_cache_incarnation(cache_dir, "1.0.0", broken=True)
+    manifest_path = installed_plugin_artifact_manifest_path(version_dir)
+    manifest_before = json.loads(manifest_path.read_text())
 
     monkeypatch.setattr(Path, "home", lambda: home)
     monkeypatch.setattr(
@@ -272,6 +295,79 @@ def test_t_c3_startup_repair_heals_a_stale_cache(
     assert validate_plugin_cache_hooks(cache_dir=cache_dir) == [], (
         "startup must have repaired the incarnation in-process"
     )
+    manifest_after = json.loads(manifest_path.read_text())
+    assert manifest_after["artifact_digest"] == directory_tree_digest(version_dir)
+    assert manifest_after["artifact_digest"] != manifest_before["artifact_digest"]
+
+
+def test_t_c3_repair_preserves_version_owned_logical_hooks(tmp_path: Path) -> None:
+    from autoskillit.workspace._projected_artifact._hook_repair import (
+        repair_broken_plugin_cache_hooks,
+    )
+
+    cache_dir = tmp_path / ".claude/plugins/cache/autoskillit-local/autoskillit"
+    version_dir = _publish_cache_incarnation(
+        cache_dir,
+        "1.0.0",
+        broken=True,
+        logical_name="legacy/version_specific",
+    )
+
+    outcomes = repair_broken_plugin_cache_hooks(cache_dir)
+
+    payload = json.loads((version_dir / "hooks/hooks.json").read_text())
+    command = payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    assert outcomes[0].repaired is True
+    assert command.endswith(" legacy/version_specific")
+
+
+def test_t_c3_manifest_failure_rolls_back_hooks_and_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import installed_plugin_artifact_manifest_path
+    from autoskillit.workspace._projected_artifact import _hook_repair as repair_module
+
+    cache_dir = tmp_path / ".claude/plugins/cache/autoskillit-local/autoskillit"
+    version_dir = _publish_cache_incarnation(cache_dir, "1.0.0", broken=True)
+    hooks_path = version_dir / "hooks/hooks.json"
+    manifest_path = installed_plugin_artifact_manifest_path(version_dir)
+    original_hooks = hooks_path.read_text()
+    original_manifest = manifest_path.read_text()
+    monkeypatch.setattr(
+        repair_module,
+        "write_installed_plugin_artifact_manifest_locked",
+        MagicMock(side_effect=RuntimeError("manifest write failed")),
+    )
+
+    outcomes = repair_module.repair_broken_plugin_cache_hooks(cache_dir)
+
+    assert outcomes[0].repaired is False
+    assert "manifest write failed" in (outcomes[0].skipped_reason or "")
+    assert hooks_path.read_text() == original_hooks
+    assert manifest_path.read_text() == original_manifest
+
+
+def test_t_c3_missing_dispatcher_rolls_back_failed_repair(tmp_path: Path) -> None:
+    from autoskillit.core import installed_plugin_artifact_manifest_path
+    from autoskillit.workspace._projected_artifact._hook_repair import (
+        repair_broken_plugin_cache_hooks,
+    )
+
+    cache_dir = tmp_path / ".claude/plugins/cache/autoskillit-local/autoskillit"
+    version_dir = _publish_cache_incarnation(cache_dir, "1.0.0", broken=True)
+    hooks_path = version_dir / "hooks/hooks.json"
+    manifest_path = installed_plugin_artifact_manifest_path(version_dir)
+    original_hooks = hooks_path.read_text()
+    original_manifest = manifest_path.read_text()
+    (version_dir / "hooks/_dispatch.py").unlink()
+
+    outcomes = repair_broken_plugin_cache_hooks(cache_dir)
+
+    assert outcomes[0].repaired is False
+    assert "remain after repair" in (outcomes[0].skipped_reason or "")
+    assert hooks_path.read_text() == original_hooks
+    assert manifest_path.read_text() == original_manifest
 
 
 def test_t_c3_repair_skips_a_contended_lease(

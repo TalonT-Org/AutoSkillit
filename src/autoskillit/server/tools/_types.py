@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any, Literal, TypedDict
 
-from autoskillit.core import ModelTotalEntry, RetryReason
+from autoskillit.core import ExecutionIdentityDict, ModelTotalEntry, RetryReason
 
 __all__ = [
     "RunSkillResult",
@@ -76,7 +76,7 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     pre_contamination_subtype: str
     ndjson_unknown_event_count: int
     ndjson_unknown_item_count: int
-    execution_identity: dict[str, str]
+    execution_identity: ExecutionIdentityDict
     pipeline_tracker: dict[str, str]
     error: str
     stage: str

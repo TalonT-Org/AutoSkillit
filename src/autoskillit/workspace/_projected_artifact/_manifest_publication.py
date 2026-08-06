@@ -1,19 +1,7 @@
-"""Shared manifest-publication core for the installed-plugin artifact cache.
+"""Publish installed-plugin artifact manifests from one shared authority.
 
-Extracted so ``cli._plugin_artifact.publish_installed_plugin_artifact`` (fresh
-identity after a successful install/upgrade) and
-``workspace._projected_artifact._hook_repair.repair_broken_plugin_cache_hooks``
-(manifest refresh after an in-process ``hooks.json`` repair) write the SAME
-manifest through the SAME code path — one implementation, two callers.
-Rewriting a cache ``hooks.json`` without refreshing its manifest through this
-function would desync the digest recorded on disk from the bytes actually
-there, turning the tamper detector (the digest comparison in
-``verify_installed_plugin_artifact``) into a false alarm.
-
-``cli/_plugin_artifact.py`` importing this module is a legal downward
-``cli → workspace`` edge (REQ-ARCH-003b only forbids the reverse). Both
-callers already hold the incarnation's exclusive publication lease before
-calling in; this function performs no locking of its own.
+Both initial publication and in-process repair use this module. Callers must
+hold the incarnation's exclusive publication lease before writing.
 """
 
 from __future__ import annotations

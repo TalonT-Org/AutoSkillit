@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import json
 import tomllib
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
 
 from autoskillit.core import (
     CompletenessReport,
+    ContinuationCursor,
     EvidencePage,
     EvidenceRecord,
     MethodProvenance,
@@ -22,6 +24,12 @@ from autoskillit.core import (
 )
 from autoskillit.pipeline import CapabilityResolutionStatus
 from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
+
+if TYPE_CHECKING:
+    from autoskillit.core import CodingAgentBackend
+    from autoskillit.pipeline import ToolContext
+    from autoskillit.workspace import DefaultSessionSkillManager
+    from tests.fakes import InMemoryHeadlessExecutor
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -52,6 +60,53 @@ class _Store:
             self.get_status,
             self._page() if self.get_status is CapabilityResolutionStatus.OK else None,
         )
+
+
+class _RecordingPageStore:
+    def __init__(self, issued_page: EvidencePage) -> None:
+        self.issued_page = issued_page
+        self.calls: list[tuple[int, ContinuationCursor | None]] = []
+
+    def get_page_from_launch_environment(
+        self,
+        *,
+        page_size: int,
+        cursor: ContinuationCursor | None = None,
+    ) -> tuple[CapabilityResolutionStatus, EvidencePage]:
+        self.calls.append((page_size, cursor))
+        return CapabilityResolutionStatus.OK, self.issued_page
+
+
+@dataclass(frozen=True, slots=True)
+class _ExplorerRunSkillScaffold:
+    tool_ctx: ToolContext
+    backend: CodingAgentBackend
+    manager: DefaultSessionSkillManager
+    executor: InMemoryHeadlessExecutor
+
+
+def _explorer_run_skill_scaffold(
+    tool_ctx: ToolContext,
+    tmp_path: Path,
+    *,
+    backend: CodingAgentBackend | None = None,
+) -> _ExplorerRunSkillScaffold:
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.workspace import DefaultSessionSkillManager, SkillsDirectoryProvider
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    resolved_backend = backend or CodexBackend(source_codex_home=tmp_path / "source-codex-home")
+    manager = DefaultSessionSkillManager(
+        SkillsDirectoryProvider(),
+        ephemeral_root=tmp_path / "ephemeral-sessions",
+        persistent_roots={"codex": tmp_path / "persistent-sessions"},
+    )
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx.backend = resolved_backend
+    tool_ctx.session_skill_manager = manager
+    tool_ctx.read_only_resolver = lambda _command: True
+    tool_ctx.executor = executor
+    return _ExplorerRunSkillScaffold(tool_ctx, resolved_backend, manager, executor)
 
 
 def _snapshot_service() -> MagicMock:
@@ -211,13 +266,28 @@ async def test_page_uses_only_server_issued_launch_environment(
 ) -> None:
     from autoskillit.server.tools import tools_exploration
 
-    store = _Store()
+    issued_page = EvidencePage(
+        evidence=(),
+        result_digest="server-issued-result",
+        completeness=CompletenessReport((), (), True),
+    )
+    store = _RecordingPageStore(issued_page)
+    cursor = ContinuationCursor(
+        result_digest="prior-result",
+        offset=7,
+        page_size=7,
+        authority_digest="server-authority",
+    )
     monkeypatch.setattr(tools_exploration, "_get_store", lambda: store)
     monkeypatch.setattr(tools_exploration, "_require_enabled", lambda: None)
 
-    result = await tools_exploration.get_exploration_page()
+    result = await tools_exploration.get_exploration_page(
+        page_size=7,
+        continuation=cursor.encode(),
+    )
 
-    assert json.loads(result)["status"] == "ready"
+    assert store.calls == [(7, cursor)]
+    assert result == tools_exploration._page_payload(issued_page, status="ready")
 
 
 def test_page_payload_preserves_evidence_authority_fields() -> None:
@@ -287,10 +357,7 @@ async def test_fresh_run_skill_projects_real_codex_binding_before_execution_and_
 ) -> None:
     """The real fresh Codex path projects authority during setup, then scrubs it."""
     from autoskillit.core import SkillResult
-    from autoskillit.execution.backends.codex import CodexBackend
     from autoskillit.server.tools import tools_execution
-    from autoskillit.workspace import DefaultSessionSkillManager, SkillsDirectoryProvider
-    from tests.fakes import InMemoryHeadlessExecutor
 
     events: list[str] = []
     cleanup_store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
@@ -318,16 +385,10 @@ async def test_fresh_run_skill_projects_real_codex_binding_before_execution_and_
         return bindings
 
     monkeypatch.setattr(cleanup_store, "bind_launches", _capture_bound_authority)
-    backend = CodexBackend(source_codex_home=tmp_path / "source-codex-home")
-    manager = DefaultSessionSkillManager(
-        SkillsDirectoryProvider(),
-        ephemeral_root=tmp_path / "ephemeral-sessions",
-        persistent_roots={"codex": tmp_path / "persistent-sessions"},
-    )
-    tool_ctx_kitchen_open.backend = backend
-    tool_ctx_kitchen_open.session_skill_manager = manager
-    tool_ctx_kitchen_open.read_only_resolver = lambda _command: True
-    executor = InMemoryHeadlessExecutor()
+    scaffold = _explorer_run_skill_scaffold(tool_ctx_kitchen_open, tmp_path)
+    backend = scaffold.backend
+    manager = scaffold.manager
+    executor = scaffold.executor
     original_run = executor.run
 
     async def _inspect_projected_launch(*args: object, **kwargs: object) -> SkillResult:
@@ -347,7 +408,6 @@ async def test_fresh_run_skill_projects_real_codex_binding_before_execution_and_
         return await original_run(*args, **kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr(executor, "run", _inspect_projected_launch)
-    tool_ctx_kitchen_open.executor = executor
     tool_ctx_kitchen_open.exploration_context_store = cleanup_store
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr(
@@ -393,8 +453,6 @@ async def test_fresh_run_skill_revokes_explorer_authority_after_codex_setup_fail
     """Cleanup ownership transfers before fresh Codex setup can fail."""
     from autoskillit.execution.backends.codex import CodexBackend
     from autoskillit.server.tools import tools_execution
-    from autoskillit.workspace import DefaultSessionSkillManager, SkillsDirectoryProvider
-    from tests.fakes import InMemoryHeadlessExecutor
 
     events: list[str] = []
     cleanup_store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
@@ -425,6 +483,7 @@ async def test_fresh_run_skill_revokes_explorer_authority_after_codex_setup_fail
     backend.name = concrete_backend.name
     backend.conventions = concrete_backend.conventions
     backend.capabilities = concrete_backend.capabilities
+    _explorer_run_skill_scaffold(tool_ctx_kitchen_open, tmp_path, backend=backend)
 
     def _fail_setup(_session_dir: Path, **kwargs: object) -> None:
         assert kwargs["explorer_binding_env"]
@@ -433,14 +492,6 @@ async def test_fresh_run_skill_revokes_explorer_authority_after_codex_setup_fail
 
     backend.setup_session_dir.side_effect = _fail_setup
     backend.clear_explorer_binding_env.return_value = None
-    tool_ctx_kitchen_open.backend = backend
-    tool_ctx_kitchen_open.session_skill_manager = DefaultSessionSkillManager(
-        SkillsDirectoryProvider(),
-        ephemeral_root=tmp_path / "ephemeral-sessions",
-        persistent_roots={"codex": tmp_path / "persistent-sessions"},
-    )
-    tool_ctx_kitchen_open.read_only_resolver = lambda _command: True
-    tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.exploration_context_store = cleanup_store
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr(
@@ -473,9 +524,7 @@ async def test_resumed_run_skill_revokes_replacement_authority_after_refresh_fai
     """Resume refresh failure revokes the replacement authority before returning."""
     from autoskillit.execution.backends.codex import CodexBackend
     from autoskillit.server.tools import tools_execution
-    from autoskillit.workspace import DefaultSessionSkillManager, SkillsDirectoryProvider
     from tests.conftest import bind_test_skill_resume_contract
-    from tests.fakes import InMemoryHeadlessExecutor
 
     concrete_backend = CodexBackend()
     backend = MagicMock(wraps=concrete_backend)
@@ -486,12 +535,7 @@ async def test_resumed_run_skill_revokes_replacement_authority_after_refresh_fai
         terminal_explorer_capable=True,
     )
     backend.refresh_explorer_binding_env.side_effect = RuntimeError("replacement injection failed")
-    tool_ctx_kitchen_open.backend = backend
-    tool_ctx_kitchen_open.session_skill_manager = DefaultSessionSkillManager(
-        SkillsDirectoryProvider(),
-        ephemeral_root=tmp_path / "ephemeral-sessions",
-        persistent_roots={"codex": tmp_path / "persistent-sessions"},
-    )
+    _explorer_run_skill_scaffold(tool_ctx_kitchen_open, tmp_path, backend=backend)
     bind_test_skill_resume_contract(
         tool_ctx_kitchen_open,
         session_id="explorer-resume",
@@ -507,7 +551,6 @@ async def test_resumed_run_skill_revokes_replacement_authority_after_refresh_fai
     cleanup_session = MagicMock(wraps=cleanup_store.cleanup_session)
     monkeypatch.setattr(cleanup_store, "cleanup_session", cleanup_session)
     tool_ctx_kitchen_open.exploration_context_store = cleanup_store
-    tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr(
         tool_ctx_kitchen_open.launch_resolver,

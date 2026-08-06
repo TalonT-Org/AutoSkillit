@@ -140,6 +140,53 @@ def test_main_non_install_argv_still_calls_obligation_repair(
     assert repair_calls == [tmp_path]
 
 
+def test_main_repair_diagnostics_never_write_stdout(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    app_module = importlib.import_module("autoskillit.cli.app")
+    from autoskillit.cli.update._obligation_repair import ObligationRepairOutcome
+
+    monkeypatch.setattr(app_module, "app", lambda: None)
+    monkeypatch.setattr(
+        "autoskillit.cli._init_helpers.evict_direct_mcp_entry",
+        lambda *a, **kw: None,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks.run_update_checks",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(sys, "argv", ["autoskillit", "doctor", "--json"])
+    monkeypatch.setattr(
+        "autoskillit.cli.update._obligation_repair.attempt_obligation_repair",
+        lambda _home: MagicMock(
+            outcome=ObligationRepairOutcome.DEFERRED,
+            findings=("run install externally",),
+        ),
+    )
+    warnings: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        app_module.logger,
+        "warning",
+        lambda event, **kwargs: warnings.append((event, kwargs)),
+    )
+
+    app_module.main()
+
+    assert capsys.readouterr().out == ""
+    assert warnings == [
+        (
+            "publication_obligation_repair_incomplete",
+            {
+                "outcome": ObligationRepairOutcome.DEFERRED.value,
+                "finding": "run install externally",
+            },
+        )
+    ]
+
+
 def test_serve_activity_check_uses_backend_derived_marker_dir(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

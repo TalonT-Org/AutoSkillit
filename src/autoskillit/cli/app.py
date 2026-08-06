@@ -40,6 +40,8 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+logger = get_logger(__name__)
+
 app = App(
     name="autoskillit",
     help="MCP server for executing recipes with Claude Code.",
@@ -684,7 +686,11 @@ def main() -> None:
                 ObligationRepairOutcome.CLEARED,
             }:
                 for finding in repair_result.findings:
-                    print(finding, flush=True)
+                    logger.warning(
+                        "publication_obligation_repair_incomplete",
+                        outcome=repair_result.outcome.value,
+                        finding=finding,
+                    )
 
         from autoskillit.cli.update._update_checks import run_update_checks
 

@@ -1,14 +1,10 @@
-"""Tests for resolve_state_root() and its effect on worktree-topology guards.
+"""State-root resolution contracts for guards running from sibling worktrees.
 
-Simulates the incident topology: state (kitchen config, session markers)
-lives under the orchestrating project root, while a PreToolUse hook payload's
-own cwd points into a sibling worktree that has its own checked-in
-``.autoskillit/`` — a directory that is *not* an ancestor of the orchestrating
-root, so a payload-cwd upward walk alone cannot find the right state. Before
-this workstream, pr_create_guard and git_ops_guard resolved state via bare
-``Path.cwd()`` and silently skipped enforcement (fail-open, unsafe direction)
-in this topology; ask_user_question_guard spuriously denied (fail-closed on
-missing state it never looked for).
+Kitchen configuration and session markers live under the orchestrating project
+root, while a PreToolUse payload can point at a sibling worktree whose checked-in
+``.autoskillit/`` directory is not an ancestor of that state. The tests preserve
+the explicit state-root signal, upward-walk fallback, and process-cwd fallback
+used to resolve those topologies consistently.
 """
 
 from __future__ import annotations
@@ -108,8 +104,7 @@ class TestResolveStateRootOrder:
     def test_no_env_var_no_payload_cwd_matches_process_cwd_exactly(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """No worse than today: with both signals absent, behavior is identical
-        to the pre-migration bare Path.cwd() call every guard used."""
+        """With both optional signals absent, process cwd is the exact fallback."""
         monkeypatch.delenv("AUTOSKILLIT_STATE_ROOT", raising=False)
         monkeypatch.chdir(tmp_path)
         assert resolve_state_root("") == Path.cwd()

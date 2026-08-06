@@ -436,7 +436,7 @@ async def test_fresh_run_skill_projects_real_codex_binding_before_execution_and_
 
     monkeypatch.setattr(manager, "cleanup_session", _inspect_scrubbed_session)
 
-    result = json.loads(await tools_execution.run_skill("/test skill", "/tmp"))
+    result = json.loads(await tools_execution.run_skill("/test skill", str(tmp_path)))
 
     assert result["success"] is True, result["result"]
     assert events == ["bind", "execute", "store-cleanup", "manager-cleanup"]
@@ -505,7 +505,7 @@ async def test_fresh_run_skill_revokes_explorer_authority_after_codex_setup_fail
         lambda _invocation: (tool_ctx_kitchen_open.project_dir, "bundled:test"),
     )
 
-    result = json.loads(await tools_execution.run_skill("/test skill", "/tmp"))
+    result = json.loads(await tools_execution.run_skill("/test skill", str(tmp_path)))
 
     assert result["success"] is False
     assert events == ["bind", "setup", "store-cleanup"]
@@ -539,7 +539,7 @@ async def test_resumed_run_skill_revokes_replacement_authority_after_refresh_fai
     bind_test_skill_resume_contract(
         tool_ctx_kitchen_open,
         session_id="explorer-resume",
-        cwd="/tmp",
+        cwd=str(tmp_path),
         skill_name="test",
         resolved_command="/test skill",
         read_only=True,
@@ -566,7 +566,7 @@ async def test_resumed_run_skill_revokes_replacement_authority_after_refresh_fai
     result = json.loads(
         await tools_execution.run_skill(
             "continue",
-            "/tmp",
+            str(tmp_path),
             resume_session_id="explorer-resume",
         )
     )

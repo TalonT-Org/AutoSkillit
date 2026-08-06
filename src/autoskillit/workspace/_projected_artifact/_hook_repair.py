@@ -108,6 +108,11 @@ def _rollback_repair(
     try:
         atomic_write(hooks_json_path, original_hooks, strict_durability=True)
     except Exception as exc:
+        logger.warning(
+            "plugin_cache_hooks_rollback_hooks_failed",
+            path=str(hooks_json_path),
+            exc_info=True,
+        )
         failures.append(f"hooks rollback failed: {exc}")
     try:
         if original_manifest is None:
@@ -115,6 +120,11 @@ def _rollback_repair(
         else:
             atomic_write(manifest_path, original_manifest, strict_durability=True)
     except Exception as exc:
+        logger.warning(
+            "plugin_cache_hooks_rollback_manifest_failed",
+            path=str(manifest_path),
+            exc_info=True,
+        )
         failures.append(f"manifest rollback failed: {exc}")
     return tuple(failures)
 

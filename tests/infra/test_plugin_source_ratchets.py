@@ -99,6 +99,15 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "The retired-shape registry identifies the exact obsolete install artifact "
         "before reconciliation removes a directory tree.",
     ),
+    (
+        "workspace/_projected_artifact/_hook_repair.py",
+        "_rollback_repair",
+        "manifest_path.unlink",
+    ): (
+        1,
+        "Rollback removes only a newly-created external manifest while holding the "
+        "incarnation's exclusive artifact lease.",
+    ),
     ("workspace/session_skills.py", "_remove_and_verify", "shutil.rmtree"): (
         1,
         "Generated session homes are ephemeral lease-owned artifacts, and cleanup "

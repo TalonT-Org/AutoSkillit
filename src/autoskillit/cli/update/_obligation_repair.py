@@ -16,6 +16,7 @@ import os
 import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -34,19 +35,27 @@ from autoskillit.workspace import (
     verify_installed_plugin_artifact,
 )
 
-__all__ = ["ObligationRepairResult", "attempt_obligation_repair"]
+__all__ = ["ObligationRepairOutcome", "ObligationRepairResult", "attempt_obligation_repair"]
 
 logger = get_logger(__name__)
 
 _ProcessRunner = Callable[..., "subprocess.CompletedProcess[Any]"]
 
 
+class ObligationRepairOutcome(StrEnum):
+    """Closed outcomes for one publication-obligation repair attempt."""
+
+    NO_OBLIGATION = "no_obligation"
+    DEFERRED = "deferred"
+    FAILED = "failed"
+    CLEARED = "cleared"
+
+
 @dataclass(frozen=True, slots=True)
 class ObligationRepairResult:
     """Outcome of one repair attempt against a pending obligation."""
 
-    outcome: str
-    """One of: "no_obligation", "deferred", "failed", "cleared"."""
+    outcome: ObligationRepairOutcome
 
     findings: tuple[str, ...] = ()
 
@@ -83,11 +92,11 @@ def attempt_obligation_repair(
     env = environment if environment is not None else os.environ
     obligation = read_obligation(home)
     if obligation is None:
-        return ObligationRepairResult(outcome="no_obligation")
+        return ObligationRepairResult(outcome=ObligationRepairOutcome.NO_OBLIGATION)
 
     if env.get("CLAUDECODE"):
         return ObligationRepairResult(
-            outcome="deferred",
+            outcome=ObligationRepairOutcome.DEFERRED,
             findings=(
                 "Publication is owed but cannot be safely completed from "
                 "inside CLAUDECODE. Run `autoskillit install` from an "
@@ -102,7 +111,7 @@ def attempt_obligation_repair(
     )
     if install_result.returncode != 0:
         return ObligationRepairResult(
-            outcome="failed",
+            outcome=ObligationRepairOutcome.FAILED,
             findings=(
                 "autoskillit install --maintenance-update exited with "
                 f"status {install_result.returncode}",
@@ -113,7 +122,7 @@ def attempt_obligation_repair(
     broken = validate_plugin_cache_hooks(cache_dir=cache_dir)
     if broken:
         return ObligationRepairResult(
-            outcome="failed",
+            outcome=ObligationRepairOutcome.FAILED,
             findings=(f"{len(broken)} broken hook command(s) remain after repair install",),
         )
 
@@ -131,7 +140,7 @@ def attempt_obligation_repair(
             has_error = any(f.severity is Severity.ERROR for f in verification.findings)
             if has_error or verification.identity is None:
                 return ObligationRepairResult(
-                    outcome="failed",
+                    outcome=ObligationRepairOutcome.FAILED,
                     findings=tuple(f"{f.check}: {f.message}" for f in verification.findings)
                     or ("Installed plugin verification returned no exact identity.",),
                 )
@@ -142,7 +151,7 @@ def attempt_obligation_repair(
         version_check = runner(["autoskillit", "--version"], check=False)
         if version_check.returncode != 0:
             return ObligationRepairResult(
-                outcome="failed",
+                outcome=ObligationRepairOutcome.FAILED,
                 findings=(
                     "autoskillit --version failed after repair install "
                     "(expected version unknown — probe never succeeded "
@@ -151,4 +160,4 @@ def attempt_obligation_repair(
             )
 
     clear_obligation(home)
-    return ObligationRepairResult(outcome="cleared")
+    return ObligationRepairResult(outcome=ObligationRepairOutcome.CLEARED)

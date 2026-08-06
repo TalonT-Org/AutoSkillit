@@ -1474,7 +1474,9 @@ def test_update_consumers_compose_with_registered_real_child_transaction(
 
     def defer_obligation_repair(target_home: Path) -> object:
         repair_homes.append(target_home)
-        return _obligation_repair.ObligationRepairResult(outcome="deferred")
+        return _obligation_repair.ObligationRepairResult(
+            outcome=_obligation_repair.ObligationRepairOutcome.DEFERRED
+        )
 
     monkeypatch.setattr(
         _obligation_repair,

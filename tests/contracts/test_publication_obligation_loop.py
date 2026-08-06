@@ -290,7 +290,7 @@ def test_t_c4_expected_version_present_uses_full_verification(tmp_path: Path) ->
     finally:
         m.verify_installed_plugin_artifact = original
 
-    assert result.outcome == "cleared"
+    assert result.outcome is m.ObligationRepairOutcome.CLEARED
     assert read_obligation(home) is None
     assert len(captured_specs) == 1
     assert captured_specs[0].expected_version == "1.1.0"  # type: ignore[attr-defined]
@@ -325,7 +325,7 @@ def test_t_c4_expected_version_none_skips_install_state_spec(tmp_path: Path) -> 
     finally:
         m.verify_installed_plugin_artifact = original
 
-    assert result.outcome == "cleared"
+    assert result.outcome is m.ObligationRepairOutcome.CLEARED
     assert read_obligation(home) is None
     assert calls[-1] == ["autoskillit", "--version"]
 
@@ -334,7 +334,10 @@ def test_t_c4_claudecode_defers_and_leaves_obligation_intact(tmp_path: Path) -> 
     """Under CLAUDECODE=1 the repair defers with an instruction finding and
     leaves the obligation intact.
     """
-    from autoskillit.cli.update._obligation_repair import attempt_obligation_repair
+    from autoskillit.cli.update._obligation_repair import (
+        ObligationRepairOutcome,
+        attempt_obligation_repair,
+    )
     from autoskillit.workspace import read_obligation, write_obligation
 
     home = tmp_path
@@ -342,6 +345,6 @@ def test_t_c4_claudecode_defers_and_leaves_obligation_intact(tmp_path: Path) -> 
 
     result = attempt_obligation_repair(home, environment={"CLAUDECODE": "1"})
 
-    assert result.outcome == "deferred"
+    assert result.outcome is ObligationRepairOutcome.DEFERRED
     assert result.findings
     assert read_obligation(home) is not None

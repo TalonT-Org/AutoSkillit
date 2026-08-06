@@ -163,9 +163,6 @@ _STRENUM_COMPARE_EXEMPT_FILES: frozenset[str] = frozenset(
         # CodexLimitVerificationDef.status: Literal[...], not StrEnum
         "test_codex_limit_verification.py",
         "test_codex_limit_findings_are_recorded.py",
-        # ObligationRepairResult.outcome: plain str field (documented values:
-        # "no_obligation", "deferred", "failed", "cleared"), not a StrEnum.
-        "test_publication_obligation_loop.py",
     }
 )
 

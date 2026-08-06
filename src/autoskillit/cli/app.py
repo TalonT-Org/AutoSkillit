@@ -673,10 +673,16 @@ def main() -> None:
         # --version` while the obligation is pending, so that probe must not
         # recursively observe and repair the same record.
         if _first_arg not in {"install", "--version"}:
-            from autoskillit.cli.update._obligation_repair import attempt_obligation_repair
+            from autoskillit.cli.update._obligation_repair import (
+                ObligationRepairOutcome,
+                attempt_obligation_repair,
+            )
 
             repair_result = attempt_obligation_repair(Path.home())
-            if repair_result.outcome not in ("no_obligation", "cleared"):
+            if repair_result.outcome not in {
+                ObligationRepairOutcome.NO_OBLIGATION,
+                ObligationRepairOutcome.CLEARED,
+            }:
                 for finding in repair_result.findings:
                     print(finding, flush=True)
 

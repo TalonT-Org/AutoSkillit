@@ -2836,6 +2836,7 @@ def test_sweep_record_budget_is_hard_and_content_free(tmp_path: Path) -> None:
 
 def test_orphan_scan_adopts_aged_files_and_leaves_everything_else_untouched(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Directory-reconciliation adoption against the plan's exact corpus:
 
@@ -2883,12 +2884,12 @@ def test_orphan_scan_adopts_aged_files_and_leaves_everything_else_untouched(
                 lease_checked=lease_checked,
             )
 
-        store._quarantine_delete = fail_delete
+        monkeypatch.setattr(store, "_quarantine_delete", fail_delete)
         store.sweep(SweepBudgetSpec(max_directory_entries_scanned=0))
         deleting_record = store.get_record(deleting_capture_id)
         assert deleting_record is not None
         assert deleting_record.state is CaptureState.DELETING
-        del store._quarantine_delete
+        monkeypatch.setattr(store, "_quarantine_delete", real_quarantine_delete)
 
         # 3 active (real, file-backed) records — created after the clock
         # advance above so their own retention window stays well beyond any

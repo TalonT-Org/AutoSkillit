@@ -103,10 +103,10 @@ def merge_graph_edges(edges: Iterable[GraphEdge]) -> tuple[GraphEdge, ...]:
 
 def evidence_by_subject(
     evidence: Iterable[EvidenceRecord],
-) -> tuple[tuple[object | None, tuple[EvidenceRecord, ...]], ...]:
+) -> tuple[tuple[NodeKey | None, tuple[EvidenceRecord, ...]], ...]:
     """Group evidence for presentation without using it as graph identity."""
 
-    grouped: dict[object | None, list[EvidenceRecord]] = {}
+    grouped: dict[NodeKey | None, list[EvidenceRecord]] = {}
     for record in evidence:
         grouped.setdefault(record.subject, []).append(record)
     return tuple(

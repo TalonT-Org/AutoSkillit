@@ -60,6 +60,7 @@ from autoskillit.core import (
     ManagedHeadlessSessionLineageRef,
     NamedResume,
     NativeShellCaptureDecision,
+    NativeShellCaptureMode,
     NoResume,
     ObserverStatus,
     OutputFormat,
@@ -1543,7 +1544,7 @@ class CodexBackend(BackendCmdBuilderBase):
         )
         # build_env strips this key from extras unconditionally, so it must be
         # injected here, after build_env returns (as the other builders do).
-        env.update({NATIVE_SHELL_CAPTURE_MODE_ENV_VAR: "capture"})
+        env.update({NATIVE_SHELL_CAPTURE_MODE_ENV_VAR: NativeShellCaptureMode.CAPTURE.value})
         if executable is not None and dict(env) != dict(executable.launch_environment):
             raise ValueError("interactive environment changed after executable binding")
         partial = builder.build()

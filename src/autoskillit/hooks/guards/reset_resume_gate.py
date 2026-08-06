@@ -10,7 +10,10 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _hook_payload import resolve_state_root  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    parse_hook_command,
+    resolve_state_root,
+)
 
 RESET_RESUME_DENY_TRIGGER: str = "RESUME ATTEMPT REQUIRED"
 
@@ -90,8 +93,8 @@ def main() -> None:
     if not dispatch_id:
         sys.exit(0)
 
-    payload_cwd = data.get("cwd", "")
-    project_root = resolve_state_root(payload_cwd if isinstance(payload_cwd, str) else "")
+    payload_cwd = parse_hook_command(data).payload_cwd
+    project_root = resolve_state_root(payload_cwd)
 
     if _is_refused(dispatch_id, project_root):
         sys.exit(0)

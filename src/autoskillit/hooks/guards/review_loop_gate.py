@@ -10,7 +10,10 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _hook_payload import resolve_state_root  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    parse_hook_command,
+    resolve_state_root,
+)
 
 REVIEW_LOOP_DENY_TRIGGER: str = "REVIEW LOOP REQUIRED"
 
@@ -36,8 +39,7 @@ def main() -> None:
     except Exception:
         sys.exit(0)
 
-    raw_payload_cwd = data.get("cwd", "") if isinstance(data, dict) else ""
-    payload_cwd = raw_payload_cwd if isinstance(raw_payload_cwd, str) else ""
+    payload_cwd = parse_hook_command(data if isinstance(data, dict) else {}).payload_cwd
     project_root = resolve_state_root(payload_cwd)
 
     state_file = project_root.joinpath(*_STATE_FILE_RELPATH)

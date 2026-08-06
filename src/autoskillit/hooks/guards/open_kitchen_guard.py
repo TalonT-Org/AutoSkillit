@@ -19,7 +19,10 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _hook_payload import resolve_state_root  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    parse_hook_command,
+    resolve_state_root,
+)
 
 OPEN_KITCHEN_DENY_TRIGGER: str = "open_kitchen cannot be called"
 
@@ -199,8 +202,7 @@ def main() -> None:
         session_id = data.get("session_id", "")
         recipe_name: str | None = None
         tool_input = data.get("tool_input") or {}
-        raw_payload_cwd = data.get("cwd", "")
-        payload_cwd = raw_payload_cwd if isinstance(raw_payload_cwd, str) else ""
+        payload_cwd = parse_hook_command(data).payload_cwd
         if isinstance(tool_input, dict):
             recipe_name = tool_input.get("name") or None
 

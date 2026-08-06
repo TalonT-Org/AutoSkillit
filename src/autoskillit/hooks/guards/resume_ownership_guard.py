@@ -12,7 +12,10 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _hook_payload import resolve_state_root  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    parse_hook_command,
+    resolve_state_root,
+)
 
 RESUME_OWNERSHIP_DENY_TRIGGER: str = "resume_session_id ownership validation failed"
 
@@ -76,8 +79,7 @@ def main() -> None:
     if not resume_session_id:
         sys.exit(0)
 
-    raw_payload_cwd = data.get("cwd", "")
-    payload_cwd = raw_payload_cwd if isinstance(raw_payload_cwd, str) else ""
+    payload_cwd = parse_hook_command(data).payload_cwd
     prov_path = _resolve_provenance_path(payload_cwd)
     record = _find_provenance(resume_session_id, prov_path)
 

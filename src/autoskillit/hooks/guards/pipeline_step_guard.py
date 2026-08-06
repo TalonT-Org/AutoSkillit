@@ -21,7 +21,10 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _hook_payload import resolve_state_root  # type: ignore[import-not-found]  # noqa: E402
+from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
+    parse_hook_command,
+    resolve_state_root,
+)
 from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
 from _hook_utils import STEP_SUFFIX_RE  # type: ignore[import-not-found]  # noqa: E402
 
@@ -67,8 +70,7 @@ def main() -> None:
     if not step_name:
         sys.exit(0)
 
-    raw_payload_cwd = data.get("cwd", "")
-    payload_cwd = raw_payload_cwd if isinstance(raw_payload_cwd, str) else ""
+    payload_cwd = parse_hook_command(data).payload_cwd
     project_root = resolve_state_root(payload_cwd)
 
     order_id = tool_input.get("order_id", "") or os.environ.get("AUTOSKILLIT_DISPATCH_ID", "")

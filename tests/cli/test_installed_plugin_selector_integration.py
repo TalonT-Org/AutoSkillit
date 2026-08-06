@@ -355,7 +355,7 @@ def test_codex_cook_remains_generated_home_and_ignores_claude_artifacts(
         skill_catalog=None,
         generated_home_available=generated_home is not None,
     )
-    assert authority is None
+    assert authority is not None
     assert load_mode is PluginLoadMode.GENERATED_HOME
 
     cli.cook(backend=backend)

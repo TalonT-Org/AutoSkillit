@@ -24,6 +24,7 @@ pytestmark = [
 class _ReloadBinding:
     def __init__(self, plugin_dir: Path) -> None:
         self.plugin_dir = plugin_dir
+        self.identity = SimpleNamespace(managed_path=plugin_dir)
         self.inherited_fds: tuple[int, ...] = ()
         self.closed = False
 
@@ -238,7 +239,7 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
 
     bindings: list[_ReloadBinding] = []
 
-    class _PerAttemptAuthority:
+    class _SessionAuthority:
         def acquire_launch_binding(self, **_kwargs: object) -> _ReloadBinding:
             binding = _ReloadBinding(tmp_path / "projected-plugin")
             binding.inherited_fds = (5, 7)
@@ -248,7 +249,7 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
     monkeypatch.setattr(
         "autoskillit.cli._plugin_artifact.interactive_plugin_authority",
         lambda **_kwargs: (
-            _PerAttemptAuthority(),
+            _SessionAuthority(),
             PluginLoadMode.EXPLICIT_PLUGIN_DIR,
         ),
     )
@@ -284,9 +285,8 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
 
     run_events = [event for event in events if event[0] == "run"]
     assert [event[3] for event in run_events] == [(5, 7, 11), (5, 7, 11)]
-    assert len(bindings) == 2
-    assert bindings[0] is not bindings[1]
-    assert all(binding.closed for binding in bindings)
+    assert len(bindings) == 1
+    assert bindings[0].closed
     assert events.index(managed_exits[0]) > events.index(
         next(event for event in events if event[:2] == ("attempt-exit", 2))
     )

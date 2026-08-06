@@ -284,7 +284,7 @@ STRICT_PLUGIN_WRITE_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Every retirement-v2 migration and mutation surfaces file and parent fsync failures.",
     ),
     (
-        "workspace/_installed_artifact_manifest.py",
+        "workspace/_installed_artifact.py",
         "write_installed_plugin_artifact_manifest_locked",
         "write_versioned_json:strict=True",
     ): (

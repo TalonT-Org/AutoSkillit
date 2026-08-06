@@ -427,7 +427,7 @@ class TestInstalledPluginArtifactAuthority:
         assert special.exists()
         assert not installed_plugin_artifact_manifest_path(root).exists()
 
-    def test_generated_home_codex_does_not_construct_projection_authority(
+    def test_generated_home_codex_constructs_durable_scripts_authority(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from types import SimpleNamespace
@@ -442,9 +442,10 @@ class TestInstalledPluginArtifactAuthority:
                 plugin_install_capable=False,
             ),
         )
+        authority_marker = object()
         monkeypatch.setattr(
             "autoskillit.workspace.project_default_plugin_authority",
-            lambda **_kwargs: pytest.fail("generated-home Codex projected an unused plugin"),
+            lambda **_kwargs: authority_marker,
         )
 
         authority, load_mode = interactive_plugin_authority(
@@ -455,7 +456,7 @@ class TestInstalledPluginArtifactAuthority:
             generated_home_available=True,
         )
 
-        assert authority is None
+        assert authority is authority_marker
         assert load_mode is PluginLoadMode.GENERATED_HOME
 
     def test_implicit_binding_rejects_wrong_transaction_identity(

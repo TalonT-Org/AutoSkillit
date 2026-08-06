@@ -30,10 +30,22 @@ class TestCodexHooksConfigRoundTrip:
         fake_home: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        from autoskillit import __version__
+        from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY, installed_plugin_semantic_key
+        from autoskillit.workspace import write_installed_plugin_artifact_manifest_locked
+
         retained_root = fake_home / "cache-root"
         hooks_dir = retained_root / "hooks"
         hooks_dir.mkdir(parents=True)
         (hooks_dir / "_dispatch.py").write_text("# retained", encoding="utf-8")
+        write_installed_plugin_artifact_manifest_locked(
+            retained_root,
+            semantic_key=installed_plugin_semantic_key(
+                _AUTOSKILLIT_PLUGIN_KEY,
+                __version__,
+            ),
+            action="publish",
+        )
         monkeypatch.setattr(
             "autoskillit.execution.backends._codex_hooks.installed_plugin_artifact_root",
             lambda *_args: retained_root,

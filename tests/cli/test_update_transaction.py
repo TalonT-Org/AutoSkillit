@@ -475,7 +475,8 @@ def test_t_b3_default_fresh_version_prober_probes_path_resolved_autoskillit_vers
     resolved autoskillit entrypoint with --version under the maintenance
     env — never touching in-process metadata for the post-pivot read.
     """
-    fake_entrypoint = tmp_path / "fake-autoskillit"
+    fake_entrypoint = tmp_path / "bin" / "autoskillit"
+    fake_entrypoint.parent.mkdir()
     fake_entrypoint.write_text("#!/bin/sh\necho 9.9.9\n")
     fake_entrypoint.chmod(0o755)
     monkeypatch.setattr(

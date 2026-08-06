@@ -39,7 +39,7 @@ def _publish_cache_incarnation(
     metadata.parent.mkdir(parents=True)
     metadata.write_text(json.dumps({"name": "autoskillit", "version": version}))
     from autoskillit.core import ArtifactLease, installed_plugin_artifact_lease_path
-    from autoskillit.workspace._installed_artifact_manifest import (
+    from autoskillit.workspace._installed_artifact import (
         write_installed_plugin_artifact_manifest_locked,
     )
 
@@ -310,7 +310,7 @@ def test_t_c3_missing_dispatcher_rolls_back_failed_repair(tmp_path: Path) -> Non
         installed_plugin_artifact_manifest_path,
         installed_plugin_semantic_key,
     )
-    from autoskillit.workspace._installed_artifact_manifest import (
+    from autoskillit.workspace._installed_artifact import (
         write_installed_plugin_artifact_manifest_locked,
     )
     from autoskillit.workspace._projected_artifact._hook_repair import (
@@ -446,6 +446,7 @@ def test_t_c4_expected_version_present_uses_full_verification(tmp_path: Path) ->
 @pytest.mark.parametrize("persisted_version", [None, "not a version"])
 def test_t_c4_unknown_version_probes_then_verifies_exact_state(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     persisted_version: str | None,
 ) -> None:
     """Unknown or invalid persisted versions trigger a fresh exact probe."""
@@ -454,6 +455,11 @@ def test_t_c4_unknown_version_probes_then_verifies_exact_state(
         read_obligation,
         update_obligation_expected_version,
         write_obligation,
+    )
+
+    monkeypatch.setattr(
+        "autoskillit.cli._install_info.detect_install",
+        lambda: MagicMock(entrypoint=None),
     )
 
     home = tmp_path

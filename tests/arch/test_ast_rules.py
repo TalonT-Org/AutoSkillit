@@ -288,8 +288,15 @@ def test_broad_except_with_reraise_is_not_violation(tmp_path: Path) -> None:
     assert not except_violations, f"Unexpected except violation: {except_violations}"
 
 
-def test_post_pivot_reporter_exemption_is_scoped(tmp_path: Path) -> None:
-    transaction = tmp_path / "_transaction.py"
+def test_post_pivot_reporter_exemption_is_scoped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.arch import _helpers
+
+    src_root = tmp_path / "src" / "autoskillit"
+    monkeypatch.setattr(_helpers, "SRC_ROOT", src_root)
+    transaction = src_root / "cli" / "update" / "_transaction.py"
+    transaction.parent.mkdir(parents=True)
     transaction.write_text(
         "def _report_post_pivot_failure(message):\n"
         "    try:\n"
@@ -303,7 +310,7 @@ def test_post_pivot_reporter_exemption_is_scoped(tmp_path: Path) -> None:
     )
     assert not [v for v in _scan(transaction) if v.rule_id == "ARCH-003"]
 
-    unrelated = tmp_path / "unrelated" / "_transaction.py"
+    unrelated = src_root / "unrelated" / "_transaction.py"
     unrelated.parent.mkdir()
     unrelated.write_text("try:\n    risky()\nexcept Exception:\n    pass\n")
     assert [v for v in _scan(unrelated) if v.rule_id == "ARCH-003"]

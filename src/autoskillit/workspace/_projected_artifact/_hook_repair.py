@@ -24,7 +24,7 @@ from autoskillit.hook_registry import (
     find_broken_hook_scripts,
     render_relocatable_hook_command,
 )
-from autoskillit.workspace._installed_artifact_manifest import (
+from autoskillit.workspace._installed_artifact import (
     write_installed_plugin_artifact_manifest_locked,
 )
 

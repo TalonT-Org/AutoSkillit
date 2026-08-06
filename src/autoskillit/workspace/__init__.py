@@ -25,8 +25,6 @@ from autoskillit.workspace._installed_artifact import (
     InstallStateLeaseMode,
     InstallStateSpec,
     verify_installed_plugin_artifact,
-)
-from autoskillit.workspace._installed_artifact_manifest import (
     write_installed_plugin_artifact_manifest_locked,
 )
 from autoskillit.workspace._projected_artifact import (

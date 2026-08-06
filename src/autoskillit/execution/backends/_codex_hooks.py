@@ -13,6 +13,7 @@ from pathlib import Path
 from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
     atomic_write,
+    get_logger,
     installed_plugin_artifact_root,
     installed_plugin_semantic_key,
     read_installed_plugin_artifact_identity,
@@ -34,6 +35,8 @@ from autoskillit.hook_registry import (
     validate_lifecycle_contracts,
 )
 
+logger = get_logger(__name__)
+
 
 def _resolve_codex_hooks_dir() -> Path:
     """Select a durable absolute dispatcher root for Codex configuration."""
@@ -49,6 +52,7 @@ def _resolve_codex_hooks_dir() -> Path:
             ),
         )
     except Exception:
+        logger.warning("Installed Codex hook artifact identity was rejected", exc_info=True)
         return HOOKS_DIR
     cache_hooks_dir = identity.managed_path / "hooks"
     if (cache_hooks_dir / "_dispatch.py").is_file():

@@ -35,6 +35,7 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 class _CookBinding:
     def __init__(self, plugin_dir: Path) -> None:
         self.plugin_dir = plugin_dir
+        self.identity = SimpleNamespace(managed_path=plugin_dir)
         self.inherited_fds: tuple[int, ...] = ()
         self.closed = False
 

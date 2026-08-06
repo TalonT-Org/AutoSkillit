@@ -281,7 +281,7 @@ def test_invalid_claude_artifact_fails_before_interactive_child_spawn(
         project_dir=state.home / "project",
         default_base_branch="main",
         skill_catalog=None,
-        generated_home=None,
+        generated_home_available=False,
     )
     assert authority is not None
     assert load_mode is PluginLoadMode.IMPLICIT_INSTALLED
@@ -353,7 +353,7 @@ def test_codex_cook_remains_generated_home_and_ignores_claude_artifacts(
         project_dir=state.home / "project",
         default_base_branch="main",
         skill_catalog=None,
-        generated_home=generated_home,
+        generated_home_available=generated_home is not None,
     )
     assert authority is None
     assert load_mode is PluginLoadMode.GENERATED_HOME

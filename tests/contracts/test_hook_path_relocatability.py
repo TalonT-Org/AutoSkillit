@@ -17,6 +17,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -361,34 +362,55 @@ def test_catalog_projection_context_defaults_to_pkg_root_when_unspecified(
     )
 
 
-def test_cook_session_resolves_durable_scripts_root_before_projection() -> None:
-    """cli/session/_session_cook.py must resolve interactive_plugin_authority()
-    — and, for IMPLICIT_INSTALLED sessions, the retained plugin-cache
-    incarnation via current_installed_plugin_root() — BEFORE
-    catalog_projection_context() runs, so the projected skill document never
-    references a tree with a shorter lifetime than the session consuming it.
+@pytest.mark.parametrize(
+    ("load_mode", "expected_kind"),
+    [
+        ("implicit", "installed"),
+        ("explicit", "source"),
+    ],
+)
+def test_cook_session_passes_behavioral_durable_root_to_projection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    load_mode: str,
+    expected_kind: str,
+) -> None:
+    from types import SimpleNamespace
 
-    Static ordering check (source-text search): cook() has many external
-    side effects (TTY prompts, subprocess launch, backend resolution) that
-    make a full behavioral test require deep mocking; the durable-root
-    resolution contract itself is covered by
-    test_catalog_projection_context_accepts_durable_scripts_root above.
-    """
-    import inspect
+    from autoskillit.cli.session._session_cook import _build_cook_projection_context
+    from autoskillit.core import PluginLoadMode, SkillExecutionRole
+    from autoskillit.workspace import EffectiveSkillCatalog, SkillsDirectoryProvider
 
-    from autoskillit.cli.session import _session_cook
-
-    source = inspect.getsource(_session_cook.cook)
-    # Search for the actual call sites, not merely the substring — both names
-    # also appear in surrounding prose comments, which would give a false
-    # pass/fail independent of where the real calls sit.
-    authority_call = "artifact_authority, load_mode = interactive_plugin_authority("
-    projection_call = "skills_provider.catalog_projection_context("
-    authority_pos = source.index(authority_call)
-    projection_pos = source.index(projection_call)
-    assert authority_pos < projection_pos, (
-        "interactive_plugin_authority() must be resolved before "
-        "catalog_projection_context() so its result can supply durable_scripts_root"
+    installed_root = tmp_path / "installed"
+    source_root = tmp_path / "source"
+    monkeypatch.setattr(
+        "autoskillit.cli._plugin_artifact.current_installed_plugin_root",
+        lambda: installed_root,
     )
-    assert "durable_scripts_root=durable_scripts_root" in source
-    assert "current_installed_plugin_root" in source
+    monkeypatch.setattr("autoskillit.core.pkg_root", lambda: source_root)
+
+    provider = SkillsDirectoryProvider(
+        temp_dir_relpath=".autoskillit/temp",
+        default_base_branch="develop",
+    )
+    catalog = EffectiveSkillCatalog(skills=(), execution_role=SkillExecutionRole.SESSION)
+    selected_mode = (
+        PluginLoadMode.IMPLICIT_INSTALLED
+        if load_mode == "implicit"
+        else PluginLoadMode.EXPLICIT_PLUGIN_DIR
+    )
+
+    backend: Any = SimpleNamespace(conventions=None)
+    context = _build_cook_projection_context(
+        provider,
+        catalog,
+        tmp_path,
+        backend,
+        selected_mode,
+    )
+
+    expected_root = installed_root if expected_kind == "installed" else source_root
+    assert context.substitutions is not None
+    assert context.substitutions["{{AUTOSKILLIT_SCRIPTS}}"] == str(
+        expected_root / "recipes" / "scripts"
+    )

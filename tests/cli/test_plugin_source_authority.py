@@ -452,7 +452,7 @@ class TestInstalledPluginArtifactAuthority:
             project_dir=tmp_path,
             default_base_branch="main",
             skill_catalog=None,
-            generated_home=tmp_path / "generated-home",
+            generated_home_available=True,
         )
 
         assert authority is None

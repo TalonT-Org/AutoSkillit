@@ -67,7 +67,7 @@ def interactive_plugin_authority(
     project_dir: Path,
     default_base_branch: str,
     skill_catalog: EffectiveSkillCatalog | None,
-    generated_home: Path | None,
+    generated_home_available: bool,
 ) -> tuple[PluginArtifactAuthority | None, PluginLoadMode]:
     """Select authority only after the effective backend and load path are known."""
     from autoskillit.core import MARKETPLACE_PREFIX, detect_autoskillit_mcp_prefix
@@ -75,7 +75,7 @@ def interactive_plugin_authority(
     capabilities = backend.capabilities
     if not capabilities.skill_injection_capable:
         return None, PluginLoadMode.NONE
-    if not capabilities.plugin_install_capable and generated_home is not None:
+    if not capabilities.plugin_install_capable and generated_home_available:
         return None, PluginLoadMode.GENERATED_HOME
     if capabilities.plugin_install_capable and (
         detect_autoskillit_mcp_prefix(capabilities) == MARKETPLACE_PREFIX

@@ -189,8 +189,13 @@ def _adoptable(root_fd: int, name: str, tracked: frozenset[str], now: float) -> 
         return False
     try:
         value = os.lstat(name, dir_fd=root_fd)
-    except OSError:
+    except FileNotFoundError:
         return False
+    except OSError as exc:
+        raise OrphanScanAuthorityError(
+            exc.errno,
+            "cannot inspect orphan candidate",
+        ) from exc
     # `lstat` (never a following `stat`/`Path.is_file()`) is load-bearing: a
     # symlinked capture root let cleanup escape the project (#4319). Mtime age
     # alone is not a liveness signal either — it must combine with the

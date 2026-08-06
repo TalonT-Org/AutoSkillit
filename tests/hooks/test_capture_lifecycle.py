@@ -3030,6 +3030,37 @@ def test_orphan_scan_clears_complete_cursor_after_directory_shrinks(tmp_path: Pa
         anchor.close()
 
 
+def test_orphan_scan_surfaces_candidate_authority_errors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, _store = _open_store(project, clock)
+    name = "shell_0000000000000001.log"
+    fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=root.fd)
+    os.close(fd)
+    real_lstat = orphan_scan.os.lstat
+
+    def deny_candidate(path, *args, **kwargs):
+        if path == name:
+            raise PermissionError(errno.EACCES, "denied")
+        return real_lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(orphan_scan.os, "lstat", deny_candidate)
+    try:
+        with pytest.raises(orphan_scan.OrphanScanAuthorityError, match="inspect orphan"):
+            orphan_scan.scan_for_orphans(
+                root.fd,
+                frozenset(),
+                SweepBudgetSpec(max_directory_entries_scanned=8),
+                now=clock.wall(),
+            )
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_orphan_adoption_rechecks_age_under_lock(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

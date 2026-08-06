@@ -176,7 +176,7 @@ def capture_store_stats(project_cwd: str) -> CaptureStoreStats:
                     continue
                 try:
                     value = entry.stat(follow_symlinks=False)
-                except OSError:
+                except FileNotFoundError:
                     continue
                 if not stat.S_ISREG(value.st_mode):
                     continue

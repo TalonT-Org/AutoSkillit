@@ -10,6 +10,7 @@ merely by that guard's limited reach.
 
 from __future__ import annotations
 
+import errno
 import os
 import subprocess
 import sys
@@ -20,6 +21,7 @@ from pathlib import Path
 import pytest
 
 import autoskillit.cli._capture_store as capture_store_command
+import autoskillit.hooks._capture._reconcile as capture_reconcile
 from autoskillit.cli._capture_store import run_capture_store
 from autoskillit.cli.doctor._doctor_capture_store import _check_capture_store_stats
 from autoskillit.hooks._capture._authority import open_capture_root, open_project_anchor
@@ -216,3 +218,25 @@ def test_capture_store_stats_does_not_hang_on_lock_contention(tmp_path: Path) ->
         except subprocess.TimeoutExpired:
             holder.terminate()
             holder.communicate(timeout=3)
+
+
+def test_capture_store_stats_surfaces_entry_authority_errors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    _seed_store_with_backlog_and_orphans(project)
+
+    class DeniedEntry:
+        name = "shell_0000000000000001.log"
+
+        @staticmethod
+        def stat(*, follow_symlinks: bool):
+            raise PermissionError(errno.EACCES, "denied")
+
+    monkeypatch.setattr(capture_reconcile.os, "scandir", lambda _fd: [DeniedEntry()])
+
+    stats = capture_reconcile.capture_store_stats(str(project))
+
+    assert stats.blocker is CleanupBlocker.PERMISSION_DENIED

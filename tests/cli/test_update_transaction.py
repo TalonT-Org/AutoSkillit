@@ -1457,7 +1457,7 @@ def test_update_consumers_compose_with_registered_real_child_transaction(
     consumer: str,
     claude_behavior: str,
 ) -> None:
-    from autoskillit.cli.update import _update, _update_checks
+    from autoskillit.cli.update import _obligation_repair, _update, _update_checks
 
     _prepare(monkeypatch)
     home, base_env = _isolated_child_environment(tmp_path)
@@ -1470,6 +1470,17 @@ def test_update_consumers_compose_with_registered_real_child_transaction(
     effects: list[tuple[str, Path, dict[str, object] | None]] = []
     dismiss_reads: list[Path] = []
     install_statuses: list[int] = []
+    repair_homes: list[Path] = []
+
+    def defer_obligation_repair(target_home: Path) -> object:
+        repair_homes.append(target_home)
+        return _obligation_repair.ObligationRepairResult(outcome="deferred")
+
+    monkeypatch.setattr(
+        _obligation_repair,
+        "attempt_obligation_repair",
+        defer_obligation_repair,
+    )
 
     def runner(
         cmd: list[str],
@@ -1582,6 +1593,9 @@ def test_update_consumers_compose_with_registered_real_child_transaction(
         assert results[0].install_result.failure_kind is InstallFailureKind.CHILD
         assert not effects
         assert not dismiss_reads
+    assert repair_homes == (
+        [home] if consumer == "explicit" and claude_behavior == "child-failure" else []
+    )
     assert [call["argv"][:2] for call in _read_fake_claude_calls(home)] == [
         ["plugin", "marketplace"],
         ["plugin", "install"],

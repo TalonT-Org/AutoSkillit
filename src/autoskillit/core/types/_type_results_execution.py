@@ -40,7 +40,7 @@ class SessionTelemetry:
     github_api_requests: int
     loc_insertions: int
     loc_deletions: int
-    execution_identity: ExecutionIdentity = ExecutionIdentity()
+    execution_identity: ExecutionIdentity = ExecutionIdentity.empty()
 
     @classmethod
     def empty(cls) -> SessionTelemetry:

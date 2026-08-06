@@ -1,15 +1,8 @@
-"""Cross-interpreter upgrade smoke test (C-I4).
+"""Exercise plugin-hook durability across a real interpreter replacement.
 
-The only test in the system that exercises real ``uv`` venv replacement
-under a real interpreter flip — issue #4469's exact fault class. This
-cannot be inflicted from in-process pytest: the running test interpreter's
-own import roots cannot be destroyed by the code under test (see
-``tests/cli/_upgrade_fixtures.py``'s documented blind spot). The in-suite
-approximation covering the same property cheaply (a fixture fake-venv tree
-renamed after publication) is
-``tests.contracts.test_hook_path_relocatability::test_token_aware_validation_survives_interpreter_pivot``
-(delivered with Phase A, since the property it pins — relocatable commands
-surviving an interpreter-tree rename — predates and is reused by this step).
+The smoke requires ``uv`` plus both declared Python minors. It installs the
+same source under each interpreter in turn, republishes the plugin artifact,
+and executes hooks from every retained cache incarnation.
 """
 
 from __future__ import annotations

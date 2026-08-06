@@ -1663,6 +1663,26 @@ async def run_skill(
             ):
                 return compat_error
 
+            def _record_explorer_launch_lease(
+                *,
+                bound_session_id: str,
+                session_home: Path,
+                operation: str,
+            ) -> CodingAgentBackend:
+                """Transfer cleanup ownership before validating backend injection."""
+                nonlocal _explorer_launch_lease
+                backend = _effective_backend_obj
+                _explorer_launch_lease = _ExplorerLaunchLease(
+                    session_id=bound_session_id,
+                    session_home=session_home,
+                    backend=backend,
+                )
+                if backend is None:
+                    raise SkillContractError(
+                        f"Explorer {operation} requires the bound Codex backend"
+                    )
+                return backend
+
             # Server-side recipe step parameter resolution.
             # When a step_name is provided and the recipe's step definition is cached,
             # auto-fill parameters the LLM may have omitted.
@@ -1822,18 +1842,11 @@ async def run_skill(
                             authority_home=authority_home,
                         )
                         if binding_env is not None:
-                            # ``bind_launches`` persists authority before it
-                            # returns. Transfer cleanup ownership before Codex
-                            # validates or writes any projected config.
-                            _explorer_launch_lease = _ExplorerLaunchLease(
-                                session_id=session_id,
+                            _record_explorer_launch_lease(
+                                bound_session_id=session_id,
                                 session_home=authority_home,
-                                backend=_effective_backend_obj,
+                                operation="launch",
                             )
-                            if _effective_backend_obj is None:
-                                raise SkillContractError(
-                                    "Explorer launch requires the bound Codex backend"
-                                )
                         return binding_env
 
                     session_root = tool_ctx.session_skill_manager.materialize_invocation(
@@ -1887,19 +1900,13 @@ async def run_skill(
                     authority_home=restored_session_root.parent,
                 )
                 if _explorer_binding_env is not None:
-                    # As on the fresh path, launch authority exists before
-                    # backend injection.  Make the outer finally block own it
-                    # first so refresh failures and cancellations revoke it.
-                    _explorer_launch_lease = _ExplorerLaunchLease(
-                        session_id=resume_session_id,
+                    assert resume_session_id is not None
+                    bound_backend = _record_explorer_launch_lease(
+                        bound_session_id=resume_session_id,
                         session_home=restored_session_root.parent,
-                        backend=_effective_backend_obj,
+                        operation="resume",
                     )
-                    if _effective_backend_obj is None:
-                        raise SkillContractError(
-                            "Explorer resume requires the bound Codex backend"
-                        )
-                    _effective_backend_obj.refresh_explorer_binding_env(
+                    bound_backend.refresh_explorer_binding_env(
                         restored_session_root.parent,
                         _explorer_binding_env,
                     )

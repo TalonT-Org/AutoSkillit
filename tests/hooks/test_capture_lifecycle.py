@@ -89,6 +89,26 @@ def _assert_holder_exited_cleanly(holder: subprocess.Popen[str]) -> None:
     assert holder.returncode == 0, stderr
 
 
+def _start_lock_holder(lock_path: Path, *, hold_seconds: float) -> subprocess.Popen[str]:
+    holder_script = (
+        "import fcntl, os, sys, time\n"
+        "fd = os.open(sys.argv[1], os.O_RDWR)\n"
+        "fcntl.flock(fd, fcntl.LOCK_EX)\n"
+        "print('ready', flush=True)\n"
+        "time.sleep(float(sys.argv[2]))\n"
+        "os.close(fd)\n"
+    )
+    holder = subprocess.Popen(
+        [sys.executable, "-c", holder_script, str(lock_path), str(hold_seconds)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    assert holder.stdout is not None
+    assert holder.stdout.readline() == "ready\n"
+    return holder
+
+
 _CAPTURE_ID = "0123456789abcdef"
 
 
@@ -2623,24 +2643,8 @@ def test_sweep_lock_contention_recovers_within_budget_and_makes_progress(
     # remain fully controllable.
     store._monotonic = time.monotonic
     lock_path = _capture_dir(project) / capture_lifecycle.LOCK_NAME
-    holder_script = (
-        "import fcntl, os, sys, time\n"
-        "fd = os.open(sys.argv[1], os.O_RDWR)\n"
-        "fcntl.flock(fd, fcntl.LOCK_EX)\n"
-        "print('ready', flush=True)\n"
-        "time.sleep(0.03)\n"
-        "os.close(fd)\n"
-    )
-    holder = subprocess.Popen(
-        [sys.executable, "-c", holder_script, str(lock_path)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    holder = _start_lock_holder(lock_path, hold_seconds=0.03)
     try:
-        assert holder.stdout is not None
-        assert holder.stdout.readline() == "ready\n"
-
         started = time.monotonic()
         outcome = store.sweep(_sweep_budget(8, 1.0))
         elapsed = time.monotonic() - started
@@ -2666,24 +2670,8 @@ def test_sweep_lock_held_for_whole_budget_reports_bounded_stalled_outcome(
     anchor, root, store = _open_store(project, _Clock())
     store._monotonic = time.monotonic
     lock_path = _capture_dir(project) / capture_lifecycle.LOCK_NAME
-    holder_script = (
-        "import fcntl, os, sys, time\n"
-        "fd = os.open(sys.argv[1], os.O_RDWR)\n"
-        "fcntl.flock(fd, fcntl.LOCK_EX)\n"
-        "print('ready', flush=True)\n"
-        "time.sleep(0.3)\n"
-        "os.close(fd)\n"
-    )
-    holder = subprocess.Popen(
-        [sys.executable, "-c", holder_script, str(lock_path)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    holder = _start_lock_holder(lock_path, hold_seconds=0.3)
     try:
-        assert holder.stdout is not None
-        assert holder.stdout.readline() == "ready\n"
-
         budget = _sweep_budget(8, 0.05)
         started = time.monotonic()
         outcome = store.sweep(budget)
@@ -3409,24 +3397,8 @@ def test_reconcile_capture_store_bounds_store_open_lock_contention(tmp_path: Pat
     anchor.close()
 
     lock_path = _capture_dir(project) / capture_lifecycle.LOCK_NAME
-    holder_script = (
-        "import fcntl, os, sys, time\n"
-        "fd = os.open(sys.argv[1], os.O_RDWR)\n"
-        "fcntl.flock(fd, fcntl.LOCK_EX)\n"
-        "print('ready', flush=True)\n"
-        "time.sleep(1.0)\n"
-        "os.close(fd)\n"
-    )
-    holder = subprocess.Popen(
-        [sys.executable, "-c", holder_script, str(lock_path)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    holder = _start_lock_holder(lock_path, hold_seconds=1.0)
     try:
-        assert holder.stdout is not None
-        assert holder.stdout.readline() == "ready\n"
-
         budget = _sweep_budget(8, 0.15)
         started = time.monotonic()
         outcome = capture_reconcile.reconcile_capture_store(str(project), budget)
@@ -3459,24 +3431,8 @@ def test_reconcile_capture_store_recovers_from_store_open_lock_contention(
     anchor.close()
 
     lock_path = _capture_dir(project) / capture_lifecycle.LOCK_NAME
-    holder_script = (
-        "import fcntl, os, sys, time\n"
-        "fd = os.open(sys.argv[1], os.O_RDWR)\n"
-        "fcntl.flock(fd, fcntl.LOCK_EX)\n"
-        "print('ready', flush=True)\n"
-        "time.sleep(0.02)\n"
-        "os.close(fd)\n"
-    )
-    holder = subprocess.Popen(
-        [sys.executable, "-c", holder_script, str(lock_path)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    holder = _start_lock_holder(lock_path, hold_seconds=0.02)
     try:
-        assert holder.stdout is not None
-        assert holder.stdout.readline() == "ready\n"
-
         budget = capture_reconcile.SESSION_START_BUDGET
         started = time.monotonic()
         outcome = capture_reconcile.reconcile_capture_store(str(project), budget)

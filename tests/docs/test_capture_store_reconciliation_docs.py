@@ -49,7 +49,7 @@ def test_hooks_md_scan_phase_documents_budget_field(hooks_md: str) -> None:
 @pytest.mark.parametrize(
     "gate_marker",
     [
-        r"shell_\[0-9a-f\]\{16\}\\\.log",
+        r"shell_\[0-9a-f\]\{16\}\.log",
         "lstat",
         "#4319",
         "#4321",

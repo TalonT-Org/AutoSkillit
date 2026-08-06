@@ -164,7 +164,7 @@ def test_capability_registry_authenticity_findings_are_typed(tmp_path: Path) -> 
 
     assert {diagnostic.capability for diagnostic in diagnostics} == set(SKILL_CAPABILITY_REGISTRY)
     assert {diagnostic.kind for diagnostic in diagnostics} == {
-        SkillInvalidityKind.UNDECLARED_CAPABILITY
+        SkillInvalidityKind.UNKNOWN_CAPABILITY
     }
 
 

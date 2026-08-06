@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 from threading import Event, RLock
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 import regex as re
 
@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 CapabilityActor = Literal["self", "parent", "external"]
 CapabilityDirection = Literal["outbound", "inbound", "descriptive"]
 CapabilitySourceClassification = Literal["executable", "artifact"]
+_AuthenticityDiagnostics = tuple["SkillCapabilityAuthenticityDiagnostic", ...]
 _SkillCapabilityEvidenceKey = tuple[str, str]
 
 # Accounted resident payload includes exact key strings, evidence source strings,
@@ -94,10 +95,7 @@ class SkillCapabilityValidation:
         return not self.missing and not self.unsupported
 
 
-@dataclass(frozen=True, slots=True)
-class SkillCapabilityAuthenticityDiagnostic:
-    """One typed declaration/evidence mismatch for a concrete capability."""
-
+class SkillCapabilityAuthenticityDiagnostic(NamedTuple):
     kind: SkillInvalidityKind
     capability: str
     detail: str
@@ -785,9 +783,7 @@ def validate_skill_capability_declarations(
     )
 
 
-def validate_skill_capability_authenticity(
-    skill_info: SkillInfo,
-) -> tuple[SkillCapabilityAuthenticityDiagnostic, ...]:
+def validate_skill_capability_authenticity(skill_info: SkillInfo) -> _AuthenticityDiagnostics:
     """Return stable diagnostics for declaration/evidence mismatches."""
     validation = validate_skill_capability_declarations(
         skill_info.canonical_content,
@@ -801,15 +797,14 @@ def validate_skill_capability_authenticity(
             for item in validation.evidence
             if item.capability == capability and item.is_genuine
         )
+        detail = (
+            f"{skill_info.name}: missing declaration for {capability!r}; "
+            f"lines {genuine.source_span[0]}-{genuine.source_span[1]}: "
+            f"{genuine.source.strip()!r}"
+        )
         diagnostics.append(
             SkillCapabilityAuthenticityDiagnostic(
-                kind=SkillInvalidityKind.UNDECLARED_CAPABILITY,
-                capability=capability,
-                detail=(
-                    f"{skill_info.name}: missing declaration for {capability!r}; "
-                    f"lines {genuine.source_span[0]}-{genuine.source_span[1]}: "
-                    f"{genuine.source.strip()!r}"
-                ),
+                SkillInvalidityKind.UNDECLARED_CAPABILITY, capability, detail
             )
         )
     for capability in sorted(validation.unsupported):
@@ -824,14 +819,13 @@ def validate_skill_capability_authenticity(
             if artifact is not None
             else "no source span: no recognizable evidence"
         )
+        detail = (
+            f"{skill_info.name}: declaration {capability!r} lacks genuine evidence; "
+            f"{evidence_detail}"
+        )
         diagnostics.append(
             SkillCapabilityAuthenticityDiagnostic(
-                kind=SkillInvalidityKind.UNDECLARED_CAPABILITY,
-                capability=capability,
-                detail=(
-                    f"{skill_info.name}: declaration {capability!r} lacks genuine evidence; "
-                    f"{evidence_detail}"
-                ),
+                SkillInvalidityKind.UNKNOWN_CAPABILITY, capability, detail
             )
         )
     return tuple(diagnostics)
@@ -1096,7 +1090,6 @@ __all__ = [
     "CapabilityDirection",
     "CapabilitySourceClassification",
     "RETIRED_SEMANTIC_CAPABILITIES",
-    "SkillCapabilityAuthenticityDiagnostic",
     "SkillCapabilityEvidence",
     "SkillCapabilityValidation",
     "classify_skill_capability_evidence",

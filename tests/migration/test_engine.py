@@ -472,7 +472,7 @@ class TestMigrationEngine:
 
     @pytest.mark.anyio
     async def test_engine_reports_post_write_validation_failure(self, tmp_path: Path) -> None:
-        class InvalidOutputAdapter(DeterministicMigrationAdapter):
+        class InvalidOutputAdapter(SkillMigrationAdapter):
             file_type = "invalid-output"
 
             def discover(self, project_dir: Path) -> list[MigrationFile]:

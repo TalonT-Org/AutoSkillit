@@ -31,11 +31,14 @@ from autoskillit.cli.session._session_order import _recipes_dir_for, order
 from autoskillit.core import (
     RecipeSource,
     atomic_write,
+    get_logger,
 )
 from autoskillit.execution import _has_active_execution_marker
 
 if TYPE_CHECKING:
     from autoskillit.core import FleetLock, SkillResult
+
+logger = get_logger(__name__)
 
 app = App(
     name="autoskillit",
@@ -448,6 +451,12 @@ def _migrate_skills(project_dir: Path, *, fix: bool) -> bool:
             )
         except Exception as exc:  # noqa: BLE001 - composition root reports per-file failure
             had_failures = True
+            logger.error(
+                "skill_migration_failed",
+                skill=skill_file.name,
+                path=str(skill_file.path),
+                exc_info=True,
+            )
             print(f"  FAILED: {skill_file.name}: {exc}")
             continue
         if result.success:

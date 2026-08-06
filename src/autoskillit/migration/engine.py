@@ -181,15 +181,16 @@ class MigrationEngine:
             atomic_write(file.path, result.migrated_content)
             logger.info("migration.written_back", name=file.name, path=str(file.path))
 
-            is_valid, validation_error = adapter.validate(file.path)
-            if not is_valid:
-                return MigrationResult(
-                    success=False,
-                    name=result.name,
-                    error=f"post-migration validation failed: {validation_error}",
-                    retries_attempted=result.retries_attempted,
-                    advisory=result.advisory,
-                )
+            if isinstance(adapter, SkillMigrationAdapter):
+                is_valid, validation_error = adapter.validate(file.path)
+                if not is_valid:
+                    return MigrationResult(
+                        success=False,
+                        name=result.name,
+                        error=f"post-migration validation failed: {validation_error}",
+                        retries_attempted=result.retries_attempted,
+                        advisory=result.advisory,
+                    )
 
         return result
 

@@ -603,6 +603,8 @@ class TestMigrateCommand:
     def test_migrate_fix_rewrites_pending_skill_on_disk(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
+        from autoskillit.workspace import read_skill_frontmatter
+
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".autoskillit" / "recipes").mkdir(parents=True)
         skill_dir = tmp_path / ".claude" / "skills" / "audit-bugs"
@@ -618,7 +620,12 @@ class TestMigrateCommand:
         assert "fixed: audit-bugs" in captured.out
         rewritten = skill_path.read_text(encoding="utf-8")
         assert rewritten != original
-        assert "claude_dir" in rewritten
+        parsed = read_skill_frontmatter(skill_path)
+        assert parsed.is_valid
+        assert parsed.data is not None
+        capabilities = parsed.data.get("uses_capabilities")
+        assert isinstance(capabilities, list)
+        assert "claude_dir" in capabilities
 
     def test_migrate_fix_reports_each_failure_and_exits_nonzero(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture

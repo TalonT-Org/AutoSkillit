@@ -159,8 +159,8 @@ def _is_denied(stdout: str) -> bool:
         return False
     try:
         data = json.loads(stdout)
-    except json.JSONDecodeError:
-        return False
+    except json.JSONDecodeError as exc:
+        raise AssertionError(f"guard produced malformed JSON: {stdout!r}") from exc
     return data.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
 
 

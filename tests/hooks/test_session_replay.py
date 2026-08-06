@@ -296,26 +296,30 @@ def seed_capture_backlog(project_root: Path, *, count: int) -> None:
         for index in range(count):
             capture_id = f"{index + 1:016x}"
             artifact = create_capture_artifact(root, capture_id, store)
-            data = b"seeded-backlog-record"
-            os.write(artifact.fd, data)
-            measurement = CaptureMeasurement.from_bytes(data, inline_bytes=max(1, len(data)))
-            snapshot = verify_capture_snapshot(
-                fd=artifact.fd,
-                capture_id=artifact.authority.capture_id,
-                incarnation=artifact.authority.incarnation,
-                project_identity=store._project_identity,
-                root_identity=store._root_identity,
-                carrier_name=artifact.name,
-                carrier_identity=(artifact.identity.device, artifact.identity.inode),
-                measurement=measurement,
-                command_outcome=CommandOutcome.exited(0),
-                expected_revision=artifact.authority.expected_revision,
-                finalized_at=wall_clock(),
-                retention_deadline=wall_clock() + _RETENTION_SECONDS,
-            )
-            store.commit_verified_snapshot(snapshot, issue_reference=False)
-            artifact.close_artifact_fd()
-            artifact.release_lease()
+            try:
+                data = b"seeded-backlog-record"
+                os.write(artifact.fd, data)
+                measurement = CaptureMeasurement.from_bytes(data, inline_bytes=max(1, len(data)))
+                snapshot = verify_capture_snapshot(
+                    fd=artifact.fd,
+                    capture_id=artifact.authority.capture_id,
+                    incarnation=artifact.authority.incarnation,
+                    project_identity=store._project_identity,
+                    root_identity=store._root_identity,
+                    carrier_name=artifact.name,
+                    carrier_identity=(artifact.identity.device, artifact.identity.inode),
+                    measurement=measurement,
+                    command_outcome=CommandOutcome.exited(0),
+                    expected_revision=artifact.authority.expected_revision,
+                    finalized_at=wall_clock(),
+                    retention_deadline=wall_clock() + _RETENTION_SECONDS,
+                )
+                store.commit_verified_snapshot(snapshot, issue_reference=False)
+            finally:
+                try:
+                    artifact.close_artifact_fd()
+                finally:
+                    artifact.release_lease()
     finally:
         root.close()
         anchor.close()

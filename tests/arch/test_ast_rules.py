@@ -288,6 +288,27 @@ def test_broad_except_with_reraise_is_not_violation(tmp_path: Path) -> None:
     assert not except_violations, f"Unexpected except violation: {except_violations}"
 
 
+def test_post_pivot_reporter_exemption_is_scoped(tmp_path: Path) -> None:
+    transaction = tmp_path / "_transaction.py"
+    transaction.write_text(
+        "def _report_post_pivot_failure(message):\n"
+        "    try:\n"
+        "        logger.warning(message)\n"
+        "    except Exception:\n"
+        "        pass\n"
+        "try:\n"
+        "    risky()\n"
+        "except Exception:\n"
+        "    _report_post_pivot_failure('failed')\n"
+    )
+    assert not [v for v in _scan(transaction) if v.rule_id == "ARCH-003"]
+
+    unrelated = tmp_path / "unrelated" / "_transaction.py"
+    unrelated.parent.mkdir()
+    unrelated.write_text("try:\n    risky()\nexcept Exception:\n    pass\n")
+    assert [v for v in _scan(unrelated) if v.rule_id == "ARCH-003"]
+
+
 # ── ARCH-004/005/006 calibration tests ───────────────────────────────────────
 
 

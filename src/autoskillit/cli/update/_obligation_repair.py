@@ -21,9 +21,9 @@ from typing import Any
 
 from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
-    DIRECT_INSTALL_CACHE_SUBDIR,
     Severity,
     get_logger,
+    installed_plugin_cache_dir,
 )
 from autoskillit.hook_registry import validate_plugin_cache_hooks
 from autoskillit.workspace import (
@@ -109,9 +109,7 @@ def attempt_obligation_repair(
             ),
         )
 
-    cache_dir = (
-        home / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / "autoskillit"
-    )
+    cache_dir = installed_plugin_cache_dir(home, "autoskillit")
     broken = validate_plugin_cache_hooks(cache_dir=cache_dir)
     if broken:
         return ObligationRepairResult(

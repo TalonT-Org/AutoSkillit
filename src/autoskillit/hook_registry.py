@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, NamedTuple
 
-from autoskillit.core import DIRECT_INSTALL_CACHE_SUBDIR, pkg_root
+from autoskillit.core import installed_plugin_cache_dir, pkg_root
 
 
 @dataclass(frozen=True, slots=True)
@@ -486,14 +486,7 @@ def resolve_codex_hooks_dir() -> Path:
     from autoskillit import __version__
 
     cache_hooks_dir = (
-        Path.home()
-        / ".claude"
-        / "plugins"
-        / "cache"
-        / DIRECT_INSTALL_CACHE_SUBDIR
-        / "autoskillit"
-        / __version__
-        / "hooks"
+        installed_plugin_cache_dir(Path.home(), "autoskillit") / __version__ / "hooks"
     )
     if (cache_hooks_dir / "_dispatch.py").is_file():
         return cache_hooks_dir
@@ -1085,9 +1078,7 @@ def validate_plugin_cache_hooks(cache_dir: Path | None = None) -> list[str]:
     ``${CLAUDE_PLUGIN_ROOT}`` to (it directly contains ``hooks/``, ``agents/``,
     ``.claude-plugin/``, ``skills/``, ``recipes/``, ``assets/``).
     """
-    _cache = cache_dir or (
-        Path.home() / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / "autoskillit"
-    )
+    _cache = cache_dir or installed_plugin_cache_dir(Path.home(), "autoskillit")
     broken: list[str] = []
     if not _cache.is_dir():
         return broken

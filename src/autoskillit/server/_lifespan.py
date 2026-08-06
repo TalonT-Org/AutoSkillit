@@ -27,7 +27,6 @@ from typing import TYPE_CHECKING, Any
 import autoskillit.core.paths as _core_paths
 from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
-    DIRECT_INSTALL_CACHE_SUBDIR,
     DISPATCH_ID_ENV_VAR,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     HEADLESS_AUTO_GATE_ENV_VAR,
@@ -38,6 +37,7 @@ from autoskillit.core import (
     cleanup_readiness_sentinel,
     clear_kitchens_for_pid,
     get_logger,
+    installed_plugin_cache_dir,
     register_active_kitchen,
     resolve_kitchen_id,
     write_readiness_sentinel,
@@ -152,14 +152,7 @@ def run_startup_hook_health_check() -> list[str]:
 
         pending_obligation = read_obligation(Path.home())
         if cache_broken or pending_obligation is not None:
-            cache_dir = (
-                Path.home()
-                / ".claude"
-                / "plugins"
-                / "cache"
-                / DIRECT_INSTALL_CACHE_SUBDIR
-                / "autoskillit"
-            )
+            cache_dir = installed_plugin_cache_dir(Path.home(), "autoskillit")
             for outcome in repair_broken_plugin_cache_hooks(cache_dir):
                 if outcome.repaired:
                     logger.info(

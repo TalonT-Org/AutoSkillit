@@ -840,6 +840,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_exploration.py",
             "server/test_tools_workspace.py",
             "server/test_explorer_dispatch.py",
+            "server/test_explorer_identity_verification.py",
+            "server/test_explorer_projection_authority.py",
             "server/test_skill_session_vector_persistence.py",
             "cli",
             "fleet",

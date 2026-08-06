@@ -2981,16 +2981,23 @@ def test_orphan_scan_examines_at_most_the_configured_batch_and_cursor_resumes(
             os.utime(name, (old, old), dir_fd=root.fd)
 
         budget = SweepBudgetSpec(max_directory_entries_scanned=8)
+        entry_count = sum(1 for _entry in os.scandir(root.fd))
+        # The scan creates one cursor entry while incomplete; permit one final
+        # pass for convergence after accounting for that persisted entry.
+        max_scan_passes = (
+            (entry_count + 1 + budget.max_directory_entries_scanned - 1)
+            // budget.max_directory_entries_scanned
+        ) + 1
         seen: set[str] = set()
         invocations = 0
         while True:
             invocations += 1
+            assert invocations <= max_scan_passes, "orphan-scan cursor did not converge"
             result = orphan_scan.scan_for_orphans(root.fd, frozenset(), budget, now=clock.wall())
             assert result.examined <= budget.max_directory_entries_scanned
             seen.update(result.candidates)
             if result.directory_complete:
                 break
-            assert invocations < 10, "cursor did not converge within a reasonable invocation count"
 
         assert seen == set(names)
     finally:

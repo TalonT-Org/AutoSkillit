@@ -620,6 +620,64 @@ class TestMigrateCommand:
         assert rewritten != original
         assert "claude_dir" in rewritten
 
+    def test_migrate_fix_reports_each_failure_and_exits_nonzero(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        from autoskillit.migration import MigrationFile
+        from autoskillit.migration.engine import MigrationResult
+
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".autoskillit" / "recipes").mkdir(parents=True)
+        skill_files: list[MigrationFile] = []
+        for name in ("first", "second"):
+            skill_dir = tmp_path / ".claude" / "skills" / name
+            skill_dir.mkdir(parents=True)
+            skill_path = skill_dir / "SKILL.md"
+            skill_path.write_text(f"---\nname: {name}\n---\nRead .claude/settings.json.\n")
+            skill_files.append(
+                MigrationFile(
+                    name=name,
+                    path=skill_path,
+                    file_type="skill",
+                    current_version=None,
+                )
+            )
+
+        class FakeSkillAdapter:
+            def discover(self, project_dir: Path) -> list[MigrationFile]:
+                return skill_files
+
+            def needs_migration(self, file: MigrationFile) -> bool:
+                return True
+
+        calls: list[str] = []
+
+        class FakeEngine:
+            def get_adapter(self, file_type: str) -> FakeSkillAdapter | None:
+                return FakeSkillAdapter() if file_type == "skill" else None
+
+            async def migrate_file(
+                self, file: MigrationFile, **_kwargs: object
+            ) -> MigrationResult:
+                calls.append(file.name)
+                if file.name == "first":
+                    raise OSError("disk unavailable")
+                return MigrationResult(success=False, name=file.name, error="still invalid")
+
+        monkeypatch.setattr(
+            "autoskillit.migration.default_migration_engine",
+            lambda: FakeEngine(),
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.migrate(check=False, fix=True)
+
+        assert exc_info.value.code == 1
+        assert calls == ["first", "second"]
+        captured = capsys.readouterr()
+        assert "FAILED: first: disk unavailable" in captured.out
+        assert "FAILED: second: still invalid" in captured.out
+
 
 class TestInstallCommand:
     def test_worktree_guard_raises_before_any_mutation(

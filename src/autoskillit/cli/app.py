@@ -385,13 +385,13 @@ def migrate(*, check: bool = False, fix: bool = False):
             "Use `--check` in CI to gate on pending migrations."
         )
 
-    _migrate_skills(project_dir, fix=fix)
+    skill_migration_failed = _migrate_skills(project_dir, fix=fix)
 
-    if check and pending:
+    if (check and pending) or skill_migration_failed:
         raise SystemExit(1)
 
 
-def _migrate_skills(project_dir: Path, *, fix: bool) -> None:
+def _migrate_skills(project_dir: Path, *, fix: bool) -> bool:
     """Report — and, with fix=True, apply — pending project-local skill migrations."""
     from autoskillit.core import SKILL_CONTRACT_REMEDIATIONS, RemediationAction
     from autoskillit.migration import default_migration_engine
@@ -405,11 +405,11 @@ def _migrate_skills(project_dir: Path, *, fix: bool) -> None:
     engine = default_migration_engine()
     skill_adapter = engine.get_adapter("skill")
     if skill_adapter is None:
-        return
+        return False
     skill_files = skill_adapter.discover(project_dir)
     pending_skills = [f for f in skill_files if skill_adapter.needs_migration(f)]
     if not pending_skills:
-        return
+        return False
 
     resolver = DefaultSkillResolver()
     print(f"\n{len(pending_skills)} project-local skill(s) need migration:\n")
@@ -425,7 +425,7 @@ def _migrate_skills(project_dir: Path, *, fix: bool) -> None:
 
     if not fix:
         print("\nRun `autoskillit migrate --fix` to apply deterministic fixes.")
-        return
+        return False
 
     import asyncio
 
@@ -436,14 +436,20 @@ def _migrate_skills(project_dir: Path, *, fix: bool) -> None:
 
     temp_dir = resolve_temp_dir(project_dir, None)
     print()
+    had_failures = False
     for skill_file in pending_skills:
-        result = asyncio.run(
-            engine.migrate_file(
-                skill_file,
-                run_headless=_no_headless_runner,
-                temp_dir=temp_dir,
+        try:
+            result = asyncio.run(
+                engine.migrate_file(
+                    skill_file,
+                    run_headless=_no_headless_runner,
+                    temp_dir=temp_dir,
+                )
             )
-        )
+        except Exception as exc:  # noqa: BLE001 - composition root reports per-file failure
+            had_failures = True
+            print(f"  FAILED: {skill_file.name}: {exc}")
+            continue
         if result.success:
             # Per-file results: which kinds this deterministic fix addressed,
             # plus hints for any ADVISORY kinds left on the same file (a
@@ -465,7 +471,9 @@ def _migrate_skills(project_dir: Path, *, fix: bool) -> None:
             for hint in invalidity_hints(remaining_advisory):
                 print(f"    - {hint}")
         else:
+            had_failures = True
             print(f"  FAILED: {skill_file.name}: {result.error}")
+    return had_failures
 
 
 @app.command

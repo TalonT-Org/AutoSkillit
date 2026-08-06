@@ -22,20 +22,66 @@ _TESTS_ROOT = _REPO_ROOT / "tests"
 
 # "approve" is included because tests/infra/test_skill_command_guard.py pairs
 # each deny test with an approve-named allow test.
-# This is deliberately a structural neighbor check; assertion quality remains
-# the responsibility of each guard's behavioral test suite.
 _ALLOW_TEST_NAME_RE = re.compile(r"test_.*(allow|permit|not_blocked|approve)")
+_GUARD_RESULT_NAMES = frozenset(
+    {"buf", "decision", "hook_out", "out", "output", "response", "result"}
+)
+_GUARD_RESULT_ATTRIBUTES = frozenset({"permissionDecision", "stdout"})
 
 
-def _module_test_function_names(source: str) -> set[str]:
-    tree = ast.parse(source)
-    names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith(
-            "test_"
-        ):
-            names.add(node.name)
-    return names
+def _references_guard_result(node: ast.AST) -> bool:
+    return any(
+        (isinstance(descendant, ast.Name) and descendant.id.lstrip("_") in _GUARD_RESULT_NAMES)
+        or (isinstance(descendant, ast.Attribute) and descendant.attr in _GUARD_RESULT_ATTRIBUTES)
+        for descendant in ast.walk(node)
+    )
+
+
+def _is_allow_value(node: ast.AST) -> bool:
+    return (isinstance(node, ast.Constant) and node.value in {None, ""}) or (
+        isinstance(node, ast.Dict) and not node.keys
+    )
+
+
+def _has_behavioral_allow_assertion(
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> bool:
+    for node in ast.walk(function):
+        if not isinstance(node, ast.Assert) or not _references_guard_result(node.test):
+            continue
+        test = node.test
+        if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+            return True
+        if not isinstance(test, ast.Compare):
+            continue
+        for operator, comparator in zip(test.ops, test.comparators, strict=True):
+            if isinstance(operator, (ast.Eq, ast.Is)) and _is_allow_value(comparator):
+                return True
+            if (
+                isinstance(operator, ast.NotEq)
+                and isinstance(comparator, ast.Constant)
+                and comparator.value == "deny"
+            ):
+                return True
+    return False
+
+
+def _module_has_behavioral_allow_test(source: str) -> bool:
+    return any(
+        _ALLOW_TEST_NAME_RE.search(node.name) and _has_behavioral_allow_assertion(node)
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    )
+
+
+def test_allow_test_detection_requires_behavioral_assertion() -> None:
+    name_only = "def test_allows_valid_input():\n    pass\n"
+    behavioral = (
+        "def test_allows_valid_input():\n    out = run_guard()\n    assert not out.strip()\n"
+    )
+
+    assert not _module_has_behavioral_allow_test(name_only)
+    assert _module_has_behavioral_allow_test(behavioral)
 
 
 def test_fail_closed_guard_basenames_are_live_files() -> None:
@@ -80,8 +126,7 @@ def test_every_fail_closed_guard_has_an_allow_test() -> None:
 
         found_allow_test = False
         for candidate in candidates:
-            names = _module_test_function_names(candidate.read_text())
-            if any(_ALLOW_TEST_NAME_RE.search(name) for name in names):
+            if _module_has_behavioral_allow_test(candidate.read_text(encoding="utf-8")):
                 found_allow_test = True
                 break
         if not found_allow_test:

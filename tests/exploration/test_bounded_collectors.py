@@ -234,6 +234,11 @@ def test_registry_invocations_conform_to_fixed_ids_and_scope_modes(tmp_path: Pat
         assert all(report.status is CollectorStatus.UNSUPPORTED for _scope, report in reports)
 
 
+def test_collector_metadata_rejects_unregistered_identifiers() -> None:
+    with pytest.raises(ValueError, match="unknown collector identifier"):
+        extractors_module._collector_metadata("unregistered-collector")
+
+
 def test_search_reports_invalid_scope_as_a_failed_collection(tmp_path: Path) -> None:
     report = collect_search(
         tmp_path,

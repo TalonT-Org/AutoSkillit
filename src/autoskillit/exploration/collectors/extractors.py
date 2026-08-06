@@ -844,5 +844,5 @@ def _collector_metadata(collector_id: str) -> tuple[str, str]:
         None,
     )
     if profile is None:
-        return "collector", _COLLECTOR_VERSION
+        raise ValueError(f"unknown collector identifier: {collector_id}")
     return profile.method, profile.version

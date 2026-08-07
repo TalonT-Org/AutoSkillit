@@ -126,6 +126,10 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "methodology_venue_appendix",  # recipe/methodology_venue_appendix.py: _ML_SUB_AREA_CACHE
         "rules_blocks",  # recipe/rules/rules_blocks.py: _BUDGETS_CACHE = YamlFileCache()
         "rules_phoropter_adjacency",  # recipe/rules/rules_phoropter_adjacency.py: _PREFIXES_CACHE
+        "_types",  # hooks/_capture/_types.py: TRANSITION_RESCUE_BUDGET = SweepBudgetSpec(...)
+        # _RETENTION_SECONDS resolved once at import time from the single-source-of-truth
+        # STATE_RECLAIMABILITY sweep grace (_lifecycle_policy.SWEEP_GRACE_SECONDS).
+        "_capture_lifecycle",
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -1052,23 +1056,34 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "circular imports; all enums/protocols/constants consolidated here",
     ),
     "hooks/_capture_artifacts.py": (
-        1050,
+        1200,
         "REQ-CNST-010-E22: descriptor-anchored capture authority and isolated runner — "
         "re-exports capture_store_stats, reconcile_capture_store, CaptureStoreStats, "
         "CleanupBlocker, CleanupProgress, and SweepBudgetSpec from its own dual-mode "
         "(flat sys.path / dotted package) _capture import bootstrap so hooks/__init__.py "
         "can gateway them to cli/_capture_store.py without importing _capture submodules "
         "directly, which would race the standalone hook scripts' own flat-style bootstrap "
-        "of sys.modules['_capture'].",
+        "of sys.modules['_capture']. Bumped for ADR-0009's failure-disposition routing "
+        "(bookkeeping vs. integrity) and the capacity injection seam (issue #4479).",
     ),
     "hooks/_capture_lifecycle.py": (
-        1150,
+        1250,
         "REQ-CNST-010-E21: capture lifecycle store — the lock-retry primitive "
         "(_acquire_flock, jittered exponential backoff bounded by the active sweep's "
         "own budget) and directory-reconciliation orphan admission "
         "(_admission_reason, _admit_new_record, _scan_and_adopt_orphans) must stay "
         "adjacent to the transition/capacity accounting they share; splitting would "
-        "separate self-accounting invariants from the store methods that enforce them.",
+        "separate self-accounting invariants from the store methods that enforce them. "
+        "Bumped for ADR-0009's rescue-sweep-and-retry pressure immunity at both the "
+        "admission and transition gates (issue #4479).",
+    ),
+    "hooks/_capture_contract.py": (
+        1100,
+        "REQ-CNST-010-E23: CaptureFailureV3 envelope framing — carries the full "
+        "CaptureFailureReason wire vocabulary and its (V2 marker) rendering; ADR-0009 "
+        "added the SNAPSHOT_INTEGRITY reason and degraded-delivery envelope fields, "
+        "which must stay co-located with the rest of the envelope schema they extend "
+        "(issue #4479).",
     ),
     "hooks/_command_classification.py": (
         1900,

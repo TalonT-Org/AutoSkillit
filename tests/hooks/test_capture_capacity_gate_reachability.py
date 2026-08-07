@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.hooks._capture._capacity import (
     CAPACITY_REASON_GATES,
     CapacityGate,
 )
 from autoskillit.hooks._capture._types import CaptureCapacityReason
+
+pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
 
 class TestGateReachabilityTotality:

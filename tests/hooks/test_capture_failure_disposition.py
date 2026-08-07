@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.hooks._capture._failure_policy import (
     FAILURE_DISPOSITIONS,
     CaptureFailureDisposition,
     CaptureFailureDispositionDef,
     CaptureFailureReason,
 )
+
+pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
 
 class TestDispositionRegistryTotality:

@@ -61,6 +61,7 @@ model.override
 model.provider
 model.recipe_overrides
 model.step_overrides
+output_budget.capture_capacity
 output_budget.guard_enabled
 output_budget.head_chars
 output_budget.inline_max_chars

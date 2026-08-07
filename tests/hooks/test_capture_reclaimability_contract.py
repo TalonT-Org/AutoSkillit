@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.hooks._capture._lifecycle_policy import (
     STATE_RECLAIMABILITY,
     CaptureState,
     ReclaimKind,
     StateReclaimabilityDef,
 )
+
+pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
 
 class TestReclaimabilityTotality:

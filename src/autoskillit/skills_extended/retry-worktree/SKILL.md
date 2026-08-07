@@ -212,7 +212,7 @@ If tests fail, fix the issue and re-run.
 
 **Deviation check:** If a fix applied in this step contradicts what the plan specified, record a deviation. If the fix aligns with the plan, skip this sub-step.
 
-Ensure the output directory exists: `mkdir -p {{AUTOSKILLIT_TEMP}}/retry-worktree/` (idempotent — the directory may not exist yet, unlike resolve-failures which already writes to its temp subdirectory).
+Ensure the output directory exists relative to the current working directory: `mkdir -p {{AUTOSKILLIT_TEMP}}/retry-worktree/` (idempotent — the directory may not exist yet, unlike resolve-failures which already writes to its temp subdirectory).
 
 Read the existing deviation manifest at `{{AUTOSKILLIT_TEMP}}/retry-worktree/deviation_manifest_{SESSION_TS}.json` (if it exists and is valid JSON), or start a new structure. Append a new entry to the `deviations` array and write the complete file:
 

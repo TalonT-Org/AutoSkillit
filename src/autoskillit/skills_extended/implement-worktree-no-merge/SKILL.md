@@ -240,8 +240,9 @@ conflict resolution and must be preserved in full.
 
 If implementing the plan would exceed the plan's declared `size_budget` (or, absent
 one, the session's injected scope budget of 1,500 added lines or 40 changed files),
-**STOP implementation**. Do not continue building — write a split proposal to a file
-in the worktree's `.autoskillit/temp/` directory. The split proposal must contain a
+**STOP implementation**. Do not continue building — write a split proposal under
+`{{AUTOSKILLIT_TEMP}}/implement-worktree-no-merge/` relative to the current working
+directory. The split proposal must contain a
 `Part A/B/C` decomposition or a descope note listing what you cut and why.
 
 Then emit `scope_verdict = split` and `split_proposal_path = <absolute path to the

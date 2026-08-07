@@ -517,7 +517,7 @@
           "route": "release_issue_failure"
         },
         {
-          "route": "plan"
+          "route": "pre_scope_replan_cleanup"
         }
       ],
       "on_failure": "release_issue_failure",
@@ -525,6 +525,16 @@
         "scope_split_count"
       ],
       "note": "Bounds both scope-stop sources (skill verdict and diff gate). scope_split_count is global per run and deliberately absent from the audit-remediation reset chain — scope re-plans are expensive full-plan iterations and a total bound is the correct semantics. The re-entry does not reset the test/merge fix counters — part-level re-entries inherit consumed budgets exactly as sequential parts already do (next_or_done resets nothing), keeping total run spend bounded.\n"
+    },
+    "pre_scope_replan_cleanup": {
+      "tool": "run_cmd",
+      "with": {
+        "cmd": "git worktree remove --force \"${{ context.worktree_path }}\"",
+        "step_name": "pre_scope_replan_cleanup"
+      },
+      "on_success": "plan",
+      "on_failure": "plan",
+      "note": "Remove the implementation worktree before scope-triggered re-planning so the next implement step can create a fresh worktree at the same path. Cleanup is best-effort because a missing worktree is already the desired state."
     },
     "close_issue_no_changes": {
       "description": "Release issue after zero-change detection — stages on non-default branch, closes on promotion target",

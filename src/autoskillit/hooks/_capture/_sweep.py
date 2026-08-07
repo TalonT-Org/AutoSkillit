@@ -722,9 +722,9 @@ def sweep_one(
             _tampered_hold = _lifecycle_policy.STATE_RECLAIMABILITY[
                 CaptureState.TAMPERED
             ].duration_seconds
-            _tampered_expiry = store._wall_clock() + (
-                _tampered_hold if _tampered_hold is not None else 86400.0
-            )
+            if _tampered_hold is None:
+                raise lifecycle_error("tampered state requires a forensic hold duration")
+            _tampered_expiry = store._wall_clock() + _tampered_hold
             _transition_if_current(
                 store,
                 expected,

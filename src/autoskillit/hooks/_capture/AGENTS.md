@@ -18,7 +18,7 @@ SessionStart reconciliation.
 `FAILURE_DISPOSITIONS`, the total mapping from every `CaptureFailureReason` to
 `CaptureFailureDisposition.PRESERVE_OUTPUT` or `DISCARD_OUTPUT` — and its
 import-time totality guarantee that a reason cannot exist without a declared
-disposition. See [ADR-0009](../../../../docs/decisions/0009-verified-output-delivery-disposition.md).
+disposition. See ADR-0009 (docs/decisions/0009-verified-output-delivery-disposition.md).
 `_lifecycle_policy.py` owns the reclaimability declaration — `ReclaimKind`
 (`SWEEP_AFTER_GRACE`, `TOMBSTONE`, `FORENSIC_HOLD`) and `STATE_RECLAIMABILITY`,
 the total mapping from every `CaptureState` to its reclaim kind and

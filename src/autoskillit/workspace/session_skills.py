@@ -52,8 +52,10 @@ from autoskillit.workspace.skills import (
     DefaultSkillResolver,
     EffectiveSkillCatalog,
     SkillCatalogEntry,
+    SkillExclusion,
     SkillInfo,
     _skill_info_from_frontmatter,
+    render_skill_invalidities,
 )
 from autoskillit.workspace.skills import (
     compute_skill_closure as compute_skill_closure,
@@ -264,6 +266,7 @@ def compile_session_skill_catalog(
             skills=tuple(supported),
             execution_role=catalog.execution_role,
             namespace_sources=namespace_sources,
+            exclusions=cast(tuple[SkillExclusion, ...], tuple(catalog.exclusions)),
         ),
         unavailable=tuple(sorted(unavailable, key=lambda item: item.skill)),
     )
@@ -312,14 +315,15 @@ def _codex_profile_skill_infos() -> tuple[SkillInfo, ...]:
                 search_dir=str(profile_skills_root),
             ),
         )
-        if (
-            info.invalid_reason is not None
-            or info.execution_role is not SkillExecutionRole.SESSION
-        ):
+        if info.invalidities or info.execution_role is not SkillExecutionRole.SESSION:
             logger.warning(
                 "codex_profile_skill_contract_rejected",
                 skill=entry.name,
-                reason=info.invalid_reason or "non-session execution role",
+                reason=(
+                    render_skill_invalidities(info.invalidities)
+                    if info.invalidities
+                    else "non-session execution role"
+                ),
             )
             continue
         result.append(info)
@@ -593,10 +597,10 @@ class DefaultSessionSkillManager:
         if invocation.execution_role is not SkillExecutionRole.SESSION:
             raise SkillContractError("L1 materialization requires an exact SESSION invocation")
         for member in invocation.closure:
-            if member.invalid_reason is not None:
+            if member.invalidities:
                 raise SkillContractError(
                     f"invalid materialization contract for {member.name!r}: "
-                    f"{member.invalid_reason}"
+                    f"{render_skill_invalidities(member.invalidities)}"
                 )
             if member.execution_role is not SkillExecutionRole.SESSION:
                 actual = (
@@ -630,10 +634,10 @@ class DefaultSessionSkillManager:
         if catalog.execution_role is not SkillExecutionRole.SESSION:
             raise SkillContractError("L1 catalog materialization requires SESSION contracts")
         for member in catalog.skills:
-            if member.invalid_reason is not None:
+            if member.invalidities:
                 raise SkillContractError(
                     f"invalid materialization contract for {member.name!r}: "
-                    f"{member.invalid_reason}"
+                    f"{render_skill_invalidities(member.invalidities)}"
                 )
             if member.execution_role is not SkillExecutionRole.SESSION:
                 actual = (
@@ -669,10 +673,10 @@ class DefaultSessionSkillManager:
         if catalog.execution_role is not SkillExecutionRole.SESSION:
             raise SkillContractError("L1 catalog materialization requires SESSION contracts")
         for member in catalog.skills:
-            if member.invalid_reason is not None:
+            if member.invalidities:
                 raise SkillContractError(
                     f"invalid materialization contract for {member.name!r}: "
-                    f"{member.invalid_reason}"
+                    f"{render_skill_invalidities(member.invalidities)}"
                 )
             if member.execution_role is not SkillExecutionRole.SESSION:
                 actual = (

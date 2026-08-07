@@ -195,7 +195,7 @@ def _read_full_sous_chef(
     sous_chef = next((skill for skill in catalog.skills if skill.name == "sous-chef"), None)
     if (
         sous_chef is None
-        or sous_chef.invalid_reason is not None
+        or sous_chef.invalidities
         or sous_chef.execution_role is not SkillExecutionRole.ORCHESTRATOR
     ):
         return ""

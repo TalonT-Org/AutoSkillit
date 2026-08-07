@@ -12,13 +12,19 @@ import regex as re
 
 from autoskillit.cli._mcp_names import detect_autoskillit_mcp_prefix
 from autoskillit.cli._prompts import _build_orchestrator_prompt, _get_ingredients_table
-from autoskillit.cli.session._session_launch import _launch_cook_session, _write_order_entry
+from autoskillit.cli.session._session_launch import (
+    _launch_cook_session,
+    _write_order_entry,
+    render_skill_catalog_exclusions,
+    render_skill_contract_composition_failure,
+)
 from autoskillit.core import (
     ORDER_INTERACTIVE_REQUIRED_ENV,
     BareResume,
     NamedResume,
     NoResume,
     RecipeSource,
+    SkillContractError,
     SkillExecutionRole,
     atomic_write,
     get_logger,
@@ -150,12 +156,17 @@ def order(
     mcp_prefix = detect_autoskillit_mcp_prefix(backend_caps)
     skill_resolver = DefaultSkillResolver()
     skill_visibility = config.skill_visibility_spec()
-    validate_skill_tier_roles(skill_visibility, skill_resolver, project_dir)
-    skill_catalog = skill_resolver.list_effective(
-        project_dir,
-        SkillExecutionRole.ORCHESTRATOR,
-        visibility=skill_visibility,
-    )
+    try:
+        validate_skill_tier_roles(skill_visibility, skill_resolver, project_dir)
+        skill_catalog = skill_resolver.list_effective(
+            project_dir,
+            SkillExecutionRole.ORCHESTRATOR,
+            visibility=skill_visibility,
+        )
+    except SkillContractError as exc:
+        render_skill_contract_composition_failure(exc)
+        raise SystemExit(1) from exc
+    render_skill_catalog_exclusions(skill_catalog.exclusions)
     _resume = resume or (session_id is not None)
     resume_spec = resume_spec_from_cli(resume=_resume, session_id=session_id)
 

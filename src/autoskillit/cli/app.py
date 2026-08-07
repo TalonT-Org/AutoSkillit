@@ -31,11 +31,14 @@ from autoskillit.cli.session._session_order import _recipes_dir_for, order
 from autoskillit.core import (
     RecipeSource,
     atomic_write,
+    get_logger,
 )
 from autoskillit.execution import _has_active_execution_marker
 
 if TYPE_CHECKING:
-    from autoskillit.core import FleetLock
+    from autoskillit.core import FleetLock, SkillResult
+
+logger = get_logger(__name__)
 
 app = App(
     name="autoskillit",
@@ -334,13 +337,17 @@ def capture_store(*, reclaim: bool = False) -> None:
 
 
 @app.command
-def migrate(*, check: bool = False):
-    """Report outdated recipes and their available migrations.
+def migrate(*, check: bool = False, fix: bool = False):
+    """Report outdated recipes and stale project-local skills.
 
     Parameters
     ----------
     check
         Exit with code 1 if any recipes need migration (useful for CI).
+    fix
+        Apply deterministic project-local skill-contract migrations in
+        place. Recipes are unaffected by this flag — they are always
+        auto-migrated when loaded.
     """
     from autoskillit import __version__
     from autoskillit.migration import applicable_migrations
@@ -356,37 +363,126 @@ def migrate(*, check: bool = False):
     all_result = _list_all_recipes(project_dir)
     project_items = [r for r in all_result.items if r.source == RecipeSource.PROJECT]
 
-    if not project_items:
-        print("No recipes found in .autoskillit/recipes/")
-        return
-
     pending = []
     for recipe in project_items:
         applicable = applicable_migrations(recipe.version, __version__)
         if applicable:
             pending.append((recipe, applicable))
 
-    if not pending:
+    if not project_items:
+        print("No recipes found in .autoskillit/recipes/")
+    elif not pending:
         print(f"All {len(project_items)} recipe(s) are at version {__version__}.")
-        return
+    else:
+        print(f"{len(pending)} recipe(s) need migration:\n")
+        for recipe, migrations in pending:
+            current = recipe.version or "(no version)"
+            target = migrations[-1].to_version
+            total_changes = sum(len(m.changes) for m in migrations)
+            print(f"  {recipe.name}: {current} -> {target} ({total_changes} change(s))")
+            for mig in migrations:
+                for change in mig.changes:
+                    print(f"    - {change.description}")
+        print(
+            "\nRecipes are auto-migrated when loaded. "
+            "Use `--check` in CI to gate on pending migrations."
+        )
 
-    print(f"{len(pending)} recipe(s) need migration:\n")
-    for recipe, migrations in pending:
-        current = recipe.version or "(no version)"
-        target = migrations[-1].to_version
-        total_changes = sum(len(m.changes) for m in migrations)
-        print(f"  {recipe.name}: {current} -> {target} ({total_changes} change(s))")
-        for mig in migrations:
-            for change in mig.changes:
-                print(f"    - {change.description}")
+    skill_migration_failed = _migrate_skills(project_dir, fix=fix)
 
-    if check:
+    if (check and pending) or skill_migration_failed:
         raise SystemExit(1)
 
-    print(
-        "\nRecipes are auto-migrated when loaded. "
-        "Use `--check` in CI to gate on pending migrations."
+
+def _migrate_skills(project_dir: Path, *, fix: bool) -> bool:
+    """Report — and, with fix=True, apply — pending project-local skill migrations."""
+    from autoskillit.core import SKILL_CONTRACT_REMEDIATIONS, RemediationAction
+    from autoskillit.migration import default_migration_engine
+    from autoskillit.workspace import (
+        DefaultSkillResolver,
+        SkillInfo,
+        SkillInvalidity,
+        invalidity_hints,
     )
+
+    engine = default_migration_engine()
+    skill_adapter = engine.get_adapter("skill")
+    if skill_adapter is None:
+        return False
+    skill_files = skill_adapter.discover(project_dir)
+    pending_skills = [f for f in skill_files if skill_adapter.needs_migration(f)]
+    if not pending_skills:
+        return False
+
+    resolver = DefaultSkillResolver()
+    print(f"\n{len(pending_skills)} project-local skill(s) need migration:\n")
+    pending_info: dict[str, SkillInfo | None] = {}
+    for skill_file in pending_skills:
+        info = resolver.resolve_local_candidate(skill_file.name, project_dir)
+        pending_info[skill_file.name] = info
+        kinds = sorted({item.kind.value for item in info.invalidities}) if info else []
+        hints = invalidity_hints(info.invalidities) if info is not None else ()
+        print(f"  {skill_file.name} ({skill_file.path}): {', '.join(kinds)}")
+        for hint in hints:
+            print(f"    - {hint}")
+
+    if not fix:
+        print("\nRun `autoskillit migrate --fix` to apply deterministic fixes.")
+        return False
+
+    import asyncio
+
+    from autoskillit.core import resolve_temp_dir
+
+    async def _no_headless_runner(*_args: object, **_kwargs: object) -> SkillResult:
+        raise RuntimeError("skill migrations never require a headless runner")
+
+    temp_dir = resolve_temp_dir(project_dir, None)
+    print()
+    had_failures = False
+    for skill_file in pending_skills:
+        try:
+            result = asyncio.run(
+                engine.migrate_file(
+                    skill_file,
+                    run_headless=_no_headless_runner,
+                    temp_dir=temp_dir,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - composition root reports per-file failure
+            had_failures = True
+            logger.error(
+                "skill_migration_failed",
+                skill=skill_file.name,
+                path=str(skill_file.path),
+                exc_info=True,
+            )
+            print(f"  FAILED: {skill_file.name}: {exc}")
+            continue
+        if result.success:
+            # Per-file results: which kinds this deterministic fix addressed,
+            # plus hints for any ADVISORY kinds left on the same file (a
+            # DETERMINISTIC fix never touches co-occurring ADVISORY defects).
+            info = pending_info.get(skill_file.name)
+            fixed_kinds: set[str] = set()
+            remaining_advisory: list[SkillInvalidity] = []
+            if info is not None:
+                for item in info.invalidities:
+                    if (
+                        SKILL_CONTRACT_REMEDIATIONS[item.kind].action
+                        is RemediationAction.DETERMINISTIC
+                    ):
+                        fixed_kinds.add(item.kind.value)
+                    else:
+                        remaining_advisory.append(item)
+            suffix = f" ({', '.join(sorted(fixed_kinds))})" if fixed_kinds else ""
+            print(f"  fixed: {skill_file.name}{suffix}")
+            for hint in invalidity_hints(remaining_advisory):
+                print(f"    - {hint}")
+        else:
+            had_failures = True
+            print(f"  FAILED: {skill_file.name}: {result.error}")
+    return had_failures
 
 
 @app.command

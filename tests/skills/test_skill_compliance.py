@@ -651,14 +651,17 @@ For each dimension name in the list, spawn the corresponding subagent using the 
 def test_parallel_dispatch_has_single_message_reinforcement(skill_dir: Path) -> None:
     """Portable child dispatch declares concurrency and join semantics."""
     from autoskillit.core import SkillSource
-    from autoskillit.workspace.skills import _skill_info_from_frontmatter
+    from autoskillit.workspace.skills import (
+        _skill_info_from_frontmatter,
+        render_skill_invalidities,
+    )
 
     info = _skill_info_from_frontmatter(
         skill_dir.name,
         SkillSource.BUNDLED,
         skill_dir / "SKILL.md",
     )
-    assert info.invalid_reason is None, info.invalid_reason
+    assert not info.invalidities, render_skill_invalidities(info.invalidities)
     plan = info.semantic_plan
     if plan is None or not plan.child_spawns:
         return

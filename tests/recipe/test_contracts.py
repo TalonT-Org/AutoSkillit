@@ -368,6 +368,42 @@ def test_check_staleness_hashes_the_effective_project_override(tmp_path: Path) -
     assert stale == []
 
 
+def test_check_staleness_skips_hashing_invalid_project_override(tmp_path: Path) -> None:
+    """T12c: an invalid project-local override with no bundled twin is treated
+    as absent — never hashed from its possibly-wrong content — rather than
+    silently reporting a hash_mismatch against invalid bytes.
+
+    Uses a fabricated, local-only skill name (no bundled twin) so
+    resolve_effective cannot fall through to a valid bundled candidate — the
+    only scenario in which the invalid SkillInfo still escapes and the
+    2.7 guard at ``_contracts_staleness.py`` actually has something to do.
+    Reverting that guard (verified manually) makes this loop instead hash
+    the invalid file's own content and append a hash_mismatch StaleItem —
+    proving this test discriminates guard-present from guard-absent.
+    """
+    from autoskillit.workspace import DefaultSkillResolver
+
+    skills_dir = tmp_path / ".claude" / "skills"
+    skill_md = skills_dir / "my-broken" / "SKILL.md"
+    skill_md.parent.mkdir(parents=True)
+    skill_md.write_text(
+        '---\nname: my-broken\n---\nSpawn via `Agent(model="sonnet")`.\n',
+        encoding="utf-8",
+    )
+    contract = {
+        "bundled_manifest_version": load_bundled_manifest()["version"],
+        "skill_hashes": {"my-broken": "deadbeef"},
+    }
+
+    stale = check_contract_staleness(
+        contract,
+        resolver=DefaultSkillResolver(),
+        project_root=tmp_path,
+    )
+
+    assert stale == []
+
+
 def test_check_staleness_preserves_triage_result_on_repeated_stale_hit(
     tmp_path: Path,
 ) -> None:

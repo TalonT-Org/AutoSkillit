@@ -73,7 +73,10 @@ def test_bundled_parallel_child_instructions_have_semantic_plans() -> None:
 
 def test_every_migrated_semantic_declaration_participates_in_conformance() -> None:
     from autoskillit.core import SkillSource, pkg_root
-    from autoskillit.workspace.skills import _skill_info_from_frontmatter
+    from autoskillit.workspace.skills import (
+        _skill_info_from_frontmatter,
+        render_skill_invalidities,
+    )
 
     migrated = 0
     violations: list[str] = []
@@ -84,8 +87,13 @@ def test_every_migrated_semantic_declaration_participates_in_conformance() -> No
                 continue
             migrated += 1
             info = _skill_info_from_frontmatter(path.parent.name, SkillSource.BUNDLED, path)
-            if info.invalid_reason is not None or info.semantic_plan is None:
-                violations.append(f"{path}: {info.invalid_reason or 'missing semantic plan'}")
+            if info.invalidities or info.semantic_plan is None:
+                reason = (
+                    render_skill_invalidities(info.invalidities)
+                    if info.invalidities
+                    else "missing semantic plan"
+                )
+                violations.append(f"{path}: {reason}")
     assert migrated > 0
     assert not violations, "invalid migrated semantic declarations:\n" + "\n".join(violations)
 

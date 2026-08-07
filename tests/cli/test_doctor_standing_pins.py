@@ -75,6 +75,61 @@ class TestStandingBackendPinsFeasibility:
 
         assert all(r.severity == Severity.OK for r in results)
 
+    def test_invalid_local_only_skill_reports_invalidity_instead_of_silent_skip(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """T12b: a project-local-only invalid skill (no bundled twin) pinned by
+        a recipe step's skill_command is reported as a finding instead of
+        silently skipping the semantic-plan feasibility check for that step.
+
+        Uses a fabricated local-only recipe + skill name (not a real bundled
+        skill) so post-2.2 fall-through can never resolve to a valid bundled
+        twin — the one scenario Step 2.7's guard is actually meant to cover.
+        """
+        from autoskillit.cli.doctor._doctor_config import (
+            _check_standing_backend_pins_feasibility,
+        )
+        from autoskillit.core import Severity
+
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
+        project_dir = tmp_path / "project"
+        _write_config(
+            project_dir / ".autoskillit" / "config.yaml",
+            "agent_backend:\n"
+            "  recipe_overrides:\n"
+            "    gap-test-recipe:\n"
+            "      probe: claude-code\n",
+        )
+        # A minimal project-local recipe whose one step targets a skill name
+        # with no bundled twin anywhere.
+        recipe_dir = project_dir / ".autoskillit" / "recipes"
+        recipe_dir.mkdir(parents=True)
+        (recipe_dir / "gap-test-recipe.yaml").write_text(
+            "name: gap-test-recipe\n"
+            "description: Minimal recipe for a local-only invalid skill target.\n"
+            "summary: probe -> done\n"
+            "ingredients: {}\n"
+            "steps:\n"
+            "  probe:\n"
+            "    tool: run_skill\n"
+            "    model: ''\n"
+            "    with:\n"
+            "      skill_command: /autoskillit:my-broken-name\n",
+            encoding="utf-8",
+        )
+        skill_dir = project_dir / ".claude" / "skills" / "my-broken-name"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            '---\nname: my-broken-name\n---\nSpawn via `Agent(model="sonnet")`.\n',
+            encoding="utf-8",
+        )
+
+        results = _check_standing_backend_pins_feasibility(project_dir=project_dir)
+
+        warnings = [r for r in results if r.severity == Severity.WARNING]
+        assert warnings, f"Expected at least one WARNING result, got: {results}"
+        assert any("my-broken-name" in r.message and "invalid" in r.message for r in warnings)
+
     def test_project_override_controls_pinned_backend_feasibility(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

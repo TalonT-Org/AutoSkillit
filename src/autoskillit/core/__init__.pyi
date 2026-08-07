@@ -457,6 +457,7 @@ from .types import SKILL_ACTIVATE_DEPS_REQUIRED as SKILL_ACTIVATE_DEPS_REQUIRED
 from .types import SKILL_CAPABILITY_REGISTRY as SKILL_CAPABILITY_REGISTRY
 from .types import SKILL_COMMAND_DISPLAY_MAX as SKILL_COMMAND_DISPLAY_MAX
 from .types import SKILL_COMMAND_PREFIX as SKILL_COMMAND_PREFIX
+from .types import SKILL_CONTRACT_REMEDIATIONS as SKILL_CONTRACT_REMEDIATIONS
 from .types import SKILL_FILE_ADVISORY_MAP as SKILL_FILE_ADVISORY_MAP
 from .types import SKILL_MODEL_CLASS_REGISTRY as SKILL_MODEL_CLASS_REGISTRY
 from .types import SKILL_MODEL_CLASSES as SKILL_MODEL_CLASSES
@@ -838,6 +839,7 @@ from .types import (
     ReconciliationQueryRequestedEffect as ReconciliationQueryRequestedEffect,
 )
 from .types import ReleaseNonAdmissionEvent as ReleaseNonAdmissionEvent
+from .types import RemediationAction as RemediationAction
 from .types import RepresentationBindingId as RepresentationBindingId
 from .types import RepresentationBindingWitness as RepresentationBindingWitness
 from .types import RepresentationRevision as RepresentationRevision
@@ -896,11 +898,15 @@ from .types import SiblingSkillSpec as SiblingSkillSpec
 from .types import SkillAuthority as SkillAuthority
 from .types import SkillCapabilityDef as SkillCapabilityDef
 from .types import SkillContractError as SkillContractError
+from .types import SkillContractRemediationDef as SkillContractRemediationDef
 from .types import SkillContractResolver as SkillContractResolver
 from .types import SkillContractView as SkillContractView
+from .types import SkillExclusionAuthority as SkillExclusionAuthority
 from .types import SkillExecutionRole as SkillExecutionRole
 from .types import SkillFamilyDef as SkillFamilyDef
 from .types import SkillFrontmatterAuthority as SkillFrontmatterAuthority
+from .types import SkillInvalidityAuthority as SkillInvalidityAuthority
+from .types import SkillInvalidityKind as SkillInvalidityKind
 from .types import SkillLister as SkillLister
 from .types import SkillModelClassDef as SkillModelClassDef
 from .types import SkillProjectionBinding as SkillProjectionBinding

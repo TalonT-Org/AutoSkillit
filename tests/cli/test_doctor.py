@@ -90,6 +90,58 @@ def test_doctor_enforces_exact_capability_role_for_genuine_evidence(
         assert "cannot declare capabilities ['run_skill']" in results[0].message
 
 
+def test_doctor_reports_project_local_skill_contracts_with_hints_and_fix_pointer(
+    tmp_path: Path,
+) -> None:
+    """T11: doctor lists both a shadowing (T1-shaped) and a local-only
+    (T2-shaped) invalid project-local skill with kinds, hints, and an
+    `autoskillit migrate --fix` pointer."""
+    from autoskillit.cli.doctor._doctor_skills import _check_project_local_skill_contracts
+    from autoskillit.core import Severity
+    from autoskillit.workspace import DefaultSkillResolver
+
+    shadowing_dir = tmp_path / ".claude" / "skills" / "audit-bugs"
+    shadowing_dir.mkdir(parents=True)
+    shadowing_path = shadowing_dir / "SKILL.md"
+    shadowing_path.write_text(
+        "---\nname: audit-bugs\ndescription: Stale pre-contract-era copy.\n---\n"
+        "# audit-bugs\n\n"
+        'LOG_DIR="$HOME/.claude/projects/${PWD//\\//-}"\n',
+        encoding="utf-8",
+    )
+    local_only_dir = tmp_path / ".claude" / "skills" / "my-own-notes"
+    local_only_dir.mkdir(parents=True)
+    local_only_path = local_only_dir / "SKILL.md"
+    local_only_path.write_text(
+        "---\nname: my-own-notes\ndescription: Stale pre-contract-era copy.\n---\n"
+        "# my-own-notes\n\n"
+        'LOG_DIR="$HOME/.claude/projects/${PWD//\\//-}"\n',
+        encoding="utf-8",
+    )
+
+    results = _check_project_local_skill_contracts(DefaultSkillResolver(), tmp_path)
+
+    assert len(results) == 2
+    assert all(result.severity is Severity.WARNING for result in results)
+    messages = "\n".join(result.message for result in results)
+    assert str(shadowing_path) in messages
+    assert str(local_only_path) in messages
+    assert "hint:" in messages
+    assert "autoskillit migrate --fix" in messages
+
+
+def test_doctor_project_local_skill_contracts_ok_when_clean(tmp_path: Path) -> None:
+    """T11: a clean project (no project-local overrides at all) passes."""
+    from autoskillit.cli.doctor._doctor_skills import _check_project_local_skill_contracts
+    from autoskillit.core import Severity
+    from autoskillit.workspace import DefaultSkillResolver
+
+    results = _check_project_local_skill_contracts(DefaultSkillResolver(), tmp_path)
+
+    assert len(results) == 1
+    assert results[0].severity is Severity.OK
+
+
 class TestCLIDoctor:
     # --- T7: doctor ---
 

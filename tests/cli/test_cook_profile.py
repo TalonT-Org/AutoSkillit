@@ -18,7 +18,6 @@ from autoskillit.core import (
     EffectiveSkillCatalogAuthority,
     HookTrustPolicy,
     ManagedSessionHome,
-    SkillContractError,
     SkillProjectionContextAuthority,
     ValidatedAddDir,
 )
@@ -339,8 +338,14 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
     assert captured["pass_fds"] == (3, 5)
 
 
-def test_cook_rejects_orchestrator_skill_in_l1_tier_before_launch() -> None:
-    """Direct cook composition validates configured tiers before materialization."""
+def test_cook_rejects_orchestrator_skill_in_l1_tier_before_launch(capsys) -> None:
+    """Direct cook composition validates configured tiers before materialization.
+
+    Composition-root rendering (2.3) catches SkillContractError around
+    validate_skill_tier_roles and exits cleanly instead of letting a raw
+    traceback propagate — the pin moves from `pytest.raises(SkillContractError)`
+    to `pytest.raises(SystemExit)` plus an output assertion.
+    """
     cfg = AutomationConfig()
     cfg.skills.tier2 = ["process-issues"]
     mock_backend_cls, _ = _make_mock_backend_class()
@@ -352,8 +357,52 @@ def test_cook_rejects_orchestrator_skill_in_l1_tier_before_launch() -> None:
         patch("autoskillit.cli.session._session_cook.resolve_project_dir", Path.cwd),
         patch("autoskillit.cli.session._session_process.run_cook_attempt") as run,
     ):
-        with pytest.raises(SkillContractError, match="process-issues.*ORCHESTRATOR"):
+        with pytest.raises(SystemExit) as exc_info:
             cook_module.cook(backend=mock_backend_cls())
 
+    assert exc_info.value.code == 1
+    out = capsys.readouterr().out
+    assert "process-issues" in out
+    assert "ORCHESTRATOR" in out
+    assert "Traceback" not in out
+    manager_cls.assert_not_called()
+    run.assert_not_called()
+
+
+def test_cook_reports_fully_invalid_tier_skill_with_hint_and_doctor_pointer(
+    tmp_path: Path, capsys
+) -> None:
+    """T5: a tier-configured skill invalid everywhere (no bundled fallback) reports
+    its file path, a remediation hint, and an `autoskillit doctor` pointer — no
+    traceback, clean exit."""
+    skill_dir = tmp_path / ".claude" / "skills" / "my-broken"
+    skill_dir.mkdir(parents=True)
+    skill_path = skill_dir / "SKILL.md"
+    skill_path.write_text(
+        '---\nname: my-broken\n---\nSpawn via `Agent(model="sonnet")`.\n',
+        encoding="utf-8",
+    )
+
+    cfg = AutomationConfig()
+    cfg.skills.tier2 = ["my-broken"]
+    mock_backend_cls, _ = _make_mock_backend_class()
+    with (
+        patch("autoskillit.config.load_config", return_value=cfg),
+        patch("autoskillit.workspace.DefaultSessionSkillManager") as manager_cls,
+        patch(
+            "autoskillit.cli.session._session_cook.resolve_project_dir",
+            return_value=tmp_path,
+        ),
+        patch("autoskillit.cli.session._session_process.run_cook_attempt") as run,
+    ):
+        with pytest.raises(SystemExit) as exc_info:
+            cook_module.cook(backend=mock_backend_cls())
+
+    assert exc_info.value.code == 1
+    out = capsys.readouterr().out
+    assert str(skill_path) in out
+    assert "hint:" in out
+    assert "autoskillit doctor" in out
+    assert "Traceback" not in out
     manager_cls.assert_not_called()
     run.assert_not_called()

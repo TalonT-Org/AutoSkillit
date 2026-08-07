@@ -379,7 +379,7 @@ def resolve_target_skill(
         return skill_command, None
 
     info = resolver.resolve_effective(name, project_root)
-    if info is None:
+    if info is None or info.invalidities:
         return skill_command, name
 
     return render_target_skill_command(

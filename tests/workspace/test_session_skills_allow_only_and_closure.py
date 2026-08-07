@@ -248,6 +248,37 @@ class TestEffectiveInvocationClosurePolicy:
         assert invocation.capability_union == frozenset({"github_api_write", "test_check"})
         assert invocation.project_root == project_root.resolve()
 
+    def test_pack_expansion_survives_unrelated_invalid_local_skill(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """T13: resolve_invocation's pack-expansion path calls
+        _list_effective_unfiltered directly and must unpack its
+        (skills, exclusions) pair correctly — pins the skills.py:900 call
+        path across the 2.2 signature change. An unrelated invalid
+        project-local skill in the same scan must not break pack-member
+        enumeration."""
+        from autoskillit.core import SkillExecutionRole
+
+        resolver = _make_effective_resolver(
+            tmp_path,
+            monkeypatch,
+            {
+                "root": {"deps": ("audit",)},
+                "pack-member": {"categories": ("audit",)},
+            },
+        )
+        project_root = tmp_path / "project"
+        broken_dir = project_root / ".claude" / "skills" / "broken-unrelated"
+        broken_dir.mkdir(parents=True)
+        (broken_dir / "SKILL.md").write_text(
+            '---\nname: broken-unrelated\n---\nSpawn via `Agent(model="sonnet")`.\n',
+            encoding="utf-8",
+        )
+
+        invocation = resolver.resolve_invocation("root", project_root, SkillExecutionRole.SESSION)
+
+        assert {member.name for member in invocation.closure} == {"root", "pack-member"}
+
     @pytest.mark.parametrize(
         ("dependency", "root_deps", "categories"),
         [

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from autoskillit.cli._hooks import _claude_settings_path
@@ -62,6 +61,7 @@ from ._doctor_mcp import (
     _check_plugin_cache_integrity,
     _check_stale_mcp_servers,
 )
+from ._doctor_output import _format_results
 from ._doctor_runtime import (
     _check_backend_version,
     _check_claude_binary,
@@ -78,7 +78,7 @@ from ._doctor_skills import (
     _check_project_local_skill_contracts,
     _check_skill_capability_authenticity,
 )
-from ._doctor_types import _NON_PROBLEM, DoctorResult
+from ._doctor_types import DoctorResult
 
 logger = get_logger(__name__)
 
@@ -240,24 +240,5 @@ def run_doctor(*, output_json: bool = False) -> None:
     # Check 42: Project-local skill contracts (excluded/shadowed stale copies)
     results.extend(_check_project_local_skill_contracts())
     # Output
-    if output_json:
-        print(
-            json.dumps(
-                {
-                    "results": [
-                        {"severity": r.severity, "check": r.check, "message": r.message}
-                        for r in results
-                    ]
-                },
-                indent=2,
-            )
-        )
-    else:
-        has_problems = any(r.severity not in _NON_PROBLEM for r in results)
-        if has_problems:
-            for r in results:
-                if r.severity not in _NON_PROBLEM:
-                    print(f"{r.severity.upper()}: {r.message}")
-        else:
-            for r in results:
-                print(f"{r.severity}: {r.message}")
+    for line in _format_results(results, output_json=output_json):
+        print(line)

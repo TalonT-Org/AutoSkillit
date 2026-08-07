@@ -6536,6 +6536,33 @@ def test_check_diff_size_untracked_files(tmp_path: Path) -> None:
     assert result["changed_files"] == "1"
 
 
+def test_check_diff_size_streams_untracked_files(tmp_path: Path, monkeypatch) -> None:
+    """Untracked files are counted without the unbounded Path.read_bytes API."""
+    _init_diff_size_repo(tmp_path)
+    (tmp_path / "untracked.py").write_text("line\n" * 20_000)
+
+    def fail_read_bytes(_path: Path) -> bytes:
+        raise AssertionError("check_diff_size must stream untracked files")
+
+    monkeypatch.setattr(Path, "read_bytes", fail_read_bytes)
+
+    result = check_diff_size(str(tmp_path), "main", default_budget="1000000")
+
+    assert result["added_lines"] == "20000"
+
+
+def test_check_diff_size_untracked_read_failure_returns_error(tmp_path: Path) -> None:
+    """An unreadable untracked entry cannot silently produce a partial measurement."""
+    _init_diff_size_repo(tmp_path)
+    (tmp_path / "broken.py").symlink_to(tmp_path / "missing-target.py")
+
+    result = check_diff_size(str(tmp_path), "main")
+
+    assert result["size_verdict"] == "error"
+    assert result["added_lines"] == "unknown"
+    assert result["changed_files"] == "unknown"
+
+
 def test_check_diff_size_per_part_isolation(tmp_path: Path) -> None:
     """Only the current part's own diff since merge_target is measured, not inherited history."""
     _init_diff_size_repo(tmp_path, branch=None)
@@ -6624,9 +6651,64 @@ def test_check_diff_size_malformed_default_budget_returns_error(tmp_path: Path) 
     result = check_diff_size(str(tmp_path), "main", default_budget="not-a-number")
 
     assert result["size_verdict"] == "error"
+    assert result["added_lines"] == "unknown"
+    assert result["changed_files"] == "unknown"
     assert result["budget"] == "not-a-number"
     assert result["budget_source"] == "ingredient"
     assert result["split_proposal_path"] == ""
+
+
+def test_check_diff_size_git_diff_failure_returns_error(tmp_path: Path, monkeypatch) -> None:
+    """A failed git diff cannot be interpreted as a zero-line measurement."""
+    _init_diff_size_repo(tmp_path)
+
+    def fake_run(args, **_kwargs):
+        if args[1] == "merge-base":
+            return subprocess.CompletedProcess(args, 0, stdout="abc123\n", stderr="")
+        return subprocess.CompletedProcess(args, 1, stdout=b"", stderr=b"diff failed")
+
+    monkeypatch.setattr("autoskillit.smoke_utils._git.subprocess.run", fake_run)
+
+    result = check_diff_size(str(tmp_path), "main")
+
+    assert result["size_verdict"] == "error"
+    assert result["added_lines"] == "unknown"
+
+
+def test_check_diff_size_merge_base_failure_is_logged(tmp_path: Path, caplog) -> None:
+    """Merge-base failures retain a bounded operator-visible diagnostic."""
+    _init_diff_size_repo(tmp_path)
+
+    result = check_diff_size(str(tmp_path), "missing-base-ref")
+
+    assert result["size_verdict"] == "error"
+    assert "check_diff_size merge-base failed" in caplog.text
+
+
+def test_check_diff_size_plan_read_failure_returns_error(tmp_path: Path) -> None:
+    """An unreadable plan cannot silently substitute the ingredient budget."""
+    _init_diff_size_repo(tmp_path)
+    plan_path = tmp_path / "plan-directory"
+    plan_path.mkdir()
+
+    result = check_diff_size(str(tmp_path), "main", plan_path=str(plan_path))
+
+    assert result["size_verdict"] == "error"
+    assert result["budget_source"] == "ingredient"
+
+
+def test_check_diff_size_requires_worktree_path() -> None:
+    """The runtime signature reflects the required worktree-path contract."""
+    with pytest.raises(TypeError):
+        check_diff_size()  # type: ignore[call-arg]
+
+
+def test_diff_size_gate_constants_are_not_public() -> None:
+    """Implementation limits are not part of the smoke_utils facade."""
+    import autoskillit.smoke_utils as smoke_utils
+
+    assert not hasattr(smoke_utils, "DIFF_SIZE_GATE_EXCLUDED_PATHSPECS")
+    assert not hasattr(smoke_utils, "DIFF_SIZE_GATE_MAX_CHANGED_FILES")
 
 
 def test_check_diff_size_changed_files_bound(tmp_path: Path) -> None:

@@ -24,8 +24,6 @@ from autoskillit.smoke_utils._experimental_review import (
     validate_experimental_auditor_outputs,
 )
 from autoskillit.smoke_utils._git import (
-    DIFF_SIZE_GATE_EXCLUDED_PATHSPECS,
-    DIFF_SIZE_GATE_MAX_CHANGED_FILES,
     check_bug_report_non_empty,
     check_commits_ahead,
     check_diff_size,
@@ -62,8 +60,6 @@ from autoskillit.smoke_utils._review_contracts import (
 from autoskillit.smoke_utils._telemetry import consolidate_health_reports, patch_pr_token_summary
 
 __all__ = [
-    "DIFF_SIZE_GATE_EXCLUDED_PATHSPECS",
-    "DIFF_SIZE_GATE_MAX_CHANGED_FILES",
     "EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY",
     "EXPERIMENTAL_REVIEW_AUDITORS",
     "LOCAL_ROUND_EXEMPT_VERDICTS",

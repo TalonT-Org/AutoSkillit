@@ -8,26 +8,55 @@ from pathlib import Path
 
 import regex as re
 
-from autoskillit.core import atomic_write
+from autoskillit.core import atomic_write, get_logger
 
-DIFF_SIZE_GATE_EXCLUDED_PATHSPECS: tuple[str, ...] = (".autoskillit/test-source-map.json",)
-DIFF_SIZE_GATE_MAX_CHANGED_FILES = 160
+logger = get_logger(__name__)
+
+_DIFF_SIZE_GATE_EXCLUDED_PATHSPECS: tuple[str, ...] = (".autoskillit/test-source-map.json",)
+_DIFF_SIZE_GATE_MAX_CHANGED_FILES = 160
+_UNTRACKED_READ_CHUNK_BYTES = 64 * 1024
+_GIT_ERROR_LOG_MAX_CHARS = 1000
 
 
 def _diff_size_error(default_budget: str) -> dict[str, str]:
     """Return the structured fail-open result for an unavailable size measurement."""
     return {
         "size_verdict": "error",
-        "added_lines": "0",
-        "changed_files": "0",
+        "added_lines": "unknown",
+        "changed_files": "unknown",
         "budget": default_budget,
         "budget_source": "ingredient",
         "split_proposal_path": "",
     }
 
 
+def _bounded_stderr(stderr: str | bytes) -> str:
+    """Return a bounded diagnostic string for a failed git command."""
+    text = stderr.decode("utf-8", errors="replace") if isinstance(stderr, bytes) else stderr
+    return text.strip()[:_GIT_ERROR_LOG_MAX_CHARS] or "<no stderr>"
+
+
+def _count_untracked_text_lines(path: Path) -> int:
+    """Count lines without loading an entire untracked file into memory."""
+    line_count = 0
+    had_content = False
+    ends_with_newline = False
+    with path.open("rb") as stream:
+        chunk = stream.read(_UNTRACKED_READ_CHUNK_BYTES)
+        if b"\x00" in chunk[:8192]:
+            return 0
+        while chunk:
+            had_content = True
+            line_count += chunk.count(b"\n")
+            ends_with_newline = chunk.endswith(b"\n")
+            chunk = stream.read(_UNTRACKED_READ_CHUNK_BYTES)
+    if had_content and not ends_with_newline:
+        line_count += 1
+    return line_count
+
+
 def check_diff_size(
-    worktree_path: str = "",
+    worktree_path: str,
     base_branch: str = "",
     plan_path: str = "",
     default_budget: str = "6000",
@@ -51,11 +80,17 @@ def check_diff_size(
         timeout=30,
     )
     if fork_result.returncode != 0:
+        logger.warning(
+            "check_diff_size merge-base failed for %s (exit %s): %s",
+            wp,
+            fork_result.returncode,
+            _bounded_stderr(fork_result.stderr),
+        )
         return _diff_size_error(default_budget)
     fork_point = fork_result.stdout.strip()
 
     exclude_args: list[str] = []
-    for pathspec in DIFF_SIZE_GATE_EXCLUDED_PATHSPECS:
+    for pathspec in _DIFF_SIZE_GATE_EXCLUDED_PATHSPECS:
         exclude_args.extend(["--", ".", f":(exclude){pathspec}"])
 
     diff_cmd = ["git", "diff", "--numstat", "-z", fork_point]
@@ -66,6 +101,14 @@ def check_diff_size(
         capture_output=True,
         timeout=60,
     )
+    if diff_result.returncode != 0:
+        logger.warning(
+            "check_diff_size git diff failed for %s (exit %s): %s",
+            wp,
+            diff_result.returncode,
+            _bounded_stderr(diff_result.stderr),
+        )
+        return _diff_size_error(default_budget)
     raw = diff_result.stdout
     added_lines = 0
     changed_files = 0
@@ -97,7 +140,15 @@ def check_diff_size(
         capture_output=True,
         timeout=30,
     )
-    excluded_set = set(DIFF_SIZE_GATE_EXCLUDED_PATHSPECS)
+    if untracked_result.returncode != 0:
+        logger.warning(
+            "check_diff_size git ls-files failed for %s (exit %s): %s",
+            wp,
+            untracked_result.returncode,
+            _bounded_stderr(untracked_result.stderr),
+        )
+        return _diff_size_error(default_budget)
+    excluded_set = set(_DIFF_SIZE_GATE_EXCLUDED_PATHSPECS)
     if untracked_result.stdout:
         for entry in untracked_result.stdout.split(b"\0"):
             if not entry:
@@ -107,13 +158,14 @@ def check_diff_size(
                 continue
             changed_files += 1
             try:
-                content = (worktree / rel_path).read_bytes()
-                if b"\x00" not in content[:8192]:
-                    added_lines += content.count(b"\n")
-                    if content and not content.endswith(b"\n"):
-                        added_lines += 1
-            except OSError:
-                pass
+                added_lines += _count_untracked_text_lines(worktree / rel_path)
+            except OSError as exc:
+                logger.warning(
+                    "check_diff_size could not read untracked file %s: %s",
+                    rel_path,
+                    exc,
+                )
+                return _diff_size_error(default_budget)
 
     try:
         budget = int(default_budget)
@@ -127,10 +179,11 @@ def check_diff_size(
             if match:
                 budget = int(match.group(1))
                 budget_source = "plan"
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.warning("check_diff_size could not read plan %s: %s", plan_path, exc)
+            return _diff_size_error(default_budget)
 
-    file_limit = DIFF_SIZE_GATE_MAX_CHANGED_FILES
+    file_limit = _DIFF_SIZE_GATE_MAX_CHANGED_FILES
     over = added_lines > budget or changed_files > file_limit
     split_proposal_path = ""
     if over and output_dir:

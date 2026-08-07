@@ -240,6 +240,19 @@ def read_installed_plugin_artifact_identity(
         raise PluginArtifactValidationError("installed plugin managed path identity mismatch")
     if raw.get("manifest_path") != str(canonical_manifest):
         raise PluginArtifactValidationError("installed plugin manifest path identity mismatch")
+    # Generation-store identity cross-check: when the directory name IS a
+    # canonical incarnation_id (uuid4 hex), it must match the manifest's
+    # incarnation_id — the path IS the identity.  Legacy Claude-cache
+    # artifacts use version strings as directory names, so only enforce
+    # this for directories that look like incarnation ids.
+    if (
+        is_canonical_plugin_artifact_incarnation_id(canonical_root.name)
+        and raw["incarnation_id"] != canonical_root.name
+    ):
+        raise PluginArtifactValidationError(
+            f"installed plugin incarnation_id {raw['incarnation_id']!r} does not "
+            f"match directory name {canonical_root.name!r}"
+        )
     try:
         observed_digest = directory_tree_digest(canonical_root)
     except OSError as exc:

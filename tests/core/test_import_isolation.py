@@ -39,8 +39,7 @@ def _clean_subprocess_env() -> dict[str, str]:
     from tests._test_env_parity import TEST_HARNESS_ENV_OVERRIDES
 
     for var, override in TEST_HARNESS_ENV_OVERRIDES.items():
-        if override.parity_fixture is None:
-            env[var] = override.value
+        env[var] = override.value
     return env
 
 

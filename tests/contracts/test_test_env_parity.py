@@ -28,18 +28,46 @@ def _taskfile_env_vars() -> set[str]:
     return set(re.findall(r"^\s+([A-Z][A-Z_0-9]+):\s", content, re.MULTILINE))
 
 
+# Taskfile vars that are NOT parity concerns — paths, feature toggles,
+# and test-specific configuration that never masks a production failure class.
+_TASKFILE_NON_PARITY_VARS: frozenset[str] = frozenset(
+    {
+        "AUTOSKILLIT_EXPLORER_LIVE_GATE",
+        "AUTOSKILLIT_TEST_FILTER",
+        "CLAUDE_CODE_SMOKE_TEST",
+        "CLAUDE_STARTUP_READINESS_SMOKE",
+        "CODEX_SMOKE_TEST",
+        "PYTEST_CACHEDIR",
+        "PYTEST_TMPDIR",
+        "RECORD_SCENARIO",
+        "RECORD_SCENARIO_DIR",
+        "RECORD_SCENARIO_RECIPE",
+        "RESEARCH_SMOKE_TEST",
+        "SMOKE_TEST",
+        "TMPDIR",
+    }
+)
+
+
 def test_every_taskfile_override_is_registered() -> None:
-    """Unregistered Taskfile env overrides fail — no silent suppression."""
+    """Unregistered Taskfile env overrides fail — no silent suppression.
+
+    Double-bind pincer: an env var added to the Taskfile's pytest tasks
+    that isn't in the non-parity allowlist and isn't in the registry will
+    fail this test, forcing the author to either register it with a
+    justification or add it to ``_TASKFILE_NON_PARITY_VARS``.
+    """
     taskfile_vars = _taskfile_env_vars()
-    # Only check vars that are actually in our registry scope — the Taskfile
-    # may set other vars (TMPDIR, paths, features) that aren't env-parity
-    # concerns. The parity contract applies to env vars known to mask
-    # production behavior.
-    for var, override in TEST_HARNESS_ENV_OVERRIDES.items():
-        assert var in taskfile_vars, (
-            f"Registry entry {var!r} is no longer set in Taskfile.yml — "
-            f"remove it from TEST_HARNESS_ENV_OVERRIDES"
-        )
+    unregistered = sorted(
+        var
+        for var in taskfile_vars
+        if var not in TEST_HARNESS_ENV_OVERRIDES and var not in _TASKFILE_NON_PARITY_VARS
+    )
+    assert not unregistered, (
+        f"Taskfile env var(s) not registered in TEST_HARNESS_ENV_OVERRIDES "
+        f"and not in _TASKFILE_NON_PARITY_VARS — register with a justification "
+        f"or add to the non-parity allowlist: {unregistered}"
+    )
 
 
 def test_registry_entries_are_still_in_taskfile() -> None:

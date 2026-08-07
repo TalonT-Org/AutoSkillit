@@ -260,7 +260,10 @@ class TestVerifyInstallState:
         raw["incarnation_id"] = new_plugin_artifact_incarnation_id()
         identity.manifest_path.write_text(json.dumps(raw), encoding="utf-8")
 
-        assert "generation_incarnation_mismatch" in _checks(home)
+        # The cross-check in read_installed_plugin_artifact_identity raises
+        # PluginArtifactValidationError, which _generation_store_findings
+        # reports as generation_artifact_invalid.
+        assert "generation_artifact_invalid" in _checks(home)
 
     def test_dangling_install_path(self, home: Path) -> None:
         _write_registry(home, home / "does" / "not" / "exist")

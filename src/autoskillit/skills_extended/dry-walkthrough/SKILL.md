@@ -87,7 +87,7 @@ The plan file must remain a **clean, self-contained implementation instruction s
 - Verify assumptions against actual codebase
 - Remove deprecation code/notes and rollback mechanisms
 - Make sure the plan includes warning against using the codebase as a notepad with useless comments
-- Prefer the long term health of project over quick, easy, and minimal fixes
+- Prefer the long-term health of the project — and the smallest design that secures it. Proportionality is part of long-term health: every added line must earn its maintenance cost
 - Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Context Limit Behavior
@@ -196,6 +196,21 @@ Scan the plan text (this part only — do not read other parts) for any statemen
 This check does not require cross-part reading — a plan declaring a post-part red test in its own text is gate-incompatible by definition.
 
 Stop execution — do not proceed to Step 5.
+
+### Step 4.4: Size Budget and Proportionality Check
+
+1. Verify the plan's `size_budget = {N}` line exists (immediately after the title). If
+   missing, compute it from per-step estimated added-line counts (expected LoC × 1.5,
+   rounded up to nearest 100) and add it during Step 5 fix-in-place — missing budget is
+   a fix, not a failure.
+2. Sum the per-step added-line estimates. If the sum exceeds `size_budget`, either raise
+   the budget with a one-line justification or descope via `## Deferred Items` — the plan
+   must leave this step internally consistent.
+3. Proportionality screen: flag any new registry, enum, ID-wrapper class, state machine,
+   protocol, or abstraction layer that the task text does not name and that fewer than two
+   existing call sites need today. Move flagged machinery to `## Deferred Items`. This
+   step is the one place in the plan pipeline authorized to reduce scope; it must not add
+   scope.
 
 ### Step 4.5: Historical Regression Check
 

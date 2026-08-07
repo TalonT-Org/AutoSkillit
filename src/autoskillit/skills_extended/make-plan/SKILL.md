@@ -164,6 +164,15 @@ Classify using this table:
 Use the **highest** complexity band that any single metric reaches. For example,
 if LoC is 40 (trivial) but files is 6 (medium), classify as medium.
 
+**Size budget derivation:** From the expected LoC computed above, set
+`size_budget` = expected added LoC × 1.5, rounded up to the nearest 100. Write
+this as a plain-digit line (no thousands separators, no markdown decoration —
+the downstream gate regex accepts bare digits only and silently falls back
+otherwise). Each implementation step must carry an estimated added-line count,
+and every new module or class must cite the requirement that forces it. Move
+anything justified as "future-proofing", "robustness", or "while we're here"
+to a `## Deferred Items` section instead of the plan body.
+
 **Log the decision:** Before proceeding, write one line to the plan file under
 a `## Adversarial Review` heading:
 
@@ -418,6 +427,7 @@ plan_disposition_path = {absolute_path_when_in_remediation_mode}
 **Plan structure (single-part):**
 ```markdown
 # Implementation Plan: {Task Name}
+size_budget = {N — plain digits only, e.g. 1500}
 
 ## Summary
 {Brief overview of what will be implemented}
@@ -440,6 +450,7 @@ plan_disposition_path = {absolute_path_when_in_remediation_mode}
 **Plan structure (multi-part — use for EACH part file):**
 ```markdown
 # Implementation Plan: {Task Name} — PART {X} ONLY
+size_budget = {N — plain digits only, e.g. 1500}
 
 > **PART {X} ONLY. Do not implement any other part. Other parts are separate tasks requiring explicit authorization.**
 

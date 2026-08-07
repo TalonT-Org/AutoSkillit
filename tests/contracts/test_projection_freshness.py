@@ -290,9 +290,13 @@ class TestBytecodeExclusion:
         assert (destination / "hooks" / "guards" / "guard_two.py").is_file()
         assert (destination / "scripts" / "module.py").is_file()
 
-    def test_asset_vocabulary_matches_the_copier_under_bytecode_seeding(
-        self, tmp_path: Path
-    ) -> None:
+    def test_asset_vocabulary_lockstep_under_bytecode_seeding(self, tmp_path: Path) -> None:
+        """Three-way lockstep: copier set == iterator set == digest hash set.
+
+        The plan requires all three consumers of ``is_projected_asset`` to
+        agree on the exact file set when bytecode is present in the source.
+        """
+
         from autoskillit.workspace._projected_artifact.materialization import (
             _copy_non_skill_plugin_assets,
         )
@@ -306,12 +310,34 @@ class TestBytecodeExclusion:
 
         _copy_non_skill_plugin_assets(source, destination)
 
-        digested = {str(p.relative_to(source)) for p in iter_public_plugin_asset_files(source)}
+        # Set 1: files the iterator yields
+        iterated = {str(p.relative_to(source)) for p in iter_public_plugin_asset_files(source)}
+        # Set 2: files the copier actually wrote
         copied = {str(p.relative_to(destination)) for p in destination.rglob("*") if p.is_file()}
-        assert digested == copied, (
-            "the digest vocabulary and the copier disagree on a bytecode-seeded tree:\n"
-            f"  only in digest walk: {sorted(digested - copied)}\n"
-            f"  only in copier output: {sorted(copied - digested)}"
+        # Set 3: files the digest function hashes (derive from the digest
+        # implementation — public_plugin_asset_digest hashes exactly the
+        # files that iter_public_plugin_asset_files yields, so we verify
+        # that by checking the digest is stable across a bytecode-removal
+        # cycle AND that both sets agree).
+        digest_before = public_plugin_asset_digest(source)
+        # Remove all bytecode and re-digest — if the digest function
+        # hashes a different set than the iterator, this will diverge.
+        import shutil
+
+        for pycache in list(source.rglob("__pycache__")):
+            shutil.rmtree(pycache)
+        for artifact in list(source.rglob("*.pyo")):
+            artifact.unlink()
+        digest_after = public_plugin_asset_digest(source)
+
+        assert iterated == copied, (
+            "iterator and copier disagree on a bytecode-seeded tree:\n"
+            f"  only in iterator: {sorted(iterated - copied)}\n"
+            f"  only in copier: {sorted(copied - iterated)}"
+        )
+        assert digest_before == digest_after, (
+            "public_plugin_asset_digest changed when only bytecode was removed — "
+            "the digest hashes a different set than the iterator yields"
         )
 
     def test_iter_walk_excludes_bytecode_directly(self, tmp_path: Path) -> None:

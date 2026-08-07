@@ -191,6 +191,53 @@ def test_exemption_registry_starts_empty() -> None:
     assert _BYTECODE_SUPPRESSION_EXEMPT == {}
 
 
+def _has_env_bytecode_suppression(source_text: str) -> bool:
+    """Check if a module's source sets PYTHONDONTWRITEBYTECODE anywhere.
+
+    This is a file-level check because the env injection may happen in a
+    different function than the argv construction (e.g. ``_runner_argv``
+    builds the list, ``_render_harness`` adds the ``PYTHONDONTWRITEBYTECODE=1``
+    prefix in the rendered bash command).
+    """
+    return "PYTHONDONTWRITEBYTECODE" in source_text
+
+
+def _subprocess_sites_missing_env_suppression() -> list[str]:
+    """Find modules with subprocess spawn sites but no PYTHONDONTWRITEBYTECODE."""
+    violations: list[str] = []
+    for path in _target_files():
+        rel = path.relative_to(_SRC).as_posix()
+        source = path.read_text()
+        tree = ast.parse(source)
+        has_spawn = any(
+            isinstance(node, ast.List) and any(_is_sys_executable(elt) for elt in node.elts)
+            for node in ast.walk(tree)
+        )
+        if has_spawn and not _has_env_bytecode_suppression(source):
+            violations.append(
+                f"{rel} — has subprocess spawn with sys.executable "
+                "but no PYTHONDONTWRITEBYTECODE assignment in the module"
+            )
+    return violations
+
+
+def test_subprocess_spawns_also_set_env_suppression() -> None:
+    """Every subprocess.run([sys.executable, ...]) site must additionally set
+    PYTHONDONTWRITEBYTECODE in the child env for ordinary-descendant coverage.
+
+    ``-B`` alone does not propagate to grandchildren via ``subprocess``;
+    ``-I`` (isolated mode) grandchildren ignore ``PYTHON*`` env entirely —
+    hence ``-B`` is the unconditional requirement (REQ-T4-1) and env
+    injection is the supplementary coverage requirement (REQ-T4-2).
+    """
+    violations = _subprocess_sites_missing_env_suppression()
+    assert not violations, (
+        "subprocess spawn site(s) missing PYTHONDONTWRITEBYTECODE in child env — "
+        "add env['PYTHONDONTWRITEBYTECODE'] = '1' for ordinary-descendant coverage:\n"
+        + "\n".join(f"  {v}" for v in violations)
+    )
+
+
 # --- Detector self-tests (synthetic AST, no repository dependency) ---------
 
 

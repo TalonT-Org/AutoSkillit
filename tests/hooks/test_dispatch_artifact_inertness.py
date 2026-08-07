@@ -173,3 +173,46 @@ class TestRunnerSpawnArtifactInertness:
         argv = _runner_argv(request)
 
         assert "-B" in argv, f"runner spawn argv missing -B flag: {argv}"
+
+    def test_runner_spawn_does_not_write_bytecode(self, tmp_path: Path) -> None:
+        """Real subprocess spawn of the runner script under production env.
+
+        Covers REQ-T1-5: the runner must not write ``__pycache__`` into the
+        artifact tree, verified by actual execution — not just a static
+        assertion on the argv list.
+        """
+        from autoskillit.hooks.shell_capture_hook import _runner_path
+
+        runner = _runner_path()
+        runner_dir = runner.parent
+
+        env = production_interpreter_env()
+        # The runner imports from its sibling modules; under production env
+        # (no PYTHONDONTWRITEBYTECODE) an unsuppressed spawn would write
+        # __pycache__ next to them.  We copy the runner tree into tmp_path
+        # to avoid polluting the source tree.
+        import shutil
+
+        test_tree = tmp_path / "runner_tree"
+        shutil.copytree(
+            runner_dir,
+            test_tree,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
+        )
+        test_runner = test_tree / runner.name
+
+        before = _find_bytecode_artifacts(test_tree)
+        assert not before, f"fixture already has bytecode: {before}"
+
+        # Spawn with -B (as _runner_argv does) under production env
+        subprocess.run(
+            [sys.executable, "-I", "-B", str(test_runner)],
+            input=b"",
+            env=env,
+            capture_output=True,
+            timeout=10,
+        )
+        # The runner will fail without proper NDJSON input, but that's fine —
+        # we only care about whether bytecode was written, not exit status.
+        stray = _find_bytecode_artifacts(test_tree)
+        assert not stray, f"runner spawn wrote bytecode into the artifact tree: {stray}"

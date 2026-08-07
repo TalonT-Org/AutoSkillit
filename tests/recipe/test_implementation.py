@@ -405,7 +405,7 @@ def test_check_scope_split_loop_exists(recipe) -> None:
     assert max_exceeded_conds[0].route == "release_issue_failure"
     default_conditions = [c for c in step.on_result.conditions if c.when is None]
     assert default_conditions, "No default (when=None) condition found"
-    assert default_conditions[0].route == "plan"
+    assert default_conditions[0].route == "pre_scope_replan_cleanup"
 
 
 def test_implement_step_captures_scope_verdict(recipe) -> None:

@@ -3,11 +3,6 @@
 Known limitation: functions use hardcoded path conventions from the pipeline recipe.
 """
 
-from autoskillit.smoke_utils._diff_size import (
-    DIFF_SIZE_GATE_EXCLUDED_PATHSPECS,
-    DIFF_SIZE_GATE_MAX_CHANGED_FILES,
-    check_diff_size,
-)
 from autoskillit.smoke_utils._eval import (
     REQUIRED_CRITERION_KEYS,
     VALID_CRITERION_TYPES,
@@ -29,8 +24,11 @@ from autoskillit.smoke_utils._experimental_review import (
     validate_experimental_auditor_outputs,
 )
 from autoskillit.smoke_utils._git import (
+    DIFF_SIZE_GATE_EXCLUDED_PATHSPECS,
+    DIFF_SIZE_GATE_MAX_CHANGED_FILES,
     check_bug_report_non_empty,
     check_commits_ahead,
+    check_diff_size,
     check_ref_state,
     close_issue_already_done,
     compute_domain_partitions,

@@ -24,6 +24,7 @@ from autoskillit.smoke_utils import (
     build_eval_context,
     build_malformed_review_envelope,
     check_bug_report_non_empty,
+    check_diff_size,
     check_loop_iteration,
     check_loop_with_progress,
     check_review_loop,
@@ -6429,3 +6430,327 @@ def test_extract_investigation_accepts_report_without_recommendations(
         output_dir=str(tmp_path / "unused"),
     )
     assert result["investigation_report"] == str(report)
+
+
+# ---------------------------------------------------------------------------
+# check_diff_size: deterministic diff-size gate
+# ---------------------------------------------------------------------------
+
+
+def test_check_diff_size_within_budget(tmp_path: Path) -> None:
+    """A small diff under the default budget reports within_budget with no split proposal."""
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    small_file = tmp_path / "small.py"
+    small_file.write_text("\n".join(f"line {i}" for i in range(10)) + "\n")
+    subprocess.run(["git", "add", "small.py"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "add small file"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+
+    result = check_diff_size(str(tmp_path), "main")
+
+    assert result["size_verdict"] == "within_budget"
+    assert result["split_proposal_path"] == ""
+
+
+def test_check_diff_size_over_budget_added_lines(tmp_path: Path) -> None:
+    """A diff exceeding the line budget reports over_budget and writes a breach report."""
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    big_file = tmp_path / "big.py"
+    big_file.write_text("\n".join(f"line {i}" for i in range(10)) + "\n")
+    subprocess.run(["git", "add", "big.py"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "add big file"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    output_dir = tmp_path / "output"
+
+    result = check_diff_size(str(tmp_path), "main", default_budget="5", output_dir=str(output_dir))
+
+    assert result["size_verdict"] == "over_budget"
+    assert result["split_proposal_path"] != ""
+    assert Path(result["split_proposal_path"]).exists()
+
+
+def test_check_diff_size_uncommitted_changes(tmp_path: Path) -> None:
+    """Unstaged working-tree modifications are captured in the diff-size measurement."""
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    tracked = tmp_path / "tracked.py"
+    tracked.write_text("original\n")
+    subprocess.run(["git", "add", "tracked.py"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "add tracked"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    # Unstaged modification — never staged, never committed.
+    tracked.write_text("original\nmodified line\n")
+
+    result = check_diff_size(str(tmp_path), "main")
+
+    assert int(result["added_lines"]) > 0
+
+
+def test_check_diff_size_untracked_files(tmp_path: Path) -> None:
+    """Untracked files are supplemented into the added_lines and changed_files counts."""
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    untracked = tmp_path / "untracked.py"
+    untracked.write_text("\n".join(f"line {i}" for i in range(20)) + "\n")
+
+    result = check_diff_size(str(tmp_path), "main")
+
+    assert result["added_lines"] == "20"
+    assert result["changed_files"] == "1"
+
+
+def test_check_diff_size_per_part_isolation(tmp_path: Path) -> None:
+    """Only the current part's own diff since merge_target is measured, not inherited history."""
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    large_file = tmp_path / "large.py"
+    large_file.write_text("\n".join(f"line {i}" for i in range(500)) + "\n")
+    subprocess.run(["git", "add", "large.py"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "large commit"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "checkout", "-b", "merge_target"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "checkout", "-b", "work"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    small_file = tmp_path / "small.py"
+    small_file.write_text("\n".join(f"line {i}" for i in range(5)) + "\n")
+    subprocess.run(["git", "add", "small.py"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "small change"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+
+    result = check_diff_size(str(tmp_path), "merge_target")
+
+    assert result["added_lines"] == "5"
+    assert result["changed_files"] == "1"
+
+
+def test_check_diff_size_excludes_test_source_map(tmp_path: Path) -> None:
+    """The test-source-map.json artifact is excluded from the diff-size measurement."""
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    autoskillit_dir = tmp_path / ".autoskillit"
+    autoskillit_dir.mkdir()
+    (autoskillit_dir / "test-source-map.json").write_text('{"mapped": "data"}\n' * 20)
+
+    result = check_diff_size(str(tmp_path), "main")
+
+    assert result["added_lines"] == "0"
+    assert result["changed_files"] == "0"
+
+
+def test_check_diff_size_plan_budget_overrides_default(tmp_path: Path) -> None:
+    """A plan-declared size_budget line overrides the default_budget ingredient."""
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    plan_path = tmp_path / "plan.md"
+    plan_path.write_text("# Plan\n\nsize_budget = 800\n\nDetails...\n")
+
+    result = check_diff_size(str(tmp_path), "main", plan_path=str(plan_path))
+
+    assert result["budget"] == "800"
+    assert result["budget_source"] == "plan"
+
+
+def test_check_diff_size_malformed_plan_budget_falls_back(tmp_path: Path) -> None:
+    """Malformed size_budget (thousands separator) fails the digit regex."""
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    plan_path = tmp_path / "plan.md"
+    plan_path.write_text("# Plan\n\nsize_budget = 4,800\n\nDetails...\n")
+
+    result = check_diff_size(str(tmp_path), "main", plan_path=str(plan_path))
+
+    assert result["budget_source"] == "ingredient"
+    assert result["budget"] == "6000"
+
+
+def test_check_diff_size_changed_files_bound(tmp_path: Path) -> None:
+    """Exceeding the changed-files limit alone triggers over_budget under a large line budget."""
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    for i in range(161):
+        (tmp_path / f"file_{i}.py").write_text(f"line {i}\n")
+
+    result = check_diff_size(str(tmp_path), "main", default_budget="1000000")
+
+    assert result["size_verdict"] == "over_budget"
+
+
+def test_check_diff_size_all_values_are_strings(tmp_path: Path) -> None:
+    """Every value in the returned dict is a string, per the smoke_utils string-typed contract."""
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    small_file = tmp_path / "small.py"
+    small_file.write_text("line 1\n")
+    subprocess.run(["git", "add", "small.py"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "add small file"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+
+    result = check_diff_size(str(tmp_path), "main")
+
+    assert all(isinstance(v, str) for v in result.values())

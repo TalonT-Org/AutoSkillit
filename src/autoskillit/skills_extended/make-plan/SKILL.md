@@ -177,6 +177,7 @@ to a `## Deferred Items` section instead of the plan body.
 a `## Adversarial Review` heading:
 
 > Complexity classification: {level} ({loc} LoC, {files} files, {modules} modules).
+> size_budget = {computed budget, plain digits}.
 > Adversarial agents: {list of agents to spawn, or "none"}.
 
 6. **Foundation Audit** - Spawn 1 Foundation Auditor via `a child assigned logical role `plan-foundation-auditor` under its declared model policy`. Pass the full draft plan text and the codebase root. Prepend the contrastive frame to the prompt:

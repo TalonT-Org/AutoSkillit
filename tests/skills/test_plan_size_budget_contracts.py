@@ -44,6 +44,12 @@ def test_make_plan_states_digit_only_rule() -> None:
     )
 
 
+def test_rectify_states_digit_only_rule() -> None:
+    """rectify must also state the digit-only rendering rule."""
+    content = _read_rectify()
+    assert re.search(r"plain.digits", content), "rectify must state the digit-only rendering rule"
+
+
 def test_make_plan_instructs_per_step_estimates() -> None:
     content = _read_make_plan()
     assert re.search(r"estimated added.line count", content, re.IGNORECASE)

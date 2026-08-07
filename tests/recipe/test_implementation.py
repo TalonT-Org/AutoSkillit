@@ -350,3 +350,128 @@ def test_audit_impl_deviation_manifest_path_kwarg_consistency(recipe_name: str) 
         "${{ context.deviation_manifest_path }}"
     )
     assert "deviation_manifest_path" in (step.optional_context_refs or [])
+
+
+# ---------------------------------------------------------------------------
+# #4476 Part C: scope-discipline gate (diff-size budget + scope-split loop)
+# ---------------------------------------------------------------------------
+
+
+def test_check_diff_size_step_exists(recipe) -> None:
+    """check_diff_size must use run_python and gate on the current part's own diff via
+    context.merge_target (not inputs.base_branch), so multi-part runs isolate per-part size."""
+    assert "check_diff_size" in recipe.steps
+    step = recipe.steps["check_diff_size"]
+    assert step.tool == "run_python"
+    assert "check_diff_size" in step.with_args.get("callable", "")
+    assert step.with_args.get("base_branch") == "${{ context.merge_target }}"
+
+
+def test_check_diff_size_routing(recipe) -> None:
+    """check_diff_size routes over_budget to check_scope_split_loop, within_budget to test,
+    and fails open to test so a broken advisory gate never halts otherwise-normal work."""
+    step = recipe.steps["check_diff_size"]
+    assert step.on_result is not None
+    routes = {c.when: c.route for c in step.on_result.conditions if c.when}
+    over_budget_routes = [route for when, route in routes.items() if "over_budget" in when]
+    within_budget_routes = [route for when, route in routes.items() if "within_budget" in when]
+    assert over_budget_routes == ["check_scope_split_loop"]
+    assert within_budget_routes == ["test"]
+    assert step.on_failure == "test"
+
+
+def test_check_changes_routes_to_check_diff_size(recipe) -> None:
+    """check_changes default arm must route to check_diff_size, not directly to test,
+    so the diff-size gate always runs before tests when changes are present."""
+    step = recipe.steps["check_changes"]
+    assert step.on_result is not None
+    default_conditions = [c for c in step.on_result.conditions if c.when is None]
+    assert default_conditions, "No default (when=None) condition found"
+    assert default_conditions[0].route == "check_diff_size"
+
+
+def test_check_scope_split_loop_exists(recipe) -> None:
+    """check_scope_split_loop uses check_loop_iteration; max_exceeded routes to
+    release_issue_failure, default (not exceeded) routes back to plan for a re-plan cycle."""
+    assert "check_scope_split_loop" in recipe.steps
+    step = recipe.steps["check_scope_split_loop"]
+    assert step.tool == "run_python"
+    assert "check_loop_iteration" in step.with_args.get("callable", "")
+    assert step.on_result is not None
+    max_exceeded_conds = [
+        c for c in step.on_result.conditions if c.when and "max_exceeded" in c.when
+    ]
+    assert max_exceeded_conds, "check_scope_split_loop must route max_exceeded"
+    assert max_exceeded_conds[0].route == "release_issue_failure"
+    default_conditions = [c for c in step.on_result.conditions if c.when is None]
+    assert default_conditions, "No default (when=None) condition found"
+    assert default_conditions[0].route == "plan"
+
+
+def test_implement_step_captures_scope_verdict(recipe) -> None:
+    """implement must capture scope_verdict and route both split and proceed values
+    explicitly via on_result."""
+    step = recipe.steps["implement"]
+    capture = step.capture or {}
+    assert "scope_verdict" in capture
+    assert step.on_result is not None
+    when_texts = [c.when for c in step.on_result.conditions if c.when]
+    assert any("split" in w for w in when_texts), "implement must route scope_verdict == split"
+    assert any("proceed" in w for w in when_texts), "implement must route scope_verdict == proceed"
+
+
+def test_retry_worktree_scope_verdict_routing(recipe) -> None:
+    """retry_worktree must route both split and proceed scope_verdict values explicitly,
+    and must no longer branch on phases_implemented > 0 (superseded by scope-verdict routing)."""
+    step = recipe.steps["retry_worktree"]
+    assert step.on_result is not None
+    when_texts = [c.when for c in step.on_result.conditions if c.when]
+    assert any("split" in w for w in when_texts), (
+        "retry_worktree must route scope_verdict == split"
+    )
+    assert any("proceed" in w for w in when_texts), (
+        "retry_worktree must route scope_verdict == proceed"
+    )
+    assert not any("phases_implemented" in w for w in when_texts), (
+        "retry_worktree must not route on phases_implemented after scope-verdict routing"
+    )
+
+
+def test_plan_step_accepts_split_proposal(recipe) -> None:
+    """plan must forward split_proposal_path to make-plan and declare it optional
+    so a scope-split re-plan can feed the prior split proposal back in."""
+    step = recipe.steps["plan"]
+    assert step.with_args["skill_inputs"]["split_proposal_path"] == (
+        "${{ context.split_proposal_path }}"
+    )
+    assert "split_proposal_path" in (step.optional_context_refs or [])
+
+
+def test_scope_ingredients_exist(recipe) -> None:
+    """diff_size_budget and scope_split_max_retries ingredients must exist with the
+    documented defaults."""
+    assert "diff_size_budget" in recipe.ingredients
+    assert recipe.ingredients["diff_size_budget"].default == "6000"
+    assert "scope_split_max_retries" in recipe.ingredients
+    assert recipe.ingredients["scope_split_max_retries"].default == "2"
+
+
+@pytest.mark.parametrize(
+    "recipe_name", ["implementation", "remediation", "implementation-groups", "merge-prs"]
+)
+def test_scope_verdict_routed_explicitly_in_implement_and_retry(recipe_name: str) -> None:
+    """Every bundled recipe's implement and retry_worktree steps must route both
+    scope_verdict values (split, proceed) explicitly rather than relying on the
+    catch-all arm, regardless of whether that recipe has a scope-split re-plan loop."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    for step_name in ("implement", "retry_worktree"):
+        assert step_name in recipe.steps, f"{recipe_name}: {step_name} step not found"
+        step = recipe.steps[step_name]
+        assert step.on_result is not None, f"{recipe_name}.{step_name} must declare on_result"
+        when_texts = [c.when for c in step.on_result.conditions if c.when]
+        assert any("split" in w for w in when_texts), (
+            f"{recipe_name}.{step_name} must route scope_verdict == split explicitly"
+        )
+        assert any("proceed" in w for w in when_texts), (
+            f"{recipe_name}.{step_name} must route scope_verdict == proceed explicitly"
+        )

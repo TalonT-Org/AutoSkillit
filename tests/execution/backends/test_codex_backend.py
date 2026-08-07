@@ -541,6 +541,10 @@ class TestCodexBuildSkillSessionCmd:
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
         assert CODEX_INTAKE_DISCIPLINE_DIGEST in spec.cmd[-1]
 
+    def test_fresh_headless_includes_scope_discipline_marker(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert "SCOPE DISCIPLINE" in spec.cmd[-1]
+
     def test_completion_reminder_injected(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
         assert "Remember: end your final response with" in spec.cmd[-1]
@@ -1034,6 +1038,10 @@ class TestCodexBuildFoodTruckCmd:
 
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
         assert CODEX_INTAKE_DISCIPLINE_DIGEST in spec.cmd[-1]
+
+    def test_food_truck_includes_scope_discipline_marker(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert "SCOPE DISCIPLINE" in spec.cmd[-1]
 
     def test_prompt_is_last_token(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)

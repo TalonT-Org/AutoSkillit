@@ -213,6 +213,7 @@ def test_run_update_command_invalidates_fetch_cache(
 def test_install_invalidates_fetch_cache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """_marketplace.install() must delete github_fetch_cache.json after install."""
     import importlib
+    from types import SimpleNamespace
 
     _app_mod = importlib.import_module("autoskillit.cli._marketplace")
 
@@ -224,47 +225,49 @@ def test_install_invalidates_fetch_cache(monkeypatch: pytest.MonkeyPatch, tmp_pa
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
     monkeypatch.delenv("CLAUDECODE", raising=False)
-    monkeypatch.setattr("shutil.which", lambda *_args, **_kwargs: "/usr/bin/claude")
 
     from autoskillit import __version__
+    from autoskillit.core import PluginArtifactIdentity
 
-    expected_target = _app_mod._installed_plugin_root(__version__)
+    from autoskillit.core import new_plugin_artifact_incarnation_id
 
-    def _fake_claude_run(argv: tuple[str, ...], **_kwargs: object) -> object:
-        if argv[:3] == ("claude", "plugin", "install"):
-            expected_target.mkdir(parents=True)
-        return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
-
-    monkeypatch.setattr(
-        "subprocess.run",
-        _fake_claude_run,
+    incarnation_id = new_plugin_artifact_incarnation_id()
+    gen_dir = (
+        tmp_path
+        / ".autoskillit"
+        / "plugin-generations"
+        / "autoskillit"
+        / __version__
+        / incarnation_id
     )
+    gen_dir.mkdir(parents=True, exist_ok=True)
+    fake_identity = PluginArtifactIdentity(
+        semantic_key=f"autoskillit@autoskillit-local:{__version__}",
+        incarnation_id=incarnation_id,
+        manifest_schema_version=1,
+        artifact_digest="a" * 64,
+        managed_path=gen_dir,
+        manifest_path=gen_dir.parent / f".{incarnation_id}.autoskillit-artifact.json",
+    )
+
     monkeypatch.setattr("autoskillit.cli._marketplace.evict_direct_mcp_entry", lambda _: False)
     monkeypatch.setattr("autoskillit.cli._hooks._evict_stale_autoskillit_hooks", lambda _: None)
-    monkeypatch.setattr("autoskillit.cli._marketplace.generate_hooks_json", lambda: {})
-    monkeypatch.setattr("autoskillit.cli._marketplace.atomic_write", lambda *a, **kw: None)
+    monkeypatch.setattr("autoskillit.cli._marketplace._ensure_marketplace", lambda **_kw: None)
+    monkeypatch.setattr("autoskillit.workspace.reconcile_install_artifacts", lambda: ())
     monkeypatch.setattr(
-        "autoskillit.cli._plugin_artifact.publish_installed_plugin_artifact",
-        lambda *args, **kwargs: None,
+        "autoskillit.workspace.publish_generation",
+        lambda **_kw: fake_identity,
     )
     monkeypatch.setattr(
-        "autoskillit.workspace.verify_installed_plugin_artifact",
-        lambda *args, **kwargs: type(
-            "Verification",
-            (),
-            {
-                "identity": type(
-                    "Identity",
-                    (),
-                    {
-                        "incarnation_id": "test-identity",
-                        "semantic_key": (f"autoskillit@autoskillit-local:{__version__}"),
-                    },
-                )(),
-                "findings": (),
-            },
-        )(),
+        "autoskillit.core.read_installed_plugin_artifact_identity",
+        lambda *_a, **_kw: fake_identity,
     )
+
+    backend = SimpleNamespace(capabilities=SimpleNamespace(plugin_install_capable=True))
+    config = SimpleNamespace(agent_backend=SimpleNamespace(backend="claude-code"))
+    monkeypatch.setattr("autoskillit.config.load_config", lambda _path: config)
+    monkeypatch.setattr("autoskillit.execution.get_backend", lambda _name: backend)
+    monkeypatch.setattr(_app_mod, "_ensure_workspace_ready", lambda **_kw: None)
 
     from autoskillit.cli._marketplace import install as _install
 

@@ -32,7 +32,7 @@ from autoskillit.hooks._capture._failure_policy import (
     CaptureFailureReason,
     runtime_failure_reason,
 )
-from autoskillit.hooks._capture._lifecycle_policy import CaptureStatus
+from autoskillit.hooks._capture._lifecycle_policy import SWEEP_GRACE_SECONDS, CaptureStatus
 from autoskillit.hooks._capture._snapshot import (
     CaptureAuthorityError,
     CaptureMeasurement,
@@ -155,6 +155,10 @@ def test_capacity_failure_reason_mapping_is_exhaustive_and_enum_keyed() -> None:
             CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED
         ),
     }
+
+
+def test_retention_seconds_use_lifecycle_policy_authority() -> None:
+    assert capture_lifecycle._RETENTION_SECONDS == SWEEP_GRACE_SECONDS
 
 
 def test_capacity_spec_derives_total_recovery_headroom() -> None:

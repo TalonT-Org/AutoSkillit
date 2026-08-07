@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture import _failure_policy as _capture_failure_policy
     from autoskillit.hooks._capture import _ledger as _capture_ledger
     from autoskillit.hooks._capture import _ledger_view as _capture_ledger_view
+    from autoskillit.hooks._capture import _lifecycle_policy as _capture_lifecycle_policy
     from autoskillit.hooks._capture import _migration as _capture_migration
     from autoskillit.hooks._capture import _reader as _capture_reader
     from autoskillit.hooks._capture import _resolver as _capture_resolver
@@ -42,6 +43,9 @@ else:
     )
     _capture_ledger = importlib.import_module(f"{_module_identity.__package__}._ledger")
     _capture_ledger_view = importlib.import_module(f"{_module_identity.__package__}._ledger_view")
+    _capture_lifecycle_policy = importlib.import_module(
+        f"{_module_identity.__package__}._lifecycle_policy"
+    )
     _capture_migration = importlib.import_module(f"{_module_identity.__package__}._migration")
     _capture_reader = importlib.import_module(f"{_module_identity.__package__}._reader")
     _capture_resolver = importlib.import_module(f"{_module_identity.__package__}._resolver")
@@ -91,21 +95,8 @@ LEDGER_NAME = ".capture-lifecycle.ledger"
 LOCK_NAME = ".capture-lifecycle.lock"
 MAX_LEDGER_BYTES = _capture_ledger.MAX_LEDGER_BYTES
 MAX_ACTIVE_RECORDS = 4096
-# Single source of truth: imported from the reclaimability declaration.
-# _capture_ledger re-exports from _lifecycle_policy which defines SWEEP_GRACE_SECONDS.
-_RETENTION_SECONDS: float = 3600.0  # overwritten below after dynamic imports resolve
-
-
-def _resolve_retention_seconds() -> float:
-    """Resolve the sweep grace from STATE_RECLAIMABILITY (single source of truth)."""
-    try:
-        policy = importlib.import_module(f"{_module_identity.__package__}._lifecycle_policy")
-        return float(policy.SWEEP_GRACE_SECONDS)
-    except (ImportError, AttributeError):
-        return 3600.0
-
-
-_RETENTION_SECONDS = _resolve_retention_seconds()
+# Single source of truth: the reclaimability declaration owns the sweep grace.
+_RETENTION_SECONDS = float(_capture_lifecycle_policy.SWEEP_GRACE_SECONDS)
 _REFERENCE_LIFETIME_SECONDS = 1800.0
 _MAX_RETRY_SECONDS = 3600.0
 _COMPACTION_THRESHOLD_BYTES = 31 * 1024 * 1024 // 8

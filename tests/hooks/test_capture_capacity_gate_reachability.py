@@ -22,7 +22,3 @@ class TestGateReachabilityTotality:
             assert gates, f"empty gate set for {reason!r}"
             for gate in gates:
                 assert isinstance(gate, CapacityGate)
-
-    def test_registry_rejects_unregistered_reason(self) -> None:
-        missing = {"FAKE_REASON"} - set(CAPACITY_REASON_GATES)
-        assert missing, "a fake reason not in CAPACITY_REASON_GATES must be detected"

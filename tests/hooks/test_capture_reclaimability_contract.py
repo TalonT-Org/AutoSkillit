@@ -42,7 +42,3 @@ class TestReclaimabilityTotality:
                 assert entry.duration_seconds is not None and entry.duration_seconds > 0
             elif entry.kind is ReclaimKind.SWEEP_AFTER_GRACE:
                 assert entry.duration_seconds is not None and entry.duration_seconds >= 0
-
-    def test_registry_rejects_unregistered_state(self) -> None:
-        missing = {"FAKE_STATE"} - set(STATE_RECLAIMABILITY)
-        assert missing, "a fake state not in STATE_RECLAIMABILITY must be detected"

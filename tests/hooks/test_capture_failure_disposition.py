@@ -39,11 +39,3 @@ class TestDispositionRegistryTotality:
             FAILURE_DISPOSITIONS[CaptureFailureReason.UNKNOWN_SETUP].disposition
             is CaptureFailureDisposition.DISCARD_OUTPUT
         )
-
-    def test_registry_rejects_unregistered_reason(self) -> None:
-        """Meta-test: the totality check has teeth."""
-        # The import-time assertion already ran. We verify the *shape*
-        # of the check by confirming a fake reason is not in the registry.
-        fake = "FAKE_TEST_REASON"
-        missing = {fake} - set(FAILURE_DISPOSITIONS)
-        assert missing, "a fake reason not in FAILURE_DISPOSITIONS must be detected"

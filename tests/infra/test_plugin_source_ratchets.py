@@ -70,9 +70,14 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "A failed snapshot construction removes only its private transaction staging directory.",
     ),
-    ("cli/_marketplace.py", "upgrade", "scripts_dir.rename"): (
+    (
+        "workspace/_projected_artifact/_generation_publication.py",
+        "_sweep_orphaned_staging",
+        "shutil.rmtree",
+    ): (
         1,
-        "Legacy package layout migration runs inside the installed-plugin transaction.",
+        "Orphan-staging sweep removes only private staging directories that were "
+        "never promoted to a published generation (crash-before-flip debris).",
     ),
     ("core/_plugin_cache.py", "try_reclaim", "record.manifest_path.unlink"): (
         1,
@@ -256,10 +261,6 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
 }
 
 PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
-    ("cli/_marketplace.py", "_run_claude_admin", "()"): (
-        1,
-        "The centralized Claude administration gateway intentionally consumes no launch binding.",
-    ),
     ("cli/session/_session_cook.py", "cook", "pass_fds"): (
         1,
         "Cook passes the stable merge of command, home, and attempt descriptors.",

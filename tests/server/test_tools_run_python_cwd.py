@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import RUN_PYTHON_PATH_LIKE_ARGS
 from autoskillit.server.tools._execution_helpers import (
-    _PATH_LIKE_ARGS,
     resolve_relative_path_args,
 )
 from autoskillit.server.tools.tools_execution import run_python
@@ -48,8 +48,9 @@ def test_run_python_callable_cwd_arg_not_hijacked(tmp_path):
     args: dict[str, object] = {"cwd": callable_cwd, "output_dir": ".autoskillit/temp/test"}
     resolved = resolve_relative_path_args(args, str(work_dir))
 
-    assert "cwd" not in _PATH_LIKE_ARGS, (
-        "cwd must not be in _PATH_LIKE_ARGS — it is a callable-level arg, not path-anchored"
+    assert "cwd" not in RUN_PYTHON_PATH_LIKE_ARGS, (
+        "cwd must not be in RUN_PYTHON_PATH_LIKE_ARGS — it is a callable-level arg, "
+        "not path-anchored"
     )
     assert resolved["cwd"] == callable_cwd, (
         f"Callable's cwd arg was mutated: {resolved['cwd']!r} != {callable_cwd!r}"

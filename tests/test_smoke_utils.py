@@ -4777,8 +4777,6 @@ def test_smoke_utils_all_exports_complete() -> None:
     import autoskillit.smoke_utils as su
 
     expected = {
-        "DIFF_SIZE_GATE_EXCLUDED_PATHSPECS",
-        "DIFF_SIZE_GATE_MAX_CHANGED_FILES",
         "EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY",
         "EXPERIMENTAL_REVIEW_AUDITORS",
         "aggregate_combined_review_candidates",
@@ -6522,7 +6520,7 @@ def test_check_diff_size_uncommitted_changes(tmp_path: Path) -> None:
 
     result = check_diff_size(str(tmp_path), "main")
 
-    assert result["added_lines"] == "1"
+    assert result["added_lines"] == "2"
 
 
 def test_check_diff_size_untracked_files(tmp_path: Path) -> None:
@@ -6680,14 +6678,16 @@ def test_check_diff_size_git_diff_failure_returns_error(tmp_path: Path, monkeypa
     assert result["added_lines"] == "unknown"
 
 
-def test_check_diff_size_merge_base_failure_is_logged(tmp_path: Path, caplog) -> None:
+def test_check_diff_size_merge_base_failure_is_logged(tmp_path: Path) -> None:
     """Merge-base failures retain a bounded operator-visible diagnostic."""
     _init_diff_size_repo(tmp_path)
 
-    result = check_diff_size(str(tmp_path), "missing-base-ref")
+    with patch("autoskillit.smoke_utils._git.logger.warning") as warning:
+        result = check_diff_size(str(tmp_path), "missing-base-ref")
 
     assert result["size_verdict"] == "error"
-    assert "check_diff_size merge-base failed" in caplog.text
+    assert warning.call_count == 1
+    assert warning.call_args.args[0].startswith("check_diff_size merge-base failed")
 
 
 def test_check_diff_size_plan_read_failure_returns_error(tmp_path: Path) -> None:

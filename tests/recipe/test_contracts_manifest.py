@@ -20,6 +20,17 @@ from autoskillit.recipe._contracts_types import AuditOutputMode
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
+@pytest.mark.parametrize("value", ["true", 1, None])
+def test_get_skill_contract_rejects_non_boolean_scope_discipline(value: object) -> None:
+    manifest = {"skills": {"demo-skill": {"scope_discipline": value}}}
+
+    with pytest.raises(
+        ValueError,
+        match="scope_discipline for skill 'demo-skill' must be a boolean",
+    ):
+        get_skill_contract("demo-skill", manifest)
+
+
 def test_get_callable_contract_promotes_allowed_values_for_commit_guard() -> None:
     """get_callable_contract must parse `allowed_values` from YAML into SkillOutput."""
     contract = get_callable_contract("autoskillit.recipe._cmd_rpc.commit_guard")

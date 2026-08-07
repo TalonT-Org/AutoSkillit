@@ -77,7 +77,9 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     write_behavior = skill_data.get("write_behavior")
     write_expected_when = skill_data.get("write_expected_when", [])
     read_only = bool(skill_data.get("read_only", False))
-    scope_discipline = bool(skill_data.get("scope_discipline", False))
+    scope_discipline = skill_data.get("scope_discipline", False)
+    if not isinstance(scope_discipline, bool):
+        raise ValueError(f"scope_discipline for skill '{skill_name}' must be a boolean")
     completion_required = bool(skill_data.get("completion_required", False))
     try:
         result_fields = [

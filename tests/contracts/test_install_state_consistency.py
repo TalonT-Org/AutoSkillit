@@ -18,13 +18,6 @@ from autoskillit.core import (
     PluginArtifactIdentity,
     Severity,
 )
-from tests.fixtures.plugin_artifact_state import (
-    INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
-    PLUGIN_ARTIFACT_STATE_EXPECTATIONS,
-    PLUGIN_ARTIFACT_STATE_KINDS,
-    PluginArtifactStateKind,
-    build_plugin_artifact_state,
-)
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -45,6 +38,45 @@ def _write_marketplace_manifest(home: Path, version: str) -> None:
     manifest.write_text(
         json.dumps({"name": "autoskillit-local", "plugins": [{"version": version}]})
     )
+
+
+def _publish_generation(
+    home: Path,
+    version: str,
+    *,
+    plugin_ref: str = _PLUGIN_KEY,
+) -> PluginArtifactIdentity:
+    """Publish a valid current generation directly at the primitive layer.
+
+    Builds the generation-store shape with the same primitives production
+    uses (``generation_artifact_root`` / ``generation_selector_path`` /
+    ``write_installed_plugin_artifact_manifest_locked``) rather than calling
+    ``workspace.publish_generation()``, which currently raises unconditionally
+    (its ``action="publish_generation"`` is not a member of
+    ``log_plugin_artifact_lifecycle``'s allowed action set) — a pre-existing
+    defect outside this test file's scope.
+    """
+    from autoskillit.core import (
+        generation_artifact_root,
+        generation_selector_path,
+        new_plugin_artifact_incarnation_id,
+    )
+    from autoskillit.workspace._installed_artifact import (
+        write_installed_plugin_artifact_manifest_locked,
+    )
+
+    incarnation_id = new_plugin_artifact_incarnation_id()
+    managed_path = generation_artifact_root(home, plugin_ref, version, incarnation_id)
+    managed_path.mkdir(parents=True)
+    (managed_path / "marker.txt").write_text("content", encoding="utf-8")
+    identity = write_installed_plugin_artifact_manifest_locked(
+        managed_path,
+        semantic_key=f"{plugin_ref}:{version}",
+        action="publish",
+        incarnation_id=incarnation_id,
+    )
+    generation_selector_path(home, plugin_ref, version).symlink_to(managed_path)
+    return identity
 
 
 @pytest.fixture
@@ -94,9 +126,19 @@ class TestVerifyInstallState:
 
     def test_acquired_lease_closes_when_findings_consumption_fails(
         self,
+        home: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        """The exact-artifact lease still closes when consumption raises.
+
+        Post-4.4 ``verify_installed_plugin_artifact`` is no longer called from
+        ``verify_install_state()``'s primary path — its sole remaining caller
+        inside this module is ``_record_matches_current_installed_artifact``,
+        reached while cross-referencing a still-registered retiring record.
+        """
         from autoskillit.workspace import _install_state
+
+        _queue_registered_retirement(home)
 
         class RaisingFindings:
             def __iter__(self):
@@ -116,7 +158,6 @@ class TestVerifyInstallState:
             def __init__(self) -> None:
                 self.lease = lease
 
-        monkeypatch.setattr(_install_state, "_current_install_state_spec", object)
         monkeypatch.setattr(
             _install_state,
             "verify_installed_plugin_artifact",
@@ -135,6 +176,8 @@ class TestVerifyInstallState:
     ) -> None:
         from autoskillit.workspace import _install_state
 
+        _queue_registered_retirement(home)
+
         class TrackingLease:
             closed = False
 
@@ -145,6 +188,7 @@ class TestVerifyInstallState:
 
         class Verification:
             findings = ()
+            identity = None
 
             def __init__(self) -> None:
                 self.lease = lease
@@ -159,42 +203,81 @@ class TestVerifyInstallState:
 
         assert lease.closed is True
 
-    @pytest.mark.parametrize("kind", PLUGIN_ARTIFACT_STATE_KINDS, ids=str)
-    def test_complete_production_shaped_artifact_matrix(
-        self,
-        home: Path,
-        kind: PluginArtifactStateKind,
+    def test_generation_store_missing_when_registry_obligates_but_store_absent(
+        self, home: Path
     ) -> None:
+        """A registered plugin with no published generation is an explicit error.
+
+        The generation store is the primary authority post-4.4; a registry
+        obligation with nothing published is exactly the "cannot start" case
+        this module exists to catch.
+        """
+        _write_registry(home, home / "cache" / "wherever")
+        assert "generation_store_missing" in _checks(home)
+
+    def test_valid_current_generation_reports_nothing(self, home: Path) -> None:
+        from autoskillit import __version__
         from autoskillit.workspace import verify_install_state
 
-        state = build_plugin_artifact_state(home, kind)
-        expected = PLUGIN_ARTIFACT_STATE_EXPECTATIONS[kind]
+        _publish_generation(home, __version__)
+        assert verify_install_state() == ()
 
-        findings = verify_install_state()
-        exact_findings = [
-            finding for finding in findings if finding.check.startswith("installed_plugin")
-        ]
-        assert {finding.check for finding in exact_findings} == expected.checks
-        if not expected.checks:
-            assert findings == ()
-            return
+    def test_generation_artifact_unreadable_is_reported(
+        self,
+        home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import autoskillit.core._plugin_artifact_identity as plugin_artifact_identity
+        from autoskillit import __version__
 
-        assert kind in INVALID_PLUGIN_ARTIFACT_STATE_KINDS
-        assert all(finding.severity is Severity.ERROR for finding in exact_findings)
-        assert any(str(state.managed_root) in finding.message for finding in exact_findings)
-        assert all("autoskillit install" in finding.message for finding in exact_findings)
+        _publish_generation(home, __version__)
+
+        def fail_digest(_path: Path) -> str:
+            raise PermissionError("injected diagnostic read failure")
+
+        monkeypatch.setattr(plugin_artifact_identity, "directory_tree_digest", fail_digest)
+
+        assert "generation_artifact_unreadable" in _checks(home)
+
+    def test_generation_artifact_invalid_when_content_digest_mismatches(self, home: Path) -> None:
+        from autoskillit import __version__
+
+        identity = _publish_generation(home, __version__)
+        (identity.managed_path / "tampered.txt").write_text(
+            "content added after publication", encoding="utf-8"
+        )
+
+        assert "generation_artifact_invalid" in _checks(home)
+
+    def test_generation_incarnation_mismatch_when_manifest_disagrees_with_directory(
+        self, home: Path
+    ) -> None:
+        from autoskillit import __version__
+        from autoskillit.core import new_plugin_artifact_incarnation_id
+
+        identity = _publish_generation(home, __version__)
+        raw = json.loads(identity.manifest_path.read_text(encoding="utf-8"))
+        raw["incarnation_id"] = new_plugin_artifact_incarnation_id()
+        identity.manifest_path.write_text(json.dumps(raw), encoding="utf-8")
+
+        assert "generation_incarnation_mismatch" in _checks(home)
 
     def test_dangling_install_path(self, home: Path) -> None:
         _write_registry(home, home / "does" / "not" / "exist")
-        assert "installed_plugins_install_path" in _checks(home)
+        assert "generation_store_missing" in _checks(home)
 
     def test_resolvable_stale_install_path_is_not_path_authority(self, home: Path) -> None:
+        """A registered path that resolves to a real directory is still not authority.
+
+        The registry's claimed install path is obligation evidence only — even
+        when it names a directory that genuinely exists, the generation store,
+        never the registry, determines whether a current incarnation is
+        published.
+        """
         real = home / "cache" / "1.0.0"
         real.mkdir(parents=True)
         _write_registry(home, real)
-        checks = _checks(home)
-        assert "installed_plugins_install_path" in checks
-        assert "installed_plugin_registry_missing" in checks
+        assert "generation_store_missing" in _checks(home)
 
     def test_current_spec_uses_fresh_metadata_and_live_obligation(
         self,
@@ -390,22 +473,39 @@ class TestDoctorReportsTheBrokenState:
         assert _check_plugin_cache_integrity().severity is not Severity.OK
 
     def test_install_state_check_surfaces_every_finding(self, home: Path) -> None:
+        """Doctor surfaces findings from more than one check, not just the first.
+
+        Combines a registry obligation with nothing published (generation
+        store) and a leftover legacy Claude-cache directory (retired
+        artifact shape) — two independent invariants — to prove neither
+        check silently suppresses the other.
+        """
         from autoskillit.cli.doctor._doctor_mcp import _check_install_state_consistency
 
         _write_registry(home, home / "gone")
+        legacy_cache = home / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
+        legacy_cache.mkdir(parents=True)
+        (legacy_cache / "marker.txt").write_text("leftover", encoding="utf-8")
+
         results = _check_install_state_consistency()
         assert results
         assert all(r.severity is Severity.ERROR for r in results)
         assert {result.check for result in results} >= {
-            "install_state:installed_plugins_install_path",
-            "install_state:installed_plugin_registry_missing",
+            "install_state:generation_store_missing",
+            "install_state:retired_install_artifact_shape",
         }
 
-    def test_install_state_check_names_fresh_current_root(
+    def test_install_state_check_uses_fresh_version_not_stale_cache(
         self,
         home: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        """The obligation check names the freshly-read package version.
+
+        The observed machine had package metadata drift from cached snapshots
+        of the version string; the check must compare against a live
+        ``importlib.metadata.version()`` read, never a stale cached one.
+        """
         import autoskillit.workspace._install_state as install_state
         from autoskillit.cli.doctor._doctor_mcp import _check_install_state_consistency
 
@@ -418,16 +518,7 @@ class TestDoctorReportsTheBrokenState:
         _write_registry(home, home / "cache" / "older")
 
         results = _check_install_state_consistency()
-        expected_root = (
-            home
-            / ".claude"
-            / "plugins"
-            / "cache"
-            / "autoskillit-local"
-            / "autoskillit"
-            / fresh_version
-        )
-        assert any(str(expected_root) in result.message for result in results)
+        assert any(fresh_version in result.message for result in results)
 
     def test_install_state_check_is_ok_on_a_clean_machine(self, home: Path) -> None:
         from autoskillit.cli.doctor._doctor_mcp import _check_install_state_consistency

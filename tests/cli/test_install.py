@@ -5,10 +5,9 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
-import shutil
 import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -84,28 +83,6 @@ class TestCLIInstall:
         assert result.outcome is InstallOutcome.FAILED
         assert result.failure_kind is InstallFailureKind.PREFLIGHT
         assert "Invalid scope" in result.findings[0]
-
-    def test_install_errors_without_claude(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """install returns manual instructions when claude is not on PATH."""
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(shutil, "which", lambda _cmd, *, path=None: None)
-        monkeypatch.delenv("CLAUDECODE", raising=False)
-        import importlib as _importlib
-
-        _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
-        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        from autoskillit.cli._install_contract import InstallFailureKind, InstallOutcome
-        from autoskillit.cli._marketplace import install
-
-        result = install(request=_direct_request())
-        assert result.outcome is InstallOutcome.FAILED
-        assert result.failure_kind is InstallFailureKind.PREFLIGHT
-        assert "claude plugin marketplace add" in result.findings[0]
-        assert "claude plugin install" in result.findings[0]
 
     def test_install_creates_marketplace_dir(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -242,72 +219,95 @@ class TestCLIInstall:
         assert data["plugins"][0]["name"] == "autoskillit"
         assert data["plugins"][0]["source"] == "./plugins/autoskillit"
 
-    @patch("autoskillit.cli._marketplace.subprocess.run")
-    def test_install_calls_claude_cli(
-        self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    def test_install_publishes_plugin_generation(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """install calls claude plugin marketplace add + claude plugin install."""
+        """install() stages and publishes the plugin content into the generation store."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(shutil, "which", lambda _cmd, *, path=None: "/usr/bin/claude")
         monkeypatch.delenv("CLAUDECODE", raising=False)
         import importlib as _importlib
 
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        mock_run.side_effect = _successful_claude_run(tmp_path)
+        from autoskillit.cli._install_contract import InstallOutcome
         from autoskillit.cli._marketplace import install
 
-        install(request=_direct_request())
+        result = install(request=_direct_request())
 
-        assert mock_run.call_count == 2
-        marketplace_call = mock_run.call_args_list[0]
-        install_call = mock_run.call_args_list[1]
-        assert "marketplace" in marketplace_call[0][0]
-        assert "add" in marketplace_call[0][0]
-        assert "install" in install_call[0][0]
-        assert "autoskillit@autoskillit-local" in install_call[0][0]
-        assert "--scope" in install_call[0][0]
-        assert "user" in install_call[0][0]
-        from autoskillit.cli._plugin_artifact import (
-            current_installed_plugin_root,
+        assert result.outcome is InstallOutcome.COMPLETED
+        assert result.verified_identity == f"autoskillit@autoskillit-local:{__version__}"
+
+        from autoskillit.core import (
             installed_plugin_artifact_manifest_path,
+            read_installed_plugin_artifact_identity,
+            resolve_current_generation,
         )
 
-        installed_root = current_installed_plugin_root()
-        artifact_manifest = json.loads(
-            installed_plugin_artifact_manifest_path(installed_root).read_text()
+        generation_root = resolve_current_generation(
+            tmp_path, "autoskillit@autoskillit-local", __version__
         )
-        assert artifact_manifest["artifact_kind"] == "installed_plugin"
-        assert artifact_manifest["managed_path"] == str(installed_root)
-        assert artifact_manifest["manifest_path"] == str(
-            installed_plugin_artifact_manifest_path(installed_root)
+        assert generation_root is not None
+        identity = read_installed_plugin_artifact_identity(
+            generation_root,
+            expected_semantic_key=result.verified_identity,
+            manifest_path=installed_plugin_artifact_manifest_path(generation_root),
         )
+        assert identity.semantic_key == result.verified_identity
+        assert (generation_root / ".claude-plugin" / "plugin.json").is_file()
 
-    @patch("autoskillit.cli._marketplace.subprocess.run")
-    def test_install_passes_scope_to_claude(
-        self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    def test_install_scope_selects_settings_path_for_hook_eviction(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """install forwards the scope argument to claude plugin install."""
+        """install() forwards scope into the settings path used for hook eviction."""
         import importlib as _importlib
 
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
 
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(shutil, "which", lambda _cmd, *, path=None: "/usr/bin/claude")
+        home = tmp_path / "home"
+        project = tmp_path / "project"
+        home.mkdir()
+        project.mkdir()
+
+        project_settings = project / ".claude" / "settings.json"
+        project_settings.parent.mkdir(parents=True)
+        project_settings.write_text(
+            json.dumps(
+                {
+                    "hooks": {
+                        "PostToolUse": [
+                            {
+                                "matcher": "mcp__.*autoskillit.*",
+                                "hooks": [
+                                    {
+                                        "type": "command",
+                                        "command": "python3 /stale/autoskillit_hook.py",
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                }
+            )
+        )
+
+        monkeypatch.setattr(Path, "home", lambda: home)
+        monkeypatch.setattr(Path, "cwd", lambda: project)
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        mock_run.side_effect = _successful_claude_run(tmp_path)
         from autoskillit.cli._marketplace import install
 
         install(request=_direct_request("project"))
 
-        install_call = mock_run.call_args_list[1][0][0]
-        scope_idx = install_call.index("--scope")
-        assert install_call[scope_idx + 1] == "project"
+        data = json.loads(project_settings.read_text())
+        for event_hooks in data.get("hooks", {}).values():
+            for entry in event_hooks:
+                for hook in entry.get("hooks", []):
+                    assert "autoskillit" not in hook["command"], (
+                        "install() must evict stale hooks from the scope-selected settings file"
+                    )
 
-    @patch("autoskillit.cli._marketplace.subprocess.run")
     def test_install_idempotent_marketplace(
-        self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Running install twice recreates the sanitized projection without error."""
         import importlib as _importlib
@@ -315,10 +315,8 @@ class TestCLIInstall:
         _app_mod = _importlib.import_module("autoskillit.cli._marketplace")
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(shutil, "which", lambda _cmd, *, path=None: "/usr/bin/claude")
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        mock_run.side_effect = _successful_claude_run(tmp_path)
         from autoskillit.cli._marketplace import install
 
         install(request=_direct_request())
@@ -335,7 +333,6 @@ class TestCLIInstall:
         tmp_path: Path,
     ) -> None:
         """install() returns a declined result when capability is false."""
-        from unittest.mock import MagicMock
 
         from autoskillit.config import AgentBackendConfig, AutomationConfig
 
@@ -368,17 +365,9 @@ class TestCLIInstall:
         monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
         monkeypatch.setattr(Path, "cwd", staticmethod(lambda: tmp_path))
         monkeypatch.delenv("CLAUDECODE", raising=False)
-        monkeypatch.setattr("shutil.which", lambda _cmd, *, path=None: "/usr/bin/claude")
 
         _app_mod = importlib.import_module("autoskillit.cli._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-
-        # Patch subprocess to prevent actual CLI call, verify we got past the guard
-        called = []
-        monkeypatch.setattr(
-            "subprocess.run",
-            lambda *a, **kw: (called.append(a), _successful_claude_run(tmp_path)(*a, **kw))[1],
-        )
         monkeypatch.setattr(_app_mod, "evict_direct_mcp_entry", lambda _: False)
         monkeypatch.setattr(
             "autoskillit.cli._hooks._evict_stale_autoskillit_hooks", lambda _: None
@@ -391,8 +380,7 @@ class TestCLIInstall:
 
         from autoskillit.cli._install_contract import InstallOutcome
 
-        assert result.outcome is InstallOutcome.COMPLETED
-        assert len(called) >= 1  # subprocess was invoked (past the guard)
+        assert result.outcome is InstallOutcome.COMPLETED  # transaction ran past the guard
 
     def test_install_backend_guard_no_new_module_level_imports(self) -> None:
         """Verify load_config is NOT at module level in _marketplace.py."""
@@ -415,9 +403,8 @@ class TestCLIInstall:
                         "load_config must be a deferred import inside install(), not module-level"
                     )
 
-    @patch("autoskillit.cli._marketplace.subprocess.run")
     def test_install_evicts_stale_direct_mcp_entry(
-        self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """install() must remove a stale mcpServers.autoskillit entry left by a prior init."""
         import importlib as _importlib
@@ -436,10 +423,8 @@ class TestCLIInstall:
             )
         )
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(shutil, "which", lambda _cmd, *, path=None: "/usr/bin/claude")
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
-        mock_run.side_effect = _successful_claude_run(tmp_path)
         from autoskillit.cli._marketplace import install
 
         install(request=_direct_request())
@@ -868,81 +853,6 @@ class TestGroupFInstall:
             f"Expected exactly 1 remove_clone hook entry, got {len(remove_clone_1)}"
         )
         assert remove_clone_1 == remove_clone_2
-
-
-def test_clear_plugin_cache_drops_plugins_entry(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """_clear_plugin_cache retires old version dirs AND drops the plugins entry.
-
-    Deliberately inverted from the previous expectation. Retiring a cache
-    directory while leaving installed_plugins.json naming it is precisely how a
-    dangling registry pointer is manufactured — the sweeper deletes the
-    directory hours later and the next `cook` crashes on a path that no longer
-    exists. `claude plugin install` rewrites the entry moments later, and
-    install() restores the previous file verbatim if that step fails, so the
-    pair is atomic from the caller's point of view.
-
-    Old version directories still survive under the grace period.
-    """
-    from autoskillit.cli._marketplace import _clear_plugin_cache
-    from autoskillit.cli._plugin_artifact import publish_installed_plugin_artifact
-    from autoskillit.core import PluginArtifactKind, read_retiring_cache
-
-    plugins_dir = tmp_path / ".claude" / "plugins"
-    plugins_dir.mkdir(parents=True)
-    installed_json = plugins_dir / "installed_plugins.json"
-    installed_json.write_text(
-        json.dumps(
-            {
-                "version": 2,
-                "plugins": {"autoskillit@autoskillit-local": {"name": "autoskillit"}},
-            }
-        )
-    )
-    # Simulate an old version directory in the plugin cache
-    cache_dir = tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
-    old_version_dir = cache_dir / "0.9.0"
-    old_version_dir.mkdir(parents=True)
-    (old_version_dir / "plugin.json").write_text('{"name":"autoskillit"}')
-    # Ensure the running __version__ differs from "0.9.0" so retirement applies
-    import autoskillit as _pkg
-
-    monkeypatch.setattr(_pkg, "__version__", "0.9.99-test")
-
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    old_identity = publish_installed_plugin_artifact(
-        old_version_dir,
-        semantic_key="autoskillit@autoskillit-local:0.9.0",
-    )
-    _clear_plugin_cache()
-
-    data = json.loads(installed_json.read_text())
-    assert "autoskillit@autoskillit-local" not in data.get("plugins", {})
-    assert data["version"] == 2
-    # Old version dir survives under grace period
-    assert old_version_dir.exists(), "Old version dir must survive under grace period"
-    # Retiring registry must record the old version
-    retiring = read_retiring_cache()
-    assert len(retiring.records) == 1
-    assert retiring.records[0].artifact_kind is PluginArtifactKind.INSTALLED_PLUGIN
-    assert retiring.records[0].identity == old_identity
-
-
-def test_clear_plugin_cache_noop_when_entry_absent(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """_clear_plugin_cache must not raise when the entry is already absent."""
-    from autoskillit.cli._marketplace import _clear_plugin_cache
-
-    plugins_dir = tmp_path / ".claude" / "plugins"
-    plugins_dir.mkdir(parents=True)
-    installed_json = plugins_dir / "installed_plugins.json"
-    installed_json.write_text(json.dumps({"version": 2, "plugins": {}}))
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    _clear_plugin_cache()  # must not raise
-    data = json.loads(installed_json.read_text())
-    assert data == {"version": 2, "plugins": {}}
 
 
 def test_install_claudecode_guard_returns_deferred_result(

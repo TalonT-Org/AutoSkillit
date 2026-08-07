@@ -201,13 +201,18 @@ class TestCLIDoctor:
         (tmp_path / ".pre-commit-config.yaml").write_text(
             "repos:\n  - repo: dummy\n    hooks:\n      - id: gitleaks\n"
         )
-        # Create the plugin cache directory for Check 2c.
-        _cache_dir = (
-            tmp_path / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
-        )
-        _cache_dir.mkdir(parents=True, exist_ok=True)
+        # Note: the legacy Claude-cache plugin directory
+        # (.claude/plugins/cache/autoskillit-local/autoskillit) is deliberately
+        # NOT created here — that shape was retired in 0.10.933 in favor of
+        # generation-keyed publication under ~/.autoskillit/plugin-generations/,
+        # and verify_install_state() now flags a bare directory there as
+        # retired_install_artifact_shape. plugin_cache_exists (Check 2c) is
+        # skipped for LOCAL_EDITABLE dev installs regardless, which this test
+        # runs under.
         # Create installed_plugins.json for Check 2d
-        (tmp_path / ".claude" / "plugins" / "installed_plugins.json").write_text(
+        plugins_dir = tmp_path / ".claude" / "plugins"
+        plugins_dir.mkdir(parents=True, exist_ok=True)
+        (plugins_dir / "installed_plugins.json").write_text(
             json.dumps({"version": 2, "plugins": {"autoskillit@autoskillit-local": {}}})
         )
         # Register hooks so hook_registration check passes
@@ -240,14 +245,25 @@ class TestCLIDoctor:
             "autoskillit.cli.doctor._check_install_classification",
             lambda: DoctorResult(Severity.OK, "install_classification", "stubbed"),
         )
+        # plugin_cache_integrity unconditionally warns when the legacy
+        # Claude-cache directory is absent, regardless of install type — unlike
+        # plugin_cache_exists, it has no editable-install skip. This test
+        # deliberately does not create that retired directory shape (see note
+        # above), so stub the check the same way the other unrelated checks
+        # above are stubbed.
+        monkeypatch.setattr(
+            "autoskillit.cli.doctor._check_plugin_cache_integrity",
+            lambda: DoctorResult(Severity.OK, "plugin_cache_integrity", "stubbed"),
+        )
         local_bin = str(tmp_path / ".local" / "bin" / "autoskillit")
+        _real_which = shutil.which
         with (
             patch(
                 "autoskillit.cli.shutil.which",
-                side_effect=lambda cmd: (
+                side_effect=lambda cmd, path=None: (
                     local_bin
                     if cmd == "autoskillit"
-                    else (local_bin if cmd == "claude" else shutil.which(cmd))
+                    else (local_bin if cmd == "claude" else _real_which(cmd, path=path))
                 ),
             ),
             patch(

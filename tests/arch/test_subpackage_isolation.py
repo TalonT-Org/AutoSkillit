@@ -78,6 +78,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "settings",  # config/settings.py: _CONFIG_SCHEMA = _build_config_schema()
         "_headless_path_tokens",  # execution/_headless_path_tokens.py: _OUTPUT_PATH_TOKENS
         "_probe_cache",  # execution/backends/_probe_cache.py: PROBE_CACHE_TTL = timedelta(...)
+        # _STAGING_ORPHAN_GRACE = timedelta(hours=1)
+        "_generation_publication",
         # _STABLE_DISMISS_WINDOW = timedelta(days=7), _DEV_DISMISS_WINDOW = timedelta(hours=12)
         "_install_info",  # cli/_install_info.py: window constants (see comment above)
         # KITCHEN_GUARDED_COMMANDS: frozenset[str]

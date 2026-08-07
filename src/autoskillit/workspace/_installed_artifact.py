@@ -54,12 +54,23 @@ def write_installed_plugin_artifact_manifest_locked(
     *,
     semantic_key: str,
     action: str,
+    incarnation_id: str | None = None,
 ) -> PluginArtifactIdentity:
-    """Persist a fresh identity while the caller owns the publication lease."""
+    """Persist a fresh identity while the caller owns the publication lease.
+
+    When ``incarnation_id`` is supplied, that value is used verbatim (the
+    caller has already minted it at staging time and threaded it through the
+    staging directory name, retirement records, and lifecycle logging).
+    When ``None`` (the default, backward-compatible path), a fresh uuid4
+    hex is minted internally.
+    """
     manifest_path = installed_plugin_artifact_manifest_path(managed_path)
+    resolved_incarnation = (
+        incarnation_id if incarnation_id is not None else new_plugin_artifact_incarnation_id()
+    )
     identity = PluginArtifactIdentity(
         semantic_key=semantic_key,
-        incarnation_id=new_plugin_artifact_incarnation_id(),
+        incarnation_id=resolved_incarnation,
         manifest_schema_version=INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
         artifact_digest=_complete_tree_digest(managed_path),
         managed_path=managed_path,

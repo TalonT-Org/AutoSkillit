@@ -39,6 +39,39 @@ from autoskillit.workspace._installed_artifact import (
 
 logger = get_logger(__name__)
 
+_STAGING_ORPHAN_GRACE = timedelta(hours=1)
+
+
+def _sweep_orphaned_staging(version_root: Path) -> None:
+    """Remove staging directories abandoned by a crashed ``publish_generation`` call.
+
+    A crash between staging and the atomic flip leaves a
+    ``.{incarnation_id}.staging-*`` directory that was never selected. Only
+    directories older than the grace window are removed, so a staging
+    directory belonging to a concurrent in-flight publish is never touched.
+    """
+    if not version_root.is_dir():
+        return
+    threshold = datetime.now(UTC) - _STAGING_ORPHAN_GRACE
+    for entry in version_root.iterdir():
+        if not entry.is_dir() or entry.is_symlink() or ".staging-" not in entry.name:
+            continue
+        try:
+            mtime = datetime.fromtimestamp(entry.stat().st_mtime, tz=UTC)
+        except OSError:
+            continue
+        if mtime >= threshold:
+            continue
+        try:
+            shutil.rmtree(entry)
+            logger.info("generation_orphan_staging_removed: %s", entry)
+        except OSError as exc:
+            logger.warning(
+                "generation_orphan_staging_removal_failed: %s: %s",
+                entry,
+                exc,
+            )
+
 
 def _fsync_directory(path: Path) -> None:
     """Fsync a directory for durability after renames."""
@@ -98,6 +131,7 @@ def publish_generation(
     selector = generation_selector_path(home, plugin_ref, version)
 
     version_root.mkdir(parents=True, exist_ok=True)
+    _sweep_orphaned_staging(version_root)
 
     # Stage: copy source into the generation directory
     staging = Path(
@@ -174,7 +208,7 @@ def publish_generation(
 
     # Enqueue prior generation for retirement (Phase 4.6)
     if prior_target is not None:
-        _enqueue_prior_generation(prior_target, version_root)
+        _enqueue_prior_generation(prior_target, version_root, home, plugin_ref, version)
 
     return PluginArtifactIdentity(
         semantic_key=semantic_key,
@@ -186,7 +220,13 @@ def publish_generation(
     )
 
 
-def _enqueue_prior_generation(prior_target: Path, version_root: Path) -> None:
+def _enqueue_prior_generation(
+    prior_target: Path,
+    version_root: Path,
+    home: Path,
+    plugin_ref: str,
+    version: str,
+) -> None:
     """Enqueue a superseded generation into the retirement engine.
 
     Best-effort: failure to enqueue is logged but does not fail the
@@ -216,6 +256,7 @@ def _enqueue_prior_generation(prior_target: Path, version_root: Path) -> None:
             manifest_path=installed_plugin_artifact_manifest_path(record.managed_path),
         ),
         logger=logger,
+        is_current=lambda path: path == resolve_current_generation(home, plugin_ref, version),
     )
     deadline = datetime.now(UTC) + timedelta(hours=6)
     try:

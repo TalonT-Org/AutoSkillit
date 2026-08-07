@@ -2877,6 +2877,7 @@ callable_contracts:
       allowed_values:
       - within_budget
       - over_budget
+      - error
     - name: added_lines
       type: str
     - name: changed_files

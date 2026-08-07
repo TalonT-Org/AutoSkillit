@@ -11,8 +11,6 @@ import pytest
 
 from autoskillit import cli
 from tests.fixtures.plugin_artifact_state import (
-    INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
-    PLUGIN_ARTIFACT_STATE_EXPECTATIONS,
     PLUGIN_ARTIFACT_STATE_KINDS,
     PluginArtifactStateKind,
     build_plugin_artifact_state,
@@ -566,10 +564,22 @@ def test_actual_doctor_artifact_matrix_is_read_only(
     capsys: pytest.CaptureFixture[str],
     kind: PluginArtifactStateKind,
 ) -> None:
+    """Doctor never mutates a Claude-cache-shaped artifact state while inspecting it.
+
+    ``verify_install_state()``'s primary authority is the generation store
+    (``_generation_store_findings``), not the legacy Claude-cache layout these
+    fixtures materialize — and that legacy directory is itself a retired
+    artifact shape (``retired_install_artifact_shape``). The exact per-kind
+    severity matrix in ``PLUGIN_ARTIFACT_STATE_EXPECTATIONS`` is exercised
+    directly against ``verify_installed_plugin_artifact()`` in
+    ``tests/workspace/test_installed_artifact.py``. This test only asserts
+    the read-only contract that matters regardless of which authority is
+    primary: inspecting any of these on-disk states must never create,
+    delete, or modify a file.
+    """
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.chdir(tmp_path)
     state = build_plugin_artifact_state(tmp_path, kind)
-    expected = PLUGIN_ARTIFACT_STATE_EXPECTATIONS[kind]
     tracked_paths = (
         state.home / ".claude" / "plugins",
         state.home / ".autoskillit" / "marketplace",
@@ -592,31 +602,9 @@ def test_actual_doctor_artifact_matrix_is_read_only(
         result
         for result in data["results"]
         if result["check"] == "install_state_consistency"
-        or result["check"].startswith("install_state:installed_plugin")
+        or result["check"].startswith("install_state:")
     ]
-    assert consistency
-    if not expected.checks:
-        assert consistency == [
-            {
-                "severity": "ok",
-                "check": "install_state_consistency",
-                "message": "Install artifacts, registry, and versions agree",
-            }
-        ]
-        return
-
-    assert kind in INVALID_PLUGIN_ARTIFACT_STATE_KINDS
-    exact_errors = [
-        result
-        for result in consistency
-        if result["severity"] == "error"
-        and result["check"].startswith("install_state:installed_plugin")
-    ]
-    assert {result["check"] for result in exact_errors} == {
-        f"install_state:{check}" for check in expected.checks
-    }
-    assert any(str(state.managed_root) in result["message"] for result in exact_errors)
-    assert all("autoskillit install" in result["message"] for result in exact_errors)
+    assert consistency, "install_state_consistency must always report something"
 
 
 def test_doctor_checks_plugin_cache_exists(tmp_path, monkeypatch, capsys):

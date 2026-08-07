@@ -15,9 +15,9 @@ from autoskillit.cli.session._session_launch import (
     render_skill_contract_composition_failure,
 )
 from autoskillit.core import (
-    SkillContractError,
     PluginLaunchBinding,
     PluginLoadMode,
+    SkillContractError,
     is_feature_enabled,
     plugin_launch_binding_scope,
     resolve_project_dir,

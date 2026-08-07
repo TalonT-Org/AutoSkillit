@@ -413,7 +413,12 @@ def test_ledger_rejects_invalid_outcome_projection_combinations(
         replace(record, **changes)
 
 
-def _open_store(project: Path, clock: _Clock):
+def _open_store(
+    project: Path,
+    clock: _Clock,
+    *,
+    capacity: CaptureCapacitySpec | None = None,
+):
     project.mkdir(exist_ok=True)
     anchor = open_project_anchor(str(project))
     try:
@@ -426,6 +431,7 @@ def _open_store(project: Path, clock: _Clock):
         root,
         wall_clock=clock.wall,
         monotonic=clock.monotonic,
+        capacity=capacity,
     )
     return anchor, root, store
 
@@ -731,19 +737,19 @@ def test_legacy_migration_retires_until_reduced_publication_capacity_fits(
         project_identity=project_identity,
         root_identity=root_identity,
         wall_clock=lambda: 3_000_000.0,
+        capacity=CaptureCapacitySpec(
+            max_operational_records=8,
+            max_retained_records=8,
+            max_evidence_records=8,
+            max_tombstones=1,
+            compaction_low_bytes=low,
+            compaction_high_bytes=high,
+            hard_ledger_bytes=high + 5120,
+            cursor_headroom_bytes=1024,
+            tamper_headroom_bytes=1024,
+            reclamation_headroom_bytes=1024,
+        ),
         _factory_token=capture_lifecycle._STORE_FACTORY_TOKEN,
-    )
-    store._capacity = CaptureCapacitySpec(
-        max_operational_records=8,
-        max_retained_records=8,
-        max_evidence_records=8,
-        max_tombstones=1,
-        compaction_low_bytes=low,
-        compaction_high_bytes=high,
-        hard_ledger_bytes=high + 5120,
-        cursor_headroom_bytes=1024,
-        tamper_headroom_bytes=1024,
-        reclamation_headroom_bytes=1024,
     )
     ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
     ledger.write_bytes(b"".join(frames))
@@ -3612,6 +3618,7 @@ def test_reconcile_adapter_preserves_runtime_failure_reason(
         (CaptureFailureReason.MIGRATION_BLOCKED, CleanupBlocker.MIGRATION_BLOCKED),
         (CaptureFailureReason.FILESYSTEM_AUTHORITY, CleanupBlocker.FILESYSTEM_AUTHORITY),
         (CaptureFailureReason.RECOVERY_CONTENDED, CleanupBlocker.FILESYSTEM_AUTHORITY),
+        (CaptureFailureReason.SNAPSHOT_INTEGRITY, CleanupBlocker.LEDGER_INTEGRITY),
         (CaptureFailureReason.UNKNOWN_SETUP, CleanupBlocker.FILESYSTEM_AUTHORITY),
     ),
 )
@@ -3679,12 +3686,15 @@ def test_active_record_bound_preserves_valid_ledger(
 def test_evidence_capacity_counts_operational_and_forensic_records(tmp_path: Path) -> None:
     project = tmp_path / "project"
     clock = _Clock()
-    anchor, root, store = _open_store(project, clock)
-    store._capacity = replace(
-        CaptureCapacitySpec(),
-        max_operational_records=2,
-        max_retained_records=2,
-        max_evidence_records=2,
+    anchor, root, store = _open_store(
+        project,
+        clock,
+        capacity=replace(
+            CaptureCapacitySpec(),
+            max_operational_records=2,
+            max_retained_records=2,
+            max_evidence_records=2,
+        ),
     )
     first = store.reserve_capture(_CAPTURE_ID)
     store._transition(
@@ -3712,12 +3722,15 @@ def test_evidence_capacity_counts_operational_and_forensic_records(tmp_path: Pat
 def test_retention_occupancy_has_distinct_capacity_reason(tmp_path: Path) -> None:
     project = tmp_path / "project"
     clock = _Clock()
-    anchor, root, store = _open_store(project, clock)
-    store._capacity = replace(
-        CaptureCapacitySpec(),
-        max_operational_records=2,
-        max_retained_records=1,
-        max_evidence_records=3,
+    anchor, root, store = _open_store(
+        project,
+        clock,
+        capacity=replace(
+            CaptureCapacitySpec(),
+            max_operational_records=2,
+            max_retained_records=1,
+            max_evidence_records=3,
+        ),
     )
     try:
         store.reserve_capture(_CAPTURE_ID)
@@ -3738,17 +3751,23 @@ def test_projected_compacted_bytes_preserve_recovery_headroom(tmp_path: Path) ->
         store.reserve_capture(_CAPTURE_ID)
         valid = ledger.read_bytes()
         hard_bound = len(valid) * 2
-        store._capacity = CaptureCapacitySpec(
-            max_operational_records=8,
-            max_retained_records=8,
-            max_evidence_records=8,
-            max_tombstones=2,
-            compaction_low_bytes=hard_bound // 3,
-            compaction_high_bytes=hard_bound // 2,
-            hard_ledger_bytes=hard_bound,
-            cursor_headroom_bytes=32,
-            tamper_headroom_bytes=32,
-            reclamation_headroom_bytes=32,
+        store = CaptureLifecycleStore.from_open_authorities(
+            anchor,
+            root,
+            wall_clock=clock.wall,
+            monotonic=clock.monotonic,
+            capacity=CaptureCapacitySpec(
+                max_operational_records=8,
+                max_retained_records=8,
+                max_evidence_records=8,
+                max_tombstones=2,
+                compaction_low_bytes=hard_bound // 3,
+                compaction_high_bytes=hard_bound // 2,
+                hard_ledger_bytes=hard_bound,
+                cursor_headroom_bytes=32,
+                tamper_headroom_bytes=32,
+                reclamation_headroom_bytes=32,
+            ),
         )
         with pytest.raises(CaptureCapacityError) as failure:
             store.reserve_capture("1" * 16)
@@ -3780,17 +3799,23 @@ def test_recovery_transition_compacts_within_reserved_headroom(
             candidate.compaction_epoch + 1,
             store._capacity,
         )
-        store._capacity = CaptureCapacitySpec(
-            max_operational_records=8,
-            max_retained_records=8,
-            max_evidence_records=8,
-            max_tombstones=2,
-            compaction_low_bytes=encoded - 4,
-            compaction_high_bytes=encoded - 3,
-            hard_ledger_bytes=encoded,
-            cursor_headroom_bytes=1,
-            tamper_headroom_bytes=1,
-            reclamation_headroom_bytes=1,
+        store = CaptureLifecycleStore.from_open_authorities(
+            anchor,
+            root,
+            wall_clock=clock.wall,
+            monotonic=clock.monotonic,
+            capacity=CaptureCapacitySpec(
+                max_operational_records=8,
+                max_retained_records=8,
+                max_evidence_records=8,
+                max_tombstones=2,
+                compaction_low_bytes=encoded - 4,
+                compaction_high_bytes=encoded - 3,
+                hard_ledger_bytes=encoded,
+                cursor_headroom_bytes=1,
+                tamper_headroom_bytes=1,
+                reclamation_headroom_bytes=1,
+            ),
         )
         monkeypatch.setattr(capture_lifecycle, "_COMPACTION_THRESHOLD_BYTES", 1)
 

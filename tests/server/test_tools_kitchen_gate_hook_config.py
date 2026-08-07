@@ -152,6 +152,7 @@ async def test_open_kitchen_bridges_output_budget_policy(
     mock_ctx.config.output_budget = OutputBudgetConfig(
         guard_enabled=guard_enabled,
         shell_max_inline_bytes=8765,
+        capture_capacity={"max_operational_records": 2048},
     )
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
@@ -167,6 +168,7 @@ async def test_open_kitchen_bridges_output_budget_policy(
     assert data["output_budget_policy"] == {
         "disabled": expected_disabled,
         "shell_max_inline_bytes": 8765,
+        "capture_capacity": {"max_operational_records": 2048},
     }
 
 

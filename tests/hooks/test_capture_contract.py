@@ -583,6 +583,7 @@ def test_v3_failure_reason_values_remain_uppercase_and_pinned() -> None:
         "PERMISSION_DENIED": "PERMISSION_DENIED",
         "FILESYSTEM_IO": "FILESYSTEM_IO",
         "RECOVERY_CONTENDED": "RECOVERY_CONTENDED",
+        "SNAPSHOT_INTEGRITY": "SNAPSHOT_INTEGRITY",
         "UNKNOWN_SETUP": "UNKNOWN_SETUP",
     }
 

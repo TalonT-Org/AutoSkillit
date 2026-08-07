@@ -217,6 +217,7 @@ def test_output_budget_policy_serializer_matches_stdlib_bridge_keys():
         OutputBudgetConfig(
             guard_enabled=False,
             shell_max_inline_bytes=654,
+            capture_capacity={"max_operational_records": 2048},
         )
     )
 
@@ -224,6 +225,7 @@ def test_output_budget_policy_serializer_matches_stdlib_bridge_keys():
     assert payload == {
         "disabled": True,
         "shell_max_inline_bytes": 654,
+        "capture_capacity": {"max_operational_records": 2048},
     }
 
 

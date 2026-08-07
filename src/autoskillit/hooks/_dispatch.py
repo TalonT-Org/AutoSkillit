@@ -6,6 +6,7 @@ Its path stability is a contract: renaming it would break in-flight sessions.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -49,11 +50,15 @@ def main() -> None:
 
     stdin_data = sys.stdin.buffer.read()
 
+    env = dict(os.environ)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+
     try:
         result = subprocess.run(
-            [sys.executable, str(target)],
+            [sys.executable, "-B", str(target)],
             input=stdin_data,
             capture_output=False,
+            env=env,
         )
     except OSError as exc:
         print(

@@ -67,7 +67,7 @@ def _build_codex_hook_command(hooks_dir: Path, script: str, timeout_seconds: int
     script_hash = hashlib.sha256(dispatch_path.read_bytes()).hexdigest()
     cmd: dict = {
         "type": "command",
-        "command": f"python3 {dispatch_path} {logical_name}",
+        "command": f"python3 -B {dispatch_path} {logical_name}",
         "trusted_hash": script_hash,
     }
     if timeout_seconds is not None:

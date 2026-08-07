@@ -816,7 +816,7 @@ def _build_hook_command(
     else:
         if hooks_dir is None:
             raise ValueError("hooks_dir is required when relocatable=False")
-        command = f"python3 {hooks_dir / '_dispatch.py'} {logical_name}"
+        command = f"python3 -B {hooks_dir / '_dispatch.py'} {logical_name}"
     cmd: dict = {
         "type": "command",
         "command": command,
@@ -837,7 +837,7 @@ def render_relocatable_hook_command(logical_name: str) -> str:
         _LOGICAL_HOOK_COMPONENT.fullmatch(component) is None for component in components
     ):
         raise ValueError(f"invalid logical hook name: {logical_name!r}")
-    return f'python3 "{PLUGIN_ROOT_TOKEN}/hooks/_dispatch.py" {shlex.quote(logical_name)}'
+    return f'python3 -B "{PLUGIN_ROOT_TOKEN}/hooks/_dispatch.py" {shlex.quote(logical_name)}'
 
 
 def generate_hooks_json(

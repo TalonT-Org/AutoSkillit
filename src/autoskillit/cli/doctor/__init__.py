@@ -61,7 +61,6 @@ from ._doctor_mcp import (
     _check_plugin_cache_integrity,
     _check_stale_mcp_servers,
 )
-from ._doctor_output import _format_results
 from ._doctor_runtime import (
     _check_backend_version,
     _check_claude_binary,
@@ -78,7 +77,8 @@ from ._doctor_skills import (
     _check_project_local_skill_contracts,
     _check_skill_capability_authenticity,
 )
-from ._doctor_types import DoctorResult
+from ._doctor_types import _NON_PROBLEM as _NON_PROBLEM
+from ._doctor_types import DoctorResult, _format_results
 
 logger = get_logger(__name__)
 

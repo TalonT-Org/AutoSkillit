@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
+from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Protocol, runtime_checkable
 
 from ._type_backend import (
@@ -20,6 +22,8 @@ from ._type_backend import (
 )
 from ._type_checkpoint import SessionCheckpoint
 from ._type_enums import ObserverStatus, OutputFormat
+from ._type_execution_identity import ExecutionIdentity
+from ._type_exploration import ExplorationRouterPlan
 from ._type_native_shell_capture import (
     ManagedHeadlessSessionLineageRef,
     NativeShellCaptureDecision,
@@ -27,6 +31,7 @@ from ._type_native_shell_capture import (
 from ._type_plugin_source import PluginLaunchBinding
 from ._type_results import ValidatedAddDir
 from ._type_resume import NoResume, ResumeSpec
+from ._type_skill_contract import ExplorationVectorDef
 from ._type_skill_semantics import SkillSemanticAdaptationResult, SkillSemanticPlan
 
 __all__ = [
@@ -35,8 +40,72 @@ __all__ = [
     "EnvPolicy",
     "ReadinessProbe",
     "SessionLocator",
+    "ExplorationDispatchConventions",
+    "ExplorationDispatchMaterialization",
+    "ExplorationDispatchRenderer",
     "CodingAgentBackend",
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class ExplorationDispatchConventions:
+    """Backend-native call vocabulary used only after backend resolution."""
+
+    launcher: str
+    role_argument: str
+    message_argument: str
+    role_prefix: str = ""
+    description_argument: str | None = None
+
+    def __post_init__(self) -> None:
+        values = (self.launcher, self.role_argument, self.message_argument)
+        if any(not value or not value.isidentifier() for value in values):
+            raise ValueError("exploration dispatch call identifiers must be valid")
+        if self.description_argument is not None and (
+            not self.description_argument or not self.description_argument.isidentifier()
+        ):
+            raise ValueError("exploration dispatch description argument must be valid")
+
+
+@dataclass(frozen=True, slots=True)
+class ExplorationDispatchMaterialization:
+    """Native marker replacements bound to neutral and role-definition identity."""
+
+    replacements: Mapping[str, str]
+    router_plan_digest: str
+    role_definition_digests: Mapping[str, str]
+    preamble: str
+    launch_context_ref: str | None = field(default=None, compare=False)
+
+    def __post_init__(self) -> None:
+        if not self.router_plan_digest:
+            raise ValueError("exploration dispatch requires a router-plan digest")
+        if not self.replacements:
+            raise ValueError("exploration dispatch requires marker replacements")
+        if set(self.replacements) != set(self.role_definition_digests):
+            raise ValueError("every exploration replacement requires a role-definition digest")
+        object.__setattr__(self, "replacements", MappingProxyType(dict(self.replacements)))
+        object.__setattr__(
+            self,
+            "role_definition_digests",
+            MappingProxyType(dict(self.role_definition_digests)),
+        )
+
+
+@runtime_checkable
+class ExplorationDispatchRenderer(Protocol):
+    """Backend-owned materializer for one canonical exploration router plan."""
+
+    @property
+    def conventions(self) -> ExplorationDispatchConventions: ...
+
+    def render(
+        self,
+        plan: ExplorationRouterPlan,
+        vectors: tuple[ExplorationVectorDef, ...],
+        *,
+        launch_context_ref: str | None = None,
+    ) -> ExplorationDispatchMaterialization: ...
 
 
 @runtime_checkable
@@ -133,6 +202,9 @@ class CodingAgentBackend(Protocol):
     @property
     def conventions(self) -> BackendConventions: ...
 
+    @property
+    def exploration_dispatch_renderer(self) -> ExplorationDispatchRenderer: ...
+
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec: ...
 
     def stream_parser(self, completion_marker: str = "") -> StreamParser: ...
@@ -142,6 +214,15 @@ class CodingAgentBackend(Protocol):
     def env_policy(self) -> EnvPolicy: ...
 
     def session_locator(self) -> SessionLocator: ...
+
+    def resolve_effective_execution_identity(
+        self,
+        *,
+        requested: ExecutionIdentity,
+        session_id: str,
+    ) -> ExecutionIdentity:
+        """Resolve backend-owned effective identity from authoritative session evidence."""
+        ...
 
     def write_tool_names(self) -> frozenset[str]: ...
 
@@ -257,4 +338,22 @@ class CodingAgentBackend(Protocol):
 
     def build_inspector_cmd(self, prompt: str, *, model: str = "") -> CmdSpec: ...
 
-    def setup_session_dir(self, session_dir: Path) -> None: ...
+    def setup_session_dir(
+        self,
+        session_dir: Path,
+        *,
+        parent_sandbox_mode: str = "workspace-write",
+        explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
+    ) -> None: ...
+
+    def refresh_explorer_binding_env(
+        self,
+        session_dir: Path,
+        explorer_binding_env: Mapping[str, Mapping[str, str]],
+    ) -> None: ...
+
+    def clear_explorer_binding_env(
+        self,
+        session_dir: Path,
+        roles: frozenset[str],
+    ) -> None: ...

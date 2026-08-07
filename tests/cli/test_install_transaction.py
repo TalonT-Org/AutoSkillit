@@ -1364,6 +1364,10 @@ def test_direct_mode_snapshots_caller_env_and_cwd(
     changed_cwd.mkdir()
     monkeypatch.chdir(caller_cwd)
     monkeypatch.setenv("DIRECT_SNAPSHOT", "original")
+    # This test intentionally omits child_env so DIRECT mode snapshots the
+    # caller's ambient os.environ. A host Claude Code session running this
+    # suite sets CLAUDECODE, which would otherwise defer the install.
+    monkeypatch.delenv("CLAUDECODE", raising=False)
     _configure_direct_backend(monkeypatch)
     monkeypatch.setattr(marketplace, "_ensure_workspace_ready", lambda **_kwargs: None)
     calls: list[tuple[dict[str, str], Path]] = []

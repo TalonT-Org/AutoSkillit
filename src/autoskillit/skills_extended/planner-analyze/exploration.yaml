@@ -1,0 +1,37 @@
+vectors:
+- id: languages-frameworks
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - imports
+  - references
+  rationale: Repository impact evidence covers manifests, dependencies, and framework
+    declarations without language-specific assumptions.
+- id: test-infrastructure
+  role: repository-impact-profiler
+  relationship_classes:
+  - references
+  - affects
+  rationale: Repository impact evidence covers test configuration, layout, naming,
+    and coverage surfaces.
+- id: architecture-patterns
+  role: semantic-code-navigator
+  relationship_classes:
+  - imports
+  - references
+  rationale: Semantic navigation covers package boundaries, imports, and structural
+    relationships used to infer architecture style.
+- id: existing-conventions
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - references
+  rationale: Semantic navigation covers repeated definitions, naming, and structural
+    code patterns while the parent retains risk synthesis.
+- id: existing-conventions-impact
+  role: repository-impact-profiler
+  relationship_classes:
+  - references
+  - affects
+  rationale: Repository impact evidence covers tests, configuration consumers, generated
+    artifacts, and risk surfaces associated with established conventions.

@@ -53,6 +53,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "food_truck_capable": "OPTIONAL",
     "github_api_callable": "OPTIONAL",
     "has_unguarded_filesystem_access": "REQUIRED",
+    "terminal_explorer_capable": "REQUIRED",
     "hook_config_format": "REQUIRED",
     "hook_trust_policy": "REQUIRED",
     "inspector_capable": "OPTIONAL",
@@ -428,6 +429,10 @@ class TestCodingAgentBackendConformance(BackendContractBase):
     def test_protected_recipe_delivery_capable_is_bool(self) -> None:
         """BackendCapabilities.protected_recipe_delivery_capable — protected host gate is bool."""
         assert isinstance(self.backend.capabilities.protected_recipe_delivery_capable, bool)
+
+    def test_terminal_explorer_capable_is_bool(self) -> None:
+        """BackendCapabilities.terminal_explorer_capable — explorer support is bool-typed."""
+        assert isinstance(self.backend.capabilities.terminal_explorer_capable, bool)
 
     def test_recipe_delivery_budget_matches_protected_capability(self) -> None:
         """BackendCapabilities.recipe_delivery_budget — protected backends select a budget."""

@@ -1,0 +1,52 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence locates revision-scoped context and experiment-plan
+    artifacts and identifies only missing declared fields without executing target
+    code.
+- id: intended-use-deployment-context
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers intended-use declarations, deployment
+    configuration, audience and stakeholder artifacts, and decision consumers.
+- id: subgroup-fairness-analysis
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers subgroup datasets, fairness configuration,
+    disaggregated results, tests, fixtures, and revision-scoped evaluation artifacts.
+- id: harm-risk-metrics
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces harm and safety metric definitions and failure-mode
+    calls while parent-owned handoff covers declarative metrics and result artifacts.
+- id: monitoring-feedback-plans
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces monitoring, feedback, drift, rollback, and
+    incident-control paths while parent-owned handoff covers alert and threshold configuration.
+- id: limitation-disclosure
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers explicit limitations, caveats, scope
+    restrictions, deployment notes, and the artifacts or decisions that consume them.

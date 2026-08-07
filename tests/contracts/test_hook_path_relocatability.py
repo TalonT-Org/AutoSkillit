@@ -362,6 +362,7 @@ def test_cook_session_passes_behavioral_durable_root_to_projection(
         tmp_path,
         backend,
         binding,
+        resolved_exploration_profile=None,
     )
 
     assert context.substitutions is not None
@@ -391,4 +392,5 @@ def test_cook_session_rejects_projection_without_retained_binding(tmp_path: Path
             tmp_path,
             backend,
             None,
+            resolved_exploration_profile=None,
         )

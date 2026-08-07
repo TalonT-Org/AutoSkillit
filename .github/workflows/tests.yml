@@ -81,6 +81,28 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
+      - name: Install ripgrep
+        shell: bash
+        run: |
+          if command -v rg >/dev/null 2>&1; then
+            rg --version
+            exit 0
+          fi
+          case "$RUNNER_OS" in
+            Linux)
+              sudo apt-get update
+              sudo apt-get install --yes ripgrep
+              ;;
+            macOS)
+              brew install ripgrep
+              ;;
+            *)
+              echo "::error::Unsupported runner OS for ripgrep installation: $RUNNER_OS"
+              exit 1
+              ;;
+          esac
+          rg --version
+
       - name: Install dependencies
         run: uv sync --locked --extra dev
 
@@ -90,7 +112,7 @@ jobs:
       - name: Compute test paths
         id: test-paths
         run: |
-          SHARD_A_DIRS="tests/execution tests/contracts tests/core tests/planner tests/pipeline tests/migration tests/integration"
+          SHARD_A_DIRS="tests/execution tests/contracts tests/core tests/exploration tests/planner tests/pipeline tests/migration tests/integration"
           if find tests/ -maxdepth 1 -name 'test_*.py' -print0 | grep -qz ' '; then
             echo "::error::Test filenames with spaces are not supported by the shard path splitter"
             exit 1

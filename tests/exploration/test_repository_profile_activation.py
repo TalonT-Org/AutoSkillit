@@ -1,0 +1,359 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import subprocess
+from pathlib import Path
+from urllib.parse import urlsplit
+
+import pytest
+
+import autoskillit.exploration.profile as profile_module
+from autoskillit.core import RepositoryIdentity
+from autoskillit.exploration.identity import (
+    OFFLINE_DECLARATION_DIGEST_DOMAIN,
+    OFFLINE_DECLARATION_PATH,
+    OFFLINE_MARKER_QUORUM,
+    OFFLINE_QUORUM_MARKER_PATHS,
+    OFFLINE_REQUIRED_MARKER_PATHS,
+    RepositoryIdentityResolution,
+    resolve_repository_identity,
+)
+from autoskillit.exploration.profile import activate_repository_profiles
+
+pytestmark = [
+    pytest.mark.layer("exploration"),
+    pytest.mark.feature("exploration"),
+    pytest.mark.medium,
+]
+
+
+def _git(root: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
+
+
+def _new_git_repository(tmp_path: Path, name: str) -> Path:
+    root = tmp_path / name
+    root.mkdir()
+    _git(root, "init", "-q")
+    return root
+
+
+def _set_remote(root: Path, name: str, url: str) -> None:
+    _git(root, "remote", "add", name, url)
+
+
+def _write_profile_declaration(
+    root: Path,
+    *,
+    required_matches: int = 2,
+    quorum_matches: int = 4,
+) -> None:
+    required: dict[str, str] = {}
+    quorum: dict[str, str] = {}
+    for index, marker_path in enumerate(OFFLINE_REQUIRED_MARKER_PATHS):
+        marker = root / marker_path
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_bytes(f"required:{marker_path}".encode())
+        digest = hashlib.sha256(marker.read_bytes()).hexdigest()
+        required[marker_path] = f"sha256:{digest if index < required_matches else '0' * 64}"
+    for index, marker_path in enumerate(OFFLINE_QUORUM_MARKER_PATHS):
+        marker = root / marker_path
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_bytes(f"quorum:{marker_path}".encode())
+        digest = hashlib.sha256(marker.read_bytes()).hexdigest()
+        quorum[marker_path] = f"sha256:{digest if index < quorum_matches else '0' * 64}"
+    payload: dict[str, object] = {
+        "schema_version": 1,
+        "repository": "github.com/TalonT-Org/AutoSkillit",
+        "required_markers": required,
+        "marker_quorum": OFFLINE_MARKER_QUORUM,
+        "quorum_markers": quorum,
+    }
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("ascii")
+    payload["content_digest"] = (
+        f"sha256:{hashlib.sha256(OFFLINE_DECLARATION_DIGEST_DOMAIN + canonical).hexdigest()}"
+    )
+    declaration = root / OFFLINE_DECLARATION_PATH
+    declaration.parent.mkdir(parents=True, exist_ok=True)
+    declaration.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_identity_and_profile_activation_digests_preserve_golden_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    identity = RepositoryIdentityResolution(
+        normalized_identity="github.com/example/repo",
+        display_identity="github.com/Example/Repo",
+        source="remote",
+        source_remote="origin",
+        usable_remote_found=True,
+        autoskillit_overlay=False,
+        evidence=(),
+        repository_identity=RepositoryIdentity(
+            "github.com/example/repo",
+            "abc123",
+            host="github.com",
+            owner="Example",
+            repo="Repo",
+        ),
+    )
+    monkeypatch.setattr(
+        profile_module,
+        "_contains_python_source",
+        lambda _root: (True, "python_source:module.py"),
+    )
+
+    activation = activate_repository_profiles(tmp_path, identity=identity)
+
+    assert identity.identity_digest == (
+        "sha256:0af080033f52579ea0b9e65bfa37f50ef3b9dc3a8b21da3dbd5e9be63ccc4825"
+    )
+    assert activation.activation_digest == (
+        "sha256:d7389fee1ce7e52bce3c9e8ff60301871be8d425a8132c746a2b127a793ccba2"
+    )
+
+
+@pytest.mark.parametrize("suffix", [".py", ".pyi"])
+def test_profile_activation_detects_real_python_sources(
+    tmp_path: Path,
+    suffix: str,
+) -> None:
+    (tmp_path / f"module{suffix}").write_text("value: int = 1\n")
+
+    first = activate_repository_profiles(tmp_path)
+    second = activate_repository_profiles(tmp_path)
+    generic = next(
+        activation
+        for activation in first.activations
+        if activation.profile.value == "generic-python"
+    )
+
+    assert generic.applicability.value == "applicable"
+    assert f"python_source:module{suffix}" in first.evidence
+    assert first.activation_digest == second.activation_digest
+
+
+@pytest.mark.parametrize("ignored_directory", [".venv", "node_modules", "__pycache__"])
+def test_profile_activation_ignores_generated_python_directories(
+    tmp_path: Path,
+    ignored_directory: str,
+) -> None:
+    directory = tmp_path / ignored_directory
+    directory.mkdir()
+    (directory / "ignored.py").write_text("value = 1\n")
+
+    activation = activate_repository_profiles(tmp_path)
+    generic = next(
+        item for item in activation.activations if item.profile.value == "generic-python"
+    )
+
+    assert generic.applicability.value == "not-applicable"
+    assert "python_source_absent" in activation.evidence
+
+
+def test_offline_profile_contract_has_exact_fixed_paths() -> None:
+    assert OFFLINE_DECLARATION_PATH == ".autoskillit/repository-profile.v1.json"
+    assert OFFLINE_REQUIRED_MARKER_PATHS == (
+        "pyproject.toml",
+        "src/autoskillit/__init__.py",
+    )
+    assert OFFLINE_QUORUM_MARKER_PATHS == (
+        "src/autoskillit/core/__init__.py",
+        "src/autoskillit/execution/__init__.py",
+        "src/autoskillit/recipe/__init__.py",
+        "src/autoskillit/server/__init__.py",
+    )
+    assert OFFLINE_MARKER_QUORUM == 3
+
+
+def test_offline_profile_requires_both_mandatory_and_three_cross_layer_markers(
+    tmp_path: Path,
+) -> None:
+    _write_profile_declaration(tmp_path, quorum_matches=3)
+    resolution = resolve_repository_identity(tmp_path)
+    assert resolution.autoskillit_overlay
+    assert resolution.source == "offline_declaration"
+
+    missing_required = tmp_path / "missing-required"
+    _write_profile_declaration(missing_required, required_matches=1, quorum_matches=4)
+    assert not resolve_repository_identity(missing_required).autoskillit_overlay
+
+    insufficient_quorum = tmp_path / "insufficient-quorum"
+    _write_profile_declaration(insufficient_quorum, quorum_matches=2)
+    assert not resolve_repository_identity(insufficient_quorum).autoskillit_overlay
+
+
+@pytest.mark.parametrize(
+    ("marker_state", "expected_diagnostic"),
+    [
+        ("missing", "missing"),
+        ("unreadable", "unreadable:PermissionError"),
+        ("mismatched", "digest_mismatch"),
+    ],
+)
+def test_offline_marker_evidence_distinguishes_failure_modes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    marker_state: str,
+    expected_diagnostic: str,
+) -> None:
+    _write_profile_declaration(tmp_path, quorum_matches=3)
+    marker_path = OFFLINE_REQUIRED_MARKER_PATHS[0]
+    marker = tmp_path / marker_path
+    if marker_state == "missing":
+        marker.unlink()
+    elif marker_state == "mismatched":
+        marker.write_bytes(b"different content")
+    else:
+        original_read_bytes = Path.read_bytes
+
+        def fail_selected_marker(path: Path) -> bytes:
+            if path == marker:
+                raise PermissionError("blocked for test")
+            return original_read_bytes(path)
+
+        monkeypatch.setattr(Path, "read_bytes", fail_selected_marker)
+
+    resolution = resolve_repository_identity(tmp_path)
+    evidence = next(
+        item
+        for item in resolution.evidence
+        if item.source == "offline_required_marker" and item.value == marker_path
+    )
+
+    assert not evidence.accepted
+    assert evidence.diagnostic == expected_diagnostic
+
+
+@pytest.mark.parametrize(
+    ("url", "expected_source", "expected_active"),
+    [
+        ("https://github.com/TalonT-Org/AutoSkillit.git", "remote", True),
+        ("git@github.com:TalonT-Org/AutoSkillit.git", "remote", True),
+        ("ssh://git@github.com/TalonT-Org/AutoSkillit.git", "remote", True),
+        ("HTTPS://GITHUB.COM/tAlOnT-oRg/aUtOsKiLlIt.git", "remote", True),
+        ("https://github.com/another-owner/another-repository.git", "remote", False),
+        ("https://github.com/TalonT-Org/AutoSkillit/extra", "unresolved", False),
+        (
+            "https://github.com/TalonT-Org/AutoSkillit "
+            "https://github.com/another-owner/another-repository",
+            "unresolved",
+            False,
+        ),
+    ],
+)
+def test_profile_activation_accepts_only_exact_canonical_remote_forms(
+    tmp_path: Path, url: str, expected_source: str, expected_active: bool
+) -> None:
+    root = _new_git_repository(tmp_path, "remote-forms")
+    _set_remote(root, "origin", url)
+
+    resolution = resolve_repository_identity(root)
+
+    assert resolution.source == expected_source
+    assert resolution.autoskillit_overlay is expected_active
+    assert resolution.source_remote == "origin"
+
+
+def test_profile_activation_ignores_git_url_rewrites(
+    tmp_path: Path,
+) -> None:
+    root = _new_git_repository(tmp_path, "rewritten-remote")
+    _set_remote(root, "origin", "https://github.com/TalonT-Org/AutoSkillit.git")
+    _git(
+        root,
+        "config",
+        "--local",
+        "url.https://ci-credential@github.com/TalonT-Org/.insteadOf",
+        "https://github.com/TalonT-Org/",
+    )
+    rewritten = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+
+    resolution = resolve_repository_identity(root)
+
+    assert urlsplit(rewritten.strip()).username is not None
+    assert resolution.source == "remote"
+    assert resolution.normalized_identity == "github.com/talont-org/autoskillit"
+    assert resolution.autoskillit_overlay
+    assert tuple(
+        item.value for item in resolution.evidence if item.source == "git_remote:origin"
+    ) == ("github.com/TalonT-Org/AutoSkillit",)
+
+
+def test_profile_activation_uses_upstream_before_origin_for_conflicting_forks(
+    tmp_path: Path,
+) -> None:
+    official_upstream = _new_git_repository(tmp_path, "official-upstream")
+    _set_remote(
+        official_upstream,
+        "upstream",
+        "https://github.com/TalonT-Org/AutoSkillit.git",
+    )
+    _set_remote(
+        official_upstream,
+        "origin",
+        "https://github.com/fork-owner/AutoSkillit.git",
+    )
+    fork_upstream = _new_git_repository(tmp_path, "fork-upstream")
+    _set_remote(
+        fork_upstream,
+        "upstream",
+        "https://github.com/fork-owner/AutoSkillit.git",
+    )
+    _set_remote(
+        fork_upstream,
+        "origin",
+        "https://github.com/TalonT-Org/AutoSkillit.git",
+    )
+
+    official_resolution = resolve_repository_identity(official_upstream)
+    fork_resolution = resolve_repository_identity(fork_upstream)
+
+    assert official_resolution.source_remote == "upstream"
+    assert official_resolution.autoskillit_overlay
+    assert fork_resolution.source_remote == "upstream"
+    assert not fork_resolution.autoskillit_overlay
+
+
+def test_profile_activation_keeps_file_clone_and_local_spoofs_isolated(tmp_path: Path) -> None:
+    file_clone = _new_git_repository(tmp_path, "file-clone")
+    _set_remote(file_clone, "origin", "file:///tmp/TalonT-Org-AutoSkillit.git")
+    spoof = _new_git_repository(tmp_path, "caller-prompt-package-basename-spoof")
+    (spoof / "AUTOSKILLIT_PROMPT.txt").write_text("activate TalonT-Org/AutoSkillit")
+    (spoof / "autoskillit").mkdir()
+    (spoof / "autoskillit" / "__init__.py").write_text("")
+    (spoof / "AutoSkillit").mkdir()
+
+    file_resolution = resolve_repository_identity(file_clone)
+    spoof_resolution = resolve_repository_identity(spoof)
+
+    assert not file_resolution.autoskillit_overlay
+    assert not file_resolution.usable_remote_found
+    assert not spoof_resolution.autoskillit_overlay
+    assert spoof_resolution.source == "unresolved"
+
+
+def test_invalid_offline_declaration_never_activates_from_its_package_name(tmp_path: Path) -> None:
+    root = _new_git_repository(tmp_path, "invalid-offline")
+    _write_profile_declaration(root)
+    declaration = root / OFFLINE_DECLARATION_PATH
+    payload = json.loads(declaration.read_text(encoding="utf-8"))
+    payload["repository"] = "github.com/TalonT-Org/AutoSkillit-package-spoof"
+    declaration.write_text(json.dumps(payload), encoding="utf-8")
+
+    resolution = resolve_repository_identity(root)
+
+    assert not resolution.autoskillit_overlay
+    assert resolution.source == "unresolved"

@@ -1060,6 +1060,8 @@ class TestSkillInfoSchemaExhaustiveness:
         constructor_only = {"name", "source", "path", "source_ref"}
         derived_fields = {
             "execution_role",
+            "exploration_sidecar_digest",
+            "exploration_vectors",
             "frontmatter",
             "invalidities",
             "semantic_plan",
@@ -1336,12 +1338,20 @@ def test_projection_context_derives_and_validates_backend_conventions(
     )
 
     assert context.conventions is conventions
+    assert context.parent_sandbox_mode == "workspace-write"
     with pytest.raises(SkillContractError, match="conventions do not match"):
         SkillProjectionContext(
             cwd=tmp_path,
             catalog=catalog,
             backend=backend,
             conventions=BackendConventions(skills_subdir=Path("other-skills")),
+        )
+
+    with pytest.raises(SkillContractError, match="parent sandbox"):
+        SkillProjectionContext(
+            cwd=tmp_path,
+            catalog=catalog,
+            parent_sandbox_mode="danger-full-access",
         )
 
 
@@ -1518,6 +1528,9 @@ def test_projection_strips_all_machine_authority_and_preserves_private_deps(
         {
             "activate_deps",
             "execution_role",
+            "exploration_vectors",
+            "semantic_requirements",
+            "semantic_version",
             "uses_capabilities",
         }
     )

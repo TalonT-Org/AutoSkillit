@@ -56,7 +56,9 @@ semantic_requirements:
 - Modify any source code files
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-variance-stability/`
+- Execute target code, experiment workflows, or target test commands to gather exploration evidence
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -67,6 +69,11 @@ semantic_requirements:
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Register every exploration vector below and route the missing-context fallback only for fields absent after parent-side argument parsing
+- Allow parent-boundary handoff between semantic run-control evidence and declarative run, result, or reporting artifacts without creating extra vectors
+- Wait for every applicable exploration result before building the variance profile, comparing signal with noise, or creating the diagram
+- Retain parent authority over run independence, noise-floor and confidence interpretation, stability judgment, findings, and diagram creation
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-variance-stability/exp_diag_variance_stability_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -85,35 +92,39 @@ If positional arg 1 (context_path) is provided and the file exists, read it to o
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
 methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
+exploration for these fields if the context file supplies them.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
+
+Dispatch all ready, scope-disjoint Step-1 vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch every Step-1 vector below under their registered role policies. The parent/router may hand bounded code or declarative evidence to the other registered role when needed; this does not create another vector. Each leaf returns terminal evidence only and must not execute the target, build the variance profile, compare signal with noise, judge stability, create diagrams, or write lens output.
 
-**Random Seed Management**
-- Find how seeds are set and varied
-- Look for: seed, random_state, torch.manual_seed, np.random, set_seed, PYTHONHASHSEED
+<!-- autoskillit:exploration-vector id="random-seed-management" -->
+1. **Random seed management** — Trace how seeds are set and varied, including random-state, manual-seed, random-library, set-seed, and hash-seed definitions and calls.
+<!-- /autoskillit:exploration-vector -->
 
-**Nondeterminism Sources**
-- Find sources of nondeterminism beyond seeds
-- Look for: cudnn, benchmark, deterministic, parallel, async, thread, race, order, nondeterministic
+<!-- autoskillit:exploration-vector id="nondeterminism-sources" -->
+2. **Nondeterminism sources** — Trace nondeterminism beyond seeds, including CUDNN settings, benchmarks, deterministic modes, parallel and asynchronous work, threads, races, and ordering paths.
+<!-- /autoskillit:exploration-vector -->
 
-**Multiple Run Protocol**
-- Find how many runs are performed per condition
-- Look for: n_runs, trials, repeat, replicate, mean, std, confidence, interval, aggregate
+<!-- autoskillit:exploration-vector id="multiple-run-protocol" -->
+3. **Multiple run protocol** — Trace run, trial, repeat, replicate, mean, standard-deviation, confidence, interval, and aggregation loops, with bounded configuration handoffs.
+<!-- /autoskillit:exploration-vector -->
 
-**Variance Reporting**
-- Find how variance is reported (if at all)
-- Look for: std, stderr, confidence, interval, range, median, quartile, bootstrap, error_bar
+<!-- autoskillit:exploration-vector id="variance-reporting" -->
+4. **Variance reporting** — Identify standard-deviation, standard-error, confidence-interval, range, median, quartile, bootstrap, and error-bar result artifacts and consumers; report absence as evidence.
+<!-- /autoskillit:exploration-vector -->
 
-**Signal-to-Noise Assessment**
-- Find whether claimed improvements exceed observed variance
-- Look for: significant, difference, improvement, margin, effect_size, gap, overlap
+<!-- autoskillit:exploration-vector id="signal-to-noise-assessment" -->
+5. **Signal-to-noise assessment** — Identify significance, difference, improvement, margin, effect-size, gap, and overlap declarations and result artifacts without comparing or judging them.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Build Variance Profile
 

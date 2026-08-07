@@ -1,4 +1,4 @@
-"""Tests for WriteEvidence bundle type safety."""
+"""Tests for core result type contracts."""
 
 from __future__ import annotations
 
@@ -109,3 +109,13 @@ class TestHasImplementationProgress:
         )
         assert sr.has_progress_evidence is True
         assert sr.has_implementation_progress is False
+
+
+class TestSessionIndexExecutionIdentitySchema:
+    def test_child_executions_uses_typed_persistence_shape(self) -> None:
+        from typing import get_type_hints
+
+        from autoskillit.core.types import ChildExecutionIdentityDict, SessionIndexEntry
+
+        hints = get_type_hints(SessionIndexEntry)
+        assert hints["child_executions"] == list[ChildExecutionIdentityDict]

@@ -19,8 +19,6 @@ hooks:
 semantic_version: 1
 semantic_requirements:
   sibling_skills:
-  - name: arch-lens-c4-container
-  - name: make-arch-diag
   - name: mermaid
 ---
 
@@ -51,6 +49,7 @@ semantic_requirements:
 ## Critical Constraints
 
 **NEVER:**
+- Treat Related Skills as executable dependencies or invoke any cross-reference from that section; those entries are documentation-only and do not imply execution. Invoke only the required `/autoskillit:mermaid` skill; never invoke `/autoskillit:make-arch-diag`, another architecture lens, or any other cross-reference.
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for ourselves
@@ -59,6 +58,7 @@ semantic_requirements:
 - Include code-level details
 - Show internal logic
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -76,6 +76,11 @@ semantic_requirements:
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-deployment/arch_diag_deployment_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch every exploration vector below through the deterministic router
+- Route mixed semantic and declarative deployment subfrontiers through the parent-owned plan; bounded handoffs return evidence to the originating vector without adding dependencies
+- Wait for every exploration result before mapping physical topology, identifying communication paths, or creating the diagram
+- Retain parent authority over deployment boundaries, locations, protocols, read/write classification, Mermaid generation, and output writing
 
 
 ## Analysis Workflow
@@ -91,43 +96,37 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch every authored vector below under their registered role policies. The parent routes code definitions, imports, calls, and control flow to the navigator and deployment manifests, configuration, registries, generated artifacts, tests, fixtures, and consumers to the profiler.
 
-**Process Boundaries**
-- Find main process entry points
-- Identify subprocess spawning
-- Look for: main, entry_points, subprocess, process spawning, daemon processes
+<!-- autoskillit:exploration-vector id="process-boundaries" -->
+1. **Process Boundaries** — Find main process entry points, subprocess creation, process spawning, daemon processes, and their call paths. Route declarative entry-point and process configuration through the parent to the profiler.
+<!-- /autoskillit:exploration-vector -->
 
-**Container/Docker**
-- Find containerization config
-- Identify services
-- Look for: Dockerfile, docker-compose.yml, container definitions, Kubernetes configs
+<!-- autoskillit:exploration-vector id="container-docker" -->
+2. **Container/Docker** — Find Dockerfiles, compose files, Kubernetes manifests, container definitions, images, services, ports, volumes, generated artifacts, and consumers.
+<!-- /autoskillit:exploration-vector -->
 
-**Local Storage**
-- Find file storage locations
-- Identify database paths
-- Look for: data directories, database files, storage volumes, persistent storage
+<!-- autoskillit:exploration-vector id="local-storage" -->
+3. **Local Storage** — Trace filesystem and database clients, reads, writes, connections, and access calls. Route data directories, database paths, storage volumes, persistence declarations, and generated outputs through the parent to the profiler.
+<!-- /autoskillit:exploration-vector -->
 
-**Network Services**
-- Find service definitions
-- Identify ports and protocols
-- Look for: port, bind, listen, server, API, endpoint, network services
+<!-- autoskillit:exploration-vector id="network-services" -->
+4. **Network Services** — Trace service definitions, servers, APIs, endpoints, listeners, sockets, bind and listen calls, ports, and protocols. Route declarative port or host configuration through the parent to the profiler.
+<!-- /autoskillit:exploration-vector -->
 
-**External Services**
-- Find external API calls
-- Identify cloud services
-- Look for: external APIs, cloud services, third-party integrations
+<!-- autoskillit:exploration-vector id="external-services" -->
+5. **External Services** — Trace external API clients and calls, cloud-service access, imports, authentication, and third-party integrations. The parent determines external boundaries and deployment meaning.
+<!-- /autoskillit:exploration-vector -->
 
-**Web/Frontend**
-- Find frontend deployment
-- Identify static file serving
-- Look for: web servers, frontend builds, static assets, CDN
+<!-- autoskillit:exploration-vector id="web-frontend" -->
+6. **Web/Frontend** — Identify frontend and web-server manifests, build configuration, static assets, frontend outputs, serving declarations, CDN configuration, and consumers. Route bounded serving-call traces through the parent to the navigator.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Map Physical Topology
 

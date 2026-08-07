@@ -408,6 +408,44 @@ def test_skill_result_to_json_omits_worktree_path_when_none():
     assert "worktree_path" not in data
 
 
+def test_skill_result_to_json_preserves_nested_execution_identity() -> None:
+    from autoskillit.core import ChildExecutionIdentity, ExecutionIdentity
+
+    child = ChildExecutionIdentity(
+        "task",
+        "semantic-code-navigator",
+        "plan",
+        "definition",
+        requested_backend="codex",
+        effective_backend="codex",
+        requested_model="gpt-5.6-luna",
+        effective_model="gpt-5.6-luna",
+        requested_effort="max",
+        effective_effort="max",
+        session_id="child-session",
+    )
+    identity = ExecutionIdentity(
+        requested_parent_backend="codex",
+        effective_parent_backend="codex",
+        parent_session_id="parent-session",
+        children=(child,),
+    )
+    result = SkillResult(
+        success=True,
+        result="Done.",
+        session_id="parent-session",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        stderr="",
+        execution_identity=identity,
+    )
+
+    assert json.loads(result.to_json())["execution_identity"] == identity.to_dict()
+
+
 # ---------------------------------------------------------------------------
 # WriteBehaviorSpec and WriteExpectedResolver
 # ---------------------------------------------------------------------------

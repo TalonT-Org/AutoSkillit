@@ -12,6 +12,7 @@ import autoskillit.workspace.session_skills as session_skills
 from autoskillit.core import (
     ClaudeDirectoryConventions,
     ManagedSessionHome,
+    RepositoryProfileId,
     SkillExecutionRole,
     ValidatedAddDir,
 )
@@ -42,6 +43,7 @@ def _make_codex_backend() -> MagicMock:
     b.ensure_pre_launch.return_value = []
     b.validate_session_layout.return_value = []
     b.adapt_skill_semantics.side_effect = CodexBackend().adapt_skill_semantics
+    b.exploration_dispatch_renderer = CodexBackend().exploration_dispatch_renderer
     return b
 
 
@@ -63,10 +65,21 @@ def _catalog_context(
             skills=tuple(member for member in catalog.skills if member.name in names),
             execution_role=SkillExecutionRole.SESSION,
         )
+    else:
+        catalog = EffectiveSkillCatalog(
+            skills=tuple(member for member in catalog.skills if not member.exploration_vectors),
+            execution_role=SkillExecutionRole.SESSION,
+        )
+    resolved_exploration_profile = (
+        RepositoryProfileId.AUTOSKILLIT
+        if any(member.exploration_vectors for member in catalog.skills)
+        else None
+    )
     context = manager._provider.catalog_projection_context(
         catalog,
         project_root,
         backend=backend,
+        resolved_exploration_profile=resolved_exploration_profile,
     )
     return catalog, context
 
@@ -111,6 +124,104 @@ def test_codex_init_session_creates_skills_subdir(make_session_skill_manager, co
     assert not (session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR).exists()
 
 
+def test_materialization_forwards_only_server_explorer_binding_env(
+    make_session_skill_manager,
+    codex_env,
+) -> None:
+    manager = make_session_skill_manager()
+    catalog, context = _catalog_context(
+        manager,
+        backend=codex_env.backend,
+        names=frozenset({"investigate"}),
+    )
+    binding_env = {
+        "semantic-code-navigator": {
+            "AUTOSKILLIT_EXPLORATION_CAPABILITY": "explore_opaque",
+            "AUTOSKILLIT_EXPLORATION_ROLE": "semantic-code-navigator",
+            "AUTOSKILLIT_EXPLORATION_SESSION_ID": "sid",
+        }
+    }
+
+    manager._materialize_bound_records(
+        "sid",
+        catalog.skills,
+        context,
+        explorer_binding_env=binding_env,
+    )
+
+    assert codex_env.backend.setup_session_dir.call_args.kwargs["explorer_binding_env"] == (
+        binding_env
+    )
+
+
+def test_materialization_mints_explorer_binding_between_prelaunch_and_setup(
+    make_session_skill_manager,
+    codex_env,
+) -> None:
+    manager = make_session_skill_manager()
+    catalog, context = _catalog_context(
+        manager,
+        backend=codex_env.backend,
+        names=frozenset({"investigate"}),
+    )
+    events: list[str] = []
+    binding_env = {
+        "semantic-code-navigator": {
+            "AUTOSKILLIT_EXPLORATION_CAPABILITY": "explore_opaque",
+        }
+    }
+
+    def _prelaunch(**_kwargs: object) -> list[str]:
+        events.append("prelaunch")
+        return []
+
+    def _mint(session_home: Path) -> dict[str, dict[str, str]]:
+        assert session_home.is_dir()
+        events.append("mint")
+        return binding_env
+
+    def _setup(_session_home: Path, **kwargs: object) -> None:
+        assert kwargs["explorer_binding_env"] == binding_env
+        events.append("setup")
+
+    codex_env.backend.ensure_pre_launch.side_effect = _prelaunch
+    codex_env.backend.setup_session_dir.side_effect = _setup
+
+    manager._materialize_bound_records(
+        "sid",
+        catalog.skills,
+        context,
+        explorer_binding_env_factory=_mint,
+    )
+
+    assert events == ["prelaunch", "mint", "setup"]
+
+
+def test_materialization_rejects_multiple_explorer_binding_authorities_before_setup(
+    make_session_skill_manager,
+    codex_env,
+) -> None:
+    manager = make_session_skill_manager()
+    catalog, context = _catalog_context(
+        manager,
+        backend=codex_env.backend,
+        names=frozenset({"investigate"}),
+    )
+    binding_env = {"semantic-code-navigator": {"TOKEN": "opaque"}}
+
+    with pytest.raises(ValueError, match="map or factory, not both"):
+        manager._materialize_bound_records(
+            "sid",
+            catalog.skills,
+            context,
+            explorer_binding_env=binding_env,
+            explorer_binding_env_factory=lambda _home: binding_env,
+        )
+
+    codex_env.backend.ensure_pre_launch.assert_not_called()
+    assert "sid" not in manager._session_roots
+
+
 def test_codex_generated_home_links_projected_catalog_into_discovery_root(
     make_session_skill_manager,
     codex_env,
@@ -138,7 +249,11 @@ def test_codex_generated_home_preserves_existing_profile_skill_on_collision(
 ) -> None:
     profile_content = "---\nname: investigate\ndescription: profile copy\n---\n"
 
-    def setup_session_dir(session_dir: Path) -> None:
+    def setup_session_dir(
+        session_dir: Path,
+        *,
+        parent_sandbox_mode: str = "workspace-write",
+    ) -> None:
         profile_skill = session_dir / "skills" / "investigate"
         profile_skill.mkdir(parents=True)
         (profile_skill / "SKILL.md").write_text(profile_content)
@@ -165,7 +280,10 @@ def test_codex_init_session_delegates_to_setup_session_dir(
 ) -> None:
     mgr = make_session_skill_manager()
     session_path = _materialize(mgr, "sid", backend=codex_env.backend)
-    codex_env.backend.setup_session_dir.assert_called_once_with(Path(str(session_path)).parent)
+    codex_env.backend.setup_session_dir.assert_called_once_with(
+        Path(str(session_path)).parent,
+        parent_sandbox_mode="workspace-write",
+    )
 
 
 def test_no_backend_skips_setup_session_dir(make_session_skill_manager) -> None:

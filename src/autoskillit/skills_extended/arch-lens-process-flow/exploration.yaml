@@ -1,0 +1,45 @@
+vectors:
+- id: state-machines-workflows
+  role: semantic-code-navigator
+  relationship_classes:
+  - declares
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces state definitions, transitions, and workflow
+    orchestration while parent-owned handoff may use repository impact evidence for
+    declarative workflow graphs.
+- id: entry-points-triggers
+  role: semantic-code-navigator
+  relationship_classes:
+  - declares
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces process entry points, event handlers, and
+    invocation paths while parent-owned handoff covers declarative trigger registration.
+- id: decision-points
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces conditional and routing definitions, branches,
+    calls, and references while the parent interprets decision semantics.
+- id: loop-mechanisms
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces iterations, retries, continuation guards,
+    and termination calls while the parent evaluates loop behavior.
+- id: terminal-states
+  role: semantic-code-navigator
+  relationship_classes:
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces completion returns, raised failures, success
+    states, and their incoming flow while the parent classifies terminal meaning.

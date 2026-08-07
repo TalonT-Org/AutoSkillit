@@ -69,15 +69,20 @@ text is supplementary context.
 - Propose solutions or write implementation code
 - Skip the prior art survey — always check what already exists in the codebase
 - Fabricate research findings when external sources return no results — if web searches or literature searches yield nothing, state that explicitly and note what the codebase evidence shows instead
+- Dispatch retained vectors through explorer roles; retained work remains delegated prose under the declared `sonnet` model-class policy
+- Let an explorer or delegated worker choose the research branch, hypotheses, investigation directions, or final conclusions
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
 
 **ALWAYS:**
-- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
+- Classify the question as `scope-software` or `scope-non-software` before dispatch; the parent owns this decision
+- Submit every applicable migrated vector to the deterministic router under its registered role and `auto` profile
+- Launch every applicable retained vector via child delegation under the declared `sonnet` model-class policy
 - Write output to `{{AUTOSKILLIT_TEMP}}/scope/` directory
 - Clearly separate facts (what the code does) from hypotheses (what might be true)
 - Include a known/unknown matrix in the output
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Join every routed and retained result before the parent synthesizes evidence, proposes hypotheses, or selects investigation directions
 
 ## Workflow
 
@@ -89,66 +94,99 @@ text is supplementary context.
 
 ### Step 1 — Parallel Exploration (SINGLE MESSAGE)
 
-**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
+Classify the research question once, before dispatch:
 
-Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
+- Use `scope-software` when the question is primarily about this repository's source,
+  architecture, runtime behavior, algorithms, tests, fixtures, or evaluation machinery.
+- Use `scope-non-software` when the question is primarily a scientific, social,
+  operational, or other domain question whose evidence is not repository structure.
+- For a hybrid question, select the branch that owns the core unknown. The parent may
+  integrate retained `always` research, but no child may revise the branch decision.
 
-Launch subagents via `child delegation under the declared `sonnet` model-class policy` to explore in parallel.
-You **must launch at least 5 subagents**. Select from the suggested menu below,
-define entirely custom subagents, or use any combination. The menu is a guide,
-not a mandate — you are free to skip entries that are not relevant and substitute
-your own tasks for any or all of them.
+Apply `always` plus the selected branch applicability. Submit all applicable migrated
+vectors to the deterministic router, launch all applicable retained vectors through
+the declared `sonnet` delegated-worker policy, and only then await results. Retained
+vectors must not be dispatched to `semantic-code-navigator` or
+`repository-impact-profiler`. Join every result before Step 2.
 
-**Suggested subagent menu:**
+<!-- autoskillit:exploration-vector id="prior-art-codebase" -->
+**[PRIOR ART — Codebase]** (`scope-software`, retained) — Search the repository for
+existing implementations, tests, benchmarks, and documentation related to the research
+question. Report what exists, its consumers and verification surfaces, and remaining
+gaps. Return bounded evidence only; do not decide which prior art should govern the
+investigation.
+<!-- /autoskillit:exploration-vector -->
 
-**[PRIOR ART — Codebase or Literature]**
-> For software questions: search the codebase for existing implementations, tests,
-> benchmarks, or documentation related to the research question. For domain-specific
-> questions (biology, chemistry, social science, etc.): survey published literature,
-> established protocols, and known methods. Report what already exists and what gaps
-> remain.
+<!-- autoskillit:exploration-vector id="prior-art-literature" -->
+**[PRIOR ART — Literature]** (`scope-non-software`, retained) — Survey published
+literature, established protocols, and known methods. Report what exists and what gaps
+remain, with source links. Do not make final relevance or direction decisions.
+<!-- /autoskillit:exploration-vector -->
 
-**[EXTERNAL RESEARCH — Web Search]**
-> Search the web for relevant tools, methods, papers, documentation, and prior work
-> related to the research question. Look for established methodologies, known solutions,
-> documentation for relevant tools, and community discussion of the topic. Report
-> findings with source links.
+<!-- autoskillit:exploration-vector id="external-research" -->
+**[EXTERNAL RESEARCH — Web Search]** (`always`, retained) — Search the web for relevant
+tools, methods, papers, documentation, prior work, and community discussion. Report
+findings with source links and state explicitly when no credible source is found.
+<!-- /autoskillit:exploration-vector -->
 
-**[DOMAIN CONTEXT — Architecture or Domain Knowledge]**
-> For software questions: understand the architecture surrounding the research area,
-> key modules, data structures, algorithms, and their relationships; document current
-> behavior and known limitations. For non-software questions: understand the domain-
-> specific structures, relationships, mechanisms, and processes that are central to
-> the research question.
+<!-- autoskillit:exploration-vector id="domain-context-architecture" -->
+**[DOMAIN CONTEXT — Software Architecture]** (`scope-software`, retained) — Trace the
+architecture surrounding the research area, including key modules, data structures,
+algorithms, imports, calls, and their relationships. Document current behavior and
+evidence-backed limitations without choosing a solution.
+<!-- /autoskillit:exploration-vector -->
 
-**[EVALUATION FRAMEWORK — Metrics or Assessment]**
-> Search for whatever evaluation framework the project or domain uses. For software
-> projects look for files named `metrics.*`, `benchmark.*`, `evaluation.*`, or any
-> assessment/scoring module. For non-software domains, look for standard scales,
-> assays, indices, or rubrics that the domain uses to measure outcomes. If no
-> dedicated evaluation infrastructure exists, flag it explicitly in the output (do
-> not silently emit an empty section). Report what measurement mechanisms exist and
-> what gaps remain.
+<!-- autoskillit:exploration-vector id="domain-context-domain-knowledge" -->
+**[DOMAIN CONTEXT — Domain Knowledge]** (`scope-non-software`, retained) — Assess the
+domain-specific structures, relationships, mechanisms, and processes central to the
+research question. Separate established facts from interpretations.
+<!-- /autoskillit:exploration-vector -->
 
-**[COMPUTATIONAL COMPLEXITY — Algorithm Analysis]**
-> Relevant when the research question involves an algorithm, model, or computational
-> approach. Identify the most expensive computation involved. For each expensive
-> operation found, note its time and space complexity class (O(n²), O(n log n), etc.)
-> and any known pitfalls from library documentation or prior art (implicit matrix
-> materializations, hidden copies, self-inclusion bugs, baseline/reference computation
-> costs). Report findings as: dominant operation, scaling behavior, known bottlenecks,
-> and gotchas.
+<!-- autoskillit:exploration-vector id="evaluation-framework-software" -->
+**[EVALUATION FRAMEWORK — Software Metrics]** (`scope-software`, retained) — Find local
+metrics, benchmarks, evaluation or scoring modules, configuration, tests, and consumers.
+Report measurement mechanisms, thresholds, and gaps; if none exist, say so explicitly.
+<!-- /autoskillit:exploration-vector -->
 
-**[DATA AVAILABILITY — Datasets or Inputs]**
-> Survey what data already exists that is relevant to the research question. Can it be
-> generated synthetically? Are there existing datasets, fixtures, repositories, or
-> domain-standard corpora? Report what is available and what gaps would need to be
-> filled to run a meaningful experiment.
+<!-- autoskillit:exploration-vector id="evaluation-framework-domain-assessment" -->
+**[EVALUATION FRAMEWORK — Domain Assessment]** (`scope-non-software`, retained) — Find
+the standard scales, assays, indices, or rubrics used to measure outcomes in the domain.
+Report the available standards and gaps; if none are credible, say so explicitly.
+<!-- /autoskillit:exploration-vector -->
 
-**You may also define entirely custom subagents** for aspects of the research question
-that require unique investigation not covered by the menu above. Always consider
-launching at least one subagent beyond the obvious selections to explore angles you
-might have missed.
+<!-- autoskillit:exploration-vector id="computational-complexity-local" -->
+**[COMPUTATIONAL COMPLEXITY — Local Algorithm]** (`scope-software`, retained) — Identify
+the most expensive local operation, including focal, baseline, and reference
+computations. Report the concrete library call or algorithm, time and space scaling,
+local bottlenecks, and repository-evidenced pitfalls without selecting an approach.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="computational-complexity-external" -->
+**[COMPUTATIONAL COMPLEXITY — External Prior Art]** (`scope-software`, retained) —
+Research complexity guarantees and known pitfalls from library documentation and prior
+art, including implicit materialization, hidden copies, self-inclusion, and baseline
+costs. Cite sources and distinguish documented guarantees from inference.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="data-availability-repository" -->
+**[DATA AVAILABILITY — Repository Datasets and Fixtures]** (`scope-software`, retained) —
+Inventory local datasets, fixtures, synthetic generators, manifests, and their
+consumers. Report availability, provenance visible in the repository, and gaps needed
+for a meaningful experiment.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="data-availability-external" -->
+**[DATA AVAILABILITY — External Datasets]** (`always`, retained) — Survey relevant
+external datasets, repositories, and domain-standard corpora, including acquisition or
+access constraints. Report what is available and what remains missing.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="custom-research" -->
+**[CUSTOM RESEARCH]** (`scope-non-software`, retained) — Define one bounded additional
+domain-research task only when an important non-software aspect is not covered above.
+This custom-unreviewed vector remains delegated prose and must never dispatch an
+explorer role. Return evidence only; the parent decides whether it affects synthesis.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2 — Synthesize Findings
 

@@ -1,0 +1,29 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence fills only visualization-context fields missing
+    after parent-side supplied-input parsing; complete caller context remains direct
+    authority.
+- id: global-color-map
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories pre-existing figure descriptions,
+    palette declarations, generated artifacts, and configuration, with bounded code-symbol
+    tracing through parent-mediated navigator handoff.
+retained:
+- id: enumerate-number-figures
+  rationale: Figure enumeration consumes the supplied or pre-existing figure plan
+    directly and does not require an independent repository scan.
+- id: detect-redundant-figures
+  rationale: Redundancy detection is a parent-owned comparison and judgment over known
+    figure mappings and questions rather than repository discovery.
+- id: map-narrative-dependencies
+  rationale: Narrative dependency mapping is parent-owned interpretation of the established
+    figure sequence, roles, and report sections rather than repository discovery.

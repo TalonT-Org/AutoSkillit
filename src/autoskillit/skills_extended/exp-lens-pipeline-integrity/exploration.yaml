@@ -1,0 +1,55 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence locates revision-scoped context and experiment-plan
+    artifacts and identifies only missing declared fields without executing target
+    code.
+- id: data-loading-sources
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces data-ingestion calls and source flow while
+    parent-owned handoff covers datasets, raw paths, manifests, and fixtures.
+- id: preprocessing-transforms
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces normalization, encoding, imputation, cleaning,
+    and preprocessing definitions and call order.
+- id: split-logic
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces train, validation, test, fold, stratification,
+    and grouping control flow without judging leakage.
+- id: feature-engineering
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces feature creation, selection, extraction, embedding,
+    and vectorization data flow without executing transformations.
+- id: model-training-evaluation
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces training and evaluation definitions, calls,
+    metrics, and data boundaries without importing or executing target models.

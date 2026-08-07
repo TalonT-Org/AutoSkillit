@@ -69,7 +69,7 @@ class TestKitchenVisibility:
     @pytest.mark.anyio
     async def test_redisable_subsets_hides_kitchen_core(self) -> None:
         """When kitchen-core is in disabled subsets, those tools stay hidden after open_kitchen."""
-        from unittest.mock import AsyncMock
+        from unittest.mock import AsyncMock, call
 
         from autoskillit.server.tools.tools_kitchen import _redisable_subsets
 
@@ -77,7 +77,10 @@ class TestKitchenVisibility:
 
         await _redisable_subsets(mock_ctx, ["kitchen-core"], features={"fleet": True})
 
-        mock_ctx.disable_components.assert_called_once_with(tags={"kitchen-core"})
+        mock_ctx.disable_components.assert_has_awaits(
+            [call(tags={"kitchen-core"}), call(tags={"exploration"})],
+            any_order=True,
+        )
 
     @pytest.mark.anyio
     async def test_tool_list_changes_after_enable_within_session(self) -> None:

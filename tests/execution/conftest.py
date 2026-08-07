@@ -19,6 +19,7 @@ from autoskillit.core import (
     BackendAuthorityTier,
     BackendCapabilities,
     CmdSpec,
+    ExecutionIdentity,
     LaunchPreparation,
     LaunchResolutionRequest,
     LaunchSurface,
@@ -445,6 +446,7 @@ def _flush(
         "loc_insertions": 0,
         "loc_deletions": 0,
         "model_identity": ModelIdentity.unknown(),
+        "execution_identity": ExecutionIdentity.empty(),
     }
     defaults.update(overrides)
 
@@ -475,6 +477,7 @@ def _flush(
         github_api_requests=_api_usage.get("total_requests", 0) if _api_usage else 0,
         loc_insertions=defaults.pop("loc_insertions"),
         loc_deletions=defaults.pop("loc_deletions"),
+        execution_identity=defaults.pop("execution_identity"),
     )
 
     # Extract provider/recipe kwargs and build typed containers

@@ -31,7 +31,7 @@ class TestCollectDisabledFeatureTags:
 
         # "planner" FeatureDef has tool_tags=frozenset() — must be skipped
         result = _collect_disabled_feature_tags({"fleet": False, "planner": False})
-        assert result == frozenset({"fleet"})
+        assert result == frozenset({"exploration", "fleet"})
 
     def test_default_disabled_fleet(self):
         from autoskillit.core.feature_flags import _collect_disabled_feature_tags

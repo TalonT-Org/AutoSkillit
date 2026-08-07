@@ -19,7 +19,6 @@ hooks:
 semantic_version: 1
 semantic_requirements:
   sibling_skills:
-  - name: make-arch-diag
   - name: mermaid
 ---
 
@@ -50,6 +49,7 @@ semantic_requirements:
 ## Critical Constraints
 
 **NEVER:**
+- Treat Related Skills as executable dependencies or invoke any cross-reference from that section; those entries are documentation-only and do not imply execution. Invoke only the required `/autoskillit:mermaid` skill; never invoke `/autoskillit:make-arch-diag`, another architecture lens, or any other cross-reference.
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for ourselves
@@ -58,7 +58,9 @@ semantic_requirements:
 - Include runtime architecture details
 - Show business logic
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
+- Infer code ownership, maintainers, or team responsibility from repository structure
 
 **ALWAYS:**
 - Focus on BUILD and TEST infrastructure
@@ -75,6 +77,11 @@ semantic_requirements:
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-development/arch_diag_development_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch every exploration vector below through the deterministic router
+- Allow parent-boundary handoff of project metadata and declarative entry-point registration from navigator vectors to `repository-impact-profiler` without creating extra vectors
+- Wait for every exploration result before mapping the quality pipeline, calculating project metrics, or creating the diagram
+- Retain parent authority over development-workflow and diagram synthesis
 
 
 ## Analysis Workflow
@@ -90,48 +97,41 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch every vector below under their registered role policies. The parent/router may hand project manifests and declarative entry-point registrations from the two navigator vectors to `repository-impact-profiler`; this does not create another vector. No vector may infer code ownership.
 
-**Project Structure**
-- Find top-level directory organization
-- Identify module/package boundaries
-- Look for: build configs, package definitions, project layout
+<!-- autoskillit:exploration-vector id="project-structure" -->
+1. **Project structure** — Trace top-level code organization, module and package boundaries, imports, and code-defined layout. Include bounded manifest or package-declaration handoffs for profiler evidence; report structure without inferring ownership.
+<!-- /autoskillit:exploration-vector -->
 
-**Build Tooling**
-- Find build configuration
-- Identify package manager and build backend
-- Look for: build config files, makefiles, task runners, package managers
+<!-- autoskillit:exploration-vector id="build-tooling" -->
+2. **Build tooling** — Identify build configuration, package managers, build backends, makefiles, task runners, generated artifacts, and the workflows or files they affect.
+<!-- /autoskillit:exploration-vector -->
 
-**Linting & Formatting**
-- Find code quality tools
-- Identify pre-commit hooks
-- Look for: linter configs, formatter configs, pre-commit hooks, code quality tools
+<!-- autoskillit:exploration-vector id="linting-formatting" -->
+3. **Linting and formatting** — Identify linter, formatter, pre-commit, and code-quality declarations, their configured scope, and workflow consumers.
+<!-- /autoskillit:exploration-vector -->
 
-**Type Checking**
-- Find type checking configuration
-- Identify strictness level
-- Look for: type checker configs, static analysis tools
+<!-- autoskillit:exploration-vector id="type-checking" -->
+4. **Type checking** — Identify type-checker and static-analysis configuration, declared strictness, included or excluded paths, and workflow consumers.
+<!-- /autoskillit:exploration-vector -->
 
-**Test Framework**
-- Find test configuration
-- Identify test patterns and fixtures
-- Look for: test configs, test directories, test runners, test fixtures
+<!-- autoskillit:exploration-vector id="test-framework" -->
+5. **Test framework** — Identify test configuration, directories, runners, naming patterns, fixtures, coverage settings, and build or CI consumers.
+<!-- /autoskillit:exploration-vector -->
 
-**CI/CD (if present)**
-- Find CI configuration
-- Identify workflow stages
-- Look for: CI/CD configs, workflow definitions, pipeline configs
+<!-- autoskillit:exploration-vector id="ci-cd" -->
+6. **CI/CD (if present)** — Identify CI/CD configuration, workflow stages, invoked quality commands, generated or published artifacts, triggers, and check consumers. Report absence as evidence rather than inventing a pipeline.
+<!-- /autoskillit:exploration-vector -->
 
-**Entry Points**
-- Find CLI entry points
-- Identify console scripts
-- Look for: entry point definitions, command definitions, binary files
+<!-- autoskillit:exploration-vector id="entry-points" -->
+7. **Entry points** — Trace CLI and binary command definitions, dispatch calls, and invocation paths. Include bounded declarative console-script or package-registration handoffs for profiler evidence; do not infer ownership from entry-point placement.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Map Quality Pipeline
 

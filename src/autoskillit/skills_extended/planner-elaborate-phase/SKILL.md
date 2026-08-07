@@ -57,6 +57,7 @@ independently and writes a single elaborated phase result. No dependency on
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts outside your designated input files and output directory
 - Explore parent directories of your input paths (e.g., `ls $(dirname $1)/..`)
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
@@ -66,7 +67,8 @@ independently and writes a single elaborated phase result. No dependency on
 - Write result to `$3/{phase_id}_result.json` (keep `_result.json` suffix — downstream consumers glob `*_result.json`)
 - Emit: `elab_result_path = <absolute path to {phase_id}_result.json>`
 - Include all `PhaseElaborated` fields in the result
-- Start all independent child delegations before awaiting any result to maximize concurrency
+- Dispatch all ready, scope-disjoint vectors through the deterministic router before awaiting any result, then join every result
+- Start all independent child delegations in a single message before awaiting any result
 
 ## Workflow
 
@@ -94,19 +96,32 @@ phase — its `technical_approach`, `scope`, and `assignments[]` — must serve 
 Do not elaborate into work not requested by the task. Flag if the phase goal appears
 unrelated to the task.
 
-### Step 2: Launch parallel codebase exploration subagents (SINGLE MESSAGE)
+### Step 2: Launch parallel codebase exploration vectors
 
-**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
+Dispatch all ready, scope-disjoint vectors together. Do not iterate across multiple turns, and join every child before synthesis.
 
-Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
+Do not output prose between dispatches. Immediately proceed to the next vector.
 
-Spawn up to 5 simultaneous child delegations against the codebase in `source_dir`:
+Dispatch the 6 exploration vectors through the deterministic router against the codebase in `source_dir`:
 
-1. **Affected files** — Which files/modules fall within this phase's `scope`? Current state, imports, deviations from conventions.
-2. **Dependency analysis** — What imports and consumes the affected modules? Full import graph.
-3. **Test coverage** — Which tests cover the affected scope? Gaps in coverage?
-4. **Pattern discovery** — What conventions and reusable utilities exist in this scope?
-5. **Cross-phase boundaries** — Based on snapshot context (other phases' names/goals/scopes), where do likely dependencies or handoff points exist?
+<!-- autoskillit:exploration-vector id="affected-files" -->
+1. **Affected source structure** — Which source files, modules, and symbols fall within this phase's `scope`? Capture current imports and structural deviations.
+<!-- /autoskillit:exploration-vector -->
+<!-- autoskillit:exploration-vector id="affected-file-impact" -->
+2. **Affected artifact and consumer impact** — Which configuration, registries, generated artifacts, tests, fixtures, and downstream consumers are tied to the affected scope?
+<!-- /autoskillit:exploration-vector -->
+<!-- autoskillit:exploration-vector id="dependency-analysis" -->
+3. **Dependency analysis** — What imports and consumes the affected modules? Full import graph.
+<!-- /autoskillit:exploration-vector -->
+<!-- autoskillit:exploration-vector id="test-coverage" -->
+4. **Test coverage** — Which tests cover the affected scope? Gaps in coverage?
+<!-- /autoskillit:exploration-vector -->
+<!-- autoskillit:exploration-vector id="pattern-discovery" -->
+5. **Pattern discovery** — What conventions, reusable utilities, fixtures, and artifact consumers exist in this scope?
+<!-- /autoskillit:exploration-vector -->
+<!-- autoskillit:exploration-vector id="cross-phase-boundaries" -->
+6. **Cross-phase boundaries** — Based on snapshot context (other phases' names/goals/scopes), where do structural dependencies or handoff points exist?
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 3: Write phase result
 

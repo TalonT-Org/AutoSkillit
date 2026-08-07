@@ -1,0 +1,56 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence fills only experiment-context fields missing
+    after parent-side argument parsing, leaving variance and stability interpretation
+    to the parent.
+- id: random-seed-management
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces random-seed definitions, variation, calls,
+    and affected execution paths without assessing stability.
+- id: nondeterminism-sources
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces deterministic settings, parallelism, asynchronous
+    work, threads, races, ordering, and nondeterministic control paths while the parent
+    assesses impact.
+- id: multiple-run-protocol
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces run, trial, repetition, replication, and aggregation
+    loops while parent-owned handoff covers declarative run configuration.
+- id: variance-reporting
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies standard-deviation, standard-error,
+    confidence-interval, range, quantile, bootstrap, and error-bar result artifacts
+    and consumers.
+- id: signal-to-noise-assessment
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies reported differences, improvements,
+    margins, effect sizes, gaps, overlap, and significance artifacts while the parent
+    compares signal with noise.

@@ -1,0 +1,44 @@
+vectors:
+- id: primary-use-cases
+  role: semantic-code-navigator
+  relationship_classes:
+  - declares
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation identifies user-facing operation definitions, entry
+    points, and invocation paths while the parent selects representative scenarios.
+- id: happy-path-flows
+  role: semantic-code-navigator
+  relationship_classes:
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces successful control-flow and component calls
+    without deciding which happy path is architecturally representative.
+- id: error-recovery-flows
+  role: semantic-code-navigator
+  relationship_classes:
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces failure branches, handlers, retries, fallbacks,
+    and recovery calls while the parent validates scenario semantics.
+- id: resume-restart-flows
+  role: semantic-code-navigator
+  relationship_classes:
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces persistence, checkpoint, restore, continue,
+    and restart branches while the parent interprets resume behavior.
+- id: integration-points
+  role: semantic-code-navigator
+  relationship_classes:
+  - imports
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces external API, subprocess, and cross-component
+    calls while parent-owned handoff may use repository impact evidence for declarative
+    integration registrations and configuration.

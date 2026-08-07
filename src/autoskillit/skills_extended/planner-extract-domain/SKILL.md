@@ -58,9 +58,10 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 
 **ALWAYS:**
 - Read the analysis file from argument $1 before spawning subagents
-- Use child delegations for all file reads
-- Spawn subagents in parallel
-- Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch ready, scope-disjoint vectors concurrently
+- Start all independent child delegations in a single message before awaiting any result
+- Wait for every dispatched exploration result before synthesis
 
 ## Workflow
 
@@ -68,11 +69,13 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 
 Read the `analysis.json` file from argument $1. Use its `language`, `framework`, `architecture_style`, and `key_patterns` fields to focus subagent queries.
 
-### Step 2: Launch 3–5 parallel child delegations (SINGLE MESSAGE)
+### Step 2: Launch 4–7 parallel exploration vectors
 
-**Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
+Dispatch all ready, scope-disjoint vectors together. Do not iterate across multiple turns.
 
-Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
+Start all independent child delegations before awaiting any result, then join every child before synthesis.
+
+Do not output prose between dispatches. Immediately proceed to the next vector.
 
 Read the task description: if $2 is provided and non-empty, read the file at that path.
 
@@ -80,17 +83,35 @@ If the task description is available, include it in each subagent's prompt: "Foc
 domain vocabulary, abstractions, and integration points relevant to this task: {task}.
 Prioritize areas the task will touch over exhaustive full-codebase coverage."
 
-Spawn all concurrently under the declared `sonnet` model-class policy. Always spawn agents 1–3; spawn agents 4–5 only when the project has >20 modules or architecture_style is layered/hexagonal:
+Dispatch all applicable vectors through the deterministic router. Always dispatch vectors 1–4; dispatch vectors 5–7 only when the project has >20 modules or `architecture_style` is layered/hexagonal:
 
+<!-- autoskillit:exploration-vector id="domain-vocabulary" -->
 1. **Domain Vocabulary** — Extract domain-specific terms, entity names, and verb patterns used in identifiers. Look for: class names, function names, docstrings, README files, ADR documents.
+<!-- /autoskillit:exploration-vector -->
 
+<!-- autoskillit:exploration-vector id="existing-abstractions" -->
 2. **Existing Abstractions** — Identify base classes, protocols, ABCs, and reusable interfaces. Look for: `class * (Protocol)`, `ABC`, the `abstractmethod` decorator, shared base types.
+<!-- /autoskillit:exploration-vector -->
 
+<!-- autoskillit:exploration-vector id="integration-points" -->
 3. **Integration Points** — Identify external system boundaries, HTTP clients, database adapters, message queues. Look for: import of third-party HTTP/DB libraries, adapter classes, port/adapter naming.
+<!-- /autoskillit:exploration-vector -->
 
-4. **Cross-cutting Concerns** (deep mode) — Identify async patterns, error handling conventions, logging strategy. Look for: `async def`, custom exception hierarchies, structured logging calls.
+<!-- autoskillit:exploration-vector id="integration-consumers" -->
+4. **Integration Consumers** — Identify configuration, registries, manifests, tests, fixtures, and generated consumers that bind or verify those integration points.
+<!-- /autoskillit:exploration-vector -->
 
-5. **Data Flow Patterns** (deep mode) — Identify pipeline stages, transformation chains, data schemas. Look for: dataclass chains, TypedDict, Pydantic models, transformation functions.
+<!-- autoskillit:exploration-vector id="cross-cutting-concerns" -->
+5. **Cross-cutting Concerns** (deep mode) — Identify async patterns, error handling conventions, and logging control flow. Look for: `async def`, custom exception hierarchies, structured logging calls.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="data-flow-patterns" -->
+6. **Data Flow Patterns** (deep mode) — Identify pipeline stages, transformation chains, data schemas. Look for: dataclass chains, TypedDict, Pydantic models, transformation functions.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="cross-cutting-impact" -->
+7. **Cross-cutting Impact** (deep mode) — Identify logging/error configuration, registries, tests, fixtures, generated artifacts, and declarative consumers that constrain these patterns.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 3: Synthesize
 

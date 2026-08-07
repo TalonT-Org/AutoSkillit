@@ -115,6 +115,28 @@ class TestClaudeCodeBackend:
         after = list(tmp_path.iterdir())
         assert before == after
 
+    def test_explorer_binding_projection_is_rejected(self, tmp_path: Path) -> None:
+        binding_env = {
+            "semantic-code-navigator": {
+                "AUTOSKILLIT_EXPLORATION_CAPABILITY": "explore_opaque",
+                "AUTOSKILLIT_EXPLORATION_ROLE": "semantic-code-navigator",
+                "AUTOSKILLIT_EXPLORATION_SESSION_ID": "sid",
+            }
+        }
+
+        with pytest.raises(ValueError, match="does not support explorer binding"):
+            ClaudeCodeBackend().setup_session_dir(
+                tmp_path,
+                explorer_binding_env=binding_env,
+            )
+        with pytest.raises(ValueError, match="does not support explorer binding"):
+            ClaudeCodeBackend().refresh_explorer_binding_env(tmp_path, binding_env)
+        with pytest.raises(ValueError, match="does not support explorer binding"):
+            ClaudeCodeBackend().clear_explorer_binding_env(
+                tmp_path,
+                frozenset(binding_env),
+            )
+
 
 class TestClaudeCodeBackendAgentBackendEnv:
     """Tests that AUTOSKILLIT_AGENT_BACKEND is injected into skill session env."""

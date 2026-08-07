@@ -106,37 +106,64 @@ def _codex_trace(
                 "fork_turns": "none",
                 "model": model,
                 "reasoning_effort": effort,
+                "task_name": "review",
             },
         ),
-        _codex_output("spawn-review", {"agent_id": "child-review"}),
+        _codex_output("spawn-review", {"task_name": "/root/review"}),
         _codex_call(
             "spawn-worker",
             "spawn_agent",
-            {"agent_type": worker, "fork_turns": "none"},
+            {
+                "agent_type": worker,
+                "fork_turns": "none",
+                "task_name": "worker",
+            },
         ),
-        _codex_output("spawn-worker", {"agent_id": "child-worker"}),
+        _codex_output("spawn-worker", {"task_name": "/root/worker"}),
         _codex_call("sibling", "Skill", {"skill": sibling}),
         _codex_output("sibling", {"result": "sibling-delivery-complete"}),
         _codex_call(
             "wait",
             "wait_agent",
-            {"targets": ["child-review", "child-worker"]},
+            {"timeout_ms": 3_600_000},
         ),
-        _codex_output(
-            "wait",
-            {
-                "completed": [
+        _codex_output("wait", {"timed_out": False}),
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [
                     {
-                        "agent_id": "child-review",
-                        "result": "child-delivery-complete review",
-                    },
-                    {
-                        "agent_id": "child-worker",
-                        "result": "child-delivery-complete worker",
-                    },
-                ]
+                        "type": "input_text",
+                        "text": (
+                            "<subagent_notification>\n"
+                            '{"agent_path":"/root/review","status":'
+                            '{"completed":"child-delivery-complete review"}}\n'
+                            "</subagent_notification>"
+                        ),
+                    }
+                ],
             },
-        ),
+        },
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": (
+                            "<subagent_notification>\n"
+                            '{"agent_path":"/root/worker","status":'
+                            '{"completed":"child-delivery-complete worker"}}\n'
+                            "</subagent_notification>"
+                        ),
+                    }
+                ],
+            },
+        },
         {
             "type": "response_item",
             "payload": {
@@ -153,6 +180,7 @@ def _codex_trace(
                 "id": "child-review",
                 "parent_thread_id": "parent",
                 "agent_role": reviewer,
+                "agent_path": "/root/review",
                 "base_instructions": {"text": _DISCIPLINE_DIGEST},
             },
         },
@@ -162,6 +190,7 @@ def _codex_trace(
                 "id": "child-worker",
                 "parent_thread_id": "parent",
                 "agent_role": worker,
+                "agent_path": "/root/worker",
                 "base_instructions": {"text": _DISCIPLINE_DIGEST},
             },
         },

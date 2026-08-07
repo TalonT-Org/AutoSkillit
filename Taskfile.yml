@@ -257,6 +257,124 @@ tasks:
         echo "Codex smoke test output saved to: $TEST_OUTPUT"
         exit $PYTEST_EXIT
 
+  test-smoke-codex-explorer-gate:
+    desc: Run the non-skippable Luna/max explorer child capability gate
+    deps: [_tmpdir-setup]
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      OMP_NUM_THREADS: "1"
+      CODEX_SMOKE_TEST: "1"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
+    preconditions:
+      - sh: command -v codex >/dev/null 2>&1
+        msg: "Codex CLI must be installed"
+      - sh: test -n "$OPENAI_API_KEY" || test -n "$CODEX_API_KEY" || test -f "$HOME/.codex/auth.json"
+        msg: "Codex authentication required: set OPENAI_API_KEY or CODEX_API_KEY, or run 'codex login'"
+    cmds:
+      - |
+        mkdir -p .autoskillit/temp/conformance
+        TEST_OUTPUT=".autoskillit/temp/explorer-gate-$(date +%Y-%m-%d_%H%M%S).txt"
+        ATTESTATION_DIR=".autoskillit/temp/conformance/$(date +%Y-%m-%d_%H%M%S)-$$"
+        mkdir -p "$ATTESTATION_DIR"
+
+        if [[ -d ".venv" ]]; then
+          PYTHON_CMD=".venv/bin/python"
+        else
+          PYTHON_CMD="python"
+        fi
+        PYTEST_CMD="$PYTHON_CMD -m pytest"
+
+        set -o pipefail
+        set +e
+        AUTOSKILLIT_EXPLORER_ATTESTATION_DIR="$ATTESTATION_DIR" \
+          $PYTEST_CMD tests/execution/backends/test_cli_conformance_probes.py \
+          -m smoke -k generated_codex_child_luna_max_sandbox_conformance \
+          -v --tb=short -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} \
+          -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+        PYTEST_EXIT=$?
+        set +o pipefail
+        set -e
+
+        if [[ $PYTEST_EXIT -eq 0 ]] && ! grep -Eq '(^| )1 passed' "$TEST_OUTPUT"; then
+          echo "Explorer gate did not produce one non-skipped pass"
+          PYTEST_EXIT=1
+        fi
+        if [[ $PYTEST_EXIT -eq 0 ]] && { [[ ! -s "$ATTESTATION_DIR/codex-explorer-conformance-v6.json" ]] || [[ ! -s "$ATTESTATION_DIR/codex-explorer-conformance-v6.json.sha256" ]]; }; then
+          echo "Explorer gate did not publish its attestation and digest sidecar"
+          PYTEST_EXIT=1
+        fi
+        if [[ $PYTEST_EXIT -eq 0 ]]; then
+          "$PYTHON_CMD" -c '
+        import subprocess
+        import sys
+        from pathlib import Path
+        from autoskillit.execution.backends._explorer_conformance import (
+            project_codex_luna_catalog,
+            validate_published_explorer_release_readiness,
+        )
+        attestation = validate_published_explorer_release_readiness(Path(sys.argv[1]))
+        cli_version = subprocess.run(
+            ["codex", "--version"], capture_output=True, check=True, text=True
+        ).stdout.strip()
+        if cli_version != f"codex-cli {attestation.cli_version}":
+            raise ValueError("published explorer attestation CLI version does not match Codex")
+        catalog = subprocess.run(
+            ["codex", "debug", "models", "--bundled"], capture_output=True, check=True
+        ).stdout
+        if attestation.model_catalog_digest != project_codex_luna_catalog(catalog).projected_sha256:
+            raise ValueError("published explorer attestation catalog does not match Codex")
+        ' "$ATTESTATION_DIR/codex-explorer-conformance-v6.json" || PYTEST_EXIT=1
+        fi
+        echo "Codex explorer gate output saved to: $TEST_OUTPUT"
+        exit $PYTEST_EXIT
+
+  test-smoke-codex-explorer-live-gate:
+    desc: Run the uncached, authenticated production AutoSkillit MCP explorer gate
+    deps: [_tmpdir-setup]
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      OMP_NUM_THREADS: "1"
+      CODEX_SMOKE_TEST: "1"
+      AUTOSKILLIT_EXPLORER_LIVE_GATE: "1"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
+    preconditions:
+      - sh: command -v codex >/dev/null 2>&1
+        msg: "Codex CLI must be installed"
+      - sh: test -n "$OPENAI_API_KEY" || test -n "$CODEX_API_KEY" || test -f "$HOME/.codex/auth.json"
+        msg: "Codex authentication required: set OPENAI_API_KEY or CODEX_API_KEY, or run 'codex login'"
+    cmds:
+      - |
+        if [[ -d ".venv" ]]; then
+          PYTHON_CMD=".venv/bin/python"
+        else
+          PYTHON_CMD="python"
+        fi
+        ARTIFACT_DIR=".autoskillit/temp/conformance/live-explorer-gate"
+        EVIDENCE="$ARTIFACT_DIR/live-explorer-gate.json"
+        TEST_OUTPUT="$ARTIFACT_DIR/pytest-output.txt"
+        JUNIT_REPORT="$ARTIFACT_DIR/pytest-report.xml"
+        mkdir -p "$ARTIFACT_DIR"
+        rm -f "$EVIDENCE" "$TEST_OUTPUT" "$JUNIT_REPORT"
+        export AUTOSKILLIT_EXPLORER_LIVE_GATE_ARTIFACT_DIR="$ARTIFACT_DIR"
+        set +e
+        $PYTHON_CMD -m pytest tests/execution/backends/test_explorer_live_gate.py \
+          -q --tb=short -m smoke -p no:cacheprovider -o "addopts=" \
+          --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" \
+          --junitxml="$JUNIT_REPORT" >"$TEST_OUTPUT" 2>&1
+        PYTEST_EXIT=$?
+        set -e
+        tail -c 16000 "$TEST_OUTPUT"
+        if [[ $PYTEST_EXIT -ne 0 ]]; then
+          echo "Live explorer gate failed; bounded output is saved to: $TEST_OUTPUT"
+          exit $PYTEST_EXIT
+        fi
+        $PYTHON_CMD -c 'import sys, xml.etree.ElementTree as E; cases=list(E.parse(sys.argv[1]).getroot().iter("testcase")); skipped=sum(bool(case.findall("skipped")) for case in cases); bad=len(cases) != 1 or skipped; sys.exit(f"live explorer gate requires exactly one non-skipped test, got tests={len(cases)} skipped={skipped}" if bad else 0)' "$JUNIT_REPORT"
+        if [[ ! -s "$EVIDENCE" ]]; then
+          echo "Live explorer gate did not publish fresh evidence: $EVIDENCE"
+          exit 1
+        fi
+        $PYTHON_CMD -c 'import json, sys; data=json.load(open(sys.argv[1], encoding="utf-8")); expected={"contract":"live-production-shared-explorer-principal-v2","principal_role":"shared-explorer-session","authenticated_resume":"denied"}; bad=any(data.get(key) != value for key, value in expected.items()); sys.exit(f"invalid live explorer evidence: {data!r}" if bad else 0)' "$EVIDENCE"
+
   test-smoke-claude-startup:
     desc: Run the exact interactive Claude startup-readiness trace
     deps: [_tmpdir-setup]

@@ -6,7 +6,7 @@ uses_capabilities: []
 activate_deps:
 - mermaid
 description: Create a risk register and stakeholder impact assessment for experiments with deployment implications. Governance
-  lens answering "What risks arise from acting on this result?"
+ lens answering "What risks arise from acting on this result?"
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -57,6 +57,8 @@ semantic_requirements:
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-governance-risk/`
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
+- Import or execute target code, tests, experiments, models, or benchmarks
+- Let an exploration vector classify risk, assess decision sufficiency, recommend deployment action, or create the diagram
 
 **ALWAYS:**
 - Identify subgroups for whom the experimental evidence may not generalize
@@ -66,6 +68,11 @@ semantic_requirements:
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch every exploration vector below through the deterministic router
+- Route mixed harm-metric and monitoring evidence through the parent for bounded profiler handoff without creating extra vectors
+- Wait for every exploration result before building the risk register, assessing decision sufficiency, or creating the diagram
+- Retain parent authority over governance, causal, subgroup, and deployment judgments in Steps 2+
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-governance-risk/exp_diag_governance_risk_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -83,36 +90,55 @@ semantic_requirements:
 If positional arg 1 (context_path) is provided and the file exists, read it to obtain
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
-methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
+methodology. Use supplied structured context as the foundation for Steps 1-5.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses supplied context and experiment-plan arguments, inspect only
+existing revision-scoped CWD artifacts for fields that remain absent. Never rediscover
+or override supplied complete fields. If no fields are missing, return an explicit
+not-applicable result without repository search. If relevant evidence is absent or
+unrelated, explicitly report it as unavailable or unrelated without widening scope,
+inferring meaning, or importing or executing target code, tests, experiments, models,
+or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+### Step 1: Launch the Authored Discovery Vectors (SINGLE MESSAGE)
+
+Dispatch the five authored Step-1 vectors with the ready fallback vector through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Use the registered role for each source block. Parent-mediated profiler handoff for mixed evidence does not create another vector.
 
-**Intended Use & Deployment Context**
+<!-- autoskillit:exploration-vector id="intended-use-deployment-context" -->
+1. **Intended Use & Deployment Context**
 - Find intended deployment scenario and audience
 - Look for: deploy, production, use_case, audience, user, stakeholder, decision
+<!-- /autoskillit:exploration-vector -->
 
-**Subgroup & Fairness Analysis**
+<!-- autoskillit:exploration-vector id="subgroup-fairness-analysis" -->
+2. **Subgroup & Fairness Analysis**
 - Find evidence of subgroup analysis or fairness evaluation
 - Look for: subgroup, demographic, fairness, equity, bias, disaggregate, protected
+<!-- /autoskillit:exploration-vector -->
 
-**Harm & Risk Metrics**
+<!-- autoskillit:exploration-vector id="harm-risk-metrics" -->
+3. **Harm & Risk Metrics**
 - Find safety or harm metrics tracked
 - Look for: harm, safety, risk, adverse, negative, side_effect, failure_mode
+<!-- /autoskillit:exploration-vector -->
 
-**Monitoring & Feedback Plans**
+<!-- autoskillit:exploration-vector id="monitoring-feedback-plans" -->
+4. **Monitoring & Feedback Plans**
 - Find post-deployment monitoring or feedback loops
 - Look for: monitor, alert, feedback, drift, rollback, incident, threshold, canary
+<!-- /autoskillit:exploration-vector -->
 
-**Limitation Disclosure**
+<!-- autoskillit:exploration-vector id="limitation-disclosure" -->
+5. **Limitation Disclosure**
 - Find explicit acknowledgment of limitations
 - Look for: limitation, caveat, not_suitable, generalize, scope, restriction, caveat
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Build Risk Register
 

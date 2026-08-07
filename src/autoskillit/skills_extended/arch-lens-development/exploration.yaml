@@ -1,0 +1,61 @@
+vectors:
+- id: project-structure
+  role: semantic-code-navigator
+  relationship_classes:
+  - declares
+  - defines
+  - imports
+  - references
+  rationale: Semantic navigation traces module and package boundaries while parent-owned
+    handoff may use repository impact evidence for declarative project artifacts.
+- id: build-tooling
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers build configuration, package managers,
+    build backends, task runners, and their consumers.
+- id: linting-formatting
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers linter, formatter, pre-commit, and
+    quality-tool declarations and the files or workflows they affect.
+- id: type-checking
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers type-checker and static-analysis configuration,
+    scope, strictness declarations, and consumers.
+- id: test-framework
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers test configuration, runners, layout,
+    fixtures, patterns, and workflow consumers.
+- id: ci-cd
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - calls
+  - references
+  - affects
+  rationale: Repository impact evidence covers CI/CD workflow definitions, pipeline
+    stages, invoked commands, artifacts, and affected checks.
+- id: entry-points
+  role: semantic-code-navigator
+  relationship_classes:
+  - declares
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces command definitions and invocation paths while
+    parent-owned handoff may use repository impact evidence for declarative entry-point
+    registration.

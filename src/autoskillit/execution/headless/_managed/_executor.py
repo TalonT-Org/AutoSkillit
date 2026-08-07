@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from autoskillit.core import (
     BackendAuthority,
     ClosureAuthoritySpec,
+    ExecutionIdentity,
     ManagedHeadlessSessionLineageRef,
     NativeShellCaptureDecision,
     ResolvedLaunchContract,
@@ -77,6 +78,7 @@ class _DefaultHeadlessExecutorBase:
         capability_contract: SkillProjectionBinding | None = None,
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
+        execution_identity: ExecutionIdentity = ExecutionIdentity(),
         on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
     ) -> SkillResult:
         from autoskillit.execution.headless import run_headless_core
@@ -130,6 +132,7 @@ class _DefaultHeadlessExecutorBase:
             capability_contract=capability_contract,
             native_shell_capture_decision=native_shell_capture_decision,
             managed_lineage_ref=managed_lineage_ref,
+            execution_identity=execution_identity,
             on_launch_resolved=on_launch_resolved,
         )
 

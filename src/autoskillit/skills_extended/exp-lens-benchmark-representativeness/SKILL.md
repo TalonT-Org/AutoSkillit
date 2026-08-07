@@ -57,6 +57,7 @@ semantic_requirements:
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-benchmark-representativeness/`
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -67,6 +68,11 @@ semantic_requirements:
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch every exploration vector below through the deterministic router
+- Route semantic code, symbol, and data-control-flow handoffs to `semantic-code-navigator` and bounded configuration, data, fixture, manifest, generated-artifact, reproduction, test, and pre-existing revision-scoped artifact handoffs to `repository-impact-profiler` through the parent-owned plan
+- Wait for every exploration result before building the coverage matrix, judging generalization, or creating the diagram
+- Retain parent authority over representativeness and generalization judgments, Mermaid generation, and output writing
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-benchmark-representativeness/exp_diag_benchmark_representativeness_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -85,35 +91,39 @@ If positional arg 1 (context_path) is provided and the file exists, read it to o
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
 methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
+exploration for these fields if the context file supplies them.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
+
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch every authored vector below under their registered role policies. Mixed code and declarative evidence remains one parent-owned plan; bounded role handoffs return to the originating vector and do not add graph dependencies.
 
-**Benchmark & Dataset Inventory**
-- Find all datasets, benchmarks, test suites used
-- Look for: `benchmark`, `dataset`, `test_suite`, `eval`, `corpus`, `split`, `GLUE`, `ImageNet`
+<!-- autoskillit:exploration-vector id="benchmark-dataset-inventory" -->
+1. **Benchmark & Dataset Inventory** — Find all datasets, benchmarks, and test suites used, including `benchmark`, `dataset`, `test_suite`, `eval`, `corpus`, `split`, `GLUE`, and `ImageNet` artifacts.
+<!-- /autoskillit:exploration-vector -->
 
-**Task & Scenario Coverage**
-- Find what scenarios, conditions, and domains are tested
-- Look for: `task`, `scenario`, `domain`, `category`, `difficulty`, `subset`
+<!-- autoskillit:exploration-vector id="task-scenario-coverage" -->
+2. **Task & Scenario Coverage** — Find what scenarios, conditions, and domains are tested, including `task`, `scenario`, `domain`, `category`, `difficulty`, and `subset` declarations.
+<!-- /autoskillit:exploration-vector -->
 
-**Metric Coverage**
-- Find all evaluation metrics used
-- Look for: `metric`, `accuracy`, `f1`, `bleu`, `rouge`, `latency`, `cost`, `fairness`
+<!-- autoskillit:exploration-vector id="metric-coverage" -->
+3. **Metric Coverage** — Find all evaluation metrics used, including `metric`, `accuracy`, `f1`, `bleu`, `rouge`, `latency`, `cost`, and `fairness` evidence.
+<!-- /autoskillit:exploration-vector -->
 
-**Claimed Generalization Scope**
-- Find claims about generality in docs, papers, READMEs
-- Look for: `generalize`, `real-world`, `production`, `deploy`, `robust`, `transfer`, `domain`
+<!-- autoskillit:exploration-vector id="claimed-generalization-scope" -->
+4. **Claimed Generalization Scope** — Find claims about generality in repository documentation and pre-existing revision-scoped artifacts, including `generalize`, `real-world`, `production`, `deploy`, `robust`, `transfer`, and `domain` language.
+<!-- /autoskillit:exploration-vector -->
 
-**Distribution Characteristics**
-- Find data distribution analysis, class balance, domain stats
-- Look for: `distribution`, `balance`, `skew`, `size`, `demographics`, `diversity`
+<!-- autoskillit:exploration-vector id="distribution-characteristics" -->
+5. **Distribution Characteristics** — Find data-distribution analysis, class balance, and domain statistics, including `distribution`, `balance`, `skew`, `size`, `demographics`, and `diversity` evidence.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Build the Coverage Matrix
 

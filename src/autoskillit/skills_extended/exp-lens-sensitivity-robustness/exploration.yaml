@@ -1,0 +1,56 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence fills only experiment-context fields missing
+    after parent-side argument parsing, leaving assumption and robustness interpretation
+    to the parent.
+- id: analytic-choices-made
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces analysis decision points, parameters, thresholds,
+    defaults, alternatives, and their control-flow effects without rating assumption
+    load.
+- id: ablation-coverage
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces ablation, removal, disablement, variation,
+    and sweep branches while parent-owned handoff covers declarative sweep and result
+    artifacts.
+- id: preprocessing-variations
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces preprocessing definitions, alternatives, calls,
+    and affected data paths while the parent assesses sensitivity.
+- id: hyperparameter-sensitivity
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies hyperparameter declarations, tuning
+    and sweep configuration, fixed values, and affected consumers while the parent
+    classifies sensitivity.
+- id: distribution-environment-variations
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies distribution-shift, domain-transfer,
+    environment, and generalization test artifacts, configuration, fixtures, and consumers.

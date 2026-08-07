@@ -93,6 +93,7 @@ class TestBackendRegistry:
             "all_backends",
             "codex_recipe_delivery_calling_contract",
             "ensure_codex_mcp_registered",
+            "extract_codex_execution_identity",
             "enumerate_fresh_codex_marker_ids",
             "generate_codex_hooks_config",
             "get_backend",

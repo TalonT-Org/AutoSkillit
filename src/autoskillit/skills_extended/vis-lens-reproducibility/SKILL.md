@@ -64,6 +64,7 @@ semantic_requirements:
 - Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-reproducibility/`
 - Treat "code available on request" as equivalent to public availability
 - Omit random seed documentation for any figure derived from stochastic processes
+- Import or execute target code, tests, experiments, models, benchmarks, notebooks, or plotting workflows to gather evidence
 
 **ALWAYS:**
 - Check data availability status for every figure (public/restricted/embargoed)
@@ -71,6 +72,12 @@ semantic_requirements:
 - Pin plotting library name and version (matplotlib 3.8.2, seaborn 0.13.0, etc.)
 - Record the random seed(s) used for any stochastic component (sampling, bootstrapping, noise injection)
 - Provide a per-figure code reference: script path or notebook cell identifier
+- Use the registered exploration roles for all repository reads
+- Route the missing-context vector only for fields absent after direct caller-context parsing, and dispatch the 5 repo-local audit vectors through the deterministic router
+- Allow parent-boundary handoff between semantic code navigation and declarative or generated-artifact evidence without creating extra vectors
+- Keep external availability, licensing, and network checks lens-owned and outside native exploration
+- Wait for every applicable exploration result before making reproducibility decisions, emitting figure specifications, or creating the diagram
+- Retain parent authority over warnings, failures, availability classification, disclosure judgment, figure-spec synthesis, and diagram creation
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool — this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-reproducibility/vis_spec_reproducibility_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
@@ -93,42 +100,49 @@ arg 2 (experiment_plan_path) is provided and exists, read the experiment plan fo
 methodology. Use this structured context as the foundation for Steps 1–4; skip the CWD
 exploration for these fields if the context file supplies them.
 
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
+
 ### Step 1: Data Availability Inventory
 
-For each figure:
-- Identify the data source (file path, dataset name, external URL)
-- Classify availability: PUBLIC (DOI / URL), RESTRICTED (license required), EMBARGOED (not yet released)
-- FLAG FAIL if data is restricted/embargoed with no access plan stated
+<!-- autoskillit:exploration-vector id="data-availability-inventory" -->
+For each pre-existing figure or figure specification, identify repo-local data file paths, dataset names, manifests, data-source fields, and declared external references. Return bounded artifact evidence only; do not access the network, resolve licenses, or classify availability.
+<!-- /autoskillit:exploration-vector -->
+
+The parent classifies availability as PUBLIC, RESTRICTED, or EMBARGOED using direct evidence and lens-owned external checks, and flags failure when restricted or embargoed data has no stated access plan.
 
 ### Step 2: Preprocessing Parameter Audit
 
-For each figure, identify all preprocessing steps that affect visual output:
-- **Histograms**: bin width or bin count; normalization (density vs count vs probability)
-- **Time-series / learning curves**: smoothing window type (rolling mean, EMA) and window size
-- **Heatmaps**: normalization method (min-max, z-score, none); colormap clipping range
-- **Scatter/line with aggregation**: aggregation function (mean, median) and grouping
-- FLAG WARNING for any preprocessing parameter not documented
+<!-- autoskillit:exploration-vector id="preprocessing-parameter-audit" -->
+Trace preprocessing definitions and parameters that affect visual output: histogram bin width or count and normalization; time-series smoothing method and window; heatmap normalization and clipping; and scatter or line aggregation and grouping. Return code relationships and declared values only.
+<!-- /autoskillit:exploration-vector -->
+
+The parent flags any undocumented preprocessing parameter as a warning.
 
 ### Step 3: Library and Version Audit
 
-Scan the codebase for plotting imports:
-- Record: `import matplotlib`, `import seaborn`, `import plotly`, etc.
-- Check `pyproject.toml` or `requirements.txt` for pinned versions
-- FLAG WARNING if plotting library version is not pinned
+<!-- autoskillit:exploration-vector id="library-version-audit" -->
+Trace plotting-library imports and references, including matplotlib, seaborn, and plotly. Include bounded parent-mediated handoff of dependency manifests and version declarations to the repository-impact profiler.
+<!-- /autoskillit:exploration-vector -->
+
+The parent records the library and version and flags an unpinned version as a warning.
 
 ### Step 4: Random Seed Audit
 
-For each figure involving a stochastic component:
-- Identify source of randomness: bootstrapping, subsampling, t-SNE/UMAP, noise injection
-- Verify `random_state`, `seed`, `np.random.seed`, or equivalent is documented per figure
-- FLAG FAIL if any stochastic figure has no documented seed
+<!-- autoskillit:exploration-vector id="random-seed-audit" -->
+For each stochastic figure path, trace sources of randomness such as bootstrapping, subsampling, dimensionality reduction, and noise injection, plus random-state and seed definitions and calls. Return evidence only.
+<!-- /autoskillit:exploration-vector -->
+
+The parent verifies per-figure seed documentation and flags failure when it is absent.
 
 ### Step 5: Per-Figure Code Reference
 
-For each figure:
-- Identify the script or notebook cell that generates it
-- Record: file path + function or cell ID
-- FLAG WARNING if a figure has no traceable code reference
+<!-- autoskillit:exploration-vector id="per-figure-code-reference" -->
+For each pre-existing figure or figure specification, identify declared generating scripts, notebooks, cell identifiers, and referenced functions. Use parent-mediated navigator handoff for bounded symbol tracing; do not execute notebooks or plotting code.
+<!-- /autoskillit:exploration-vector -->
+
+The parent records the file and function or cell identifier and flags missing traceability as a warning.
 
 ### Step 6: Emit yaml:figure-spec Blocks
 

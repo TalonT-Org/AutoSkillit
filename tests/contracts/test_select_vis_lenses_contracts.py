@@ -31,6 +31,38 @@ CONTRACTS_YAML = (
     / "recipe"
     / "skill_contracts.yaml"
 )
+RECIPES_DIR = SKILL_PATH.parents[2] / "recipes"
+
+VIS_LENS_FAMILY = (
+    "vis-lens-always-on",
+    "vis-lens-antipattern",
+    "vis-lens-caption-annot",
+    "vis-lens-chart-select",
+    "vis-lens-color-access",
+    "vis-lens-figure-table",
+    "vis-lens-methodology-norms",
+    "vis-lens-multi-compare",
+    "vis-lens-reproducibility",
+    "vis-lens-story-arc",
+    "vis-lens-temporal",
+    "vis-lens-uncertainty",
+)
+REACHABLE_SELECTOR_VALUES = (
+    "vis-lens-always-on",
+    "vis-lens-temporal",
+    "vis-lens-multi-compare",
+    "vis-lens-chart-select",
+    "vis-lens-uncertainty",
+    "vis-lens-figure-table",
+    "vis-lens-methodology-norms",
+)
+UNREACHABLE_SELECTOR_VALUES = (
+    "vis-lens-antipattern",
+    "vis-lens-caption-annot",
+    "vis-lens-color-access",
+    "vis-lens-reproducibility",
+    "vis-lens-story-arc",
+)
 
 
 def _read_skill() -> str:
@@ -46,6 +78,47 @@ def _extract_lens_table_section(text: str) -> str:
     )
     assert m, "Tier B experiment-type table not found in select-vis-lenses SKILL.md"
     return m.group(0).lower()
+
+
+def _selector_values(text: str) -> tuple[str, ...]:
+    step_one = text.split("### Step 1", 1)[1].split("### Step 2", 1)[0]
+    return tuple(dict.fromkeys(re.findall(r"vis-lens-[a-z-]+", step_one)))
+
+
+def test_selector_values_are_the_exact_strict_subset_of_the_packaged_family() -> None:
+    filesystem = tuple(
+        path.parent.name for path in sorted(SKILL_PATH.parents[1].glob("vis-lens-*/SKILL.md"))
+    )
+    selector_values = _selector_values(_read_skill())
+
+    assert filesystem == VIS_LENS_FAMILY
+    assert selector_values == REACHABLE_SELECTOR_VALUES
+    assert set(selector_values) < set(VIS_LENS_FAMILY)
+    assert tuple(value for value in VIS_LENS_FAMILY if value not in selector_values) == (
+        UNREACHABLE_SELECTOR_VALUES
+    )
+
+
+@pytest.mark.parametrize("recipe_name", ["research", "research-design"])
+def test_bundled_recipe_contexts_share_selector_values_and_materialize_dynamic_slug(
+    recipe_name: str,
+) -> None:
+    source = load_yaml(RECIPES_DIR / f"{recipe_name}.yaml")
+    compiled = load_yaml(RECIPES_DIR / f"{recipe_name}.json")
+
+    for recipe in (source, compiled):
+        vis_dial = recipe["steps"]["vis_dial"]
+        vis_apply = recipe["steps"]["vis_apply"]
+
+        assert vis_dial["phoropter_family"] == "vis-lens"
+        assert "/autoskillit:select-vis-lenses" in vis_dial["with"]["skill_command"]
+        assert vis_apply["phoropter_family"] == "vis-lens"
+        assert vis_apply["with"]["step_name"] == "vis_apply"
+        command = vis_apply["with"]["skill_command"]
+        assert command.startswith("/autoskillit:vis-lens-{slug}")
+        assert command.count("{slug}") == 1
+
+    assert _selector_values(_read_skill()) == REACHABLE_SELECTOR_VALUES
 
 
 class TestSelectVisLensesExperimentTypes:

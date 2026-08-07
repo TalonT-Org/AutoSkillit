@@ -1,0 +1,57 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence fills only visualization-context fields missing
+    after parent-side supplied-input parsing; complete caller context remains direct
+    authority.
+- id: learning-loss-curves
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories pre-existing curve specifications,
+    generated figures, tables, data declarations, and fixtures, with bounded code
+    tracing through parent-mediated navigator handoff.
+- id: seed-count
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces seed-count definitions, random-state configuration,
+    run construction, and affected training-curve paths while the parent judges sufficiency.
+- id: smoothing-calls
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces smoothing definitions, parameters, calls,
+    and affected visualization paths while disclosure and appropriateness remain parent
+    judgments.
+- id: x-axis-type
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces epoch, step, and wall-clock definitions, plotting
+    references, and affected comparison paths while alignment remains a parent judgment.
+- id: early-stopping
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces early-stopping configuration, control flow,
+    best-epoch references, and affected plot annotations while the parent judges marker
+    completeness.

@@ -1,0 +1,65 @@
+vectors:
+- id: input-validation
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces validation and sanitization definitions, calls,
+    guarded inputs, and failure paths while the parent assesses trust boundaries.
+- id: path-security
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces path-validation and restriction control paths
+    while parent-owned handoff may use repository impact evidence for declarative
+    allowlists, denylists, and path policy.
+- id: process-boundaries
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces subprocess creation, isolation, timeout, guard,
+    and cleanup control flow while the parent interprets process trust boundaries.
+- id: authentication-authorization
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces authentication and authorization definitions,
+    permission checks, credential references, and guarded call paths without judging
+    policy adequacy.
+- id: secret-management
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies secret and credential declarations,
+    environment-variable use, ignore policy, configuration consumers, and affected
+    surfaces without exposing values.
+- id: file-system-security
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies file-access controls, allowed write
+    zones, snapshots, file-change policy, configuration, and affected consumers.
+- id: database-isolation
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies database access controls, tenant
+    or user scoping declarations, isolation configuration, registrations, and affected
+    consumers.

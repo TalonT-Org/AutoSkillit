@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -84,6 +85,14 @@ from autoskillit.server._audit_authority_materializer import (
     derive_initial_lifecycle_ids,
     load_current_prior_authority,
     normalize_audited_plan_refs,
+)
+from autoskillit.server._explorer_projection import (
+    _build_requested_execution_identity,
+    _cleanup_explorer_launch,
+    _explorer_launch_identity,
+    _issue_explorer_binding_env,
+    _resolve_exploration_applicabilities,
+    _resolve_exploration_profile,
 )
 from autoskillit.server._guards import (
     _check_dry_walkthrough,
@@ -183,6 +192,16 @@ from autoskillit.server.tools._native_shell_capture import (
 from autoskillit.server.tools._types import ToolFailureEnvelope, deny_envelope
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class _ExplorerLaunchLease:
+    """Cleanup authority for one bound explorer launch."""
+
+    session_id: str
+    session_home: Path
+    backend: CodingAgentBackend | None
+
 
 _PURE_SLEEP_RE = re.compile(
     r'^(?:python3?\s+-c\s+["\']import time;\s*time\.sleep\((?P<py_secs>\d+(?:\.\d+)?)\)["\']'
@@ -907,6 +926,8 @@ async def run_skill(
         from autoskillit.server import _get_ctx  # circular-break
 
         _cleanup_session_id: str | None = None
+        _explorer_parent_identity: tuple[Path, str] | None = None
+        _explorer_launch_lease: _ExplorerLaunchLease | None = None
         tool_ctx = _get_ctx()
         _installed_execution = get_recipe_execution(tool_ctx)
         _contract_store = tool_ctx.skill_session_contract_store
@@ -1512,6 +1533,8 @@ async def run_skill(
                 _effective_backend_obj = _resume_backend_obj
             elif _explicit_resolution is not None:
                 authority_kind = _explicit_resolution.kind
+                if authority_kind is None:
+                    raise SkillContractError("Explicit backend resolution lacks typed authority")
                 authority_tier = (
                     BackendAuthorityTier.RECIPE
                     if authority_kind is BackendAuthorityKind.RECIPE
@@ -1552,9 +1575,31 @@ async def run_skill(
                         order_id=effective_order_id,
                     ).to_json()
             if _stored_contract is None:
-                projection_context = bind_projection_backend(
-                    projection_context, _effective_backend_obj
+                if projection_context is None:
+                    raise SkillContractError("Fresh execution lacks projection authority")
+                _fresh_parent_sandbox_mode = (
+                    "read-only"
+                    if tool_ctx.read_only_resolver and tool_ctx.read_only_resolver(skill_command)
+                    else "workspace-write"
                 )
+                _active_exploration_applicabilities = _resolve_exploration_applicabilities(
+                    projection_context,
+                    skill_inputs=skill_inputs,
+                    output_dir=output_dir,
+                )
+                projection_context = bind_projection_backend(
+                    projection_context,
+                    _effective_backend_obj,
+                    resolution=_explicit_resolution,
+                    parent_sandbox_mode=_fresh_parent_sandbox_mode,
+                    resolved_exploration_profile=_resolve_exploration_profile(
+                        tool_ctx,
+                        projection_context,
+                        active_applicabilities=_active_exploration_applicabilities,
+                    ),
+                    active_exploration_applicabilities=_active_exploration_applicabilities,
+                )
+            _explorer_parent_identity = _explorer_launch_identity(invocation)
             if invocation is not None and _stored_contract is None:
                 if invocation.root.source_ref is None:
                     raise SkillContractError("Effective skill source identity is missing")
@@ -1617,6 +1662,26 @@ async def run_skill(
                 ),
             ):
                 return compat_error
+
+            def _record_explorer_launch_lease(
+                *,
+                bound_session_id: str,
+                session_home: Path,
+                operation: str,
+            ) -> CodingAgentBackend:
+                """Transfer cleanup ownership before validating backend injection."""
+                nonlocal _explorer_launch_lease
+                backend = _effective_backend_obj
+                _explorer_launch_lease = _ExplorerLaunchLease(
+                    session_id=bound_session_id,
+                    session_home=session_home,
+                    backend=backend,
+                )
+                if backend is None:
+                    raise SkillContractError(
+                        f"Explorer {operation} requires the bound Codex backend"
+                    )
+                return backend
 
             # Server-side recipe step parameter resolution.
             # When a step_name is provided and the recipe's step definition is cached,
@@ -1691,9 +1756,9 @@ async def run_skill(
                 is_read_only = _stored_contract.read_only
                 completion_required = _stored_contract.completion_required
             else:
-                is_read_only = bool(
-                    tool_ctx.read_only_resolver and tool_ctx.read_only_resolver(skill_command)
-                )
+                if projection_context is None:
+                    raise SkillContractError("Projection context was not prepared")
+                is_read_only = projection_context.parent_sandbox_mode == "read-only"
                 completion_required = bool(
                     tool_ctx.completion_required_resolver
                     and tool_ctx.completion_required_resolver(skill_command)
@@ -1764,10 +1829,31 @@ async def run_skill(
                     _cleanup_session_id = session_id
                     if projection_context is None:
                         raise SkillContractError("Projection context was not prepared")
+
+                    def _mint_fresh_explorer_binding(
+                        authority_home: Path,
+                    ) -> dict[str, dict[str, str]] | None:
+                        nonlocal _explorer_launch_lease
+                        binding_env = _issue_explorer_binding_env(
+                            tool_ctx,
+                            session_id=session_id,
+                            projection_context=projection_context,
+                            identity=_explorer_parent_identity,
+                            authority_home=authority_home,
+                        )
+                        if binding_env is not None:
+                            _record_explorer_launch_lease(
+                                bound_session_id=session_id,
+                                session_home=authority_home,
+                                operation="launch",
+                            )
+                        return binding_env
+
                     session_root = tool_ctx.session_skill_manager.materialize_invocation(
                         session_id,
                         invocation,
                         projection_context,
+                        explorer_binding_env_factory=_mint_fresh_explorer_binding,
                     )
                 else:
                     raise SkillContractError(
@@ -1793,6 +1879,38 @@ async def run_skill(
                     ).to_json()
                 skill_add_dirs.append(session_root)
 
+            if _stored_contract_entry is not None and _explorer_parent_identity is not None:
+                restored_session_root = Path(skill_add_dirs[0].path)
+                if not restored_session_root.is_dir():
+                    return SkillResult.crashed(
+                        exception=RuntimeError(
+                            f"Restored session path {str(restored_session_root)!r} does not exist."
+                        ),
+                        skill_command=resolved_command,
+                        session_id=resume_session_id,
+                        order_id=effective_order_id,
+                    ).to_json()
+                if projection_context is None:
+                    raise SkillContractError("Projection context was not prepared")
+                _explorer_binding_env = _issue_explorer_binding_env(
+                    tool_ctx,
+                    session_id=resume_session_id,
+                    projection_context=projection_context,
+                    identity=_explorer_parent_identity,
+                    authority_home=restored_session_root.parent,
+                )
+                if _explorer_binding_env is not None:
+                    assert resume_session_id is not None
+                    bound_backend = _record_explorer_launch_lease(
+                        bound_session_id=resume_session_id,
+                        session_home=restored_session_root.parent,
+                        operation="resume",
+                    )
+                    bound_backend.refresh_explorer_binding_env(
+                        restored_session_root.parent,
+                        _explorer_binding_env,
+                    )
+
             # Both fresh and rehydrated invocations extend scope from their
             # validated closure, independent of whether a snapshot was replayed.
             if invocation is not None:
@@ -1804,6 +1922,22 @@ async def run_skill(
                     )
                 )
 
+            _capability_contract = build_validated_skill_dispatch_contract(
+                projection_context,
+                skill_add_dirs,
+                _stored_contract,
+            )
+            if _stored_contract is not None:
+                _execution_identity = _stored_contract.execution_identity
+            else:
+                _execution_identity = _build_requested_execution_identity(
+                    projection_context=projection_context,
+                    target_name=target_name,
+                    skill_add_dirs=skill_add_dirs,
+                    effective_backend=_effective_backend_obj,
+                    effective_model=effective_model,
+                    explicit_resolution=_explicit_resolution,
+                )
             if invocation is not None and _stored_contract is None:
                 if not skill_add_dirs:
                     raise SkillContractError(
@@ -1821,13 +1955,9 @@ async def run_skill(
                     read_only=is_read_only,
                     completion_required=completion_required,
                     skill_contract_json=_serialize_skill_contract(_skill_contract),
+                    execution_identity=_execution_identity,
                 )
 
-            _capability_contract = build_validated_skill_dispatch_contract(
-                projection_context,
-                skill_add_dirs,
-                _stored_contract,
-            )
             _lineage_store = tool_ctx.managed_headless_session_lineage_store
             _lineage_preparation = prepare_skill_native_shell_lineage(
                 store=_lineage_store,
@@ -1949,6 +2079,7 @@ async def run_skill(
                                 native_shell_capture_decision=(_native_shell_capture_decision),
                                 managed_lineage_ref=_managed_lineage_ref,
                                 on_launch_resolved=contract_lifecycle.bind_launch,
+                                execution_identity=_execution_identity,
                                 on_session_id_resolved=(
                                     _observe_contract_session_id
                                     if contract_lifecycle.correlation_key is not None
@@ -2196,6 +2327,20 @@ async def run_skill(
         ).to_json()
     finally:
         contract_lifecycle.cleanup()
+        if _explorer_launch_lease is not None:
+            exploration_store = tool_ctx.exploration_context_store
+            if exploration_store is None:
+                logger.warning(
+                    "explorer_context_store_unavailable_during_cleanup",
+                    session_id=_explorer_launch_lease.session_id,
+                )
+            else:
+                _cleanup_explorer_launch(
+                    exploration_store,
+                    session_id=_explorer_launch_lease.session_id,
+                    session_home=_explorer_launch_lease.session_home,
+                    backend=_explorer_launch_lease.backend,
+                )
         if _sn_token is not None:
             _current_step_name.reset(_sn_token)  # type: ignore[possibly-undefined]
         if _oid_token is not None:

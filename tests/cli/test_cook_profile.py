@@ -18,9 +18,20 @@ from autoskillit.core import (
     EffectiveSkillCatalogAuthority,
     HookTrustPolicy,
     ManagedSessionHome,
+    RepositoryProfileId,
+    SkillExecutionRole,
     SkillProjectionContextAuthority,
+    SkillSource,
     ValidatedAddDir,
+    pkg_root,
 )
+from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
+from autoskillit.workspace import (
+    CompiledSessionSkillCatalog,
+    EffectiveSkillCatalog,
+    SkillCatalogEntry,
+)
+from autoskillit.workspace.skills import _skill_info_from_frontmatter
 from tests.fakes import adapt_test_skill_semantics
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
@@ -32,6 +43,7 @@ def _make_mock_backend_class():
     class _MockBackend:
         name = "claude-code"
         conventions = BackendConventions()
+        exploration_dispatch_renderer = ClaudeCodeBackend().exploration_dispatch_renderer
         capabilities = SimpleNamespace(
             hook_trust_policy=HookTrustPolicy.AUTOMATED,
             session_dir_persistent=False,
@@ -115,6 +127,56 @@ def _run_cook(profile, cfg, mock_mgr, generated_home: Path):
     ):
         cook_module.cook(profile=profile, backend=mock_backend_cls())
     return captured
+
+
+def test_cook_skips_repository_profile_resolution_for_ordinary_catalog(
+    _mock_mgr: MagicMock,
+    tmp_path: Path,
+) -> None:
+    cfg = MagicMock()
+    cfg.experimental_enabled = True
+    cfg.providers.profiles = {}
+    ordinary_path = pkg_root() / "skills" / "open-kitchen" / "SKILL.md"
+    ordinary_info = _skill_info_from_frontmatter(
+        "open-kitchen", SkillSource.BUNDLED, ordinary_path
+    )
+    assert not ordinary_info.invalidities, ordinary_info.invalidities
+    ordinary_compilation = CompiledSessionSkillCatalog(
+        backend="claude-code",
+        catalog=EffectiveSkillCatalog(
+            skills=(SkillCatalogEntry.from_skill_info(ordinary_info),),
+            execution_role=SkillExecutionRole.SESSION,
+        ),
+        unavailable=(),
+    )
+
+    with (
+        patch(
+            "autoskillit.workspace.compile_session_skill_catalog",
+            return_value=ordinary_compilation,
+        ),
+        patch("autoskillit.exploration.resolve_repository_profile") as resolve_profile,
+    ):
+        _run_cook(None, cfg, _mock_mgr, tmp_path / "ordinary-home")
+
+    resolve_profile.assert_not_called()
+
+
+def test_cook_resolves_repository_profile_for_active_auto_vector(
+    _mock_mgr: MagicMock,
+    tmp_path: Path,
+) -> None:
+    cfg = MagicMock()
+    cfg.experimental_enabled = True
+    cfg.providers.profiles = {}
+
+    with patch(
+        "autoskillit.exploration.resolve_repository_profile",
+        return_value=RepositoryProfileId.AUTOSKILLIT,
+    ) as resolve_profile:
+        _run_cook(None, cfg, _mock_mgr, tmp_path / "auto-home")
+
+    resolve_profile.assert_called_once_with(Path.cwd())
 
 
 def test_profile_valid_injects_provider_env_var(_mock_mgr, tmp_path: Path):
@@ -230,6 +292,7 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
             persistent_session_root_subdir=Path("codex-sessions"),
             skill_sigil="$",
         )
+        exploration_dispatch_renderer = CodexBackend().exploration_dispatch_renderer
         capabilities = SimpleNamespace(
             hook_trust_policy=HookTrustPolicy.REVIEW_EACH_SESSION,
             session_dir_persistent=True,

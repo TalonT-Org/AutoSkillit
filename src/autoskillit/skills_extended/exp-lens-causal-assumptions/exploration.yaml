@@ -1,0 +1,55 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence retrieves only IV/DV, hypothesis, control,
+    and success-criterion fields absent from supplied context while the parent preserves
+    causal interpretation.
+- id: treatment-outcome-definition
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces treatment assignment and outcome measurement
+    symbols and call paths while the parent classifies variables and routes declarative
+    experiment artifacts to the profiler.
+- id: confounding-pathways
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence finds shared data, preprocessing configuration,
+    environment, seed, and global-state artifacts while the parent identifies confounding
+    pathways.
+- id: mediator-mechanism-variables
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces transforms, preprocessing, feature construction,
+    intermediates, and pipeline calls while the parent determines mediator and mechanism
+    status.
+- id: collider-selection-variables
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces post-treatment filtering, subsetting, exclusion,
+    threshold, and selection control flow while the parent classifies colliders and
+    selection variables.
+- id: randomization-assignment
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces randomization, allocation, splitting, stratification,
+    and blocking logic while the parent routes declarative assignment artifacts to
+    the profiler and judges validity.

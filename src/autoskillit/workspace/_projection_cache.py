@@ -335,9 +335,11 @@ PROJECTION_CACHE_KEY_EXCLUSIONS: Mapping[str, str] = MappingProxyType(
             "project_root=None into the projection context."
         ),
         "skills": (
-            "Covered by `skill_identity` (name + canonical digest, per skill) and "
-            "`namespace_identity` (name -> source). The skills/ tree is regenerated from "
-            "those contracts, so digesting the on-disk skill directories would be redundant."
+            "Covered by `skill_identity` (name + canonical digest + sidecar digest, "
+            "per skill) and `namespace_identity` (name -> source). The skills/ tree "
+            "is regenerated from those contracts, and sidecar bytes are covered via "
+            "skill_identity's sidecar-digest component, so digesting the on-disk skill "
+            "directories would be redundant."
         ),
         "skills_extended": (
             "Same as `skills`: canonical skill trees are never copied verbatim into a "

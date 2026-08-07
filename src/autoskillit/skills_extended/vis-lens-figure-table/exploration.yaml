@@ -1,0 +1,13 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence locates revision-scoped context and experiment-plan
+    artifacts and reports only fields still absent after direct caller-context parsing.
+retained:
+- id: result-slot-inventory
+  rationale: Result-slot classification is direct interpretation of caller-supplied
+    experiment-plan content, not repository discovery, so it remains lens-owned prose.

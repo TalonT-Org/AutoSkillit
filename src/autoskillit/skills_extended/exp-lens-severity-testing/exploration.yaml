@@ -1,0 +1,51 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence fills only experiment-context fields missing
+    after parent-side argument parsing, without interpreting claim severity.
+- id: positive-results-claimed
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies positive claims, conclusion artifacts,
+    reported results, and their supporting references while the parent assesses severity.
+- id: negative-controls-sanity-checks
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies negative-control, baseline, sanity-check,
+    ablation, null, random, and degenerate test artifacts and fixtures.
+- id: adversarial-conditions
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies adversarial, stress, perturbation,
+    corruption, noise, and edge-case test declarations, fixtures, configuration, and
+    consumers.
+- id: alternative-explanations-tested
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies tests and artifacts addressing
+    alternative, confounding, spurious, coincidental, or luck-based explanations while
+    the parent judges adequacy.
+- id: prediction-specificity
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies hypothesis, prediction, preregistration,
+    expectation, and prior declarations and their supporting artifacts.

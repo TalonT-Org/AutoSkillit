@@ -8,16 +8,16 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 # ---------------------------------------------------------------------------
-# T5: _collect_fleet_tool_tags auto-discovers tags from FEATURE_REGISTRY
+# T5: fleet sessions expose only the fleet feature surface.
 # ---------------------------------------------------------------------------
 
 
-def test_collect_fleet_tool_tags_is_union_of_registry() -> None:
-    """_collect_fleet_tool_tags() equals the union of all FeatureDef.tool_tags."""
+def test_collect_fleet_tool_tags_is_fleet_feature_surface() -> None:
+    """_collect_fleet_tool_tags() excludes unrelated feature tags."""
     from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
     from autoskillit.server._session_type import _collect_fleet_tool_tags
 
-    expected = frozenset().union(*(fdef.tool_tags for fdef in FEATURE_REGISTRY.values()))
+    expected = FEATURE_REGISTRY["fleet"].tool_tags
     assert _collect_fleet_tool_tags() == expected
 
 

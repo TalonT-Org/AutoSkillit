@@ -28,12 +28,16 @@ def _codex_backend() -> MagicMock:
 
 def _catalog_context(manager, *, backend=None):
     from autoskillit.core import SkillExecutionRole
-    from autoskillit.workspace import DefaultSkillResolver
+    from autoskillit.workspace import DefaultSkillResolver, EffectiveSkillCatalog
 
     project_root = Path.cwd()
     catalog = DefaultSkillResolver().list_effective(
         project_root,
         SkillExecutionRole.SESSION,
+    )
+    catalog = EffectiveSkillCatalog(
+        skills=tuple(member for member in catalog.skills if not member.exploration_vectors),
+        execution_role=SkillExecutionRole.SESSION,
     )
     context = manager._provider.catalog_projection_context(
         catalog,

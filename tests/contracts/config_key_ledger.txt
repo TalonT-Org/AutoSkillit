@@ -21,6 +21,7 @@ diagnostics.pipeline_health
 diagnostics.post_run_analysis
 features.codex_backend
 features.experimental_enabled
+features.exploration
 features.fleet
 features.fleet_headless_run
 features.franchise

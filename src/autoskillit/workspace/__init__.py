@@ -131,6 +131,7 @@ from autoskillit.workspace.skills import (
     invalidity_hints,
     override_names,
     render_skill_invalidities,
+    replace_exploration_vector_bodies,
     validate_skill_tier_roles,
 )
 from autoskillit.workspace.worktree import (
@@ -176,6 +177,7 @@ __all__ = [
     "SkillInvalidity",
     "SkillUnavailableMetadata",
     "SkillCapabilityAuthenticityDiagnostic",
+    "replace_exploration_vector_bodies",
     "SkillCapabilityEvidence",
     "SkillCapabilityValidation",
     "RETIRED_SEMANTIC_CAPABILITIES",

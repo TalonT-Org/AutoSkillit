@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    EXPLORATION_TOOLS,
     TOOL_REGISTRY,
     ToolInitializationOperation,
     ToolParamDef,
@@ -194,7 +195,8 @@ def test_every_tool_has_an_explicit_initialization_operation() -> None:
             "load_recipe",
             "read_db",
             "validate_recipe",
-        },
+        }
+        | EXPLORATION_TOOLS,
         ToolInitializationOperation.LIFECYCLE_CONTROL: {
             "close_kitchen",
             "open_kitchen",

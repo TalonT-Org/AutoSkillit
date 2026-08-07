@@ -19,9 +19,6 @@ hooks:
 semantic_version: 1
 semantic_requirements:
   sibling_skills:
-  - name: arch-lens-error-resilience
-  - name: arch-lens-process-flow
-  - name: make-arch-diag
   - name: mermaid
 ---
 
@@ -52,14 +49,17 @@ semantic_requirements:
 ## Critical Constraints
 
 **NEVER:**
+- Treat Related Skills as executable dependencies or invoke any cross-reference from that section; those entries are documentation-only and do not imply execution. Invoke only the required `/autoskillit:mermaid` skill; never invoke `/autoskillit:make-arch-diag`, another architecture lens, or any other cross-reference.
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for ourselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/arch-lens-scenarios/`
 - Modify any source code files
+- Execute target code, application workflows, or target test commands to gather exploration evidence
 - Show internal component details
 - Include all possible scenarios (pick key ones)
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -77,6 +77,11 @@ semantic_requirements:
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-scenarios/arch_diag_scenarios_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch every exploration vector below through the deterministic router
+- Allow parent-boundary handoff of declarative entry-point, integration-registration, and configuration-consumer artifacts to `repository-impact-profiler` without creating extra vectors
+- Wait for every exploration result before selecting scenarios, mapping component touchpoints, analyzing read/write direction, or creating the diagram
+- Retain parent authority over scenario selection, cooperation validation, component-touchpoint and data-direction synthesis, and diagram creation
 
 
 ## Analysis Workflow
@@ -92,38 +97,33 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch every vector below under their registered role policies. When a navigator finds a declarative entry point, integration registration, or configuration-consumer surface, the parent/router may reclassify that bounded handoff to `repository-impact-profiler`; it must not create another vector. Each leaf returns bounded terminal evidence only and must not select representative scenarios, validate component cooperation, interpret read/write direction, synthesize journeys, create diagrams, or write lens output.
 
-**Primary Use Cases**
-- Find the main user-facing operations
-- Identify CLI commands or API endpoints
-- Look for: main commands, primary workflows, user stories
+<!-- autoskillit:exploration-vector id="primary-use-cases" -->
+1. **Primary use cases** — Find the main user-facing operations, CLI commands, API endpoints, primary workflows, and repository-supported user stories; include bounded declarative entry-point handoffs for profiler evidence.
+<!-- /autoskillit:exploration-vector -->
 
-**Happy Path Flows**
-- Trace successful execution paths
-- Identify component touchpoints
-- Look for: success paths, normal flow, expected behavior
+<!-- autoskillit:exploration-vector id="happy-path-flows" -->
+2. **Happy path flows** — Trace successful execution paths and ordered component touchpoints through normal and expected behavior.
+<!-- /autoskillit:exploration-vector -->
 
-**Error/Recovery Flows**
-- Trace error handling paths
-- Identify recovery mechanisms
-- Look for: error handling, retry, recovery, fallback
+<!-- autoskillit:exploration-vector id="error-recovery-flows" -->
+3. **Error/recovery flows** — Trace error-handling branches and recovery mechanisms, including retries, recovery calls, and fallbacks.
+<!-- /autoskillit:exploration-vector -->
 
-**Resume/Restart Flows**
-- Find state persistence and resume
-- Identify checkpoint mechanisms
-- Look for: resume, checkpoint, restore, continue
+<!-- autoskillit:exploration-vector id="resume-restart-flows" -->
+4. **Resume/restart flows** — Trace state-persistence, checkpoint, restore, resume, restart, and continue paths.
+<!-- /autoskillit:exploration-vector -->
 
-**Integration Points**
-- Find external system interactions
-- Identify cross-component calls
-- Look for: API calls, subprocess, external, integration
+<!-- autoskillit:exploration-vector id="integration-points" -->
+5. **Integration points** — Trace external-system interactions and cross-component calls, including API calls, subprocesses, and integration boundaries; include bounded declarative registration and configuration handoffs for profiler evidence.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Select Key Scenarios
 

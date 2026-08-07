@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import pytest
 
+from tests.server._helpers import (
+    BUNDLED_RECIPE_STEP_BACKEND_PIN_CASES,
+    _bundled_backend,
+)
+
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
@@ -17,6 +22,24 @@ def _backend(result):
 
 
 class TestResolveBackendOverride:
+    @pytest.mark.parametrize(
+        ("recipe_name", "step_name", "key_path"),
+        BUNDLED_RECIPE_STEP_BACKEND_PIN_CASES,
+    )
+    def test_bundled_recipe_step_pin_has_exact_authority(
+        self, recipe_name: str, step_name: str, key_path: str
+    ) -> None:
+        from autoskillit.core import BackendAuthorityKind
+        from autoskillit.server._guards import _resolve_backend_override
+
+        result = _resolve_backend_override(step_name, recipe_name, _bundled_backend())
+
+        assert result is not None
+        assert result.backend == "codex"
+        assert result.kind is BackendAuthorityKind.RECIPE
+        assert result.tier == "recipe_step"
+        assert result.key_path == key_path
+
     def test_exact_recipe_step_match(self) -> None:
         from autoskillit.core import BackendAuthorityKind
         from autoskillit.server._guards import _resolve_backend_override
@@ -28,10 +51,16 @@ class TestResolveBackendOverride:
         assert result.kind is BackendAuthorityKind.RECIPE
 
     def test_recipe_wildcard(self) -> None:
+        from autoskillit.core import BackendAuthorityKind
         from autoskillit.server._guards import _resolve_backend_override
 
         cfg = _make_backend(recipe_overrides={"remediation": {"*": "codex"}})
-        assert _backend(_resolve_backend_override("any_step", "remediation", cfg)) == "codex"
+        result = _resolve_backend_override("any_step", "remediation", cfg)
+        assert result is not None
+        assert result.backend == "codex"
+        assert result.kind is BackendAuthorityKind.RECIPE
+        assert result.tier == "recipe_wildcard"
+        assert result.key_path == "agent_backend.recipe_overrides.remediation.*"
 
     def test_exact_beats_wildcard(self) -> None:
         from autoskillit.server._guards import _resolve_backend_override

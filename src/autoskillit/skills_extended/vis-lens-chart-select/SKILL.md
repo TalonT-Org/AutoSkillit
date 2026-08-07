@@ -116,6 +116,7 @@ metadata:
 - Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-chart-select/`
 - Use `radar` or `pie` chart types — these are perceptually inferior and excluded from the controlled vocabulary
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -126,6 +127,11 @@ metadata:
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch every migrated exploration vector below through the deterministic router
+- Route semantic plotting-code, symbol, and data-control-flow handoffs to `semantic-code-navigator` and bounded schema, configuration, generated-figure, table, test, fixture, reproduction, planning-document, and pre-existing artifact handoffs to `repository-impact-profiler` through the parent-owned plan
+- Wait for every exploration result before classifying data types, selecting chart types, ranking encodings, or creating the diagram
+- Retain parent authority over data-type classification, chart selection, perceptual ranking, encoding assignment, Mermaid, `yaml:figure-spec`, and output decisions
 - Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-chart-select/vis_spec_chart_select_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -140,35 +146,40 @@ metadata:
 
 ### Step 0: Parse optional arguments
 
+<!-- autoskillit:exploration-vector id="caller-context" -->
 If positional arg 1 (context_path) is provided and the file exists, read it to obtain
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
-methodology. Use this structured context as the foundation for Steps 1–4; skip the CWD
-exploration for these fields if the context file supplies them.
+methodology. Use this structured context as the foundation for Steps 1–4.
+<!-- /autoskillit:exploration-vector -->
 
-### Step 1: Parallel Exploration (SINGLE MESSAGE)
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
+
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn parallel exploration tasks to investigate:
+Dispatch every authored vector below under their registered role policies. Mixed code and declarative evidence remains one parent-owned plan; bounded role handoffs return to the originating vector and do not add graph dependencies.
 
-**Existing Figure Inventory**
-- Find all existing figures, plots, and visualizations in the project
-- Look for: `fig`, `figure`, `plot`, `chart`, `image`, `png`, `svg`, `pdf`, `matplotlib`, `seaborn`, `plotly`
+<!-- autoskillit:exploration-vector id="existing-figure-inventory" -->
+1. **Existing Figure Inventory** — Find all existing figures, plots, and visualizations through `fig`, `figure`, `plot`, `chart`, `image`, `png`, `svg`, `pdf`, `matplotlib`, `seaborn`, and `plotly` artifacts. Route semantic plotting-code relationships through the parent to the navigator. Use static repository evidence only; do not import or execute target code, tests, visualization pipelines, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Data Types and Variables**
-- Find all variables, metrics, and data fields to be visualized
-- Look for: `accuracy`, `loss`, `metric`, `score`, `embedding`, `distribution`, `time`, `epoch`
+<!-- autoskillit:exploration-vector id="data-types-variables" -->
+2. **Data Types and Variables** — Find all repository-local variables, metrics, and data fields to be visualized through `accuracy`, `loss`, `metric`, `score`, `embedding`, `distribution`, `time`, and `epoch` definitions and references. Route bounded schemas, configuration, data manifests, fixtures, and pre-existing artifacts through the parent to the profiler. Use static repository evidence only; do not import or execute target code, tests, visualization pipelines, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Current Chart Choices**
-- Find existing chart-type decisions in code, config, or planning docs
-- Look for: `bar_plot`, `scatter`, `line_chart`, `heatmap`, `histogram`, `boxplot`, `violinplot`
+<!-- autoskillit:exploration-vector id="current-chart-choices" -->
+3. **Current Chart Choices** — Find existing chart-type decisions through `bar_plot`, `scatter`, `line_chart`, `heatmap`, `histogram`, `boxplot`, and `violinplot` definitions and call paths. Route bounded configuration and planning documents through the parent to the profiler. Use static repository evidence only; do not import or execute target code, tests, visualization pipelines, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Encoding Channel Usage**
-- Find existing axis assignments, color mappings, size mappings
-- Look for: `xlabel`, `ylabel`, `hue`, `color`, `size`, `marker`, `alpha`, `facet`
+<!-- autoskillit:exploration-vector id="encoding-channel-usage" -->
+4. **Encoding Channel Usage** — Find existing axis assignments, color mappings, and size mappings through `xlabel`, `ylabel`, `hue`, `color`, `size`, `marker`, `alpha`, and `facet` definitions and call paths. Route bounded figure specifications and generated artifacts through the parent to the profiler. Use static repository evidence only; do not import or execute target code, tests, visualization pipelines, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Build the Data-Type → Chart-Type Matrix
 

@@ -26,12 +26,15 @@ def _materialize_project(
         DefaultSessionSkillManager,
         SkillsDirectoryProvider,
     )
+    from tests.contracts._projection_helpers import non_exploration_catalog
 
     backend = get_backend("claude-code")
     provider = SkillsDirectoryProvider()
-    catalog = DefaultSkillResolver().list_effective(
-        project_root,
-        SkillExecutionRole.SESSION,
+    catalog = non_exploration_catalog(
+        DefaultSkillResolver().list_effective(
+            project_root,
+            SkillExecutionRole.SESSION,
+        )
     )
     context = provider.catalog_projection_context(
         catalog,
@@ -48,15 +51,16 @@ def test_project_local_skill_delivered_from_each_search_dir(
 ) -> None:
     """Skills placed in any search dir are copied into the ephemeral session dir."""
     project_root = tmp_path / "project"
-    skill_dir = project_root / search_dir / "investigate"
+    skill_name = "local-delivery-fixture"
+    skill_dir = project_root / search_dir / skill_name
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(
-        _project_skill_document("investigate", f"# PROJECT LOCAL from {search_dir}")
+        _project_skill_document(skill_name, f"# PROJECT LOCAL from {search_dir}")
     )
 
     result = _materialize_project(project_root, tmp_path / "eph", "sess-delivery")
 
-    delivered = result / ".claude" / "skills" / "investigate" / "SKILL.md"
+    delivered = result / ".claude" / "skills" / skill_name / "SKILL.md"
     assert Path(delivered).exists(), (
         f"project-local skill from {search_dir} must be delivered into ephemeral dir"
     )

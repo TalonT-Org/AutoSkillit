@@ -1,0 +1,52 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence locates revision-scoped context and experiment-plan
+    artifacts and identifies only missing declared fields without executing target
+    code.
+- id: metric-definitions
+  role: semantic-code-navigator
+  relationship_classes:
+  - declares
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces computed and reported metric definitions and
+    code consumers while the parent retains construct interpretation.
+- id: intended-interpretations
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers metric claims, intended interpretations,
+    result narratives, experiment plans, and revision-scoped report consumers.
+- id: metric-computation-details
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces aggregation, weighting, thresholds, cutoffs,
+    edge cases, and metric call paths without judging validity.
+- id: alternative-metrics-considered
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers alternative metric declarations, selection
+    rationale, rejected measures, limitations, and revision-scoped evaluation artifacts.
+- id: construct-metric-gap
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers local caveats, proxy limitations, approximation
+    disclosures, failure artifacts, and claims that metrics do not capture.

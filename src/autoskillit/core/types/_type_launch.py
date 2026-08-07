@@ -13,6 +13,7 @@ from enum import IntEnum, StrEnum
 from types import MappingProxyType
 
 from ._type_backend import CmdOrigin, CmdSpec
+from ._type_execution_identity import BackendAuthorityKind
 from ._type_launch_projection import (
     LaunchContractError,
     SkillProjectionBinding,
@@ -26,7 +27,6 @@ __all__ = [
     "CANONICAL_LAUNCH_DIGEST_FIELDS",
     "LAUNCH_CONTRACT_SCHEMA_VERSION",
     "BackendAuthority",
-    "BackendAuthorityKind",
     "BackendAuthorityTier",
     "LaunchAdapterResult",
     "LaunchContractError",
@@ -90,15 +90,6 @@ class LaunchSurface(StrEnum):
     FLEET_STEP_NON_RESUMABLE = "fleet-step-non-resumable"
     INTERACTIVE_COOK = "interactive-cook"
     INTERACTIVE_ORDER = "interactive-order"
-
-
-class BackendAuthorityKind(StrEnum):
-    """Closed set of inputs permitted to choose a backend."""
-
-    GLOBAL = "global"
-    RECIPE = "recipe"
-    STEP = "step"
-    CALLER = "caller"
 
 
 class BackendAuthorityTier(IntEnum):

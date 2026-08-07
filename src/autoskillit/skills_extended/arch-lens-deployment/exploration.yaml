@@ -1,0 +1,54 @@
+vectors:
+- id: process-boundaries
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces executable entry points, subprocess creation,
+    process calls, and daemon startup paths while the parent determines physical process
+    boundaries.
+- id: container-docker
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies Dockerfiles, compose files, Kubernetes
+    manifests, container declarations, images, ports, volumes, and consumers.
+- id: local-storage
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces filesystem and database reads, writes, clients,
+    and access calls while the parent routes storage declarations and generated artifacts
+    to repository impact profiling.
+- id: network-services
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces servers, listeners, sockets, bind calls, endpoints,
+    and network-service entry points while the parent determines deployment topology.
+- id: external-services
+  role: semantic-code-navigator
+  relationship_classes:
+  - imports
+  - calls
+  - references
+  rationale: Semantic navigation traces third-party clients, dependency imports, authentication
+    calls, cloud access, and external service calls while the parent decides system
+    boundaries.
+- id: web-frontend
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies frontend manifests, build configuration,
+    web-server declarations, static assets, generated outputs, CDN configuration,
+    and consumers.

@@ -23,6 +23,8 @@ __all__ = [
     "FLEET_TOOLS",
     "FLEET_DISPATCH_TOOLS",
     "FLEET_MENU_TOOLS",
+    "EXPLORATION_TOOLS",
+    "KITCHEN_GATED_TOOLS",
     "FLEET_ERROR_CODES",
     "FREE_RANGE_TOOLS",
     "UNGATED_TOOLS",
@@ -132,6 +134,9 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "reset_dispatch",
         "get_recipe_section",
         "complete_recipe_initialization",
+        "submit_exploration_query",
+        "get_exploration_page",
+        "resume_exploration_context",
     }
 )
 
@@ -704,6 +709,7 @@ PACK_REGISTRY: dict[str, PackDef] = {
     "audit": PackDef(True, "Codebase audit skills"),
     "research": PackDef(False, "Research recipe and experiment skills"),
     "exp-lens": PackDef(False, "Experimental design audit lenses"),
+    "exploration": PackDef(False, "Bounded specialized repository exploration tools"),
     "vis-lens": PackDef(False, "Visualization planning lenses"),
     "audit-pipeline": PackDef(False, "Audit pipeline internals (recipe-dispatched only)"),
 }
@@ -809,10 +815,28 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "record_pipeline_step": frozenset({"kitchen-core"}),
     "get_recipe_section": frozenset({"kitchen-core"}),
     "complete_recipe_initialization": frozenset({"kitchen-core"}),
+    "submit_exploration_query": frozenset({"exploration"}),
+    "get_exploration_page": frozenset({"exploration"}),
+    "resume_exploration_context": frozenset({"exploration"}),
 }
 
+EXPLORATION_TOOLS: frozenset[str] = frozenset(
+    name for name, tags in TOOL_SUBSET_TAGS.items() if "exploration" in tags
+)
+KITCHEN_GATED_TOOLS: frozenset[str] = (
+    GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS - EXPLORATION_TOOLS
+)
+
 ALL_VISIBILITY_TAGS: frozenset[str] = frozenset(
-    {"kitchen", "headless", "fleet", "fleet-dispatch", "kitchen-core", "plan-review"}
+    {
+        "kitchen",
+        "headless",
+        "fleet",
+        "fleet-dispatch",
+        "kitchen-core",
+        "plan-review",
+        "exploration",
+    }
 )
 
 if not TOOL_SUBSET_TAGS:

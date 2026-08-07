@@ -1,0 +1,51 @@
+vectors:
+- id: concurrency-model
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - imports
+  - calls
+  - references
+  rationale: Semantic navigation traces threading, async, multiprocessing, coroutine,
+    and executor definitions while the parent determines the concurrency model.
+- id: worker-pools
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces executor and pool construction, worker limits,
+    and submission call paths while the parent retains pool-boundary judgments.
+- id: parallel-operations
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces submitted, mapped, gathered, and parallelized
+    operations without deciding architectural concurrency boundaries.
+- id: synchronization-points
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces locks, semaphores, waits, gathers, barriers,
+    and result-collection calls while the parent evaluates coordination guarantees.
+- id: state-access
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces shared-state reads, writes, queues, locks,
+    atomics, and thread-local access while the parent determines thread safety.
+- id: sequential-boundaries
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces main-thread responsibilities, serialized calls,
+    and atomic update paths while the parent classifies required sequential execution.

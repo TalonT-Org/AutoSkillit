@@ -8,7 +8,7 @@ import os
 import shutil
 import tempfile
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, assert_never
@@ -22,6 +22,13 @@ from autoskillit.core import (
     CodingAgentBackend,
     EffectiveSkillCatalogAuthority,
     EffectiveSkillInvocationAuthority,
+    ExplorationApplicability,
+    ExplorationRouterPlan,
+    ExplorationVectorApplicabilityId,
+    ExplorationVectorDef,
+    ExplorationVectorDisposition,
+    ProfileActivation,
+    RepositoryProfileId,
     ResolvedSkillAuthority,
     SkillAuthority,
     SkillContractError,
@@ -30,13 +37,18 @@ from autoskillit.core import (
     atomic_write,
     destination_location,
     dump_yaml_str,
+    normalize_parent_sandbox_mode,
     read_versioned_json,
     temp_dir_display_str,
     write_versioned_json,
 )
 from autoskillit.workspace._projection_cache import is_projected_asset
 from autoskillit.workspace.skill_format import parse_frontmatter_content
-from autoskillit.workspace.skills import SkillInfo, render_skill_invalidities
+from autoskillit.workspace.skills import (
+    SkillInfo,
+    render_skill_invalidities,
+    replace_exploration_vector_bodies,
+)
 
 _SKILL_NAMESPACE_REF_RE = re.compile(r"/autoskillit:([a-z][a-z0-9-]*)")
 
@@ -97,11 +109,22 @@ class SkillProjectionContext:
     substitutions: Mapping[str, str] | None = None
     gating: bool | None = None
     namespace: str | None = None
+    exploration_launch_context_ref: str | None = None
+    resolved_exploration_profile: RepositoryProfileId | None = None
+    active_exploration_applicabilities: frozenset[ExplorationVectorApplicabilityId] = frozenset(
+        {ExplorationVectorApplicabilityId.ALWAYS}
+    )
+    parent_sandbox_mode: str = "workspace-write"
     projection_version: int = SKILL_PROJECTION_VERSION
 
     def __post_init__(self) -> None:
         if type(self.projection_version) is not int or self.projection_version < 1:
             raise SkillContractError("projection version must be a positive integer")
+        object.__setattr__(
+            self,
+            "parent_sandbox_mode",
+            normalize_parent_sandbox_mode(self.parent_sandbox_mode),
+        )
         if (self.catalog is None) == (self.invocation is None):
             raise SkillContractError(
                 "projection context must bind exactly one effective catalog or invocation"
@@ -124,6 +147,21 @@ class SkillProjectionContext:
                 raise SkillContractError("projection context conventions do not match its backend")
         elif self.conventions is not None:
             raise SkillContractError("projection context conventions require a bound backend")
+        if self.exploration_launch_context_ref is not None and (
+            not isinstance(self.exploration_launch_context_ref, str)
+            or not self.exploration_launch_context_ref.strip()
+        ):
+            raise SkillContractError("exploration launch-context reference must be non-empty text")
+        if self.resolved_exploration_profile is RepositoryProfileId.AUTO:
+            raise SkillContractError("resolved exploration profile cannot remain auto")
+        active_applicabilities = frozenset(self.active_exploration_applicabilities)
+        if ExplorationVectorApplicabilityId.ALWAYS not in active_applicabilities:
+            raise SkillContractError("active exploration applicability must include always")
+        object.__setattr__(
+            self,
+            "active_exploration_applicabilities",
+            active_applicabilities,
+        )
         if self.substitutions is not None:
             object.__setattr__(
                 self,
@@ -138,6 +176,95 @@ class SkillProjectionContext:
             return self.invocation.closure
         assert self.catalog is not None
         return self.catalog.skills
+
+    @property
+    def exploration_vectors(self) -> Mapping[str, tuple[ExplorationVectorDef, ...]]:
+        """Return validated vectors keyed by the exact bound skill name."""
+        return MappingProxyType({skill.name: skill.exploration_vectors for skill in self.skills})
+
+
+def _exploration_router_plan(
+    vectors: tuple[ExplorationVectorDef, ...],
+) -> ExplorationRouterPlan:
+    """Build the one backend-neutral authoring plan for migrated vectors."""
+    migrated = tuple(
+        sorted(
+            (
+                vector
+                for vector in vectors
+                if vector.disposition is ExplorationVectorDisposition.MIGRATED
+            ),
+            key=lambda vector: vector.task.task_id,
+        )
+    )
+    task_ids = {vector.task.task_id for vector in migrated}
+    if len(task_ids) != len(migrated):
+        raise SkillContractError("migrated exploration task ids must be unique")
+    unknown_dependencies = {
+        dependency
+        for vector in migrated
+        for dependency in vector.task.depends_on
+        if dependency not in task_ids
+    }
+    if unknown_dependencies:
+        raise SkillContractError(
+            "migrated exploration tasks name unknown dependencies: "
+            f"{sorted(unknown_dependencies)!r}"
+        )
+    pending = {vector.task.task_id: set(vector.task.depends_on) for vector in migrated}
+    resolved: set[str] = set()
+    while pending:
+        ready = sorted(
+            task_id for task_id, dependencies in pending.items() if dependencies <= resolved
+        )
+        if not ready:
+            raise SkillContractError("migrated exploration tasks contain a dependency cycle")
+        resolved.update(ready)
+        for task_id in ready:
+            pending.pop(task_id)
+    profiles = sorted({vector.profile for vector in migrated})
+    return ExplorationRouterPlan(
+        snapshot=None,
+        tasks=tuple(vector.task for vector in migrated),
+        activations=tuple(
+            ProfileActivation(
+                profile,
+                ExplorationApplicability.APPLICABLE,
+                "authoring applicability:always",
+            )
+            for profile in profiles
+        ),
+    )
+
+
+def _active_exploration_vectors(
+    vectors: tuple[ExplorationVectorDef, ...],
+    context: SkillProjectionContext,
+) -> tuple[ExplorationVectorDef, ...]:
+    """Resolve profile:auto and closed applicability before native rendering."""
+    active: list[ExplorationVectorDef] = []
+    for vector in vectors:
+        if (
+            vector.disposition is not ExplorationVectorDisposition.MIGRATED
+            or vector.applicability not in context.active_exploration_applicabilities
+        ):
+            continue
+        profile = vector.profile
+        if profile is RepositoryProfileId.AUTO:
+            resolved_profile = context.resolved_exploration_profile
+            if resolved_profile is None:
+                raise SkillContractError(
+                    "profile:auto exploration requires a trusted resolved repository profile"
+                )
+            profile = resolved_profile
+        active.append(
+            replace(
+                vector,
+                profile=profile,
+                task=replace(vector.task, profile=profile),
+            )
+        )
+    return tuple(active)
 
 
 def _direct_install_projection_context(
@@ -157,6 +284,7 @@ def _direct_install_projection_context(
         catalog=catalog,
         backend=backend,
         conventions=backend.conventions,
+        resolved_exploration_profile=RepositoryProfileId.LANGUAGE_NEUTRAL,
         substitutions={
             "{{AUTOSKILLIT_TEMP}}": temp_dir_display_str(None),
             "{{AUTOSKILLIT_SCRIPTS}}": str(destination / "recipes" / "scripts"),
@@ -255,6 +383,69 @@ def project_agent_skill_document(
                 + "\n```"
                 + "\n"
             )
+    vectors = context.exploration_vectors.get(skill_info.name, ())
+    if vectors:
+        if context.backend is None or context.conventions is None:
+            raise SkillContractError(
+                "exploration-bearing skill projection requires a bound backend and conventions"
+            )
+        migrated = tuple(
+            vector
+            for vector in vectors
+            if vector.disposition is ExplorationVectorDisposition.MIGRATED
+        )
+        if migrated:
+            active_vectors = _active_exploration_vectors(vectors, context)
+            replacements = {
+                vector.id: (
+                    "This exploration vector is not applicable to the current invocation; "
+                    "do not dispatch it."
+                )
+                for vector in migrated
+                if vector.applicability not in context.active_exploration_applicabilities
+            }
+            if not active_vectors:
+                content = replace_exploration_vector_bodies(content, vectors, replacements)
+            else:
+                plan = _exploration_router_plan(active_vectors)
+                materialized = context.backend.exploration_dispatch_renderer.render(
+                    plan,
+                    active_vectors,
+                    launch_context_ref=(
+                        context.exploration_launch_context_ref or f"skill:{skill_info.name}"
+                    ),
+                )
+                if materialized.router_plan_digest != plan.digest:
+                    raise SkillContractError(
+                        "backend exploration renderer changed the canonical router-plan identity"
+                    )
+                replacements.update(materialized.replacements)
+                content = replace_exploration_vector_bodies(
+                    content,
+                    vectors,
+                    replacements,
+                )
+                # Splice the preamble as the first body content after the
+                # frontmatter close delimiter. This placement is mode-neutral
+                # and section-agnostic — it precedes every marker regardless
+                # of which section the marker belongs to.
+                if materialized.preamble:
+                    frontmatter_close = "---\n"
+                    # Find the second occurrence of "---\n" (closing delimiter)
+                    first_idx = content.find(frontmatter_close)
+                    if first_idx >= 0:
+                        second_idx = content.find(
+                            frontmatter_close, first_idx + len(frontmatter_close)
+                        )
+                        if second_idx >= 0:
+                            splice_point = second_idx + len(frontmatter_close)
+                            content = (
+                                content[:splice_point]
+                                + "\n"
+                                + materialized.preamble
+                                + "\n\n"
+                                + content[splice_point:]
+                            )
 
     projected_digest = hashlib.sha256(content.encode()).hexdigest()
     canonical_digest = (

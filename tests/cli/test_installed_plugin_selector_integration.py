@@ -32,7 +32,7 @@ from autoskillit.core import (
 from autoskillit.core._plugin_ids import (
     detect_autoskillit_mcp_prefix as _production_mcp_prefix,
 )
-from autoskillit.execution.backends.codex import CodexBackend
+from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from tests.fakes import adapt_test_skill_semantics
 from tests.fixtures.plugin_artifact_state import (
     INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
@@ -80,6 +80,12 @@ class _RecordingBackend:
             CodexBackend().capabilities,
             session_dir_persistent=False,
         )
+
+    @property
+    def exploration_dispatch_renderer(self):
+        if self.name == "claude-code":
+            return ClaudeCodeBackend().exploration_dispatch_renderer
+        return CodexBackend().exploration_dispatch_renderer
 
     def binary_name(self) -> str:
         return "claude" if self.name == "claude-code" else "codex"

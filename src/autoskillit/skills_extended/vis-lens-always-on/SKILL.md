@@ -60,12 +60,18 @@ semantic_requirements:
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-always-on/`
 - Emit PASS if any critical finding exists — any single critical = FAIL_N
+- Run exploration leaves in the background
 
 **ALWAYS:**
 - Run all three passes in sequence; do not skip any pass
 - Tally critical_count and warning_count across all three passes
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
+- Use the registered exploration roles for all repository reads
+- Dispatch every migrated exploration vector below through the deterministic router
+- Route semantic plotting-code, symbol, and data-control-flow handoffs to `semantic-code-navigator` and bounded schema, configuration, generated-figure, table, test, fixture, reproduction, and pre-existing artifact handoffs to `repository-impact-profiler` through the parent-owned plan
+- Wait for the exploration result before running any triage pass, computing the verdict, or creating the diagram
+- Retain parent authority over anti-pattern, accessibility, annotation-completeness, verdict, Mermaid, `yaml:spec-index`, and output decisions
 - Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-always-on/vis_spec_always_on_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -80,17 +86,24 @@ semantic_requirements:
 
 ### Step 0: Parse optional arguments
 
+<!-- autoskillit:exploration-vector id="caller-context" -->
 If positional arg 1 (context_path) is provided and the file exists, read it to obtain
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
-methodology. Use this structured context as the foundation for all three passes; skip the
-CWD exploration for these fields if the context file supplies them.
+methodology. Use this structured context as the foundation for all three passes.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 1: Inventory All Figures
 
-Before running passes, build a complete figure inventory from the experiment plan, context
-file, code, and any existing output files. Every figure in this inventory is checked in
-all three passes.
+<!-- autoskillit:exploration-vector id="figure-inventory" -->
+Before running passes, retrieve a complete figure inventory from the experiment plan, context file, plotting configuration and code references, and existing figure or output artifacts. Route semantic plotting-code and symbol relationships through the parent to the navigator. Use static repository evidence only; do not import or execute target code, tests, visualization pipelines, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
+
+Every figure in this inventory is checked in all three passes.
 
 ### Step 2: Run THREE Sequential Passes
 

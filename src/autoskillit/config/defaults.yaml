@@ -339,6 +339,26 @@ providers:
 agent_backend:
   backend: claude-code
   step_overrides: {}
-  recipe_overrides: {}
+  recipe_overrides:
+    implementation:
+      run_arch_lenses: codex
+    implementation-groups:
+      run_arch_lenses: codex
+    planner:
+      analyze: codex
+      extract_domain: codex
+      elaborate_phases: codex
+    remediation:
+      investigate: codex
+      run_arch_lenses: codex
+    research:
+      run_experiment_lenses: codex
+      scope: codex
+      vis_apply: codex
+    research-design:
+      scope: codex
+      vis_apply: codex
+    research-review:
+      run_experiment_lenses: codex
 
 features: {}

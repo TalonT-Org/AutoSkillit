@@ -856,16 +856,22 @@ async def _redisable_subsets(
     ``features`` defaults to ``None`` (treated as ``{}``, i.e. all features use
     ``FeatureDef.default_enabled``). Pass ``config.features`` from the call site.
     """
+
+    async def _disable_tag(tag: str) -> None:
+        result = ctx.disable_components(tags={tag})
+        if inspect.isawaitable(result):
+            await result
+
     # Pass 1: subset re-disable (existing)
     for subset in disabled:
-        await ctx.disable_components(tags={subset})
+        await _disable_tag(subset)
 
     # Pass 2: feature gate — suppress tool tags for disabled features
     _features = features or {}
     for tag in _collect_disabled_feature_tags(
         _features, experimental_enabled=experimental_enabled
     ):
-        await ctx.disable_components(tags={tag})
+        await _disable_tag(tag)
 
 
 def _close_kitchen_handler() -> None:
@@ -1798,8 +1804,14 @@ async def close_kitchen(ctx: Context = CurrentContext()) -> str:
         if (h := _require_orchestrator_exact("close_kitchen")) is not None:
             return h
         _close_kitchen_handler()
+        from autoskillit.server import _get_ctx  # circular-break: server lifecycle owner
+
+        exploration_store = _get_ctx().exploration_context_store
+        if exploration_store is not None:
+            exploration_store.close()
 
         mcp.disable(tags={"kitchen"})
+        mcp.disable(tags={"exploration"})
         mcp.disable(tags={"plan-review"})
 
         await ctx.reset_visibility()

@@ -74,6 +74,11 @@ def test_env_forward_constants_have_production_consumer() -> None:
 _REGISTRY_CANONICAL_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*(?:_REGISTRY|_TOOLS|_TAGS|_NAMES)$")
 
 _REGISTRY_EXEMPTIONS: dict[str, str] = {
+    "EXPLORATION_TOOLS": (
+        "test-consumed: centralized visibility expected set imported by "
+        "test_session_type_visibility.py and test_tool_registry_parity.py; "
+        "production exploration visibility is intentionally FastMCP tag-driven"
+    ),
     "FREE_RANGE_TOOLS": (
         "alias-derived: backing constant for UNGATED_TOOLS which is imported "
         "in pipeline/gate.py and server/tools/tools_recipe.py; "
@@ -90,6 +95,11 @@ _REGISTRY_EXEMPTIONS: dict[str, str] = {
         "for session-type visibility dispatch; production consumers access "
         "it via GATED_TOOLS membership (see test_canonical_constant_consumption.py "
         "test_fleet_dispatch_tools_subset_of_gated_tools)"
+    ),
+    "KITCHEN_GATED_TOOLS": (
+        "test-consumed: centralized visibility expected set imported by "
+        "test_session_type_visibility.py; production kitchen-gated visibility "
+        "is intentionally FastMCP tag-driven"
     ),
     "RECIPE_EXECUTION_INSTALL_SITE_REGISTRY": (
         "test-consumed: architectural ratchet imported by "

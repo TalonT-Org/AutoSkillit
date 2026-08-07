@@ -48,6 +48,14 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     ("Agents", ("unlock_agent_pack",)),
     (
+        "Repository Exploration",
+        (
+            "submit_exploration_query",
+            "get_exploration_page",
+            "resume_exploration_context",
+        ),
+    ),
+    (
         "Clone & Remote",
         (
             "clone_repo",

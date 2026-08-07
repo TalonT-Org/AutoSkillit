@@ -283,6 +283,15 @@ _SKILL_CONTRACT_REMEDIATION_DEFS = (
         hint=("change the offending frontmatter field to a YAML list, e.g. 'categories: [tag]'"),
     ),
     SkillContractRemediationDef(
+        kind=SkillInvalidityKind.EXPLORATION_CONTRACT_INVALID,
+        introduced_in="0.10.931",
+        action=RemediationAction.ADVISORY,
+        hint=(
+            "move exploration vectors to a valid exploration.yaml sidecar and ensure "
+            "its declarations match the SKILL.md exploration-vector markers"
+        ),
+    ),
+    SkillContractRemediationDef(
         kind=SkillInvalidityKind.RESERVED_FIELD,
         introduced_in="0.10.929",
         action=RemediationAction.ADVISORY,

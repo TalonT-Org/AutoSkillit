@@ -1,0 +1,51 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence retrieves only IV/DV, hypothesis, control,
+    and success-criterion fields absent after direct caller-context parsing while
+    the parent preserves visualization interpretation.
+- id: existing-figure-inventory
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories existing figures, plots, image
+    outputs, figure specifications, and plotting artifacts while the parent determines
+    figure slots and chart suitability.
+- id: data-types-variables
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces repository-local variable, metric, score,
+    embedding, distribution, time, and epoch definitions while the parent routes declarative
+    schemas and data artifacts to the profiler and classifies types.
+- id: current-chart-choices
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces existing chart-construction definitions and
+    call paths while the parent routes configuration and planning artifacts to the
+    profiler and evaluates the choices.
+- id: encoding-channel-usage
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces axis, hue, color, size, marker, alpha, and
+    facet assignments while the parent routes declarative figure specifications to
+    the profiler and judges encoding quality.
+retained:
+- id: caller-context
+  rationale: Caller-provided context and experiment plans are explicit inputs read
+    directly, so parsing and interpretation remain parent-owned without native exploration
+    dispatch.

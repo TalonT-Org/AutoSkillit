@@ -147,6 +147,7 @@ class TestProbeSingleRemote:
         assert resolution.reason == "ok"
         assert resolution.url == str(bare_remote)
         assert resolution.stderr == ""
+        assert resolution.remote_name == "origin"
 
     def test_probe_single_remote_returns_no_origin_reason_when_no_remote(
         self, git_repo: Path
@@ -154,6 +155,7 @@ class TestProbeSingleRemote:
         resolution = _probe_single_remote(git_repo, "origin")
         assert resolution.reason == "no_origin"
         assert resolution.url == ""
+        assert resolution.remote_name == "origin"
 
     def test_probe_single_remote_returns_timeout_reason_on_timeout(self, tmp_path: Path) -> None:
         with patch(
@@ -163,6 +165,7 @@ class TestProbeSingleRemote:
             resolution = _probe_single_remote(tmp_path, "origin")
         assert resolution.reason == "timeout"
         assert resolution.url == ""
+        assert resolution.remote_name == "origin"
 
     def test_probe_single_remote_returns_error_reason_on_non_zero_rc(self, tmp_path: Path) -> None:
         mock_result = MagicMock()
@@ -174,6 +177,7 @@ class TestProbeSingleRemote:
         assert resolution.reason == "error"
         assert resolution.url == ""
         assert resolution.stderr == "fatal: not a git repository"
+        assert resolution.remote_name == "origin"
 
 
 class TestProbeCloneSourceUrl:
@@ -217,6 +221,7 @@ class TestProbeCloneSourceUrl:
         result = _probe_clone_source_url(source)
 
         assert result.reason == "ok"
+        assert result.remote_name == "upstream"
         assert result.url == str(bare), (
             f"Expected upstream URL {bare!r}, got {result.url!r}. "
             "When origin=file://, upstream should be preferred."
@@ -247,6 +252,7 @@ class TestProbeCloneSourceUrl:
 
         assert result.reason == "ok"
         assert result.url == str(bare)
+        assert result.remote_name == "origin"
 
     def test_uses_origin_when_upstream_is_file_url_and_origin_is_network(
         self, tmp_path: Path
@@ -287,6 +293,7 @@ class TestProbeCloneSourceUrl:
         # upstream is file:// → excluded by _is_not_file_url → falls through to origin
         assert result.reason == "ok"
         assert result.url == str(bare)
+        assert result.remote_name == "origin"
 
     def test_returns_no_origin_for_repo_without_remotes(self, tmp_path: Path) -> None:
         """Repo with no remotes returns reason='no_origin' (unchanged from current behavior)."""
@@ -310,6 +317,7 @@ class TestProbeCloneSourceUrl:
 
         assert result.reason == "no_origin"
         assert result.url == ""
+        assert result.remote_name == "origin"
 
 
 class TestCloneFromPreviousAutoskillitClone:

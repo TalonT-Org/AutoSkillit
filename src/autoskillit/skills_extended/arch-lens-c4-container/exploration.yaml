@@ -1,0 +1,45 @@
+vectors:
+- id: application-layer
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces application entry points, commands, APIs,
+    and frontend code while the parent routes declarative registrations to repository
+    impact profiling.
+- id: service-business-logic-layer
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - imports
+  - calls
+  - references
+  rationale: Semantic navigation identifies service, workflow, handler, and domain-module
+    boundaries without deciding their C4 container meaning.
+- id: package-library-layer
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - imports
+  - references
+  rationale: Semantic navigation identifies shared packages, internal libraries, utilities,
+    and their import relationships while the parent retains container classification.
+- id: data-storage-layer
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces storage clients, models, repositories, caches,
+    and data-access calls while the parent routes storage configuration and generated
+    artifacts to repository impact profiling.
+- id: external-integrations
+  role: semantic-code-navigator
+  relationship_classes:
+  - imports
+  - calls
+  - references
+  rationale: Semantic navigation traces API clients, SDK imports, and external calls
+    while the parent retains system-boundary and integration judgments.

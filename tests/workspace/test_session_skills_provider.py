@@ -65,6 +65,10 @@ def _catalog_context(
         project_root,
         SkillExecutionRole.SESSION,
     )
+    catalog = EffectiveSkillCatalog(
+        skills=tuple(member for member in catalog.skills if not member.exploration_vectors),
+        execution_role=SkillExecutionRole.SESSION,
+    )
     context = provider.catalog_projection_context(
         catalog,
         project_root,

@@ -43,6 +43,7 @@ from autoskillit.core import (
     CmdSpec,
     CookSessionHandle,
     ExecutableLaunchBinding,
+    ExplorationDispatchRenderer,
     ManagedHeadlessSessionLineageRef,
     NamedResume,
     NativeShellCaptureDecision,
@@ -89,11 +90,14 @@ from autoskillit.execution.backends._claude_prompt import (
     apply_prompt_injector_chain,
 )
 from autoskillit.execution.backends._cmd_builder import CmdBuilder
+from autoskillit.execution.backends._explorer_dispatch import (
+    CLAUDE_EXPLORATION_DISPATCH_RENDERER,
+)
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import parse_session_result
 
 log = logging.getLogger(__name__)  # noqa: TID251 — stdlib fallback: used before configure_logging(); structlog proxy would emit to stderr via import-time WriteLoggerFactory
-
+_EXPLORER_BINDING_REJECTION_MESSAGE = "Claude Code does not support explorer binding projection"
 _ORDER_GREETING_PREFIXES = (
     "Today's special:",
     "Order up! Today's special:",
@@ -398,8 +402,31 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             skill_sigil=self.capabilities.skill_sigil,
         )
 
-    def setup_session_dir(self, session_dir: Path) -> None:
-        pass
+    @property
+    def exploration_dispatch_renderer(self) -> ExplorationDispatchRenderer:
+        return CLAUDE_EXPLORATION_DISPATCH_RENDERER
+
+    def setup_session_dir(
+        self,
+        session_dir: Path,
+        *,
+        parent_sandbox_mode: str = "workspace-write",
+        explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
+    ) -> None:
+        if explorer_binding_env:
+            raise ValueError(_EXPLORER_BINDING_REJECTION_MESSAGE)
+
+    def refresh_explorer_binding_env(
+        self,
+        session_dir: Path,
+        explorer_binding_env: Mapping[str, Mapping[str, str]],
+    ) -> None:
+        if explorer_binding_env:
+            raise ValueError(_EXPLORER_BINDING_REJECTION_MESSAGE)
+
+    def clear_explorer_binding_env(self, session_dir: Path, roles: frozenset[str]) -> None:
+        if roles:
+            raise ValueError(_EXPLORER_BINDING_REJECTION_MESSAGE)
 
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:
         spec = self.build_headless_cmd(skill_command)

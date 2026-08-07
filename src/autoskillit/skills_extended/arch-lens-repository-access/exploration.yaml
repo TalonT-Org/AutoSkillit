@@ -1,0 +1,55 @@
+vectors:
+- id: repository-classes
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - imports
+  - references
+  rationale: Semantic navigation identifies repository definitions, inheritance, imports,
+    and concrete implementations while the parent retains repository-pattern interpretation.
+- id: entity-models
+  role: semantic-code-navigator
+  relationship_classes:
+  - declares
+  - defines
+  - references
+  rationale: Semantic navigation identifies entity and model definitions while parent-owned
+    handoff may use repository impact evidence for declarative tables, collections,
+    and ORM artifacts.
+- id: crud-operations
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces CRUD and specialized-query method definitions,
+    callers, and affected storage operations without classifying their architectural
+    role.
+- id: query-patterns
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces query-builder, filter, join, ordering, grouping,
+    and index-related code paths while the parent interprets query patterns.
+- id: factory-scoping
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces repository factories, dependency-injection
+    calls, and session or context scope paths while parent-owned handoff covers declarative
+    registrations and configuration.
+- id: format-conversion
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces adapter, DTO, serializer, mapper, and conversion
+    definitions and calls while the parent interprets conversion boundaries.

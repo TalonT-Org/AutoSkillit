@@ -782,9 +782,12 @@ def _skill_info_from_frontmatter(
     exploration_vectors: tuple[ExplorationVectorDef, ...] = ()
     exploration_sidecar_digest = ""
     if "exploration_vectors" in data:
-        invalid_reasons.append(
-            "exploration_vectors in frontmatter is no longer supported; "
-            "moved to the exploration.yaml sidecar"
+        invalidities.append(
+            SkillInvalidity(
+                SkillInvalidityKind.EXPLORATION_CONTRACT_INVALID,
+                "exploration_vectors in frontmatter is no longer supported; "
+                "moved to the exploration.yaml sidecar",
+            )
         )
     else:
         try:
@@ -802,7 +805,12 @@ def _skill_info_from_frontmatter(
                 # when called with an empty vector tuple.
                 pass
         except SkillContractError as exc:
-            invalid_reasons.append(str(exc))
+            invalidities.append(
+                SkillInvalidity(
+                    SkillInvalidityKind.EXPLORATION_CONTRACT_INVALID,
+                    str(exc),
+                )
+            )
 
     # These names are reserved machine-derived fields. Reading them here makes
     # attempts to inject source identity through YAML an explicit contract error.

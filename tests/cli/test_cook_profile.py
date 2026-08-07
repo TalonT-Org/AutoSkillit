@@ -19,7 +19,6 @@ from autoskillit.core import (
     HookTrustPolicy,
     ManagedSessionHome,
     RepositoryProfileId,
-    SkillContractError,
     SkillExecutionRole,
     SkillProjectionContextAuthority,
     ValidatedAddDir,

@@ -165,6 +165,7 @@ class SkillInvalidityKind(StrEnum):
 
     FRONTMATTER_PARSE = "frontmatter_parse"
     FIELD_SHAPE = "field_shape"
+    EXPLORATION_CONTRACT_INVALID = "exploration_contract_invalid"
     RESERVED_FIELD = "reserved_field"
     UNKNOWN_CAPABILITY = "unknown_capability"
     UNDECLARED_CAPABILITY = "undeclared_capability"

@@ -93,7 +93,7 @@ def test_delivery_matrix_partitions_policies() -> None:
 
 # Task-shaped anchors that a change-authoring policy is expected to use but a
 # universal (session-mechanics) policy must not — presupposing a plan, a diff, or
-# a scope-stop mechanism most session types don't have is exactly the #4478 defect.
+# a scope-stop mechanism most session types don't have would make it task-specific.
 _TASK_SHAPED_MARKERS: tuple[str, ...] = (
     "split proposal",
     "added lines",

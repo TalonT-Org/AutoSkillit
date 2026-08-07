@@ -14,6 +14,18 @@ DIFF_SIZE_GATE_EXCLUDED_PATHSPECS: tuple[str, ...] = (".autoskillit/test-source-
 DIFF_SIZE_GATE_MAX_CHANGED_FILES = 160
 
 
+def _diff_size_error(default_budget: str) -> dict[str, str]:
+    """Return the structured fail-open result for an unavailable size measurement."""
+    return {
+        "size_verdict": "error",
+        "added_lines": "0",
+        "changed_files": "0",
+        "budget": default_budget,
+        "budget_source": "ingredient",
+        "split_proposal_path": "",
+    }
+
+
 def check_diff_size(
     worktree_path: str = "",
     base_branch: str = "",
@@ -39,14 +51,7 @@ def check_diff_size(
         timeout=30,
     )
     if fork_result.returncode != 0:
-        return {
-            "size_verdict": "error",
-            "added_lines": "0",
-            "changed_files": "0",
-            "budget": default_budget,
-            "budget_source": "ingredient",
-            "split_proposal_path": "",
-        }
+        return _diff_size_error(default_budget)
     fork_point = fork_result.stdout.strip()
 
     exclude_args: list[str] = []
@@ -110,7 +115,10 @@ def check_diff_size(
             except OSError:
                 pass
 
-    budget = int(default_budget)
+    try:
+        budget = int(default_budget)
+    except ValueError:
+        return _diff_size_error(default_budget)
     budget_source = "ingredient"
     if plan_path:
         try:

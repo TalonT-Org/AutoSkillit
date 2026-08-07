@@ -6617,6 +6617,18 @@ def test_check_diff_size_malformed_plan_budget_falls_back(tmp_path: Path) -> Non
     assert result["budget"] == "6000"
 
 
+def test_check_diff_size_malformed_default_budget_returns_error(tmp_path: Path) -> None:
+    """A non-numeric default budget produces the structured fail-open verdict."""
+    _init_diff_size_repo(tmp_path)
+
+    result = check_diff_size(str(tmp_path), "main", default_budget="not-a-number")
+
+    assert result["size_verdict"] == "error"
+    assert result["budget"] == "not-a-number"
+    assert result["budget_source"] == "ingredient"
+    assert result["split_proposal_path"] == ""
+
+
 def test_check_diff_size_changed_files_bound(tmp_path: Path) -> None:
     """Exceeding the changed-files limit alone triggers over_budget under a large line budget."""
     _init_diff_size_repo(tmp_path)

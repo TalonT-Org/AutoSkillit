@@ -6788,6 +6788,8 @@ def test_check_diff_size_changed_files_bound(tmp_path: Path) -> None:
     result = check_diff_size(str(tmp_path), "main", default_budget="1000000")
 
     assert result["size_verdict"] == "over_budget"
+    assert result["added_lines"] == "161"
+    assert result["changed_files"] == "161"
 
 
 def test_check_diff_size_all_values_are_strings(tmp_path: Path) -> None:

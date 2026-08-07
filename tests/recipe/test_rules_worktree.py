@@ -1058,7 +1058,9 @@ class TestCaptureListRequiresRetriesZero:
 # ---------------------------------------------------------------------------
 
 
-def _make_cycle_clobber_workflow(*, with_merge_barrier: bool = False) -> Recipe:
+def _make_cycle_clobber_workflow(
+    *, with_merge_barrier: bool = False, with_python_cleanup: bool = False
+) -> Recipe:
     """Build a minimal recipe with a worktree-creating step inside a remediation cycle.
 
     With with_merge_barrier=False: implement → audit → NO GO → remediate → implement
@@ -1214,6 +1216,18 @@ def _make_cycle_clobber_workflow(*, with_merge_barrier: bool = False) -> Recipe:
             "done": {"action": "stop", "message": "Done."},
             "fail_stop": {"action": "stop", "message": "Failed."},
         }
+    if with_python_cleanup:
+        steps["remediate"]["on_success"] = "cleanup"
+        steps["cleanup"] = {
+            "tool": "run_python",
+            "with": {
+                "callable": "autoskillit.smoke_utils.remove_worktree_for_replan",
+                "worktree_path": "${{ context.worktree_path }}",
+                "main_repo": "/repo",
+            },
+            "on_success": "implement",
+            "on_failure": "implement",
+        }
     return _make_workflow(steps)
 
 
@@ -1237,6 +1251,14 @@ def test_worktree_clobber_without_merge_clean_with_barrier() -> None:
         f"worktree-clobber-without-merge must not fire when merge barrier is present, "
         f"got: {rule_findings}"
     )
+
+
+def test_worktree_clobber_clean_with_run_python_cleanup_barrier() -> None:
+    """The typed worktree cleanup callable consumes the live worktree reference."""
+    wf = _make_cycle_clobber_workflow(with_python_cleanup=True)
+    findings = run_semantic_rules(wf)
+    rule_findings = [f for f in findings if f.rule == "worktree-clobber-without-merge"]
+    assert rule_findings == []
 
 
 def test_existing_rules_do_not_catch_cycle_clobber_pattern() -> None:

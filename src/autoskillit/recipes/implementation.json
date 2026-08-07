@@ -533,7 +533,19 @@
         "worktree_path": "${{ context.worktree_path }}",
         "main_repo": "${{ context.work_dir }}"
       },
-      "on_success": "plan",
+      "on_result": [
+        {
+          "when": "${{ result.cleanup_state }} == removed",
+          "route": "plan"
+        },
+        {
+          "when": "${{ result.cleanup_state }} == missing",
+          "route": "plan"
+        },
+        {
+          "route": "plan"
+        }
+      ],
       "on_failure": "plan",
       "note": "Remove the implementation worktree before scope-triggered re-planning so the next implement step can create a fresh worktree at the same path. Cleanup is best-effort because a missing worktree is already the desired state."
     },

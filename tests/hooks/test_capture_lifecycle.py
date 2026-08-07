@@ -157,6 +157,33 @@ def test_capacity_failure_reason_mapping_is_exhaustive_and_enum_keyed() -> None:
     }
 
 
+@pytest.mark.parametrize("reason", tuple(CaptureCapacityReason))
+def test_capacity_rescue_records_only_byte_pressure(
+    tmp_path: Path,
+    reason: CaptureCapacityReason,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+
+    def fail_with_reason() -> None:
+        raise CaptureCapacityError(reason)
+
+    try:
+        with pytest.raises(CaptureCapacityError, match=reason.value):
+            store._with_capacity_rescue(fail_with_reason, rescuable_reasons=frozenset())
+        assert store.byte_pressure_observed is (
+            reason
+            in {
+                CaptureCapacityReason.PROJECTED_COMPACTED_BYTES,
+                CaptureCapacityReason.HARD_LEDGER_CAPACITY,
+            }
+        )
+    finally:
+        root.close()
+        anchor.close()
+
+
 def test_retention_seconds_use_lifecycle_policy_authority() -> None:
     assert capture_lifecycle._RETENTION_SECONDS == SWEEP_GRACE_SECONDS
 

@@ -99,6 +99,12 @@ MAX_ACTIVE_RECORDS = 4096
 _RETENTION_SECONDS = float(_capture_lifecycle_policy.SWEEP_GRACE_SECONDS)
 _REFERENCE_LIFETIME_SECONDS = 1800.0
 _MAX_RETRY_SECONDS = 3600.0
+_BYTE_CAPACITY_REASONS = frozenset(
+    {
+        CaptureCapacityReason.PROJECTED_COMPACTED_BYTES,
+        CaptureCapacityReason.HARD_LEDGER_CAPACITY,
+    }
+)
 _COMPACTION_THRESHOLD_BYTES = 31 * 1024 * 1024 // 8
 _MAX_COMPACTION_BYTES = 4 * 1024 * 1024
 _CAPTURE_ID_RE = _capture_syntax.CAPTURE_ID_RE
@@ -590,10 +596,10 @@ class CaptureLifecycleStore:
         try:
             return attempt()
         except CaptureCapacityError as exc:
-            if exc.reason not in effective:
+            if exc.reason in _BYTE_CAPACITY_REASONS:
                 self.byte_pressure_observed = True
+            if exc.reason not in effective:
                 raise
-            self.byte_pressure_observed = True
             # Run a bounded rescue sweep with the lock released (sweep
             # acquires it itself — sequential, no re-entrancy).
             self.sweep(_capture_types.TRANSITION_RESCUE_BUDGET)
@@ -639,13 +645,10 @@ class CaptureLifecycleStore:
 
         # Admission gate: rescue on both byte reasons (soft + hard ceiling),
         # not just soft.  Record-count ceilings keep existing behavior.
-        _ADMISSION_BYTE_REASONS = frozenset(
-            {
-                CaptureCapacityReason.PROJECTED_COMPACTED_BYTES,
-                CaptureCapacityReason.HARD_LEDGER_CAPACITY,
-            }
+        result = self._with_capacity_rescue(
+            _attempt,
+            rescuable_reasons=_BYTE_CAPACITY_REASONS,
         )
-        result = self._with_capacity_rescue(_attempt, rescuable_reasons=_ADMISSION_BYTE_REASONS)
         if type(result) is not CaptureLifecycleRecord:
             raise CaptureLifecycleError("reserve_capture rescue produced invalid result")
         return result

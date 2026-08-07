@@ -159,16 +159,23 @@ class TestRunnerSpawnArtifactInertness:
     itself and avoids duplicating T3's coverage of ``_capture_artifacts.py``.
     """
 
-    def test_runner_argv_disables_bytecode_writing(self) -> None:
+    @pytest.mark.parametrize(
+        ("action", "command"),
+        [
+            pytest.param("run", "printf ok", id="run"),
+            pytest.param("reject", None, id="reject"),
+        ],
+    )
+    def test_runner_argv_disables_bytecode_writing(self, action: str, command: str | None) -> None:
         request = CaptureRequest(
             protocol_version=CAPTURE_REQUEST_PROTOCOL_VERSION,
-            action="run",
+            action=action,
             mode="capture",
             attempt_id=None,
             lineage_ref=None,
             cwd="/abs/project",
             capture_id="0123456789abcdef",
-            command="printf ok",
+            command=command,
         )
 
         argv = _runner_argv(request)

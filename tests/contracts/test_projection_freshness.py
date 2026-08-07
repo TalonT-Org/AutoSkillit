@@ -221,3 +221,71 @@ class TestAssetDigestMirrorsTheCopier:
         before = public_plugin_asset_digest(source)
         (source / "not_public" / "x.txt").write_text("irrelevant\n")
         assert public_plugin_asset_digest(source) == before
+
+
+class TestBytecodeExclusion:
+    """Bytecode (``__pycache__/``, ``*.pyc``, ``*.pyo``) must never enter a
+    published artifact — exclusion is enforced by ``is_projected_asset``
+    at every depth, and the digest/copier stay in lockstep through it.
+    """
+
+    @staticmethod
+    def _seed_bytecode(source: Path) -> None:
+        """Seed a source tree with bytecode at multiple depths."""
+        hooks = source / "hooks"
+        hooks.mkdir(parents=True, exist_ok=True)
+        (hooks / "real.py").write_text("pass")
+        guards = hooks / "guards"
+        guards.mkdir(parents=True, exist_ok=True)
+        (guards / "guard.py").write_text("pass")
+
+        # Bytecode at hooks/ level
+        pc1 = hooks / "__pycache__"
+        pc1.mkdir(exist_ok=True)
+        (pc1 / "real.cpython-311.pyc").write_bytes(b"fake pyc")
+
+        # Bytecode at hooks/guards/ level
+        pc2 = guards / "__pycache__"
+        pc2.mkdir(exist_ok=True)
+        (pc2 / "guard.cpython-311.pyc").write_bytes(b"fake pyc")
+
+        # .pyo file at hooks/ level
+        (hooks / "stale.pyo").write_bytes(b"fake pyo")
+
+        # Bytecode under scripts/
+        scripts = source / "scripts"
+        scripts.mkdir(parents=True, exist_ok=True)
+        (scripts / "helper.py").write_text("pass")
+        pc3 = scripts / "__pycache__"
+        pc3.mkdir(exist_ok=True)
+        (pc3 / "helper.cpython-311.pyc").write_bytes(b"fake pyc")
+
+    def test_iter_walk_excludes_bytecode(self, tmp_path: Path) -> None:
+        source = tmp_path / "src"
+        source.mkdir()
+        self._seed_bytecode(source)
+
+        walked = set(iter_public_plugin_asset_files(source))
+        bytecode = {p for p in walked if "__pycache__" in p.parts or p.suffix in {".pyc", ".pyo"}}
+        assert not bytecode, f"iter_public_plugin_asset_files yielded bytecode entries: {bytecode}"
+
+    def test_digest_ignores_bytecode(self, tmp_path: Path) -> None:
+        source = tmp_path / "src"
+        source.mkdir()
+        self._seed_bytecode(source)
+
+        d_with_bytecode = public_plugin_asset_digest(source)
+
+        # Remove all bytecode
+        import shutil
+
+        for pc in list(source.rglob("__pycache__")):
+            shutil.rmtree(pc)
+        for pyc in list(source.rglob("*.pyo")):
+            pyc.unlink()
+
+        d_clean = public_plugin_asset_digest(source)
+        assert d_with_bytecode == d_clean, (
+            "digest changed when bytecode was removed — bytecode should be "
+            "excluded from the digest by is_projected_asset"
+        )

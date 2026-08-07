@@ -1,14 +1,28 @@
-"""Architectural guard: every interpreter spawn in the hook pipeline must suppress bytecode.
+"""Architectural guard: every hooks-side interpreter spawn suppresses bytecode writes.
 
-Any site that constructs a Python interpreter invocation — ``sys.executable`` in
-a subprocess argv list, or a rendered command string containing ``python3`` as a
-command — must include ``-B`` in the argv unconditionally. An env-var assignment
-(``PYTHONDONTWRITEBYTECODE``) is never an accepted *substitute* because isolated
-(``-I``) spawns ignore ``PYTHON*`` env. Sites with a Python-level
-``subprocess`` spawn must *additionally* set ``PYTHONDONTWRITEBYTECODE`` to
-``"1"`` in the child env for ordinary-descendant coverage.
+Companion to ``tests/hooks/test_hook_command_suppression.py``, which exercises
+specific renderers behaviorally. This guard is structural: it walks every
+``.py`` file under ``src/autoskillit/hooks/`` plus ``hook_registry.py`` and
+``execution/backends/_codex_hooks.py`` (the two IL-1/IL-3 modules that render
+hook command strings outside the hooks package itself) looking for any site
+that constructs a ``python3``/``sys.executable`` interpreter invocation, and
+requires ``-B`` unconditionally. New spawn sites are caught automatically —
+nothing needs to opt in.
 
-This guard turns any future unsuppressed spawn into an instant test failure.
+Deliberately naming/structure-agnostic: detection keys off *what a site is
+shaped like* (a subprocess argv list containing ``sys.executable``, or a
+string/f-string whose own text begins with ``"python3 "``), not off where the
+result is assigned, returned, or embedded, and not off the enclosing
+function's name. A command string built into a local variable before being
+placed in a dict or returned by name (e.g. ``_build_hook_command``'s
+non-relocatable branch) is exactly as detectable as one written inline.
+
+Modeled on ``tests/arch/test_xfail_bridge_policy.py``'s AST-walk-plus-registry
+shape: a bounded, rationale-carrying exemption registry
+(``_BYTECODE_SUPPRESSION_EXEMPT``) paired with a pincer meta-test that fails
+if an exemption entry no longer corresponds to a real, still-non-suppressing
+site (mirrors ``TestRetiredArtifactShapeRegistry``'s no-orphan half in
+``tests/contracts/test_install_state_consistency.py``).
 """
 
 from __future__ import annotations
@@ -21,42 +35,28 @@ import pytest
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
-_SRC_ROOT = Path(__file__).resolve().parent.parent.parent / "src" / "autoskillit"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SRC = _REPO_ROOT / "src" / "autoskillit"
+_HOOKS_DIR = _SRC / "hooks"
 
-# Modules whose interpreter spawn sites are covered by this guard.
-_GUARDED_MODULES: tuple[Path, ...] = (
-    _SRC_ROOT / "hooks",
-    _SRC_ROOT / "hook_registry.py",
-    _SRC_ROOT / "execution" / "backends" / "_codex_hooks.py",
-)
+_PYTHON3_COMMAND_RE = re.compile(r"^python3\s")
 
-# Entries: (module_relpath, line_number) -> reason (≥40 chars).
-# An exemption whose site no longer exists fails the orphan meta-test.
+# Interpreter-spawn sites that legitimately cannot carry -B, keyed by
+# (module-relative-path-under-src/autoskillit, line-number). Every reason
+# must explain the exemption in at least 40 characters. Starts EMPTY:
+# every spawn site as of issue #4480 already passes -B — an entry here
+# should be rare and reviewed carefully, not a default escape hatch.
 _BYTECODE_SUPPRESSION_EXEMPT: dict[tuple[str, int], str] = {}
 
 
-def _python_files() -> list[Path]:
-    """Collect every .py file in the guarded module set."""
-    result: list[Path] = []
-    for path in _GUARDED_MODULES:
-        if path.is_file() and path.suffix == ".py":
-            result.append(path)
-        elif path.is_dir():
-            result.extend(sorted(path.rglob("*.py")))
-    return result
+def _target_files() -> list[Path]:
+    files = sorted(_HOOKS_DIR.rglob("*.py"))
+    files.append(_SRC / "hook_registry.py")
+    files.append(_SRC / "execution" / "backends" / "_codex_hooks.py")
+    return files
 
 
-def _relpath(path: Path) -> str:
-    return path.relative_to(_SRC_ROOT).as_posix()
-
-
-# ---------------------------------------------------------------------------
-# AST helpers — Case 1: sys.executable in list literals
-# ---------------------------------------------------------------------------
-
-
-def _is_sys_executable(node: ast.AST) -> bool:
-    """Return True if ``node`` is ``sys.executable``."""
+def _is_sys_executable(node: ast.expr) -> bool:
     return (
         isinstance(node, ast.Attribute)
         and node.attr == "executable"
@@ -65,181 +65,199 @@ def _is_sys_executable(node: ast.AST) -> bool:
     )
 
 
-def _list_contains_sys_executable(node: ast.List) -> bool:
-    return any(_is_sys_executable(elt) for elt in node.elts)
+def _render_string_node(node: ast.Constant | ast.JoinedStr) -> str:
+    if isinstance(node, ast.Constant):
+        return node.value if isinstance(node.value, str) else ""
+    parts: list[str] = []
+    for value in node.values:
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            parts.append(value.value)
+        elif isinstance(value, ast.FormattedValue):
+            parts.append(f"{{{ast.unparse(value.value)}}}")
+    return "".join(parts)
 
 
-def _list_contains_dash_b(node: ast.List) -> bool:
-    """Check if a list literal contains the string ``"-B"``."""
-    return any(isinstance(elt, ast.Constant) and elt.value == "-B" for elt in node.elts)
+class _CommandStringVisitor(ast.NodeVisitor):
+    """Finds python3-command-shaped string/f-string literals.
+
+    Deliberately does not descend into a ``JoinedStr``'s own parts: those are
+    either literal fragments already folded into the rendered text, or
+    interpolated sub-expressions unrelated to command-string detection.
+    Visiting them separately would double-report the same site and — worse —
+    would flag mid-string mentions of "python3" (e.g. an instructional
+    message telling an agent what shell command to run) as if the *message
+    itself* were a command we constructed, which it is not: only a string
+    whose own rendered text begins with the interpreter invocation is.
+    """
+
+    def __init__(self) -> None:
+        self.sites: list[tuple[int, str]] = []
+
+    def visit_JoinedStr(self, node: ast.JoinedStr) -> None:
+        rendered = _render_string_node(node)
+        if _PYTHON3_COMMAND_RE.match(rendered):
+            self.sites.append((node.lineno, rendered))
+
+    def visit_Constant(self, node: ast.Constant) -> None:
+        if isinstance(node.value, str) and _PYTHON3_COMMAND_RE.match(node.value):
+            self.sites.append((node.lineno, node.value))
 
 
-# ---------------------------------------------------------------------------
-# AST helpers — Case 2: command-construction f-strings/strings
-#
-# Only flag strings that are used as dict values for a key named "command"
-# in a dict literal — this is how hooks.json/settings.json/Codex config
-# command entries are constructed.
-# ---------------------------------------------------------------------------
+def _interpreter_spawn_sites(tree: ast.Module) -> list[tuple[int, str]]:
+    """Every interpreter-invocation-construction site in ``tree``.
 
-_PYTHON3_CMD_RE = re.compile(r"\bpython3\s")
-_PYTHON3_DASH_B_RE = re.compile(r"\bpython3\s+-B\b")
+    Two independent shapes are covered:
+      - a literal ``list`` containing ``sys.executable`` as an element
+        (the ``subprocess.run`` argv shape used by ``_dispatch.py`` and
+        ``shell_capture_hook.py``)
+      - a string/f-string whose rendered text begins with ``"python3 "``
+        (the command-template shape used by ``hook_registry.py`` and
+        ``_codex_hooks.py``)
 
-
-def _extract_string(node: ast.AST) -> str | None:
-    """Extract a string from a Constant or JoinedStr."""
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
-    if isinstance(node, ast.JoinedStr):
-        parts: list[str] = []
-        for v in node.values:
-            if isinstance(v, ast.Constant) and isinstance(v.value, str):
-                parts.append(v.value)
-        return "".join(parts) if parts else None
-    return None
-
-
-def _find_command_string_violations(tree: ast.Module) -> list[tuple[int, str]]:
-    """Find dict entries ``"command": f"python3 ..."`` missing ``-B``."""
-    violations: list[tuple[int, str]] = []
+    Returns ``(line, rendered_text)`` pairs.
+    """
+    sites: list[tuple[int, str]] = []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Dict):
-            continue
-        for key, value in zip(node.keys, node.values):
-            if value is None or key is None:
-                continue
-            if not (isinstance(key, ast.Constant) and key.value == "command"):
-                continue
-            text = _extract_string(value)
-            if text is None:
-                continue
-            if _PYTHON3_CMD_RE.search(text) and not _PYTHON3_DASH_B_RE.search(text):
-                violations.append((value.lineno, text))
-    return violations
+        if isinstance(node, ast.List) and any(_is_sys_executable(elt) for elt in node.elts):
+            rendered = " ".join(
+                elt.value
+                if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
+                else ast.unparse(elt)
+                for elt in node.elts
+            )
+            sites.append((node.lineno, rendered))
+    visitor = _CommandStringVisitor()
+    visitor.visit(tree)
+    sites.extend(visitor.sites)
+    return sites
 
 
-# Also check return statements in render/build command functions
-def _find_return_command_violations(tree: ast.Module) -> list[tuple[int, str]]:
-    """Find ``return f"python3 ..."`` in command-rendering functions missing ``-B``."""
-    violations: list[tuple[int, str]] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        name = node.name
-        if not (
-            name.startswith("render_")
-            and "command" in name.lower()
-            or name.startswith("_build_")
-            and "command" in name.lower()
-        ):
-            continue
-        for child in ast.walk(node):
-            if isinstance(child, ast.Return) and child.value is not None:
-                text = _extract_string(child.value)
-                if text is None:
-                    continue
-                if _PYTHON3_CMD_RE.search(text) and not _PYTHON3_DASH_B_RE.search(text):
-                    violations.append((child.lineno, text))
-    return violations
+def _has_bytecode_suppression_flag(rendered: str) -> bool:
+    return "-B" in rendered.split()
 
 
-# ---------------------------------------------------------------------------
-# Violation collector
-# ---------------------------------------------------------------------------
-
-
-def _collect_violations() -> list[str]:
-    """Find every interpreter spawn site missing ``-B`` suppression."""
+def _unexempted_violations() -> list[str]:
     violations: list[str] = []
-    for path in _python_files():
-        rel = _relpath(path)
-        source = path.read_text()
-        tree = ast.parse(source, filename=str(path))
-
-        # Case 1: list containing sys.executable (subprocess argv)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.List) and _list_contains_sys_executable(node):
-                if not _list_contains_dash_b(node):
-                    key = (rel, node.lineno)
-                    if key not in _BYTECODE_SUPPRESSION_EXEMPT:
-                        violations.append(
-                            f"{rel}:{node.lineno}: subprocess argv with "
-                            f"sys.executable is missing -B flag"
-                        )
-
-        # Case 2: command-construction strings missing -B
-        for lineno, text in _find_command_string_violations(tree):
-            key = (rel, lineno)
-            if key not in _BYTECODE_SUPPRESSION_EXEMPT:
-                violations.append(
-                    f"{rel}:{lineno}: command string contains python3 without -B flag: {text!r}"
-                )
-
-        # Case 3: return statements in command-rendering functions
-        for lineno, text in _find_return_command_violations(tree):
-            key = (rel, lineno)
-            if key not in _BYTECODE_SUPPRESSION_EXEMPT:
-                violations.append(
-                    f"{rel}:{lineno}: render/build command function returns "
-                    f"python3 command without -B flag: {text!r}"
-                )
-
+    for path in _target_files():
+        rel = path.relative_to(_SRC).as_posix()
+        tree = ast.parse(path.read_text())
+        for lineno, rendered in _interpreter_spawn_sites(tree):
+            if _has_bytecode_suppression_flag(rendered):
+                continue
+            if (rel, lineno) in _BYTECODE_SUPPRESSION_EXEMPT:
+                continue
+            violations.append(f"{rel}:{lineno} — missing -B: {rendered!r}")
     return violations
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
-
-def test_every_interpreter_spawn_suppresses_bytecode() -> None:
-    """No spawn site in the hook pipeline may produce bytecode in the tree."""
-    violations = _collect_violations()
+def test_every_interpreter_spawn_site_suppresses_bytecode() -> None:
+    violations = _unexempted_violations()
     assert not violations, (
-        "Interpreter spawn sites found without -B bytecode suppression:\n"
-        + "\n".join(f"  • {v}" for v in violations)
+        "interpreter spawn site(s) missing bytecode suppression (-B) — either "
+        "add -B to the invocation or register a rationale in "
+        "_BYTECODE_SUPPRESSION_EXEMPT:\n" + "\n".join(f"  {v}" for v in violations)
     )
 
 
-def test_exemption_registry_has_no_orphans() -> None:
-    """Every exemption must still correspond to a real spawn site."""
-    if not _BYTECODE_SUPPRESSION_EXEMPT:
-        return  # empty registry — nothing to check
-    surviving: list[str] = []
-    for (rel, lineno), _reason in _BYTECODE_SUPPRESSION_EXEMPT.items():
-        path = _SRC_ROOT / rel
-        if not path.is_file():
-            surviving.append(f"{rel}:{lineno} — file no longer exists")
-            continue
-        source = path.read_text()
-        tree = ast.parse(source, filename=str(path))
-        found = False
-        for node in ast.walk(tree):
-            if isinstance(node, ast.List) and _list_contains_sys_executable(node):
-                if node.lineno == lineno:
-                    found = True
-                    break
-        for _vlineno, _vtext in _find_command_string_violations(tree):
-            if _vlineno == lineno:
-                found = True
-                break
-        for _vlineno, _vtext in _find_return_command_violations(tree):
-            if _vlineno == lineno:
-                found = True
-                break
-        if not found:
-            surviving.append(f"{rel}:{lineno} — no spawn site at this line")
-    assert not surviving, "Stale exemption entries in _BYTECODE_SUPPRESSION_EXEMPT:\n" + "\n".join(
-        f"  • {s}" for s in surviving
+def test_exempt_entries_have_rationale() -> None:
+    for key, reason in _BYTECODE_SUPPRESSION_EXEMPT.items():
+        assert len(reason) >= 40, f"{key}: exemption reason too thin to act on"
+
+
+def test_no_exempt_entry_is_orphaned() -> None:
+    """Pincer meta-test: an allowlist entry whose site no longer needs it must go.
+
+    Mirrors ``TestRetiredArtifactShapeRegistry``'s no-orphan half — the
+    registry must track the codebase's actual state, not accumulate
+    permanently. An entry is orphaned once its site either stops missing
+    ``-B`` (fixed) or stops existing (removed/renamed).
+    """
+    still_missing = {
+        (rel, lineno)
+        for path in _target_files()
+        for rel in (path.relative_to(_SRC).as_posix(),)
+        for lineno, rendered in _interpreter_spawn_sites(ast.parse(path.read_text()))
+        if not _has_bytecode_suppression_flag(rendered)
+    }
+    orphaned = sorted(k for k in _BYTECODE_SUPPRESSION_EXEMPT if k not in still_missing)
+    assert not orphaned, (
+        "_BYTECODE_SUPPRESSION_EXEMPT entries no longer correspond to a live, "
+        f"still-non-suppressing spawn site — remove them: {orphaned}"
     )
 
 
-def test_exemption_reasons_are_substantive() -> None:
-    """Every exemption reason must be at least 40 characters."""
-    short: list[str] = []
-    for (rel, lineno), reason in _BYTECODE_SUPPRESSION_EXEMPT.items():
-        if len(reason) < 40:
-            short.append(f"{rel}:{lineno} — reason is {len(reason)} chars: {reason!r}")
-    assert not short, "Exemption reasons must be ≥40 chars:\n" + "\n".join(
-        f"  • {s}" for s in short
+def test_exemption_registry_starts_empty() -> None:
+    """As of issue #4480, no site needs an exemption. Growth should be rare."""
+    assert _BYTECODE_SUPPRESSION_EXEMPT == {}
+
+
+# --- Detector self-tests (synthetic AST, no repository dependency) ---------
+
+
+def test_detector_flags_missing_flag_in_list_site() -> None:
+    tree = ast.parse("import sys\nsubprocess.run([sys.executable, str(target)])\n")
+    sites = _interpreter_spawn_sites(tree)
+    assert sites
+    assert not any(_has_bytecode_suppression_flag(rendered) for _, rendered in sites)
+
+
+def test_detector_passes_when_flag_present_in_list_site() -> None:
+    tree = ast.parse('import sys\nsubprocess.run([sys.executable, "-B", str(target)])\n')
+    sites = _interpreter_spawn_sites(tree)
+    assert sites
+    assert all(_has_bytecode_suppression_flag(rendered) for _, rendered in sites)
+
+
+def test_detector_flags_missing_flag_in_command_string_site() -> None:
+    tree = ast.parse('command = f"python3 {path} {name}"\n')
+    sites = _interpreter_spawn_sites(tree)
+    assert sites
+    assert not any(_has_bytecode_suppression_flag(rendered) for _, rendered in sites)
+
+
+def test_detector_passes_when_flag_present_in_command_string_site() -> None:
+    tree = ast.parse('command = f"python3 -B {path} {name}"\n')
+    sites = _interpreter_spawn_sites(tree)
+    assert sites
+    assert all(_has_bytecode_suppression_flag(rendered) for _, rendered in sites)
+
+
+def test_detector_catches_command_built_into_a_local_before_being_returned() -> None:
+    """Regression coverage for the real ``_build_hook_command`` shape: a
+    command f-string assigned to a local variable, then only referenced by
+    name in the dict/return — not written inline at the dict site itself.
+    """
+    tree = ast.parse(
+        "def _build(hooks_dir, script):\n"
+        "    logical_name = script\n"
+        "    command = f'python3 {hooks_dir}/_dispatch.py {logical_name}'\n"
+        "    cmd = {'type': 'command', 'command': command}\n"
+        "    return cmd\n"
     )
+    sites = _interpreter_spawn_sites(tree)
+    assert sites
+    assert not any(_has_bytecode_suppression_flag(rendered) for _, rendered in sites)
+
+
+def test_detector_ignores_unrelated_python3_mentions() -> None:
+    """A message that merely *mentions* python3 mid-string is not a spawn site.
+
+    Regression coverage for the real shape in ``guards/quota_guard.py``: an
+    instructional string telling an agent what shell command to run next,
+    where "python3" appears after other text rather than at the string's
+    own start.
+    """
+    tree = ast.parse('msg = f"Call run_cmd with: python3 -c \\"import time; time.sleep({n})\\""\n')
+    assert _interpreter_spawn_sites(tree) == []
+
+
+def test_detector_ignores_bare_interpreter_name_comparison() -> None:
+    """A basename equality check like ``base == "python3"`` is not a spawn site."""
+    tree = ast.parse('if base == "python3":\n    pass\n')
+    assert _interpreter_spawn_sites(tree) == []
+
+
+def test_detector_ignores_sys_executable_outside_a_list() -> None:
+    """``Path(sys.executable)`` (locating a sibling binary) is not argv construction."""
+    tree = ast.parse("import sys\ncandidate = Path(sys.executable).parent / 'ruff'\n")
+    assert _interpreter_spawn_sites(tree) == []

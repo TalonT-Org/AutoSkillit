@@ -245,12 +245,19 @@ RETIRED_INSTALL_ARTIFACT_SHAPES: Mapping[str, RetiredArtifactShape] = MappingPro
                 "its own source root."
             ),
         ),
-        # Phase 4 (generation-keyed publication) will add:
-        # - ".autoskillit/plugin-projections" (directory, retire_via_engine)
-        # - ".claude/plugins/cache/autoskillit-local/autoskillit" (directory, retire_via_engine)
-        # These entries must land in the same commit as the generation store
-        # migration, because adding them before the migration makes
-        # verify_install_state() flag the active installed artifact as retired.
+        # Phase 4.8 entries — deferred until install() stops writing to these
+        # paths (Phase 4.4).  Adding them before the install transaction is
+        # restructured makes verify_install_state() flag the active installed
+        # artifact as retired:
+        #
+        # ".autoskillit/plugin-projections": RetiredArtifactShape(
+        #     shape="directory", retired_in="0.10.933",
+        #     reason="...", disposition="retire_via_engine",
+        # ),
+        # ".claude/plugins/cache/autoskillit-local/autoskillit": RetiredArtifactShape(
+        #     shape="directory", retired_in="0.10.933",
+        #     reason="...", disposition="retire_via_engine",
+        # ),
     }
 )
 

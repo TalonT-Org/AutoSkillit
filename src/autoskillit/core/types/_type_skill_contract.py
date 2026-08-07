@@ -144,6 +144,7 @@ class SkillSessionContract:
     expected_output_patterns: tuple[str, ...] = ()
     write_behavior: WriteBehaviorSpec = WriteBehaviorSpec()
     read_only: bool = False
+    scope_discipline: bool = False
     completion_required: bool = False
     skill_contract_json: str = ""
     projection_substitutions: tuple[tuple[str, str], ...] = ()

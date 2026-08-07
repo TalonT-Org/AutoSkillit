@@ -77,6 +77,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     write_behavior = skill_data.get("write_behavior")
     write_expected_when = skill_data.get("write_expected_when", [])
     read_only = bool(skill_data.get("read_only", False))
+    scope_discipline = bool(skill_data.get("scope_discipline", False))
     completion_required = bool(skill_data.get("completion_required", False))
     try:
         result_fields = [
@@ -208,6 +209,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         write_behavior=write_behavior,
         write_expected_when=write_expected_when,
         read_only=read_only,
+        scope_discipline=scope_discipline,
         completion_required=completion_required,
         result_fields=result_fields,
         outcome_invariants=outcome_invariants,

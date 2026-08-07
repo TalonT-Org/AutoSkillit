@@ -450,6 +450,7 @@ class SkillSessionConfig:
     resume_message: str | None = None
     sandbox_mode: str = "workspace-write"
     network_access: bool = False
+    include_scope_discipline: bool = False
     native_shell_capture_decision: NativeShellCaptureDecision | None = None
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
     managed_attempt_id: str | None = None

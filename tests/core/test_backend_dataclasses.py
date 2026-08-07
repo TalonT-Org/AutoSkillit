@@ -428,6 +428,7 @@ def test_skill_session_config_fields_exhaustive():
         "resume_message",
         "sandbox_mode",
         "network_access",
+        "include_scope_discipline",
         "native_shell_capture_decision",
         "managed_lineage_ref",
         "managed_attempt_id",

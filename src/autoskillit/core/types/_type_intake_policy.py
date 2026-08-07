@@ -25,7 +25,19 @@ CODEX_INTAKE_DISCIPLINE_VERSION: Final[int] = 3
 # setup plus one copy per session prompt across 5 delivery surfaces. Raising either
 # ceiling is a decision, not a consequence — record measured before/after in the PR.
 CODEX_INTAKE_DISCIPLINE_BYTE_BUDGET: Final[int] = 1200
-CODEX_DISCIPLINE_SUFFIX_BYTE_BUDGET: Final[int] = 4800
+# Governs the UNIVERSAL composed suffix only (output-discipline + intake-discipline +
+# recipe-delivery-contract — codex_discipline_suffix()'s default form), delivered to
+# every Codex session including bundled agent TOMLs. #4478 review (2026-08-07): the
+# scope digest was originally folded into this universal form (budget raised
+# 3150 -> 4800), broadcasting a change-authoring policy to all ~125 skills though only
+# 2 declare the split-proposal receiving mechanism it presupposes. Restored to the
+# measured pre-scope-digest size (universal form measured 3,137 bytes at the time).
+# The scope digest is now a separate change-authoring policy
+# (CODEX_SCOPE_DISCIPLINE_DIGEST, own budget below) delivered only to skill sessions
+# whose contract declares `scope_discipline: true`, to interactive TUI sessions
+# (deliberate — task unknown at launch), and to resumes that opt in explicitly via
+# codex_discipline_suffix(include_scope=True).
+CODEX_DISCIPLINE_SUFFIX_BYTE_BUDGET: Final[int] = 3150
 CODEX_SCOPE_DISCIPLINE_BYTE_BUDGET: Final[int] = 1700
 
 
@@ -161,9 +173,11 @@ CODEX_SCOPE_DISCIPLINE_DIGEST: Final[str] = (
     'S1. Build the smallest design that satisfies the stated requirements. "Immunity",\n'
     '    "architectural", or "contract" framing is not a mandate for maximal machinery —\n'
     "    deliver the minimal mechanism that closes the enumerated gaps.\n"
-    "S2. Hard budget: if your plan or implementation would exceed 1,500 added lines or 40\n"
-    "    changed files, STOP. Do not silently proceed — emit a split proposal (Part A/B/C)\n"
-    "    or a descope note listing what you cut and why, and let the pipeline decide.\n"
+    "S2. Hard budget: if your work would exceed the plan's declared size_budget (or 1,500\n"
+    "    added lines / 40 changed files when no plan declares one), STOP. Do not silently\n"
+    "    proceed — follow your skill's scope-stop procedure when it defines one; otherwise\n"
+    "    surface the overrun and what you would cut in your final report, and let the\n"
+    "    pipeline decide.\n"
     "S3. No speculative machinery: do not introduce a new registry, enum, ID-wrapper/newtype\n"
     "    class, state machine, protocol, event vocabulary, or abstraction layer unless the\n"
     "    task text names it explicitly OR two existing call sites need it today. One concrete\n"
@@ -173,11 +187,7 @@ CODEX_SCOPE_DISCIPLINE_DIGEST: Final[str] = (
     "    Trace only the symbols you will modify or whose contracts you rely on.\n"
     "S5. Tests cover the behavior this change introduces — one focused test per new behavior\n"
     "    or reachable edge. No permutation matrices for hypothetical states. Prefer\n"
-    "    parametrization over near-duplicate test bodies.\n"
-    "S6. In plans: every step must carry an estimated added-line count, and every new module\n"
-    "    or class must cite the requirement that forces it. Move anything justified as\n"
-    '    "future-proofing", "robustness", or "while we\'re here" to a Deferred Items list\n'
-    "    instead of the plan body."
+    "    parametrization over near-duplicate test bodies."
 )
 
 _RULE_IDS = [rule.id for rule in CODEX_INTAKE_RULES]

@@ -536,6 +536,7 @@ def _contract_to_dict(contract: SkillSessionContract) -> dict[str, Any]:
             "expected_when": list(contract.write_behavior.expected_when),
         },
         "read_only": contract.read_only,
+        "scope_discipline": contract.scope_discipline,
         "completion_required": contract.completion_required,
         "skill_contract_json": contract.skill_contract_json,
         "projection_substitutions": [list(item) for item in contract.projection_substitutions],
@@ -558,6 +559,9 @@ def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
         read_only = data.get("read_only", False)
         if not isinstance(read_only, bool):
             raise ValueError("read_only must be a boolean")
+        scope_discipline = data.get("scope_discipline", False)
+        if not isinstance(scope_discipline, bool):
+            raise ValueError("scope_discipline must be a boolean")
         completion_required = data.get("completion_required", False)
         if not isinstance(completion_required, bool):
             raise ValueError("completion_required must be a boolean")
@@ -634,6 +638,7 @@ def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
                 ),
             ),
             read_only=read_only,
+            scope_discipline=scope_discipline,
             completion_required=completion_required,
             skill_contract_json=str(data.get("skill_contract_json", "")),
             projection_substitutions=tuple(

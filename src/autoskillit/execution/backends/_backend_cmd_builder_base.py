@@ -240,6 +240,7 @@ class BackendCmdBuilderBase(ABC):
             "resume_message": config.resume_message,
             "sandbox_mode": config.sandbox_mode,
             "network_access": config.network_access,
+            "include_scope_discipline": config.include_scope_discipline,
             "native_shell_capture_decision": config.native_shell_capture_decision,
             "managed_lineage_ref": config.managed_lineage_ref,
             "managed_attempt_id": config.managed_attempt_id,

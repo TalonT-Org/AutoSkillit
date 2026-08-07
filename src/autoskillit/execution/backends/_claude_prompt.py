@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, NamedTuple
+from typing import Any, Literal, NamedTuple
 
 from autoskillit.core import (
     CODEX_INTAKE_DISCIPLINE_DIGEST,
@@ -220,6 +220,18 @@ class CoInjectedPolicyDef(NamedTuple):
     ``scope_marker`` must appear in the text, so a text cannot silently widen past the
     subject it declares.
 
+    ``delivery`` declares the channel: ``"universal"`` texts are session-mechanics
+    policies (output byte-bounding, file-intake discipline, recipe-delivery
+    attestation) that apply to any Codex session and must stay task-neutral —
+    codex_discipline_suffix()'s default form carries only these. ``"change-authoring"``
+    texts presuppose the session has a plan or is producing a diff, and ride only
+    surfaces serving sessions that author code changes (opt in via
+    ``codex_discipline_suffix(include_scope=True)``). #4478 review (2026-08-07): the
+    scope-discipline digest was originally placed on the universal channel, reaching
+    all ~125 skill sessions though only 2 declared the split-proposal mechanism its
+    text presupposes — the first task-shaped policy on a channel built for
+    session-mechanics rules.
+
     Not to be confused with ``InjectorDef`` below, which names a *stage of the
     prompt-injection chain* ("intake-discipline"). This names a *constant whose text
     is injected* ("CODEX_INTAKE_DISCIPLINE_DIGEST"). The field is ``constant_name``, not
@@ -229,6 +241,7 @@ class CoInjectedPolicyDef(NamedTuple):
     constant_name: str
     subjects: frozenset[str]
     scope_marker: str
+    delivery: Literal["universal", "change-authoring"]
 
 
 CODEX_CO_INJECTED_POLICIES: tuple[CoInjectedPolicyDef, ...] = (
@@ -236,6 +249,7 @@ CODEX_CO_INJECTED_POLICIES: tuple[CoInjectedPolicyDef, ...] = (
         constant_name="OUTPUT_DISCIPLINE_DIGEST",
         subjects=frozenset({"producer-byte-bounding", "saved-artifact-inspection"}),
         scope_marker="saved output",
+        delivery="universal",
     ),
     CoInjectedPolicyDef(
         constant_name="CODEX_INTAKE_DISCIPLINE_DIGEST",
@@ -249,16 +263,19 @@ CODEX_CO_INJECTED_POLICIES: tuple[CoInjectedPolicyDef, ...] = (
             }
         ),
         scope_marker="Instruction files",
+        delivery="universal",
     ),
     CoInjectedPolicyDef(
         constant_name="CODEX_RECIPE_DELIVERY_CALLING_CONTRACT",
         subjects=frozenset({"recipe-delivery-attestation"}),
         scope_marker="delivery_request",
+        delivery="universal",
     ),
     CoInjectedPolicyDef(
         constant_name="CODEX_SCOPE_DISCIPLINE_DIGEST",
         subjects=frozenset({"change-scope-sizing"}),
         scope_marker="SCOPE DISCIPLINE",
+        delivery="change-authoring",
     ),
 )
 
@@ -272,13 +289,22 @@ _CO_INJECTED_POLICY_TEXTS: dict[str, str] = {
 }
 
 
-def codex_discipline_suffix() -> str:
-    """Canonical combined discipline suffix: output + intake + delivery + scope."""
-    return (
-        f"{OUTPUT_DISCIPLINE_DIGEST}\n\n{CODEX_INTAKE_DISCIPLINE_DIGEST}\n\n"
-        f"{CODEX_RECIPE_DELIVERY_CALLING_CONTRACT}\n\n"
-        f"{CODEX_SCOPE_DISCIPLINE_DIGEST}"
-    )
+def codex_discipline_suffix(*, include_scope: bool = False) -> str:
+    """Canonical combined discipline suffix.
+
+    Default form: output + intake + delivery-contract (the universal
+    session-mechanics policies, delivered to every Codex session). Pass
+    ``include_scope=True`` to additionally append the change-authoring
+    scope-discipline policy, for surfaces serving sessions that author code
+    changes (skill sessions whose contract declares ``scope_discipline: true``,
+    interactive TUI sessions, and resumes that opt in explicitly).
+    """
+    parts = [
+        _CO_INJECTED_POLICY_TEXTS[entry.constant_name]
+        for entry in CODEX_CO_INJECTED_POLICIES
+        if entry.delivery == "universal" or include_scope
+    ]
+    return "\n\n".join(parts)
 
 
 def _inject_output_discipline(prompt: str, *, include: bool = False) -> str:

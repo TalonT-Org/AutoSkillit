@@ -289,6 +289,7 @@ def build_skill_session_contract(
     expected_output_patterns: tuple[str, ...],
     write_behavior: WriteBehaviorSpec,
     read_only: bool,
+    scope_discipline: bool,
     completion_required: bool,
     skill_contract_json: str,
 ) -> tuple[SkillSessionContract, dict[str, str]]:
@@ -346,6 +347,7 @@ def build_skill_session_contract(
         expected_output_patterns=expected_output_patterns,
         write_behavior=write_behavior,
         read_only=read_only,
+        scope_discipline=scope_discipline,
         completion_required=completion_required,
         skill_contract_json=skill_contract_json,
         projection_substitutions=tuple(sorted((projection_context.substitutions or {}).items())),
@@ -377,6 +379,9 @@ def deserialize_skill_contract(payload: str) -> SkillContract | None:
         read_only = data.get("read_only", False)
         if not isinstance(read_only, bool):
             raise ValueError("read_only must be a boolean")
+        scope_discipline = data.get("scope_discipline", False)
+        if not isinstance(scope_discipline, bool):
+            raise ValueError("scope_discipline must be a boolean")
         completion_required = data.get("completion_required", False)
         if not isinstance(completion_required, bool):
             raise ValueError("completion_required must be a boolean")

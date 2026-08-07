@@ -577,11 +577,13 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         managed_attempt_id: str | None = None,
+        include_scope_discipline: bool = False,
     ) -> CmdSpec:
         del (
             native_shell_capture_decision,
             managed_lineage_ref,
             managed_attempt_id,
+            include_scope_discipline,
         )
         cmd: list[str] = [
             "claude",

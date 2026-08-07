@@ -32,6 +32,7 @@ from autoskillit.smoke_utils._git import (
     compute_domain_partitions,
     detect_zero_changes,
     fetch_merge_queue_data,
+    remove_worktree_for_replan,
 )
 from autoskillit.smoke_utils._helpers import try_load_json
 from autoskillit.smoke_utils._investigation import extract_investigation
@@ -101,6 +102,7 @@ __all__ = [
     "prepare_experimental_review_publication",
     "publish_experimental_review_artifacts",
     "render_review_finding_body",
+    "remove_worktree_for_replan",
     "review_handoff_pair_error",
     "select_experimental_review_dispatch",
     "select_review_dimensions",

@@ -474,10 +474,11 @@ steps:
     - scope_split_count
     note: "Bound total scope replans per run without resetting test or merge-fix counters.\n"
   pre_scope_replan_cleanup:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: git worktree remove --force "${{ context.worktree_path }}"
-      step_name: pre_scope_replan_cleanup
+      callable: autoskillit.smoke_utils.remove_worktree_for_replan
+      worktree_path: ${{ context.worktree_path }}
+      main_repo: ${{ context.work_dir }}
     on_success: plan
     on_failure: plan
     note: >-

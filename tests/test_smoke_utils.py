@@ -41,6 +41,7 @@ from autoskillit.smoke_utils import (
     patch_pr_token_summary,
     prepare_experimental_review_publication,
     publish_experimental_review_artifacts,
+    remove_worktree_for_replan,
     render_review_finding_body,
     review_handoff_pair_error,
     select_experimental_review_dispatch,
@@ -86,6 +87,38 @@ def test_returns_false_when_bug_report_empty_array(tmp_path: Path) -> None:
     (tmp_path / "bug_report.json").write_text("[]")
     result = check_bug_report_non_empty(str(tmp_path))
     assert result == {"non_empty": "false"}
+
+
+def test_remove_worktree_for_replan_passes_unsafe_path_as_single_argv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    main_repo = tmp_path / "main"
+    main_repo.mkdir()
+    worktree = tmp_path / 'worktree "$(echo injected)"'
+    worktree.mkdir()
+    observed: list[list[str]] = []
+
+    def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        observed.append(args)
+        assert kwargs["cwd"] == main_repo
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("autoskillit.smoke_utils._git.subprocess.run", fake_run)
+
+    result = remove_worktree_for_replan(str(worktree), str(main_repo))
+
+    assert result == {"cleanup_state": "removed"}
+    assert observed == [
+        [
+            "git",
+            "-C",
+            str(main_repo),
+            "worktree",
+            "remove",
+            "--force",
+            str(worktree),
+        ]
+    ]
 
 
 # T_SU3

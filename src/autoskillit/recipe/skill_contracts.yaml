@@ -2863,6 +2863,21 @@ skills:
     - "Analysis complete.\n\n---\npipeline-health-result---\n%%ORDER_UP%%"
     read_only: true
 callable_contracts:
+  autoskillit.smoke_utils.remove_worktree_for_replan:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: main_repo
+      type: directory_path
+      required: true
+    outputs:
+    - name: cleanup_state
+      type: str
+      allowed_values:
+      - removed
+      - missing
+      - failed
   autoskillit.smoke_utils.check_diff_size:
     inputs:
     - name: worktree_path

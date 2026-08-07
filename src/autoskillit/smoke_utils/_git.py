@@ -55,6 +55,48 @@ def _count_untracked_text_lines(path: Path) -> int:
     return line_count
 
 
+def remove_worktree_for_replan(worktree_path: str, main_repo: str) -> dict[str, str]:
+    """Best-effort removal of a linked worktree without shell interpolation."""
+    worktree = Path(worktree_path)
+    repo = Path(main_repo)
+    if not worktree.is_absolute():
+        raise ValueError(f"worktree_path must be absolute, got {worktree_path!r}")
+    if not repo.is_absolute():
+        raise ValueError(f"main_repo must be absolute, got {main_repo!r}")
+    if not worktree.exists():
+        return {"cleanup_state": "missing"}
+
+    command = [
+        "git",
+        "-C",
+        str(repo),
+        "worktree",
+        "remove",
+        "--force",
+        str(worktree),
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        logger.warning("worktree cleanup failed for %s: %s", worktree, exc)
+        return {"cleanup_state": "failed"}
+    if result.returncode != 0:
+        logger.warning(
+            "worktree cleanup failed for %s (exit %s): %s",
+            worktree,
+            result.returncode,
+            _bounded_stderr(result.stderr),
+        )
+        return {"cleanup_state": "failed"}
+    return {"cleanup_state": "removed"}
+
+
 def check_diff_size(
     worktree_path: str,
     base_branch: str = "",

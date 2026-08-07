@@ -168,10 +168,16 @@ hook can be retired in favor of that mechanism.
 Whether a failure occurring after this ADR's containment mechanism has
 already captured and verified output may still discard that output is
 governed by [ADR-0009](0009-verified-output-delivery-disposition.md)'s
-`FAILURE_DISPOSITIONS` registry (`hooks/_capture/_failure_policy.py`) and its
-import-time totality assertion. `DS-012` in
-`audit-defense-standards/SKILL.md` is the audit-time check that a verified
-primary result is never discarded or misreported by a bookkeeping failure.
+`FAILURE_DISPOSITIONS` registry (`hooks/_capture/_failure_policy.py`). The
+arch rule is the registry's own import-time totality assertion — a
+`CaptureFailureReason` member with no declared disposition raises
+`AssertionError` at import, so the module cannot load until every reason is
+classified — backed by `tests/hooks/test_capture_failure_disposition.py`'s
+`TestDispositionRegistryTotality`. `DS-012` in
+`audit-defense-standards/SKILL.md` is the periodic audit-time check that no
+bookkeeping failure discards or misreports a verified primary result outside
+of what the import-time assertion alone can catch (e.g. a `PRESERVE_OUTPUT`
+classification applied to a reason that should be `DISCARD_OUTPUT`).
 
 ## Consequences
 

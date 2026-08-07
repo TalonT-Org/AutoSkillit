@@ -140,6 +140,6 @@ reclaimability and gate-reachability trustworthy.
   `CaptureCapacityReason` member is structurally required to declare its
   disposition, reclaimability, and gate membership respectively before the
   module can load — see DS-012 in
-  `audit-defense-standards/SKILL.md` for the audit-time check that keeps this
-  true outside of import-time enforcement (e.g., in a partially-applied
-  edit under review).
+  `src/autoskillit/skills_extended/audit-defense-standards/SKILL.md` for the
+  audit-time check that keeps this true outside of import-time enforcement
+  (e.g., in a partially-applied edit under review).

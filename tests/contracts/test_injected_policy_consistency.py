@@ -17,6 +17,8 @@ from autoskillit.core import (
     CODEX_DISCIPLINE_SUFFIX_BYTE_BUDGET,
     CODEX_INTAKE_DISCIPLINE_BYTE_BUDGET,
     CODEX_INTAKE_DISCIPLINE_DIGEST,
+    CODEX_SCOPE_DISCIPLINE_BYTE_BUDGET,
+    CODEX_SCOPE_DISCIPLINE_DIGEST,
 )
 from autoskillit.execution.backends._claude_prompt import (
     _CO_INJECTED_POLICY_TEXTS,
@@ -46,6 +48,10 @@ def test_intake_digest_within_byte_budget() -> None:
     )
 
 
+def test_scope_digest_within_byte_budget() -> None:
+    assert len(CODEX_SCOPE_DISCIPLINE_DIGEST.encode("utf-8")) <= CODEX_SCOPE_DISCIPLINE_BYTE_BUDGET
+
+
 def test_composed_suffix_within_byte_budget() -> None:
     assert len(codex_discipline_suffix().encode("utf-8")) <= CODEX_DISCIPLINE_SUFFIX_BYTE_BUDGET
 
@@ -73,6 +79,7 @@ def test_subject_matrix_covers_every_co_injected_text() -> None:
         "OUTPUT_DISCIPLINE_DIGEST",
         "CODEX_INTAKE_DISCIPLINE_DIGEST",
         "CODEX_RECIPE_DELIVERY_CALLING_CONTRACT",
+        "CODEX_SCOPE_DISCIPLINE_DIGEST",
     }
     assert {entry.constant_name for entry in CODEX_CO_INJECTED_POLICIES} == expected
     assert set(_CO_INJECTED_POLICY_TEXTS.keys()) == expected

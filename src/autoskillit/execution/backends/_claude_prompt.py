@@ -8,6 +8,7 @@ from typing import Any, NamedTuple
 
 from autoskillit.core import (
     CODEX_INTAKE_DISCIPLINE_DIGEST,
+    CODEX_SCOPE_DISCIPLINE_DIGEST,
     MANAGED_ATTEMPT_ID_ENV_VAR,
     MANAGED_LAUNCH_ID_ENV_VAR,
     MANAGED_LINEAGE_DIGEST_ENV_VAR,
@@ -254,6 +255,11 @@ CODEX_CO_INJECTED_POLICIES: tuple[CoInjectedPolicyDef, ...] = (
         subjects=frozenset({"recipe-delivery-attestation"}),
         scope_marker="delivery_request",
     ),
+    CoInjectedPolicyDef(
+        constant_name="CODEX_SCOPE_DISCIPLINE_DIGEST",
+        subjects=frozenset({"change-scope-sizing"}),
+        scope_marker="SCOPE DISCIPLINE",
+    ),
 )
 
 # Explicit lookup, not globals()/getattr: a constant renamed out from under the matrix
@@ -262,14 +268,16 @@ _CO_INJECTED_POLICY_TEXTS: dict[str, str] = {
     "OUTPUT_DISCIPLINE_DIGEST": OUTPUT_DISCIPLINE_DIGEST,
     "CODEX_INTAKE_DISCIPLINE_DIGEST": CODEX_INTAKE_DISCIPLINE_DIGEST,
     "CODEX_RECIPE_DELIVERY_CALLING_CONTRACT": CODEX_RECIPE_DELIVERY_CALLING_CONTRACT,
+    "CODEX_SCOPE_DISCIPLINE_DIGEST": CODEX_SCOPE_DISCIPLINE_DIGEST,
 }
 
 
 def codex_discipline_suffix() -> str:
-    """Canonical combined discipline suffix: output-discipline + intake-discipline."""
+    """Canonical combined discipline suffix: output + intake + delivery + scope."""
     return (
         f"{OUTPUT_DISCIPLINE_DIGEST}\n\n{CODEX_INTAKE_DISCIPLINE_DIGEST}\n\n"
-        f"{CODEX_RECIPE_DELIVERY_CALLING_CONTRACT}"
+        f"{CODEX_RECIPE_DELIVERY_CALLING_CONTRACT}\n\n"
+        f"{CODEX_SCOPE_DISCIPLINE_DIGEST}"
     )
 
 
@@ -285,6 +293,13 @@ def _inject_intake_discipline(prompt: str, *, include: bool = False) -> str:
     if not include:
         return prompt
     return f"{prompt}\n\n{CODEX_INTAKE_DISCIPLINE_DIGEST}"
+
+
+def _inject_scope_discipline(prompt: str, *, include: bool = False) -> str:
+    """Append the scope-discipline digest on Codex delivery surfaces."""
+    if not include:
+        return prompt
+    return f"{prompt}\n\n{CODEX_SCOPE_DISCIPLINE_DIGEST}"
 
 
 def _inject_completion_reminder(prompt: str, marker: str) -> str:
@@ -324,6 +339,7 @@ class PromptBuildContext:
     profile_name: str = ""
     include_output_discipline: bool = False
     include_intake_discipline: bool = False
+    include_scope_discipline: bool = False
 
 
 class InjectorDef(NamedTuple):
@@ -338,6 +354,7 @@ PROMPT_INJECTOR_CHAIN: tuple[InjectorDef, ...] = (
     InjectorDef("narration-suppression"),
     InjectorDef("output-discipline"),
     InjectorDef("intake-discipline"),
+    InjectorDef("scope-discipline"),
     InjectorDef("output-format-reinforcement"),
     InjectorDef("completion-reminder"),
 )
@@ -354,6 +371,7 @@ def apply_prompt_injector_chain(prompt: str, ctx: PromptBuildContext) -> str:
     prompt = _inject_narration_suppression(prompt, has_skill_prefix=ctx.has_skill_prefix)
     prompt = _inject_output_discipline(prompt, include=ctx.include_output_discipline)
     prompt = _inject_intake_discipline(prompt, include=ctx.include_intake_discipline)
+    prompt = _inject_scope_discipline(prompt, include=ctx.include_scope_discipline)
     prompt = _inject_output_format_reinforcement(prompt, profile_name=ctx.profile_name)
     prompt = _inject_completion_reminder(prompt, ctx.completion_marker)
     return prompt

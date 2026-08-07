@@ -254,3 +254,6 @@ insertion control, not a measurement of remaining context.
   would make every intake-prose edit probe-gated under this ADR's Forward Obligations,
   a real recurring operational cost; excluding it keeps that a conscious future decision
   rather than a side effect of this change.
+- `CODEX_SCOPE_DISCIPLINE_DIGEST` is likewise deliberately excluded from
+  `PROBE_POLICY_IDENTITY`, for the same reason: scope-discipline prose edits must not
+  become probe-gated as a side effect.

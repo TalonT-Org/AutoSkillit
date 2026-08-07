@@ -2962,6 +2962,7 @@ def test_prompt_injector_registry():
     assert "narration-suppression" in names
     assert "output-discipline" in names
     assert "intake-discipline" in names
+    assert "scope-discipline" in names
     assert "output-format-reinforcement" in names
     assert "completion-reminder" in names
     assert names[0] == "completion-directive"
@@ -3006,6 +3007,24 @@ def test_intake_discipline_injector_is_backend_conditional():
 
     assert CODEX_INTAKE_DISCIPLINE_DIGEST in codex_prompt
     assert CODEX_INTAKE_DISCIPLINE_DIGEST not in claude_prompt
+
+
+def test_scope_discipline_injector_is_backend_conditional():
+    from autoskillit.core import CODEX_SCOPE_DISCIPLINE_DIGEST
+    from autoskillit.execution.backends._claude_prompt import (
+        PromptBuildContext,
+        apply_prompt_injector_chain,
+    )
+
+    codex_prompt = apply_prompt_injector_chain(
+        "base", PromptBuildContext(include_scope_discipline=True)
+    )
+    claude_prompt = apply_prompt_injector_chain(
+        "base", PromptBuildContext(include_scope_discipline=False)
+    )
+
+    assert CODEX_SCOPE_DISCIPLINE_DIGEST in codex_prompt
+    assert CODEX_SCOPE_DISCIPLINE_DIGEST not in claude_prompt
 
 
 def test_inject_output_format_reinforcement_non_anthropic():

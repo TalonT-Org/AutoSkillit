@@ -13,6 +13,7 @@ import pytest
 
 from autoskillit.core import (
     CODEX_INTAKE_DISCIPLINE_DIGEST,
+    CODEX_SCOPE_DISCIPLINE_DIGEST,
     SESSION_TYPE_ENV_VAR,
     SESSION_TYPE_FLEET,
     SESSION_TYPE_ORCHESTRATOR,
@@ -66,6 +67,23 @@ def _assert_headless_intake_digest(backend, spec) -> None:
         assert CODEX_INTAKE_DISCIPLINE_DIGEST in spec.cmd[-1]
 
 
+def _assert_interactive_scope_digest(backend, spec) -> None:
+    """Assert the scope digest is present for Codex, absent for Claude."""
+    header = CODEX_SCOPE_DISCIPLINE_DIGEST.splitlines()[0]
+    if isinstance(backend, ClaudeCodeBackend):
+        assert not any(header in arg for arg in spec.cmd)
+    else:
+        assert any("developer_instructions=" in arg and header in arg for arg in spec.cmd)
+
+
+def _assert_headless_scope_digest(backend, spec) -> None:
+    """Assert the scope digest is present in the final prompt arg for Codex, absent for Claude."""
+    if isinstance(backend, ClaudeCodeBackend):
+        assert CODEX_SCOPE_DISCIPLINE_DIGEST not in spec.cmd[-1]
+    else:
+        assert CODEX_SCOPE_DISCIPLINE_DIGEST in spec.cmd[-1]
+
+
 class TestFleetInteractive:
     @pytest.mark.parametrize(
         "backend",
@@ -103,6 +121,18 @@ class TestFleetInteractive:
         )
         _assert_interactive_intake_digest(backend, spec)
 
+    @pytest.mark.parametrize(
+        "backend",
+        [ClaudeCodeBackend(), CodexBackend()],
+        ids=["claude-code", "codex"],
+    )
+    def test_scope_digest_delivery(self, backend) -> None:
+        spec = backend.build_interactive_cmd(
+            system_prompt="Fleet discipline prompt",
+            env_extras={SESSION_TYPE_ENV_VAR: SESSION_TYPE_FLEET},
+        )
+        _assert_interactive_scope_digest(backend, spec)
+
 
 class TestOrchestratorInteractive:
     @pytest.mark.parametrize(
@@ -138,6 +168,17 @@ class TestOrchestratorInteractive:
         )
         _assert_interactive_intake_digest(backend, spec)
 
+    @pytest.mark.parametrize(
+        "backend",
+        [ClaudeCodeBackend(), CodexBackend()],
+        ids=["claude-code", "codex"],
+    )
+    def test_scope_digest_delivery(self, backend) -> None:
+        spec = backend.build_interactive_cmd(
+            system_prompt="Orchestrator discipline prompt",
+        )
+        _assert_interactive_scope_digest(backend, spec)
+
 
 class TestOrchestratorHeadless:
     @pytest.mark.parametrize(
@@ -168,6 +209,15 @@ class TestOrchestratorHeadless:
         spec = _build_orchestrator_spec(backend)
         _assert_headless_intake_digest(backend, spec)
 
+    @pytest.mark.parametrize(
+        "backend",
+        [ClaudeCodeBackend(), CodexBackend()],
+        ids=["claude-code", "codex"],
+    )
+    def test_scope_digest_delivery(self, backend) -> None:
+        spec = _build_orchestrator_spec(backend)
+        _assert_headless_scope_digest(backend, spec)
+
 
 class TestSkillSession:
     @pytest.mark.parametrize(
@@ -197,6 +247,15 @@ class TestSkillSession:
         spec = backend.build_skill_session_cmd("/investigate foo", "/tmp")
         _assert_headless_intake_digest(backend, spec)
 
+    @pytest.mark.parametrize(
+        "backend",
+        [ClaudeCodeBackend(), CodexBackend()],
+        ids=["claude-code", "codex"],
+    )
+    def test_scope_digest_delivery(self, backend) -> None:
+        spec = backend.build_skill_session_cmd("/investigate foo", "/tmp")
+        _assert_headless_scope_digest(backend, spec)
+
 
 class TestResumeDelivery:
     @pytest.mark.parametrize(
@@ -220,6 +279,18 @@ class TestResumeDelivery:
         assert spec.cmd[-1].index(CODEX_INTAKE_DISCIPLINE_DIGEST) < spec.cmd[-1].index(
             "CALLER PROMPT MARKER"
         )
+
+    @pytest.mark.parametrize(
+        "backend",
+        [ClaudeCodeBackend(), CodexBackend()],
+        ids=["claude-code", "codex"],
+    )
+    def test_scope_digest_delivery(self, backend) -> None:
+        spec = backend.build_resume_cmd(
+            resume_session_id="abc123",
+            prompt="CALLER PROMPT MARKER",
+        )
+        _assert_headless_scope_digest(backend, spec)
 
 
 class TestAgentTomlDelivery:

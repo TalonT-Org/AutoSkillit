@@ -1243,6 +1243,7 @@ class CodexBackend(BackendCmdBuilderBase):
                 profile_name=profile_name,
                 include_output_discipline=True,
                 include_intake_discipline=True,
+                include_scope_discipline=True,
             ),
         )
 
@@ -1372,6 +1373,7 @@ class CodexBackend(BackendCmdBuilderBase):
                 profile_name="",
                 include_output_discipline=True,
                 include_intake_discipline=True,
+                include_scope_discipline=True,
             ),
         )
 

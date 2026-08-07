@@ -13,17 +13,20 @@ __all__ = [
     "CODEX_INTAKE_DISCIPLINE_VERSION",
     "CODEX_INTAKE_DISCIPLINE_BYTE_BUDGET",
     "CODEX_DISCIPLINE_SUFFIX_BYTE_BUDGET",
+    "CODEX_SCOPE_DISCIPLINE_BYTE_BUDGET",
+    "CODEX_SCOPE_DISCIPLINE_DIGEST",
     "render_intake_digest",
     "CODEX_INTAKE_DISCIPLINE_DIGEST",
 ]
 
 CODEX_INTAKE_DISCIPLINE_VERSION: Final[int] = 3
 
-# Always-on injection: every byte is replicated into 11 bundled agent TOMLs at session
+# Always-on injection: every byte is replicated into 13 bundled agent TOMLs at session
 # setup plus one copy per session prompt across 5 delivery surfaces. Raising either
 # ceiling is a decision, not a consequence — record measured before/after in the PR.
 CODEX_INTAKE_DISCIPLINE_BYTE_BUDGET: Final[int] = 1200
-CODEX_DISCIPLINE_SUFFIX_BYTE_BUDGET: Final[int] = 3150
+CODEX_DISCIPLINE_SUFFIX_BYTE_BUDGET: Final[int] = 4800
+CODEX_SCOPE_DISCIPLINE_BYTE_BUDGET: Final[int] = 1700
 
 
 class IntakeRuleDef(NamedTuple):
@@ -153,6 +156,30 @@ def render_intake_digest(
 
 CODEX_INTAKE_DISCIPLINE_DIGEST: Final[str] = render_intake_digest()
 
+CODEX_SCOPE_DISCIPLINE_DIGEST: Final[str] = (
+    "SCOPE DISCIPLINE (this backend tends to oversize changes; these rules are mandatory):\n"
+    'S1. Build the smallest design that satisfies the stated requirements. "Immunity",\n'
+    '    "architectural", or "contract" framing is not a mandate for maximal machinery —\n'
+    "    deliver the minimal mechanism that closes the enumerated gaps.\n"
+    "S2. Hard budget: if your plan or implementation would exceed 1,500 added lines or 40\n"
+    "    changed files, STOP. Do not silently proceed — emit a split proposal (Part A/B/C)\n"
+    "    or a descope note listing what you cut and why, and let the pipeline decide.\n"
+    "S3. No speculative machinery: do not introduce a new registry, enum, ID-wrapper/newtype\n"
+    "    class, state machine, protocol, event vocabulary, or abstraction layer unless the\n"
+    "    task text names it explicitly OR two existing call sites need it today. One concrete\n"
+    "    implementation beats an extensible framework.\n"
+    "S4. Reuse before invention: extend existing modules, types, and helpers. Do not rewrite,\n"
+    '    "harden", or defensively refactor adjacent code the requirement does not touch.\n'
+    "    Trace only the symbols you will modify or whose contracts you rely on.\n"
+    "S5. Tests cover the behavior this change introduces — one focused test per new behavior\n"
+    "    or reachable edge. No permutation matrices for hypothetical states. Prefer\n"
+    "    parametrization over near-duplicate test bodies.\n"
+    "S6. In plans: every step must carry an estimated added-line count, and every new module\n"
+    "    or class must cite the requirement that forces it. Move anything justified as\n"
+    '    "future-proofing", "robustness", or "while we\'re here" to a Deferred Items list\n'
+    "    instead of the plan body."
+)
+
 _RULE_IDS = [rule.id for rule in CODEX_INTAKE_RULES]
 if len(_RULE_IDS) != len(set(_RULE_IDS)):
     raise AssertionError(f"CODEX_INTAKE_RULES ids must be unique: {_RULE_IDS}")
@@ -178,3 +205,14 @@ if _DIGEST_BYTES > CODEX_INTAKE_DISCIPLINE_BYTE_BUDGET:
         f"{CODEX_INTAKE_DISCIPLINE_BYTE_BUDGET}-byte budget"
     )
 del _DIGEST_BYTES
+
+_SCOPE_DIGEST_BYTES = len(CODEX_SCOPE_DISCIPLINE_DIGEST.encode("utf-8"))
+if _SCOPE_DIGEST_BYTES > CODEX_SCOPE_DISCIPLINE_BYTE_BUDGET:
+    raise AssertionError(
+        f"CODEX_SCOPE_DISCIPLINE_DIGEST is {_SCOPE_DIGEST_BYTES} bytes, exceeding the "
+        f"{CODEX_SCOPE_DISCIPLINE_BYTE_BUDGET}-byte budget"
+    )
+del _SCOPE_DIGEST_BYTES
+
+if "'''" in CODEX_SCOPE_DISCIPLINE_DIGEST:
+    raise AssertionError("CODEX_SCOPE_DISCIPLINE_DIGEST must not contain triple single-quotes")

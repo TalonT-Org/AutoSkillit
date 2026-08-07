@@ -46,11 +46,6 @@ def test_ensure_marketplace_importable_from_marketplace():
     from autoskillit.cli._marketplace import _ensure_marketplace  # noqa: F401
 
 
-# MK5
-def test_clear_plugin_cache_importable_from_marketplace():
-    from autoskillit.cli._marketplace import _clear_plugin_cache  # noqa: F401
-
-
 # MK6
 def test_install_defined_in_app_module():
     """install command is registered in cli/app.py as a thin @app.command wrapper."""

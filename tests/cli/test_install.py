@@ -237,23 +237,17 @@ class TestCLIInstall:
         assert result.outcome is InstallOutcome.COMPLETED
         assert result.verified_identity == f"autoskillit@autoskillit-local:{__version__}"
 
-        from autoskillit.core import (
-            installed_plugin_artifact_manifest_path,
-            read_installed_plugin_artifact_identity,
-            resolve_current_generation,
-        )
+        from autoskillit.core import resolve_current_generation
 
         generation_root = resolve_current_generation(
             tmp_path, "autoskillit@autoskillit-local", __version__
         )
         assert generation_root is not None
-        identity = read_installed_plugin_artifact_identity(
-            generation_root,
-            expected_semantic_key=result.verified_identity,
-            manifest_path=installed_plugin_artifact_manifest_path(generation_root),
-        )
-        assert identity.semantic_key == result.verified_identity
         assert (generation_root / ".claude-plugin" / "plugin.json").is_file()
+        plugin_manifest = json.loads(
+            (generation_root / ".claude-plugin" / "plugin.json").read_text()
+        )
+        assert plugin_manifest["name"] == "autoskillit"
 
     def test_install_scope_selects_settings_path_for_hook_eviction(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

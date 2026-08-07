@@ -30,7 +30,6 @@ from autoskillit.cli.update._transaction import (
     run_update_transaction,
 )
 from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY as _PLUGIN_REF
-from autoskillit.core import Severity
 from tests.fixtures.plugin_artifact_state import (
     PluginArtifactStateKind,
     build_plugin_artifact_state,
@@ -103,6 +102,31 @@ def _assert_terminal_history(
     )
 
 
+def _stub_generation_verification(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the post-update generation-store verification succeed with a fake identity."""
+    import autoskillit.core as core
+
+    fake_gen = Path("/tmp/fake-generation")
+
+    monkeypatch.setattr(
+        core,
+        "resolve_current_generation",
+        lambda _home, _ref, _version: fake_gen,
+    )
+
+    def _fake_read_identity(*_args: object, **_kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            semantic_key=f"{_PLUGIN_REF}:{importlib.metadata.version('autoskillit')}",
+            incarnation_id="0" * 32,
+        )
+
+    monkeypatch.setattr(
+        core,
+        "read_installed_plugin_artifact_identity",
+        _fake_read_identity,
+    )
+
+
 def _prepare(
     monkeypatch: pytest.MonkeyPatch,
     *,
@@ -122,6 +146,7 @@ def _prepare(
             "autoskillit.cli.update._transaction.is_git_main_checkout",
             lambda _path: False,
         )
+    _stub_generation_verification(monkeypatch)
 
 
 def _create_caller_git_worktree(tmp_path: Path) -> Path:
@@ -375,11 +400,13 @@ t.is_git_worktree = lambda _p: False
 t.is_git_main_checkout = lambda _p: False
 
 
-def raising_verify(spec):
+def raising_resolve_current_generation(home, plugin_ref, version):
     raise RuntimeError("simulated verification crash (deleted tree)")
 
 
-t.verify_installed_plugin_artifact = raising_verify
+import autoskillit.core as core_module
+
+core_module.resolve_current_generation = raising_resolve_current_generation
 
 
 def runner(cmd, **kwargs):
@@ -697,8 +724,8 @@ def test_success_uses_sealed_env_explicit_cwd_and_maintenance_flags(
 ) -> None:
     _prepare(monkeypatch)
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.verify_installed_plugin_artifact",
-        lambda _spec: pytest.fail("no prior registration must not invent an obligation"),
+        "autoskillit.core.resolve_current_generation",
+        lambda *_a, **_kw: pytest.fail("no prior registration must not invent an obligation"),
     )
     versions = iter(["1.0.0", "1.1.0"])
     calls: list[tuple[list[str], dict[str, Any]]] = []
@@ -755,8 +782,8 @@ def test_success_from_real_worktree_seals_env_and_uses_home_maintenance_cwd(
 ) -> None:
     _prepare(monkeypatch, stub_git_checks=False)
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.verify_installed_plugin_artifact",
-        lambda _spec: pytest.fail("no prior registration must not invent an obligation"),
+        "autoskillit.core.resolve_current_generation",
+        lambda *_a, **_kw: pytest.fail("no prior registration must not invent an obligation"),
     )
     caller_worktree = _create_caller_git_worktree(tmp_path)
     caller_toplevel = subprocess.run(
@@ -830,8 +857,6 @@ def test_codex_caller_with_old_claude_registration_completes_only_after_matching
     registry = _register_plugin(tmp_path)
     versions = iter(["1.0.0", "1.1.0"])
     calls: list[list[str]] = []
-    lease = SimpleNamespace(closed=False)
-    lease.close = lambda: setattr(lease, "closed", True)
 
     def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
         calls.append(list(cmd))
@@ -839,22 +864,28 @@ def test_codex_caller_with_old_claude_registration_completes_only_after_matching
             _register_plugin(tmp_path, "1.1.0")
         return subprocess.CompletedProcess(cmd, 0)
 
-    captured_specs: list[Any] = []
+    captured_generation_lookups: list[tuple[Any, ...]] = []
+    gen_root = tmp_path / "generation-root"
+    gen_root.mkdir()
 
-    def verify(spec: Any) -> Any:
-        captured_specs.append(spec)
+    def resolve_current_generation(home: Path, plugin_ref: str, version: str) -> Path | None:
+        captured_generation_lookups.append((home, plugin_ref, version))
         registry_state = json.loads(registry.read_text(encoding="utf-8"))
         fresh_path = registry_state["plugins"][_PLUGIN_REF][0]["installPath"]
         assert fresh_path.endswith("/1.1.0")
-        return SimpleNamespace(
-            identity=SimpleNamespace(semantic_key=f"{_PLUGIN_REF}:1.1.0"),
-            findings=(),
-            lease=lease,
-        )
+        return gen_root
+
+    def read_installed_plugin_artifact_identity(managed_path: Path, **_kwargs: Any) -> Any:
+        assert managed_path == gen_root
+        return SimpleNamespace(semantic_key=f"{_PLUGIN_REF}:1.1.0")
 
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.verify_installed_plugin_artifact",
-        verify,
+        "autoskillit.core.resolve_current_generation",
+        resolve_current_generation,
+    )
+    monkeypatch.setattr(
+        "autoskillit.core.read_installed_plugin_artifact_identity",
+        read_installed_plugin_artifact_identity,
     )
     result = run_update_transaction(
         home=tmp_path,
@@ -869,14 +900,11 @@ def test_codex_caller_with_old_claude_registration_completes_only_after_matching
 
     assert result.outcome is UpdateTransactionOutcome.COMPLETED
     assert "--require-registered-plugin" in calls[1]
-    assert captured_specs[0].require_registered_plugin is True
-    from autoskillit.workspace import InstallStateLeaseMode
-
-    assert captured_specs[0].lease_mode is InstallStateLeaseMode.SHARED
-    assert captured_specs[0].expected_version == "1.1.0"
+    assert captured_generation_lookups == [
+        (tmp_path.expanduser().absolute(), _PLUGIN_REF, "1.1.0")
+    ]
     assert result.expected_version == "1.1.0"
     assert result.verified_identity == f"{_PLUGIN_REF}:1.1.0"
-    assert lease.closed is True
     assert result.install_result is not None
     assert result.install_result.outcome is InstallOutcome.COMPLETED
     assert result.phase_history == UPDATE_TRANSACTION_PHASES
@@ -890,11 +918,6 @@ def test_pre_update_obligation_is_immutable_but_post_update_evidence_is_fresh(
     registry = _register_plugin(tmp_path)
     versions = iter(["1.0.0", "1.1.0"])
     calls: list[list[str]] = []
-    finding = SimpleNamespace(
-        severity=Severity.ERROR,
-        check="installed_plugin_registry_missing",
-        message="fresh registry has no exact current publication",
-    )
 
     def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
         calls.append(list(cmd))
@@ -902,13 +925,15 @@ def test_pre_update_obligation_is_immutable_but_post_update_evidence_is_fresh(
             registry.unlink()
         return subprocess.CompletedProcess(cmd, 0)
 
-    def verify(_spec: Any) -> Any:
-        assert not registry.exists()
-        return SimpleNamespace(identity=None, findings=(finding,), lease=None)
+    registry_state_at_verification: list[bool] = []
+
+    def resolve_current_generation(*_a: Any, **_kw: Any) -> Path | None:
+        registry_state_at_verification.append(registry.exists())
+        return None
 
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.verify_installed_plugin_artifact",
-        verify,
+        "autoskillit.core.resolve_current_generation",
+        resolve_current_generation,
     )
     result = run_update_transaction(
         home=tmp_path,
@@ -922,73 +947,54 @@ def test_pre_update_obligation_is_immutable_but_post_update_evidence_is_fresh(
     )
 
     assert "--require-registered-plugin" in calls[1]
+    # The upgrade subprocess deleted the pre-update registry snapshot; by the
+    # time verification runs (post-install), that mutation is already
+    # visible — confirming verification consults fresh, not cached, state.
+    assert registry_state_at_verification == [False]
     assert result.outcome is UpdateTransactionOutcome.FAILED_POSTCONDITION
-    assert any("fresh registry" in item for item in result.findings)
+    assert any("No current generation found after install" in item for item in result.findings)
     assert result.phase_history == UPDATE_TRANSACTION_PHASES
     assert result.irreversible_pivot_crossed is True
 
 
 @pytest.mark.parametrize(
-    ("artifact_state", "check", "message", "has_identity"),
+    ("artifact_state", "expected_message"),
     [
-        (
-            "absent-root",
-            "installed_plugin_root_missing",
-            "exact current-version root is absent",
-            False,
-        ),
-        (
-            "dangling-registry",
-            "installed_plugin_registry_dangling",
-            "registered path is dangling",
-            False,
-        ),
-        (
-            "corrupt-identity",
-            "installed_plugin_identity_malformed",
-            "identity sidecar is malformed",
-            False,
-        ),
-        (
-            "wrong-identity",
-            "installed_plugin_identity_mismatch",
-            "semantic key or incarnation is wrong",
-            True,
-        ),
-        (
-            "digest-mismatch",
-            "installed_plugin_digest_mismatch",
-            "published content digest does not match",
-            True,
-        ),
+        ("absent-generation", "No current generation found after install"),
+        ("identity-read-raises", "Installed plugin verification failed"),
     ],
 )
 def test_required_invalid_artifact_states_fail_only_at_final_verification(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     artifact_state: str,
-    check: str,
-    message: str,
-    has_identity: bool,
+    expected_message: str,
 ) -> None:
     _prepare(monkeypatch)
     _register_plugin(tmp_path)
     versions = iter(["1.0.0", "1.1.0"])
     calls: list[list[str]] = []
-    finding = SimpleNamespace(
-        severity=Severity.ERROR,
-        check=check,
-        message=message,
-    )
-    identity = SimpleNamespace(semantic_key=f"{_PLUGIN_REF}:1.1.0") if has_identity else None
-    monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.verify_installed_plugin_artifact",
-        lambda _spec: SimpleNamespace(
-            identity=identity,
-            findings=(finding,),
-            lease=None,
-        ),
-    )
+
+    if artifact_state == "absent-generation":
+        monkeypatch.setattr(
+            "autoskillit.core.resolve_current_generation",
+            lambda *_a, **_kw: None,
+        )
+    else:
+        gen_root = tmp_path / "generation-root"
+        gen_root.mkdir()
+        monkeypatch.setattr(
+            "autoskillit.core.resolve_current_generation",
+            lambda *_a, **_kw: gen_root,
+        )
+
+        def raising_read_identity(*_a: Any, **_kw: Any) -> Any:
+            raise RuntimeError("simulated identity read failure")
+
+        monkeypatch.setattr(
+            "autoskillit.core.read_installed_plugin_artifact_identity",
+            raising_read_identity,
+        )
 
     result = run_update_transaction(
         home=tmp_path,
@@ -1000,7 +1006,7 @@ def test_required_invalid_artifact_states_fail_only_at_final_verification(
 
     assert len(calls) == 2, artifact_state
     assert result.outcome is UpdateTransactionOutcome.FAILED_POSTCONDITION
-    assert any(message in item for item in result.findings)
+    assert any(expected_message in item for item in result.findings)
     assert result.phase_history == UPDATE_TRANSACTION_PHASES
     assert result.irreversible_pivot_crossed is True
 
@@ -1011,14 +1017,9 @@ def test_verification_error_is_failed_postcondition(
     _prepare(monkeypatch)
     _register_plugin(tmp_path)
     versions = iter(["1.0.0", "1.1.0"])
-    finding = SimpleNamespace(
-        severity=Severity.ERROR,
-        check="installed_plugin_registry_missing",
-        message="missing exact registration",
-    )
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.verify_installed_plugin_artifact",
-        lambda _spec: SimpleNamespace(identity=None, findings=(finding,), lease=None),
+        "autoskillit.core.resolve_current_generation",
+        lambda *_a, **_kw: None,
     )
 
     result = run_update_transaction(
@@ -1031,7 +1032,7 @@ def test_verification_error_is_failed_postcondition(
 
     assert result.outcome is UpdateTransactionOutcome.FAILED_POSTCONDITION
     assert result.install_result is not None
-    assert any("missing exact registration" in item for item in result.findings)
+    assert any("No current generation found after install" in item for item in result.findings)
     assert result.phase_history == UPDATE_TRANSACTION_PHASES
     assert result.irreversible_pivot_crossed is True
 
@@ -1244,6 +1245,19 @@ def test_coordinator_runs_real_install_adapter_with_exact_isolated_context(
     assert result.phase_history == UPDATE_TRANSACTION_PHASES
 
 
+# The following tests were removed in the generation-keyed publication
+# migration (#4480): test_registered_plugin_crosses_real_install_cli_with_typed_statuses,
+# test_real_install_process_launch_signal_and_unknown_statuses_stop_verification,
+# and test_update_consumers_compose_with_registered_real_child_transaction.
+# They tested the now-retired Claude subprocess boundary (claude plugin marketplace add /
+# claude plugin install) by running a fake 'claude' binary in a child process.
+# install() no longer invokes any Claude subprocess — it calls publish_generation()
+# directly. The typed-status mapping and process-boundary contract they verified
+# are covered by the in-process install transaction tests and the publication
+# obligation journal tests below.
+
+
+@pytest.mark.skip(reason="Retired: Claude subprocess boundary removed in #4480")
 @pytest.mark.parametrize(
     (
         "claude_behavior",
@@ -1377,6 +1391,7 @@ def test_registered_plugin_crosses_real_install_cli_with_typed_statuses(
         ),
     ],
 )
+@pytest.mark.skip(reason="Retired: Claude subprocess boundary removed in #4480")
 def test_real_install_process_launch_signal_and_unknown_statuses_stop_verification(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1414,8 +1429,8 @@ def test_real_install_process_launch_signal_and_unknown_statuses_stop_verificati
         return completed
 
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.verify_installed_plugin_artifact",
-        lambda _spec: pytest.fail("non-success child status reached verification"),
+        "autoskillit.core.resolve_current_generation",
+        lambda *_a, **_kw: pytest.fail("non-success child status reached verification"),
     )
     result = run_update_transaction(
         home=home,
@@ -1449,6 +1464,7 @@ def test_real_install_process_launch_signal_and_unknown_statuses_stop_verificati
         assert not _read_fake_claude_calls(home)
 
 
+@pytest.mark.skip(reason="Retired: Claude subprocess boundary removed in #4480")
 @pytest.mark.parametrize("consumer", ["explicit", "automatic"])
 @pytest.mark.parametrize("claude_behavior", ["success", "child-failure"])
 def test_update_consumers_compose_with_registered_real_child_transaction(
@@ -1622,13 +1638,15 @@ def test_obligation_written_before_upgrade_launch_and_cleared_on_completion(
 
     _prepare(monkeypatch)
     _register_plugin(tmp_path)
+    gen_root = tmp_path / "generation-root"
+    gen_root.mkdir()
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.verify_installed_plugin_artifact",
-        lambda _spec: SimpleNamespace(
-            identity=SimpleNamespace(semantic_key=f"{_PLUGIN_REF}:1.1.0"),
-            findings=(),
-            lease=None,
-        ),
+        "autoskillit.core.resolve_current_generation",
+        lambda *_a, **_kw: gen_root,
+    )
+    monkeypatch.setattr(
+        "autoskillit.core.read_installed_plugin_artifact_identity",
+        lambda *_a, **_kw: SimpleNamespace(semantic_key=f"{_PLUGIN_REF}:1.1.0"),
     )
     versions = iter(["1.0.0", "1.1.0"])
     obligation_present_at_upgrade_launch: list[bool] = []
@@ -1697,8 +1715,8 @@ def test_obligation_survives_failures_at_or_after_upgrade_subprocess(
     )
     if failure_point == "verifier_raises_after_probe":
         monkeypatch.setattr(
-            "autoskillit.cli.update._transaction.verify_installed_plugin_artifact",
-            lambda _spec: (_ for _ in ()).throw(RuntimeError("simulated verify crash")),
+            "autoskillit.core.resolve_current_generation",
+            lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError("simulated verify crash")),
         )
 
     calls: list[list[str]] = []

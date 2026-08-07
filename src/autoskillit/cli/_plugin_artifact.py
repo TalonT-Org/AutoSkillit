@@ -34,6 +34,7 @@ from autoskillit.core import (
     migrate_retiring_cache_v1,
     read_installed_plugin_artifact_identity,
     read_retiring_cache,
+    resolve_current_generation,
 )
 
 logger = get_logger(__name__)
@@ -71,8 +72,6 @@ def interactive_plugin_authority(
     retain_projection_source: bool = False,
 ) -> tuple[PluginArtifactAuthority | None, PluginLoadMode]:
     """Select authority only after the effective backend and load path are known."""
-    from autoskillit.core import MARKETPLACE_PREFIX, detect_autoskillit_mcp_prefix
-
     capabilities = backend.capabilities
     if not capabilities.skill_injection_capable:
         if not retain_projection_source:
@@ -87,11 +86,9 @@ def interactive_plugin_authority(
             ),
             PluginLoadMode.NONE,
         )
-    if capabilities.plugin_install_capable and (
-        detect_autoskillit_mcp_prefix(capabilities) == MARKETPLACE_PREFIX
-    ):
-        return current_installed_plugin_authority(), PluginLoadMode.IMPLICIT_INSTALLED
-
+    # All artifact-consuming backends use generation-store publication with
+    # explicit --plugin-dir binding.  IMPLICIT_INSTALLED was retired in the
+    # generation-keyed publication migration (#4480).
     from autoskillit.workspace import project_default_plugin_authority
 
     authority = project_default_plugin_authority(
@@ -99,10 +96,10 @@ def interactive_plugin_authority(
         catalog=skill_catalog,
         cwd=project_dir,
     )
-    if not capabilities.plugin_install_capable and generated_home_available:
-        load_mode = PluginLoadMode.GENERATED_HOME
-    elif capabilities.plugin_install_capable:
+    if capabilities.plugin_install_capable:
         load_mode = PluginLoadMode.EXPLICIT_PLUGIN_DIR
+    elif generated_home_available:
+        load_mode = PluginLoadMode.GENERATED_HOME
     else:
         load_mode = PluginLoadMode.PROJECTED_HOME
     return authority, load_mode
@@ -181,39 +178,67 @@ class InstalledPluginArtifactAuthority:
         backend: CodingAgentBackend,
         load_mode: PluginLoadMode,
     ) -> PluginLaunchBinding:
-        """Acquire a shared reader lease, then validate the exact incarnation."""
+        """Resolve current generation, acquire a shared reader lease, validate."""
         del backend
-        if load_mode is not PluginLoadMode.IMPLICIT_INSTALLED:
+        if not load_mode.consumes_artifact:
             raise PluginArtifactValidationError(
-                "installed plugin authority requires implicit_installed load mode"
+                f"installed plugin authority requires an artifact-consuming load mode, "
+                f"got {load_mode.value!r}"
             )
-        from autoskillit.workspace import (
-            InstallStateLeaseMode,
-            InstallStateSpec,
-            verify_installed_plugin_artifact,
+
+        generation_dir = resolve_current_generation(
+            Path.home(),
+            "autoskillit",
+            self._root.name,
         )
+        if generation_dir is None:
+            # No generation store yet — fall back to legacy installed root
+            return self._acquire_from_root(self._root, load_mode)
 
-        try:
-            spec = InstallStateSpec.from_managed_root(
-                self._root,
-                self._semantic_key,
-                require_registered_plugin=True,
-                lease_mode=InstallStateLeaseMode.SHARED,
-            )
-        except ValueError as exc:
-            raise PluginArtifactValidationError(str(exc)) from exc
+        return self._acquire_from_root(generation_dir, load_mode)
 
-        verification = verify_installed_plugin_artifact(spec)
-        lease = verification.lease
-        if verification.findings or verification.identity is None or lease is None:
-            if lease is not None:
-                lease.close()
-            detail = "; ".join(finding.message for finding in verification.findings)
-            raise PluginArtifactValidationError(
-                detail or f"installed plugin identity is unavailable: {self._semantic_key}"
-            )
+    def _acquire_shared_lease_with_retry(
+        self,
+        managed_root: Path,
+        *,
+        max_retries: int = 3,
+    ) -> ArtifactLease:
+        """Acquire a shared lease on a generation, re-resolving on reclaim race."""
+        lease_path = installed_plugin_artifact_lease_path(managed_root)
+        last_error: OSError | None = None
+        for _attempt in range(max_retries):
+            try:
+                return ArtifactLease.acquire_existing_shared(lease_path)
+            except OSError as exc:
+                last_error = exc
+                refreshed = resolve_current_generation(
+                    Path.home(),
+                    "autoskillit",
+                    self._root.name,
+                )
+                if refreshed is not None and refreshed != managed_root:
+                    managed_root = refreshed
+                    lease_path = installed_plugin_artifact_lease_path(managed_root)
+                    continue
+                break
+        raise PluginArtifactValidationError(
+            f"installed plugin generation lease unavailable after "
+            f"{max_retries} attempts: {last_error}"
+        ) from last_error
+
+    def _acquire_from_root(
+        self,
+        managed_root: Path,
+        load_mode: PluginLoadMode,
+    ) -> PluginLaunchBinding:
+        """Lease + validate one exact incarnation directory."""
+        lease = self._acquire_shared_lease_with_retry(managed_root)
         try:
-            identity = verification.identity
+            identity = read_installed_plugin_artifact_identity(
+                managed_root,
+                expected_semantic_key=self._semantic_key,
+                manifest_path=installed_plugin_artifact_manifest_path(managed_root),
+            )
             InstalledPluginArtifactRetirementOwner(
                 identity.managed_path.parent
             ).cancel_obsolete_retirements(identity)
@@ -227,7 +252,7 @@ class InstalledPluginArtifactAuthority:
             )
             return PluginLaunchBinding(
                 load_mode=load_mode,
-                plugin_dir=None,
+                plugin_dir=identity.managed_path,
                 identity=identity,
                 inherited_fds=lease.inherited_fds,
                 _lease=PluginArtifactLifecycleLease(

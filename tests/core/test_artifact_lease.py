@@ -510,7 +510,6 @@ def test_plugin_load_modes_identify_artifact_consumers() -> None:
     assert {mode for mode in PluginLoadMode if mode.consumes_artifact} == {
         PluginLoadMode.EXPLICIT_PLUGIN_DIR,
         PluginLoadMode.PROJECTED_HOME,
-        PluginLoadMode.IMPLICIT_INSTALLED,
     }
 
 

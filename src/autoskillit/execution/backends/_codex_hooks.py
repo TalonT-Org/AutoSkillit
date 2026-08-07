@@ -38,10 +38,36 @@ from autoskillit.hook_registry import (
 logger = get_logger(__name__)
 
 
-def _resolve_codex_hooks_dir() -> Path:
-    """Select a durable absolute dispatcher root for Codex configuration."""
-    from autoskillit import __version__
+def _resolve_codex_hooks_dir(plugin_dir: Path | None = None) -> Path:
+    """Select a durable absolute dispatcher root for Codex configuration.
 
+    When ``plugin_dir`` is supplied (a session's validated generation path),
+    the hooks tree inside that directory is used directly.  When ``None``
+    (bindingless callers such as MCP server startup and ``init``), a
+    short-lived resolve→validate of the current generation selector is
+    performed through the same generation-store authority as launch binding.
+
+    The silent ``except Exception → HOOKS_DIR`` fallback was removed in the
+    generation-keyed publication migration (#4480) — a validation failure now
+    surfaces as a classified error, not a quiet dev-checkout resolution.
+    """
+    if plugin_dir is not None:
+        candidate = plugin_dir / "hooks"
+        if (candidate / "_dispatch.py").is_file():
+            return candidate
+        raise RuntimeError(f"validated plugin_dir {plugin_dir} has no hooks/_dispatch.py")
+
+    # Bindingless path: resolve from generation store with short-lived lease
+    from autoskillit import __version__
+    from autoskillit.core import resolve_current_generation
+
+    generation_dir = resolve_current_generation(Path.home(), "autoskillit", __version__)
+    if generation_dir is not None:
+        candidate = generation_dir / "hooks"
+        if (candidate / "_dispatch.py").is_file():
+            return candidate
+
+    # Fall back to legacy installed cache
     cache_root = installed_plugin_artifact_root(Path.home(), "autoskillit", __version__)
     try:
         identity = read_installed_plugin_artifact_identity(
@@ -52,7 +78,11 @@ def _resolve_codex_hooks_dir() -> Path:
             ),
         )
     except Exception:
-        logger.warning("Installed Codex hook artifact identity was rejected", exc_info=True)
+        logger.warning(
+            "codex_hooks_dir_resolution_failed: no generation store or legacy "
+            "installed artifact available; using dev checkout hooks",
+            exc_info=True,
+        )
         return HOOKS_DIR
     cache_hooks_dir = identity.managed_path / "hooks"
     if (cache_hooks_dir / "_dispatch.py").is_file():
@@ -80,6 +110,7 @@ def generate_codex_hooks_config(
     *,
     registry: Sequence[HookDef] = HOOK_REGISTRY,
     lifecycle_contracts: Sequence[LifecycleContractDef] = LIFECYCLE_CONTRACTS,
+    plugin_dir: Path | None = None,
 ) -> dict[str, list[dict]]:
     """Generate Codex config.toml hooks entries from HOOK_REGISTRY.
 
@@ -91,7 +122,7 @@ def generate_codex_hooks_config(
         lifecycle_contracts,
         backend="codex",
     )
-    hooks_dir = _resolve_codex_hooks_dir()
+    hooks_dir = _resolve_codex_hooks_dir(plugin_dir)
     groups: dict[str, dict[tuple[str, str], dict]] = {}
     for hook_def in registry:
         if not hook_applies_to_backend(
@@ -168,7 +199,10 @@ def _upsert_hooks_text(
 
 
 def _sync_hooks_to_codex_config_unlocked(
-    config_path: Path, *, hook_config_format: str = ""
+    config_path: Path,
+    *,
+    hook_config_format: str = "",
+    plugin_dir: Path | None = None,
 ) -> bool:
     """Mutate hook entries while the caller owns the Codex config lock.
 
@@ -178,7 +212,10 @@ def _sync_hooks_to_codex_config_unlocked(
     if result.is_corrupt:
         if result.raw_bytes is None:
             raise RuntimeError("corrupt ReadResult has no raw_bytes")
-        fresh = generate_codex_hooks_config(hook_config_format=hook_config_format)
+        fresh = generate_codex_hooks_config(
+            hook_config_format=hook_config_format,
+            plugin_dir=plugin_dir,
+        )
         _upsert_hooks_text(config_path, result.raw_bytes, fresh)
         return True
 
@@ -193,7 +230,10 @@ def _sync_hooks_to_codex_config_unlocked(
         foreign = [e for e in entries if not _is_autoskillit_hook_entry(e)]
         if foreign:
             foreign_hooks[event_type] = foreign
-    fresh = generate_codex_hooks_config(hook_config_format=hook_config_format)
+    fresh = generate_codex_hooks_config(
+        hook_config_format=hook_config_format,
+        plugin_dir=plugin_dir,
+    )
     merged: dict[str, list[dict]] = {}
     for event_type in set(list(foreign_hooks.keys()) + list(fresh.keys())):
         merged[event_type] = foreign_hooks.get(event_type, []) + fresh.get(event_type, [])
@@ -205,7 +245,10 @@ def _sync_hooks_to_codex_config_unlocked(
 
 
 def sync_hooks_to_codex_config(
-    config_path: Path | None = None, *, hook_config_format: str = ""
+    config_path: Path | None = None,
+    *,
+    hook_config_format: str = "",
+    plugin_dir: Path | None = None,
 ) -> bool:
     """Sync autoskillit hooks under the shared Codex config lock."""
     resolved_config_path = (
@@ -217,4 +260,5 @@ def sync_hooks_to_codex_config(
         return _sync_hooks_to_codex_config_unlocked(
             config_path=resolved_config_path,
             hook_config_format=hook_config_format,
+            plugin_dir=plugin_dir,
         )

@@ -281,7 +281,7 @@ class TestInstalledPluginArtifactAuthority:
                 semantic_key="autoskillit@autoskillit-local:1.2.3",
             ).acquire_launch_binding(
                 backend=object(),
-                load_mode=PluginLoadMode.IMPLICIT_INSTALLED,
+                load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
             )
 
     def test_publication_round_trips_exact_external_incarnation(
@@ -333,10 +333,10 @@ class TestInstalledPluginArtifactAuthority:
             semantic_key=semantic_key,
         ).acquire_launch_binding(
             backend=object(),
-            load_mode=PluginLoadMode.IMPLICIT_INSTALLED,
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
         )
         try:
-            assert binding.plugin_dir is None
+            assert binding.plugin_dir == root
             assert binding.identity == published
             assert len(binding.inherited_fds) == 1
             assert not binding.closed
@@ -376,7 +376,7 @@ class TestInstalledPluginArtifactAuthority:
                 semantic_key=semantic_key,
             ).acquire_launch_binding(
                 backend=object(),
-                load_mode=PluginLoadMode.IMPLICIT_INSTALLED,
+                load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
             )
         with ArtifactLease.acquire_exclusive(
             installed_plugin_artifact_lease_path(root),
@@ -527,5 +527,5 @@ class TestInstalledPluginArtifactAuthority:
                 semantic_key="autoskillit@autoskillit-local:1.2.3",
             ).acquire_launch_binding(
                 backend=object(),
-                load_mode=PluginLoadMode.IMPLICIT_INSTALLED,
+                load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
             )

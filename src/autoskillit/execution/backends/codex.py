@@ -134,7 +134,7 @@ from autoskillit.execution.backends._explorer_dispatch import (
 def _codex_home_from_plugin_binding(
     plugin_binding: PluginLaunchBinding | None,
 ) -> str | None:
-    if plugin_binding is None or plugin_binding.plugin_dir is None:
+    if plugin_binding is None:
         return None
     return str(plugin_binding.plugin_dir)
 
@@ -2266,6 +2266,7 @@ class CodexBackend(BackendCmdBuilderBase):
         *,
         session_dir: Path | None = None,
         executable: ExecutableLaunchBinding | None = None,
+        plugin_dir: Path | None = None,
     ) -> list[str]:
         del executable
         os.environ[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
@@ -2274,6 +2275,7 @@ class CodexBackend(BackendCmdBuilderBase):
             with codex_prelaunch_transaction(
                 source_codex_home=self.source_codex_home,
                 hook_config_format=self.capabilities.hook_config_format,
+                plugin_dir=plugin_dir,
             ) as config_path:
                 if session_dir is not None:
                     snapshot = config_path.read_bytes()

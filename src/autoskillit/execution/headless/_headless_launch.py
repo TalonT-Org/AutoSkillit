@@ -143,7 +143,7 @@ async def _run_headless_attempt(
         plugin_identity = _binding_identity(binding)
         artifact_paths = tuple(
             [*launch_preparation.artifact_paths]
-            + ([str(binding.plugin_dir)] if binding is not None and binding.plugin_dir else [])
+            + ([str(binding.plugin_dir)] if binding is not None else [])
         )
         attempt_preparation = dataclasses.replace(
             launch_preparation,

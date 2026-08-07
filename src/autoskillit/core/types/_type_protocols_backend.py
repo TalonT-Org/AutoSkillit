@@ -311,12 +311,17 @@ class CodingAgentBackend(Protocol):
         *,
         session_dir: Path | None = None,
         executable: ExecutableLaunchBinding | None = None,
+        plugin_dir: Path | None = None,
     ) -> list[str]:
         """Return backend-specific launch-readiness errors.
 
         ``executable`` carries the shared exact launch binding. Backends whose
         readiness policy seals or probes that binding validate it here; backends
         with a different readiness boundary may intentionally ignore it.
+
+        ``plugin_dir`` carries the session's validated generation path so that
+        Codex hooks can be resolved from the exact artifact tree rather than
+        performing an independent resolution.
         """
         ...
 

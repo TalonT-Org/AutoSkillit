@@ -287,7 +287,7 @@ def test_installed_lifecycle_events_use_the_shared_schema(
                 semantic_key=identity.semantic_key,
             ).acquire_launch_binding(
                 backend=object(),  # type: ignore[arg-type]
-                load_mode=PluginLoadMode.IMPLICIT_INSTALLED,
+                load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
             )
             binding.close()
             InstalledPluginArtifactRetirementOwner(

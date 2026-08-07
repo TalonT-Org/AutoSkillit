@@ -20,6 +20,7 @@ def codex_prelaunch_transaction(
     *,
     source_codex_home: Path,
     hook_config_format: str = "",
+    plugin_dir: Path | None = None,
 ) -> Iterator[Path]:
     """Synchronize the source config and hold its lock across caller work.
 
@@ -34,5 +35,6 @@ def codex_prelaunch_transaction(
         _sync_hooks_to_codex_config_unlocked(
             config_path=config_path,
             hook_config_format=hook_config_format,
+            plugin_dir=plugin_dir,
         )
         yield config_path

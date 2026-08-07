@@ -17,7 +17,7 @@ from tests.fixtures.plugin_artifact_state import (
     build_plugin_artifact_state,
 )
 
-pytestmark = pytest.mark.small
+pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 def test_bytecode_contamination_raises_classified_validation_error(

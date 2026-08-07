@@ -93,7 +93,6 @@ artifact acquisition:
 |---|---|
 | `EXPLICIT_PLUGIN_DIR` | Claude receives the binding path as `--plugin-dir`. |
 | `PROJECTED_HOME` | Codex receives the binding path as `CODEX_HOME`. |
-| `IMPLICIT_INSTALLED` | Claude emits no path argument, but still inherits the exact installed-root reader descriptor. |
 | `GENERATED_HOME` | Codex consumes its generated home and session-storage leases; no unused projection binding is acquired. |
 | `NONE` | The physical launch consumes no plugin artifact. |
 

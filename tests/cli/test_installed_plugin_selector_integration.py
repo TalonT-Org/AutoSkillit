@@ -23,7 +23,6 @@ from autoskillit.core import (
     CookSessionHandle,
     EffectiveSkillCatalogAuthority,
     ManagedSessionHome,
-    PluginArtifactValidationError,
     PluginLaunchBinding,
     PluginLoadMode,
     SkillProjectionContextAuthority,
@@ -270,18 +269,23 @@ def _run_session_launch(
     _CLAUDE_INSTALLED_INVALID_STATES,
     ids=lambda kind: kind.value,
 )
-@pytest.mark.parametrize("consumer", ("cook", "session-launch"))
-def test_invalid_claude_artifact_fails_before_interactive_child_spawn(
+def test_invalid_claude_cache_does_not_block_interactive_session(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     kind: PluginArtifactStateKind,
-    consumer: str,
 ) -> None:
+    """Invalid Claude-cache artifacts no longer block sessions.
+
+    Since the generation-keyed publication migration (#4480),
+    ``interactive_plugin_authority`` returns the projection authority
+    (which resolves from ``pkg_root()``) rather than the installed-artifact
+    authority.  Invalid states in ``~/.claude/plugins/cache/`` are
+    therefore invisible to session launch.
+    """
     state = build_plugin_artifact_state(tmp_path / "home", kind)
     _activate_production_selector(monkeypatch, state)
     backend = _RecordingBackend("claude-code")
     spawn_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
-    cook_capture: dict[str, object] | None = None
     authority, load_mode = interactive_plugin_authority(
         backend=backend,
         project_dir=state.home / "project",
@@ -290,29 +294,19 @@ def test_invalid_claude_artifact_fails_before_interactive_child_spawn(
         generated_home_available=False,
     )
     assert authority is not None
-    assert load_mode is PluginLoadMode.IMPLICIT_INSTALLED
+    assert load_mode is PluginLoadMode.EXPLICIT_PLUGIN_DIR
 
-    with pytest.raises(PluginArtifactValidationError):
-        if consumer == "cook":
-            cook_capture = _install_cook_harness(monkeypatch, state.home / "project")
-            cli.cook(backend=backend)
-            pytest.fail(f"Cook unexpectedly completed: {cook_capture}")
-        else:
-            _run_session_launch(monkeypatch, state, backend, spawn_calls)
+    _run_session_launch(monkeypatch, state, backend, spawn_calls)
 
-    assert backend.build_calls == []
-    assert spawn_calls == []
-    if cook_capture is not None:
-        events = cast(list[tuple[object, ...]], cook_capture["events"])
-        assert ("run",) not in events
+    assert len(backend.build_calls) == 2
+    assert len(spawn_calls) == 1
 
 
-@pytest.mark.parametrize("consumer", ("cook", "session-launch"))
-def test_matching_claude_artifact_binds_through_real_selector(
+def test_matching_claude_artifact_binds_through_real_selector_session_launch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    consumer: str,
 ) -> None:
+    """Session-launch binds through the projection authority with valid artifact."""
     state = build_plugin_artifact_state(
         tmp_path / "home",
         PluginArtifactStateKind.VALID_CURRENT,
@@ -321,21 +315,36 @@ def test_matching_claude_artifact_binds_through_real_selector(
     backend = _RecordingBackend("claude-code")
     spawn_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
 
-    if consumer == "cook":
-        _install_cook_harness(monkeypatch, state.home / "project")
-        cli.cook(backend=backend)
-    else:
-        _run_session_launch(monkeypatch, state, backend, spawn_calls)
+    _run_session_launch(monkeypatch, state, backend, spawn_calls)
 
-    expected_builds = 2 if consumer == "session-launch" else 1
-    assert len(backend.build_calls) == expected_builds
+    assert len(backend.build_calls) == 2
     binding = cast(PluginLaunchBinding, backend.build_calls[-1]["plugin_binding"])
-    assert binding.load_mode is PluginLoadMode.IMPLICIT_INSTALLED
-    assert binding.plugin_dir is None
-    assert binding.identity == state.identity
+    assert binding.load_mode is PluginLoadMode.EXPLICIT_PLUGIN_DIR
+    assert isinstance(binding.plugin_dir, Path)
     assert binding.closed
-    if consumer == "session-launch":
-        assert len(spawn_calls) == 1
+    assert len(spawn_calls) == 1
+
+
+def test_cook_binds_through_projection_authority(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cook uses the projection authority, not the installed-artifact authority."""
+    state = build_plugin_artifact_state(
+        tmp_path / "home",
+        PluginArtifactStateKind.VALID_CURRENT,
+    )
+    _activate_production_selector(monkeypatch, state)
+    backend = _RecordingBackend("claude-code")
+
+    _install_cook_harness(monkeypatch, state.home / "project")
+    cli.cook(backend=backend)
+
+    assert len(backend.build_calls) == 1
+    binding = cast(PluginLaunchBinding, backend.build_calls[-1]["plugin_binding"])
+    assert binding.load_mode is PluginLoadMode.EXPLICIT_PLUGIN_DIR
+    assert isinstance(binding.plugin_dir, Path)
+    assert binding.closed
 
 
 @pytest.mark.parametrize(

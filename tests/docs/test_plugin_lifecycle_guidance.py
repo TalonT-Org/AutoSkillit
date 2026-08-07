@@ -30,7 +30,6 @@ def test_backend_contract_documents_binding_load_modes_and_fd_ownership() -> Non
     for phrase in (
         "`EXPLICIT_PLUGIN_DIR`",
         "`PROJECTED_HOME`",
-        "`IMPLICIT_INSTALLED`",
         "`GENERATED_HOME`",
         "`CmdSpec.inherited_fds`",
         "owning binding closes only after final child reap",

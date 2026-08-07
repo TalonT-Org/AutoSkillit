@@ -201,6 +201,42 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Non-public staging cleanup precedes artifact publication.",
     ),
     (
+        "workspace/_projected_artifact/_generation_publication.py",
+        "_replace_symlink",
+        "temporary.unlink",
+    ): (
+        1,
+        "Clears a leftover process-private temp symlink candidate (PID-scoped name) "
+        "before staging the atomic generation-selector flip.",
+    ),
+    (
+        "workspace/_projected_artifact/_generation_publication.py",
+        "_replace_symlink",
+        "os.replace",
+    ): (
+        1,
+        "The sole generation-selector commit point: renames the process-private temp "
+        "symlink onto the public selector path under the caller's install lock.",
+    ),
+    (
+        "workspace/_projected_artifact/_generation_publication.py",
+        "publish_generation",
+        "os.rename",
+    ): (
+        1,
+        "Moves digest-verified staged content from its private staging directory to "
+        "its final generation path; the tree is unpublished until this rename.",
+    ),
+    (
+        "workspace/_projected_artifact/_generation_publication.py",
+        "publish_generation",
+        "shutil.rmtree",
+    ): (
+        1,
+        "Failure cleanup removes only the private, unpublished staging directory "
+        "created for this publish attempt.",
+    ),
+    (
         "execution/backends/codex.py",
         "_atomically_replace_explorer_projection",
         "os.replace",

@@ -19,18 +19,16 @@ from pathlib import Path
 from autoskillit.core import (
     PluginArtifactIdentity,
     PluginArtifactKind,
-    get_logger,
-    log_plugin_artifact_lifecycle,
-    new_plugin_artifact_incarnation_id,
-)
-from autoskillit.core._plugin_artifact_identity import (
+    directory_tree_digest,
     generation_artifact_root,
     generation_selector_path,
     generation_version_root,
+    get_logger,
     installed_plugin_artifact_manifest_path,
+    log_plugin_artifact_lifecycle,
+    new_plugin_artifact_incarnation_id,
     resolve_current_generation,
 )
-from autoskillit.core.io import directory_tree_digest
 from autoskillit.workspace._installed_artifact import (
     write_installed_plugin_artifact_manifest_locked,
 )

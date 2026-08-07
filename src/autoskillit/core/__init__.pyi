@@ -28,15 +28,6 @@ from ._plugin_artifact_identity import (
     INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION as INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,  # noqa: E501
 )
 from ._plugin_artifact_identity import (
-    installed_plugin_artifact_lease_path as installed_plugin_artifact_lease_path,
-)
-from ._plugin_artifact_identity import (
-    installed_plugin_artifact_manifest_path as installed_plugin_artifact_manifest_path,
-)
-from ._plugin_artifact_identity import (
-    installed_plugin_artifact_manifest_payload as installed_plugin_artifact_manifest_payload,
-)
-from ._plugin_artifact_identity import (
     generation_artifact_root as generation_artifact_root,
 )
 from ._plugin_artifact_identity import (
@@ -47,6 +38,15 @@ from ._plugin_artifact_identity import (
 )
 from ._plugin_artifact_identity import (
     generation_version_root as generation_version_root,
+)
+from ._plugin_artifact_identity import (
+    installed_plugin_artifact_lease_path as installed_plugin_artifact_lease_path,
+)
+from ._plugin_artifact_identity import (
+    installed_plugin_artifact_manifest_path as installed_plugin_artifact_manifest_path,
+)
+from ._plugin_artifact_identity import (
+    installed_plugin_artifact_manifest_payload as installed_plugin_artifact_manifest_payload,
 )
 from ._plugin_artifact_identity import (
     installed_plugin_artifact_root as installed_plugin_artifact_root,

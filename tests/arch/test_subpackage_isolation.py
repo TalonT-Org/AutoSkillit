@@ -1263,7 +1263,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "Codex explorer role registration and invocation wiring",
     ),
     "execution/backends/claude.py": (
-        1103,
+        1104,
         "REQ-CNST-010-E19: Claude backend protocol parity keeps managed native-shell "
         "decision/reference disposition beside executable launch-binding validation; "
         "both are shared builder-interface obligations even though Claude deliberately "
@@ -1271,7 +1271,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "adaptation remains on this registered backend so native child syntax and model "
         "alias resolution cannot drift into a second adapter registry; #4443 also threads "
         "parent sandbox authority through the shared no-op setup boundary and explorer "
-        "dispatch rendering preserves the same backend-owned syntax authority.",
+        "dispatch rendering preserves the same backend-owned syntax authority; #4480 adds "
+        "the plugin_dir launch-binding validation parameter for cross-backend signature "
+        "parity.",
     ),
     "workspace/skill_capabilities.py": (
         1100,

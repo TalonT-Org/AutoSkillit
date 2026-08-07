@@ -48,7 +48,6 @@ class PluginLoadMode(StrEnum):
     EXPLICIT_PLUGIN_DIR = "explicit_plugin_dir"
     PROJECTED_HOME = "projected_home"
     GENERATED_HOME = "generated_home"
-    IMPLICIT_INSTALLED = "implicit_installed"
     NONE = "none"
 
     @property
@@ -56,7 +55,6 @@ class PluginLoadMode(StrEnum):
         return self in {
             PluginLoadMode.EXPLICIT_PLUGIN_DIR,
             PluginLoadMode.PROJECTED_HOME,
-            PluginLoadMode.IMPLICIT_INSTALLED,
         }
 
 
@@ -286,17 +284,16 @@ class PluginLaunchBinding:
             raise ValueError(
                 f"plugin launch binding cannot use non-artifact mode {self.load_mode.value!r}"
             )
-        if self.plugin_dir is not None:
-            object.__setattr__(self, "plugin_dir", Path(self.plugin_dir))
-            if not self.plugin_dir.is_absolute():
-                raise ValueError(f"plugin launch path must be absolute: {self.plugin_dir}")
-            if self.plugin_dir != self.identity.managed_path:
-                raise ValueError(
-                    "plugin launch path must match the leased artifact identity: "
-                    f"{self.plugin_dir} != {self.identity.managed_path}"
-                )
-        if self.load_mode is not PluginLoadMode.IMPLICIT_INSTALLED and self.plugin_dir is None:
+        if self.plugin_dir is None:
             raise ValueError(f"{self.load_mode.value} requires a plugin path")
+        object.__setattr__(self, "plugin_dir", Path(self.plugin_dir))
+        if not self.plugin_dir.is_absolute():
+            raise ValueError(f"plugin launch path must be absolute: {self.plugin_dir}")
+        if self.plugin_dir != self.identity.managed_path:
+            raise ValueError(
+                "plugin launch path must match the leased artifact identity: "
+                f"{self.plugin_dir} != {self.identity.managed_path}"
+            )
         inherited_fds = normalize_inherited_fds(self.inherited_fds)
         if inherited_fds != normalize_inherited_fds(self._lease.inherited_fds):
             raise ValueError("inherited descriptors must be owned by the launch lease")

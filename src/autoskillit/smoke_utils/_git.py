@@ -173,7 +173,11 @@ def check_diff_size(
                 try:
                     added_lines += int(add_str)
                 except ValueError:
-                    pass
+                    logger.warning(
+                        "check_diff_size received malformed numstat addition: %r",
+                        add_str[:100],
+                    )
+                    return _diff_size_error(default_budget)
             i += 3 if path_or_empty == b"" else 1
 
     untracked_result = subprocess.run(

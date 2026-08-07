@@ -6711,6 +6711,34 @@ def test_check_diff_size_git_diff_failure_returns_error(tmp_path: Path, monkeypa
     assert result["added_lines"] == "unknown"
 
 
+def test_check_diff_size_malformed_numstat_returns_error(tmp_path: Path, monkeypatch) -> None:
+    """Malformed numstat additions cannot silently understate the diff size."""
+    _init_diff_size_repo(tmp_path)
+
+    def fake_run(args, **_kwargs):
+        if args[1] == "merge-base":
+            return subprocess.CompletedProcess(args, 0, stdout="abc123\n", stderr="")
+        if args[1] == "diff":
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout=b"not-a-count\t0\tfile.py\0",
+                stderr=b"",
+            )
+        pytest.fail(f"unexpected subprocess call: {args}")
+
+    monkeypatch.setattr("autoskillit.smoke_utils._git.subprocess.run", fake_run)
+
+    with patch("autoskillit.smoke_utils._git.logger.warning") as warning:
+        result = check_diff_size(str(tmp_path), "main")
+
+    assert result["size_verdict"] == "error"
+    assert result["added_lines"] == "unknown"
+    assert warning.call_args.args[0].startswith(
+        "check_diff_size received malformed numstat addition"
+    )
+
+
 def test_check_diff_size_merge_base_failure_is_logged(tmp_path: Path) -> None:
     """Merge-base failures retain a bounded operator-visible diagnostic."""
     _init_diff_size_repo(tmp_path)

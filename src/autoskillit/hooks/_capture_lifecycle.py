@@ -577,20 +577,29 @@ class CaptureLifecycleStore:
     def _with_capacity_rescue(
         self,
         attempt: Callable[[], object],
+        *,
+        rescuable_reasons: frozenset[CaptureCapacityReason] | None = None,
     ) -> object:
-        """Attempt an operation; on soft byte-ceiling breach, sweep and retry once.
+        """Attempt an operation; on byte-ceiling breach, sweep and retry once.
 
         Each call of ``attempt`` must perform a complete fresh cycle: acquire
         lock, reload the ledger, rebuild the candidate, run the transition.
         Nothing loaded in a failed attempt may be reused by the retry.
 
-        Only the soft ceiling (PROJECTED_COMPACTED_BYTES) triggers the
-        rescue — hard-ceiling breaches fail fast.
+        ``rescuable_reasons`` controls which capacity reasons trigger the
+        rescue.  Default (``None``) rescues only the soft ceiling
+        (``PROJECTED_COMPACTED_BYTES``).  At the admission gate,
+        ``reserve_capture`` passes both byte reasons so that hard-ceiling
+        breaches with reclaimable bytes also get one rescue attempt.
+        Record-count ceilings are never rescued (they already have a
+        proven recovery story under the existing integration test).
         """
+        _default_rescuable = frozenset({CaptureCapacityReason.PROJECTED_COMPACTED_BYTES})
+        effective = rescuable_reasons if rescuable_reasons is not None else _default_rescuable
         try:
             return attempt()
         except CaptureCapacityError as exc:
-            if exc.reason is not CaptureCapacityReason.PROJECTED_COMPACTED_BYTES:
+            if exc.reason not in effective:
                 self.byte_pressure_observed = True
                 raise
             self.byte_pressure_observed = True
@@ -637,7 +646,15 @@ class CaptureLifecycleStore:
                 self._append_locked(record, records, compaction_epoch, size)
             return record
 
-        result = self._with_capacity_rescue(_attempt)
+        # Admission gate: rescue on both byte reasons (soft + hard ceiling),
+        # not just soft.  Record-count ceilings keep existing behavior.
+        _ADMISSION_BYTE_REASONS = frozenset(
+            {
+                CaptureCapacityReason.PROJECTED_COMPACTED_BYTES,
+                CaptureCapacityReason.HARD_LEDGER_CAPACITY,
+            }
+        )
+        result = self._with_capacity_rescue(_attempt, rescuable_reasons=_ADMISSION_BYTE_REASONS)
         if type(result) is not CaptureLifecycleRecord:
             raise CaptureLifecycleError("reserve_capture rescue produced invalid result")
         return result

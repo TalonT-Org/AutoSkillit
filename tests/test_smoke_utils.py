@@ -6701,7 +6701,9 @@ def test_check_diff_size_git_diff_failure_returns_error(tmp_path: Path, monkeypa
     def fake_run(args, **_kwargs):
         if args[1] == "merge-base":
             return subprocess.CompletedProcess(args, 0, stdout="abc123\n", stderr="")
-        return subprocess.CompletedProcess(args, 1, stdout=b"", stderr=b"diff failed")
+        if args[1] == "diff":
+            return subprocess.CompletedProcess(args, 1, stdout=b"", stderr=b"diff failed")
+        pytest.fail(f"unexpected subprocess call: {args}")
 
     monkeypatch.setattr("autoskillit.smoke_utils._git.subprocess.run", fake_run)
 

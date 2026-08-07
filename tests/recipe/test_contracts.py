@@ -810,7 +810,6 @@ ALWAYS_WRITE_SKILLS = {
     "generate-report",
     "implement-experiment",
     "implement-worktree",
-    "implement-worktree-no-merge",
     "investigate",
     "make-campaign",
     "make-groups",

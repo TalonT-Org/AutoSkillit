@@ -60,7 +60,7 @@ def _semantic_plan() -> SkillSemanticPlan:
             ChildModelPolicySpec(
                 role=_REVIEW_ROLE,
                 model_class="sonnet",
-                reasoning_effort="medium",
+                reasoning_effort="high",
             ),
         ),
         sibling_skills=(SiblingSkillSpec(name="smoke-task"),),
@@ -323,7 +323,7 @@ def test_codex_semantic_policy_matches_generated_native_role_toml(tmp_path: Path
             ChildModelPolicySpec(
                 role=_REVIEW_ROLE,
                 model_class="sonnet",
-                reasoning_effort="high",
+                reasoning_effort="medium",
             ),
         ),
     )

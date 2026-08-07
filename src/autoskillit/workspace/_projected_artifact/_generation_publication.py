@@ -145,23 +145,10 @@ def publish_generation(
         shutil.copytree(source_root, staging / "content", dirs_exist_ok=False)
         content_root = staging / "content"
 
-        # Write manifest with the caller-supplied incarnation_id
-        identity = write_installed_plugin_artifact_manifest_locked(
-            content_root,
-            semantic_key=semantic_key,
-            action="publish_generation",
-            incarnation_id=incarnation_id,
-        )
+        # Compute the tree digest while still in staging (pre-manifest)
+        staged_digest = directory_tree_digest(content_root)
 
-        # Verify digest
-        observed = directory_tree_digest(content_root)
-        if observed != identity.artifact_digest:
-            raise RuntimeError(
-                f"staged generation digest verification failed: "
-                f"expected {identity.artifact_digest}, got {observed}"
-            )
-
-        # Fsync staged contents for durability
+        # Fsync staged contents for durability before the rename
         _fsync_tree_contents(content_root)
 
         # Move staging content to the final generation path
@@ -177,6 +164,23 @@ def publish_generation(
         staging.rmdir()
     except OSError:
         pass
+
+    # Write manifest at the final location (sibling of generation_root)
+    # This must happen AFTER the rename so the manifest path matches the
+    # generation directory's actual location on disk.
+    identity = write_installed_plugin_artifact_manifest_locked(
+        generation_root,
+        semantic_key=semantic_key,
+        action="publish_generation",
+        incarnation_id=incarnation_id,
+    )
+
+    # Verify the digest matches what we computed in staging
+    if identity.artifact_digest != staged_digest:
+        raise RuntimeError(
+            f"generation digest changed between staging and publication: "
+            f"staged {staged_digest}, published {identity.artifact_digest}"
+        )
 
     # Record prior target for rollback
     prior_target = resolve_current_generation(home, plugin_ref, version)

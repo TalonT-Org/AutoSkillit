@@ -7,7 +7,10 @@ import hmac
 import json
 import os
 import stat
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from ._failure_policy import CaptureFailureReason
 
 from ._module_identity import register_module_aliases
 
@@ -20,7 +23,7 @@ _UNTRUSTED_MODE_BITS = stat.S_IRWXG | stat.S_IRWXO
 class CaptureAuthorityError(RuntimeError):
     """Raised when shell-capture authority cannot be proven."""
 
-    failure_reason: object = None  # set to CaptureFailureReason at verify-stage raise sites
+    failure_reason: CaptureFailureReason | None = None
 
 
 def canonical_json(value: object) -> bytes:

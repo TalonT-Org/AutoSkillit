@@ -384,10 +384,8 @@ steps:
       route: check_changes
     - route: check_changes
     on_failure: release_issue_failure
-    note: "On proceed completions the split_proposal_path capture re-binds to empty,\
-      \ clearing any stale value from an earlier scope stop. The trailing catch-all\
-      \ exists solely for malformed/missing scope_verdict tokens (unreachable under\
-      \ the mandatory-emission contract).\n"
+    note: "On proceed, clear stale split_proposal_path; malformed or missing scope_verdict\
+      \ falls back to check_changes.\n"
   retry_worktree:
     tool: run_skill
     model: ''
@@ -457,11 +455,8 @@ steps:
       route: test
     - route: test
     on_failure: test
-    note: "Deterministic diff-size gate. Measures the current part's own diff via\
-      \ merge-base with context.merge_target (not inputs.base_branch) to isolate\
-      \ per-part contributions in multi-part runs. Fail-open: on_failure routes to\
-      \ test — a broken advisory gate must not halt otherwise-normal work. The trailing\
-      \ catch-all is the malformed-result fallback only.\n"
+    note: "Measure this part against merge_target; measurement errors or malformed\
+      \ verdicts fail open to tests.\n"
   check_scope_split_loop:
     tool: run_python
     with:
@@ -477,12 +472,7 @@ steps:
     on_failure: release_issue_failure
     optional_context_refs:
     - scope_split_count
-    note: "Bounds both scope-stop sources (skill verdict and diff gate). scope_split_count\
-      \ is global per run and deliberately absent from the audit-remediation reset\
-      \ chain — scope re-plans are expensive full-plan iterations and a total bound\
-      \ is the correct semantics. The re-entry does not reset the test/merge fix counters\
-      \ — part-level re-entries inherit consumed budgets exactly as sequential parts\
-      \ already do (next_or_done resets nothing), keeping total run spend bounded.\n"
+    note: "Bound total scope replans per run without resetting test or merge-fix counters.\n"
   pre_scope_replan_cleanup:
     tool: run_cmd
     with:

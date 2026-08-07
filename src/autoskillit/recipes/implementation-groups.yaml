@@ -380,8 +380,8 @@ steps:
       route: test
     - route: test
     on_failure: release_issue_failure
-    note: "This recipe has no scope-split re-plan loop, so split fails fast to\
-      \ release_issue_failure. The catch-all is the malformed/missing-token fallback.\n"
+    note: "Split fails fast to release_issue_failure because this recipe has no scope-replan\
+      \ loop.\n"
   retry_worktree:
     tool: run_skill
     model: ''
@@ -407,8 +407,7 @@ steps:
     on_rate_limit: test
     on_exhausted: release_issue_failure
     on_failure: release_issue_failure
-    note: "This recipe has no scope-split re-plan loop, so split fails fast.\
-      \ The catch-all is the malformed-token fallback.\n"
+    note: "A split retry fails fast because this recipe has no scope-replan loop.\n"
   test:
     tool: test_check
     with:

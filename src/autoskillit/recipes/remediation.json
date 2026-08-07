@@ -441,7 +441,7 @@
         }
       ],
       "on_failure": "release_issue_failure",
-      "note": "This recipe has no scope-split re-plan loop, so split fails fast to release_issue_failure with the worktree and split proposal retained for diagnostics. The catch-all arm is the malformed/missing-token fallback.\n"
+      "note": "Split fails fast to release_issue_failure with the worktree and proposal retained for diagnostics.\n"
     },
     "retry_worktree": {
       "tool": "run_skill",
@@ -485,7 +485,7 @@
       "on_rate_limit": "check_changes",
       "on_exhausted": "release_issue_failure",
       "on_failure": "release_issue_failure",
-      "note": "This recipe has no scope-split re-plan loop, so split fails fast. The phases_implemented capture stays but no longer governs routing (both arms routed to check_changes). The catch-all is the malformed-token fallback.\n"
+      "note": "Split retries fail fast; otherwise continue to check_changes with phases_implemented retained for reporting.\n"
     },
     "check_changes": {
       "tool": "run_python",

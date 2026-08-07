@@ -54,9 +54,7 @@ def test_parity_fixtures_exist() -> None:
     for var, override in TEST_HARNESS_ENV_OVERRIDES.items():
         if override.parity_fixture is None:
             continue
-        # The production_interpreter_env fixture lives in test_dispatch_artifact_inertness
-        # and will be promoted to a shared conftest in a later phase.
-        from tests.hooks.test_dispatch_artifact_inertness import production_interpreter_env
+        from tests.conftest import production_interpreter_env
 
         assert callable(production_interpreter_env), (
             f"Parity fixture {override.parity_fixture!r} for {var!r} is not callable"

@@ -55,3 +55,32 @@ def test_plain_digest_mismatch_does_not_mention_bytecode(
             ),
         )
     assert "bytecode contamination" not in str(exc_info.value)
+
+
+def test_mixed_tampering_does_not_mask_broader_integrity_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bytecode + unrelated content tamper must still fail closed.
+
+    The classifier must never mask a broader integrity failure by
+    attributing the mismatch solely to bytecode when other content
+    was also modified.
+    """
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    # Build a BYTECODE_CONTAMINATED state (real interpreter writes __pycache__)
+    state = build_plugin_artifact_state(tmp_path, PluginArtifactStateKind.BYTECODE_CONTAMINATED)
+    # Add a non-bytecode tamper on top
+    (state.managed_root / "tampered-content.txt").write_text("extra tampering")
+
+    from autoskillit.core._plugin_artifact_identity import read_installed_plugin_artifact_identity
+    from autoskillit.core._plugin_ids import installed_plugin_semantic_key
+
+    with pytest.raises(PluginArtifactValidationError, match="bytecode contamination"):
+        read_installed_plugin_artifact_identity(
+            state.managed_root,
+            expected_semantic_key=installed_plugin_semantic_key(
+                state.plugin_ref, state.expected_version
+            ),
+        )
+    # The key assertion: validation still fails closed — the mixed-tamper
+    # case never succeeds, never masks the broader failure.

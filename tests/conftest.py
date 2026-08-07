@@ -1093,6 +1093,21 @@ def pytest_testnodedown(node, error):
             _worker_feature_scope.update(scope)
 
 
+def production_interpreter_env() -> dict[str, str]:
+    """Build an env dict that strips test-harness bytecode suppression.
+
+    The test harness sets ``PYTHONDONTWRITEBYTECODE=1`` on every pytest path
+    (see ``TEST_HARNESS_ENV_OVERRIDES`` in ``tests/_test_env_parity.py``),
+    which masks production behavior where hooks execute without suppression.
+    This fixture lifts that mask so a child interpreter runs exactly as it
+    does under a real Claude Code hook invocation.
+    """
+    env = dict(os.environ)
+    env.pop("PYTHONDONTWRITEBYTECODE", None)
+    env.pop("PYTHONPYCACHEPREFIX", None)
+    return env
+
+
 def pytest_terminal_summary(terminalreporter, config: pytest.Config) -> None:
     """Emit a single ``Feature scope:`` line so the test run's effective feature
     gate state is visible regardless of ``--disable-warnings``.

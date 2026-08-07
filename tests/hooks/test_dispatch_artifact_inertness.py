@@ -22,7 +22,6 @@ defeated before the main assertions place any trust in it.
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 import textwrap
@@ -34,20 +33,13 @@ from autoskillit.core import directory_tree_digest
 from autoskillit.hook_registry import HOOKS_DIR
 from autoskillit.hooks._capture_contract import CAPTURE_REQUEST_PROTOCOL_VERSION, CaptureRequest
 from autoskillit.hooks.shell_capture_hook import _runner_argv
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.integration, pytest.mark.medium]
 
 _DISPATCH_SCRIPT = HOOKS_DIR / "_dispatch.py"
 _HOOK_SETTINGS_SCRIPT = HOOKS_DIR / "_hook_settings.py"
 _QUOTA_GUARD_SCRIPT = HOOKS_DIR / "guards" / "quota_guard.py"
-
-
-def production_interpreter_env() -> dict[str, str]:
-    """Build an env dict that strips test-harness bytecode suppression."""
-    env = dict(os.environ)
-    env.pop("PYTHONDONTWRITEBYTECODE", None)
-    env.pop("PYTHONPYCACHEPREFIX", None)
-    return env
 
 
 def _build_hooks_tree(dest_root: Path) -> Path:

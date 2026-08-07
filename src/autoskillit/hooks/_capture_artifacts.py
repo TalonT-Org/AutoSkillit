@@ -856,12 +856,12 @@ def run_capture(
                 )
                 try:
                     _capture_replay.write_and_flush_hook_stdout(degraded_payload)
-                except _CAPTURE_RUNTIME_ERRORS:
+                except _CAPTURE_RUNTIME_ERRORS as delivery_exc:
                     # Stdout write itself failed — re-raise into the outer
                     # handler so the caller gets the fail-closed envelope
                     # and exit 1 (fallback ladder, house pattern from
                     # _response_budget.py:1072-1096).
-                    raise finalization_exc from finalization_exc
+                    raise finalization_exc from delivery_exc
                 # Single-envelope invariant: degraded marker only after
                 # successful stdout flush.
                 degraded_failure = _capture_replay.failure_transport(

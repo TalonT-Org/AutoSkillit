@@ -27,12 +27,8 @@ CODEX_INTAKE_DISCIPLINE_VERSION: Final[int] = 3
 CODEX_INTAKE_DISCIPLINE_BYTE_BUDGET: Final[int] = 1200
 # Governs the UNIVERSAL composed suffix only (output-discipline + intake-discipline +
 # recipe-delivery-contract — codex_discipline_suffix()'s default form), delivered to
-# every Codex session including bundled agent TOMLs. #4478 review (2026-08-07): the
-# scope digest was originally folded into this universal form (budget raised
-# 3150 -> 4800), broadcasting a change-authoring policy to all ~125 skills though only
-# 2 declare the split-proposal receiving mechanism it presupposes. Restored to the
-# measured pre-scope-digest size (universal form measured 3,137 bytes at the time).
-# The scope digest is now a separate change-authoring policy
+# every Codex session including bundled agent TOMLs. The scope digest is a separate
+# change-authoring policy
 # (CODEX_SCOPE_DISCIPLINE_DIGEST, own budget below) delivered only to skill sessions
 # whose contract declares `scope_discipline: true`, to interactive TUI sessions
 # (deliberate — task unknown at launch), and to resumes that opt in explicitly via

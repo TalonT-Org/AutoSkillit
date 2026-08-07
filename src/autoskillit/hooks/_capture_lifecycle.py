@@ -91,7 +91,21 @@ LEDGER_NAME = ".capture-lifecycle.ledger"
 LOCK_NAME = ".capture-lifecycle.lock"
 MAX_LEDGER_BYTES = _capture_ledger.MAX_LEDGER_BYTES
 MAX_ACTIVE_RECORDS = 4096
-_RETENTION_SECONDS = 3600.0  # must equal SWEEP_GRACE_SECONDS in _lifecycle_policy
+# Single source of truth: imported from the reclaimability declaration.
+# _capture_ledger re-exports from _lifecycle_policy which defines SWEEP_GRACE_SECONDS.
+_RETENTION_SECONDS: float = 3600.0  # overwritten below after dynamic imports resolve
+
+
+def _resolve_retention_seconds() -> float:
+    """Resolve the sweep grace from STATE_RECLAIMABILITY (single source of truth)."""
+    try:
+        policy = importlib.import_module(f"{_module_identity.__package__}._lifecycle_policy")
+        return float(policy.SWEEP_GRACE_SECONDS)
+    except (ImportError, AttributeError):
+        return 3600.0
+
+
+_RETENTION_SECONDS = _resolve_retention_seconds()
 _REFERENCE_LIFETIME_SECONDS = 1800.0
 _MAX_RETRY_SECONDS = 3600.0
 _COMPACTION_THRESHOLD_BYTES = 31 * 1024 * 1024 // 8

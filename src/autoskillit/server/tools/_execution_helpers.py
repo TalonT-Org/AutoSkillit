@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
+    RUN_PYTHON_PATH_LIKE_ARGS,
     RUN_PYTHON_SENTINEL_KEYS,
     SKILL_CAPABILITY_REGISTRY,
     WORKTREE_SKILLS,
@@ -75,10 +76,6 @@ _SERVER_INJECTED_RUN_PYTHON_PARAMS: dict[str, frozenset[str]] = {
 if TYPE_CHECKING:
     from autoskillit.core import SkillResult
     from autoskillit.pipeline import ToolContext
-
-_PATH_LIKE_ARGS: frozenset[str] = frozenset(
-    {"output_dir", "workspace", "diagnostics_log_dir", "investigation_path", "plan_path"}
-)
 
 
 @dataclasses.dataclass(slots=True)
@@ -725,7 +722,7 @@ def validate_path_arg_anchoring(args: dict[str, object] | None, work_dir: str) -
     """Return error message if args contain relative path-like values without work_dir."""
     if not args:
         return None
-    for key in _PATH_LIKE_ARGS:
+    for key in RUN_PYTHON_PATH_LIKE_ARGS:
         val = args.get(key)
         if isinstance(val, str) and val and not Path(val).is_absolute() and not work_dir:
             if "work_dir" in args:
@@ -744,7 +741,7 @@ def validate_path_arg_anchoring(args: dict[str, object] | None, work_dir: str) -
 def resolve_relative_path_args(args: dict[str, object], work_dir: str) -> dict[str, object]:
     """Anchor relative path arguments to work_dir."""
     resolved = dict(args)
-    for key in _PATH_LIKE_ARGS:
+    for key in RUN_PYTHON_PATH_LIKE_ARGS:
         val = resolved.get(key)
         if isinstance(val, str) and val and not Path(val).is_absolute():
             resolved[key] = str(Path(work_dir) / val)

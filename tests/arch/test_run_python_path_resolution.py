@@ -207,9 +207,8 @@ def test_executor_uses_canonical_sentinel_constant() -> None:
 
 
 def test_path_like_args_registry_complete() -> None:
-    """Every smoke_utils callable param named *_dir, *_path, or *_file must be in _PATH_LIKE_ARGS
-    or explicitly excluded."""
-    from autoskillit.server.tools._execution_helpers import _PATH_LIKE_ARGS
+    """Every path-like smoke_utils parameter must be registered or excluded."""
+    from autoskillit.core import RUN_PYTHON_PATH_LIKE_ARGS
 
     unregistered: list[str] = []
 
@@ -224,28 +223,26 @@ def test_path_like_args_registry_complete() -> None:
                 name = arg.arg
                 if not any(name.endswith(suffix) for suffix in _PATH_LIKE_SUFFIXES):
                     continue
-                if name in _PATH_LIKE_ARGS:
+                if name in RUN_PYTHON_PATH_LIKE_ARGS:
                     continue
                 if name in _EXPLICITLY_EXCLUDED:
                     continue
                 unregistered.append(
                     f"{py_file.name}:{func_node.name}: param '{name}' not in "
-                    f"_PATH_LIKE_ARGS and not explicitly excluded"
+                    f"RUN_PYTHON_PATH_LIKE_ARGS and not explicitly excluded"
                 )
 
     assert not unregistered, (
         "smoke_utils callable params with path-like names must be registered in "
-        "_PATH_LIKE_ARGS or listed in _EXPLICITLY_EXCLUDED with justification:\n"
+        "RUN_PYTHON_PATH_LIKE_ARGS or listed in _EXPLICITLY_EXCLUDED with justification:\n"
         + "\n".join(unregistered)
     )
 
 
-def test_path_like_args_synchronized_across_layers() -> None:
-    """_PATH_LIKE_ARGS and _RUN_PYTHON_PATH_LIKE_ARGS must stay in sync."""
-    from autoskillit.recipe.rules.rules_tools import _RUN_PYTHON_PATH_LIKE_ARGS
-    from autoskillit.server.tools._execution_helpers import _PATH_LIKE_ARGS
+def test_path_like_args_registry_has_no_private_consumer_copies() -> None:
+    """Recipe and server consumers must use the core registry directly."""
+    from autoskillit.recipe.rules import rules_tools
+    from autoskillit.server.tools import _execution_helpers
 
-    assert _PATH_LIKE_ARGS == _RUN_PYTHON_PATH_LIKE_ARGS, (
-        f"Path-like args registries out of sync: "
-        f"server={_PATH_LIKE_ARGS}, recipe={_RUN_PYTHON_PATH_LIKE_ARGS}"
-    )
+    assert not hasattr(rules_tools, "_RUN_PYTHON_PATH_LIKE_ARGS")
+    assert not hasattr(_execution_helpers, "_PATH_LIKE_ARGS")

@@ -41,6 +41,7 @@ __all__ = [
     "QUOTA_POST_WARNING_TRIGGER",
     "QUOTA_POST_BUDGET_EXCEEDED_TRIGGER",
     "CONFIG_AUTHORITY_KEYS",
+    "RUN_PYTHON_PATH_LIKE_ARGS",
     "RUN_PYTHON_SENTINEL_KEYS",
     "SCOPE_DIRECTION_SOURCE_TYPES",
     "WORKTREE_SKILLS",
@@ -407,6 +408,9 @@ DATA_MANIFEST_SOURCE_TYPES: frozenset[str] = frozenset(
     }
 )
 
+RUN_PYTHON_PATH_LIKE_ARGS: frozenset[str] = frozenset(
+    {"output_dir", "workspace", "diagnostics_log_dir", "investigation_path", "plan_path"}
+)
 RUN_PYTHON_SENTINEL_KEYS: frozenset[str] = frozenset({"callable", "timeout", "work_dir"})
 
 SCOPE_DIRECTION_SOURCE_TYPES: frozenset[str] = frozenset(

@@ -14,19 +14,23 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from autoskillit.core import (
     PluginArtifactIdentity,
     PluginArtifactKind,
+    PluginArtifactValidationError,
     directory_tree_digest,
     generation_artifact_root,
     generation_selector_path,
     generation_version_root,
     get_logger,
+    installed_plugin_artifact_lease_path,
     installed_plugin_artifact_manifest_path,
     log_plugin_artifact_lifecycle,
     new_plugin_artifact_incarnation_id,
+    read_installed_plugin_artifact_identity,
     resolve_current_generation,
 )
 from autoskillit.workspace._installed_artifact import (
@@ -168,6 +172,10 @@ def publish_generation(
         incarnation=incarnation_id,
     )
 
+    # Enqueue prior generation for retirement (Phase 4.6)
+    if prior_target is not None:
+        _enqueue_prior_generation(prior_target, version_root)
+
     return PluginArtifactIdentity(
         semantic_key=semantic_key,
         incarnation_id=incarnation_id,
@@ -176,3 +184,44 @@ def publish_generation(
         managed_path=generation_root,
         manifest_path=installed_plugin_artifact_manifest_path(generation_root),
     )
+
+
+def _enqueue_prior_generation(prior_target: Path, version_root: Path) -> None:
+    """Enqueue a superseded generation into the retirement engine.
+
+    Best-effort: failure to enqueue is logged but does not fail the
+    publication — an orphan sweep will catch it later.
+    """
+    from autoskillit.core import PluginArtifactRetirementEngine
+
+    try:
+        prior_identity = read_installed_plugin_artifact_identity(
+            prior_target,
+            manifest_path=installed_plugin_artifact_manifest_path(prior_target),
+        )
+    except (PluginArtifactValidationError, OSError) as exc:
+        logger.warning(
+            "generation_retirement_enqueue_skipped: could not read prior generation identity: %s",
+            exc,
+        )
+        return
+    engine = PluginArtifactRetirementEngine(
+        managed_root=version_root,
+        artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
+        manifest_path=installed_plugin_artifact_manifest_path,
+        lease_path=installed_plugin_artifact_lease_path,
+        current_identity=lambda record: read_installed_plugin_artifact_identity(
+            record.managed_path,
+            expected_semantic_key=record.semantic_key,
+            manifest_path=installed_plugin_artifact_manifest_path(record.managed_path),
+        ),
+        logger=logger,
+    )
+    deadline = datetime.now(UTC) + timedelta(hours=6)
+    try:
+        engine.enqueue_retirement(prior_identity, deadline)
+    except Exception as exc:
+        logger.warning(
+            "generation_retirement_enqueue_failed: %s",
+            exc,
+        )

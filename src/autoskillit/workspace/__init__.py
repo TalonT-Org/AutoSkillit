@@ -41,6 +41,9 @@ from autoskillit.workspace._projected_artifact import (
     public_plugin_asset_digest,
     repair_broken_plugin_cache_hooks,
 )
+from autoskillit.workspace._projected_artifact._generation_publication import (
+    publish_generation,
+)
 from autoskillit.workspace._update_obligation import (
     PublicationObligation,
     clear_obligation,
@@ -241,6 +244,7 @@ __all__ = [
     "project_agent_skill_document",
     "project_default_plugin_authority",
     "project_direct_install_authority",
+    "publish_generation",
     "read_skill_frontmatter",
     "repair_broken_plugin_cache_hooks",
     "validate_skill_tier_roles",

@@ -5,11 +5,7 @@ from __future__ import annotations
 import importlib.metadata
 import json
 import os
-import shutil
-import subprocess
-from collections.abc import Callable, Mapping, Sequence
-from contextlib import nullcontext
-from datetime import UTC, datetime, timedelta
+from collections.abc import Mapping
 from pathlib import Path
 
 import regex as re
@@ -27,12 +23,7 @@ from autoskillit.cli._install_contract import (
     InstallRequest,
     InstallResult,
 )
-from autoskillit.cli._install_snapshot import (
-    _fetch_cache_path,
-    _installed_plugin_root,
-    _InstallSnapshot,
-    _plugin_cache_dir,
-)
+from autoskillit.cli._install_snapshot import _fetch_cache_path
 from autoskillit.core import (
     SkillExecutionRole,
     SkillSource,
@@ -62,70 +53,6 @@ class _InstallFailed(Exception):
     def __init__(self, kind: InstallFailureKind, message: str) -> None:
         self.kind = kind
         super().__init__(message)
-
-
-def _clear_plugin_cache(
-    *,
-    on_retirement_created: Callable[[str], None] | None = None,
-    current_version: str | None = None,
-    _lock_owned: bool = False,
-) -> tuple[str, ...]:
-    """Queue exact old versions and remove their installed_plugins.json reference."""
-    if current_version is None:
-        from autoskillit import __version__
-
-        current_version = __version__
-    from autoskillit.cli._installed_plugins import InstalledPluginsFile
-    from autoskillit.cli._plugin_artifact import (
-        InstalledPluginArtifactRetirementOwner,
-        _read_installed_plugin_identity,
-        default_plugin_retirement_coordinator,
-    )
-    from autoskillit.core import (
-        _AUTOSKILLIT_PLUGIN_KEY,
-        ArtifactLease,
-        PluginArtifactValidationError,
-        _InstallLock,
-        installed_plugin_artifact_lease_path,
-    )
-
-    cache_dir = _plugin_cache_dir()
-    owner = InstalledPluginArtifactRetirementOwner(cache_dir)
-    lock_scope = nullcontext() if _lock_owned else _InstallLock()
-    with lock_scope:
-        default_plugin_retirement_coordinator().migrate_legacy_cache()
-        candidates = (
-            tuple(
-                path
-                for path in sorted(cache_dir.iterdir(), key=lambda item: item.name)
-                if path.name != current_version
-                and not path.name.startswith(".")
-                and path.is_dir()
-                and not path.is_symlink()
-            )
-            if cache_dir.is_dir()
-            else ()
-        )
-
-        created_ids: list[str] = []
-        deadline = datetime.now(UTC) + timedelta(hours=6)
-        for candidate in candidates:
-            reader = ArtifactLease.acquire_shared(installed_plugin_artifact_lease_path(candidate))
-            with reader:
-                try:
-                    identity = _read_installed_plugin_identity(candidate)
-                except PluginArtifactValidationError:
-                    continue
-                result = owner.enqueue_retirement(
-                    identity,
-                    deadline,
-                    on_persisted=on_retirement_created,
-                )
-                if result.created:
-                    created_ids.append(result.record_id)
-
-        InstalledPluginsFile().remove(_AUTOSKILLIT_PLUGIN_KEY)
-    return tuple(created_ids)
 
 
 def _assert_not_worktree() -> None:
@@ -241,51 +168,6 @@ def _marketplace_manifest_path() -> Path:
     return Path.home() / ".autoskillit" / "marketplace" / ".claude-plugin" / "marketplace.json"
 
 
-def _claude_on_path(env: Mapping[str, str]) -> bool:
-    """Resolve Claude exactly once against the sealed PATH."""
-    return shutil.which("claude", path=env.get("PATH")) is not None
-
-
-def _validate_transaction_target(target: Path, expected_version: str) -> None:
-    """Validate an explicit-version target without consulting cached package state."""
-    expected_parent = _plugin_cache_dir()
-    if not target.is_absolute():
-        raise RuntimeError(f"Unsafe installed plugin target must be absolute: {target}")
-    if target != expected_parent / expected_version:
-        raise RuntimeError(
-            f"Unsafe installed plugin target does not match expected version target: {target}"
-        )
-    if target.is_symlink():
-        raise RuntimeError(f"Unsafe installed plugin target must not be a symlink: {target}")
-    if target.exists() and not target.is_dir():
-        raise RuntimeError(f"Unsafe installed plugin target must be a directory: {target}")
-    resolved_parent = expected_parent.resolve(strict=False)
-    if target.resolve(strict=False).parent != resolved_parent:
-        raise RuntimeError(f"Unsafe installed plugin target escapes managed cache: {target}")
-
-
-def _run_claude_admin(
-    argv: Sequence[str],
-    *,
-    env: Mapping[str, str],
-    cwd: Path,
-) -> subprocess.CompletedProcess[str]:
-    """Run one Claude administrative command with an explicit sealed context."""
-    if not argv:
-        raise ValueError("Claude administrative argv must not be empty")
-    return subprocess.run(
-        tuple(argv),
-        capture_output=True,
-        text=True,
-        stdin=subprocess.DEVNULL,
-        timeout=30,
-        pass_fds=(),
-        shell=False,
-        env=dict(env),
-        cwd=cwd,
-    )
-
-
 def _typed_result(
     outcome: InstallOutcome,
     *,
@@ -298,27 +180,6 @@ def _typed_result(
         failure_kind=failure_kind,
         verified_identity=verified_identity,
         findings=findings,
-    )
-
-
-def _compensated_result(
-    snapshot: _InstallSnapshot,
-    primary: _InstallFailed,
-    *,
-    owned_lease_fd: int | None = None,
-) -> InstallResult:
-    rollback_findings = snapshot.rollback(owned_lease_fd=owned_lease_fd)
-    primary_finding = f"{primary.kind.value} failure: {primary}"
-    if rollback_findings:
-        return _typed_result(
-            InstallOutcome.RECOVERY_REQUIRED,
-            failure_kind=InstallFailureKind.ROLLBACK,
-            findings=(primary_finding, *rollback_findings),
-        )
-    return _typed_result(
-        InstallOutcome.FAILED,
-        failure_kind=primary.kind,
-        findings=(primary_finding, "compensation completed"),
     )
 
 
@@ -386,7 +247,14 @@ def install(
     child_env: Mapping[str, str] | None = None,
     child_cwd: Path | None = None,
 ) -> InstallResult:
-    """Install the Claude plugin as one typed, compensating transaction."""
+    """Publish a generation-keyed plugin artifact as one typed transaction.
+
+    The transaction stages a fresh generation from source, flips the
+    atomic selector, reconciles retired shapes, and cleans up stale
+    registrations. Publication never contends with readers (fresh-path
+    staging), so ``InstallOutcome.DEFERRED`` for lease contention is no
+    longer possible.
+    """
     ambient_env = dict(os.environ)
     ambient_cwd = Path.cwd().resolve()
     from autoskillit import __version__
@@ -452,26 +320,12 @@ def install(
                     ),
                 )
 
-        marketplace_dir = Path.home() / ".autoskillit" / "marketplace"
         plugin_ref = f"autoskillit@{_MARKETPLACE_NAME}"
         if operation_env.get("CLAUDECODE"):
             return _typed_result(
                 InstallOutcome.DEFERRED,
-                findings=(
-                    "Run the Claude plugin marketplace and install commands in a regular terminal",
-                ),
+                findings=("Run the plugin generation publication in a regular terminal",),
             )
-        if not _claude_on_path(operation_env):
-            raise RuntimeError(
-                "'claude' command not found in the sealed PATH.\n"
-                "Install Claude Code, then run:\n"
-                f"  claude plugin marketplace add {marketplace_dir}\n"
-                f"  claude plugin install {plugin_ref} --scope {effective_scope}\n"
-                "Then run: autoskillit init (in your project directory)"
-            )
-
-        target_root = _installed_plugin_root(expected_version)
-        _validate_transaction_target(target_root, expected_version)
     except (OSError, RuntimeError, ValueError, importlib.metadata.PackageNotFoundError) as exc:
         return _typed_result(
             InstallOutcome.FAILED,
@@ -479,226 +333,82 @@ def install(
             findings=(f"preflight failure: {exc}",),
         )
 
-    from autoskillit.cli._plugin_artifact import (
-        installed_plugin_semantic_key,
-        publish_installed_plugin_artifact,
-    )
-    from autoskillit.core import (
-        ArtifactLease,
-        ArtifactLeaseContention,
-        PluginArtifactPublicationError,
-        _InstallLock,
-        installed_plugin_artifact_lease_path,
-    )
-    from autoskillit.workspace import (
-        InstallStateLeaseMode,
-        InstallStateSpec,
-        reconcile_install_artifacts,
-        verify_installed_plugin_artifact,
-    )
+    from autoskillit.cli._plugin_artifact import installed_plugin_semantic_key
+    from autoskillit.core import _InstallLock
+    from autoskillit.workspace import publish_generation, reconcile_install_artifacts
 
     settings_path = _hooks_mod._claude_settings_path(
         effective_scope,
         cwd=operation_cwd,
     )
-    lease_path = installed_plugin_artifact_lease_path(target_root)
     try:
         with _InstallLock():
-            snapshot = _InstallSnapshot(
-                target_root=target_root,
-                settings_path=settings_path,
-                workspace_cwd=(
-                    operation_cwd if install_request.mode is InstallMode.DIRECT else None
-                ),
-            )
             try:
-                snapshot.stage()
-            except (OSError, RuntimeError, ValueError) as exc:
+                for repaired in reconcile_install_artifacts():
+                    print(f"Repaired legacy install artifact: ~/{repaired}")
+
+                # Stage and publish the marketplace projection for metadata
+                _ensure_marketplace(
+                    cwd=operation_cwd,
+                    version=expected_version,
+                )
+                if install_request.mode is InstallMode.DIRECT:
+                    _ensure_workspace_ready(cwd=operation_cwd)
+
+                # Build the source root for the generation
+                marketplace_plugin_root = (
+                    Path.home() / ".autoskillit" / "marketplace" / "plugins" / "autoskillit"
+                )
+
+                semantic_key = installed_plugin_semantic_key(
+                    plugin_ref,
+                    expected_version,
+                )
+
+                try:
+                    identity = publish_generation(
+                        home=Path.home(),
+                        plugin_ref=plugin_ref,
+                        version=expected_version,
+                        semantic_key=semantic_key,
+                        source_root=marketplace_plugin_root,
+                    )
+                except (OSError, RuntimeError, ValueError) as exc:
+                    raise _InstallFailed(
+                        InstallFailureKind.POSTCONDITION,
+                        f"Failed to publish plugin generation: {exc}",
+                    ) from exc
+
+                verified_identity = identity.semantic_key
+
+                # Clean up stale registrations
+                if evict_direct_mcp_entry(_user_claude_json_path()):
+                    print("Removed stale direct MCP entry from ~/.claude.json")
+                _hooks_mod._evict_stale_autoskillit_hooks(settings_path)
+                from autoskillit.cli.update._update_checks import invalidate_fetch_cache
+
+                invalidate_fetch_cache(Path.home())
+                _verify_cleanup(settings_path, _fetch_cache_path(Path.home()))
+
+            except _InstallFailed as exc:
                 return _typed_result(
                     InstallOutcome.FAILED,
-                    failure_kind=InstallFailureKind.PREFLIGHT,
-                    findings=(f"preflight snapshot failure: {exc}",),
+                    failure_kind=exc.kind,
+                    findings=(f"{exc.kind.value} failure: {exc}",),
                 )
-
-            try:
-                target_writer = ArtifactLease.acquire_exclusive(
-                    lease_path,
-                    blocking=False,
+            except BaseException as exc:
+                logger.warning(
+                    "install_transaction_unexpected_failure",
+                    failure=str(exc),
+                    exc_info=True,
                 )
-            except ArtifactLeaseContention:
-                snapshot.discard()
+                if not isinstance(exc, Exception):
+                    raise
                 return _typed_result(
-                    InstallOutcome.DEFERRED,
-                    findings=(
-                        "Installed plugin is in use by an active session; retry after it exits",
-                    ),
+                    InstallOutcome.FAILED,
+                    failure_kind=InstallFailureKind.POSTCONDITION,
+                    findings=(f"Install transaction failed: {exc}",),
                 )
-            except (OSError, RuntimeError, ValueError) as exc:
-                return _compensated_result(
-                    snapshot,
-                    _InstallFailed(
-                        InstallFailureKind.PREFLIGHT,
-                        f"Could not acquire installed plugin lease: {exc}",
-                    ),
-                )
-            with target_writer:
-                try:
-                    for repaired in reconcile_install_artifacts():
-                        print(f"Repaired legacy install artifact: ~/{repaired}")
-                    marketplace_dir = _ensure_marketplace(
-                        cwd=operation_cwd,
-                        version=expected_version,
-                    )
-                    if install_request.mode is InstallMode.DIRECT:
-                        _ensure_workspace_ready(cwd=operation_cwd)
-                    _clear_plugin_cache(
-                        current_version=expected_version,
-                        _lock_owned=True,
-                    )
-
-                    try:
-                        result = _run_claude_admin(
-                            (
-                                "claude",
-                                "plugin",
-                                "marketplace",
-                                "add",
-                                str(marketplace_dir),
-                            ),
-                            env=operation_env,
-                            cwd=operation_cwd,
-                        )
-                    except (OSError, subprocess.SubprocessError) as exc:
-                        raise _InstallFailed(
-                            InstallFailureKind.CHILD,
-                            f"Failed to register marketplace: {exc}",
-                        ) from exc
-                    if result.returncode != 0:
-                        raise _InstallFailed(
-                            InstallFailureKind.CHILD,
-                            f"Failed to register marketplace: {result.stderr.strip()}",
-                        )
-
-                    if not snapshot.quarantine_install_target():
-                        raise _InstallFailed(
-                            InstallFailureKind.POSTCONDITION,
-                            "Could not quarantine the pre-existing expected-version "
-                            f"plugin target before installation: {target_root}",
-                        )
-
-                    try:
-                        result = _run_claude_admin(
-                            (
-                                "claude",
-                                "plugin",
-                                "install",
-                                plugin_ref,
-                                "--scope",
-                                effective_scope,
-                            ),
-                            env=operation_env,
-                            cwd=operation_cwd,
-                        )
-                    except (OSError, subprocess.SubprocessError) as exc:
-                        raise _InstallFailed(
-                            InstallFailureKind.CHILD,
-                            f"Failed to install plugin: {exc}",
-                        ) from exc
-                    if result.returncode != 0:
-                        raise _InstallFailed(
-                            InstallFailureKind.CHILD,
-                            f"Failed to install plugin: {result.stderr.strip()}",
-                        )
-                    if not snapshot.install_target_is_directory():
-                        raise _InstallFailed(
-                            InstallFailureKind.POSTCONDITION,
-                            "Claude plugin install did not freshly materialize the "
-                            f"expected-version target: {target_root}",
-                        )
-
-                    try:
-                        publish_installed_plugin_artifact(
-                            target_root,
-                            semantic_key=installed_plugin_semantic_key(
-                                plugin_ref,
-                                expected_version,
-                            ),
-                            _owned_exclusive_lease=target_writer,
-                        )
-                    except PluginArtifactPublicationError as exc:
-                        raise _InstallFailed(
-                            InstallFailureKind.POSTCONDITION,
-                            f"Failed to publish installed plugin identity: {exc}",
-                        ) from exc
-
-                    if evict_direct_mcp_entry(_user_claude_json_path()):
-                        print("Removed stale direct MCP entry from ~/.claude.json")
-                    _hooks_mod._evict_stale_autoskillit_hooks(settings_path)
-                    from autoskillit.cli.update._update_checks import invalidate_fetch_cache
-
-                    invalidate_fetch_cache(Path.home())
-                    _verify_cleanup(settings_path, _fetch_cache_path(Path.home()))
-
-                    verification = verify_installed_plugin_artifact(
-                        InstallStateSpec(
-                            home=Path.home(),
-                            plugin_ref=plugin_ref,
-                            expected_version=expected_version,
-                            require_registered_plugin=(install_request.require_registered_plugin),
-                            lease_mode=InstallStateLeaseMode.EXCLUSIVE,
-                            supplied_lease=target_writer,
-                        )
-                    )
-                    if verification.identity is None or verification.findings:
-                        messages = "; ".join(
-                            f"{finding.check}: {finding.message}"
-                            for finding in verification.findings
-                        )
-                        raise _InstallFailed(
-                            InstallFailureKind.POSTCONDITION,
-                            "Installed plugin exact verification failed"
-                            + (f": {messages}" if messages else ""),
-                        )
-                    verified_identity = verification.identity.semantic_key
-                    snapshot.commit()
-                except _InstallFailed as exc:
-                    return _compensated_result(
-                        snapshot,
-                        exc,
-                        owned_lease_fd=target_writer.fileno(),
-                    )
-                except BaseException as exc:
-                    logger.warning(
-                        "install_transaction_unexpected_failure",
-                        failure=str(exc),
-                        exc_info=True,
-                    )
-                    if not isinstance(exc, Exception):
-                        try:
-                            _compensated_result(
-                                snapshot,
-                                _InstallFailed(
-                                    InstallFailureKind.POSTCONDITION,
-                                    f"Install transaction failed: {exc}",
-                                ),
-                                owned_lease_fd=target_writer.fileno(),
-                            )
-                        except BaseException:
-                            logger.warning(
-                                "install_control_flow_compensation_failed",
-                                failure=str(exc),
-                                exc_info=True,
-                            )
-                        raise
-                    compensated = _compensated_result(
-                        snapshot,
-                        _InstallFailed(
-                            InstallFailureKind.POSTCONDITION,
-                            f"Install transaction failed: {exc}",
-                        ),
-                        owned_lease_fd=target_writer.fileno(),
-                    )
-                    return compensated
     except (OSError, RuntimeError, ValueError) as exc:
         return _typed_result(
             InstallOutcome.FAILED,
@@ -706,7 +416,7 @@ def install(
             findings=(f"install lock failure: {exc}",),
         )
 
-    success_message = f"Plugin installed: {plugin_ref} (scope: {effective_scope})"
+    success_message = f"Plugin published: {plugin_ref} (scope: {effective_scope})"
     return _typed_result(
         InstallOutcome.COMPLETED,
         verified_identity=verified_identity,

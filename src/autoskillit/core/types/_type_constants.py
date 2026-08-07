@@ -245,19 +245,25 @@ RETIRED_INSTALL_ARTIFACT_SHAPES: Mapping[str, RetiredArtifactShape] = MappingPro
                 "its own source root."
             ),
         ),
-        # Phase 4.8 entries — deferred until install() stops writing to these
-        # paths (Phase 4.4).  Adding them before the install transaction is
-        # restructured makes verify_install_state() flag the active installed
-        # artifact as retired:
-        #
-        # ".autoskillit/plugin-projections": RetiredArtifactShape(
-        #     shape="directory", retired_in="0.10.933",
-        #     reason="...", disposition="retire_via_engine",
-        # ),
-        # ".claude/plugins/cache/autoskillit-local/autoskillit": RetiredArtifactShape(
-        #     shape="directory", retired_in="0.10.933",
-        #     reason="...", disposition="retire_via_engine",
-        # ),
+        ".claude/plugins/cache/autoskillit-local/autoskillit": RetiredArtifactShape(
+            shape="directory",
+            retired_in="0.10.933",
+            reason=(
+                "The Claude-cache installed plugin artifact was replaced by generation-keyed "
+                "publication under ~/.autoskillit/plugin-generations/. Live sessions may "
+                "hold inherited shared-lease fds on version subdirectories, so the store "
+                "is routed through the retirement engine rather than deleted immediately."
+            ),
+            disposition="retire_via_engine",
+        ),
+        # ".autoskillit/plugin-projections" is deliberately NOT registered here yet.
+        # It is still the live store `ProjectedPluginArtifactAuthority`
+        # (workspace/_projected_artifact/authority.py) publishes to and binds cook
+        # and headless sessions from on every launch (PROJECTED_HOME/
+        # EXPLICIT_PLUGIN_DIR). Registering it as retired before that authority's
+        # dual-store logic collapses onto the generation store (tracked separately)
+        # would make verify_install_state() flag a healthy, actively-served store
+        # as broken on every machine that has ever run `autoskillit cook`.
     }
 )
 

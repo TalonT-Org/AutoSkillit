@@ -32,19 +32,26 @@ from __future__ import annotations
 import importlib.metadata
 import json
 import shutil
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from autoskillit.core import (  # IL-005: core only — never cli.InstalledPluginsFile
-    DIRECT_INSTALL_CACHE_SUBDIR,
     RETIRED_INSTALL_ARTIFACT_SHAPES,
     PluginArtifactKind,
+    PluginArtifactRetirementEngine,
     PluginArtifactUnavailableError,
+    PluginArtifactValidationError,
     RetiringArtifactRecord,
     RetiringCacheState,
     Severity,
     get_logger,
+    installed_plugin_artifact_lease_path,
+    installed_plugin_artifact_manifest_path,
+    read_installed_plugin_artifact_identity,
     read_retiring_cache,
     registered_install_paths,
+    resolve_current_generation,
 )
 from autoskillit.workspace._installed_artifact import (
     _INSTALLED_PLUGIN_ARTIFACT_UNREADABLE_CHECK,
@@ -77,10 +84,6 @@ def _marketplace_manifest() -> Path:
     return _home() / ".autoskillit" / "marketplace" / ".claude-plugin" / "marketplace.json"
 
 
-def _plugin_cache_dir() -> Path:
-    return _home() / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / "autoskillit"
-
-
 def _read_json_version(path: Path, *, key: str) -> str | None:
     """Return a version string from a JSON file, or None when unavailable."""
     try:
@@ -111,20 +114,92 @@ def _current_install_state_spec() -> InstallStateSpec:
     )
 
 
+def _generation_store_findings() -> list[InstallStateFinding]:
+    """Validate the current generation in the generation store.
+
+    A machine that has never run ``autoskillit install`` and whose registry
+    requires nothing is not a violation — most users only ever run ``cook``,
+    which never touches this store. Only report a missing generation when
+    the registry evidence says one should exist.
+    """
+    from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY
+
+    home = _home()
+    expected_version = importlib.metadata.version("autoskillit")
+    plugin_ref = _AUTOSKILLIT_PLUGIN_KEY
+    require_registered_plugin = bool(registered_install_paths(home))
+
+    current = resolve_current_generation(home, plugin_ref, expected_version)
+    if current is None:
+        if not require_registered_plugin:
+            return []
+        return [
+            InstallStateFinding(
+                Severity.ERROR,
+                "generation_store_missing",
+                "No current generation found in the generation store for "
+                f"{plugin_ref} {expected_version}, but installed_plugins.json "
+                "registers an obligation. Run `autoskillit install` to publish "
+                "a generation.",
+            )
+        ]
+    try:
+        identity = read_installed_plugin_artifact_identity(
+            current,
+            manifest_path=installed_plugin_artifact_manifest_path(current),
+        )
+    except PluginArtifactUnavailableError as exc:
+        return [
+            InstallStateFinding(
+                Severity.ERROR,
+                "generation_artifact_unreadable",
+                f"Current generation at {current} cannot be read: {exc}. "
+                "Run `autoskillit install` to republish.",
+            )
+        ]
+    except PluginArtifactValidationError as exc:
+        return [
+            InstallStateFinding(
+                Severity.ERROR,
+                "generation_artifact_invalid",
+                f"Current generation at {current} failed validation: {exc}. "
+                "Run `autoskillit install` to republish.",
+            )
+        ]
+    except Exception as exc:
+        logger.warning(
+            "generation_store_verification_failed",
+            error=str(exc),
+            exc_info=True,
+        )
+        return [
+            InstallStateFinding(
+                Severity.ERROR,
+                "generation_artifact_error",
+                f"Current generation at {current} could not be verified: {exc}. "
+                "Run `autoskillit install` to republish.",
+            )
+        ]
+    # Verify incarnation_id matches directory name
+    if identity.incarnation_id != current.name:
+        return [
+            InstallStateFinding(
+                Severity.ERROR,
+                "generation_incarnation_mismatch",
+                f"Current generation directory {current.name} does not match "
+                f"manifest incarnation_id {identity.incarnation_id}. "
+                "Run `autoskillit install` to republish.",
+            )
+        ]
+    return []
+
+
 def verify_install_state() -> tuple[InstallStateFinding, ...]:
     """Return every violated install-state invariant, most actionable first."""
     findings: list[InstallStateFinding] = []
 
-    # 1. Registry obligation and exact current-artifact identity. Registry paths
-    #    are evidence only; the shared authority derives the sole managed root
-    #    from the trusted home/plugin/version tuple.
-    current_spec = _current_install_state_spec()
-    exact = verify_installed_plugin_artifact(current_spec)
-    try:
-        findings.extend(exact.findings)
-    finally:
-        if exact.lease is not None:
-            exact.lease.close()
+    # 1. Generation-store current-generation validation (primary authority).
+    findings.extend(_generation_store_findings())
 
     # 2. Retired artifact shapes still present on disk.
     for key, retired in sorted(RETIRED_INSTALL_ARTIFACT_SHAPES.items()):
@@ -205,7 +280,7 @@ def verify_install_state() -> tuple[InstallStateFinding, ...]:
                 )
 
     # 4. Version agreement, one finding per derived file (see module docstring).
-    findings.extend(_derived_version_findings(current_spec.expected_version))
+    findings.extend(_derived_version_findings(importlib.metadata.version("autoskillit")))
 
     return tuple(findings)
 
@@ -268,11 +343,6 @@ def _derived_version_findings(package_version: str) -> list[InstallStateFinding]
             marketplace_plugin_root() / ".claude-plugin" / "plugin.json",
             "version",
         ),
-        (
-            "plugin_cache_version",
-            _plugin_cache_dir() / package_version / ".claude-plugin" / "plugin.json",
-            "version",
-        ),
     )
     findings: list[InstallStateFinding] = []
     for check, path, key in derived:
@@ -291,6 +361,77 @@ def _derived_version_findings(package_version: str) -> list[InstallStateFinding]
     return findings
 
 
+def _enqueue_legacy_installed_plugin_versions(artifact: Path) -> None:
+    """Enqueue every version subdirectory of the legacy Claude-cache root.
+
+    Best-effort per candidate: a version directory that fails to validate or
+    is already contended is skipped and retried on the next reconciliation
+    pass rather than aborting the whole sweep.
+    """
+    engine = PluginArtifactRetirementEngine(
+        managed_root=artifact,
+        artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
+        manifest_path=installed_plugin_artifact_manifest_path,
+        lease_path=installed_plugin_artifact_lease_path,
+        current_identity=lambda record: read_installed_plugin_artifact_identity(
+            record.managed_path,
+            expected_semantic_key=record.semantic_key,
+            manifest_path=installed_plugin_artifact_manifest_path(record.managed_path),
+        ),
+        logger=logger,
+    )
+    deadline = datetime.now(UTC) + timedelta(hours=6)
+    candidates = sorted(
+        (
+            path
+            for path in artifact.iterdir()
+            if path.is_dir() and not path.is_symlink() and not path.name.startswith(".")
+        ),
+        key=lambda item: item.name,
+    )
+    for candidate in candidates:
+        try:
+            identity = read_installed_plugin_artifact_identity(
+                candidate,
+                manifest_path=installed_plugin_artifact_manifest_path(candidate),
+            )
+        except (PluginArtifactValidationError, PluginArtifactUnavailableError, OSError) as exc:
+            logger.warning(
+                "reconcile_install_artifacts: legacy version %s unreadable, skipping: %s",
+                candidate,
+                exc,
+            )
+            continue
+        try:
+            engine.enqueue_retirement(identity, deadline)
+        except (PluginArtifactValidationError, OSError) as exc:
+            logger.warning(
+                "reconcile_install_artifacts: could not enqueue legacy version %s: %s",
+                candidate,
+                exc,
+            )
+    try:
+        next(artifact.iterdir())
+    except StopIteration:
+        try:
+            artifact.rmdir()
+        except OSError as exc:
+            logger.warning(
+                "reconcile_install_artifacts: could not remove drained legacy root %s: %s",
+                artifact,
+                exc,
+            )
+    except OSError:
+        pass
+
+
+_RETIRE_VIA_ENGINE_HANDLERS: dict[str, Callable[[Path], None]] = {
+    ".claude/plugins/cache/autoskillit-local/autoskillit": (
+        _enqueue_legacy_installed_plugin_versions
+    ),
+}
+
+
 def reconcile_install_artifacts() -> tuple[str, ...]:
     """Remove install artifacts left in a retired shape; return what was repaired.
 
@@ -301,7 +442,10 @@ def reconcile_install_artifacts() -> tuple[str, ...]:
 
     Entries with ``disposition="retire_via_engine"`` are enqueued into the
     retirement engine rather than deleted immediately, so a live session's
-    inherited shared-lease fd is never invalidated.
+    inherited shared-lease fd is never invalidated. Each such entry names a
+    directory with dynamic, artifact-specific children (version- or
+    key-addressed subdirectories) that cannot be enumerated generically, so
+    every entry must register a handler in ``_RETIRE_VIA_ENGINE_HANDLERS``.
     """
     repaired: list[str] = []
     for key, retired in sorted(RETIRED_INSTALL_ARTIFACT_SHAPES.items()):
@@ -324,8 +468,15 @@ def reconcile_install_artifacts() -> tuple[str, ...]:
                 )
                 continue
         elif disposition == "retire_via_engine":
+            handler = _RETIRE_VIA_ENGINE_HANDLERS.get(key)
+            if handler is None:
+                raise ValueError(
+                    f"no retire_via_engine handler registered for {key!r} — "
+                    "add one to _RETIRE_VIA_ENGINE_HANDLERS in this module"
+                )
+            handler(artifact)
             logger.info(
-                "reconcile_install_artifacts: %s marked for engine-gated retirement "
+                "reconcile_install_artifacts: %s enqueued for engine-gated retirement "
                 "(retired in %s, disposition=%s)",
                 artifact,
                 retired.retired_in,

@@ -14,17 +14,13 @@ from packaging.version import InvalidVersion, Version
 
 from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
-    Severity,
     get_logger,
     installed_plugin_cache_dir,
 )
 from autoskillit.hook_registry import validate_plugin_cache_hooks
 from autoskillit.workspace import (
-    InstallStateLeaseMode,
-    InstallStateSpec,
     clear_obligation,
     read_obligation,
-    verify_installed_plugin_artifact,
 )
 
 __all__ = ["ObligationRepairOutcome", "ObligationRepairResult", "attempt_obligation_repair"]
@@ -170,14 +166,21 @@ def attempt_obligation_repair(
             )
 
     try:
-        verification = verify_installed_plugin_artifact(
-            InstallStateSpec(
-                home=home,
-                plugin_ref=_AUTOSKILLIT_PLUGIN_KEY,
-                expected_version=expected_version,
-                require_registered_plugin=True,
-                lease_mode=InstallStateLeaseMode.SHARED,
+        from autoskillit.core import (
+            installed_plugin_artifact_manifest_path,
+            read_installed_plugin_artifact_identity,
+            resolve_current_generation,
+        )
+
+        gen_root = resolve_current_generation(home, _AUTOSKILLIT_PLUGIN_KEY, expected_version)
+        if gen_root is None:
+            return ObligationRepairResult(
+                outcome=ObligationRepairOutcome.FAILED,
+                findings=("No current generation found after install",),
             )
+        read_installed_plugin_artifact_identity(
+            gen_root,
+            manifest_path=installed_plugin_artifact_manifest_path(gen_root),
         )
     except Exception as exc:
         logger.warning("publication_obligation_verification_failed", exc_info=True)
@@ -185,20 +188,9 @@ def attempt_obligation_repair(
             outcome=ObligationRepairOutcome.FAILED,
             findings=(f"Installed plugin verification could not run: {exc}",),
         )
-    try:
-        has_error = any(f.severity is Severity.ERROR for f in verification.findings)
-        if has_error or verification.identity is None:
-            return ObligationRepairResult(
-                outcome=ObligationRepairOutcome.FAILED,
-                findings=tuple(f"{f.check}: {f.message}" for f in verification.findings)
-                or ("Installed plugin verification returned no exact identity.",),
-            )
-        if not clear_obligation(home, expected=obligation):
-            return ObligationRepairResult(
-                outcome=ObligationRepairOutcome.FAILED,
-                findings=("Publication succeeded but its obligation could not be cleared.",),
-            )
-        return ObligationRepairResult(outcome=ObligationRepairOutcome.CLEARED)
-    finally:
-        if verification.lease is not None:
-            verification.lease.close()
+    if not clear_obligation(home, expected=obligation):
+        return ObligationRepairResult(
+            outcome=ObligationRepairOutcome.FAILED,
+            findings=("Publication succeeded but its obligation could not be cleared.",),
+        )
+    return ObligationRepairResult(outcome=ObligationRepairOutcome.CLEARED)

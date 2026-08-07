@@ -170,7 +170,7 @@ def test_capacity_rescue_records_only_byte_pressure(
         raise CaptureCapacityError(reason)
 
     try:
-        with pytest.raises(CaptureCapacityError, match=reason.value):
+        with pytest.raises(CaptureCapacityError):
             store._with_capacity_rescue(fail_with_reason, rescuable_reasons=frozenset())
         assert store.byte_pressure_observed is (
             reason

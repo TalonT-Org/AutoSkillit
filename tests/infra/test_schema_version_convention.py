@@ -150,8 +150,8 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # Line 110 is a list-payload write site (dual membership: also in list_sites
     # in test_allowlist_includes_list_payloads_as_documented). The AST scanner catches
     # it because it cannot distinguish list vs dict return types — intentional.
-    ("src/autoskillit/smoke_utils/_git.py", 200),
-    ("src/autoskillit/smoke_utils/_git.py", 255),
+    ("src/autoskillit/smoke_utils/_git.py", 208),
+    ("src/autoskillit/smoke_utils/_git.py", 263),
     # smoke_utils/_eval.py — eval resolved/manifest/scorecard/eval_context, agent-eval
     ("src/autoskillit/smoke_utils/_eval.py", 84),
     ("src/autoskillit/smoke_utils/_eval.py", 95),
@@ -229,7 +229,7 @@ class TestSchemaVersionConvention:
         """List-payload sites are included since the AST scanner can't distinguish return types."""
         # These sites write list payloads through function calls but are caught by the scanner
         list_sites = [
-            ("src/autoskillit/smoke_utils/_git.py", 255),
+            ("src/autoskillit/smoke_utils/_git.py", 263),
         ]
         for site in list_sites:
             assert site in _LEGACY_JSON_WRITES, (

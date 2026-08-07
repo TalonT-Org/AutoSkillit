@@ -209,11 +209,19 @@ class RetiredArtifactShape(NamedTuple):
     real directory, file to directory, …) strands every pre-existing install.
     Declaring the retirement here is what gives the reconciler something to
     repair and the guard test something to enforce.
+
+    ``disposition`` controls how the reconciler handles the retired shape:
+
+    - ``"delete"`` — unconditional removal (the original behavior).
+    - ``"retire_via_engine"`` — enqueue into the retirement engine with
+      the standard grace window and per-path lease gating, so a live
+      session's inherited shared-lease fd is never invalidated.
     """
 
     shape: str
     retired_in: str
     reason: str
+    disposition: str = "delete"
 
 
 # Artifact key -> the shape that was retired. Keys are ``Path.home()``-relative
@@ -237,6 +245,12 @@ RETIRED_INSTALL_ARTIFACT_SHAPES: Mapping[str, RetiredArtifactShape] = MappingPro
                 "its own source root."
             ),
         ),
+        # Phase 4 (generation-keyed publication) will add:
+        # - ".autoskillit/plugin-projections" (directory, retire_via_engine)
+        # - ".claude/plugins/cache/autoskillit-local/autoskillit" (directory, retire_via_engine)
+        # These entries must land in the same commit as the generation store
+        # migration, because adding them before the migration makes
+        # verify_install_state() flag the active installed artifact as retired.
     }
 )
 

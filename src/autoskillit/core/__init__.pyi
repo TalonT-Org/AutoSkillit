@@ -37,6 +37,18 @@ from ._plugin_artifact_identity import (
     installed_plugin_artifact_manifest_payload as installed_plugin_artifact_manifest_payload,
 )
 from ._plugin_artifact_identity import (
+    generation_artifact_root as generation_artifact_root,
+)
+from ._plugin_artifact_identity import (
+    generation_selector_path as generation_selector_path,
+)
+from ._plugin_artifact_identity import (
+    generation_store_root as generation_store_root,
+)
+from ._plugin_artifact_identity import (
+    generation_version_root as generation_version_root,
+)
+from ._plugin_artifact_identity import (
     installed_plugin_artifact_root as installed_plugin_artifact_root,
 )
 from ._plugin_artifact_identity import (
@@ -44,6 +56,9 @@ from ._plugin_artifact_identity import (
 )
 from ._plugin_artifact_identity import (
     read_installed_plugin_artifact_identity as read_installed_plugin_artifact_identity,
+)
+from ._plugin_artifact_identity import (
+    resolve_current_generation as resolve_current_generation,
 )
 from ._plugin_cache import PluginArtifactRetirementEngine as PluginArtifactRetirementEngine
 from ._plugin_cache import _InstallLock as _InstallLock

@@ -32,6 +32,51 @@ def installed_plugin_artifact_root(
     return installed_plugin_cache_dir(home, plugin_ref) / version
 
 
+# ---------------------------------------------------------------------------
+# Generation store — AutoSkillit-owned immutable-path publication
+# ---------------------------------------------------------------------------
+
+_GENERATION_STORE_ROOT = ".autoskillit/plugin-generations"
+
+
+def generation_store_root(home: Path, plugin_ref: str) -> Path:
+    """Return the generation store root for a plugin."""
+    plugin_name = plugin_ref.partition("@")[0]
+    return Path(home) / _GENERATION_STORE_ROOT / plugin_name
+
+
+def generation_version_root(home: Path, plugin_ref: str, version: str) -> Path:
+    """Return the version directory inside the generation store."""
+    return generation_store_root(home, plugin_ref) / version
+
+
+def generation_artifact_root(
+    home: Path, plugin_ref: str, version: str, incarnation_id: str
+) -> Path:
+    """Return the immutable generation directory for one incarnation."""
+    return generation_version_root(home, plugin_ref, version) / incarnation_id
+
+
+def generation_selector_path(home: Path, plugin_ref: str, version: str) -> Path:
+    """Return the ``current`` symlink that selects the active generation."""
+    return generation_version_root(home, plugin_ref, version) / "current"
+
+
+def resolve_current_generation(home: Path, plugin_ref: str, version: str) -> Path | None:
+    """Resolve the ``current`` selector to the active generation directory.
+
+    Returns ``None`` when no selector exists or the target is missing.
+    """
+    selector = generation_selector_path(home, plugin_ref, version)
+    if not selector.is_symlink():
+        return None
+    try:
+        target = selector.resolve(strict=True)
+    except OSError:
+        return None
+    return target if target.is_dir() else None
+
+
 def installed_plugin_artifact_manifest_path(managed_root: Path) -> Path:
     """Return the stable external manifest for one installed plugin root."""
     root = Path(managed_root)

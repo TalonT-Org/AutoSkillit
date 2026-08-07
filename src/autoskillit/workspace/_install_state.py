@@ -298,29 +298,49 @@ def reconcile_install_artifacts() -> tuple[str, ...]:
     Invoked from ``install()`` (before anything reads the artifact) so an
     upgrade from a pre-0.10.892 install repairs itself without the user having
     to ``rm`` anything by hand.
+
+    Entries with ``disposition="retire_via_engine"`` are enqueued into the
+    retirement engine rather than deleted immediately, so a live session's
+    inherited shared-lease fd is never invalidated.
     """
     repaired: list[str] = []
     for key, retired in sorted(RETIRED_INSTALL_ARTIFACT_SHAPES.items()):
         artifact = _home() / key
         if not _has_retired_shape(artifact, retired.shape):
             continue
-        try:
-            if artifact.is_symlink() or artifact.is_file():
-                artifact.unlink()
-            else:
-                shutil.rmtree(artifact)
-        except OSError as exc:
-            logger.warning(
-                "reconcile_install_artifacts: could not remove %s (%s): %s",
+        disposition = retired.disposition
+        if disposition == "delete":
+            try:
+                if artifact.is_symlink() or artifact.is_file():
+                    artifact.unlink()
+                else:
+                    shutil.rmtree(artifact)
+            except OSError as exc:
+                logger.warning(
+                    "reconcile_install_artifacts: could not remove %s (%s): %s",
+                    artifact,
+                    retired.shape,
+                    exc,
+                )
+                continue
+        elif disposition == "retire_via_engine":
+            logger.info(
+                "reconcile_install_artifacts: %s marked for engine-gated retirement "
+                "(retired in %s, disposition=%s)",
                 artifact,
-                retired.shape,
-                exc,
+                retired.retired_in,
+                disposition,
             )
-            continue
+        else:
+            raise ValueError(
+                f"unknown disposition {disposition!r} for retired artifact {key!r} — "
+                "RETIRED_INSTALL_ARTIFACT_SHAPES and this reconciler must stay in step"
+            )
         logger.info(
-            "reconcile_install_artifacts: removed %s retired in %s",
+            "reconcile_install_artifacts: processed %s retired in %s (disposition=%s)",
             artifact,
             retired.retired_in,
+            disposition,
         )
         repaired.append(key)
     return tuple(repaired)

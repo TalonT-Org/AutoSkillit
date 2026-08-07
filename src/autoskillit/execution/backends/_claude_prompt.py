@@ -226,11 +226,7 @@ class CoInjectedPolicyDef(NamedTuple):
     codex_discipline_suffix()'s default form carries only these. ``"change-authoring"``
     texts presuppose the session has a plan or is producing a diff, and ride only
     surfaces serving sessions that author code changes (opt in via
-    ``codex_discipline_suffix(include_scope=True)``). #4478 review (2026-08-07): the
-    scope-discipline digest was originally placed on the universal channel, reaching
-    all ~125 skill sessions though only 2 declared the split-proposal mechanism its
-    text presupposes — the first task-shaped policy on a channel built for
-    session-mechanics rules.
+    ``codex_discipline_suffix(include_scope=True)``).
 
     Not to be confused with ``InjectorDef`` below, which names a *stage of the
     prompt-injection chain* ("intake-discipline"). This names a *constant whose text

@@ -252,8 +252,8 @@ assert set(CODEX_MODEL_ALIASES.values()).issubset(CODEX_VALID_MODEL_IDS), (
 )
 
 CODEX_EFFORT_MAPPING: dict[str, str] = {
-    "sonnet": "high",
-    "opus": "xhigh",
+    "sonnet": "medium",
+    "opus": "high",
     "haiku": "medium",
 }
 

@@ -6478,6 +6478,7 @@ def test_check_diff_size_within_budget(tmp_path: Path) -> None:
     result = check_diff_size(str(tmp_path), "main")
 
     assert result["size_verdict"] == "within_budget"
+    assert result["added_lines"] == "10"
     assert result["split_proposal_path"] == ""
 
 
@@ -6521,7 +6522,7 @@ def test_check_diff_size_uncommitted_changes(tmp_path: Path) -> None:
 
     result = check_diff_size(str(tmp_path), "main")
 
-    assert int(result["added_lines"]) > 0
+    assert result["added_lines"] == "1"
 
 
 def test_check_diff_size_untracked_files(tmp_path: Path) -> None:
@@ -6625,11 +6626,13 @@ def test_check_diff_size_plan_budget_overrides_default(tmp_path: Path) -> None:
     _init_diff_size_repo(tmp_path)
     plan_path = tmp_path / "plan.md"
     plan_path.write_text("# Plan\n\nsize_budget = 800\n\nDetails...\n")
+    (tmp_path / "budgeted.py").write_text("line\n" * 1_000)
 
     result = check_diff_size(str(tmp_path), "main", plan_path=str(plan_path))
 
     assert result["budget"] == "800"
     assert result["budget_source"] == "plan"
+    assert result["size_verdict"] == "over_budget"
 
 
 def test_check_diff_size_malformed_plan_budget_falls_back(tmp_path: Path) -> None:
@@ -6637,11 +6640,13 @@ def test_check_diff_size_malformed_plan_budget_falls_back(tmp_path: Path) -> Non
     _init_diff_size_repo(tmp_path)
     plan_path = tmp_path / "plan.md"
     plan_path.write_text("# Plan\n\nsize_budget = 4,800\n\nDetails...\n")
+    (tmp_path / "budgeted.py").write_text("line\n" * 5_000)
 
     result = check_diff_size(str(tmp_path), "main", plan_path=str(plan_path))
 
     assert result["budget_source"] == "ingredient"
     assert result["budget"] == "6000"
+    assert result["size_verdict"] == "within_budget"
 
 
 def test_check_diff_size_malformed_default_budget_returns_error(tmp_path: Path) -> None:

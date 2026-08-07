@@ -426,8 +426,16 @@ steps:
     retries: 0
     on_context_limit: retry_worktree
     on_rate_limit: retry_worktree
-    on_success: check_changes
+    on_result:
+    - when: ${{ result.scope_verdict }} == split
+      route: release_issue_failure
+    - when: ${{ result.scope_verdict }} == proceed
+      route: check_changes
+    - route: check_changes
     on_failure: release_issue_failure
+    note: "This recipe has no scope-split re-plan loop, so split fails fast to\
+      \ release_issue_failure with the worktree and split proposal retained for\
+      \ diagnostics. The catch-all arm is the malformed/missing-token fallback.\n"
   retry_worktree:
     tool: run_skill
     model: ''
@@ -450,13 +458,19 @@ steps:
         from: ${{ result.deviation_manifest_path }}
         type: optional_string
     on_result:
-    - when: ${{ result.phases_implemented }} > 0
+    - when: ${{ result.scope_verdict }} == split
+      route: release_issue_failure
+    - when: ${{ result.scope_verdict }} == proceed
       route: check_changes
     - route: check_changes
     on_context_limit: check_changes
     on_rate_limit: check_changes
     on_exhausted: release_issue_failure
     on_failure: release_issue_failure
+    note: "This recipe has no scope-split re-plan loop, so split fails fast.\
+      \ The phases_implemented capture stays but no longer governs routing\
+      \ (both arms routed to check_changes). The catch-all is the malformed-token\
+      \ fallback.\n"
   check_changes:
     tool: run_python
     with:

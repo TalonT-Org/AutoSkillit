@@ -287,12 +287,21 @@ skills:
       type: string
     - name: has_implementation_progress
       type: string
+    - name: scope_verdict
+      type: string
+      allowed_values:
+      - proceed
+      - split
+    - name: split_proposal_path
+      type: optional_string
     expected_output_patterns:
     - "worktree_path[ \\t]*=[ \\t]*/.+"
     - "%%ORDER_UP::[a-f0-9]+%%"
     pattern_examples:
     - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP::a1b2c3d4%%"
-    write_behavior: always
+    write_behavior: conditional
+    write_expected_when:
+    - "scope_verdict[ \\t]*=[ \\t]*proceed"
     completion_required: true
   investigate:
     inputs:
@@ -336,6 +345,9 @@ skills:
       type: string
       required: false
     - name: audit_cycle_path
+      type: file_path
+      required: false
+    - name: split_proposal_path
       type: file_path
       required: false
     outputs:
@@ -430,6 +442,13 @@ skills:
       type: optional_string
     - name: has_implementation_progress
       type: string
+    - name: scope_verdict
+      type: string
+      allowed_values:
+      - proceed
+      - split
+    - name: split_proposal_path
+      type: optional_string
     expected_output_patterns:
     - "worktree_path[ \\t]*=[ \\t]*/.+"
     - "%%ORDER_UP::[a-f0-9]+%%"
@@ -2833,6 +2852,39 @@ skills:
     - "Analysis complete.\n\n---\npipeline-health-result---\n%%ORDER_UP%%"
     read_only: true
 callable_contracts:
+  autoskillit.smoke_utils.check_diff_size:
+    inputs:
+    - name: worktree_path
+      type: directory_path
+      required: true
+    - name: base_branch
+      type: str
+      required: true
+    - name: plan_path
+      type: file_path
+      required: false
+    - name: default_budget
+      type: str
+      required: false
+    - name: output_dir
+      type: directory_path
+      required: false
+    outputs:
+    - name: size_verdict
+      type: str
+      allowed_values:
+      - within_budget
+      - over_budget
+    - name: added_lines
+      type: str
+    - name: changed_files
+      type: str
+    - name: budget
+      type: str
+    - name: budget_source
+      type: str
+    - name: split_proposal_path
+      type: str
   autoskillit.smoke_utils.check_loop_iteration:
     inputs:
     - name: current_iteration

@@ -1045,12 +1045,25 @@
         "worktree_path": "${{ result.worktree_path }}",
         "worktree_branch_name": "${{ result.branch_name }}"
       },
-      "on_success": "test",
+      "on_result": [
+        {
+          "when": "${{ result.scope_verdict }} == split",
+          "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.scope_verdict }} == proceed",
+          "route": "test"
+        },
+        {
+          "route": "test"
+        }
+      ],
       "on_failure": "register_clone_failure",
       "retries": 0,
       "on_exhausted": "retry_worktree",
       "on_context_limit": "retry_worktree",
-      "on_rate_limit": "retry_worktree"
+      "on_rate_limit": "retry_worktree",
+      "note": "This recipe has no scope-split re-plan loop, so split fails fast to register_clone_failure. The catch-all is the malformed/missing-token fallback.\n"
     },
     "retry_worktree": {
       "tool": "run_skill",
@@ -1070,12 +1083,25 @@
         "worktree_path": "${{ result.worktree_path }}",
         "worktree_branch_name": "${{ result.branch_name }}"
       },
-      "on_success": "test",
+      "on_result": [
+        {
+          "when": "${{ result.scope_verdict }} == split",
+          "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.scope_verdict }} == proceed",
+          "route": "test"
+        },
+        {
+          "route": "test"
+        }
+      ],
       "on_failure": "register_clone_failure",
       "retries": 3,
       "on_exhausted": "register_clone_failure",
       "on_context_limit": "register_clone_failure",
-      "on_rate_limit": "register_clone_failure"
+      "on_rate_limit": "register_clone_failure",
+      "note": "This recipe has no scope-split re-plan loop, so split fails fast. The catch-all is the malformed-token fallback.\n"
     },
     "test": {
       "tool": "test_check",

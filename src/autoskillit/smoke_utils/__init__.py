@@ -36,9 +36,12 @@ from autoskillit.smoke_utils._helpers import try_load_json
 from autoskillit.smoke_utils._investigation import extract_investigation
 from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
 from autoskillit.smoke_utils._review import (
+    DIFF_SIZE_GATE_EXCLUDED_PATHSPECS,
+    DIFF_SIZE_GATE_MAX_CHANGED_FILES,
     LOCAL_ROUND_EXEMPT_VERDICTS,
     aggregate_review_verdict,
     annotate_pr_diff,
+    check_diff_size,
     check_loop_iteration,
     check_loop_with_progress,
     check_review_loop,
@@ -59,6 +62,8 @@ from autoskillit.smoke_utils._review_contracts import (
 from autoskillit.smoke_utils._telemetry import consolidate_health_reports, patch_pr_token_summary
 
 __all__ = [
+    "DIFF_SIZE_GATE_EXCLUDED_PATHSPECS",
+    "DIFF_SIZE_GATE_MAX_CHANGED_FILES",
     "EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY",
     "EXPERIMENTAL_REVIEW_AUDITORS",
     "LOCAL_ROUND_EXEMPT_VERDICTS",
@@ -73,6 +78,7 @@ __all__ = [
     "build_malformed_review_envelope",
     "check_bug_report_non_empty",
     "check_commits_ahead",
+    "check_diff_size",
     "check_loop_iteration",
     "check_ref_state",
     "check_loop_with_progress",

@@ -28,7 +28,7 @@ logger = get_logger(__name__)
 _ALL_TOOLS: frozenset[str] = frozenset(TOOL_REGISTRY)
 
 _RUN_PYTHON_PATH_LIKE_ARGS: frozenset[str] = frozenset(
-    {"output_dir", "workspace", "diagnostics_log_dir", "investigation_path"}
+    {"output_dir", "workspace", "diagnostics_log_dir", "investigation_path", "plan_path"}
 )
 
 # Registry of context variables that are captured upstream and MUST be forwarded

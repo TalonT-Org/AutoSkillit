@@ -72,7 +72,7 @@ UNSPACED_OUTPUT_TOKEN = re.compile(
     r"ci_blocked_count|review_blocked_count|queue_mode|"
     r"failure_type|is_fixable|escalation_required|escalation_reason|"
     r"execution_map|execution_map_report|group_count|review_approach_candidates|"
-    r"merged)=[^\s]",
+    r"merged|scope_verdict|split_proposal_path)=[^\s]",
     re.MULTILINE,
 )
 
@@ -106,7 +106,7 @@ def _get_skills_with_output_tokens() -> list[str]:
         r"ci_blocked_count|review_blocked_count|queue_mode|"
         r"failure_type|is_fixable|escalation_required|escalation_reason|"
         r"execution_map|execution_map_report|group_count|review_approach_candidates|"
-        r"merged)\s*=\s*",
+        r"merged|scope_verdict|split_proposal_path)\s*=\s*",
         re.MULTILINE,
     )
     for info in resolver.list_all():

@@ -61,6 +61,10 @@ Create focused, actionable implementation plans that recommend the technically b
   not prose flags or ambient files, activates remediation mode. Before reading any referenced
   artifact, verify that this authority is the server-published current `NO GO` head and that
   its generation, plan set, scope, part, round, parent, and audited-plan lineage match this run.
+- `split_proposal_path` (optional) — When present, a prior implementation attempt stopped
+  for scope. Read the proposal and produce a multi-part plan (or a plan honoring the budget)
+  that incorporates it. When both `audit_cycle_path` and `split_proposal_path` are present,
+  the audit authority governs and the split proposal is supplementary context.
 
 ## Core Values - CRITICAL
 

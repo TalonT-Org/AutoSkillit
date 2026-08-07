@@ -162,6 +162,7 @@ if context is exhausted before Step 6:
 ```
 worktree_path = ${WORKTREE_PATH}
 branch_name = ${BRANCH_NAME}
+scope_verdict = proceed
 ```
 
 **Why emit early?** If context exhaustion occurs during Steps 2–5, the
@@ -235,6 +236,22 @@ handoff:
 This guard prevents silent data loss: Category C files are PR-only changes that require no
 conflict resolution and must be preserved in full.
 
+### Scope Stop (S2)
+
+If implementing the plan would exceed the plan's declared `size_budget` (or, absent
+one, the session's injected scope budget of 1,500 added lines or 40 changed files),
+**STOP implementation**. Do not continue building — write a split proposal to a file
+in the worktree's `.autoskillit/temp/` directory. The split proposal must contain a
+`Part A/B/C` decomposition or a descope note listing what you cut and why.
+
+Then emit `scope_verdict = split` and `split_proposal_path = <absolute path to the
+proposal file>` in the final token block. Do NOT emit `scope_verdict = proceed` when
+stopping for scope — `proceed` means normal successful completion.
+
+A split stop is the only sanctioned zero-change exit. The zero-changes prohibition
+(above) still governs `proceed` completions. A split stop never routes through
+zero-change detection — it routes directly to the scope-split re-plan loop.
+
 ### Step 6: Handoff Report
 
 Output to terminal:
@@ -256,6 +273,7 @@ Then emit these structured output tokens on their own lines so recipe capture bl
 ```
 worktree_path = ${WORKTREE_PATH}
 branch_name = ${BRANCH_NAME}
+scope_verdict = proceed
 ```
 
 **If this is a `_part_` plan file:** The orchestrator MUST merge this worktree

@@ -77,7 +77,7 @@ if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
 
 _PATH_LIKE_ARGS: frozenset[str] = frozenset(
-    {"output_dir", "workspace", "diagnostics_log_dir", "investigation_path"}
+    {"output_dir", "workspace", "diagnostics_log_dir", "investigation_path", "plan_path"}
 )
 
 

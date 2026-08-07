@@ -216,6 +216,7 @@ _WRAPPER_LOOP_EXEMPT_COUNTERS: frozenset[str] = frozenset(
     {
         "group_iteration_count",
         "ref_push_count",
+        "scope_split_count",
     }
 )
 """Counters exempt from the cross-cycle reset requirement.

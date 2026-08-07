@@ -126,7 +126,6 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "methodology_venue_appendix",  # recipe/methodology_venue_appendix.py: _ML_SUB_AREA_CACHE
         "rules_blocks",  # recipe/rules/rules_blocks.py: _BUDGETS_CACHE = YamlFileCache()
         "rules_phoropter_adjacency",  # recipe/rules/rules_phoropter_adjacency.py: _PREFIXES_CACHE
-        "_types",  # hooks/_capture/_types.py: TRANSITION_RESCUE_BUDGET = SweepBudgetSpec(...)
         # _RETENTION_SECONDS resolved once at import time from the single-source-of-truth
         # STATE_RECLAIMABILITY sweep grace (_lifecycle_policy.SWEEP_GRACE_SECONDS).
         "_capture_lifecycle",
@@ -159,10 +158,11 @@ _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
 )
 _SINGLETON_SAFE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
     {
-        ("context_admission_ledger", "_EVENT_TYPES"),
-        ("context_admission_ledger", "_EFFECT_TYPES"),
-        ("context_admission_ledger", "_STATE_TYPES"),
-        ("tools_kitchen", "_OPEN_KITCHEN_REQUEST_CTX"),
+        ("src/autoskillit/hooks/_capture/_types.py", "TRANSITION_RESCUE_BUDGET"),
+        ("src/autoskillit/pipeline/context_admission_ledger.py", "_EVENT_TYPES"),
+        ("src/autoskillit/pipeline/context_admission_ledger.py", "_EFFECT_TYPES"),
+        ("src/autoskillit/pipeline/context_admission_ledger.py", "_STATE_TYPES"),
+        ("src/autoskillit/server/tools/tools_kitchen.py", "_OPEN_KITCHEN_REQUEST_CTX"),
     }
 )
 
@@ -277,6 +277,7 @@ def test_no_sync_manifest_imports_in_production_code():
 def test_singleton_definition_locality(source_file: Path) -> None:
     """Module-level constructor calls are only permitted in SINGLETON_ALLOWED_MODULES."""
     mod_stem = source_file.stem
+    source_path = _rel(source_file)
     if mod_stem in SINGLETON_ALLOWED_MODULES:
         pytest.skip(f"{mod_stem!r} is in SINGLETON_ALLOWED_MODULES")
 
@@ -298,7 +299,7 @@ def test_singleton_definition_locality(source_file: Path) -> None:
         if (
             target_name is not None
             and (
-                mod_stem,
+                source_path,
                 target_name,
             )
             in _SINGLETON_SAFE_ASSIGNMENTS
@@ -323,9 +324,22 @@ def test_context_admission_ledger_singletons_are_assignment_scoped() -> None:
     assert "context_admission_ledger" not in SINGLETON_ALLOWED_MODULES
     assert {
         target
-        for module, target in _SINGLETON_SAFE_ASSIGNMENTS
-        if module == "context_admission_ledger"
+        for path, target in _SINGLETON_SAFE_ASSIGNMENTS
+        if path == "src/autoskillit/pipeline/context_admission_ledger.py"
     } == {"_EVENT_TYPES", "_EFFECT_TYPES", "_STATE_TYPES"}
+
+
+def test_capture_types_singleton_is_path_and_assignment_scoped(tmp_path: Path) -> None:
+    assert "_types" not in SINGLETON_ALLOWED_MODULES
+    assert (
+        "src/autoskillit/hooks/_capture/_types.py",
+        "TRANSITION_RESCUE_BUDGET",
+    ) in _SINGLETON_SAFE_ASSIGNMENTS
+    unrelated = tmp_path / "_types.py"
+    unrelated.write_text("TRANSITION_RESCUE_BUDGET = SweepBudgetSpec()\n")
+
+    with pytest.raises(AssertionError, match="Singleton locality violations"):
+        test_singleton_definition_locality(unrelated)
 
 
 # ── Rule 4: test_no_module_level_io ───────────────────────────────────────────

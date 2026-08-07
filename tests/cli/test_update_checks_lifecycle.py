@@ -227,9 +227,7 @@ def test_install_invalidates_fetch_cache(monkeypatch: pytest.MonkeyPatch, tmp_pa
     monkeypatch.delenv("CLAUDECODE", raising=False)
 
     from autoskillit import __version__
-    from autoskillit.core import PluginArtifactIdentity
-
-    from autoskillit.core import new_plugin_artifact_incarnation_id
+    from autoskillit.core import PluginArtifactIdentity, new_plugin_artifact_incarnation_id
 
     incarnation_id = new_plugin_artifact_incarnation_id()
     gen_dir = (

@@ -4777,6 +4777,8 @@ def test_smoke_utils_all_exports_complete() -> None:
     import autoskillit.smoke_utils as su
 
     expected = {
+        "DIFF_SIZE_GATE_EXCLUDED_PATHSPECS",
+        "DIFF_SIZE_GATE_MAX_CHANGED_FILES",
         "EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY",
         "EXPERIMENTAL_REVIEW_AUDITORS",
         "aggregate_combined_review_candidates",
@@ -4787,6 +4789,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "build_malformed_review_envelope",
         "check_bug_report_non_empty",
         "check_commits_ahead",
+        "check_diff_size",
         "check_loop_iteration",
         "check_loop_with_progress",
         "check_ref_state",
@@ -4837,6 +4840,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "build_malformed_review_envelope",
         "check_bug_report_non_empty",
         "check_commits_ahead",
+        "check_diff_size",
         "check_loop_iteration",
         "check_loop_with_progress",
         "check_review_loop",

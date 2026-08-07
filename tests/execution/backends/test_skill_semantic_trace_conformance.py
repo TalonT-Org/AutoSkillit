@@ -60,7 +60,7 @@ def _semantic_plan() -> SkillSemanticPlan:
             ChildModelPolicySpec(
                 role=_REVIEW_ROLE,
                 model_class="sonnet",
-                reasoning_effort="high",
+                reasoning_effort="medium",
             ),
         ),
         sibling_skills=(SiblingSkillSpec(name="smoke-task"),),

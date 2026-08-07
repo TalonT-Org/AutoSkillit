@@ -17,13 +17,22 @@ def _load(name: str) -> dict:
     return load_yaml(RECIPES_DIR / f"{name}.yaml")
 
 
+def _assert_proceed_routes_to_check_changes(step: dict, *, label: str) -> None:
+    proceed_routes = [
+        entry.get("route")
+        for entry in step.get("on_result", [])
+        if "proceed" in str(entry.get("when", ""))
+    ]
+    assert proceed_routes == ["check_changes"], (
+        f"{label} proceed result must route to check_changes, got {proceed_routes!r}"
+    )
+
+
 def test_implementation_recipe_has_change_check_after_implement() -> None:
     """implement must route directly to the zero-change check."""
     data = _load("implementation")
     implement_step = data["steps"]["implement"]
-    assert implement_step.get("on_success") == "check_changes", (
-        f"got {implement_step.get('on_success')!r}"
-    )
+    _assert_proceed_routes_to_check_changes(implement_step, label="implement")
 
 
 def test_implementation_recipe_check_changes_routes_false_to_close() -> None:
@@ -38,16 +47,12 @@ def test_implementation_recipe_check_changes_routes_false_to_close() -> None:
     )
 
 
-def test_retry_worktree_all_exits_route_to_check_changes() -> None:
-    """retry_worktree: all on_result branches and on_context_limit must route to check_changes."""
+def test_retry_worktree_proceed_exits_route_to_check_changes() -> None:
+    """retry_worktree proceed and context-limit exits must route to check_changes."""
     data = _load("implementation")
     step = data["steps"]["retry_worktree"]
 
-    on_result = step.get("on_result", [])
-    for entry in on_result:
-        assert entry.get("route") == "check_changes", (
-            f"retry_worktree on_result entry must route to check_changes, got: {entry}"
-        )
+    _assert_proceed_routes_to_check_changes(step, label="retry_worktree")
 
     assert step.get("on_context_limit") == "check_changes", (
         f"retry_worktree.on_context_limit must be 'check_changes', "
@@ -60,19 +65,12 @@ def test_remediation_recipe_has_same_circuit_breaker() -> None:
     data = _load("remediation")
 
     implement_step = data["steps"]["implement"]
-    assert implement_step.get("on_success") == "check_changes", (
-        f"remediation implement.on_success must be 'check_changes', "
-        f"got {implement_step.get('on_success')!r}"
-    )
+    _assert_proceed_routes_to_check_changes(implement_step, label="remediation implement")
 
     assert "check_changes" in data["steps"], "remediation check_changes step must exist"
 
     retry_step = data["steps"]["retry_worktree"]
-    on_result = retry_step.get("on_result", [])
-    for entry in on_result:
-        assert entry.get("route") == "check_changes", (
-            f"remediation retry_worktree on_result entry must route to check_changes: {entry}"
-        )
+    _assert_proceed_routes_to_check_changes(retry_step, label="remediation retry_worktree")
 
     assert retry_step.get("on_context_limit") == "check_changes", (
         f"remediation retry_worktree.on_context_limit must be 'check_changes', "

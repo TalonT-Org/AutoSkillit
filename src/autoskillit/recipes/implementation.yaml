@@ -440,6 +440,7 @@ steps:
     tool: run_python
     with:
       callable: autoskillit.smoke_utils.check_diff_size
+      work_dir: ${{ context.worktree_path }}
       worktree_path: ${{ context.worktree_path }}
       base_branch: ${{ context.merge_target }}
       plan_path: ${{ context.plan_path }}

@@ -299,6 +299,8 @@ skills:
     - "%%ORDER_UP::[a-f0-9]+%%"
     pattern_examples:
     - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP::a1b2c3d4%%"
+    - "scope_verdict = proceed"
+    - "scope_verdict = split"
     write_behavior: conditional
     write_expected_when:
     - "scope_verdict[ \\t]*=[ \\t]*proceed"
@@ -454,6 +456,8 @@ skills:
     - "%%ORDER_UP::[a-f0-9]+%%"
     pattern_examples:
     - "worktree_path = /tmp/worktrees/impl-foo-20260316\nbranch_name = feature/123\nphases_implemented = 2\n%%ORDER_UP::a1b2c3d4%%"
+    - "scope_verdict = proceed"
+    - "scope_verdict = split"
     write_behavior: conditional
     write_expected_when:
     - "phases_implemented[ \\t]*=[ \\t]*[1-9][0-9]*"

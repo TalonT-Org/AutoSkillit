@@ -76,6 +76,25 @@ def installed_plugin_artifact_manifest_payload(
     }
 
 
+def _classify_bytecode_contamination(root: Path) -> str:
+    """Scan an artifact tree for bytecode contamination.
+
+    Returns a short description if ``__pycache__``/``*.pyc``/``*.pyo`` are
+    found, empty string otherwise. Claims co-occurrence, not causation —
+    "digest mismatch with bytecode contamination present."
+    """
+    pycache_dirs = list(root.rglob("__pycache__"))
+    pyc_files = [*root.rglob("*.pyc"), *root.rglob("*.pyo")]
+    if not pycache_dirs and not pyc_files:
+        return ""
+    parts: list[str] = []
+    if pycache_dirs:
+        parts.append(f"{len(pycache_dirs)} __pycache__ dir(s)")
+    if pyc_files:
+        parts.append(f"{len(pyc_files)} .pyc/.pyo file(s)")
+    return ", ".join(parts)
+
+
 def read_installed_plugin_artifact_identity(
     managed_path: Path,
     *,
@@ -187,6 +206,12 @@ def read_installed_plugin_artifact_identity(
             f"installed plugin artifact cannot be digested: {canonical_root}"
         ) from exc
     if raw["artifact_digest"] != observed_digest:
+        contamination = _classify_bytecode_contamination(canonical_root)
+        if contamination:
+            raise PluginArtifactValidationError(
+                f"installed plugin content digest mismatch "
+                f"(bytecode contamination present: {contamination})"
+            )
         raise PluginArtifactValidationError("installed plugin content digest mismatch")
     return PluginArtifactIdentity(
         semantic_key=raw["semantic_key"],

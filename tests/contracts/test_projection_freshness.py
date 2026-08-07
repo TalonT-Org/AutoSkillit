@@ -224,68 +224,125 @@ class TestAssetDigestMirrorsTheCopier:
 
 
 class TestBytecodeExclusion:
-    """Bytecode (``__pycache__/``, ``*.pyc``, ``*.pyo``) must never enter a
-    published artifact — exclusion is enforced by ``is_projected_asset``
-    at every depth, and the digest/copier stay in lockstep through it.
+    """The copier and the digest vocabulary must never disagree about bytecode.
+
+    ``is_projected_asset`` excludes ``__pycache__`` directories and
+    ``.pyc``/``.pyo`` files at every depth — see ``_projection_cache.py``.
+    These tests exercise that exclusion at the call sites that actually
+    matter: the file copier (``_copy_non_skill_plugin_assets``, which writes
+    what a session executes), the digest vocabulary walk
+    (``iter_public_plugin_asset_files``, which keys the projection cache),
+    and the cache-key digest itself (``public_plugin_asset_digest``). If any
+    of these drift apart, one silently ships or hashes bytes another believes
+    were excluded — the same class of defect this module's docstring
+    describes for stale snapshots, in a new place.
     """
 
     @staticmethod
-    def _seed_bytecode(source: Path) -> None:
-        """Seed a source tree with bytecode at multiple depths."""
-        hooks = source / "hooks"
-        hooks.mkdir(parents=True, exist_ok=True)
-        (hooks / "real.py").write_text("pass")
-        guards = hooks / "guards"
-        guards.mkdir(parents=True, exist_ok=True)
-        (guards / "guard.py").write_text("pass")
+    def _seed_source_with_bytecode(source: Path) -> None:
+        (source / "hooks" / "guards").mkdir(parents=True)
+        (source / "hooks" / "guard_one.py").write_text("real hook\n")
+        (source / "hooks" / "guards" / "guard_two.py").write_text("real hook\n")
+        (source / "hooks" / "__pycache__").mkdir()
+        (source / "hooks" / "__pycache__" / "quota_guard.cpython-311.pyc").write_bytes(b"fake pyc")
+        (source / "hooks" / "guards" / "__pycache__").mkdir()
+        (source / "hooks" / "guards" / "__pycache__" / "quota_guard.cpython-311.pyc").write_bytes(
+            b"fake pyc"
+        )
+        (source / "hooks" / "stale.pyo").write_bytes(b"fake pyo")
+        (source / "scripts" / "__pycache__").mkdir(parents=True)
+        (source / "scripts" / "module.py").write_text("real script\n")
+        (source / "scripts" / "__pycache__" / "module.cpython-311.pyc").write_bytes(b"fake pyc")
 
-        # Bytecode at hooks/ level
-        pc1 = hooks / "__pycache__"
-        pc1.mkdir(exist_ok=True)
-        (pc1 / "real.cpython-311.pyc").write_bytes(b"fake pyc")
+    def test_copier_excludes_bytecode_at_every_depth(self, tmp_path: Path) -> None:
+        from autoskillit.workspace._projected_artifact.materialization import (
+            _copy_non_skill_plugin_assets,
+        )
+        from autoskillit.workspace._projection_cache import is_projected_asset
 
-        # Bytecode at hooks/guards/ level
-        pc2 = guards / "__pycache__"
-        pc2.mkdir(exist_ok=True)
-        (pc2 / "guard.cpython-311.pyc").write_bytes(b"fake pyc")
-
-        # .pyo file at hooks/ level
-        (hooks / "stale.pyo").write_bytes(b"fake pyo")
-
-        # Bytecode under scripts/
-        scripts = source / "scripts"
-        scripts.mkdir(parents=True, exist_ok=True)
-        (scripts / "helper.py").write_text("pass")
-        pc3 = scripts / "__pycache__"
-        pc3.mkdir(exist_ok=True)
-        (pc3 / "helper.cpython-311.pyc").write_bytes(b"fake pyc")
-
-    def test_iter_walk_excludes_bytecode(self, tmp_path: Path) -> None:
-        source = tmp_path / "src"
+        source = tmp_path / "source"
         source.mkdir()
-        self._seed_bytecode(source)
+        self._seed_source_with_bytecode(source)
+        destination = tmp_path / "destination"
+        destination.mkdir()
+
+        _copy_non_skill_plugin_assets(source, destination)
+
+        copied_pycache_dirs = list(destination.rglob("__pycache__"))
+        copied_bytecode_files = [
+            p for p in destination.rglob("*") if p.is_file() and p.suffix in (".pyc", ".pyo")
+        ]
+        assert not copied_pycache_dirs, f"copier published __pycache__ dirs: {copied_pycache_dirs}"
+        assert not copied_bytecode_files, (
+            f"copier published bytecode files: {copied_bytecode_files}"
+        )
+
+        # The predicate behind the copier agrees, at the exact seeded sites.
+        assert not is_projected_asset(source / "hooks" / "__pycache__", top_level=False)
+        assert not is_projected_asset(
+            source / "hooks" / "__pycache__" / "quota_guard.cpython-311.pyc", top_level=False
+        )
+        assert not is_projected_asset(source / "hooks" / "stale.pyo", top_level=False)
+
+        # Sanity: the copier did real work, so the empty assertions above
+        # aren't trivially true because nothing was copied at all.
+        assert (destination / "hooks" / "guard_one.py").is_file()
+        assert (destination / "hooks" / "guards" / "guard_two.py").is_file()
+        assert (destination / "scripts" / "module.py").is_file()
+
+    def test_asset_vocabulary_matches_the_copier_under_bytecode_seeding(
+        self, tmp_path: Path
+    ) -> None:
+        from autoskillit.workspace._projected_artifact.materialization import (
+            _copy_non_skill_plugin_assets,
+        )
+        from autoskillit.workspace._projection_cache import iter_public_plugin_asset_files
+
+        source = tmp_path / "source"
+        source.mkdir()
+        self._seed_source_with_bytecode(source)
+        destination = tmp_path / "destination"
+        destination.mkdir()
+
+        _copy_non_skill_plugin_assets(source, destination)
+
+        digested = {str(p.relative_to(source)) for p in iter_public_plugin_asset_files(source)}
+        copied = {str(p.relative_to(destination)) for p in destination.rglob("*") if p.is_file()}
+        assert digested == copied, (
+            "the digest vocabulary and the copier disagree on a bytecode-seeded tree:\n"
+            f"  only in digest walk: {sorted(digested - copied)}\n"
+            f"  only in copier output: {sorted(copied - digested)}"
+        )
+
+    def test_iter_walk_excludes_bytecode_directly(self, tmp_path: Path) -> None:
+        """Direct membership check, independent of the copier comparison above."""
+        from autoskillit.workspace._projection_cache import iter_public_plugin_asset_files
+
+        source = tmp_path / "source"
+        source.mkdir()
+        self._seed_source_with_bytecode(source)
 
         walked = set(iter_public_plugin_asset_files(source))
         bytecode = {p for p in walked if "__pycache__" in p.parts or p.suffix in {".pyc", ".pyo"}}
         assert not bytecode, f"iter_public_plugin_asset_files yielded bytecode entries: {bytecode}"
 
-    def test_digest_ignores_bytecode(self, tmp_path: Path) -> None:
-        source = tmp_path / "src"
-        source.mkdir()
-        self._seed_bytecode(source)
-
-        d_with_bytecode = public_plugin_asset_digest(source)
-
-        # Remove all bytecode
+    def test_cache_key_digest_ignores_bytecode(self, tmp_path: Path) -> None:
+        """Adding or removing only bytecode must not move the projection cache key."""
         import shutil
 
-        for pc in list(source.rglob("__pycache__")):
-            shutil.rmtree(pc)
-        for pyc in list(source.rglob("*.pyo")):
-            pyc.unlink()
+        source = tmp_path / "source"
+        source.mkdir()
+        self._seed_source_with_bytecode(source)
 
-        d_clean = public_plugin_asset_digest(source)
-        assert d_with_bytecode == d_clean, (
-            "digest changed when bytecode was removed — bytecode should be "
-            "excluded from the digest by is_projected_asset"
+        with_bytecode = public_plugin_asset_digest(source)
+
+        for pycache in list(source.rglob("__pycache__")):
+            shutil.rmtree(pycache)
+        for artifact in list(source.rglob("*.pyo")):
+            artifact.unlink()
+
+        without_bytecode = public_plugin_asset_digest(source)
+        assert with_bytecode == without_bytecode, (
+            "public_plugin_asset_digest changed when only bytecode was removed — "
+            "bytecode must be excluded from the digest by is_projected_asset"
         )

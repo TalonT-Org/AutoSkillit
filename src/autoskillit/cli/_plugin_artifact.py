@@ -178,7 +178,11 @@ class InstalledPluginArtifactAuthority:
         backend: CodingAgentBackend,
         load_mode: PluginLoadMode,
     ) -> PluginLaunchBinding:
-        """Resolve current generation, acquire a shared reader lease, validate."""
+        """Resolve current generation, acquire a shared reader lease, validate.
+
+        If validation of the current generation fails, attempts a single
+        self-heal republish from source before propagating the error.
+        """
         del backend
         if not load_mode.consumes_artifact:
             raise PluginArtifactValidationError(
@@ -195,7 +199,92 @@ class InstalledPluginArtifactAuthority:
             # No generation store yet — fall back to legacy installed root
             return self._acquire_from_root(self._root, load_mode)
 
-        return self._acquire_from_root(generation_dir, load_mode)
+        try:
+            return self._acquire_from_root(generation_dir, load_mode)
+        except PluginArtifactValidationError:
+            healed = self._self_heal_republish()
+            if healed is None:
+                raise
+            return self._acquire_from_root(healed, load_mode)
+
+    def _self_heal_republish(self) -> Path | None:
+        """Publish a replacement generation from source on validation failure.
+
+        Returns the new generation directory on success, ``None`` if the
+        republish itself fails. At most one self-heal per authority instance.
+        """
+        if getattr(self, "_self_healed", False):
+            return None
+        self._self_healed = True
+        try:
+            import json
+            import tempfile
+
+            from autoskillit import __version__
+            from autoskillit.core import (
+                _AUTOSKILLIT_PLUGIN_KEY,
+                SkillExecutionRole,
+                SkillSource,
+                _InstallLock,
+                atomic_write,
+                pkg_root,
+            )
+            from autoskillit.hooks import generate_hooks_json
+            from autoskillit.workspace import (
+                DefaultSkillResolver,
+                EffectiveSkillCatalog,
+                SkillCatalogEntry,
+                SkillProjectionContext,
+                materialize_sanitized_plugin_root,
+                publish_generation,
+            )
+
+            source_root = pkg_root()
+            source_infos = tuple(
+                s for s in DefaultSkillResolver().list_all() if s.source is SkillSource.BUNDLED
+            )
+            catalog = EffectiveSkillCatalog(
+                skills=tuple(SkillCatalogEntry.from_skill_info(s) for s in source_infos),
+                execution_role=SkillExecutionRole.SESSION,
+            )
+            with tempfile.TemporaryDirectory(prefix="self-heal-") as staging:
+                staging_root = Path(staging) / "content"
+                materialize_sanitized_plugin_root(
+                    source_root,
+                    staging_root,
+                    catalog,
+                    SkillProjectionContext(cwd=Path.cwd(), catalog=catalog),
+                )
+                hooks_dir = staging_root / "hooks"
+                hooks_dir.mkdir(parents=True, exist_ok=True)
+                atomic_write(
+                    hooks_dir / "hooks.json",
+                    json.JSONEncoder(indent=2).encode(generate_hooks_json()) + "\n",
+                )
+                with _InstallLock():
+                    identity = publish_generation(
+                        home=Path.home(),
+                        plugin_ref=_AUTOSKILLIT_PLUGIN_KEY,
+                        version=__version__,
+                        semantic_key=self._semantic_key,
+                        source_root=staging_root,
+                    )
+            log_plugin_artifact_lifecycle(
+                logger,
+                action="self_heal_republish",
+                outcome="succeeded",
+                artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN.value,
+                semantic_key=self._semantic_key,
+                incarnation=identity.incarnation_id,
+            )
+            return identity.managed_path
+        except Exception as exc:
+            logger.warning(
+                "self_heal_republish_failed: %s",
+                exc,
+                exc_info=True,
+            )
+            return None
 
     def _acquire_shared_lease_with_retry(
         self,

@@ -74,7 +74,7 @@ def _skill_info(slug: str) -> SkillInfo:
         SkillSource.BUNDLED_EXTENDED,
         SKILLS_DIR / name / "SKILL.md",
     )
-    assert info.invalid_reason is None, info.invalid_reason
+    assert not info.invalidities, info.invalidities
     return info
 
 

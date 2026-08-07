@@ -1291,7 +1291,7 @@ def _load_phase_d_skill(skill_name: str) -> SkillInfo:
         SkillSource.BUNDLED_EXTENDED,
         skill_path,
     )
-    assert info.invalid_reason is None
+    assert not info.invalidities, info.invalidities
     return info
 
 
@@ -1400,7 +1400,7 @@ def test_planner_skill_vectors_match_reviewed_inventory(
         skill_path,
     )
 
-    assert info.invalid_reason is None
+    assert not info.invalidities, info.invalidities
     assert [
         [vector.id, vector.disposition.value, vector.role, vector.task.task_id]
         for vector in info.exploration_vectors
@@ -2034,7 +2034,7 @@ def test_migration_completeness_census_total_vector_count() -> None:
             else SkillSource.BUNDLED_EXTENDED
         )
         info = _skill_info_from_frontmatter(skill_md_path.parent.name, source, skill_md_path)
-        assert info.invalid_reason is None, (skill_md_path, info.invalid_reason)
+        assert not info.invalidities, (skill_md_path, info.invalidities)
 
         if (skill_md_path.parent / "exploration.yaml").is_file():
             sidecar_count += 1

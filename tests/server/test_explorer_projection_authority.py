@@ -170,7 +170,7 @@ def test_investigate_activation_projects_all_migrated_vectors_as_dispatch() -> N
     path = pkg_root() / "skills_extended" / "investigate" / "SKILL.md"
     info = _skill_info_from_frontmatter("investigate", SkillSource.BUNDLED, path)
 
-    assert info.invalid_reason is None
+    assert not info.invalidities, info.invalidities
     migrated = [
         vector
         for vector in info.exploration_vectors

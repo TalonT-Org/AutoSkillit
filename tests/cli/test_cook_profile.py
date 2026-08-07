@@ -21,9 +21,17 @@ from autoskillit.core import (
     RepositoryProfileId,
     SkillExecutionRole,
     SkillProjectionContextAuthority,
+    SkillSource,
     ValidatedAddDir,
+    pkg_root,
 )
-from autoskillit.workspace import CompiledSessionSkillCatalog, EffectiveSkillCatalog
+from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
+from autoskillit.workspace import (
+    CompiledSessionSkillCatalog,
+    EffectiveSkillCatalog,
+    SkillCatalogEntry,
+)
+from autoskillit.workspace.skills import _skill_info_from_frontmatter
 from tests.fakes import adapt_test_skill_semantics
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
@@ -35,6 +43,7 @@ def _make_mock_backend_class():
     class _MockBackend:
         name = "claude-code"
         conventions = BackendConventions()
+        exploration_dispatch_renderer = ClaudeCodeBackend().exploration_dispatch_renderer
         capabilities = SimpleNamespace(
             hook_trust_policy=HookTrustPolicy.AUTOMATED,
             session_dir_persistent=False,
@@ -127,10 +136,15 @@ def test_cook_skips_repository_profile_resolution_for_ordinary_catalog(
     cfg = MagicMock()
     cfg.experimental_enabled = True
     cfg.providers.profiles = {}
+    ordinary_path = pkg_root() / "skills" / "open-kitchen" / "SKILL.md"
+    ordinary_info = _skill_info_from_frontmatter(
+        "open-kitchen", SkillSource.BUNDLED, ordinary_path
+    )
+    assert not ordinary_info.invalidities, ordinary_info.invalidities
     ordinary_compilation = CompiledSessionSkillCatalog(
         backend="claude-code",
         catalog=EffectiveSkillCatalog(
-            skills=(),
+            skills=(SkillCatalogEntry.from_skill_info(ordinary_info),),
             execution_role=SkillExecutionRole.SESSION,
         ),
         unavailable=(),
@@ -278,6 +292,7 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
             persistent_session_root_subdir=Path("codex-sessions"),
             skill_sigil="$",
         )
+        exploration_dispatch_renderer = CodexBackend().exploration_dispatch_renderer
         capabilities = SimpleNamespace(
             hook_trust_policy=HookTrustPolicy.REVIEW_EACH_SESSION,
             session_dir_persistent=True,

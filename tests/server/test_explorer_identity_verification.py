@@ -159,7 +159,7 @@ def test_always_active_target_identity_build_succeeds(tmp_path: Path) -> None:
     info = _skill_info_from_frontmatter(
         _ALWAYS_ACTIVE_SKILL, SkillSource.BUNDLED_EXTENDED, skill_path
     )
-    assert info.invalid_reason is None
+    assert not info.invalidities, info.invalidities
     migrated = [
         vector
         for vector in info.exploration_vectors

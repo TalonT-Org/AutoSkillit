@@ -87,7 +87,7 @@ def test_vector_contract_builds_phase_b_task_and_survives_catalog_projection(
 ) -> None:
     info = _parse(tmp_path)
 
-    assert info.invalid_reason is None
+    assert not info.invalidities, info.invalidities
     assert len(info.exploration_vectors) == 2
     migrated = info.exploration_vectors[0]
     assert migrated.disposition is ExplorationVectorDisposition.MIGRATED
@@ -113,7 +113,7 @@ def test_planner_extract_domain_deep_is_the_exact_closed_applicability_value(
 
     info = _parse(tmp_path, sidecar=sidecar)
 
-    assert info.invalid_reason is None
+    assert not info.invalidities, info.invalidities
     assert (
         info.exploration_vectors[0].applicability
         is ExplorationVectorApplicabilityId.PLANNER_EXTRACT_DOMAIN_DEEP
@@ -219,8 +219,8 @@ def test_marker_contract_rejects_missing_unknown_nested_and_escaped_tokens(
 ) -> None:
     info = _parse(tmp_path, _FRONTMATTER + body)
 
-    assert info.invalid_reason is not None
-    assert reason in info.invalid_reason
+    assert info.invalidities
+    assert any(reason in invalidity.detail for invalidity in info.invalidities)
     assert info.exploration_vectors == ()
 
 
@@ -233,8 +233,8 @@ def test_sidecar_vector_schema_rejects_unknown_keys(tmp_path: Path) -> None:
 
     info = _parse(tmp_path, sidecar=sidecar)
 
-    assert info.invalid_reason is not None
-    assert "unknown keys" in info.invalid_reason
+    assert info.invalidities
+    assert any("unknown keys" in invalidity.detail for invalidity in info.invalidities)
 
 
 def test_sidecar_vector_parser_requires_a_mapping_with_valid_entries() -> None:

@@ -71,11 +71,12 @@ __all__ = [
     "decode_capture_request",
     "decode_lineage_ref_json",
     "encode_capture_request",
+    "parse_capture_degraded_v3",
     "parse_capture_failure_v2",
     "parse_capture_failure_v3",
     "parse_capture_v2",
-    "render_capture_failure_v2",
     "render_capture_degraded_v3",
+    "render_capture_failure_v2",
     "render_capture_failure_v3",
     "render_capture_v2",
 ]

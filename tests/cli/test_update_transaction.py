@@ -226,7 +226,7 @@ def _run_poisoned_subprocess(driver_body: str) -> subprocess.CompletedProcess[st
     )
 
 
-def test_t_b1_incident_reproduction_raising_probe_survives_real_logging_chain() -> None:
+def test_raising_post_pivot_probe_survives_real_logging_chain() -> None:
     """A raising post-pivot probe remains reportable without Rich imports."""
     driver = """
 import importlib.metadata
@@ -278,16 +278,8 @@ print("SURVIVED", flush=True)
     assert "ModuleNotFoundError" not in result.stderr
 
 
-def test_t_b2_module_default_logging_survives_deleted_rich_tree() -> None:
-    """T-B2: the module-import-time default structlog config (core/logging.py,
-    consulted by every autoskillit path that logs before configure_logging()
-    runs — including the entire update transaction, which executes ahead of
-    any configure_logging() call, see cli/app.py's main()) must render an
-    exception without crashing when rich is unimportable.
-
-    Fails before B-I1: the default chain had no explicit ``processors=``, so
-    structlog's own default rich-capable ConsoleRenderer applied.
-    """
+def test_module_default_logging_survives_deleted_rich_tree() -> None:
+    """Default logging renders exceptions when Rich is unavailable."""
     driver = """
 from autoskillit.core.logging import get_logger
 
@@ -311,11 +303,8 @@ print("SURVIVED", flush=True)
     assert "simulated_failure" in result.stderr
 
 
-def test_t_b2_configure_logging_console_branch_survives_deleted_rich_tree() -> None:
-    """T-B2: configure_logging()'s console (TTY, non-JSON) branch must also
-    survive — same property as the module default, exercised via the
-    explicit call site every CLI subcommand uses.
-    """
+def test_configure_logging_console_branch_survives_deleted_rich_tree() -> None:
+    """Configured console logging renders exceptions without Rich."""
     driver = """
 from autoskillit.core import configure_logging, get_logger
 
@@ -364,13 +353,8 @@ print("STREAM_CONTENT_END", flush=True)
     assert "simulated_failure" in stream_content
 
 
-def test_t_b5_verifier_fault_injection_survives_real_logging_chain() -> None:
-    """T-B5: a raising ``verify_installed_plugin_artifact`` — rendered
-    through the real logging chain, with rich unimportable — maps to the
-    same failure outcome as T-B1, no escape. Same shape as T-B1, one phase
-    later (POST_UPDATE_ARTIFACT_VERIFICATION instead of
-    FRESH_VERSION_METADATA_GATE).
-    """
+def test_verifier_fault_survives_real_logging_chain() -> None:
+    """Artifact-verification faults remain reportable without Rich."""
     driver = """
 import json
 import subprocess
@@ -431,16 +415,10 @@ print("SURVIVED", flush=True)
     assert "ModuleNotFoundError" not in result.stderr
 
 
-def test_t_b3_post_pivot_verification_is_out_of_process(
+def test_post_pivot_verification_is_out_of_process(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """T-B3: FRESH_VERSION_METADATA_GATE must not consult version_reader for
-    the post-pivot read when fresh_version_prober is supplied — the
-    transaction reaches INSTALL_CHILD_INVOCATION and completes.
-
-    Fails before B-I3: the gate always called version_reader (defaulting to
-    in-process importlib.metadata) for both the pre- and post-pivot reads.
-    """
+    """Post-pivot verification uses the fresh subprocess probe."""
     _prepare(monkeypatch)
     call_count = 0
 
@@ -467,14 +445,10 @@ def test_t_b3_post_pivot_verification_is_out_of_process(
     assert result.phase_history == UPDATE_TRANSACTION_PHASES
 
 
-def test_t_b3_default_fresh_version_prober_probes_path_resolved_autoskillit_version(
+def test_default_fresh_version_prober_uses_resolved_autoskillit(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """T-B3 companion: the production default (neither fresh_version_prober
-    nor version_reader injected) constructs a subprocess invocation of the
-    resolved autoskillit entrypoint with --version under the maintenance
-    env — never touching in-process metadata for the post-pivot read.
-    """
+    """The default fresh probe invokes the resolved CLI in the maintenance env."""
     fake_entrypoint = tmp_path / "bin" / "autoskillit"
     fake_entrypoint.parent.mkdir()
     fake_entrypoint.write_text("#!/bin/sh\necho 9.9.9\n")

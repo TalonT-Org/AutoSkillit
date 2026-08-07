@@ -99,6 +99,24 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "The retired-shape registry identifies the exact obsolete install artifact "
         "before reconciliation removes a directory tree.",
     ),
+    (
+        "workspace/_update_obligation.py",
+        "clear_obligation",
+        "_obligation_path(home).unlink",
+    ): (
+        1,
+        "Compare-and-delete removes only the matched publication journal while holding "
+        "its exclusive obligation lease after exact publication verification.",
+    ),
+    (
+        "workspace/_projected_artifact/_hook_repair.py",
+        "_rollback_repair",
+        "manifest_path.unlink",
+    ): (
+        1,
+        "Rollback removes only a newly-created external manifest while holding the "
+        "incarnation's exclusive artifact lease.",
+    ),
     ("workspace/session_skills.py", "_remove_and_verify", "shutil.rmtree"): (
         1,
         "Generated session homes are ephemeral lease-owned artifacts, and cleanup "
@@ -266,12 +284,13 @@ STRICT_PLUGIN_WRITE_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Every retirement-v2 migration and mutation surfaces file and parent fsync failures.",
     ),
     (
-        "cli/_plugin_artifact.py",
-        "_publish_installed_plugin_artifact_locked",
+        "workspace/_installed_artifact.py",
+        "write_installed_plugin_artifact_manifest_locked",
         "write_versioned_json:strict=True",
     ): (
         1,
-        "Installed incarnation publication persists exact identity before launch.",
+        "Installed incarnation publication persists exact identity before launch; "
+        "shared by first publish and the in-process repair's manifest refresh.",
     ),
     (
         "workspace/_projected_artifact/authority.py",

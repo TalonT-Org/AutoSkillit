@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import regex as re
 
 from autoskillit.cli._install_snapshot import _fetch_cache_path
 from autoskillit.core import AUTOSKILLIT_INSTALLED_VERSION, atomic_write, get_logger
@@ -71,8 +72,6 @@ def _scrub_auth(text: str) -> str:
     token = os.environ.get("GITHUB_TOKEN")
     if token:
         text = text.replace(token, "***")
-    import regex as re
-
     text = re.sub(r"(?i)Bearer\s+\S+", "Bearer ***", text)
     return text
 

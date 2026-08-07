@@ -19,7 +19,7 @@ from tests.arch._rules import (
     _STRENUM_SRC_COMPARE_EXEMPT_PATHS,
     RuleDescriptor,
     Violation,
-    _rel,  # noqa: F401  # re-exported for test_layer_enforcement, test_subpackage_isolation
+    _rel,  # noqa: F401  # shared by layer and subpackage checks
 )
 
 # ── Path constants ────────────────────────────────────────────────────────────
@@ -55,6 +55,15 @@ def _has_reraise(body: list[ast.stmt]) -> bool:
     return False
 
 
+def _has_named_call(body: list[ast.stmt], function_name: str) -> bool:
+    """Return whether a handler delegates to a named reporting helper."""
+    for node in ast.walk(ast.Module(body=body, type_ignores=[])):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id == function_name:
+                return True
+    return False
+
+
 class ArchitectureViolationVisitor(ast.NodeVisitor):
     def __init__(self, filepath: Path) -> None:
         self.filepath = filepath
@@ -62,6 +71,7 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
         self._print_exempt = filepath.name in _PRINT_EXEMPT
         self._asyncio_pipe_exempt = filepath.name in _ASYNCIO_PIPE_EXEMPT
         self._broad_except_exempt = filepath.name in _BROAD_EXCEPT_EXEMPT
+        self._function_stack: list[str] = []
         try:
             rel = filepath.relative_to(SRC_ROOT)
             self._strenum_src_compare_exempt = (
@@ -192,9 +202,16 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
         is_broad = node.type is None or (
             isinstance(node.type, ast.Name) and node.type.id in _BROAD_EXCEPTION_TYPES
         )
+        scoped_post_pivot_exempt = self.filepath == (
+            SRC_ROOT / "cli" / "update" / "_transaction.py"
+        ) and (
+            self._function_stack[-1:] == ["_report_post_pivot_failure"]
+            or _has_named_call(node.body, "_report_post_pivot_failure")
+        )
         if (
             is_broad
             and not self._broad_except_exempt
+            and not scoped_post_pivot_exempt
             and not _has_log_call(node.body)
             and not _has_reraise(node.body)
         ):
@@ -206,6 +223,20 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
                 " -- add logger.warning/error with exc_info=True",
             )
         self.generic_visit(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._function_stack.append(node.name)
+        try:
+            self.generic_visit(node)
+        finally:
+            self._function_stack.pop()
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._function_stack.append(node.name)
+        try:
+            self.generic_visit(node)
+        finally:
+            self._function_stack.pop()
 
     def visit_Compare(self, node: ast.Compare) -> None:
         """Rule ARCH-010: StrEnum fields must not be compared against raw string literals.
@@ -308,6 +339,38 @@ def _scan_strenum_compare(path: Path) -> list[Violation]:
 # ── Section B: Import analysis helpers ────────────────────────────────────────
 
 _SOURCE_FILES = sorted(SRC_ROOT.rglob("*.py"))
+
+
+def _function_local_imports(tree: ast.AST) -> list[ast.Import | ast.ImportFrom]:
+    """Return import nodes nested within synchronous or asynchronous functions."""
+    imports: list[ast.Import | ast.ImportFrom] = []
+
+    class _Visitor(ast.NodeVisitor):
+        def __init__(self) -> None:
+            self.function_depth = 0
+
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            self.function_depth += 1
+            self.generic_visit(node)
+            self.function_depth -= 1
+
+        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+            self.function_depth += 1
+            self.generic_visit(node)
+            self.function_depth -= 1
+
+        def visit_Import(self, node: ast.Import) -> None:
+            if self.function_depth:
+                imports.append(node)
+            self.generic_visit(node)
+
+        def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+            if self.function_depth:
+                imports.append(node)
+            self.generic_visit(node)
+
+    _Visitor().visit(tree)
+    return imports
 
 
 def _extract_module_level_internal_imports(path: Path) -> list[tuple[str, int]]:

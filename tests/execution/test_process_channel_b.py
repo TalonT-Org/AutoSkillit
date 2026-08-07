@@ -135,9 +135,9 @@ CHANNEL_B_THEN_A_EMPTY_RESULT_SCRIPT = textwrap.dedent("""\
     time.sleep(3600)
 """)
 
-# Script that writes %%ORDER_UP%% to session JSONL then immediately exits rc=0
-# with an empty type=result on stdout. Used with _phase1_poll=1.0 so the process
-# exits before the first Phase 1 poll, exercising the post-exit drain window.
+# Script that writes %%ORDER_UP%% to session JSONL then immediately exits rc=0.
+# It deliberately emits no Channel A completion record, so process exit is the
+# only competing trigger and the post-exit drain window is exercised deterministically.
 # Pass session_dir as sys.argv[1].
 PROCESS_EXIT_THEN_CHANNEL_B_FIRES_SCRIPT = textwrap.dedent("""\
     import sys, json, os, time
@@ -161,10 +161,6 @@ PROCESS_EXIT_THEN_CHANNEL_B_FIRES_SCRIPT = textwrap.dedent("""\
                   "content": "%%ORDER_UP%%"}}
         f.write(json.dumps(record) + "\\n")
         f.flush()
-    payload = {"type": "result", "subtype": "success", "is_error": False,
-               "result": "", "session_id": "test-drain"}
-    sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\\n")
-    sys.stdout.flush()
     sys.exit(0)
 """)
 
@@ -574,8 +570,9 @@ class TestPostExitDrainWindow:
         """Process exits after writing marker; drain window lets Channel B detect it.
 
         The script writes initial content, waits for Phase 1 to discover the file,
-        then writes the marker and exits. The drain window gives Channel B time to
-        complete its Phase 2 poll and detect the marker, producing CHANNEL_B confirmation.
+        then writes the marker and exits without emitting a Channel A completion record.
+        The drain window gives Channel B time to complete its Phase 2 poll and detect
+        the marker, producing CHANNEL_B confirmation.
 
         timeout=120 / _phase1_timeout=250: _phase1_timeout must exceed the outer timeout
         so Phase 1 never fires STALE before the outer guard under WSL2 + xdist load.

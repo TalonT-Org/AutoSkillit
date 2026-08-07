@@ -37,8 +37,15 @@ def _extract_hook_commands() -> list[str]:
 
 @pytest.mark.parametrize("command", _extract_hook_commands(), ids=_extract_hook_commands())
 def test_hook_command_executable(command: str) -> None:
-    """Every hook command must execute successfully as a subprocess."""
-    parts = shlex.split(command)
+    """Every hook command must execute successfully as a subprocess.
+
+    generate_hooks_json() emits ${CLAUDE_PLUGIN_ROOT}-relative commands — the
+    form Claude Code expands at hook-invocation time against the plugin
+    version that supplied the file. This test simulates that expansion
+    against the source checkout before splitting and executing it.
+    """
+    resolved_command = command.replace("${CLAUDE_PLUGIN_ROOT}", str(pkg_root()))
+    parts = shlex.split(resolved_command)
     # Replace python3 with sys.executable for test isolation
     if parts[0] == "python3":
         parts[0] = sys.executable

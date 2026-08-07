@@ -37,6 +37,7 @@ from autoskillit.core import (
     cleanup_readiness_sentinel,
     clear_kitchens_for_pid,
     get_logger,
+    installed_plugin_cache_dir,
     register_active_kitchen,
     resolve_kitchen_id,
     write_readiness_sentinel,
@@ -68,7 +69,12 @@ from autoskillit.pipeline import (
 )
 from autoskillit.server._guards import _backend_supports_quota
 from autoskillit.server._state import _get_ctx_or_none, deferred_initialize
-from autoskillit.workspace import verify_install_state
+from autoskillit.workspace import (
+    PluginHookRepairStatus,
+    read_obligation,
+    repair_broken_plugin_cache_hooks,
+    verify_install_state,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend
@@ -116,9 +122,17 @@ def run_startup_hook_health_check() -> list[str]:
 
     Called as a background task alongside run_startup_drift_check().
     Returns list of broken hook commands. Any failure is logged and swallowed.
+
+    On broken plugin-cache hooks OR a pending publication obligation, also
+    attempts an in-process repair of the plugin cache's hook artifacts (the
+    server must not shell out, per its existing design — see
+    workspace._projected_artifact._hook_repair). This reduces the broken
+    window while the obligation remains until a full verified install
+    clears it; the in-process repair alone cannot perform that full
+    publication, so it never clears the obligation itself.
     """
+    broken: list[str] = []
     try:
-        broken: list[str] = []
         for scope_label, settings_path in iter_all_scope_paths(None):
             scope_broken = find_broken_hook_scripts(settings_path)
             if scope_broken:
@@ -128,6 +142,12 @@ def run_startup_hook_health_check() -> list[str]:
                     scope=scope_label,
                     broken=scope_broken,
                 )
+        pending_obligation = read_obligation(Path.home())
+    except Exception:
+        logger.exception("startup_hook_health_check_failed")
+        return []
+
+    try:
         cache_broken = validate_plugin_cache_hooks()
         if cache_broken:
             broken.extend(cache_broken)
@@ -136,10 +156,34 @@ def run_startup_hook_health_check() -> list[str]:
                 broken=cache_broken,
                 remediation="Run `autoskillit install` from an external terminal",
             )
-        return broken
     except Exception:
-        logger.exception("startup_hook_health_check_failed")
-        return []
+        logger.exception("startup_plugin_cache_hook_validation_failed")
+        cache_broken = ["plugin cache hook validation failed"]
+
+    if cache_broken or pending_obligation is not None:
+        cache_dir = installed_plugin_cache_dir(Path.home(), "autoskillit")
+        try:
+            for outcome in repair_broken_plugin_cache_hooks(cache_dir):
+                if outcome.status is PluginHookRepairStatus.REPAIRED:
+                    logger.info(
+                        "plugin_cache_hooks_repaired_at_startup",
+                        incarnation=str(outcome.incarnation_dir),
+                    )
+                elif outcome.status is PluginHookRepairStatus.CONTENDED:
+                    logger.warning(
+                        "plugin_cache_hooks_repair_contended_at_startup",
+                        incarnation=str(outcome.incarnation_dir),
+                        reason=outcome.detail,
+                    )
+                else:
+                    logger.error(
+                        "plugin_cache_hooks_repair_failed_at_startup",
+                        incarnation=str(outcome.incarnation_dir),
+                        reason=outcome.detail,
+                    )
+        except Exception:
+            logger.exception("startup_hook_repair_failed")
+    return broken
 
 
 def run_startup_install_state_check() -> list[str]:

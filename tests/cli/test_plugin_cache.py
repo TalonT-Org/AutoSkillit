@@ -519,10 +519,20 @@ def test_any_kitchen_open_no_project_path_returns_global(
 
 
 def test_stale_cache_after_reorg_detected(tmp_path: Path) -> None:
+    """validate_plugin_cache_hooks must find the real installed layout.
+
+    hooks.json lives two segments below the cache plugin dir
+    (<version>/hooks/hooks.json — the write site is
+    cli/_marketplace.py's public_plugin_root / "hooks" / "hooks.json"), not
+    one (<version>/hooks.json). This fixture pins the real layout so the
+    validator's glob is exercised against it, not a shape it never sees in
+    production.
+    """
     from autoskillit.hook_registry import validate_plugin_cache_hooks
 
     version_dir = tmp_path / "cache" / "0.9.347"
-    version_dir.mkdir(parents=True)
+    hooks_dir = version_dir / "hooks"
+    hooks_dir.mkdir(parents=True)
     stale_hooks_json = {
         "hooks": {
             "PreToolUse": [
@@ -542,10 +552,49 @@ def test_stale_cache_after_reorg_detected(tmp_path: Path) -> None:
             ]
         }
     }
-    (version_dir / "hooks.json").write_text(json.dumps(stale_hooks_json))
+    (hooks_dir / "hooks.json").write_text(json.dumps(stale_hooks_json))
 
     broken = validate_plugin_cache_hooks(cache_dir=tmp_path / "cache")
 
     assert len(broken) == 2
     assert any("quota_guard.py" in command for command in broken)
     assert any("pretty_output_hook.py" in command for command in broken)
+
+
+def test_stale_cache_relocatable_command_resolved_against_incarnation_dir(
+    tmp_path: Path,
+) -> None:
+    """A relocatable (${CLAUDE_PLUGIN_ROOT}) command resolves against its own
+    <version> incarnation directory — hooks_json_path.parent.parent, the
+    plugin root Claude Code binds the token to — not hooks_json_path.parent
+    (which would wrongly yield <version>/hooks/hooks/_dispatch.py).
+    """
+    from autoskillit.hook_registry import validate_plugin_cache_hooks
+
+    version_dir = tmp_path / "cache" / "0.9.999"
+    hooks_dir = version_dir / "hooks"
+    hooks_dir.mkdir(parents=True)
+    (hooks_dir / "_dispatch.py").write_text("# dispatcher stub")
+    relocatable_hooks_json = {
+        "hooks": {
+            "PreToolUse": [
+                {
+                    "matcher": ".*",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": (
+                                'python3 "${CLAUDE_PLUGIN_ROOT}/hooks/_dispatch.py" '
+                                "guards/quota_guard"
+                            ),
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+    (hooks_dir / "hooks.json").write_text(json.dumps(relocatable_hooks_json))
+
+    broken = validate_plugin_cache_hooks(cache_dir=tmp_path / "cache")
+
+    assert broken == []

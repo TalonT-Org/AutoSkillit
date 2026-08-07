@@ -40,6 +40,8 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+logger = get_logger(__name__)
+
 app = App(
     name="autoskillit",
     help="MCP server for executing recipes with Claude Code.",
@@ -651,6 +653,25 @@ def main() -> None:
         from autoskillit.cli._init_helpers import _user_claude_json_path, evict_direct_mcp_entry
 
         evict_direct_mcp_entry(_user_claude_json_path())
+
+        # Repair on the next safe CLI process; exclude recursive child paths.
+        if _first_arg not in {"install", "--version"}:
+            from autoskillit.cli.update._obligation_repair import (
+                ObligationRepairOutcome,
+                attempt_obligation_repair,
+            )
+
+            repair_result = attempt_obligation_repair(Path.home())
+            if repair_result.outcome not in {
+                ObligationRepairOutcome.NO_OBLIGATION,
+                ObligationRepairOutcome.CLEARED,
+            }:
+                for finding in repair_result.findings:
+                    logger.warning(
+                        "publication_obligation_repair_incomplete",
+                        outcome=repair_result.outcome.value,
+                        finding=finding,
+                    )
 
         from autoskillit.cli.update._update_checks import run_update_checks
 

@@ -236,6 +236,10 @@ class TestCLIDoctor:
             "autoskillit.cli.doctor._check_capture_store_stats",
             lambda: DoctorResult(Severity.OK, "capture_store_stats", "stubbed"),
         )
+        monkeypatch.setattr(
+            "autoskillit.cli.doctor._check_install_classification",
+            lambda: DoctorResult(Severity.OK, "install_classification", "stubbed"),
+        )
         local_bin = str(tmp_path / ".local" / "bin" / "autoskillit")
         with (
             patch(
@@ -1436,9 +1440,68 @@ def test_check_source_version_drift_warning_on_drift(
     assert ref_sha[:8] in result.message
 
 
+# ---------------------------------------------------------------------------
+# _check_publication_obligation — doctor check (diagnostic only, Check 17b)
+# ---------------------------------------------------------------------------
+
+
+def test_check_publication_obligation_ok_when_no_obligation_pending(tmp_path: Path) -> None:
+    """No obligation journal on disk reports OK."""
+    from autoskillit.cli.doctor import _check_publication_obligation
+    from autoskillit.core import Severity
+
+    result = _check_publication_obligation(home=tmp_path)
+    assert result.severity == Severity.OK
+    assert "no publication obligation pending" in result.message.lower()
+
+
+def test_check_publication_obligation_warning_when_obligation_pending(tmp_path: Path) -> None:
+    """A pending obligation reports WARNING with previous/expected version content."""
+    from autoskillit.cli.doctor import _check_publication_obligation
+    from autoskillit.core import Severity
+    from autoskillit.workspace import update_obligation_expected_version, write_obligation
+
+    obligation = write_obligation(
+        tmp_path, previous_version="1.0.0", originating_phase="upgrade-subprocess-gate"
+    )
+    update_obligation_expected_version(tmp_path, expected=obligation, expected_version="1.1.0")
+
+    result = _check_publication_obligation(home=tmp_path)
+    assert result.severity == Severity.WARNING
+    assert "1.0.0" in result.message
+    assert "1.1.0" in result.message
+    assert "autoskillit install" in result.message
+    assert "MCP-server" not in result.message
+
+
+def test_check_publication_obligation_warns_when_state_is_unreadable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from autoskillit.cli.doctor import _check_publication_obligation
+    from autoskillit.core import Severity
+
+    monkeypatch.setattr(
+        "autoskillit.workspace.read_obligation",
+        lambda _home: (_ for _ in ()).throw(PermissionError("denied")),
+    )
+
+    result = _check_publication_obligation(home=tmp_path)
+
+    assert result.severity is Severity.WARNING
+    assert "could not determine" in result.message.lower()
+    assert "denied" in result.message
+
+
 # T-CACHE-INTEGRITY-1: doctor detects plugin cache hooks.json with broken paths
 def test_doctor_plugin_cache_integrity(tmp_path: Path) -> None:
-    """_check_plugin_cache_integrity must return ERROR when cached hooks.json has broken paths."""
+    """_check_plugin_cache_integrity must return ERROR when cached hooks.json has broken paths.
+
+    hooks.json lives two segments below the cache plugin dir
+    (<version>/hooks/hooks.json — write site: cli/_marketplace.py's
+    public_plugin_root / "hooks" / "hooks.json"), not one
+    (<version>/hooks.json) — this fixture pins the real layout so
+    validate_plugin_cache_hooks's glob is exercised against it.
+    """
     import json as _json
 
     from autoskillit.cli.doctor._doctor_mcp import _check_plugin_cache_integrity
@@ -1446,7 +1509,8 @@ def test_doctor_plugin_cache_integrity(tmp_path: Path) -> None:
 
     fake_cache = tmp_path / "cache"
     version_dir = fake_cache / "0.9.347"
-    version_dir.mkdir(parents=True)
+    hooks_dir = version_dir / "hooks"
+    hooks_dir.mkdir(parents=True)
     stale_hooks = {
         "hooks": {
             "PreToolUse": [
@@ -1462,7 +1526,7 @@ def test_doctor_plugin_cache_integrity(tmp_path: Path) -> None:
             ]
         }
     }
-    (version_dir / "hooks.json").write_text(_json.dumps(stale_hooks))
+    (hooks_dir / "hooks.json").write_text(_json.dumps(stale_hooks))
 
     result = _check_plugin_cache_integrity(cache_dir=fake_cache)
 
@@ -1482,7 +1546,8 @@ def test_doctor_plugin_cache_integrity_ok_when_valid(tmp_path: Path) -> None:
 
     fake_cache = tmp_path / "cache"
     version_dir = fake_cache / "0.9.347"
-    version_dir.mkdir(parents=True)
+    hooks_dir = version_dir / "hooks"
+    hooks_dir.mkdir(parents=True)
     valid_script = tmp_path / "hooks" / "guards" / "quota_guard.py"
     valid_script.parent.mkdir(parents=True)
     valid_script.write_text("# valid")
@@ -1501,7 +1566,7 @@ def test_doctor_plugin_cache_integrity_ok_when_valid(tmp_path: Path) -> None:
             ]
         }
     }
-    (version_dir / "hooks.json").write_text(_json.dumps(valid_hooks))
+    (hooks_dir / "hooks.json").write_text(_json.dumps(valid_hooks))
 
     result = _check_plugin_cache_integrity(cache_dir=fake_cache)
 

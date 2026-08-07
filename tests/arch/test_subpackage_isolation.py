@@ -955,10 +955,14 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_capture_store capture-store stats/reclaim command
         "cli/doctor": 12,  # +_doctor_skills capability declaration authenticity checks;
         # +_doctor_capture_store read-only capture-store stats check
-        "workspace": 15,  # +_installed_artifact exact lease-protected authority (#4409);
+        "workspace": 16,  # +_installed_artifact exact lease-protected authority (#4409);
         # +_install_state (single install-state consistency authority,
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
+        # +_update_obligation (persisted "republication owed" journal; must be writable
+        # by cli/update/ and readable by server/_lifespan.py without a server->cli edge,
+        # so it lives at this IL-1 layer rather than splitting further — its 176 lines
+        # are one cohesive read/write/clear API with no internal seam to extract)
         "hooks": 22,  # +_capture_process owned shell process-group boundary;
         # +_hook_payload shared payload parser for guards  # noqa: E501
         "pipeline": 16,  # +context/audit admission ledgers +recipe initialization
@@ -976,6 +980,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # and per-attempt storage concerns out of the public backend gateway:
         # +_codex_config_lock, +_codex_prelaunch, +_codex_session_storage.
         "execution/backends": 16,
+        "smoke_utils": 11,  # cross-interpreter upgrade smoke support
     }
     violations: list[str] = []
     dirs_to_check: list[Path] = []
@@ -1362,6 +1367,17 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "REQ-CNST-010-E20: shared run-skill contract lifecycle and response-shaping helpers "
         "remain one server-tool support authority; the managed session metadata additions "
         "must stay beside contract rehydration and persistence to prevent resume drift.",
+    ),
+    "hook_registry.py": (
+        1100,
+        "REQ-CNST-010-E21: hook_registry.py is a stdlib-only, package-root module imported "
+        "directly by standalone hook subprocess scripts, so it deliberately stays a flat "
+        "module rather than a sub-package (a package split would change how hook scripts "
+        "resolve the import on the low-latency startup path). Relocatable hook commands "
+        "(${CLAUDE_PLUGIN_ROOT} token generation in _build_hook_command, "
+        "relocatable command rendering, and token-aware find_broken_hook_scripts/"
+        "validate_plugin_cache_hooks) add 114 net lines to the existing registry+drift-"
+        "detection surface.",
     ),
 }
 

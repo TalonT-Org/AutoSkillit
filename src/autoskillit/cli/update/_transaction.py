@@ -6,6 +6,7 @@ import importlib.metadata
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -25,7 +26,12 @@ from autoskillit.cli._install_contract import (
     InstallResult,
     result_from_process_status,
 )
-from autoskillit.cli._install_info import detect_install, upgrade_command
+from autoskillit.cli._install_info import (
+    InstallInfo,
+    detect_install,
+    resolve_autoskillit_entrypoint,
+    upgrade_command,
+)
 from autoskillit.cli._installed_plugins import InstalledPluginsFile
 from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
@@ -39,7 +45,11 @@ from autoskillit.core import (
 from autoskillit.workspace import (
     InstallStateLeaseMode,
     InstallStateSpec,
+    PublicationObligation,
+    clear_obligation,
+    update_obligation_expected_version,
     verify_installed_plugin_artifact,
+    write_obligation,
 )
 
 __all__ = [
@@ -61,6 +71,7 @@ logger = get_logger(__name__)
 
 _ProcessRunner = Callable[..., subprocess.CompletedProcess[Any]]
 _VersionReader = Callable[[str], str]
+_VersionProber = Callable[[InstallInfo, Mapping[str, str], _ProcessRunner], str]
 
 
 class UpdateTransactionPhase(StrEnum):
@@ -209,6 +220,70 @@ def _process_finding(stage: str, returncode: int) -> str:
     return f"{stage} exited with status {returncode}"
 
 
+def _report_post_pivot_failure(message: str) -> None:
+    """Log a post-pivot failure without ever raising past this call.
+
+    Must be called from within an active ``except:`` block — relies on
+    ``sys.exc_info()`` via ``exc_info=True`` to attach the traceback. If the
+    structured logger itself fails, emits one plain stderr line. Reporting
+    never masks the original post-pivot failure.
+    """
+    try:
+        logger.warning(message, exc_info=True)
+    except Exception:
+        try:
+            sys.stderr.write(f"{message}\n")
+        except Exception:
+            pass
+
+
+def _default_fresh_version_prober(
+    info: InstallInfo,
+    maintenance_env: Mapping[str, str],
+    runner: _ProcessRunner,
+) -> str:
+    """Read the post-pivot version from a newly launched CLI process."""
+    entrypoint = resolve_autoskillit_entrypoint(
+        info.entrypoint,
+        search_path=maintenance_env.get("PATH"),
+    )
+    if entrypoint is None:
+        raise RuntimeError(
+            "Could not resolve an autoskillit entrypoint to probe the "
+            "post-upgrade version (neither the pre-pivot ambient PATH nor "
+            "the maintenance environment's PATH could locate one)."
+        )
+    result = runner(
+        [str(entrypoint), "--version"],
+        check=False,
+        env=maintenance_env,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip() or "(no stderr)"
+        raise RuntimeError(
+            f"autoskillit --version exited with status {result.returncode}: {stderr}"
+        )
+    probed_version = (result.stdout or "").strip()
+    if not probed_version:
+        raise RuntimeError("autoskillit --version produced no output")
+    return probed_version
+
+
+def _resolve_fresh_version(
+    *,
+    info: InstallInfo,
+    maintenance_env: Mapping[str, str],
+    runner: _ProcessRunner,
+    fresh_version_prober: _VersionProber | None,
+) -> str:
+    """Resolve post-pivot version truth through the configured subprocess probe."""
+    if fresh_version_prober is not None:
+        return fresh_version_prober(info, maintenance_env, runner)
+    return _default_fresh_version_prober(info, maintenance_env, runner)
+
+
 def _map_install_result(
     progress: _TransactionProgress,
     install_result: InstallResult,
@@ -253,6 +328,7 @@ def run_update_transaction(
     process_runner: _ProcessRunner | None = None,
     base_env: Mapping[str, str] | None = None,
     version_reader: _VersionReader | None = None,
+    fresh_version_prober: _VersionProber | None = None,
 ) -> UpdateTransactionResult:
     """Upgrade, run a fresh maintenance install, and verify every obligation.
 
@@ -260,6 +336,13 @@ def run_update_transaction(
     particular, an existing Claude plugin registration creates an immutable
     post-update publication obligation even when the caller's ambient backend
     is Codex.
+
+    ``version_reader`` is consulted for the PRE-pivot read only —
+    ``fresh_version_prober`` is the sole sanctioned source of post-pivot
+    version truth (defaulting to ``_default_fresh_version_prober``: an
+    out-of-process subprocess probe). In-process metadata reads are a
+    pre-pivot-only API in production, because the parent's own import
+    machinery is invalid past the pivot by construction.
     """
 
     progress = _TransactionProgress()
@@ -337,6 +420,31 @@ def run_update_transaction(
                 f"Refusing to run update maintenance inside a git repository: {working_dir}",
             )
         progress.enter(UpdateTransactionPhase.UPGRADE_SUBPROCESS_GATE)
+        obligation: PublicationObligation | None = None
+        if require_registered_plugin:
+            # Written only here — every failure/deferral strictly before this
+            # point mutates nothing and must leave no obligation; every
+            # outcome at or after this point legitimately leaves one
+            # pending. A write failure aborts before the irreversible
+            # subprocess launches: nothing is yet mutated, so refusing to
+            # proceed without the breadcrumb on disk is safe.
+            try:
+                obligation = write_obligation(
+                    resolved_home,
+                    previous_version=current_version,
+                    originating_phase=UpdateTransactionPhase.UPGRADE_SUBPROCESS_GATE.value,
+                )
+            except Exception as exc:
+                # Pre-pivot: the parent's own import machinery is still
+                # intact here (nothing has been mutated yet), so a direct
+                # logger call is safe — unlike the post-pivot except
+                # handlers below, this one predates _report_post_pivot_failure's
+                # crash-proofing concern entirely.
+                logger.warning("update_obligation_write_failed", exc_info=True)
+                return _upgrade_failure(
+                    progress,
+                    f"Could not record the publication obligation: {exc}",
+                )
         try:
             upgrade_result = runner(
                 command,
@@ -357,7 +465,12 @@ def run_update_transaction(
         progress.enter(UpdateTransactionPhase.IRREVERSIBLE_PIVOT)
         progress.enter(UpdateTransactionPhase.FRESH_VERSION_METADATA_GATE)
         try:
-            expected_version = read_version("autoskillit")
+            expected_version = _resolve_fresh_version(
+                info=info,
+                maintenance_env=maintenance_env,
+                runner=runner,
+                fresh_version_prober=fresh_version_prober,
+            )
             if Version(expected_version) <= Version(current_version):
                 return _upgrade_failure(
                     progress,
@@ -365,11 +478,24 @@ def run_update_transaction(
                     f"beyond {current_version}; observed {expected_version}.",
                 )
         except Exception as exc:
-            logger.warning("update_post_upgrade_metadata_failed", exc_info=True)
+            _report_post_pivot_failure("update_post_upgrade_metadata_failed")
             return _upgrade_failure(
                 progress,
                 f"Could not verify post-upgrade autoskillit metadata: {exc}",
             )
+
+        if require_registered_plugin:
+            # Post-pivot journal touch; update_obligation_expected_version()
+            # never raises — a failed backfill leaves expected_version None,
+            # which downstream repair code already treats as "unknown".
+            assert obligation is not None
+            updated_obligation = update_obligation_expected_version(
+                resolved_home,
+                expected=obligation,
+                expected_version=expected_version,
+            )
+            if updated_obligation is not None:
+                obligation = updated_obligation
 
         request = InstallRequest(
             scope=request.scope,
@@ -395,6 +521,7 @@ def run_update_transaction(
                 cwd=working_dir,
             )
         except OSError as exc:
+            _report_post_pivot_failure("update_install_child_launch_failed")
             install_result = InstallResult(
                 outcome=InstallOutcome.FAILED,
                 failure_kind=InstallFailureKind.CHILD,
@@ -426,6 +553,8 @@ def run_update_transaction(
 
         progress.enter(UpdateTransactionPhase.POST_UPDATE_ARTIFACT_VERIFICATION)
         if not require_registered_plugin:
+            # This transaction created no obligation and therefore has no
+            # authority to clear debt left by an earlier registered update.
             return progress.finish(
                 UpdateTransactionOutcome.COMPLETED,
                 expected_version=expected_version,
@@ -443,7 +572,7 @@ def run_update_transaction(
                 )
             )
         except Exception as exc:
-            logger.warning("update_artifact_verification_failed", exc_info=True)
+            _report_post_pivot_failure("update_artifact_verification_failed")
             return progress.finish(
                 UpdateTransactionOutcome.FAILED_POSTCONDITION,
                 expected_version=expected_version,
@@ -472,6 +601,17 @@ def run_update_transaction(
                     install_result=install_result,
                     verified_identity=verified_identity,
                     findings=install_result.findings + verification_findings,
+                )
+            assert obligation is not None
+            if not clear_obligation(resolved_home, expected=obligation):
+                return progress.finish(
+                    UpdateTransactionOutcome.FAILED_POSTCONDITION,
+                    expected_version=expected_version,
+                    install_result=install_result,
+                    verified_identity=verified_identity,
+                    findings=install_result.findings
+                    + verification_findings
+                    + ("Publication succeeded but its obligation could not be cleared.",),
                 )
             return progress.finish(
                 UpdateTransactionOutcome.COMPLETED,

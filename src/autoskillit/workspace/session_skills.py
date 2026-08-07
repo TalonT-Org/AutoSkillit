@@ -508,8 +508,14 @@ class SkillsDirectoryProvider:
         *,
         gating: bool | None = None,
         backend: CodingAgentBackend | None = None,
+        durable_scripts_root: Path | None = None,
     ) -> SkillProjectionContext:
-        """Build the shared execution-local projection context."""
+        """Build the shared execution-local projection context.
+
+        ``durable_scripts_root`` defaults to ``pkg_root()`` (the dev-source
+        checkout) — correct for this wrapper's callers, none of which hold a
+        plugin artifact binding at call time (see ``catalog_projection_context``).
+        """
         catalog = EffectiveSkillCatalog(
             skills=(SkillCatalogEntry.from_skill_info(skill_info),),
             execution_role=skill_info.execution_role or SkillExecutionRole.SESSION,
@@ -519,6 +525,7 @@ class SkillsDirectoryProvider:
             cwd,
             gating=gating,
             backend=backend,
+            durable_scripts_root=durable_scripts_root,
         )
 
     def catalog_projection_context(
@@ -528,8 +535,21 @@ class SkillsDirectoryProvider:
         *,
         gating: bool | None = None,
         backend: CodingAgentBackend | None = None,
+        durable_scripts_root: Path | None = None,
     ) -> SkillProjectionContext:
-        """Build one projection context bound to a resolved path-free catalog."""
+        """Build one projection context bound to a resolved path-free catalog.
+
+        ``durable_scripts_root`` is the root a projected document's
+        ``{{AUTOSKILLIT_SCRIPTS}}`` placeholder resolves against — it must
+        never have a shorter lifetime than the session consuming the
+        projected document. Defaults to ``pkg_root()`` (the dev-source
+        checkout, whose lifetime is not tied to the venv) when the caller has
+        no plugin artifact binding to supply instead; callers that hold a
+        retained plugin-cache incarnation (durable across a mid-session
+        `autoskillit update` via retire-don't-delete) must pass it explicitly
+        rather than relying on this default — see ``cli/session/_session_cook.py``.
+        """
+        scripts_root = pkg_root() if durable_scripts_root is None else durable_scripts_root
         return SkillProjectionContext(
             cwd=cwd,
             catalog=catalog,
@@ -537,7 +557,7 @@ class SkillsDirectoryProvider:
             conventions=backend.conventions if backend is not None else None,
             substitutions={
                 "{{AUTOSKILLIT_TEMP}}": self._temp_dir_relpath,
-                "{{AUTOSKILLIT_SCRIPTS}}": str(pkg_root() / "recipes" / "scripts"),
+                "{{AUTOSKILLIT_SCRIPTS}}": str(scripts_root / "recipes" / "scripts"),
                 "{{DEFAULT_BASE_BRANCH}}": self._default_base_branch,
             },
             gating=gating,

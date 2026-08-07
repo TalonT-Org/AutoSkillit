@@ -116,7 +116,7 @@ def _run_interactive_session(
         project_dir=_project_dir,
         default_base_branch=default_base_branch,
         skill_catalog=skill_catalog,
-        generated_home=None,
+        generated_home_available=False,
     )
     tools_arg: tuple[str, ...] = (
         ("AskUserQuestion",) if backend.capabilities.skill_injection_capable else ()

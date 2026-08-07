@@ -3,6 +3,9 @@
 Known limitation: functions use hardcoded path conventions from the pipeline recipe.
 """
 
+from autoskillit.smoke_utils._cross_interpreter_upgrade import (
+    run_cross_interpreter_upgrade_smoke,
+)
 from autoskillit.smoke_utils._eval import (
     REQUIRED_CRITERION_KEYS,
     VALID_CRITERION_TYPES,
@@ -100,6 +103,7 @@ __all__ = [
     "publish_experimental_review_artifacts",
     "render_review_finding_body",
     "review_handoff_pair_error",
+    "run_cross_interpreter_upgrade_smoke",
     "select_experimental_review_dispatch",
     "select_review_dimensions",
     "try_load_json",

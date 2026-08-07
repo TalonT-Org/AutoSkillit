@@ -25,9 +25,12 @@ from autoskillit.workspace._installed_artifact import (
     InstallStateLeaseMode,
     InstallStateSpec,
     verify_installed_plugin_artifact,
+    write_installed_plugin_artifact_manifest_locked,
 )
 from autoskillit.workspace._projected_artifact import (
     PROJECTION_CACHE_KEY_EXCLUSIONS,
+    PluginHookRepairOutcome,
+    PluginHookRepairStatus,
     ProjectedPluginArtifactAuthority,
     ProjectedPluginRetirementOwner,
     ProjectionCacheKey,
@@ -36,6 +39,14 @@ from autoskillit.workspace._projected_artifact import (
     project_direct_install_authority,
     prune_stale_projections,
     public_plugin_asset_digest,
+    repair_broken_plugin_cache_hooks,
+)
+from autoskillit.workspace._update_obligation import (
+    PublicationObligation,
+    clear_obligation,
+    read_obligation,
+    update_obligation_expected_version,
+    write_obligation,
 )
 from autoskillit.workspace.cleanup import (
     CleanupResult,
@@ -177,6 +188,8 @@ __all__ = [
     "ProjectionCacheKey",
     "ProjectedPluginArtifactAuthority",
     "ProjectedPluginRetirementOwner",
+    "PluginHookRepairOutcome",
+    "PluginHookRepairStatus",
     "SkillFrontmatterParseResult",
     "SkillProjectionContext",
     "iter_public_plugin_asset_files",
@@ -186,6 +199,11 @@ __all__ = [
     "reconcile_install_artifacts",
     "verify_install_state",
     "verify_installed_plugin_artifact",
+    "PublicationObligation",
+    "clear_obligation",
+    "read_obligation",
+    "update_obligation_expected_version",
+    "write_obligation",
     "SkillsDirectoryProvider",
     "materialize_agent_skill_tree",
     "materialize_codex_profile_skills",
@@ -222,8 +240,10 @@ __all__ = [
     "project_default_plugin_authority",
     "project_direct_install_authority",
     "read_skill_frontmatter",
+    "repair_broken_plugin_cache_hooks",
     "validate_skill_tier_roles",
     "validate_skill_capability_authenticity",
     "validate_skill_capability_declarations",
     "validate_skill_frontmatter",
+    "write_installed_plugin_artifact_manifest_locked",
 ]

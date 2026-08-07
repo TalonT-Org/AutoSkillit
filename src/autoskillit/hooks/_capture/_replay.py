@@ -17,10 +17,12 @@ if TYPE_CHECKING:
         FinalizedCapture,
         PublishedCaptureReference,
         UnavailableCaptureReference,
+        VerifiedCaptureSnapshot,
     )
     from autoskillit.hooks._capture_contract import (
         CaptureFailureReason,
         CaptureFailureV3,
+        render_capture_degraded_v3,
         render_capture_failure_v3,
         render_capture_v2,
     )
@@ -29,12 +31,14 @@ else:
         FinalizedCapture,
         PublishedCaptureReference,
         UnavailableCaptureReference,
+        VerifiedCaptureSnapshot,
     )
 
     if __package__ == "_capture":
         from _capture_contract import (
             CaptureFailureReason,
             CaptureFailureV3,
+            render_capture_degraded_v3,
             render_capture_failure_v3,
             render_capture_v2,
         )
@@ -42,6 +46,7 @@ else:
         from .._capture_contract import (
             CaptureFailureReason,
             CaptureFailureV3,
+            render_capture_degraded_v3,
             render_capture_failure_v3,
             render_capture_v2,
         )
@@ -199,6 +204,47 @@ def render_oversized_capture(
         + b"\n"
         + snapshot.measurement.tail
     )
+
+
+def render_degraded_capture(
+    verified: VerifiedCaptureSnapshot,
+    *,
+    reason_code: str,
+) -> bytes:
+    """Render bounded output from a verified snapshot for degraded delivery.
+
+    When the verified output fits within the inline-byte cap, the raw bytes are
+    returned unchanged (issue expected-behavior option 1).  Otherwise an
+    ``UnavailableCaptureReference`` is constructed via the sanctioned factory
+    and rendered as head + V2 marker + tail (option 2 — bounded).
+
+    Uses the ``inline_bytes`` cap field on ``CaptureMeasurement`` so the branch
+    boundary is bit-for-bit the same as the success path's oversized decision.
+    """
+    if type(verified) is not VerifiedCaptureSnapshot:
+        raise _ReplayError("degraded delivery requires a verified snapshot")
+    measurement = verified.measurement
+    if measurement.total_bytes <= measurement.inline_bytes:
+        return measurement.inline
+    from ._snapshot import _make_unavailable_reference
+
+    reference = _make_unavailable_reference(verified, reason_code)
+    return render_oversized_capture(reference)
+
+
+def degraded_delivery_return(shell_returncode: int | None) -> int:
+    """Return the child's exit code unchanged for degraded delivery.
+
+    A degraded delivery without a completed child is a programming error.
+    """
+    if shell_returncode is None:
+        raise _ReplayError("degraded delivery without a completed child process")
+    return shell_returncode
+
+
+def _emit_degraded(failure: CaptureFailureV3) -> None:
+    """Emit a degraded-delivery diagnostic marker to stderr."""
+    _write_and_flush_hook_stderr(render_capture_degraded_v3(failure) + b"\n")
 
 
 def settle_failed_capture(

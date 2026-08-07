@@ -20,6 +20,8 @@ _UNTRUSTED_MODE_BITS = stat.S_IRWXG | stat.S_IRWXO
 class CaptureAuthorityError(RuntimeError):
     """Raised when shell-capture authority cannot be proven."""
 
+    failure_reason: object = None  # set to CaptureFailureReason at verify-stage raise sites
+
 
 def canonical_json(value: object) -> bytes:
     try:

@@ -273,6 +273,7 @@ class CaptureFailureEvidence:
     stage: str
     detail: str
     settlement_returncode: int | None = None
+    failure_reason: str | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -282,6 +283,7 @@ class CaptureFailureEvidence:
                 self.settlement_returncode is not None
                 and (type(self.settlement_returncode) is not int)
             )
+            or (self.failure_reason is not None and not isinstance(self.failure_reason, str))
         ):
             raise _descriptor.CaptureAuthorityError("invalid capture failure evidence")
 
@@ -317,3 +319,32 @@ class LockContended(RuntimeError):
 
 class Tampered(Exception):
     pass
+
+
+# Budget used by the rescue-and-retry path in commit_verified_snapshot and
+# reserve_capture — bounded reclamation before capacity failure.  Defined
+# here (not in _reconcile.py) to avoid a circular import:
+# _capture_lifecycle → _reconcile → _authority → _capture_lifecycle.
+TRANSITION_RESCUE_BUDGET = SweepBudgetSpec(
+    max_records_inspected=4096,
+    max_replay_bytes=4 * 1024 * 1024,
+    max_attempts=64,
+    max_transitions=256,
+    max_cursor_writes=32,
+    max_duration_seconds=0.25,
+    max_directory_entries_scanned=0,
+)
+
+
+# The five capacity-related CaptureFailureReason values that warrant zero
+# sweep-grace when a failure record is committed — a record that failed
+# *by* capacity must not *hold* capacity.
+_CAPACITY_FAILURE_REASON_VALUES = frozenset(
+    {
+        _failure_policy.CaptureFailureReason.ACTIVE_CAPACITY_EXHAUSTED.value,
+        _failure_policy.CaptureFailureReason.RETENTION_CAPACITY_EXHAUSTED.value,
+        _failure_policy.CaptureFailureReason.EVIDENCE_CAPACITY_EXHAUSTED.value,
+        _failure_policy.CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED.value,
+        _failure_policy.CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED.value,
+    }
+)

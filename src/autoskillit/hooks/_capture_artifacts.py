@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture import _failure_policy as _capture_failure_policy
     from autoskillit.hooks._capture import _reconcile as _capture_reconcile
     from autoskillit.hooks._capture import _replay as _capture_replay
+    from autoskillit.hooks._capture import _types as _capture_types
     from autoskillit.hooks._capture._authority import (
         _DIRECTORY_FLAGS,
         _READ_FLAGS,
@@ -57,6 +58,7 @@ if TYPE_CHECKING:
         verify_capture_snapshot,
     )
     from autoskillit.hooks._capture._types import (
+        CaptureCapacitySpec,
         CaptureFailureEvidence,
         CleanupBlocker,
         CleanupProgress,
@@ -104,6 +106,7 @@ else:
     from _capture import _failure_policy as _capture_failure_policy
     from _capture import _reconcile as _capture_reconcile
     from _capture import _replay as _capture_replay
+    from _capture import _types as _capture_types
     from _capture._authority import (
         _DIRECTORY_FLAGS,
         _READ_FLAGS,
@@ -138,6 +141,7 @@ else:
         verify_capture_snapshot,
     )
     from _capture._types import (
+        CaptureCapacitySpec,
         CaptureFailureEvidence,
         CleanupBlocker,
         CleanupProgress,
@@ -284,6 +288,7 @@ class CaptureArtifact:
 class CapturePolicy:
     disabled: bool = False
     inline_bytes: int = _DEFAULT_INLINE_BYTES
+    capacity: CaptureCapacitySpec | None = None
 
 
 def create_capture_artifact(
@@ -373,6 +378,33 @@ def _policy_inline_bytes(value: object) -> int:
     return min(value, _MAX_INLINE_BYTES)
 
 
+def _policy_capacity(value: object) -> CaptureCapacitySpec | None:
+    """Parse an optional ``capture_capacity`` dict from hook config.
+
+    Accepts any nonempty subset of ``CaptureCapacitySpec`` field names
+    (partial overrides are the normal case).  Invalid values, unknown
+    keys, or non-dict input → ``None`` (fail-safe to defaults).
+    """
+    if not isinstance(value, dict) or not value:
+        return None
+    valid_fields = set(CaptureCapacitySpec.__dataclass_fields__)
+    validated: dict[str, int] = {}
+    for key, val in value.items():
+        if key not in valid_fields:
+            return None
+        if not isinstance(val, int) or isinstance(val, bool) or val <= 0:
+            return None
+        validated[key] = val
+    if not validated:
+        return None
+    try:
+        from dataclasses import replace as _replace
+
+        return _replace(CaptureCapacitySpec(), **validated)
+    except (TypeError, ValueError):
+        return None
+
+
 def read_capture_policy(anchor: ProjectAnchor) -> CapturePolicy:
     autoskillit_fd = -1
     temp_fd = -1
@@ -395,6 +427,7 @@ def read_capture_policy(anchor: ProjectAnchor) -> CapturePolicy:
         return CapturePolicy(
             disabled=section.get("disabled") is True,
             inline_bytes=_policy_inline_bytes(section.get("shell_max_inline_bytes")),
+            capacity=_policy_capacity(section.get("capture_capacity")),
         )
     finally:
         try:
@@ -691,7 +724,9 @@ def run_capture(
                 )
 
         root = open_capture_root(anchor, create=True)
-        lifecycle = CaptureLifecycleStore.from_open_authorities(anchor, root)
+        lifecycle = CaptureLifecycleStore.from_open_authorities(
+            anchor, root, capacity=policy.capacity
+        )
         artifact = create_capture_artifact(root, capture_id, lifecycle)
         artifact_writer_fd = _duplicate_artifact_writer(artifact)
         command_outcome: CommandOutcome | None = None
@@ -774,10 +809,73 @@ def run_capture(
                 retention_deadline=retention_deadline,
             )
             failure_stage = "capture finalization"
-            finalized = lifecycle.commit_verified_snapshot(
-                verified,
-                issue_reference=result.measurement.total_bytes > policy.inline_bytes,
-            )
+            try:
+                finalized = lifecycle.commit_verified_snapshot(
+                    verified,
+                    issue_reference=result.measurement.total_bytes > policy.inline_bytes,
+                )
+            except _CAPTURE_RUNTIME_ERRORS as finalization_exc:
+                # A-I3: Narrow finalization guard — check disposition before
+                # discarding verified output on a bookkeeping failure.
+                finalization_reason = _capture_failure_policy.runtime_failure_reason(
+                    finalization_exc
+                )
+                disposition_entry = _capture_failure_policy.FAILURE_DISPOSITIONS.get(
+                    finalization_reason
+                )
+                if (
+                    disposition_entry is None
+                    or disposition_entry.disposition
+                    is _capture_failure_policy.CaptureFailureDisposition.DISCARD_OUTPUT
+                    or verified is None
+                    or command_outcome is None
+                ):
+                    raise  # outer handler at :837 runs unchanged
+                # PRESERVE_OUTPUT: best-effort failure bookkeeping, then
+                # deliver the bounded verified output with the child's
+                # real exit code.
+                try:
+                    finalization_detail = _capture_replay._bounded_detail(
+                        f"{failure_stage} failed"
+                    )
+                    lifecycle.commit_capture_failure(
+                        artifact.authority,
+                        CaptureFailureEvidence(
+                            stage=_capture_replay._failure_stage(failure_stage),
+                            detail=finalization_detail,
+                            failure_reason=finalization_reason.value,
+                        ),
+                        observed_size=max(0, os.fstat(artifact.fd).st_size),
+                    )
+                    terminal_committed = True
+                except _CAPTURE_RUNTIME_ERRORS:
+                    logger.error("capture_degraded_failure_commit_failed", exc_info=True)
+                # Deliver bounded verified output on stdout.
+                degraded_payload = _capture_replay.render_degraded_capture(
+                    verified, reason_code=finalization_reason.value
+                )
+                try:
+                    _capture_replay.write_and_flush_hook_stdout(degraded_payload)
+                except _CAPTURE_RUNTIME_ERRORS:
+                    # Stdout write itself failed — re-raise into the outer
+                    # handler so the caller gets the fail-closed envelope
+                    # and exit 1 (fallback ladder, house pattern from
+                    # _response_budget.py:1072-1096).
+                    raise finalization_exc from finalization_exc
+                # Single-envelope invariant: degraded marker only after
+                # successful stdout flush.
+                degraded_failure = _capture_replay.failure_transport(
+                    reason=finalization_reason,
+                    stage=failure_stage,
+                    detail=_capture_replay._bounded_detail(f"{failure_stage} failed"),
+                    shell_returncode=command_returncode,
+                    settlement=None,
+                )
+                try:
+                    _capture_replay._emit_degraded(degraded_failure)
+                except _CAPTURE_RUNTIME_ERRORS:
+                    pass  # output already delivered; lost diagnostic
+                return _capture_replay.degraded_delivery_return(command_returncode)
             finalized_capture = finalized
             terminal_committed = True
             failure_stage = "capture reader transfer"
@@ -838,6 +936,13 @@ def run_capture(
             logger.error("capture_shell_execution_failed", exc_info=True)
             if command_outcome is None and process is not None:
                 settlement = _settle_failed_capture(process)
+            # B-I3: resolve the transported reason early so it can be passed
+            # to commit_capture_failure for zero-grace on capacity reasons.
+            transport_reason = _capture_failure_policy.runtime_failure_reason(exc)
+            transport_detail = f"{failure_stage} failed"
+            if isinstance(exc, CaptureSetupError):
+                transport_reason = exc.reason
+                transport_detail = exc.detail
             if not terminal_committed:
                 try:
                     failure_detail = _capture_replay._bounded_detail(f"{failure_stage} failed")
@@ -849,6 +954,7 @@ def run_capture(
                             settlement_returncode=(
                                 None if settlement is None else settlement.returncode
                             ),
+                            failure_reason=transport_reason.value,
                         ),
                         observed_size=max(0, os.fstat(artifact.fd).st_size),
                     )
@@ -867,11 +973,6 @@ def run_capture(
                 )
             if not isinstance(exc, _CAPTURE_RUNTIME_ERRORS):
                 raise
-            transport_reason = _capture_failure_policy.runtime_failure_reason(exc)
-            transport_detail = f"{failure_stage} failed"
-            if isinstance(exc, CaptureSetupError):
-                transport_reason = exc.reason
-                transport_detail = exc.detail
             return _capture_replay.capture_failure_return(
                 _capture_replay.failure_transport(
                     reason=transport_reason,
@@ -882,6 +983,11 @@ def run_capture(
                 )
             )
     finally:
+        # B-I5: copy per-store byte-pressure flag to module level so
+        # _sweep_after_runner can escalate its budget.
+        global _BYTE_PRESSURE_OBSERVED  # noqa: PLW0603
+        if lifecycle is not None and getattr(lifecycle, "byte_pressure_observed", False):
+            _BYTE_PRESSURE_OBSERVED = True
         if process is not None and process.stdout is not None:
             try:
                 process.stdout.close()
@@ -951,6 +1057,11 @@ def _dispatch_runner(request: CaptureRequest) -> int:
         )
 
 
+# B-I5: Module-level byte-pressure flag — set by run_capture when a
+# byte-reason CaptureCapacityError was raised or rescued.  The runner is
+# a single-command ``python3 -I`` process; the flag's lifetime is exactly
+# one invocation.
+_BYTE_PRESSURE_OBSERVED = False
 _RUNNER_TAIL_OWNER = "runner_tail"
 
 
@@ -971,9 +1082,15 @@ def _emit_runner_tail_crash_diagnostic() -> None:
 
 def _sweep_after_runner(requested_cwd: str) -> None:
     try:
-        outcome = _capture_reconcile.reconcile_capture_store(
-            requested_cwd, _capture_reconcile.RUNNER_TAIL_BUDGET
+        # B-I5: escalate the sweep budget when byte pressure was observed
+        # during this invocation — converge the session instead of
+        # oscillating on the 50ms lock race.
+        budget = (
+            _capture_types.TRANSITION_RESCUE_BUDGET
+            if _BYTE_PRESSURE_OBSERVED
+            else _capture_reconcile.RUNNER_TAIL_BUDGET
         )
+        outcome = _capture_reconcile.reconcile_capture_store(requested_cwd, budget)
         _capture_reconcile.emit_owner_diagnostic(
             outcome, owner=_RUNNER_TAIL_OWNER, write=sys.stderr.write
         )

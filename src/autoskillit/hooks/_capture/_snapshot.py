@@ -14,7 +14,7 @@ from dataclasses import InitVar, dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, NoReturn, SupportsIndex
 
-from . import _descriptor, _lifecycle_policy, _syntax
+from . import _descriptor, _failure_policy, _lifecycle_policy, _syntax
 from ._module_identity import register_module_aliases
 
 if TYPE_CHECKING:
@@ -90,6 +90,18 @@ _MANIFEST_FIELDS = frozenset(
 
 CaptureAuthorityError = _descriptor.CaptureAuthorityError
 _canonical_json = _descriptor.canonical_json
+
+
+def _integrity_error(message: str) -> CaptureAuthorityError:
+    """Construct a CaptureAuthorityError carrying SNAPSHOT_INTEGRITY.
+
+    Used at every verify-stage raise site so the runner's
+    ``runtime_failure_reason`` helper resolves the distinct integrity
+    reason instead of falling through to ``UNKNOWN_SETUP``.
+    """
+    error = CaptureAuthorityError(message)
+    error.failure_reason = _failure_policy.CaptureFailureReason.SNAPSHOT_INTEGRITY
+    return error
 
 
 class _NoAuthorityCopy:
@@ -564,21 +576,21 @@ def verify_capture_snapshot(
     """Verify one immutable carrier view and sync it before FINAL is possible."""
 
     if not _is_plain_int(fd):
-        raise CaptureAuthorityError("invalid capture descriptor")
+        raise _integrity_error("invalid capture descriptor")
     if type(measurement) is not CaptureMeasurement:
-        raise CaptureAuthorityError("measurement must be an exact CaptureMeasurement")
+        raise _integrity_error("measurement must be an exact CaptureMeasurement")
     if type(command_outcome) is not CommandOutcome:
-        raise CaptureAuthorityError("outcome must be an exact CommandOutcome")
+        raise _integrity_error("outcome must be an exact CommandOutcome")
     expected_identity = _identity(carrier_identity, "carrier identity")
     project = _identity(project_identity, "project identity")
     root = _identity(root_identity, "root identity")
     try:
         before = os.fstat(fd)
     except OSError as exc:
-        raise CaptureAuthorityError("cannot inspect capture descriptor") from exc
+        raise _integrity_error("cannot inspect capture descriptor") from exc
     actual_identity = (before.st_dev, before.st_ino)
     if actual_identity != expected_identity:
-        raise CaptureAuthorityError("capture artifact identity changed")
+        raise _integrity_error("capture artifact identity changed")
     if (
         not stat.S_ISREG(before.st_mode)
         or before.st_nlink != 1
@@ -586,7 +598,7 @@ def verify_capture_snapshot(
         or before.st_mode & _UNTRUSTED_MODE_BITS
         or before.st_size != measurement.total_bytes
     ):
-        raise CaptureAuthorityError("capture artifact metadata changed")
+        raise _integrity_error("capture artifact metadata changed")
     digest = hashlib.sha256()
     head = bytearray()
     inline = bytearray()
@@ -600,9 +612,9 @@ def verify_capture_snapshot(
                 offset,
             )
         except OSError as exc:
-            raise CaptureAuthorityError("capture artifact readback failed") from exc
+            raise _integrity_error("capture artifact readback failed") from exc
         if not chunk:
-            raise CaptureAuthorityError("capture artifact readback ended early")
+            raise _integrity_error("capture artifact readback ended early")
         digest.update(chunk)
         if len(head) < len(measurement.head):
             head.extend(chunk[: len(measurement.head) - len(head)])
@@ -615,27 +627,27 @@ def verify_capture_snapshot(
         offset += len(chunk)
 
     if not hmac.compare_digest(digest.hexdigest(), measurement.sha256):
-        raise CaptureAuthorityError("capture artifact content changed")
+        raise _integrity_error("capture artifact content changed")
     if (
         bytes(head) != measurement.head
         or bytes(inline) != measurement.inline
         or bytes(tail) != measurement.tail
     ):
-        raise CaptureAuthorityError("capture artifact preview changed")
+        raise _integrity_error("capture artifact preview changed")
     try:
         after = os.fstat(fd)
     except OSError as exc:
-        raise CaptureAuthorityError("cannot re-inspect capture descriptor") from exc
+        raise _integrity_error("cannot re-inspect capture descriptor") from exc
     if (
         (after.st_dev, after.st_ino) != expected_identity
         or after.st_size != measurement.total_bytes
         or after.st_nlink != 1
     ):
-        raise CaptureAuthorityError("capture artifact metadata changed")
+        raise _integrity_error("capture artifact metadata changed")
     try:
         os.fsync(fd)
     except OSError as exc:
-        raise CaptureAuthorityError("cannot sync completed capture artifact") from exc
+        raise _integrity_error("cannot sync completed capture artifact") from exc
     manifest = _make_manifest(
         capture_id=capture_id,
         incarnation=incarnation,

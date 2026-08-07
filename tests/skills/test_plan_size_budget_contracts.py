@@ -39,15 +39,13 @@ def test_make_plan_multi_part_template_has_size_budget() -> None:
 def test_make_plan_states_digit_only_rule() -> None:
     """The digit-only rendering rule must appear near size_budget guidance."""
     content = _read_make_plan()
-    assert re.search(r"plain.digits", content), (
-        "make-plan must state the digit-only rendering rule"
-    )
+    assert "plain digits" in content, "make-plan must state the digit-only rendering rule"
 
 
 def test_rectify_states_digit_only_rule() -> None:
     """rectify must also state the digit-only rendering rule."""
     content = _read_rectify()
-    assert re.search(r"plain.digits", content), "rectify must state the digit-only rendering rule"
+    assert "plain digits" in content, "rectify must state the digit-only rendering rule"
 
 
 def test_make_plan_instructs_per_step_estimates() -> None:

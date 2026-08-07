@@ -1610,7 +1610,7 @@ def test_update_consumers_compose_with_registered_real_child_transaction(
 # ---------------------------------------------------------------------------
 
 
-def test_t_c1_obligation_written_before_upgrade_launch_and_cleared_on_completion(
+def test_obligation_written_before_upgrade_launch_and_cleared_on_completion(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """A successful transaction writes the obligation immediately before the
@@ -1662,7 +1662,7 @@ def test_t_c1_obligation_written_before_upgrade_launch_and_cleared_on_completion
         ("verifier_raises_after_probe", True),
     ],
 )
-def test_t_c1_obligation_survives_failures_at_or_after_upgrade_subprocess(
+def test_obligation_survives_failures_at_or_after_upgrade_subprocess(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     failure_point: str,
@@ -1748,7 +1748,7 @@ def test_t_c1_obligation_survives_failures_at_or_after_upgrade_subprocess(
         "worktree_refusal",
     ],
 )
-def test_t_c1_no_obligation_for_failures_before_upgrade_subprocess(
+def test_no_obligation_for_failures_before_upgrade_subprocess(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, failure_point: str
 ) -> None:
     """Every failure/deferral strictly before the upgrade subprocess launches
@@ -1790,7 +1790,7 @@ def test_t_c1_no_obligation_for_failures_before_upgrade_subprocess(
     assert read_obligation(tmp_path) is None, failure_point
 
 
-def test_t_c1_failing_obligation_write_aborts_before_upgrade_subprocess(
+def test_failing_obligation_write_aborts_before_upgrade_subprocess(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """A failed obligation write aborts the transaction with a mapped

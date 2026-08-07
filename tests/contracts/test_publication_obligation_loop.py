@@ -179,7 +179,7 @@ def test_obligation_clear_maps_non_oserror_to_false(
 # ---------------------------------------------------------------------------
 
 
-def test_t_c3_startup_repair_heals_a_stale_cache(
+def test_startup_repair_heals_a_stale_cache(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """A cache incarnation with legacy venv-absolute (broken) commands — the
@@ -213,7 +213,7 @@ def test_t_c3_startup_repair_heals_a_stale_cache(
     assert manifest_after["artifact_digest"] != manifest_before["artifact_digest"]
 
 
-def test_t_c3_repair_preserves_version_owned_logical_hooks(tmp_path: Path) -> None:
+def test_repair_preserves_version_owned_logical_hooks(tmp_path: Path) -> None:
     from autoskillit.workspace._projected_artifact._hook_repair import (
         repair_broken_plugin_cache_hooks,
     )
@@ -234,7 +234,7 @@ def test_t_c3_repair_preserves_version_owned_logical_hooks(tmp_path: Path) -> No
     assert command.endswith(" legacy/version_specific")
 
 
-def test_t_c3_manifest_failure_rolls_back_hooks_and_manifest(
+def test_manifest_failure_rolls_back_hooks_and_manifest(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -261,7 +261,7 @@ def test_t_c3_manifest_failure_rolls_back_hooks_and_manifest(
     assert manifest_path.read_text() == original_manifest
 
 
-def test_t_c3_repair_refuses_to_bless_unrelated_tampering(tmp_path: Path) -> None:
+def test_repair_refuses_to_bless_unrelated_tampering(tmp_path: Path) -> None:
     from autoskillit.workspace._projected_artifact._hook_repair import (
         repair_broken_plugin_cache_hooks,
     )
@@ -280,7 +280,7 @@ def test_t_c3_repair_refuses_to_bless_unrelated_tampering(tmp_path: Path) -> Non
     assert hooks_path.read_text() == original_hooks
 
 
-def test_t_c3_repair_rejects_unsafe_logical_hook_names(tmp_path: Path) -> None:
+def test_repair_rejects_unsafe_logical_hook_names(tmp_path: Path) -> None:
     from autoskillit.workspace._projected_artifact._hook_repair import (
         repair_broken_plugin_cache_hooks,
     )
@@ -302,7 +302,7 @@ def test_t_c3_repair_rejects_unsafe_logical_hook_names(tmp_path: Path) -> None:
     assert hooks_path.read_text() == original_hooks
 
 
-def test_t_c3_missing_dispatcher_rolls_back_failed_repair(tmp_path: Path) -> None:
+def test_missing_dispatcher_rolls_back_failed_repair(tmp_path: Path) -> None:
     from autoskillit.core import (
         _AUTOSKILLIT_PLUGIN_KEY,
         ArtifactLease,
@@ -345,9 +345,7 @@ def test_t_c3_missing_dispatcher_rolls_back_failed_repair(tmp_path: Path) -> Non
     assert manifest_path.read_text() == original_manifest
 
 
-def test_t_c3_repair_skips_a_contended_lease(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_repair_skips_a_contended_lease(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """A held exclusive-conflicting lease: repair skips, diagnostic logged,
     hooks.json untouched.
     """
@@ -392,7 +390,7 @@ def test_hook_repair_does_not_follow_incarnation_symlinks(tmp_path: Path) -> Non
 # ---------------------------------------------------------------------------
 
 
-def test_t_c4_expected_version_present_uses_full_verification(tmp_path: Path) -> None:
+def test_expected_version_present_uses_full_verification(tmp_path: Path) -> None:
     """With expected_version present, verification includes
     verify_installed_plugin_artifact and clears the obligation on success.
     """
@@ -444,7 +442,7 @@ def test_t_c4_expected_version_present_uses_full_verification(tmp_path: Path) ->
 
 
 @pytest.mark.parametrize("persisted_version", [None, "not a version"])
-def test_t_c4_unknown_version_probes_then_verifies_exact_state(
+def test_unknown_version_probes_then_verifies_exact_state(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     persisted_version: str | None,
@@ -512,7 +510,7 @@ def test_t_c4_unknown_version_probes_then_verifies_exact_state(
     ]
 
 
-def test_t_c4_unknown_version_requires_exact_installed_identity(tmp_path: Path) -> None:
+def test_unknown_version_requires_exact_installed_identity(tmp_path: Path) -> None:
     from autoskillit.cli.update import _obligation_repair as m
     from autoskillit.workspace import read_obligation, write_obligation
 
@@ -546,7 +544,7 @@ def test_t_c4_unknown_version_requires_exact_installed_identity(tmp_path: Path) 
     assert read_obligation(tmp_path) is not None
 
 
-def test_t_c4_remaining_broken_hooks_keep_obligation(tmp_path: Path) -> None:
+def test_remaining_broken_hooks_keep_obligation(tmp_path: Path) -> None:
     from autoskillit.cli.update import _obligation_repair as m
     from autoskillit.workspace import read_obligation, write_obligation
 
@@ -572,7 +570,7 @@ def test_t_c4_remaining_broken_hooks_keep_obligation(tmp_path: Path) -> None:
     assert read_obligation(tmp_path) is not None
 
 
-def test_t_c4_compare_and_clear_occurs_before_verification_lease_release(tmp_path: Path) -> None:
+def test_compare_and_clear_occurs_before_verification_lease_release(tmp_path: Path) -> None:
     from autoskillit.cli.update import _obligation_repair as m
     from autoskillit.workspace import update_obligation_expected_version, write_obligation
 
@@ -612,7 +610,7 @@ def test_t_c4_compare_and_clear_occurs_before_verification_lease_release(tmp_pat
     assert events == ["clear", "close"]
 
 
-def test_t_c4_unexpected_verification_error_is_mapped_to_failure(tmp_path: Path) -> None:
+def test_unexpected_verification_error_is_mapped_to_failure(tmp_path: Path) -> None:
     from autoskillit.cli.update import _obligation_repair as m
     from autoskillit.workspace import (
         read_obligation,
@@ -649,7 +647,7 @@ def test_t_c4_unexpected_verification_error_is_mapped_to_failure(tmp_path: Path)
     assert read_obligation(tmp_path) is not None
 
 
-def test_t_c4_process_launch_error_is_reported_and_keeps_obligation(tmp_path: Path) -> None:
+def test_process_launch_error_is_reported_and_keeps_obligation(tmp_path: Path) -> None:
     from autoskillit.cli.update import _obligation_repair as m
     from autoskillit.workspace import read_obligation, write_obligation
 
@@ -676,7 +674,7 @@ def test_t_c4_process_launch_error_is_reported_and_keeps_obligation(tmp_path: Pa
     assert read_obligation(tmp_path) is not None
 
 
-def test_t_c4_claudecode_defers_and_leaves_obligation_intact(tmp_path: Path) -> None:
+def test_claudecode_defers_and_leaves_obligation_intact(tmp_path: Path) -> None:
     """Under CLAUDECODE=1 the repair defers with an instruction finding and
     leaves the obligation intact.
     """

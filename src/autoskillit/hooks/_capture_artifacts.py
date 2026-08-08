@@ -1077,13 +1077,16 @@ def _emit_runner_tail_crash_diagnostic() -> None:
 
 
 def _sweep_after_runner(requested_cwd: str) -> None:
+    global _BYTE_PRESSURE_OBSERVED  # noqa: PLW0603
+    byte_pressure_observed = _BYTE_PRESSURE_OBSERVED
+    _BYTE_PRESSURE_OBSERVED = False
     try:
         # Escalate the sweep budget when byte pressure was observed
         # during this invocation — converge the session instead of
         # oscillating on the 50ms lock race.
         budget = (
             _capture_types.TRANSITION_RESCUE_BUDGET
-            if _BYTE_PRESSURE_OBSERVED
+            if byte_pressure_observed
             else _capture_reconcile.RUNNER_TAIL_BUDGET
         )
         outcome = _capture_reconcile.reconcile_capture_store(requested_cwd, budget)

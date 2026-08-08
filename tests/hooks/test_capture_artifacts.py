@@ -1143,6 +1143,31 @@ def test_valid_reject_runs_one_runner_tail_sweep(
     assert "capture request rejected before command execution" in capfd.readouterr().err
 
 
+def test_runner_tail_consumes_byte_pressure_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    budgets = []
+
+    def reconcile(_requested_cwd, budget):
+        budgets.append(budget)
+        return CaptureCleanupOutcome()
+
+    monkeypatch.setattr(capture_artifacts, "_BYTE_PRESSURE_OBSERVED", True)
+    monkeypatch.setattr(
+        capture_artifacts._capture_reconcile,
+        "reconcile_capture_store",
+        reconcile,
+    )
+
+    capture_artifacts._sweep_after_runner("/abs/project")
+    capture_artifacts._sweep_after_runner("/abs/project")
+
+    assert budgets == [
+        capture_artifacts._capture_types.TRANSITION_RESCUE_BUDGET,
+        capture_artifacts._capture_reconcile.RUNNER_TAIL_BUDGET,
+    ]
+
+
 def test_runner_tail_preserves_dispatch_result_and_order(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

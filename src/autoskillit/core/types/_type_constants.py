@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from hashlib import sha256
 from types import MappingProxyType
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
 from ._type_enums import RemediationAction, SkillInvalidityKind
 from ._type_skill_semantics import SKILL_SEMANTIC_SCHEMA_VERSION
@@ -221,7 +221,7 @@ class RetiredArtifactShape(NamedTuple):
     shape: str
     retired_in: str
     reason: str
-    disposition: str = "delete"
+    disposition: Literal["delete", "retire_via_engine"] = "delete"
 
 
 # Artifact key -> the shape that was retired. Keys are ``Path.home()``-relative

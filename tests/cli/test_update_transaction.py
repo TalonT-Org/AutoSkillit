@@ -28,6 +28,7 @@ from autoskillit.cli.update._transaction import (
     run_update_transaction,
 )
 from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY as _PLUGIN_REF
+from tests.cli._self_invoke_helpers import assert_valid_maintenance_install_argv
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -199,6 +200,7 @@ def _recording_success_runner(
         **kwargs: Any,
     ) -> subprocess.CompletedProcess[Any]:
         del kwargs
+        assert_valid_maintenance_install_argv(cmd)
         calls.append(list(cmd))
         return subprocess.CompletedProcess(cmd, 0)
 
@@ -496,6 +498,7 @@ def test_default_fresh_version_prober_uses_resolved_autoskillit(
     calls: list[tuple[list[str], dict[str, Any]]] = []
 
     def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        assert_valid_maintenance_install_argv(cmd)
         calls.append((list(cmd), kwargs))
         if len(calls) == 2:
             return subprocess.run(cmd, **kwargs)
@@ -568,6 +571,7 @@ def test_upgrade_failure_gates_install_and_cleans_cwd(
     calls: list[list[str]] = []
 
     def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        assert_valid_maintenance_install_argv(cmd)
         calls.append(list(cmd))
         return subprocess.CompletedProcess(cmd, 7)
 
@@ -698,7 +702,10 @@ def test_install_process_statuses_map_to_distinct_update_outcomes(
         base_env={"PATH": "/bin"},
         version_reader=lambda _name: next(versions),
         fresh_version_prober=lambda _info, _env, _runner: next(versions),
-        process_runner=lambda cmd, **kwargs: subprocess.CompletedProcess(cmd, next(statuses)),
+        process_runner=lambda cmd, **kwargs: (
+            assert_valid_maintenance_install_argv(cmd),
+            subprocess.CompletedProcess(cmd, next(statuses)),
+        )[1],
     )
 
     assert result.outcome is expected
@@ -725,6 +732,7 @@ def test_success_uses_sealed_env_explicit_cwd_and_maintenance_flags(
     calls: list[tuple[list[str], dict[str, Any]]] = []
 
     def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        assert_valid_maintenance_install_argv(cmd)
         calls.append((list(cmd), kwargs))
         return subprocess.CompletedProcess(cmd, 0)
 
@@ -817,6 +825,7 @@ def test_success_from_real_worktree_seals_env_and_uses_home_maintenance_cwd(
     calls: list[tuple[list[str], dict[str, Any]]] = []
 
     def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        assert_valid_maintenance_install_argv(cmd)
         calls.append((list(cmd), kwargs))
         return subprocess.CompletedProcess(cmd, 0)
 
@@ -853,6 +862,7 @@ def test_codex_caller_with_old_claude_registration_completes_only_after_matching
     calls: list[list[str]] = []
 
     def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        assert_valid_maintenance_install_argv(cmd)
         calls.append(list(cmd))
         if len(calls) == 2:
             _register_plugin(tmp_path, "1.1.0")
@@ -915,6 +925,7 @@ def test_pre_update_obligation_is_immutable_but_post_update_evidence_is_fresh(
     calls: list[list[str]] = []
 
     def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        assert_valid_maintenance_install_argv(cmd)
         calls.append(list(cmd))
         if len(calls) == 1:
             registry.unlink()
@@ -1030,7 +1041,10 @@ def test_verification_error_is_failed_postcondition(
         base_env={"PATH": "/bin"},
         version_reader=lambda _name: next(versions),
         fresh_version_prober=lambda _info, _env, _runner: next(versions),
-        process_runner=lambda cmd, **kwargs: subprocess.CompletedProcess(cmd, 0),
+        process_runner=lambda cmd, **kwargs: (
+            assert_valid_maintenance_install_argv(cmd),
+            subprocess.CompletedProcess(cmd, 0),
+        )[1],
     )
 
     assert result.outcome is UpdateTransactionOutcome.FAILED_POSTCONDITION
@@ -1334,6 +1348,7 @@ def test_obligation_survives_failures_at_or_after_upgrade_subprocess(
     calls: list[list[str]] = []
 
     def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        assert_valid_maintenance_install_argv(cmd)
         calls.append(list(cmd))
         if failure_point == "upgrade_nonzero_exit" and len(calls) == 1:
             return subprocess.CompletedProcess(cmd, 7)

@@ -9,6 +9,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tests.cli._self_invoke_helpers import assert_valid_maintenance_install_argv
+
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 
@@ -433,9 +435,11 @@ def test_expected_version_present_uses_full_verification(
     captured_kwargs: list[dict[str, object]] = []
 
     def runner(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        assert_valid_maintenance_install_argv(cmd)
         calls.append(list(cmd))
         captured_kwargs.append(kwargs)
-        return subprocess.CompletedProcess(cmd, 0)
+        stdout = "1.1.0\n" if cmd[-1] == "--version" else None
+        return subprocess.CompletedProcess(cmd, 0, stdout=stdout)
 
     result = m.attempt_obligation_repair(
         home,
@@ -457,8 +461,17 @@ def test_expected_version_present_uses_full_verification(
             },
         )
     ]
-    assert calls == [["autoskillit", "install", "--maintenance-update"]]
-    assert captured_kwargs[0]["env"] == {"HOME": str(home)}
+    assert calls == [
+        [str(Path("autoskillit")), "--version"],
+        [
+            str(Path("autoskillit")),
+            "install",
+            "--maintenance-update",
+            "--expected-version",
+            "1.1.0",
+        ],
+    ]
+    assert captured_kwargs[1]["env"] == {"HOME": str(home)}
 
 
 def test_mismatched_generation_identity_keeps_obligation(
@@ -501,7 +514,12 @@ def test_mismatched_generation_identity_keeps_obligation(
     result = m.attempt_obligation_repair(
         tmp_path,
         environment={},
-        process_runner=lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 0),
+        process_runner=lambda cmd, **_kwargs: (
+            assert_valid_maintenance_install_argv(cmd),
+            subprocess.CompletedProcess(
+                cmd, 0, stdout=("1.1.0\n" if cmd[-1] == "--version" else None)
+            ),
+        )[1],
         entrypoint=Path("autoskillit"),
     )
 
@@ -567,6 +585,7 @@ def test_unknown_version_probes_then_verifies_exact_state(
     calls: list[list[str]] = []
 
     def runner(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        assert_valid_maintenance_install_argv(cmd)
         calls.append(list(cmd))
         stdout = "1.1.0\n" if cmd[-1] == "--version" else None
         return subprocess.CompletedProcess(cmd, 0, stdout=stdout)
@@ -581,8 +600,14 @@ def test_unknown_version_probes_then_verifies_exact_state(
     assert read_obligation(home) is None
     assert captured_generation_calls[0][2] == "1.1.0"
     assert calls == [
-        [str(entrypoint), "install", "--maintenance-update"],
         [str(entrypoint), "--version"],
+        [
+            str(entrypoint),
+            "install",
+            "--maintenance-update",
+            "--expected-version",
+            "1.1.0",
+        ],
     ]
 
 
@@ -599,6 +624,7 @@ def test_unknown_version_requires_exact_installed_identity(
     )
 
     def runner(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        assert_valid_maintenance_install_argv(cmd)
         stdout = "1.1.0\n" if cmd[-1] == "--version" else None
         return subprocess.CompletedProcess(cmd, 0, stdout=stdout)
 
@@ -622,20 +648,34 @@ def test_unknown_version_requires_exact_installed_identity(
 
 def test_remaining_broken_hooks_keep_obligation(tmp_path: Path) -> None:
     from autoskillit.cli.update import _obligation_repair as m
-    from autoskillit.workspace import read_obligation, write_obligation
+    from autoskillit.workspace import (
+        read_obligation,
+        update_obligation_expected_version,
+        write_obligation,
+    )
 
-    write_obligation(
+    obligation = write_obligation(
         tmp_path,
         previous_version="1.0.0",
         originating_phase="upgrade-subprocess-gate",
     )
+    # Backfill expected_version so the pre-launch --version probe is
+    # allowed to run (the runner returns "1.1.0\n" for --version); the
+    # persisted and probed versions match, install runs with valid argv,
+    # then hook validation fails and the obligation survives.
+    update_obligation_expected_version(tmp_path, expected=obligation, expected_version="1.1.0")
     original_validate = m.validate_plugin_cache_hooks
     m.validate_plugin_cache_hooks = lambda **_kwargs: ["broken command"]
     try:
         result = m.attempt_obligation_repair(
             tmp_path,
             environment={},
-            process_runner=lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 0),
+            process_runner=lambda cmd, **_kwargs: (
+                assert_valid_maintenance_install_argv(cmd),
+                subprocess.CompletedProcess(
+                    cmd, 0, stdout=("1.1.0\n" if cmd[-1] == "--version" else None)
+                ),
+            )[1],
             entrypoint=Path("autoskillit"),
         )
     finally:
@@ -688,7 +728,12 @@ def test_compare_and_clear_occurs_after_generation_identity_is_verified(
         result = m.attempt_obligation_repair(
             tmp_path,
             environment={},
-            process_runner=lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 0),
+            process_runner=lambda cmd, **_kwargs: (
+                assert_valid_maintenance_install_argv(cmd),
+                subprocess.CompletedProcess(
+                    cmd, 0, stdout=("1.1.0\n" if cmd[-1] == "--version" else None)
+                ),
+            )[1],
             entrypoint=Path("autoskillit"),
         )
     finally:
@@ -727,7 +772,12 @@ def test_unexpected_verification_error_is_mapped_to_failure(
     result = m.attempt_obligation_repair(
         tmp_path,
         environment={},
-        process_runner=lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 0),
+        process_runner=lambda cmd, **_kwargs: (
+            assert_valid_maintenance_install_argv(cmd),
+            subprocess.CompletedProcess(
+                cmd, 0, stdout=("1.1.0\n" if cmd[-1] == "--version" else None)
+            ),
+        )[1],
         entrypoint=Path("autoskillit"),
     )
 
@@ -736,7 +786,8 @@ def test_unexpected_verification_error_is_mapped_to_failure(
     assert read_obligation(tmp_path) is not None
 
 
-def test_process_launch_error_is_reported_and_keeps_obligation(tmp_path: Path) -> None:
+def test_probe_side_oserror_is_reported_as_failed(tmp_path: Path) -> None:
+    """An OSError during the pre-launch --version probe aborts with FAILED."""
     from autoskillit.cli.update import _obligation_repair as m
     from autoskillit.workspace import read_obligation, write_obligation
 
@@ -747,6 +798,41 @@ def test_process_launch_error_is_reported_and_keeps_obligation(tmp_path: Path) -
     )
 
     def runner(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        raise OSError("entrypoint disappeared")
+
+    result = m.attempt_obligation_repair(
+        tmp_path,
+        environment={},
+        process_runner=runner,
+        entrypoint=Path("/resolved/autoskillit"),
+    )
+
+    assert result.outcome is m.ObligationRepairOutcome.FAILED
+    assert result.findings == ("obligation_repair_probe_failed: entrypoint disappeared",)
+    assert read_obligation(tmp_path) is not None
+
+
+def test_install_side_oserror_is_reported_as_failed(tmp_path: Path) -> None:
+    """An OSError during the install spawn aborts with FAILED; the probe
+    succeeded so the persisted/probed version match allows the install to
+    proceed."""
+    from autoskillit.cli.update import _obligation_repair as m
+    from autoskillit.workspace import (
+        read_obligation,
+        update_obligation_expected_version,
+        write_obligation,
+    )
+
+    obligation = write_obligation(
+        tmp_path,
+        previous_version="1.0.0",
+        originating_phase="upgrade-subprocess-gate",
+    )
+    update_obligation_expected_version(tmp_path, expected=obligation, expected_version="1.1.0")
+
+    def runner(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        if cmd[-1] == "--version":
+            return subprocess.CompletedProcess(cmd, 0, stdout="1.1.0\n")
         raise OSError("entrypoint disappeared")
 
     result = m.attempt_obligation_repair(

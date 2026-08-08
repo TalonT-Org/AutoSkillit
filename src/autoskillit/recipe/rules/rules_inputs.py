@@ -7,6 +7,7 @@ from packaging.version import Version
 
 from autoskillit.core import (
     AUTOSKILLIT_INSTALLED_VERSION,
+    CALLER_SOVEREIGN_INGREDIENTS,
     CONFIG_AUTHORITY_KEYS,
     SKILL_TOOLS,
     BindingFailureCode,
@@ -529,9 +530,22 @@ def _check_config_authority_requires_resolve_source(ctx: ValidationContext) -> l
                     message=(
                         f"Ingredient {name!r} declares authority='config' but is not a recognized "
                         f"config-authoritative key. Known keys come from "
-                        f"SERVER_AUTHORITATIVE_INGREDIENTS or source_dir: "
+                        f"SERVER_AUTHORITATIVE_INGREDIENTS or CALLER_SOVEREIGN_INGREDIENTS: "
                         f"{sorted(CONFIG_AUTHORITY_KEYS)}. "
                         f"Add the key to the appropriate registry in ingredient_defaults.py."
+                    ),
+                )
+            )
+        elif name in CALLER_SOVEREIGN_INGREDIENTS:
+            findings.append(
+                make_finding(
+                    rule_name="config-authority-requires-resolve-source",
+                    step_name="(top-level)",
+                    message=(
+                        f"Ingredient {name!r} is caller-sovereign "
+                        f"(in CALLER_SOVEREIGN_INGREDIENTS) and must not declare "
+                        f"authority='config' — the server never injects a value for "
+                        f"it. Remove the authority field."
                     ),
                 )
             )

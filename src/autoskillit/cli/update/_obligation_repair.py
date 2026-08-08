@@ -167,7 +167,8 @@ def attempt_obligation_repair(
         return ObligationRepairResult(
             outcome=ObligationRepairOutcome.FAILED,
             findings=(
-                f"obligation_repair_probe_failed: --version returned {version_check.returncode}",
+                "obligation_repair_probe_failed: --version returned "
+                f"{version_check.returncode}: {version_check.stderr.strip()}",
             ),
         )
     probed_version = (version_check.stdout or "").strip()

@@ -800,6 +800,35 @@ def test_probe_side_oserror_is_reported_as_failed(tmp_path: Path) -> None:
     assert read_obligation(tmp_path) is not None
 
 
+def test_probe_nonzero_exit_preserves_stderr(tmp_path: Path) -> None:
+    from autoskillit.cli.update import _obligation_repair as m
+    from autoskillit.workspace import read_obligation, write_obligation
+
+    write_obligation(
+        tmp_path,
+        previous_version="1.0.0",
+        originating_phase="upgrade-subprocess-gate",
+    )
+
+    result = m.attempt_obligation_repair(
+        tmp_path,
+        environment={},
+        process_runner=lambda cmd, **_kwargs: subprocess.CompletedProcess(
+            cmd,
+            7,
+            stdout="",
+            stderr="broken environment\n",
+        ),
+        entrypoint=Path("/resolved/autoskillit"),
+    )
+
+    assert result.outcome is m.ObligationRepairOutcome.FAILED
+    assert result.findings == (
+        "obligation_repair_probe_failed: --version returned 7: broken environment",
+    )
+    assert read_obligation(tmp_path) is not None
+
+
 def test_install_side_oserror_is_reported_as_failed(tmp_path: Path) -> None:
     """An OSError during the install spawn aborts with FAILED; the probe
     succeeded so the persisted/probed version match allows the install to

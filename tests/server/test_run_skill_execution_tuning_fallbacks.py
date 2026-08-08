@@ -105,3 +105,61 @@ async def test_explicit_zero_idle_output_timeout_is_not_overwritten(
     await run_skill("/implement ...", str(tmp_path), step_name="implement", idle_output_timeout=0)
 
     assert executor.calls[0].idle_output_timeout == 0.0
+
+
+@pytest.mark.anyio
+async def test_unresolved_model_template_is_not_forwarded(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+) -> None:
+    """#4402 remediation — RecipeStep.model is a plain str field, unlike the int
+    stale_threshold/idle_output_timeout fields, so it can (and in the real
+    bundled remediation.yaml investigate step, does) carry an unresolved
+    ``${{ ... }}`` ingredient template: load_recipe() is a thin YAML parse
+    with no interpolation. The fallback must skip it — mirroring the
+    identical "${{" guard the output_dir fallback already has — rather than
+    forward a broken template string as --model. See
+    test_attestation_delivery_reachability.py::
+    test_attested_run_skill_never_forwards_an_unresolved_model_template for
+    the same guard proven against the real recipe step."""
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    step = RecipeStep(
+        name="implement",
+        model="${{ 'opus[1m]' if inputs.depth == 'deep' else 'sonnet' }}",
+    )
+    tool_ctx_kitchen_open.active_recipe_steps = {"implement": step}
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    await run_skill("/implement ...", str(tmp_path), step_name="implement")
+
+    assert "${{" not in executor.calls[0].model
+    assert executor.calls[0].model == ""
+
+
+def test_execution_tuning_step_fields_have_matching_runtime_read_sites() -> None:
+    """_EXECUTION_TUNING_STEP_FIELDS documents which RecipeStep fields the
+    post-gate fallback reads — it is NOT itself iterated at runtime (each
+    field needs a distinct vacancy-sentinel check and writes a distinct
+    local variable, which Python cannot dispatch generically by name
+    without unsafe locals() mutation). This is the alternative safety net:
+    every table entry must have a real ``_recipe_step.<field>`` read site
+    inside run_skill(), so a table entry added without a matching if-block
+    — the exact silent-no-op drift this table exists to prevent — fails CI
+    instead of silently doing nothing at runtime."""
+    import inspect
+
+    from autoskillit.server.tools import tools_execution
+
+    source = inspect.getsource(tools_execution.run_skill)
+    missing = [
+        field_name
+        for field_name in tools_execution._EXECUTION_TUNING_STEP_FIELDS.values()
+        if f"_recipe_step.{field_name}" not in source
+    ]
+    assert not missing, (
+        f"EXECUTION_TUNING RecipeStep field(s) in _EXECUTION_TUNING_STEP_FIELDS have "
+        f"no matching '_recipe_step.<field>' read site inside run_skill(): {missing}. "
+        "A table entry with no runtime consumer silently does nothing — add the "
+        "matching fallback if-block (see model/stale_threshold/idle_output_timeout "
+        "for the pattern)."
+    )

@@ -862,9 +862,15 @@ def _build_actual_mcp_kwargs(
 # when the caller left the run_skill param at its vacancy sentinel (empty
 # string for str params, None for int params — see the fallback block
 # below). Single source of truth for "which EXECUTION_TUNING params get a
-# RecipeStep fallback"; every loop-table entry is actually read, and this
-# set is verified disjoint from _EXECUTION_TUNING_EXTERNALLY_RESOLVED by
-# tests/contracts/test_tool_param_roles.py.
+# RecipeStep fallback", cross-checked two ways: test_tool_param_roles.py
+# verifies this set is disjoint from _EXECUTION_TUNING_EXTERNALLY_RESOLVED
+# and matches the EXECUTION_TUNING role assignments; test_run_skill_execution_tuning_fallbacks.py
+# verifies each entry has a real `_recipe_step.<field>` read site in the
+# fallback block below (a per-field explicit `if`, not a runtime loop over
+# this dict — each field needs a distinct vacancy-sentinel check and writes
+# a distinct local variable, which Python cannot dispatch generically by
+# name without unsafe locals() mutation; that per-field test is what keeps
+# a new table entry from becoming a silent no-op).
 _EXECUTION_TUNING_STEP_FIELDS: Mapping[str, str] = {
     "model": "model",
     "stale_threshold": "stale_threshold",
@@ -1783,7 +1789,17 @@ async def run_skill(
                     # params) — an explicit caller idle_output_timeout=0 (the
                     # documented "disabled for this step" value) must survive
                     # untouched. See _EXECUTION_TUNING_STEP_FIELDS.
-                    if effective_model == "" and _recipe_step.model:
+                    if (
+                        effective_model == ""
+                        and _recipe_step.model
+                        and "${{" not in _recipe_step.model
+                    ):
+                        # Skip values containing unresolved template references —
+                        # load() returns raw YAML without ingredient resolution,
+                        # so ${{ inputs.* }}/${{ context.* }} placeholders may
+                        # survive (see the output_dir fallback above for the
+                        # same guard). A raw template string is never a valid
+                        # --model value.
                         effective_model = _recipe_step.model
                         logger.warning(
                             "model_resolved_from_recipe",

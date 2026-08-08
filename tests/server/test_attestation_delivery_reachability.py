@@ -165,6 +165,53 @@ async def test_attested_run_skill_admits_explicit_order_id(
     assert executor.calls[0].order_id == "AB"
 
 
+async def test_attested_run_skill_never_forwards_an_unresolved_model_template(
+    tmp_path,
+    tool_ctx_ready_recipe,
+) -> None:
+    """#4402 remediation — restores T3.b's original intent against the real
+    recipe, catching the defect the synthetic-literal-model unit tests in
+    test_run_skill_execution_tuning_fallbacks.py structurally could not see.
+
+    The real remediation.yaml investigate step declares
+    ``model: ${{ 'opus[1m]' if inputs.depth == 'deep' else 'sonnet' }}`` — a
+    template load_recipe() never interpolates (it's a thin YAML parse; see
+    the output_dir fallback's identical "${{" guard). Since sous-chef now
+    mandates omitting model from attested calls, every real invocation of
+    this step reaches the RecipeStep.model fallback. Before the fix, the
+    fallback had no template guard (unlike its output_dir sibling) and would
+    forward the raw, broken template string straight to --model.
+    """
+    from autoskillit.server.tools.tools_execution import run_skill
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    ready = tool_ctx_ready_recipe
+    executor = InMemoryHeadlessExecutor()
+    ready.tool_ctx.executor = executor
+    with_args = ready.with_args
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+
+    result = json.loads(
+        await run_skill(
+            with_args["skill_command"],
+            str(work_dir),
+            step_name=with_args["step_name"],
+            output_dir=with_args["output_dir"],
+            recipe_execution_id=ready.credential["execution_id"],
+            invocation_template_digest=ready.template_digest,
+            skill_inputs={name: "probe value" for name in with_args["skill_inputs"]},
+        )
+    )
+
+    assert result.get("stage") != "preflight:recipe_execution", result
+    assert len(executor.calls) == 1
+    assert "${{" not in executor.calls[0].model, (
+        f"unresolved recipe template leaked into the executor's model kwarg: "
+        f"{executor.calls[0].model!r}"
+    )
+
+
 async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
     tmp_path,
     tool_ctx_ready_recipe,

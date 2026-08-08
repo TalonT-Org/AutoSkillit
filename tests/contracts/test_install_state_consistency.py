@@ -46,37 +46,21 @@ def _publish_generation(
     *,
     plugin_ref: str = _PLUGIN_KEY,
 ) -> PluginArtifactIdentity:
-    """Publish a valid current generation directly at the primitive layer.
+    """Publish a valid current generation through the production commit path."""
+    from autoskillit.core import _InstallLock
+    from autoskillit.workspace import publish_generation
 
-    Builds the generation-store shape with the same primitives production
-    uses (``generation_artifact_root`` / ``generation_selector_path`` /
-    ``write_installed_plugin_artifact_manifest_locked``) rather than calling
-    ``workspace.publish_generation()``, which currently raises unconditionally
-    (its ``action="publish_generation"`` is not a member of
-    ``log_plugin_artifact_lifecycle``'s allowed action set) — a pre-existing
-    defect outside this test file's scope.
-    """
-    from autoskillit.core import (
-        generation_artifact_root,
-        generation_selector_path,
-        new_plugin_artifact_incarnation_id,
-    )
-    from autoskillit.workspace._installed_artifact import (
-        write_installed_plugin_artifact_manifest_locked,
-    )
-
-    incarnation_id = new_plugin_artifact_incarnation_id()
-    managed_path = generation_artifact_root(home, plugin_ref, version, incarnation_id)
-    managed_path.mkdir(parents=True)
-    (managed_path / "marker.txt").write_text("content", encoding="utf-8")
-    identity = write_installed_plugin_artifact_manifest_locked(
-        managed_path,
-        semantic_key=f"{plugin_ref}:{version}",
-        action="publish",
-        incarnation_id=incarnation_id,
-    )
-    generation_selector_path(home, plugin_ref, version).symlink_to(managed_path)
-    return identity
+    source_root = home / ".test-generation-source"
+    source_root.mkdir(exist_ok=True)
+    (source_root / "marker.txt").write_text("content", encoding="utf-8")
+    with _InstallLock():
+        return publish_generation(
+            home=home,
+            plugin_ref=plugin_ref,
+            version=version,
+            semantic_key=f"{plugin_ref}:{version}",
+            source_root=source_root,
+        )
 
 
 @pytest.fixture

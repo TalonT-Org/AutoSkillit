@@ -961,7 +961,8 @@ def test_pre_update_obligation_is_immutable_but_post_update_evidence_is_fresh(
     ("artifact_state", "expected_message"),
     [
         ("absent-generation", "No current generation found after install"),
-        ("identity-read-raises", "Installed plugin verification failed"),
+        ("wrong-identity", "Installed plugin verification failed"),
+        ("digest-mismatch", "Installed plugin verification failed"),
     ],
 )
 def test_required_invalid_artifact_states_fail_only_at_final_verification(
@@ -988,8 +989,15 @@ def test_required_invalid_artifact_states_fail_only_at_final_verification(
             lambda *_a, **_kw: gen_root,
         )
 
+        from autoskillit.core import PluginArtifactValidationError
+
+        validation_message = {
+            "wrong-identity": "installed plugin semantic identity mismatch",
+            "digest-mismatch": "installed plugin content digest mismatch",
+        }[artifact_state]
+
         def raising_read_identity(*_a: Any, **_kw: Any) -> Any:
-            raise RuntimeError("simulated identity read failure")
+            raise PluginArtifactValidationError(validation_message)
 
         monkeypatch.setattr(
             "autoskillit.core.read_installed_plugin_artifact_identity",

@@ -215,7 +215,10 @@ def test_missing_expected_version_prints_warning_at_update_command(
     MISSING_EXPECTED_VERSION at cli/update/_update.py:43-55.
     """
     from autoskillit.cli.update import _update
-    from autoskillit.cli.update._obligation_repair import ObligationRepairOutcome
+    from autoskillit.cli.update._obligation_repair import (
+        ObligationRepairOutcome,
+        ObligationRepairResult,
+    )
     from autoskillit.cli.update._transaction import UpdateTransactionResult
 
     _patch_result(
@@ -226,15 +229,8 @@ def test_missing_expected_version_prints_warning_at_update_command(
         ),
     )
 
-    def fake_repair(_home: Path) -> object:
-        from dataclasses import dataclass
-
-        @dataclass(frozen=True, slots=True)
-        class _Result:
-            outcome: ObligationRepairOutcome
-            findings: tuple[str, ...]
-
-        return _Result(
+    def fake_repair(_home: Path) -> ObligationRepairResult:
+        return ObligationRepairResult(
             outcome=ObligationRepairOutcome.MISSING_EXPECTED_VERSION,
             findings=("obligation_stale: expected 0.9.0, observed 1.1.0",),
         )

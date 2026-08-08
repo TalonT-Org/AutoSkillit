@@ -941,6 +941,7 @@ def test_stale_obligation_probe_mismatch_returns_missing_expected_version(
 
 def test_valid_obligation_probe_first_then_install_clears(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Valid expected_version: probe runs FIRST, install (with both flags)
     runs SECOND, obligation is CLEARED.
@@ -963,7 +964,6 @@ def test_valid_obligation_probe_first_then_install_clears(
     update_obligation_expected_version(tmp_path, expected=obligation, expected_version="1.1.0")
 
     gen_root = tmp_path / "generation-root"
-    monkeypatch = pytest.MonkeyPatch()
 
     def fake_resolve_current_generation(_home: object, _ref: str, _version: str) -> Path:
         return gen_root
@@ -986,15 +986,12 @@ def test_valid_obligation_probe_first_then_install_clears(
         stdout = "1.1.0\n" if cmd[-1] == "--version" else None
         return subprocess.CompletedProcess(cmd, 0, stdout=stdout)
 
-    try:
-        result = m.attempt_obligation_repair(
-            tmp_path,
-            environment={},
-            process_runner=runner,
-            entrypoint=Path("autoskillit"),
-        )
-    finally:
-        monkeypatch.undo()
+    result = m.attempt_obligation_repair(
+        tmp_path,
+        environment={},
+        process_runner=runner,
+        entrypoint=Path("autoskillit"),
+    )
 
     assert result.outcome is m.ObligationRepairOutcome.CLEARED
     assert read_obligation(tmp_path) is None

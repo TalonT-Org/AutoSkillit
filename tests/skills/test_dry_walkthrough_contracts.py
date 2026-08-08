@@ -240,24 +240,3 @@ def test_dry_walkthrough_step4_includes_gitignore_check(skill_text: str) -> None
         "Step 4 gitignore check must reference deliverable paths or output files "
         "so the checklist item is specific about what to verify."
     )
-
-
-def test_dry_walkthrough_has_size_budget_step(skill_text: str) -> None:
-    """dry-walkthrough must contain a Step 4.4 referencing size_budget."""
-    assert "### Step 4.4" in skill_text
-    step_44_idx = skill_text.find("### Step 4.4")
-    # Extract the section content up to the next step heading
-    next_step = skill_text.find("### Step 4.5", step_44_idx)
-    section = skill_text[step_44_idx:next_step] if next_step != -1 else skill_text[step_44_idx:]
-    assert "size_budget" in section
-
-
-def test_dry_walkthrough_size_budget_step_positioned(skill_text: str) -> None:
-    """Step 4.4 must appear after Step 4.3 and before Step 4.5."""
-    step_43_idx = skill_text.find("### Step 4.3")
-    step_44_idx = skill_text.find("### Step 4.4")
-    step_45_idx = skill_text.find("### Step 4.5")
-    assert step_43_idx != -1 and step_44_idx != -1 and step_45_idx != -1
-    assert step_43_idx < step_44_idx < step_45_idx, (
-        "Step 4.4 must be positioned after Step 4.3 and before Step 4.5"
-    )

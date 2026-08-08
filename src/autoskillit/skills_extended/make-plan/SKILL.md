@@ -61,10 +61,6 @@ Create focused, actionable implementation plans that recommend the technically b
   not prose flags or ambient files, activates remediation mode. Before reading any referenced
   artifact, verify that this authority is the server-published current `NO GO` head and that
   its generation, plan set, scope, part, round, parent, and audited-plan lineage match this run.
-- `split_proposal_path` (optional) — When present, a prior implementation attempt stopped
-  for scope. Read the proposal and produce a multi-part plan (or a plan honoring the budget)
-  that incorporates it. When both `audit_cycle_path` and `split_proposal_path` are present,
-  the audit authority governs and the split proposal is supplementary context.
 
 ## Core Values - CRITICAL
 
@@ -164,20 +160,10 @@ Classify using this table:
 Use the **highest** complexity band that any single metric reaches. For example,
 if LoC is 40 (trivial) but files is 6 (medium), classify as medium.
 
-**Size budget derivation:** From the expected LoC computed above, set
-`size_budget` = expected added LoC × 1.5, rounded up to the nearest 100. Write
-this as a plain-digit line (no thousands separators, no markdown decoration —
-the downstream gate regex accepts bare digits only and silently falls back
-otherwise). Each implementation step must carry an estimated added-line count,
-and every new module or class must cite the requirement that forces it. Move
-anything justified as "future-proofing", "robustness", or "while we're here"
-to a `## Deferred Items` section instead of the plan body.
-
 **Log the decision:** Before proceeding, write one line to the plan file under
 a `## Adversarial Review` heading:
 
 > Complexity classification: {level} ({loc} LoC, {files} files, {modules} modules).
-> size_budget = {computed budget, plain digits}.
 > Adversarial agents: {list of agents to spawn, or "none"}.
 
 6. **Foundation Audit** - Spawn 1 Foundation Auditor via `a child assigned logical role `plan-foundation-auditor` under its declared model policy`. Pass the full draft plan text and the codebase root. Prepend the contrastive frame to the prompt:
@@ -428,7 +414,6 @@ plan_disposition_path = {absolute_path_when_in_remediation_mode}
 **Plan structure (single-part):**
 ```markdown
 # Implementation Plan: {Task Name}
-size_budget = {N — plain digits only, e.g. 1500}
 
 ## Summary
 {Brief overview of what will be implemented}
@@ -451,7 +436,6 @@ size_budget = {N — plain digits only, e.g. 1500}
 **Plan structure (multi-part — use for EACH part file):**
 ```markdown
 # Implementation Plan: {Task Name} — PART {X} ONLY
-size_budget = {N — plain digits only, e.g. 1500}
 
 > **PART {X} ONLY. Do not implement any other part. Other parts are separate tasks requiring explicit authorization.**
 

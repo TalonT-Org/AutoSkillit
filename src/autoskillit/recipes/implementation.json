@@ -136,16 +136,6 @@
       "description": "Resolved diagnostics log directory path (auto-injected)",
       "default": "",
       "hidden": true
-    },
-    "diff_size_budget": {
-      "description": "Backend-neutral hard gate for added lines; must clear the legitimate single-PR baseline (recent Claude like-for-like PRs up to 5,305 added lines). The Codex digest's S2 target (1,500) is deliberately tighter and prompt-level only.",
-      "default": "6000",
-      "hidden": true
-    },
-    "scope_split_max_retries": {
-      "description": "Maximum scope-split re-plan cycles before failing the run",
-      "default": "2",
-      "hidden": true
     }
   },
   "kitchen_rules": [
@@ -230,8 +220,7 @@
           "adversarial_review_level": "${{ inputs.adversarial_review_level }}",
           "task": "${{ inputs.task }}",
           "issue_url": "${{ inputs.issue_url }}",
-          "audit_cycle_path": "${{ context.audit_cycle_path }}",
-          "split_proposal_path": "${{ context.split_proposal_path }}"
+          "audit_cycle_path": "${{ context.audit_cycle_path }}"
         },
         "cwd": "${{ context.work_dir }}",
         "step_name": "plan",
@@ -257,8 +246,7 @@
       "on_rate_limit": "release_issue_failure",
       "on_context_limit": "salvage_plan",
       "optional_context_refs": [
-        "audit_cycle_path",
-        "split_proposal_path"
+        "audit_cycle_path"
       ],
       "note": "Produces an ordinary plan when no audit_cycle_path is present. On NO GO re-entry, consumes that exact current authority and emits both plan_path and plan_disposition_path. all_plan_paths appends result.plan_path across re-entries; verdict=plan is the only successful result. Glob plan_dir for *_part_*.md or a single plan file and preserve alphabetical part order."
     },
@@ -437,91 +425,10 @@
           "route": "close_issue_no_changes"
         },
         {
-          "route": "check_diff_size"
+          "route": "test"
         }
       ],
       "on_failure": "release_issue_failure"
-    },
-    "check_diff_size": {
-      "tool": "run_python",
-      "with": {
-        "callable": "autoskillit.smoke_utils.check_diff_size",
-        "work_dir": "${{ context.worktree_path }}",
-        "worktree_path": "${{ context.worktree_path }}",
-        "base_branch": "${{ context.merge_target }}",
-        "plan_path": "${{ context.plan_path }}",
-        "default_budget": "${{ inputs.diff_size_budget }}",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}"
-      },
-      "capture": {
-        "split_proposal_path": {
-          "from": "${{ result.split_proposal_path }}",
-          "type": "optional_string"
-        }
-      },
-      "on_result": [
-        {
-          "when": "${{ result.size_verdict }} == over_budget",
-          "route": "check_scope_split_loop"
-        },
-        {
-          "when": "${{ result.size_verdict }} == within_budget",
-          "route": "test"
-        },
-        {
-          "route": "test"
-        }
-      ],
-      "on_failure": "test",
-      "note": "Measure this part against merge_target; measurement errors or malformed verdicts fail open to tests.\n"
-    },
-    "check_scope_split_loop": {
-      "tool": "run_python",
-      "with": {
-        "callable": "autoskillit.smoke_utils.check_loop_iteration",
-        "current_iteration": "${{ context.scope_split_count }}",
-        "max_iterations": "${{ inputs.scope_split_max_retries }}"
-      },
-      "capture": {
-        "scope_split_count": "${{ result.next_iteration }}"
-      },
-      "on_result": [
-        {
-          "when": "${{ result.max_exceeded }} == true",
-          "route": "release_issue_failure"
-        },
-        {
-          "route": "pre_scope_replan_cleanup"
-        }
-      ],
-      "on_failure": "release_issue_failure",
-      "optional_context_refs": [
-        "scope_split_count"
-      ],
-      "note": "Bound total scope replans per run without resetting test or merge-fix counters.\n"
-    },
-    "pre_scope_replan_cleanup": {
-      "tool": "run_python",
-      "with": {
-        "callable": "autoskillit.smoke_utils.remove_worktree_for_replan",
-        "worktree_path": "${{ context.worktree_path }}",
-        "main_repo": "${{ context.work_dir }}"
-      },
-      "on_result": [
-        {
-          "when": "${{ result.cleanup_state }} == removed",
-          "route": "plan"
-        },
-        {
-          "when": "${{ result.cleanup_state }} == missing",
-          "route": "plan"
-        },
-        {
-          "route": "plan"
-        }
-      ],
-      "on_failure": "plan",
-      "note": "Remove the implementation worktree before scope-triggered re-planning so the next implement step can create a fresh worktree at the same path. Cleanup is best-effort because a missing worktree is already the desired state."
     },
     "close_issue_no_changes": {
       "description": "Release issue after zero-change detection — stages on non-default branch, closes on promotion target",

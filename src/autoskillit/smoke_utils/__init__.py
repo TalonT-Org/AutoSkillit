@@ -26,13 +26,11 @@ from autoskillit.smoke_utils._experimental_review import (
 from autoskillit.smoke_utils._git import (
     check_bug_report_non_empty,
     check_commits_ahead,
-    check_diff_size,
     check_ref_state,
     close_issue_already_done,
     compute_domain_partitions,
     detect_zero_changes,
     fetch_merge_queue_data,
-    remove_worktree_for_replan,
 )
 from autoskillit.smoke_utils._helpers import try_load_json
 from autoskillit.smoke_utils._investigation import extract_investigation
@@ -75,7 +73,6 @@ __all__ = [
     "build_malformed_review_envelope",
     "check_bug_report_non_empty",
     "check_commits_ahead",
-    "check_diff_size",
     "check_loop_iteration",
     "check_ref_state",
     "check_loop_with_progress",
@@ -102,7 +99,6 @@ __all__ = [
     "prepare_experimental_review_publication",
     "publish_experimental_review_artifacts",
     "render_review_finding_body",
-    "remove_worktree_for_replan",
     "review_handoff_pair_error",
     "select_experimental_review_dispatch",
     "select_review_dimensions",

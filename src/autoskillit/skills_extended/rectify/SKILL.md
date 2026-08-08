@@ -266,19 +266,9 @@ plan_parts = {path_to_part_a}
 {path_to_part_c}
 ```
 
-The `size_budget` value must be rendered as plain digits only — no thousands
-separators, no markdown decoration. The downstream gate regex accepts bare
-digits only and silently falls back to its ingredient default otherwise.
-
-Each implementation step must carry an estimated added-line count, and every
-new module or class must cite the requirement that forces it. Move anything
-justified as "future-proofing", "robustness", or "while we're here" to a
-`## Deferred Items` section instead of the plan body.
-
 **Plan structure:**
 ```markdown
 # Rectify: {Topic}
-size_budget = {N — plain digits only, e.g. 1500}
 
 **Date:** {YYYY-MM-DD}
 **Investigation Reference:** {link to or name of the investigation report}
@@ -297,15 +287,12 @@ size_budget = {N — plain digits only, e.g. 1500}
 
 ## Immunity Plan
 
-### Step 1: Failing Tests (~N added lines)
+### Step 1: Failing Tests
 {Tests that reproduce the issue and capture the gap — these must be written first}
 
-### Step 2: Implementation (~N added lines)
+### Step 2: Implementation
 {The architectural solution that makes this class of bug impossible or instantly caught, structured so each change makes a failing test pass}
 
 ## Verification
 {How to verify the architectural changes provide the intended immunity}
-
-## Deferred Items
-{Items deferred for proportionality — not needed for this immunity}
 ```

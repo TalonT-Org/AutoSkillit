@@ -24,7 +24,6 @@ from autoskillit.smoke_utils import (
     build_eval_context,
     build_malformed_review_envelope,
     check_bug_report_non_empty,
-    check_diff_size,
     check_loop_iteration,
     check_loop_with_progress,
     check_review_loop,
@@ -41,7 +40,6 @@ from autoskillit.smoke_utils import (
     patch_pr_token_summary,
     prepare_experimental_review_publication,
     publish_experimental_review_artifacts,
-    remove_worktree_for_replan,
     render_review_finding_body,
     review_handoff_pair_error,
     select_experimental_review_dispatch,
@@ -87,38 +85,6 @@ def test_returns_false_when_bug_report_empty_array(tmp_path: Path) -> None:
     (tmp_path / "bug_report.json").write_text("[]")
     result = check_bug_report_non_empty(str(tmp_path))
     assert result == {"non_empty": "false"}
-
-
-def test_remove_worktree_for_replan_passes_unsafe_path_as_single_argv(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    main_repo = tmp_path / "main"
-    main_repo.mkdir()
-    worktree = tmp_path / 'worktree "$(echo injected)"'
-    worktree.mkdir()
-    observed: list[list[str]] = []
-
-    def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        observed.append(args)
-        assert kwargs["cwd"] == main_repo
-        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
-
-    monkeypatch.setattr("autoskillit.smoke_utils._git.subprocess.run", fake_run)
-
-    result = remove_worktree_for_replan(str(worktree), str(main_repo))
-
-    assert result == {"cleanup_state": "removed"}
-    assert observed == [
-        [
-            "git",
-            "-C",
-            str(main_repo),
-            "worktree",
-            "remove",
-            "--force",
-            str(worktree),
-        ]
-    ]
 
 
 # T_SU3
@@ -4820,7 +4786,6 @@ def test_smoke_utils_all_exports_complete() -> None:
         "build_malformed_review_envelope",
         "check_bug_report_non_empty",
         "check_commits_ahead",
-        "check_diff_size",
         "check_loop_iteration",
         "check_loop_with_progress",
         "check_ref_state",
@@ -4848,7 +4813,6 @@ def test_smoke_utils_all_exports_complete() -> None:
         "prepare_experimental_review_publication",
         "publish_experimental_review_artifacts",
         "render_review_finding_body",
-        "remove_worktree_for_replan",
         "REVIEW_HANDOFF_IDENTITY_FIELDS",
         "REQUIRED_CRITERION_KEYS",
         "review_handoff_pair_error",
@@ -4872,7 +4836,6 @@ def test_smoke_utils_all_exports_complete() -> None:
         "build_malformed_review_envelope",
         "check_bug_report_non_empty",
         "check_commits_ahead",
-        "check_diff_size",
         "check_loop_iteration",
         "check_loop_with_progress",
         "check_review_loop",
@@ -4897,7 +4860,6 @@ def test_smoke_utils_all_exports_complete() -> None:
         "prepare_experimental_review_publication",
         "publish_experimental_review_artifacts",
         "render_review_finding_body",
-        "remove_worktree_for_replan",
         "review_handoff_pair_error",
         "select_experimental_review_dispatch",
         "select_review_dimensions",
@@ -6467,347 +6429,3 @@ def test_extract_investigation_accepts_report_without_recommendations(
         output_dir=str(tmp_path / "unused"),
     )
     assert result["investigation_report"] == str(report)
-
-
-# ---------------------------------------------------------------------------
-# check_diff_size: deterministic diff-size gate
-# ---------------------------------------------------------------------------
-
-
-def _init_diff_size_repo(tmp_path: Path, *, branch: str | None = "feature") -> None:
-    """Create the common baseline repository used by diff-size gate tests."""
-    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(
-        ["git", "commit", "--allow-empty", "-m", "init"],
-        cwd=tmp_path,
-        capture_output=True,
-        check=True,
-        env=_DZC_GIT_ENV,
-    )
-    if branch is not None:
-        subprocess.run(
-            ["git", "checkout", "-b", branch],
-            cwd=tmp_path,
-            capture_output=True,
-            check=True,
-            env=_DZC_GIT_ENV,
-        )
-
-
-def test_check_diff_size_within_budget(tmp_path: Path) -> None:
-    """A small diff under the default budget reports within_budget with no split proposal."""
-    _init_diff_size_repo(tmp_path)
-    small_file = tmp_path / "small.py"
-    small_file.write_text("\n".join(f"line {i}" for i in range(10)) + "\n")
-    subprocess.run(["git", "add", "small.py"], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(
-        ["git", "commit", "-m", "add small file"],
-        cwd=tmp_path,
-        capture_output=True,
-        check=True,
-        env=_DZC_GIT_ENV,
-    )
-
-    result = check_diff_size(str(tmp_path), "main")
-
-    assert result["size_verdict"] == "within_budget"
-    assert result["added_lines"] == "10"
-    assert result["split_proposal_path"] == ""
-
-
-def test_check_diff_size_over_budget_added_lines(tmp_path: Path) -> None:
-    """A diff exceeding the line budget reports over_budget and writes a breach report."""
-    _init_diff_size_repo(tmp_path)
-    big_file = tmp_path / "big.py"
-    big_file.write_text("\n".join(f"line {i}" for i in range(10)) + "\n")
-    subprocess.run(["git", "add", "big.py"], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(
-        ["git", "commit", "-m", "add big file"],
-        cwd=tmp_path,
-        capture_output=True,
-        check=True,
-        env=_DZC_GIT_ENV,
-    )
-    output_dir = tmp_path / "output"
-
-    result = check_diff_size(str(tmp_path), "main", default_budget="5", output_dir=str(output_dir))
-
-    assert result["size_verdict"] == "over_budget"
-    assert result["split_proposal_path"] != ""
-    assert Path(result["split_proposal_path"]).exists()
-
-
-def test_check_diff_size_uncommitted_changes(tmp_path: Path) -> None:
-    """Unstaged working-tree modifications are captured in the diff-size measurement."""
-    _init_diff_size_repo(tmp_path)
-    tracked = tmp_path / "tracked.py"
-    tracked.write_text("original\n")
-    subprocess.run(["git", "add", "tracked.py"], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(
-        ["git", "commit", "-m", "add tracked"],
-        cwd=tmp_path,
-        capture_output=True,
-        check=True,
-        env=_DZC_GIT_ENV,
-    )
-    # Unstaged modification — never staged, never committed.
-    tracked.write_text("original\nmodified line\n")
-
-    result = check_diff_size(str(tmp_path), "main")
-
-    assert result["added_lines"] == "2"
-
-
-def test_check_diff_size_untracked_files(tmp_path: Path) -> None:
-    """Untracked files are supplemented into the added_lines and changed_files counts."""
-    _init_diff_size_repo(tmp_path)
-    untracked = tmp_path / "untracked.py"
-    untracked.write_text("\n".join(f"line {i}" for i in range(20)) + "\n")
-
-    result = check_diff_size(str(tmp_path), "main")
-
-    assert result["added_lines"] == "20"
-    assert result["changed_files"] == "1"
-
-
-def test_check_diff_size_streams_untracked_files(tmp_path: Path, monkeypatch) -> None:
-    """Untracked files are counted without the unbounded Path.read_bytes API."""
-    _init_diff_size_repo(tmp_path)
-    (tmp_path / "untracked.py").write_text("line\n" * 20_000)
-
-    def fail_read_bytes(_path: Path) -> bytes:
-        raise AssertionError("check_diff_size must stream untracked files")
-
-    monkeypatch.setattr(Path, "read_bytes", fail_read_bytes)
-
-    result = check_diff_size(str(tmp_path), "main", default_budget="1000000")
-
-    assert result["added_lines"] == "20000"
-
-
-def test_check_diff_size_untracked_read_failure_returns_error(tmp_path: Path) -> None:
-    """An unreadable untracked entry cannot silently produce a partial measurement."""
-    _init_diff_size_repo(tmp_path)
-    (tmp_path / "broken.py").symlink_to(tmp_path / "missing-target.py")
-
-    result = check_diff_size(str(tmp_path), "main")
-
-    assert result["size_verdict"] == "error"
-    assert result["added_lines"] == "unknown"
-    assert result["changed_files"] == "unknown"
-
-
-def test_check_diff_size_per_part_isolation(tmp_path: Path) -> None:
-    """Only the current part's own diff since merge_target is measured, not inherited history."""
-    _init_diff_size_repo(tmp_path, branch=None)
-    large_file = tmp_path / "large.py"
-    large_file.write_text("\n".join(f"line {i}" for i in range(500)) + "\n")
-    subprocess.run(["git", "add", "large.py"], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(
-        ["git", "commit", "-m", "large commit"],
-        cwd=tmp_path,
-        capture_output=True,
-        check=True,
-        env=_DZC_GIT_ENV,
-    )
-    subprocess.run(
-        ["git", "checkout", "-b", "merge_target"],
-        cwd=tmp_path,
-        capture_output=True,
-        check=True,
-        env=_DZC_GIT_ENV,
-    )
-    subprocess.run(
-        ["git", "checkout", "-b", "work"],
-        cwd=tmp_path,
-        capture_output=True,
-        check=True,
-        env=_DZC_GIT_ENV,
-    )
-    small_file = tmp_path / "small.py"
-    small_file.write_text("\n".join(f"line {i}" for i in range(5)) + "\n")
-    subprocess.run(["git", "add", "small.py"], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(
-        ["git", "commit", "-m", "small change"],
-        cwd=tmp_path,
-        capture_output=True,
-        check=True,
-        env=_DZC_GIT_ENV,
-    )
-
-    result = check_diff_size(str(tmp_path), "merge_target")
-
-    assert result["added_lines"] == "5"
-    assert result["changed_files"] == "1"
-
-
-def test_check_diff_size_excludes_test_source_map(tmp_path: Path) -> None:
-    """The test-source-map.json artifact is excluded from the diff-size measurement."""
-    _init_diff_size_repo(tmp_path)
-    autoskillit_dir = tmp_path / ".autoskillit"
-    autoskillit_dir.mkdir()
-    (autoskillit_dir / "test-source-map.json").write_text('{"mapped": "data"}\n' * 20)
-
-    result = check_diff_size(str(tmp_path), "main")
-
-    assert result["added_lines"] == "0"
-    assert result["changed_files"] == "0"
-
-
-def test_check_diff_size_plan_budget_overrides_default(tmp_path: Path) -> None:
-    """A plan-declared size_budget line overrides the default_budget ingredient."""
-    _init_diff_size_repo(tmp_path)
-    plan_path = tmp_path / "plan.md"
-    plan_path.write_text("# Plan\n\nsize_budget = 800\n\nDetails...\n")
-    (tmp_path / "budgeted.py").write_text("line\n" * 1_000)
-
-    result = check_diff_size(str(tmp_path), "main", plan_path=str(plan_path))
-
-    assert result["budget"] == "800"
-    assert result["budget_source"] == "plan"
-    assert result["size_verdict"] == "over_budget"
-
-
-def test_check_diff_size_malformed_plan_budget_falls_back(tmp_path: Path) -> None:
-    """Malformed size_budget (thousands separator) fails the digit regex."""
-    _init_diff_size_repo(tmp_path)
-    plan_path = tmp_path / "plan.md"
-    plan_path.write_text("# Plan\n\nsize_budget = 4,800\n\nDetails...\n")
-    (tmp_path / "budgeted.py").write_text("line\n" * 5_000)
-
-    result = check_diff_size(str(tmp_path), "main", plan_path=str(plan_path))
-
-    assert result["budget_source"] == "ingredient"
-    assert result["budget"] == "6000"
-    assert result["size_verdict"] == "within_budget"
-
-
-def test_check_diff_size_malformed_default_budget_returns_error(tmp_path: Path) -> None:
-    """A non-numeric default budget produces the structured fail-open verdict."""
-    _init_diff_size_repo(tmp_path)
-
-    result = check_diff_size(str(tmp_path), "main", default_budget="not-a-number")
-
-    assert result["size_verdict"] == "error"
-    assert result["added_lines"] == "unknown"
-    assert result["changed_files"] == "unknown"
-    assert result["budget"] == "not-a-number"
-    assert result["budget_source"] == "ingredient"
-    assert result["split_proposal_path"] == ""
-
-
-def test_check_diff_size_git_diff_failure_returns_error(tmp_path: Path, monkeypatch) -> None:
-    """A failed git diff cannot be interpreted as a zero-line measurement."""
-    _init_diff_size_repo(tmp_path)
-
-    def fake_run(args, **_kwargs):
-        if args[1] == "merge-base":
-            return subprocess.CompletedProcess(args, 0, stdout="abc123\n", stderr="")
-        if args[1] == "diff":
-            return subprocess.CompletedProcess(args, 1, stdout=b"", stderr=b"diff failed")
-        pytest.fail(f"unexpected subprocess call: {args}")
-
-    monkeypatch.setattr("autoskillit.smoke_utils._git.subprocess.run", fake_run)
-
-    result = check_diff_size(str(tmp_path), "main")
-
-    assert result["size_verdict"] == "error"
-    assert result["added_lines"] == "unknown"
-
-
-def test_check_diff_size_malformed_numstat_returns_error(tmp_path: Path, monkeypatch) -> None:
-    """Malformed numstat additions cannot silently understate the diff size."""
-    _init_diff_size_repo(tmp_path)
-
-    def fake_run(args, **_kwargs):
-        if args[1] == "merge-base":
-            return subprocess.CompletedProcess(args, 0, stdout="abc123\n", stderr="")
-        if args[1] == "diff":
-            return subprocess.CompletedProcess(
-                args,
-                0,
-                stdout=b"not-a-count\t0\tfile.py\0",
-                stderr=b"",
-            )
-        pytest.fail(f"unexpected subprocess call: {args}")
-
-    monkeypatch.setattr("autoskillit.smoke_utils._git.subprocess.run", fake_run)
-
-    with patch("autoskillit.smoke_utils._git.logger.warning") as warning:
-        result = check_diff_size(str(tmp_path), "main")
-
-    assert result["size_verdict"] == "error"
-    assert result["added_lines"] == "unknown"
-    assert warning.call_args.args[0].startswith(
-        "check_diff_size received malformed numstat addition"
-    )
-
-
-def test_check_diff_size_merge_base_failure_is_logged(tmp_path: Path) -> None:
-    """Merge-base failures retain a bounded operator-visible diagnostic."""
-    _init_diff_size_repo(tmp_path)
-
-    with patch("autoskillit.smoke_utils._git.logger.warning") as warning:
-        result = check_diff_size(str(tmp_path), "missing-base-ref")
-
-    assert result["size_verdict"] == "error"
-    assert warning.call_count == 1
-    assert warning.call_args.args[0].startswith("check_diff_size merge-base failed")
-
-
-def test_check_diff_size_plan_read_failure_returns_error(tmp_path: Path) -> None:
-    """An unreadable plan cannot silently substitute the ingredient budget."""
-    _init_diff_size_repo(tmp_path)
-    plan_path = tmp_path / "plan-directory"
-    plan_path.mkdir()
-
-    result = check_diff_size(str(tmp_path), "main", plan_path=str(plan_path))
-
-    assert result["size_verdict"] == "error"
-    assert result["budget_source"] == "ingredient"
-
-
-def test_check_diff_size_requires_worktree_path() -> None:
-    """The runtime signature reflects the required worktree-path contract."""
-    with pytest.raises(TypeError):
-        check_diff_size()  # type: ignore[call-arg]
-
-
-def test_diff_size_gate_constants_are_not_public() -> None:
-    """Implementation limits are not part of the smoke_utils facade."""
-    import autoskillit.smoke_utils as smoke_utils
-
-    assert not hasattr(smoke_utils, "DIFF_SIZE_GATE_EXCLUDED_PATHSPECS")
-    assert not hasattr(smoke_utils, "DIFF_SIZE_GATE_MAX_CHANGED_FILES")
-
-
-def test_check_diff_size_changed_files_bound(tmp_path: Path) -> None:
-    """Exceeding the changed-files limit alone triggers over_budget under a large line budget."""
-    _init_diff_size_repo(tmp_path)
-    for i in range(161):
-        (tmp_path / f"file_{i}.py").write_text(f"line {i}\n")
-
-    result = check_diff_size(str(tmp_path), "main", default_budget="1000000")
-
-    assert result["size_verdict"] == "over_budget"
-    assert result["added_lines"] == "161"
-    assert result["changed_files"] == "161"
-
-
-def test_check_diff_size_all_values_are_strings(tmp_path: Path) -> None:
-    """Every value in the returned dict is a string, per the smoke_utils string-typed contract."""
-    _init_diff_size_repo(tmp_path)
-    small_file = tmp_path / "small.py"
-    small_file.write_text("line 1\n")
-    subprocess.run(["git", "add", "small.py"], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(
-        ["git", "commit", "-m", "add small file"],
-        cwd=tmp_path,
-        capture_output=True,
-        check=True,
-        env=_DZC_GIT_ENV,
-    )
-
-    result = check_diff_size(str(tmp_path), "main")
-
-    assert all(isinstance(v, str) for v in result.values())

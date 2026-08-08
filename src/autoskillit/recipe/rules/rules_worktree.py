@@ -299,7 +299,6 @@ _WORKTREE_REF_KEYS = frozenset({"worktree_path", "implementation_ref"})
 
 # Matches 'git worktree remove' shell invocations used as cleanup barriers.
 _GIT_WORKTREE_REMOVE_RE = re.compile(r"git\s+worktree\s+remove")
-_WORKTREE_CLEANUP_CALLABLES = frozenset({"autoskillit.smoke_utils.remove_worktree_for_replan"})
 
 
 def _is_worktree_barrier(step_name: str, ctx_vars: frozenset[str], recipe: Recipe) -> bool:
@@ -318,9 +317,6 @@ def _is_worktree_barrier(step_name: str, ctx_vars: frozenset[str], recipe: Recip
         if not _GIT_WORKTREE_REMOVE_RE.search(cmd):
             return False
         return any(f"context.{v}" in cmd for v in ctx_vars)
-    if step.tool == "run_python" and step.with_args.get("callable") in _WORKTREE_CLEANUP_CALLABLES:
-        wt_arg = step.with_args.get("worktree_path", "")
-        return any(f"context.{v}" in wt_arg for v in ctx_vars)
     return False
 
 

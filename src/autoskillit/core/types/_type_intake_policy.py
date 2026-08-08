@@ -165,15 +165,15 @@ def render_intake_digest(
 CODEX_INTAKE_DISCIPLINE_DIGEST: Final[str] = render_intake_digest()
 
 CODEX_SCOPE_DISCIPLINE_DIGEST: Final[str] = (
-    "SCOPE DISCIPLINE (this backend tends to oversize changes; these rules are mandatory):\n"
-    'S1. Build the smallest design that satisfies the stated requirements. "Immunity",\n'
+    "SCOPE DISCIPLINE (this backend tends to over-engineer; these rules are mandatory):\n"
+    "S1. Maintainability is the goal. Every line you add must be read, understood, and kept\n"
+    "    working by someone else — it is a standing cost, not progress. Volume the\n"
+    "    requirement genuinely forces is fine; volume from speculation is not.\n"
+    'S2. Build the smallest design that satisfies the stated requirements. "Immunity",\n'
     '    "architectural", or "contract" framing is not a mandate for maximal machinery —\n'
-    "    deliver the minimal mechanism that closes the enumerated gaps.\n"
-    "S2. Hard budget: if your work would exceed the plan's declared size_budget (or 1,500\n"
-    "    added lines / 40 changed files when no plan declares one), STOP. Do not silently\n"
-    "    proceed — follow your skill's scope-stop procedure when it defines one; otherwise\n"
-    "    surface the overrun and what you would cut in your final report, and let the\n"
-    "    pipeline decide.\n"
+    "    deliver the minimal mechanism that closes the enumerated gaps. When the problem\n"
+    "    truly needs a complex solution, build it — elegance is the smallest design that\n"
+    "    meets the need, not the shortest diff.\n"
     "S3. No speculative machinery: do not introduce a new registry, enum, ID-wrapper/newtype\n"
     "    class, state machine, protocol, event vocabulary, or abstraction layer unless the\n"
     "    task text names it explicitly OR two existing call sites need it today. One concrete\n"

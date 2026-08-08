@@ -79,12 +79,14 @@ def test_registry_entries_are_still_in_taskfile() -> None:
 
 def test_parity_fixtures_exist() -> None:
     """Overrides with a parity fixture must reference a real function."""
+    from tests import conftest as test_conftest
+
     for var, override in TEST_HARNESS_ENV_OVERRIDES.items():
         if override.parity_fixture is None:
             continue
-        from tests.conftest import production_interpreter_env
+        parity_fixture = getattr(test_conftest, override.parity_fixture, None)
 
-        assert callable(production_interpreter_env), (
+        assert callable(parity_fixture), (
             f"Parity fixture {override.parity_fixture!r} for {var!r} is not callable"
         )
 

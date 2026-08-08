@@ -189,6 +189,7 @@ async def test_attested_run_skill_never_forwards_an_unresolved_model_template(
     executor = InMemoryHeadlessExecutor()
     ready.tool_ctx.executor = executor
     with_args = ready.with_args
+    assert "${{" in ready.step_body["model"]
     work_dir = tmp_path / "work"
     work_dir.mkdir()
 

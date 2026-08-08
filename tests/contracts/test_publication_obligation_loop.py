@@ -397,6 +397,7 @@ def test_expected_version_present_uses_full_verification(
     generation for that exact version and clears the obligation on success.
     """
     from autoskillit.cli.update import _obligation_repair as m
+    from autoskillit.core import installed_plugin_artifact_manifest_path
     from autoskillit.workspace import (
         read_obligation,
         update_obligation_expected_version,
@@ -411,14 +412,14 @@ def test_expected_version_present_uses_full_verification(
 
     gen_root = tmp_path / "generation-root"
     captured_generation_calls: list[tuple[object, str, str]] = []
-    captured_identity_calls: list[object] = []
+    captured_identity_calls: list[tuple[object, dict[str, object]]] = []
 
     def fake_resolve_current_generation(home_arg: object, plugin_ref: str, version: str) -> Path:
         captured_generation_calls.append((home_arg, plugin_ref, version))
         return gen_root
 
     def fake_read_identity(managed_path: object, **_kwargs: object) -> MagicMock:
-        captured_identity_calls.append(managed_path)
+        captured_identity_calls.append((managed_path, dict(_kwargs)))
         return MagicMock(semantic_key="x")
 
     monkeypatch.setattr(
@@ -447,7 +448,12 @@ def test_expected_version_present_uses_full_verification(
     assert read_obligation(home) is None
     assert len(captured_generation_calls) == 1
     assert captured_generation_calls[0][2] == "1.1.0"
-    assert captured_identity_calls == [gen_root]
+    assert captured_identity_calls == [
+        (
+            gen_root,
+            {"manifest_path": installed_plugin_artifact_manifest_path(gen_root)},
+        )
+    ]
     assert calls == [["autoskillit", "install", "--maintenance-update"]]
     assert captured_kwargs[0]["env"] == {"HOME": str(home)}
 

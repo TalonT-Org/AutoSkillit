@@ -29,6 +29,9 @@ from autoskillit.core import (
     load_bundled_agent_definitions,
     strip_context_window_suffix,
 )
+from autoskillit.core import (
+    session_type as _resolve_session_type,
+)
 from autoskillit.exploration import resolve_repository_profile
 from autoskillit.pipeline.exploration_context import is_explorer_binding_eligible
 from autoskillit.server._misc import SkillProjectionContext
@@ -161,6 +164,7 @@ def _issue_explorer_binding_env(
             else False
         ),
         parent_sandbox_mode=projection_context.parent_sandbox_mode,
+        session_type=_resolve_session_type(),
     ):
         return None
     if identity is None:

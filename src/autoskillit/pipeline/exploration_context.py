@@ -31,6 +31,7 @@ from autoskillit.core import (
     ExplorationContextStoreProtocol,
     ExplorationQuerySpec,
     RepositorySnapshot,
+    SessionType,
     canonical_json_bytes,
     get_logger,
     read_versioned_json,
@@ -42,6 +43,7 @@ __all__ = [
     "CapabilityResolution",
     "CapabilityResolutionStatus",
     "EXPLORER_ROLE_NAMES",
+    "EXPLORER_INELIGIBLE_SESSION_TYPES",
     "EXPLORATION_AUTHORITY_PATH_ENV",
     "EXPLORATION_CAPABILITY_ENV",
     "EXPLORATION_PRINCIPAL_ROLE",
@@ -73,6 +75,7 @@ logger = get_logger(__name__)
 # preserve them while materializing an explorer child, but never mint or alter
 # their authority.
 EXPLORER_ROLE_NAMES = BUNDLED_EXPLORER_ROLES
+EXPLORER_INELIGIBLE_SESSION_TYPES = frozenset({SessionType.ORCHESTRATOR, SessionType.FLEET})
 EXPLORATION_CAPABILITY_ENV = "AUTOSKILLIT_EXPLORATION_CAPABILITY"
 EXPLORATION_ROLE_ENV = "AUTOSKILLIT_EXPLORATION_ROLE"
 EXPLORATION_SESSION_ENV = "AUTOSKILLIT_EXPLORATION_SESSION_ID"
@@ -87,7 +90,7 @@ def is_explorer_binding_eligible(
     terminal_explorer_capable: bool,
     session_scoped_explorer_capable: bool,
     parent_sandbox_mode: str,
-    session_type_name: str | None = None,
+    session_type: SessionType | None = None,
 ) -> bool:
     """Pure eligibility predicate for explorer binding mint.
 
@@ -98,11 +101,9 @@ def is_explorer_binding_eligible(
     """
     if not has_identity or not has_backend:
         return False
-    if session_type_name in {"ORCHESTRATOR", "FLEET"}:
+    if session_type in EXPLORER_INELIGIBLE_SESSION_TYPES:
         return False
-    if terminal_explorer_capable:
-        return parent_sandbox_mode == "read-only"
-    if session_scoped_explorer_capable:
+    if terminal_explorer_capable or session_scoped_explorer_capable:
         return parent_sandbox_mode == "read-only"
     return False
 

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.core import RepositoryIdentity, RepositorySnapshot
+from autoskillit.core import RepositoryIdentity, RepositorySnapshot, SessionType
 from autoskillit.pipeline.exploration_context import (
     OwnerBoundExplorationContextStore,
     is_explorer_binding_eligible,
@@ -64,15 +64,15 @@ class TestExplorerBindingEligibility:
             parent_sandbox_mode="read-only",
         )
 
-    @pytest.mark.parametrize("session_type_name", ["ORCHESTRATOR", "FLEET"])
-    def test_orchestrator_fleet_never_eligible(self, session_type_name: str) -> None:
+    @pytest.mark.parametrize("session_type", [SessionType.ORCHESTRATOR, SessionType.FLEET])
+    def test_orchestrator_fleet_never_eligible(self, session_type: SessionType) -> None:
         assert not is_explorer_binding_eligible(
             has_identity=True,
             has_backend=True,
             terminal_explorer_capable=True,
             session_scoped_explorer_capable=True,
             parent_sandbox_mode="read-only",
-            session_type_name=session_type_name,
+            session_type=session_type,
         )
 
     def test_skill_session_type_eligible(self) -> None:
@@ -82,7 +82,7 @@ class TestExplorerBindingEligibility:
             terminal_explorer_capable=True,
             session_scoped_explorer_capable=False,
             parent_sandbox_mode="read-only",
-            session_type_name="SKILL",
+            session_type=SessionType.SKILL,
         )
 
     def test_no_capabilities_not_eligible(self) -> None:

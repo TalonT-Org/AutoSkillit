@@ -38,7 +38,7 @@ from autoskillit.recipe.schema import RecipeStep
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
-_INERT_TRACKED_RE = re.compile(r"^inert-tracked:#\d+$")
+_INERT_TRACKED_RE = re.compile(r"^inert-tracked:#[1-9]\d*$")
 _KNOWN_CLASSIFICATIONS = frozenset({"execution", "composition", "validation-only"})
 
 # Keys MUST stay sorted — enforced by test_ledger_is_sorted() below.
@@ -157,8 +157,8 @@ def test_no_silent_field_removals() -> None:
     )
 
 
-def test_inert_tracked_entries_cite_a_live_issue() -> None:
-    """An inert-tracked entry without a live issue reference is invisible at review time."""
+def test_inert_tracked_entries_have_a_valid_issue_reference() -> None:
+    """An inert-tracked entry without a valid issue reference is invisible at review time."""
     malformed = sorted(
         f"{name}={value!r}"
         for name, value in RECIPE_STEP_FIELD_CLASSIFICATION.items()

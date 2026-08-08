@@ -60,25 +60,6 @@ class IntakeRuleDef(NamedTuple):
 
 CODEX_INTAKE_RULES: Final[tuple[IntakeRuleDef, ...]] = (
     IntakeRuleDef(
-        id="instruction-file-completeness",
-        subject="instruction-file-intake",
-        text=(
-            "Instruction files you are about to act on — the SKILL.md you selected and "
-            "any plan file your task names — must be read completely before you act on "
-            "them; if a read is truncated or paginated, continue until EOF."
-        ),
-        basis="upstream-aligned",
-        evidence="openai/codex#27044",
-        evidence_anchor="must be read completely",
-        exception=(
-            "Recipe YAML and bundled source-tree SKILL.md paths are never read from disk "
-            "at all — recipes arrive via load_recipe / get_recipe_section; skills surface "
-            "to Codex through the generated session catalog ($-mention) and to Claude Code "
-            "through the Skill tool."
-        ),
-        path_classes=("session-skill-md", "plan-file"),
-    ),
-    IntakeRuleDef(
         id="data-file-bounded-read",
         subject="data-file-intake",
         text=(
@@ -89,7 +70,9 @@ CODEX_INTAKE_RULES: Final[tuple[IntakeRuleDef, ...]] = (
         evidence="#4280",
         evidence_anchor="at most 250 lines",
         exception=(
-            "Instruction files covered by the completeness rule above are exempt from this bound."
+            "This bound applies to data, log, and source files only — files the "
+            "harness did not deliver. SKILL.md bodies, plan files, and recipe "
+            "YAML paths are out of scope for this rule."
         ),
         path_classes=("data-file",),
     ),

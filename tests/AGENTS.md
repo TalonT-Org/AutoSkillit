@@ -242,6 +242,11 @@ registered entity must update its retirement registry in the SAME commit:
   `tmp_path` — a shape change with no registry entry strands every pre-existing
   install and no test notices. `test_no_retired_artifact_shape_is_unhandled` and
   `test_reconciler_handles_every_retired_artifact_shape` fail otherwise.
+- **Intake rule ids** (`src/autoskillit/core/types/_type_intake_policy.py`): removing a
+  rule id from `CODEX_INTAKE_RULES` must add it to `RETIRED_INTAKE_RULE_IDS` in
+  `src/autoskillit/core/types/_type_constants.py`. `test_no_retired_intake_rule_id_is_live`
+  and `test_retired_intake_rule_ids_are_lowercase_and_kebab_case` in
+  `tests/arch/test_intake_rule_registry.py` fail otherwise.
 - **Skill contract validations**: adding or tightening an `invalid_reason`-producing
   skill validation must mint a `SkillInvalidityKind` member AND register a
   `SkillContractRemediationDef` in `SKILL_CONTRACT_REMEDIATIONS`

@@ -83,9 +83,10 @@ def test_digest_is_safe_for_agent_toml_multiline_literal_guard() -> None:
 
 
 def test_intake_digest_pins_numeric_rules() -> None:
+    # "must be read completely" and "continue until EOF" were retired alongside
+    # rule `instruction-file-completeness` in #4487 (harness-native injection
+    # made the re-read redundant).
     anchors = [
-        "must be read completely",
-        "continue until EOF",
         "at most 250 lines",
         "max_output_tokens above 10000",
         "an index, not required reading",

@@ -97,6 +97,7 @@ UNIVERSAL_PROJECT_RULE_MARKERS: list[tuple[str, str]] = [
     ("pre-commit run --all-files", "pre-commit"),
     ("RETIRED_SCRIPT_BASENAMES", "hook-renames"),
     ("RETIRED_SKILL_NAMES", "skill-renames"),
+    ("RETIRED_INTAKE_RULE_IDS", "intake-rule-retirement"),
     ("POSIX ERE", "search-tool-ere"),
     ('Grep(pattern="foo|bar")', "search-tool-ere"),
     ("autoskillit init", "worktree-init-prohibition"),

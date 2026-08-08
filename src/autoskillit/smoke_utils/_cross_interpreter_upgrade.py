@@ -145,7 +145,28 @@ def run_cross_interpreter_upgrade_smoke(*, work_dir: str) -> bool:
     if upgrade.returncode != 0:
         raise RuntimeError(f"upgrade install (python {minor_b}) failed: {upgrade.stderr}")
 
-    republish = _run([entrypoint, "install", "--maintenance-update"], env=env)
+    # Resolve the post-upgrade version from the resolved entrypoint's
+    # interpreter via subprocess — the smoke has no Python in-process handle
+    # on the upgraded interpreter's distribution version. Without this, the
+    # maintenance-install child rejects the call at the strict
+    # --expected-version boundary.
+    from autoskillit.cli._install_contract import MaintenanceInstallArgv
+
+    version_check = subprocess.run(
+        [entrypoint, "--version"], env=env, capture_output=True, text=True, timeout=60
+    )
+    resolved_version = (version_check.stdout or "").strip()
+    if not resolved_version:
+        raise RuntimeError(
+            f"cross-interpreter smoke could not resolve post-upgrade version: {version_check}"
+        )
+    republish = _run(
+        MaintenanceInstallArgv(
+            entrypoint=Path(entrypoint),
+            expected_version=resolved_version,
+        ).to_argv(),
+        env=env,
+    )
     if republish.returncode != 0:
         raise RuntimeError(f"post-upgrade republication failed: {republish.stderr}")
 

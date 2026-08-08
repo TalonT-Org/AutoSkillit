@@ -1445,6 +1445,14 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "validate_plugin_cache_hooks) add 114 net lines to the existing registry+drift-"
         "detection surface.",
     ),
+    "pipeline/exploration_context.py": (
+        1100,
+        "REQ-CNST-010-E22: explorer context store owns the process-local capability "
+        "lifecycle for brokered exploration; #4488/#4489/#4492 add shared eligibility "
+        "predicate is_explorer_binding_eligible, session-scoped Claude-native "
+        "bind_session_scoped/session_scoped_capability authority mode, and the "
+        "supporting lease management (+89 net lines)",
+    ),
 }
 
 

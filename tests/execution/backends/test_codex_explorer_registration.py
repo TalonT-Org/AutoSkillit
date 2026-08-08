@@ -39,10 +39,12 @@ class TestExplorerRegistrationDerivesFromBindings:
         binding["AUTOSKILLIT_EXPLORATION_ROLE"] = "shared-explorer-session"
         binding["AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH"] = "/tmp/test-authority"
         bindings = {role: dict(binding) for role in sorted(BUNDLED_EXPLORER_ROLES)}
+        transport = {"command": "/usr/bin/fake-mcp"}
 
         count = _generate_agent_tomls(
             tmp_path,
             explorer_binding_envs=bindings,
+            explorer_mcp_transport=transport,
         )
         toml_names = {p.stem for p in (tmp_path / "agents").glob("*.toml")}
         assert BUNDLED_EXPLORER_ROLES <= toml_names, (
@@ -61,10 +63,12 @@ class TestExplorerRegistrationDerivesFromBindings:
         binding["AUTOSKILLIT_EXPLORATION_ROLE"] = "shared-explorer-session"
         binding["AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH"] = "/tmp/test-authority"
         bindings = {role: dict(binding) for role in sorted(BUNDLED_EXPLORER_ROLES)}
+        transport = {"command": "/usr/bin/fake-mcp"}
 
         _generate_agent_tomls(
             tmp_path,
             explorer_binding_envs=bindings,
+            explorer_mcp_transport=transport,
         )
         for role in BUNDLED_EXPLORER_ROLES:
             data = tomllib.loads(

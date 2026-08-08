@@ -118,7 +118,7 @@ class SkillProjectionContext:
         {ExplorationVectorApplicabilityId.ALWAYS}
     )
     parent_sandbox_mode: str = "workspace-write"
-    explorer_provisioning_eligible: bool = False
+    explorer_provisioning_eligible: bool | None = None
     projection_version: int = SKILL_PROJECTION_VERSION
 
     def __post_init__(self) -> None:
@@ -408,8 +408,8 @@ def project_agent_skill_document(
                 for vector in migrated
                 if vector.applicability not in context.active_exploration_applicabilities
             }
-            if not active_vectors or not context.explorer_provisioning_eligible:
-                if not context.explorer_provisioning_eligible and active_vectors:
+            if not active_vectors or context.explorer_provisioning_eligible is False:
+                if context.explorer_provisioning_eligible is False and active_vectors:
                     replacements.update(
                         {
                             vector.id: (

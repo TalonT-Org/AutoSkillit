@@ -370,8 +370,17 @@ async def enable_exploration(
     Never raises.
     """
     try:
+        from autoskillit.core import SessionType
+        from autoskillit.core import session_type as _resolve_session_type
         from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
         from autoskillit.server import _get_ctx
+
+        session_type = _resolve_session_type()
+        if session_type in {SessionType.ORCHESTRATOR, SessionType.FLEET}:
+            return json.dumps(
+                {"status": "error", "code": "session_type_ineligible"},
+                separators=(",", ":"),
+            )
 
         ctx = _get_ctx()
         store = ctx.exploration_context_store

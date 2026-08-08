@@ -2177,11 +2177,11 @@ class CodexBackend(BackendCmdBuilderBase):
         if env_source.exists():
             shutil.copy2(env_source, session_dir / ".env")
 
-        toml_definitions = (
-            projected_definitions
-            if explorer_binding_envs
-            else tuple(d for d in projected_definitions if d.name not in BUNDLED_EXPLORER_ROLES)
-        )
+        toml_definitions = projected_definitions
+        if not explorer_binding_envs and agent_defs is None:
+            toml_definitions = tuple(
+                d for d in projected_definitions if d.name not in BUNDLED_EXPLORER_ROLES
+            )
         _generate_agent_tomls(
             session_dir,
             toml_definitions,

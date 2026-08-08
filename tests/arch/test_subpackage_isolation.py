@@ -1254,7 +1254,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "run_skill launch denial paths before command construction (+139 net lines)",
     ),
     "execution/backends/codex.py": (
-        2350,
+        2370,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1296,7 +1296,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "include_scope_discipline parameter and build_interactive_cmd's suffix call is "
         "widened to codex_discipline_suffix(include_scope=True) so scope-discipline "
         "delivery scoping stays adjacent to the same command builders that already own "
-        "prompt-injection composition (+14 net lines)",
+        "prompt-injection composition (+14 net lines)"
+        "; #4488/#4489/#4492 explorer surface authority: setup_session_dir gains "
+        "explorer-role TOML exclusion filter for unbound sessions (+7 net lines)",
     ),
     "execution/backends/claude.py": (
         1108,

@@ -124,7 +124,9 @@ def installed_plugin_artifact_manifest_payload(
 
 def is_python_bytecode_path(path: Path) -> bool:
     """Return whether *path* names interpreter-generated Python bytecode."""
-    return path.name == "__pycache__" or path.name.endswith((".pyc", ".pyo"))
+    return (path.name == "__pycache__" and path.is_dir()) or (
+        path.name.endswith((".pyc", ".pyo")) and path.is_file()
+    )
 
 
 def _classify_bytecode_contamination(root: Path) -> str:

@@ -830,7 +830,7 @@ def run_capture(
                     or verified is None
                     or command_outcome is None
                 ):
-                    raise  # outer handler at :837 runs unchanged
+                    raise  # propagate to the enclosing runtime-error handler
                 # PRESERVE_OUTPUT: best-effort failure bookkeeping, then
                 # deliver the bounded verified output with the child's
                 # real exit code.

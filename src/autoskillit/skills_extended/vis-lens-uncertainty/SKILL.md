@@ -61,11 +61,18 @@ semantic_requirements:
 - Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-uncertainty/`
 - Conflate SD, SE, CI95, and PI95 — they have fundamentally different interpretations
 - Omit the CRITICAL flag when n_seeds == 1; single-seed variance is unquantifiable
+- Import or execute target code, tests, experiments, models, benchmarks, notebooks, or plotting workflows to gather evidence
 
 **ALWAYS:**
 - CRITICAL: if `n_seeds == 1`, flag the figure as **CRITICAL** — single-seed variance is unquantifiable and must be reported
 - If `n_seeds >= 10`, prefer violin/box/strip over error bars to show the full distribution shape
 - Label every uncertainty overlay with its exact measure (SD, SE, CI95, PI95) and n in the figure caption
+- Use the registered exploration roles for all repository reads
+- Route the missing-context vector only for fields absent after direct caller-context parsing, and dispatch the 4 repo-local uncertainty inventory vectors through the deterministic router
+- Allow parent-boundary handoff between declarative or generated-artifact evidence and semantic code navigation without creating extra vectors
+- Keep external availability, licensing, and network checks lens-owned and outside native exploration
+- Wait for every applicable exploration result before selecting an uncertainty measure, judging claims or seed sufficiency, emitting figure specifications, or creating the diagram
+- Retain parent authority over critical and warning classifications, uncertainty-measure choice, claim interpretation, figure-spec synthesis, and diagram creation
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-uncertainty/vis_spec_uncertainty_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
@@ -88,25 +95,37 @@ arg 2 (experiment_plan_path) is provided and exists, read the experiment plan fo
 methodology. Use this structured context as the foundation for Steps 1–4; skip the CWD
 exploration for these fields if the context file supplies them.
 
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
+
 ### Step 1: Inventory Figures and Seeds
 
-Scan experiment plan, context file, and codebase for:
+Use the supplied experiment plan and context directly. Route only the repo-local inventory below through registered exploration roles.
 
 **Figures with Error-Bearing Quantities**
-- Find all figures that aggregate over multiple runs, seeds, or samples
-- Look for: `mean`, `average`, `std`, `stderr`, `ci`, `error_bar`, `errorbar`, `fill_between`
+
+<!-- autoskillit:exploration-vector id="figures-error-bearing-quantities" -->
+Inventory pre-existing figures and figure specifications that aggregate across runs, seeds, or samples, including generated figures, tables, data declarations, tests, and fixtures. Use parent-mediated semantic navigator handoff for bounded plotting-symbol tracing; do not import or execute target code.
+<!-- /autoskillit:exploration-vector -->
 
 **Seed Count**
-- Find the number of random seeds or independent runs used
-- Look for: `n_seeds`, `num_seeds`, `seeds`, `SEEDS`, `random_state`, `seed_list`, `runs`
+
+<!-- autoskillit:exploration-vector id="seed-count" -->
+Trace seed-count and independent-run definitions, seed collections, random-state configuration, run construction, and the aggregate-figure paths they affect. Return code relationships and declared values only.
+<!-- /autoskillit:exploration-vector -->
 
 **Existing Uncertainty Representation**
-- Find whether any uncertainty overlay exists at all
-- Look for: `plt.fill_between`, `ax.errorbar`, `capsize`, `yerr`, `xerr`, `ci=`, `sd=`, `ci_band`
+
+<!-- autoskillit:exploration-vector id="existing-uncertainty-representation" -->
+Trace uncertainty-overlay definitions and calls, including bands, error bars, caps, axis errors, declared measures, and the visualization paths they affect. Return evidence only; the parent determines whether the representation exists and is correctly labeled.
+<!-- /autoskillit:exploration-vector -->
 
 **Claims About Variance**
-- Find claims that assert robustness, stability, or statistical significance
-- Look for: `significant`, `robust`, `stable`, `p-value`, `consistent`, `reproducible`
+
+<!-- autoskillit:exploration-vector id="claims-about-variance" -->
+Inventory pre-existing report text, captions, figure specifications, and declarative artifacts that claim robustness, stability, consistency, reproducibility, statistical significance, or variance behavior. Map claims to affected figures without judging validity.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Determine Correct Uncertainty Measure Per Figure
 

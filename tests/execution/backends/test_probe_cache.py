@@ -181,7 +181,7 @@ def test_probe_policy_identity_uses_output_discipline_authorities() -> None:
         f"{CODEX_RECIPE_PROBE_POLICY_DIGEST}"
     )
     assert PROBE_SUITE_CONTRACT == (
-        "generated-codex-child-v1",
+        "generated-codex-child-v7",
         "deep-investigate-codex-v2",
         "deep-investigate-claude-200k-v2",
         "claude-startup-readiness-v1",
@@ -216,8 +216,8 @@ def test_recipe_probe_policy_identity_covers_every_invalidation_domain() -> None
     }
 
 
-def test_probe_cache_schema_is_version_three() -> None:
-    assert _SCHEMA_VERSION == 3
+def test_probe_cache_schema_is_version_five() -> None:
+    assert _SCHEMA_VERSION == 5
 
 
 class TestWriteProbeCache:

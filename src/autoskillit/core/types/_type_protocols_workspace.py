@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from ._type_backend import BackendConventions
-from ._type_enums import SkillExecutionRole, SkillSource
+from ._type_enums import SkillExecutionRole, SkillInvalidityKind, SkillSource
+from ._type_exploration import RepositoryProfileId
 from ._type_plugin_source import (
     PluginArtifactIdentity,
     PluginLaunchBinding,
@@ -20,7 +21,13 @@ from ._type_plugin_source import (
 )
 from ._type_protocols_backend import CodingAgentBackend
 from ._type_results import CleanupResult, CloneResult, ManagedSessionHome, ValidatedAddDir
-from ._type_skill_contract import SkillSourceIdentity, SkillSourceRef, SkillVisibilitySpec
+from ._type_skill_contract import (
+    ExplorationVectorApplicabilityId,
+    ExplorationVectorDef,
+    SkillSourceIdentity,
+    SkillSourceRef,
+    SkillVisibilitySpec,
+)
 from ._type_skill_semantics import SkillSemanticPlan
 
 __all__ = [
@@ -34,7 +41,9 @@ __all__ = [
     "ResolvedSkillAuthority",
     "SessionSkillManager",
     "SkillAuthority",
+    "SkillExclusionAuthority",
     "SkillFrontmatterAuthority",
+    "SkillInvalidityAuthority",
     "SkillLister",
     "SkillProjectionContextAuthority",
     "SkillResolver",
@@ -103,6 +112,40 @@ class SkillFrontmatterAuthority(Protocol):
 
 
 @runtime_checkable
+class SkillInvalidityAuthority(Protocol):
+    """One typed reason a skill's contract failed, crossing the IL-0 boundary."""
+
+    @property
+    def kind(self) -> SkillInvalidityKind: ...
+
+    @property
+    def detail(self) -> str: ...
+
+
+@runtime_checkable
+class SkillExclusionAuthority(Protocol):
+    """One project-local skill candidate excluded from the effective catalog."""
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def path(self) -> Path: ...
+
+    @property
+    def search_dir(self) -> str: ...
+
+    @property
+    def invalidities(self) -> tuple[SkillInvalidityAuthority, ...]: ...
+
+    @property
+    def fallback(self) -> SkillSource | None: ...
+
+    @property
+    def hints(self) -> tuple[str, ...]: ...
+
+
+@runtime_checkable
 class SkillAuthority(Protocol):
     """Structural machine authority shared by resolved and catalog skill records."""
 
@@ -131,6 +174,12 @@ class SkillAuthority(Protocol):
     def activate_deps(self) -> tuple[str, ...]: ...
 
     @property
+    def exploration_vectors(self) -> tuple[ExplorationVectorDef, ...]: ...
+
+    @property
+    def exploration_sidecar_digest(self) -> str: ...
+
+    @property
     def canonical_content(self) -> str: ...
 
     @property
@@ -140,7 +189,7 @@ class SkillAuthority(Protocol):
     def frontmatter(self) -> SkillFrontmatterAuthority | None: ...
 
     @property
-    def invalid_reason(self) -> str | None: ...
+    def invalidities(self) -> tuple[SkillInvalidityAuthority, ...]: ...
 
 
 @runtime_checkable
@@ -166,6 +215,9 @@ class EffectiveSkillCatalogAuthority(Protocol):
 
     @property
     def namespace_sources(self) -> Mapping[str, SkillSource]: ...
+
+    @property
+    def exclusions(self) -> Sequence[SkillExclusionAuthority]: ...
 
 
 @runtime_checkable
@@ -223,10 +275,27 @@ class SkillProjectionContextAuthority(Protocol):
     def namespace(self) -> str | None: ...
 
     @property
+    def exploration_launch_context_ref(self) -> str | None: ...
+
+    @property
+    def resolved_exploration_profile(self) -> RepositoryProfileId | None: ...
+
+    @property
+    def active_exploration_applicabilities(
+        self,
+    ) -> frozenset[ExplorationVectorApplicabilityId]: ...
+
+    @property
+    def parent_sandbox_mode(self) -> str: ...
+
+    @property
     def projection_version(self) -> int: ...
 
     @property
     def skills(self) -> tuple[SkillAuthority, ...]: ...
+
+    @property
+    def exploration_vectors(self) -> Mapping[str, tuple[ExplorationVectorDef, ...]]: ...
 
 
 @runtime_checkable
@@ -283,6 +352,11 @@ class SessionSkillManager(Protocol):
         session_id: str,
         invocation: EffectiveSkillInvocationAuthority,
         projection_context: SkillProjectionContextAuthority,
+        *,
+        explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
+        explorer_binding_env_factory: (
+            Callable[[Path], Mapping[str, Mapping[str, str]] | None] | None
+        ) = None,
     ) -> ValidatedAddDir: ...
 
     def init_session(

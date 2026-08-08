@@ -171,6 +171,7 @@ _CORE_UNIVERSAL_EXCLUSIONS: dict[str, frozenset[str]] = {
 MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_cmd_runner": frozenset({"cli", "core", "recipe", "smoke_utils", "_probe_canary"}),
     "_json": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
+    "agent_definition": frozenset({"core", "execution", "pipeline", "server", "workspace"}),
     "artifact_lease": frozenset({"core", "workspace"}),
     "executable_binding": frozenset({"cli", "core", "execution"}),
     "private_file": frozenset({"core", "execution", "pipeline"}),
@@ -180,12 +181,16 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "branch_guard": frozenset({"core", "pipeline", "server", "workspace"}),
     # +workspace: _install_state reads the plugin registry through
     # registered_install_paths() (IL-005 forbids reaching for cli.InstalledPluginsFile).
-    "_plugin_ids": frozenset({"core", "cli", "hook_registry", "server", "workspace"}),
+    "_plugin_ids": frozenset({"core", "cli", "execution", "hook_registry", "server", "workspace"}),
     "_terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
-    "_plugin_artifact_identity": frozenset({"core", "cli", "server", "workspace"}),
+    "_plugin_artifact_identity": frozenset(
+        {"core", "cli", "execution", "hook_registry", "server", "smoke_utils", "workspace"}
+    ),
     "_plugin_cache": frozenset({"core", "cli", "server", "workspace"}),
-    "git_remote": frozenset({"core", "execution"}),
+    "git_remote": frozenset({"core", "execution", "exploration"}),
     "github_url": frozenset({"core", "cli", "execution", "fleet", "server"}),
+    # +smoke_utils: _cross_interpreter_upgrade resolves the repo root above the
+    # installed package via pkg_root() for the live uv upgrade smoke step.
     "paths": frozenset(
         {
             "core",
@@ -198,6 +203,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
             "recipe",
             "report",
             "server",
+            "smoke_utils",
             "workspace",
             "infra/test_generated_file_write_guard.py",
             "infra/test_generated_files.py",
@@ -215,7 +221,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         {"_llm_triage", "cli", "core", "execution", "fleet", "pipeline", "server", "workspace"}
     ),
     "_type_skill_semantics": frozenset(
-        {"cli", "core", "execution", "fleet", "pipeline", "server", "workspace"}
+        {"cli", "core", "execution", "fleet", "migration", "pipeline", "server", "workspace"}
     ),
     "_type_inspector": frozenset({"core", "execution"}),
     "_type_intake_policy": frozenset({"core", "execution"}),
@@ -238,6 +244,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         {
             "core",
             "execution",
+            "exploration",
             "pipeline",
             "workspace",
             "recipe",
@@ -252,7 +259,11 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         }
     ),
     "_type_results_execution": frozenset({"core", "execution", "server", "pipeline"}),
-    "_type_backend": frozenset({"core", "execution", "cli", "recipe", "server", "workspace"}),
+    "_type_execution_identity": frozenset({"core", "execution", "server", "cli", "fleet"}),
+    "_type_exploration": frozenset({"core", "exploration", "pipeline", "server"}),
+    "_type_backend": frozenset(
+        {"core", "execution", "cli", "migration", "recipe", "server", "workspace"}
+    ),
     "_type_launch": frozenset(
         {"core", "execution", "pipeline", "server", "fleet", "cli", "recipe", "workspace"}
     ),
@@ -292,7 +303,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         }
     ),
     "_type_exceptions": frozenset(
-        {"cli", "core", "execution", "fleet", "recipe", "server", "workspace"}
+        {"cli", "core", "execution", "fleet", "migration", "recipe", "server", "workspace"}
     ),
     "_type_skill_contract": frozenset(
         {"cli", "config", "core", "execution", "recipe", "server", "workspace"}
@@ -676,6 +687,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "core",
             "config",
             "execution",
+            "exploration",
             "pipeline",
             "report",
             "workspace",
@@ -773,6 +785,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     "workspace": frozenset(
         {
             "workspace",
+            "migration",
             # recipe direct-import entries (import autoskillit.workspace at AST level):
             "recipe/test_contracts.py",
             "recipe/test_recipe_backend_composition_matrix.py",
@@ -824,7 +837,12 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_execution_routing.py",
             "server/test_run_skill_add_dirs.py",
             "server/test_tools_execution_backend_mixing.py",
+            "server/test_tools_exploration.py",
             "server/test_tools_workspace.py",
+            "server/test_explorer_dispatch.py",
+            "server/test_explorer_identity_verification.py",
+            "server/test_explorer_projection_authority.py",
+            "server/test_skill_session_vector_persistence.py",
             "cli",
             "fleet",
             "skills",
@@ -984,6 +1002,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "hooks",
             "cli",
             "execution",
+            # +workspace: _hook_repair repairs a broken plugin-cache hooks.json by
+            # calling find_broken_hook_scripts/generate_hooks_json directly.
+            "workspace",
             # server/ narrowed to 4 files
             "server/test_tools_kitchen_envelope.py",
             "server/test_tools_kitchen_preflight.py",
@@ -1010,6 +1031,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     # Standalone modules (not subpackage directories)
     # L1
     "report": frozenset({"report", "skills_extended"}),
+    "exploration": frozenset({"exploration", "server", "cli"}),
     "planner": frozenset(
         {
             "planner",
@@ -1128,6 +1150,7 @@ LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {
     "version": frozenset({"test_version.py"}),
     "_test_filter": frozenset({"arch", "contracts"}),
     "report": frozenset({"report"}),
+    "exploration": frozenset({"exploration"}),
     "_probe_canary": frozenset(
         {
             "core",

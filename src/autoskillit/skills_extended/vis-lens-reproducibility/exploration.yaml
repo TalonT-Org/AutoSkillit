@@ -1,0 +1,54 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence fills only visualization-context fields missing
+    after parent-side supplied-input parsing; complete caller context remains direct
+    authority.
+- id: data-availability-inventory
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies repo-local data sources, manifests,
+    figure data references, and declared external references while availability, licensing,
+    and network checks remain parent-owned.
+- id: preprocessing-parameter-audit
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces preprocessing definitions, parameters, calls,
+    and affected visualization paths while the parent judges disclosure completeness.
+- id: library-version-audit
+  role: semantic-code-navigator
+  relationship_classes:
+  - imports
+  - references
+  - affects
+  rationale: Semantic navigation traces plotting imports and references while parent-owned
+    handoff uses repository impact evidence for dependency manifests and version declarations.
+- id: random-seed-audit
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces stochastic figure paths, random-seed definitions,
+    and seed-setting calls without judging documentation adequacy.
+- id: per-figure-code-reference
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence maps pre-existing figures and figure specifications
+    to declared scripts, notebooks, cells, and generated-artifact consumers, with
+    bounded navigator handoff for code symbols.

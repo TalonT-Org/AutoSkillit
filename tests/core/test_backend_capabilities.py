@@ -84,6 +84,7 @@ def test_backend_capabilities_field_count():
     assert bool_fields == {
         "channel_b_capable",
         "has_unguarded_filesystem_access",
+        "terminal_explorer_capable",
         "pty_required",
         "session_resume_capable",
         "skill_injection_capable",
@@ -141,6 +142,7 @@ def test_backend_capabilities_field_names_locked():
     expected = {
         "channel_b_capable",
         "has_unguarded_filesystem_access",
+        "terminal_explorer_capable",
         "pty_required",
         "session_resume_capable",
         "skill_injection_capable",
@@ -236,6 +238,7 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.default_skill_sandbox_mode == ""
     assert CLAUDE_CODE_CAPABILITIES.skill_sigil == "/"
     assert CLAUDE_CODE_CAPABILITIES.supports_model_invocation_gating is True
+    assert CLAUDE_CODE_CAPABILITIES.terminal_explorer_capable is False
     assert CLAUDE_CODE_CAPABILITIES.hook_trust_policy is HookTrustPolicy.AUTOMATED
 
 

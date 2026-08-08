@@ -84,12 +84,37 @@ src/autoskillit/skills_extended/*/SKILL.md:
   - skills_extended/
   - workspace/
   - planner/
+  - execution/
+  - server/test_explorer_dispatch.py
+
+src/autoskillit/skills_extended/*/exploration.yaml:
+  - skills/
+  - contracts/
+  - recipe/test_skill_worktree_patterns.py
+  - recipe/test_plan_visualization_step.py
+  - recipe/test_diagnose_ci_subtype_output.py
+  - recipe/test_contracts.py
+  - recipe/test_silent_type_flows.py
+  - recipe/test_skill_emit_consistency.py
+  - recipe/test_diagnostic_steps.py
+  - recipe/test_bundled_recipes_general.py
+  - recipe/test_rules_skill_content.py
+  - recipe/test_rules_contracts.py
+  - recipe/test_rules_skills.py
+  - recipe/test_rules_dedup.py
+  - skills_extended/
+  - workspace/
+  - planner/
+  - execution/
+  - server/test_explorer_dispatch.py
 
 src/autoskillit/config/defaults.yaml:
   - config/
   - infra/
   - docs/
   - workspace/
+  - server/test_resolve_backend_override.py
+  - server/test_explicit_backend_override.py
 
 src/autoskillit/hooks/registry.sha256:
   - infra/
@@ -108,6 +133,9 @@ src/autoskillit/agents/**:
   - server/
   - arch/
   - contracts/
+  - planner/
+  - execution/
+  - workspace/
   - planner/
 
 .github/workflows/*.yml:
@@ -157,6 +185,9 @@ tests/arch/fixtures/*:
 
 tests/recipe/fixtures/*:
   - recipe/
+
+tests/contracts/fixtures/skill_contract_corpus/*:
+  - contracts/
 
 tests/fixtures/codex/*.ndjson:
   - execution/

@@ -123,6 +123,7 @@ class CloneSourceResolution:
     reason: Literal["ok", "no_origin", "timeout", "error"]
     url: str
     stderr: str
+    remote_name: str = ""
 
 
 def _probe_single_remote(source: Path, remote_name: str) -> CloneSourceResolution:
@@ -140,20 +141,28 @@ def _probe_single_remote(source: Path, remote_name: str) -> CloneSourceResolutio
             timeout=30,
         )
     except subprocess.TimeoutExpired:
-        return CloneSourceResolution(reason="timeout", url="", stderr="")
+        return CloneSourceResolution(reason="timeout", url="", stderr="", remote_name=remote_name)
     except OSError as exc:
-        return CloneSourceResolution(reason="error", url="", stderr=str(exc))
+        return CloneSourceResolution(
+            reason="error", url="", stderr=str(exc), remote_name=remote_name
+        )
 
     if result.returncode != 0:
         stderr = result.stderr.strip()
         if any(m in stderr.lower() for m in _no_remote_markers):
-            return CloneSourceResolution(reason="no_origin", url="", stderr=stderr)
-        return CloneSourceResolution(reason="error", url="", stderr=stderr)
+            return CloneSourceResolution(
+                reason="no_origin", url="", stderr=stderr, remote_name=remote_name
+            )
+        return CloneSourceResolution(
+            reason="error", url="", stderr=stderr, remote_name=remote_name
+        )
 
     url = result.stdout.strip()
     if not url:
-        return CloneSourceResolution(reason="no_origin", url="", stderr="")
-    return CloneSourceResolution(reason="ok", url=url, stderr="")
+        return CloneSourceResolution(
+            reason="no_origin", url="", stderr="", remote_name=remote_name
+        )
+    return CloneSourceResolution(reason="ok", url=url, stderr="", remote_name=remote_name)
 
 
 def _probe_clone_source_url(source: Path) -> CloneSourceResolution:

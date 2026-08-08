@@ -27,6 +27,54 @@ async def test_tools_execution_routes_through_executor(tool_ctx_kitchen_open, mo
 
 
 @pytest.mark.anyio
+async def test_run_skill_preserves_execution_identity_in_response(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+) -> None:
+    import json
+
+    from autoskillit.core import (
+        ChildExecutionIdentity,
+        ExecutionIdentity,
+        RetryReason,
+        SkillResult,
+    )
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    identity = ExecutionIdentity(
+        effective_parent_backend="codex",
+        effective_parent_model="gpt-5.6-sol",
+        children=(
+            ChildExecutionIdentity(
+                task_id="task-a",
+                role="semantic-code-navigator",
+                plan_digest="sha256:plan",
+                definition_digest="sha256:definition",
+            ),
+        ),
+    )
+    executor = InMemoryHeadlessExecutor(
+        SkillResult(
+            success=True,
+            result="ok",
+            session_id="session-a",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+            execution_identity=identity,
+        )
+    )
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    response = json.loads(await run_skill("/test skill", str(tmp_path)))
+
+    assert response["execution_identity"] == identity.to_dict()
+
+
+@pytest.mark.anyio
 async def test_standalone_audit_uses_only_standalone_contract(
     tool_ctx_kitchen_open,
     monkeypatch,

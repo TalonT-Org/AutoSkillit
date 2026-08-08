@@ -4,7 +4,7 @@ How AutoSkillit runs a recipe end to end: orchestrator, kitchen gating, clone an
 
 ## Overview
 
-AutoSkillit is a Claude Code plugin that orchestrates automated workflows using headless sessions. It provides 65 MCP tools and 142 bundled skills, organized into a gated visibility system.
+AutoSkillit is a Claude Code plugin that orchestrates automated workflows using headless sessions. It provides 68 MCP tools and 142 bundled skills, organized into a gated visibility system.
 
 ## Core Concepts
 
@@ -13,6 +13,17 @@ YAML pipeline definitions that describe a sequence of steps. Each step invokes a
 
 ### Skills
 Markdown instruction files (`SKILL.md`) that define what a headless Claude session should do. Skills are registered as `/autoskillit:*` slash commands. Each skill runs in its own context window, so pipelines can run for hours without hitting context limits.
+
+Skills that adopt specialized repository exploration declare a reviewed vector inventory in a
+per-skill `exploration.yaml` sidecar (slim schema: `vectors` for migrated entries, `retained` for
+prose-only review ledger entries). Exact HTML markers in SKILL.md bind each vector to its canonical
+prose. Source resolution validates the sidecar schema and marker coverage; session projection then
+builds a deterministic router plan and replaces only migrated marker bodies after the backend is
+bound. Claude materializes native `Agent` calls and Codex materializes native `spawn_agent` calls,
+both using the same typed task packets and parent-owned merge/synthesis rules. Retained vectors
+remain prose, so a conditional or unsupported investigation is not silently promoted to
+unconditional native dispatch. The projection-cache `skill_identity` includes the sidecar content
+digest, so sidecar-only edits bust the cache. See [Explorer Agents](explorer-agents.md).
 
 ### The Orchestrator
 When you run `autoskillit order`, Claude Code acts as a pipeline orchestrator. It reads the recipe, collects ingredients from you, and executes steps in sequence. The orchestrator never reads or writes code itself — it delegates all work through `run_skill` (headless sessions) and `run_cmd` (shell commands).
@@ -72,7 +83,7 @@ AutoSkillit supports four session modes with different tool and skill visibility
   `$ claude`); `/open-kitchen` reveals kitchen tools.
 
 - **`$ autoskillit order`**: Pipeline orchestrator session. Kitchen is pre-opened at startup —
-  all 65 MCP tools are available immediately. All skill tiers are accessible. The orchestrator
+  all 68 MCP tools are available immediately. All skill tiers are accessible. The orchestrator
   delegates work through `run_skill` (headless sessions) and `run_cmd` (shell commands).
 
 - **`run_skill` (headless)**: Worker sessions launched by the orchestrator. Sees 4 always-visible

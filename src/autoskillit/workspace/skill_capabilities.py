@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 from threading import Event, RLock
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 import regex as re
 
@@ -29,6 +29,7 @@ from autoskillit.core import (
     LogicalRoleSpec,
     SiblingSkillSpec,
     SkillContractError,
+    SkillInvalidityKind,
     SkillSemanticPlan,
 )
 
@@ -38,6 +39,7 @@ if TYPE_CHECKING:
 CapabilityActor = Literal["self", "parent", "external"]
 CapabilityDirection = Literal["outbound", "inbound", "descriptive"]
 CapabilitySourceClassification = Literal["executable", "artifact"]
+_AuthenticityDiagnostics = tuple["SkillCapabilityAuthenticityDiagnostic", ...]
 _SkillCapabilityEvidenceKey = tuple[str, str]
 
 # Accounted resident payload includes exact key strings, evidence source strings,
@@ -91,6 +93,12 @@ class SkillCapabilityValidation:
     @property
     def valid(self) -> bool:
         return not self.missing and not self.unsupported
+
+
+class SkillCapabilityAuthenticityDiagnostic(NamedTuple):
+    kind: SkillInvalidityKind
+    capability: str
+    detail: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -775,26 +783,29 @@ def validate_skill_capability_declarations(
     )
 
 
-def validate_skill_capability_authenticity(
-    skill_info: SkillInfo,
-) -> tuple[str, ...]:
+def validate_skill_capability_authenticity(skill_info: SkillInfo) -> _AuthenticityDiagnostics:
     """Return stable diagnostics for declaration/evidence mismatches."""
     validation = validate_skill_capability_declarations(
         skill_info.canonical_content,
         skill_info.name,
         skill_info.uses_capabilities,
     )
-    diagnostics: list[str] = []
+    diagnostics: list[SkillCapabilityAuthenticityDiagnostic] = []
     for capability in sorted(validation.missing):
         genuine = next(
             item
             for item in validation.evidence
             if item.capability == capability and item.is_genuine
         )
-        diagnostics.append(
+        detail = (
             f"{skill_info.name}: missing declaration for {capability!r}; "
             f"lines {genuine.source_span[0]}-{genuine.source_span[1]}: "
             f"{genuine.source.strip()!r}"
+        )
+        diagnostics.append(
+            SkillCapabilityAuthenticityDiagnostic(
+                SkillInvalidityKind.UNDECLARED_CAPABILITY, capability, detail
+            )
         )
     for capability in sorted(validation.unsupported):
         artifact = next(
@@ -808,21 +819,26 @@ def validate_skill_capability_authenticity(
             if artifact is not None
             else "no source span: no recognizable evidence"
         )
-        diagnostics.append(
+        detail = (
             f"{skill_info.name}: declaration {capability!r} lacks genuine evidence; "
             f"{evidence_detail}"
+        )
+        diagnostics.append(
+            SkillCapabilityAuthenticityDiagnostic(
+                SkillInvalidityKind.UNKNOWN_CAPABILITY, capability, detail
+            )
         )
     return tuple(diagnostics)
 
 
-_RETIRED_SEMANTIC_CAPABILITIES: dict[str, str] = {
+RETIRED_SEMANTIC_CAPABILITIES: dict[str, str] = {
     "agent_model": "semantic_requirements.child_model_policies",
     "agent_subagent": "semantic_requirements.child_spawns",
     "cross_skill_ref": "semantic_requirements.sibling_skills",
     "git_metadata_write": "semantic_requirements.git_metadata_writes",
 }
 _RETIRED_SEMANTIC_DECLARATIONS: dict[str, str] = {
-    **_RETIRED_SEMANTIC_CAPABILITIES,
+    **RETIRED_SEMANTIC_CAPABILITIES,
     "backend_requirements": "backend selection outside skill declarations",
     "required_backends": "backend selection outside skill declarations",
 }
@@ -880,18 +896,21 @@ def parse_skill_semantic_plan(
     path: Path,
     content: str,
     uses_capabilities: frozenset[str],
-) -> tuple[SkillSemanticPlan | None, tuple[str, ...]]:
+) -> tuple[SkillSemanticPlan | None, tuple[tuple[SkillInvalidityKind, str], ...]]:
     """Parse one source declaration without granting it backend authority."""
-    diagnostics: list[str] = []
+    diagnostics: list[tuple[SkillInvalidityKind, str]] = []
     schema_version = data.get("semantic_version", SKILL_SEMANTIC_SCHEMA_VERSION)
-    retired_caps = sorted(uses_capabilities & _RETIRED_SEMANTIC_CAPABILITIES.keys())
+    retired_caps = sorted(uses_capabilities & RETIRED_SEMANTIC_CAPABILITIES.keys())
     for capability in retired_caps:
         diagnostics.append(
-            _semantic_error(
-                path,
-                schema_version=schema_version,
-                offending=capability,
-                replacement=_RETIRED_SEMANTIC_CAPABILITIES[capability],
+            (
+                SkillInvalidityKind.SEMANTIC_UNDECLARED_TOKENS,
+                _semantic_error(
+                    path,
+                    schema_version=schema_version,
+                    offending=capability,
+                    replacement=RETIRED_SEMANTIC_CAPABILITIES[capability],
+                ),
             )
         )
 
@@ -906,11 +925,14 @@ def parse_skill_semantic_plan(
     for token, replacement in raw_tokens:
         if token in body:
             diagnostics.append(
-                _semantic_error(
-                    path,
-                    schema_version=schema_version,
-                    offending=token,
-                    replacement=replacement,
+                (
+                    SkillInvalidityKind.SEMANTIC_UNDECLARED_TOKENS,
+                    _semantic_error(
+                        path,
+                        schema_version=schema_version,
+                        offending=token,
+                        replacement=replacement,
+                    ),
                 )
             )
 
@@ -919,21 +941,27 @@ def parse_skill_semantic_plan(
         return None, tuple(diagnostics)
     if "semantic_version" not in data:
         diagnostics.append(
-            _semantic_error(
-                path,
-                schema_version="missing",
-                offending="semantic_requirements",
-                replacement=f"semantic_version: {SKILL_SEMANTIC_SCHEMA_VERSION}",
+            (
+                SkillInvalidityKind.SEMANTIC_MISSING_VERSION,
+                _semantic_error(
+                    path,
+                    schema_version="missing",
+                    offending="semantic_requirements",
+                    replacement=f"semantic_version: {SKILL_SEMANTIC_SCHEMA_VERSION}",
+                ),
             )
         )
         return None, tuple(diagnostics)
     if schema_version != SKILL_SEMANTIC_SCHEMA_VERSION:
         diagnostics.append(
-            _semantic_error(
-                path,
-                schema_version=schema_version,
-                offending=f"semantic_version: {schema_version}",
-                replacement=f"semantic_version: {SKILL_SEMANTIC_SCHEMA_VERSION}",
+            (
+                SkillInvalidityKind.SEMANTIC_VERSION_MISMATCH,
+                _semantic_error(
+                    path,
+                    schema_version=schema_version,
+                    offending=f"semantic_version: {schema_version}",
+                    replacement=f"semantic_version: {SKILL_SEMANTIC_SCHEMA_VERSION}",
+                ),
             )
         )
         return None, tuple(diagnostics)
@@ -941,11 +969,14 @@ def parse_skill_semantic_plan(
     raw_requirements = data.get("semantic_requirements", {})
     if not isinstance(raw_requirements, dict):
         diagnostics.append(
-            _semantic_error(
-                path,
-                schema_version=schema_version,
-                offending="semantic_requirements",
-                replacement="a mapping of version-1 semantic requirement fields",
+            (
+                SkillInvalidityKind.SEMANTIC_PLAN_INVALID,
+                _semantic_error(
+                    path,
+                    schema_version=schema_version,
+                    offending="semantic_requirements",
+                    replacement="a mapping of version-1 semantic requirement fields",
+                ),
             )
         )
         return None, tuple(diagnostics)
@@ -956,11 +987,14 @@ def parse_skill_semantic_plan(
             token, f"one of {sorted(_SEMANTIC_REQUIREMENT_KEYS)}"
         )
         diagnostics.append(
-            _semantic_error(
-                path,
-                schema_version=schema_version,
-                offending=token,
-                replacement=replacement,
+            (
+                SkillInvalidityKind.SEMANTIC_PLAN_INVALID,
+                _semantic_error(
+                    path,
+                    schema_version=schema_version,
+                    offending=token,
+                    replacement=replacement,
+                ),
             )
         )
     if diagnostics:
@@ -1028,11 +1062,14 @@ def parse_skill_semantic_plan(
         )
     except (SkillContractError, TypeError, ValueError) as exc:
         diagnostics.append(
-            _semantic_error(
-                path,
-                schema_version=schema_version,
-                offending="semantic_requirements",
-                replacement=f"a valid version-{SKILL_SEMANTIC_SCHEMA_VERSION} plan ({exc})",
+            (
+                SkillInvalidityKind.SEMANTIC_PLAN_INVALID,
+                _semantic_error(
+                    path,
+                    schema_version=schema_version,
+                    offending="semantic_requirements",
+                    replacement=f"a valid version-{SKILL_SEMANTIC_SCHEMA_VERSION} plan ({exc})",
+                ),
             )
         )
         return None, tuple(diagnostics)
@@ -1052,6 +1089,7 @@ __all__ = [
     "CapabilityActor",
     "CapabilityDirection",
     "CapabilitySourceClassification",
+    "RETIRED_SEMANTIC_CAPABILITIES",
     "SkillCapabilityEvidence",
     "SkillCapabilityValidation",
     "classify_skill_capability_evidence",

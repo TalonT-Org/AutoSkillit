@@ -29,6 +29,7 @@ __all__ = [
     "CODEX_EFFORT_MAPPING",
     "CODEX_MODEL_ALIASES",
     "CODEX_MODEL_ALIASES_LAST_VERIFIED",
+    "CODEX_VALID_REASONING_EFFORTS",
     "CODEX_VALID_MODEL_IDS",
     "SKILL_MODEL_CLASSES",
     "SKILL_REASONING_EFFORTS",
@@ -173,6 +174,8 @@ class BackendCapabilities:
     supports_context_window_suffix: bool = field(default=False)
     # Gates backend-specific prompt supplements that warn against reading raw package files
     has_unguarded_filesystem_access: bool = field(default=False)
+    # True when a backend can materialize the isolated terminal explorer role surface.
+    terminal_explorer_capable: bool = field(default=False)
     # True when backend's git metadata directories (.git/worktrees/) are writable
     # True when the backend can make outbound GitHub API write calls without sandbox restriction
     github_api_callable: bool = field(default=False)
@@ -242,9 +245,12 @@ CODEX_MODEL_ALIASES: Mapping[str, str] = MappingProxyType(
     }
 )
 
-CODEX_MODEL_ALIASES_LAST_VERIFIED: str = "2026-07-09"
+CODEX_MODEL_ALIASES_LAST_VERIFIED: str = "2026-08-01"
 
-CODEX_VALID_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.5", "gpt-5.6-sol"})
+CODEX_VALID_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.5", "gpt-5.6-luna", "gpt-5.6-sol"})
+CODEX_VALID_REASONING_EFFORTS: frozenset[str] = frozenset(
+    {"low", "medium", "high", "xhigh", "max", "ultra"}
+)
 
 assert set(CODEX_MODEL_ALIASES.values()).issubset(CODEX_VALID_MODEL_IDS), (
     "CODEX_MODEL_ALIASES values must all be members of CODEX_VALID_MODEL_IDS; "
@@ -353,6 +359,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     inspector_capable=False,
     supports_context_window_suffix=True,
     has_unguarded_filesystem_access=False,
+    terminal_explorer_capable=False,
     github_api_callable=True,
     skill_sigil="/",
     session_dir_persistent=False,

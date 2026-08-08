@@ -10,15 +10,26 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, NamedTuple
 
+import regex as re
+
 from autoskillit.core import (
     ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS,
     FEATURE_REGISTRY,
     PACK_REGISTRY,
     RETIRED_SKILL_NAMES,
     SKILL_CAPABILITY_REGISTRY,
+    SKILL_CONTRACT_REMEDIATIONS,
+    ExplorationTaskSpec,
+    ExplorationVectorApplicabilityId,
+    ExplorationVectorDef,
+    ExplorationVectorDisposition,
     FeatureLifecycle,
+    RelationshipKind,
+    RepositoryProfileId,
     SkillContractError,
     SkillExecutionRole,
+    SkillInvalidityAuthority,
+    SkillInvalidityKind,
     SkillResolver,
     SkillSemanticPlan,
     SkillSource,
@@ -27,11 +38,13 @@ from autoskillit.core import (
     SkillVisibilitySpec,
     get_logger,
     is_feature_enabled,
+    load_yaml,
     pkg_root,
     validate_skill_capability_roles,
 )
 from autoskillit.workspace.skill_format import (
     SkillFrontmatterParseResult,
+    _normalize_exploration_vector_body,
     parse_frontmatter_content,
     read_skill_frontmatter,
 )
@@ -68,6 +81,28 @@ def _project_skill_path(root: Path, search: Path, name: str) -> Path | None:
 
 
 @dataclass(frozen=True, slots=True)
+class SkillInvalidity:
+    """One typed reason a skill's contract failed validation."""
+
+    kind: SkillInvalidityKind
+    detail: str
+    capability: str | None = None
+
+
+def invalidity_hints(invalidities: Iterable[SkillInvalidity]) -> tuple[str, ...]:
+    """Return one deduplicated remediation hint per distinct invalidity kind."""
+    return tuple(
+        SKILL_CONTRACT_REMEDIATIONS[kind].hint
+        for kind in dict.fromkeys(item.kind for item in invalidities)
+    )
+
+
+def render_skill_invalidities(invalidities: Iterable[SkillInvalidityAuthority]) -> str:
+    """Render typed skill invalidities for operator-facing diagnostics."""
+    return "; ".join(item.detail for item in invalidities)
+
+
+@dataclass(frozen=True, slots=True)
 class SkillInfo:
     """One exact, typed skill machine contract selected from a source."""
 
@@ -80,10 +115,12 @@ class SkillInfo:
     semantic_plan: SkillSemanticPlan | None = None
     execution_role: SkillExecutionRole | None = SkillExecutionRole.SESSION
     activate_deps: tuple[str, ...] = ()
+    exploration_vectors: tuple[ExplorationVectorDef, ...] = ()
+    exploration_sidecar_digest: str = ""
     canonical_content: str = ""
     canonical_digest: str = ""
     frontmatter: SkillFrontmatterParseResult | None = None
-    invalid_reason: str | None = None
+    invalidities: tuple[SkillInvalidity, ...] = ()
 
     def __post_init__(self) -> None:
         if self.source_ref is None:
@@ -120,12 +157,17 @@ class SkillInfo:
         if (
             self.frontmatter is not None
             and not self.frontmatter.is_valid
-            and self.invalid_reason is None
+            and not self.invalidities
         ):
             object.__setattr__(
                 self,
-                "invalid_reason",
-                f"invalid frontmatter: {self.frontmatter.error}",
+                "invalidities",
+                (
+                    SkillInvalidity(
+                        SkillInvalidityKind.FRONTMATTER_PARSE,
+                        f"invalid frontmatter: {self.frontmatter.error}",
+                    ),
+                ),
             )
 
     @property
@@ -151,17 +193,20 @@ class SkillCatalogEntry:
     semantic_plan: SkillSemanticPlan | None
     execution_role: SkillExecutionRole
     activate_deps: tuple[str, ...]
+    exploration_vectors: tuple[ExplorationVectorDef, ...]
+    exploration_sidecar_digest: str
     canonical_content: str
     canonical_digest: str
     frontmatter: SkillFrontmatterParseResult
-    invalid_reason: str | None = None
+    invalidities: tuple[SkillInvalidity, ...] = ()
 
     @classmethod
     def from_skill_info(cls, skill: SkillInfo) -> SkillCatalogEntry:
         """Remove private source paths while preserving the parsed contract."""
-        if skill.invalid_reason is not None:
+        if skill.invalidities:
             raise SkillContractError(
-                f"invalid contract for {skill.name!r}: {skill.invalid_reason}"
+                f"invalid contract for {skill.name!r}: "
+                f"{render_skill_invalidities(skill.invalidities)}"
             )
         if skill.execution_role is None:
             raise SkillContractError(f"skill {skill.name!r} has no valid execution role")
@@ -178,9 +223,42 @@ class SkillCatalogEntry:
             semantic_plan=skill.semantic_plan,
             execution_role=skill.execution_role,
             activate_deps=skill.activate_deps,
+            exploration_vectors=skill.exploration_vectors,
+            exploration_sidecar_digest=skill.exploration_sidecar_digest,
             canonical_content=skill.canonical_content,
             canonical_digest=skill.canonical_digest,
             frontmatter=skill.frontmatter,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SkillExclusion:
+    """One project-local skill candidate excluded from the effective catalog.
+
+    Recorded — never silently dropped — whenever the resolution boundary
+    (``resolve_effective`` / ``_list_effective_unfiltered``) skips an invalid
+    project-local candidate in favor of the next valid source or, if none
+    exists, an operator-visible absence.
+    """
+
+    name: str
+    path: Path
+    search_dir: str
+    invalidities: tuple[SkillInvalidity, ...]
+    fallback: SkillSource | None
+    hints: tuple[str, ...]
+
+    @classmethod
+    def from_skill_info(cls, info: SkillInfo, *, fallback: SkillSource | None) -> SkillExclusion:
+        """Build a record from a rejected candidate's own invalidities."""
+        assert info.source_ref is not None
+        return cls(
+            name=info.name,
+            path=info.path,
+            search_dir=info.source_ref.search_dir or "",
+            invalidities=info.invalidities,
+            fallback=fallback,
+            hints=invalidity_hints(info.invalidities),
         )
 
 
@@ -191,6 +269,7 @@ class EffectiveSkillCatalog:
     skills: tuple[SkillCatalogEntry, ...]
     execution_role: SkillExecutionRole
     namespace_sources: Mapping[str, SkillSource] = field(default_factory=dict)
+    exclusions: tuple[SkillExclusion, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -199,9 +278,10 @@ class EffectiveSkillCatalog:
             MappingProxyType(dict(self.namespace_sources)),
         )
         for skill in self.skills:
-            if skill.invalid_reason is not None:
+            if skill.invalidities:
                 raise SkillContractError(
-                    f"invalid catalog contract for {skill.name!r}: {skill.invalid_reason}"
+                    f"invalid catalog contract for {skill.name!r}: "
+                    f"{render_skill_invalidities(skill.invalidities)}"
                 )
             if skill.execution_role is not self.execution_role:
                 raise SkillContractError(
@@ -228,13 +308,17 @@ class EffectiveSkillInvocation:
             raise SkillContractError("effective invocation closure contains duplicate members")
         for member in self.closure:
             if (
-                member.invalid_reason is not None
+                member.invalidities
                 or member.frontmatter is None
                 or not member.frontmatter.is_valid
             ):
+                reason = (
+                    render_skill_invalidities(member.invalidities)
+                    if member.invalidities
+                    else "missing parsed frontmatter"
+                )
                 raise SkillContractError(
-                    f"invalid effective invocation contract for {member.name!r}: "
-                    f"{member.invalid_reason or 'missing parsed frontmatter'}"
+                    f"invalid effective invocation contract for {member.name!r}: {reason}"
                 )
             if member.execution_role is not self.execution_role:
                 actual = (
@@ -292,7 +376,7 @@ def _compute_skill_closure(
         info = skills.get(name)
         if (
             info is None
-            or info.invalid_reason is not None
+            or info.invalidities
             or info.execution_role is not SkillExecutionRole.SESSION
         ):
             continue
@@ -326,6 +410,259 @@ def override_names(overrides: frozenset[ProjectLocalOverride]) -> frozenset[str]
 
 _LIST_ALL_CACHE: list[SkillInfo] | None = None
 _LIST_ALL_CACHE_KEY: tuple[float, float] = (0.0, 0.0)
+_SIDECAR_MIGRATED_KEYS = frozenset(
+    {"id", "role", "relationship_classes", "rationale", "applicability"}
+)
+_SIDECAR_RETAINED_KEYS = frozenset({"id", "rationale"})
+_SIDECAR_FILENAME = "exploration.yaml"
+_EXPLORATION_VECTOR_MARKER_TOKEN = "autoskillit:exploration-vector"
+_EXPLORATION_VECTOR_OPEN_RE = re.compile(
+    r'^<!-- autoskillit:exploration-vector id="'
+    r'(?P<id>[a-z][a-z0-9]*(?:-[a-z0-9]+)*)" -->$'
+)
+_EXPLORATION_VECTOR_CLOSE = "<!-- /autoskillit:exploration-vector -->"
+# Parser constants — derived/constant across all 301 vectors at the migration census.
+_VECTOR_DEFAULT_PROFILE = RepositoryProfileId.AUTO
+_VECTOR_DEFAULT_DEPENDS_ON: tuple[str, ...] = ()
+_VECTOR_DEFAULT_SCOPE: tuple[str, ...] = (".",)
+
+
+def _string_tuple(value: object, field_name: str) -> tuple[str, ...]:
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise SkillContractError(f"exploration vector {field_name} must be a list of strings")
+    return tuple(value)
+
+
+def _load_exploration_sidecar(skill_md_path: Path) -> tuple[object | None, str]:
+    """Load exploration.yaml sidecar and return (parsed_yaml, sha256_hex).
+
+    Returns (None, "") if the sidecar does not exist.
+    """
+    sidecar_path = skill_md_path.parent / _SIDECAR_FILENAME
+    try:
+        raw_bytes = sidecar_path.read_bytes()
+    except FileNotFoundError:
+        return None, ""
+    sidecar_digest = hashlib.sha256(raw_bytes).hexdigest()
+    try:
+        parsed = load_yaml(raw_bytes.decode("utf-8"))
+    except Exception as exc:
+        raise SkillContractError(
+            f"exploration sidecar {sidecar_path} is not valid YAML: {exc}"
+        ) from exc
+    return parsed, sidecar_digest
+
+
+def _parse_exploration_sidecar(
+    data: object,
+    skill_name: str,
+) -> tuple[ExplorationVectorDef, ...]:
+    """Parse the slim exploration.yaml schema into typed ExplorationVectorDef tuples."""
+    if data is None:
+        return ()
+    if not isinstance(data, dict):
+        raise SkillContractError("exploration sidecar must be a YAML mapping")
+    allowed_top_keys = {"vectors", "retained"}
+    if set(data) - allowed_top_keys:
+        raise SkillContractError(
+            f"exploration sidecar contains unknown top-level keys: "
+            f"{sorted(set(data) - allowed_top_keys)!r}"
+        )
+    vectors: list[ExplorationVectorDef] = []
+
+    for index, item in enumerate(data.get("vectors") or []):
+        if not isinstance(item, dict):
+            raise SkillContractError(f"exploration sidecar vectors[{index}] must be a mapping")
+        unknown = set(item) - _SIDECAR_MIGRATED_KEYS
+        if unknown:
+            raise SkillContractError(
+                f"exploration sidecar vectors[{index}] contains unknown keys: {sorted(unknown)!r}"
+            )
+        try:
+            for field_name in ("id", "role", "rationale"):
+                if not isinstance(item[field_name], str):
+                    raise SkillContractError(
+                        f"exploration sidecar vectors[{index}].{field_name} must be text"
+                    )
+            applicability_raw = item.get("applicability", "always")
+            if not isinstance(applicability_raw, str):
+                raise SkillContractError(
+                    f"exploration sidecar vectors[{index}].applicability must be text"
+                )
+            vector_id = item["id"]
+            # Derive task_id and frontier_item_id from skill_name + vector id
+            task_id = f"{skill_name}-{vector_id}"
+            frontier_item_id = f"{task_id}-frontier"
+            profile = _VECTOR_DEFAULT_PROFILE
+            vector = ExplorationVectorDef(
+                id=vector_id,
+                disposition=ExplorationVectorDisposition.MIGRATED,
+                rationale=item["rationale"],
+                applicability=ExplorationVectorApplicabilityId(applicability_raw),
+                role=item["role"],
+                profile=profile,
+                relationship_classes=tuple(
+                    RelationshipKind(relationship)
+                    for relationship in _string_tuple(
+                        item["relationship_classes"],
+                        "relationship_classes",
+                    )
+                ),
+                task=ExplorationTaskSpec(
+                    task_id=task_id,
+                    frontier_item_id=frontier_item_id,
+                    profile=profile,
+                    depends_on=_VECTOR_DEFAULT_DEPENDS_ON,
+                    scope=_VECTOR_DEFAULT_SCOPE,
+                ),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise SkillContractError(
+                f"exploration sidecar vectors[{index}] contains an invalid value"
+            ) from exc
+        vectors.append(vector)
+
+    for index, item in enumerate(data.get("retained") or []):
+        if not isinstance(item, dict):
+            raise SkillContractError(f"exploration sidecar retained[{index}] must be a mapping")
+        unknown = set(item) - _SIDECAR_RETAINED_KEYS
+        if unknown:
+            raise SkillContractError(
+                f"exploration sidecar retained[{index}] contains unknown keys: {sorted(unknown)!r}"
+            )
+        try:
+            for field_name in ("id", "rationale"):
+                if not isinstance(item[field_name], str):
+                    raise SkillContractError(
+                        f"exploration sidecar retained[{index}].{field_name} must be text"
+                    )
+            vector_id = item["id"]
+            task_id = f"{skill_name}-{vector_id}"
+            frontier_item_id = f"{task_id}-frontier"
+            profile = _VECTOR_DEFAULT_PROFILE
+            vector = ExplorationVectorDef(
+                id=vector_id,
+                disposition=ExplorationVectorDisposition.RETAINED,
+                rationale=item["rationale"],
+                applicability=ExplorationVectorApplicabilityId.ALWAYS,
+                role=None,
+                profile=profile,
+                relationship_classes=(RelationshipKind.REFERENCES,),
+                task=ExplorationTaskSpec(
+                    task_id=task_id,
+                    frontier_item_id=frontier_item_id,
+                    profile=profile,
+                    depends_on=_VECTOR_DEFAULT_DEPENDS_ON,
+                    scope=_VECTOR_DEFAULT_SCOPE,
+                ),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise SkillContractError(
+                f"exploration sidecar retained[{index}] contains an invalid value"
+            ) from exc
+        vectors.append(vector)
+
+    ids = tuple(vector.id for vector in vectors)
+    if len(ids) != len(set(ids)):
+        raise SkillContractError("exploration sidecar vector ids must be unique")
+    return tuple(vectors)
+
+
+def _bind_exploration_vector_markers(
+    content: str,
+    vectors: tuple[ExplorationVectorDef, ...],
+) -> tuple[ExplorationVectorDef, ...]:
+    declared = {vector.id: vector for vector in vectors}
+    if len(declared) != len(vectors):
+        raise SkillContractError("exploration vector ids must be unique")
+    bodies: dict[str, str] = {}
+    active_id: str | None = None
+    body_lines: list[str] = []
+    for raw_line in content.splitlines(keepends=True):
+        line = raw_line.rstrip("\r\n")
+        if _EXPLORATION_VECTOR_MARKER_TOKEN not in line:
+            if active_id is not None:
+                body_lines.append(raw_line)
+            continue
+        opening = _EXPLORATION_VECTOR_OPEN_RE.fullmatch(line)
+        if opening is not None:
+            marker_id = opening.group("id")
+            if active_id is not None:
+                raise SkillContractError("exploration vector markers cannot be nested")
+            if marker_id not in declared:
+                raise SkillContractError(f"unknown exploration vector marker {marker_id!r}")
+            if marker_id in bodies:
+                raise SkillContractError(f"duplicate exploration vector marker {marker_id!r}")
+            active_id = marker_id
+            body_lines = []
+            continue
+        if line == _EXPLORATION_VECTOR_CLOSE:
+            if active_id is None:
+                raise SkillContractError("mismatched exploration vector closing marker")
+            body = _normalize_exploration_vector_body("".join(body_lines))
+            if not body.strip():
+                raise SkillContractError(f"exploration vector {active_id!r} has an empty body")
+            bodies[active_id] = body
+            active_id = None
+            body_lines = []
+            continue
+        raise SkillContractError("malformed or embedded exploration vector marker token")
+    if active_id is not None:
+        raise SkillContractError(f"exploration vector {active_id!r} is missing its closing marker")
+    missing = set(declared).difference(bodies)
+    if missing:
+        raise SkillContractError(f"missing exploration vector markers: {sorted(missing)!r}")
+    return tuple(replace(vector, body=bodies[vector.id]) for vector in vectors)
+
+
+def replace_exploration_vector_bodies(
+    content: str,
+    vectors: tuple[ExplorationVectorDef, ...],
+    replacements: Mapping[str, str],
+) -> str:
+    """Replace exactly every migrated marker body while retaining reviewed prose."""
+    bound = _bind_exploration_vector_markers(content, vectors)
+    supplied = {vector.id: vector for vector in vectors}
+    if any(vector.body != supplied[vector.id].body for vector in bound):
+        raise SkillContractError(
+            "exploration vector body differs from its canonical parsed authority"
+        )
+    expected = {
+        vector.id
+        for vector in bound
+        if vector.disposition is ExplorationVectorDisposition.MIGRATED
+    }
+    if set(replacements) != expected:
+        raise SkillContractError(
+            "exploration vector replacements must exactly match migrated marker ids"
+        )
+    normalized: dict[str, str] = {}
+    for marker_id, replacement_body in replacements.items():
+        if not isinstance(replacement_body, str) or not replacement_body.strip():
+            raise SkillContractError(f"replacement for exploration vector {marker_id!r} is empty")
+        replacement_body = _normalize_exploration_vector_body(replacement_body)
+        if _EXPLORATION_VECTOR_MARKER_TOKEN in replacement_body:
+            raise SkillContractError("exploration vector replacement contains a marker token")
+        normalized[marker_id] = replacement_body
+
+    output: list[str] = []
+    active_id: str | None = None
+    for raw_line in content.splitlines(keepends=True):
+        line = raw_line.rstrip("\r\n")
+        opening = _EXPLORATION_VECTOR_OPEN_RE.fullmatch(line)
+        if opening is not None:
+            active_id = opening.group("id")
+            output.append(raw_line)
+            if active_id in normalized:
+                output.append(normalized[active_id] + "\n")
+            continue
+        if line == _EXPLORATION_VECTOR_CLOSE:
+            output.append(raw_line)
+            active_id = None
+            continue
+        if active_id not in normalized:
+            output.append(raw_line)
+    return "".join(output)
 
 
 def _dir_mtime(path: Path) -> float:
@@ -390,14 +727,21 @@ def _skill_info_from_frontmatter(
             canonical_content=parsed.content,
             canonical_digest=hashlib.sha256(parsed.content.encode()).hexdigest(),
             frontmatter=parsed,
-            invalid_reason=f"invalid frontmatter: {parsed.error}",
+            invalidities=(
+                SkillInvalidity(
+                    SkillInvalidityKind.FRONTMATTER_PARSE,
+                    f"invalid frontmatter: {parsed.error}",
+                ),
+            ),
         )
 
     data = parsed.data
-    invalid_reasons: list[str] = []
+    invalidities: list[SkillInvalidity] = []
     categories_raw = data.get("categories", [])
     if not isinstance(categories_raw, list):
-        invalid_reasons.append("categories must be a list")
+        invalidities.append(
+            SkillInvalidity(SkillInvalidityKind.FIELD_SHAPE, "categories must be a list")
+        )
         categories_raw = []
     categories = frozenset(str(c) for c in categories_raw)
 
@@ -409,7 +753,9 @@ def _skill_info_from_frontmatter(
             skill=name,
             hint="use bracket syntax: uses_capabilities: [agent_subagent]",
         )
-        invalid_reasons.append("uses_capabilities must be a list")
+        invalidities.append(
+            SkillInvalidity(SkillInvalidityKind.FIELD_SHAPE, "uses_capabilities must be a list")
+        )
         caps_raw = []
     uses_capabilities = frozenset(str(c) for c in caps_raw)
 
@@ -421,22 +767,62 @@ def _skill_info_from_frontmatter(
         content=parsed.content,
         uses_capabilities=uses_capabilities,
     )
-    invalid_reasons.extend(semantic_diagnostics)
+    invalidities.extend(SkillInvalidity(kind, detail) for kind, detail in semantic_diagnostics)
 
     execution_role = parsed.execution_role
 
     activate_deps_raw = data.get("activate_deps", [])
     if not isinstance(activate_deps_raw, list):
-        invalid_reasons.append("activate_deps must be a list")
+        invalidities.append(
+            SkillInvalidity(SkillInvalidityKind.FIELD_SHAPE, "activate_deps must be a list")
+        )
         activate_deps_raw = []
     activate_deps = tuple(str(dep) for dep in activate_deps_raw)
+
+    exploration_vectors: tuple[ExplorationVectorDef, ...] = ()
+    exploration_sidecar_digest = ""
+    if "exploration_vectors" in data:
+        invalidities.append(
+            SkillInvalidity(
+                SkillInvalidityKind.EXPLORATION_CONTRACT_INVALID,
+                "exploration_vectors in frontmatter is no longer supported; "
+                "moved to the exploration.yaml sidecar",
+            )
+        )
+    else:
+        try:
+            sidecar_data, sidecar_digest = _load_exploration_sidecar(skill_path)
+            exploration_sidecar_digest = sidecar_digest
+            if sidecar_data is not None:
+                parsed_vectors = _parse_exploration_sidecar(sidecar_data, name)
+                exploration_vectors = _bind_exploration_vector_markers(
+                    parsed.content,
+                    parsed_vectors,
+                )
+            else:
+                # No sidecar — check if there are markers in the body that expect one.
+                # If markers exist but no sidecar, that is an error caught by the binder
+                # when called with an empty vector tuple.
+                pass
+        except SkillContractError as exc:
+            invalidities.append(
+                SkillInvalidity(
+                    SkillInvalidityKind.EXPLORATION_CONTRACT_INVALID,
+                    str(exc),
+                )
+            )
 
     # These names are reserved machine-derived fields. Reading them here makes
     # attempts to inject source identity through YAML an explicit contract error.
     supplied_canonical_content = data.get("canonical_content")
     supplied_canonical_digest = data.get("canonical_digest")
     if supplied_canonical_content is not None or supplied_canonical_digest is not None:
-        invalid_reasons.append("canonical content and digest are source-derived")
+        invalidities.append(
+            SkillInvalidity(
+                SkillInvalidityKind.RESERVED_FIELD,
+                "canonical content and digest are source-derived",
+            )
+        )
 
     unknown_caps = uses_capabilities - frozenset(SKILL_CAPABILITY_REGISTRY)
     if unknown_caps:
@@ -450,7 +836,7 @@ def _skill_info_from_frontmatter(
     try:
         validate_skill_capability_roles(uses_capabilities, execution_role)
     except SkillContractError as exc:
-        invalid_reasons.append(str(exc))
+        invalidities.append(SkillInvalidity(SkillInvalidityKind.UNKNOWN_CAPABILITY, str(exc)))
 
     canonical_digest = hashlib.sha256(parsed.content.encode()).hexdigest()
 
@@ -464,10 +850,12 @@ def _skill_info_from_frontmatter(
         semantic_plan=semantic_plan,
         execution_role=execution_role,
         activate_deps=activate_deps,
+        exploration_vectors=exploration_vectors,
+        exploration_sidecar_digest=exploration_sidecar_digest,
         canonical_content=parsed.content,
         canonical_digest=canonical_digest,
         frontmatter=parsed,
-        invalid_reason="; ".join(invalid_reasons) or None,
+        invalidities=tuple(invalidities),
     )
     from autoskillit.workspace.skill_capabilities import (
         validate_skill_capability_authenticity,
@@ -475,15 +863,18 @@ def _skill_info_from_frontmatter(
 
     authenticity_diagnostics = validate_skill_capability_authenticity(info)
     if authenticity_diagnostics:
-        reasons = [
-            reason
-            for reason in (
-                info.invalid_reason,
-                *authenticity_diagnostics,
-            )
-            if reason
-        ]
-        info = replace(info, invalid_reason="; ".join(reasons))
+        info = replace(
+            info,
+            invalidities=info.invalidities
+            + tuple(
+                SkillInvalidity(
+                    diagnostic.kind,
+                    diagnostic.detail,
+                    capability=diagnostic.capability,
+                )
+                for diagnostic in authenticity_diagnostics
+            ),
+        )
     return info
 
 
@@ -668,7 +1059,66 @@ class DefaultSkillResolver:
         return list(combined)
 
     def resolve_effective(self, name: str, project_root: Path | None) -> SkillInfo | None:
-        """Resolve the current highest-precedence source without caching overrides."""
+        """Resolve the current highest-precedence VALID source.
+
+        Recipe-loader fall-through semantics (``recipe/io.py``): the first
+        *valid* project-local candidate, in precedence order, wins. An
+        invalid higher-precedence local copy is logged and skipped rather
+        than shadowing a valid bundled twin or a valid lower-precedence
+        local copy — it never escapes to a composition-root gate. If the
+        name has no valid source anywhere, the highest-precedence invalid
+        local candidate is returned so callers can still report why.
+        """
+        normalized_root = project_root.resolve() if project_root is not None else None
+        first_invalid: SkillInfo | None = None
+        if normalized_root is not None:
+            for precedence, search_dir in enumerate(_OVERRIDE_SEARCH_DIRS):
+                skill_path = _project_skill_path(
+                    normalized_root,
+                    normalized_root / search_dir,
+                    name,
+                )
+                if skill_path is None:
+                    continue
+                candidate = _skill_info_from_frontmatter(
+                    name,
+                    SkillSource.PROJECT_LOCAL,
+                    skill_path,
+                    source_ref=SkillSourceRef(
+                        origin=SkillSource.PROJECT_LOCAL,
+                        logical_name=name,
+                        skill_path=skill_path,
+                        search_dir=search_dir,
+                        precedence=precedence,
+                    ),
+                )
+                if not candidate.invalidities:
+                    return candidate
+                logger.warning(
+                    "project_local_skill_rejected",
+                    skill=name,
+                    path=str(skill_path),
+                    reason=render_skill_invalidities(candidate.invalidities),
+                    hints=invalidity_hints(candidate.invalidities),
+                )
+                if first_invalid is None:
+                    first_invalid = candidate
+        bundled = self.resolve(name)
+        return bundled if bundled is not None else first_invalid
+
+    def resolve_local_candidate(self, name: str, project_root: Path | None) -> SkillInfo | None:
+        """Return the first-path-match project-local candidate, valid or not.
+
+        Preserves ``resolve_effective``'s pre-fall-through semantics: the
+        first project-local search dir containing the name wins regardless
+        of validity, falling through to the bundled source only when no
+        project-local directory contains the name at all. ``_llm_triage``
+        is the one caller whose purpose is comparing the raw, possibly
+        stale, on-disk content against a stored baseline — under
+        ``resolve_effective``'s fall-through it would silently receive a
+        bundled twin's substitute content instead of the file it needs to
+        triage.
+        """
         normalized_root = project_root.resolve() if project_root is not None else None
         if normalized_root is not None:
             for precedence, search_dir in enumerate(_OVERRIDE_SEARCH_DIRS):
@@ -691,19 +1141,23 @@ class DefaultSkillResolver:
                         precedence=precedence,
                     ),
                 )
-                if candidate.invalid_reason is not None:
+                if candidate.invalidities:
                     logger.warning(
                         "project_local_skill_rejected",
                         skill=name,
                         path=str(skill_path),
-                        reason=candidate.invalid_reason,
+                        reason=render_skill_invalidities(candidate.invalidities),
+                        hints=invalidity_hints(candidate.invalidities),
                     )
                 return candidate
         return self.resolve(name)
 
-    def _list_effective_unfiltered(self, project_root: Path | None) -> tuple[SkillInfo, ...]:
+    def _list_effective_unfiltered(
+        self, project_root: Path | None
+    ) -> tuple[tuple[SkillInfo, ...], tuple[SkillExclusion, ...]]:
         normalized_root = project_root.resolve() if project_root is not None else None
         by_name = {skill.name: skill for skill in self.list_all()}
+        pending_exclusions: list[SkillInfo] = []
         if normalized_root is not None:
             selected: set[str] = set()
             for precedence, search_dir in enumerate(_OVERRIDE_SEARCH_DIRS):
@@ -738,18 +1192,41 @@ class DefaultSkillResolver:
                             precedence=precedence,
                         ),
                     )
-                    selected.add(entry.name)
-                    if candidate.invalid_reason is not None:
+                    if candidate.invalidities:
                         logger.warning(
                             "project_local_skill_rejected",
                             skill=entry.name,
                             path=str(skill_path),
-                            reason=candidate.invalid_reason,
+                            reason=render_skill_invalidities(candidate.invalidities),
+                            hints=invalidity_hints(candidate.invalidities),
                         )
-                        if entry.name not in by_name:
-                            continue
+                        pending_exclusions.append(candidate)
+                        continue
+                    # Recipe-loader "seen"-on-success rule: only a valid candidate
+                    # claims the name, so an invalid higher-precedence copy never
+                    # clobbers a valid bundled entry or blocks a valid lower-
+                    # precedence local copy from being found on the next pass.
+                    selected.add(entry.name)
                     by_name[entry.name] = candidate
-        return tuple(sorted(by_name.values(), key=lambda skill: skill.name))
+        exclusions = tuple(
+            SkillExclusion.from_skill_info(
+                candidate,
+                fallback=(by_name[candidate.name].source if candidate.name in by_name else None),
+            )
+            for candidate in pending_exclusions
+        )
+        return tuple(sorted(by_name.values(), key=lambda skill: skill.name)), exclusions
+
+    def scan_effective(
+        self, project_root: Path | None
+    ) -> tuple[tuple[SkillInfo, ...], tuple[SkillExclusion, ...]]:
+        """Public pair-returning scan: effective skills plus excluded candidates.
+
+        Doctor and other operator-facing tooling call this directly instead
+        of reaching for the underscore-prefixed internal implementation.
+        """
+        normalized_root = project_root.resolve() if project_root is not None else None
+        return self._list_effective_unfiltered(normalized_root)
 
     def list_effective(
         self,
@@ -764,12 +1241,18 @@ class DefaultSkillResolver:
     ) -> EffectiveSkillCatalog:
         """Return a fresh, immutable catalog authorized by role and visibility."""
         normalized_root = project_root.resolve() if project_root is not None else None
-        effective_skills = self._list_effective_unfiltered(normalized_root)
-        invalid = tuple(skill for skill in effective_skills if skill.invalid_reason is not None)
+        effective_skills, exclusions = self._list_effective_unfiltered(normalized_root)
+        # Invalid project-local candidates never reach this point — they were
+        # already diverted into `exclusions` above. Any survivor here is a
+        # bundled/extended packaging bug, guarded at merge time (T7).
+        invalid = tuple(skill for skill in effective_skills if skill.invalidities)
         if invalid:
-            details = "; ".join(f"{skill.name!r}: {skill.invalid_reason}" for skill in invalid)
+            details = "; ".join(
+                f"{skill.name!r}: {render_skill_invalidities(skill.invalidities)}"
+                for skill in invalid
+            )
             raise SkillContractError(
-                f"effective skill catalog contains invalid contracts: {details}"
+                f"bundled skill catalog contains invalid contracts (packaging bug): {details}"
             )
         disabled, custom_tags, features, experimental_enabled = _visibility_policy(
             visibility,
@@ -808,7 +1291,7 @@ class DefaultSkillResolver:
                 skill
                 for name in sorted(_INTERNAL_SKILLS)
                 if (skill := self.resolve_effective(name, normalized_root)) is not None
-                and skill.invalid_reason is None
+                and not skill.invalidities
                 and skill.execution_role is execution_role
                 and _skill_is_visible(
                     skill,
@@ -838,6 +1321,7 @@ class DefaultSkillResolver:
             skills=skills,
             execution_role=execution_role,
             namespace_sources=namespace_sources,
+            exclusions=exclusions,
         )
 
     def resolve_invocation(
@@ -871,9 +1355,10 @@ class DefaultSkillResolver:
             return member
 
         def validate_member(skill: SkillInfo) -> None:
-            if skill.invalid_reason is not None:
+            if skill.invalidities:
                 raise SkillContractError(
-                    f"invalid contract for {skill.name!r}: {skill.invalid_reason}"
+                    f"invalid contract for {skill.name!r}: "
+                    f"{render_skill_invalidities(skill.invalidities)}"
                 )
             if skill.execution_role is not execution_role:
                 actual = (
@@ -897,7 +1382,9 @@ class DefaultSkillResolver:
             for dependency in skill.activate_deps:
                 if dependency in PACK_REGISTRY:
                     if pack_catalog is None:
-                        pack_catalog = self._list_effective_unfiltered(normalized_root)
+                        pack_catalog, _pack_exclusions = self._list_effective_unfiltered(
+                            normalized_root
+                        )
                         for candidate in pack_catalog:
                             resolved_by_name.setdefault(candidate.name, candidate)
                     members = sorted(
@@ -976,11 +1463,23 @@ def validate_skill_tier_roles(
                 raise SkillContractError(
                     f"configured {tier_name} skill {skill_name!r} was not found"
                 )
-            if effective.invalid_reason is not None:
-                raise SkillContractError(
+            if effective.invalidities:
+                # Only fires now for names whose *every* implementation is
+                # invalid — resolve_effective already fell through to a valid
+                # bundled twin or lower-precedence local copy for every other
+                # case. Enrich with path/hints when the concrete resolver
+                # (the overwhelmingly common case) supplied a real SkillInfo.
+                message = (
                     f"configured {tier_name} skill {skill_name!r} is invalid: "
-                    f"{effective.invalid_reason}"
+                    f"{render_skill_invalidities(effective.invalidities)}"
                 )
+                if isinstance(effective, SkillInfo):
+                    kinds = sorted({item.kind.value for item in effective.invalidities})
+                    hints = invalidity_hints(effective.invalidities)
+                    message += f" (path: {effective.path}, kind: {', '.join(kinds)})"
+                    if hints:
+                        message += f"; hint: {'; '.join(hints)}"
+                raise SkillContractError(f"{message}; run: autoskillit doctor")
             if effective.execution_role is not SkillExecutionRole.SESSION:
                 role = (
                     effective.execution_role.value

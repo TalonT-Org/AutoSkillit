@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+import shlex
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, NamedTuple
 
-from autoskillit.core import DIRECT_INSTALL_CACHE_SUBDIR, pkg_root
+from autoskillit.core import installed_plugin_cache_dir, pkg_root
 
 
 @dataclass(frozen=True, slots=True)
@@ -447,6 +449,11 @@ LIFECYCLE_CONTRACTS: tuple[LifecycleContractDef, ...] = (
 )
 
 HOOKS_DIR: Path = pkg_root() / "hooks"
+"""Source hooks used by machine-local settings and development checks."""
+
+PLUGIN_ROOT_TOKEN = "${CLAUDE_PLUGIN_ROOT}"
+"""Claude Code's runtime root for the plugin supplying ``hooks.json``."""
+
 
 RETIRED_SCRIPT_BASENAMES: frozenset[str] = frozenset(
     {
@@ -784,16 +791,53 @@ def _build_hook_entry(hook_def: HookDef, hook_commands: list[dict]) -> dict:
     return {"matcher": hook_def.matcher, "hooks": hook_commands}
 
 
-def _build_hook_command(hooks_dir: Path, script: str, timeout_seconds: int | None) -> dict:
-    """Build a single hook command dict using the stable dispatcher format."""
+def _build_hook_command(
+    hooks_dir: Path | None,
+    script: str,
+    timeout_seconds: int | None,
+    *,
+    relocatable: bool = False,
+) -> dict:
+    """Build a single hook command dict using the stable dispatcher format.
+
+    Two explicit modes — no implicit default silently decides the destination:
+
+    - ``relocatable=True`` (hooks.json only): emits the quoted
+      ``PLUGIN_ROOT_TOKEN`` form, expanded by Claude Code at hook-invocation
+      time against the plugin version that supplied the file. ``hooks_dir``
+      is ignored and may be ``None``.
+    - ``relocatable=False`` (settings.json only, dev-mode, machine-local):
+      bakes the caller-supplied absolute ``hooks_dir``. ``hooks_dir`` is
+      required.
+    """
     logical_name = script.removesuffix(".py")
+    if relocatable:
+        command = render_relocatable_hook_command(logical_name)
+    else:
+        if hooks_dir is None:
+            raise ValueError("hooks_dir is required when relocatable=False")
+        command = f"python3 {hooks_dir / '_dispatch.py'} {logical_name}"
     cmd: dict = {
         "type": "command",
-        "command": f"python3 {hooks_dir / '_dispatch.py'} {logical_name}",
+        "command": command,
     }
     if timeout_seconds is not None:
         cmd["timeout"] = timeout_seconds
     return cmd
+
+
+_LOGICAL_HOOK_COMPONENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
+
+
+def render_relocatable_hook_command(logical_name: str) -> str:
+    """Render one validated dispatcher command for a plugin hooks artifact."""
+    logical_name = logical_name.removesuffix(".py").strip("/")
+    components = logical_name.split("/")
+    if not logical_name or any(
+        _LOGICAL_HOOK_COMPONENT.fullmatch(component) is None for component in components
+    ):
+        raise ValueError(f"invalid logical hook name: {logical_name!r}")
+    return f'python3 "{PLUGIN_ROOT_TOKEN}/hooks/_dispatch.py" {shlex.quote(logical_name)}'
 
 
 def generate_hooks_json(
@@ -815,7 +859,7 @@ def generate_hooks_json(
     for hook_def in registry:
         key = (hook_def.event_type, hook_def.matcher)
         hook_commands = [
-            _build_hook_command(HOOKS_DIR, script, hook_def.timeout_seconds)
+            _build_hook_command(None, script, hook_def.timeout_seconds, relocatable=True)
             for script in hook_def.scripts
         ]
         if key not in groups:
@@ -950,9 +994,24 @@ def _count_hook_registry_drift(settings_path: Path) -> HookDriftResult:
     )
 
 
-def find_broken_hook_scripts(settings_path: Path) -> list[str]:
-    """Return list of hook commands whose script files do not exist on disk."""
-    data = _load_settings_data(settings_path)
+def find_broken_hook_scripts(
+    hook_config_path: Path,
+    *,
+    expansion_root: Path | None = None,
+) -> list[str]:
+    """Return list of hook commands whose script files do not exist on disk.
+
+    Commands are parsed with ``shlex`` (not bare ``.split()``) so the quoted
+    relocatable form (``python3 "${CLAUDE_PLUGIN_ROOT}/hooks/_dispatch.py" name``)
+    classifies correctly. A command containing ``PLUGIN_ROOT_TOKEN`` is
+    resolved against ``expansion_root`` (the root of the artifact — e.g. the
+    plugin-cache incarnation dir — that contains it) before the existence
+    check. A token-bearing command with no ``expansion_root`` supplied is
+    reported broken (fail-closed, never silently skipped). Commands with a
+    plain absolute path (settings.json, dev-mode) are checked as before,
+    independent of ``expansion_root``.
+    """
+    data = _load_settings_data(hook_config_path)
     broken: list[str] = []
     for event_type in ("PreToolUse", "PostToolUse", "SessionStart"):
         for entry in data.get("hooks", {}).get(event_type, []):
@@ -960,28 +1019,62 @@ def find_broken_hook_scripts(settings_path: Path) -> list[str]:
                 cmd = hook.get("command", "")
                 if not _is_own_hook(cmd):
                     continue
-                parts = cmd.split()
+                try:
+                    parts = shlex.split(cmd)
+                except ValueError:
+                    broken.append(cmd)
+                    continue
+                has_dispatcher = any(part.endswith("_dispatch.py") for part in parts)
                 if len(parts) >= 3 and parts[-2].endswith("_dispatch.py"):
-                    if not Path(parts[-2]).is_file():
-                        broken.append(cmd)
+                    script_path_str = parts[-2]
+                elif has_dispatcher:
+                    broken.append(cmd)
+                    continue
                 elif len(parts) >= 2:
-                    if not Path(parts[-1]).is_file():
+                    script_path_str = parts[-1]
+                else:
+                    broken.append(cmd)
+                    continue
+                if PLUGIN_ROOT_TOKEN in script_path_str:
+                    if expansion_root is None:
                         broken.append(cmd)
+                        continue
+                    script_path_str = script_path_str.replace(
+                        PLUGIN_ROOT_TOKEN, str(expansion_root)
+                    )
+                    expansion_root_resolved = expansion_root.resolve()
+                    script_path = Path(script_path_str).resolve()
+                    if not script_path.is_relative_to(expansion_root_resolved):
+                        broken.append(cmd)
+                        continue
+                else:
+                    script_path = Path(script_path_str)
+                if not script_path.is_file():
+                    broken.append(cmd)
     return broken
 
 
 def validate_plugin_cache_hooks(cache_dir: Path | None = None) -> list[str]:
     """Return list of broken hook commands from the plugin cache hooks.json.
 
-    Reads each hooks.json found under cache_dir/*/hooks.json and checks that
-    every autoskillit hook script path exists on disk.
+    Reads each hooks.json found under cache_dir/<version>/hooks/hooks.json —
+    the real installed layout (write site: ``cli/_marketplace.py``,
+    ``public_plugin_root / "hooks" / "hooks.json"``) — and checks that every
+    autoskillit hook script path exists on disk. Token-bearing commands are
+    expanded against ``hooks_json_path.parent.parent``: the ``<version>``
+    incarnation directory, which is the plugin root Claude Code binds
+    ``${CLAUDE_PLUGIN_ROOT}`` to (it directly contains ``hooks/``, ``agents/``,
+    ``.claude-plugin/``, ``skills/``, ``recipes/``, ``assets/``).
     """
-    _cache = cache_dir or (
-        Path.home() / ".claude" / "plugins" / "cache" / DIRECT_INSTALL_CACHE_SUBDIR / "autoskillit"
-    )
+    _cache = cache_dir or installed_plugin_cache_dir(Path.home(), "autoskillit")
     broken: list[str] = []
     if not _cache.is_dir():
         return broken
-    for hooks_json_path in _cache.glob("*/hooks.json"):
-        broken.extend(find_broken_hook_scripts(hooks_json_path))
+    for hooks_json_path in _cache.glob("*/hooks/hooks.json"):
+        broken.extend(
+            find_broken_hook_scripts(
+                hooks_json_path,
+                expansion_root=hooks_json_path.parent.parent,
+            )
+        )
     return broken

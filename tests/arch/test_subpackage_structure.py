@@ -30,6 +30,8 @@ class TestCoreSubpackages:
             "_type_context_admission_persistence",
             "_type_dispatch_identity",
             "_type_enums",
+            "_type_execution_identity",
+            "_type_exploration",
             "_type_exceptions",
             "_type_figure_spec",
             "_type_github_review",
@@ -78,8 +80,8 @@ class TestCoreSubpackages:
         assert len(combined) == len(remaining) + len(env) + len(features) + len(registries), (
             "Duplicate symbols across split modules"
         )
-        assert len(combined) == 138, (
-            f"Expected 138 symbols total, got {len(combined)} "
+        assert len(combined) == 142, (
+            f"Expected 142 symbols total, got {len(combined)} "
             f"(remaining={len(remaining)}, env={len(env)}, "
             f"features={len(features)}, registries={len(registries)})"
         )

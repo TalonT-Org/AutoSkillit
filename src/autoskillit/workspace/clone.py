@@ -38,6 +38,40 @@ from autoskillit.workspace._clone_remote import (
 
 logger = get_logger(__name__)
 
+_IDENTITY_CONFIG_SOURCE_URL = "autoskillit.repositoryIdentity.sourceUrl"
+_IDENTITY_CONFIG_SOURCE_REMOTE = "autoskillit.repositoryIdentity.sourceRemote"
+_IDENTITY_CONFIG_SOURCE_USABLE = "autoskillit.repositoryIdentity.sourceUsable"
+_IDENTITY_CONFIG_OVERRIDE_APPLIED = "autoskillit.repositoryIdentity.overrideApplied"
+
+
+def _record_repository_identity_source(
+    clone_path: Path,
+    *,
+    source_url: str,
+    source_remote: str,
+    source_usable: bool,
+    override_applied: bool,
+) -> None:
+    """Persist source identity observed before caller override and isolation."""
+    values = {
+        _IDENTITY_CONFIG_SOURCE_URL: source_url,
+        _IDENTITY_CONFIG_SOURCE_REMOTE: source_remote,
+        _IDENTITY_CONFIG_SOURCE_USABLE: str(source_usable).lower(),
+        _IDENTITY_CONFIG_OVERRIDE_APPLIED: str(override_applied).lower(),
+    }
+    for key, value in values.items():
+        result = subprocess.run(
+            ["git", "config", "--local", key, value],
+            cwd=str(clone_path),
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"failed to record repository identity authority {key}: {result.stderr.strip()}"
+            )
+
 
 def clone_repo(
     source_dir: str,
@@ -81,6 +115,7 @@ def clone_repo(
             "clone_path": str,
             "source_dir": str,
             "remote_url": str,
+            "repository_identity_url": str,
             "clone_source_type": "remote" | "local",
             "clone_source_reason": str,
         }
@@ -174,13 +209,21 @@ def clone_repo(
         source_type = "remote"
         source_reason = "ok"
 
-    # Use caller-supplied override if provided; fall back to probed URL
+    # Use caller-supplied override for clone push/fetch behavior only. Repository
+    # identity remains bound to the configured source remote observed above.
     effective_url = remote_url if remote_url else resolution.url
 
     # Unconditionally isolate the clone: set 'origin' to file://<clone_path> for every
     # successful clone regardless of URL availability. This closes the #377 compounding
     # regression where the isolation rewrite was skipped when effective_url was empty.
     _ensure_origin_isolated(clone_path, effective_url)
+    _record_repository_identity_source(
+        clone_path,
+        source_url=resolution.url if resolution.reason == "ok" else "",
+        source_remote=resolution.remote_name,
+        source_usable=resolution.reason == "ok",
+        override_applied=bool(remote_url and remote_url != resolution.url),
+    )
 
     # Decontaminate: untrack inherited generated files
     ls_gen = subprocess.run(
@@ -229,6 +272,7 @@ def clone_repo(
         "clone_path": str(clone_path),
         "source_dir": str(source),
         "remote_url": effective_url,
+        "repository_identity_url": resolution.url if resolution.reason == "ok" else "",
         "clone_source_type": source_type,
         "clone_source_reason": source_reason,
     }

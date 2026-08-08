@@ -58,6 +58,7 @@ semantic_requirements:
 - Accept default alpha=0.05 without checking whether it is appropriate for the decision context
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-error-budget/`
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -68,6 +69,11 @@ semantic_requirements:
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch every exploration vector below through the deterministic router
+- Route semantic code, symbol, and data-control-flow handoffs to `semantic-code-navigator` and bounded configuration, data, fixture, manifest, generated-artifact, reproduction, test, and pre-existing revision-scoped artifact handoffs to `repository-impact-profiler` through the parent-owned plan
+- Wait for every exploration result before building the error budget, evaluating statistical risk, or creating the diagram
+- Retain parent authority over statistical error, power, and practical-significance judgments, Mermaid generation, and output writing
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-error-budget/exp_diag_error_budget_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -86,35 +92,39 @@ If positional arg 1 (context_path) is provided and the file exists, read it to o
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
 methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
+exploration for these fields if the context file supplies them.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
+
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch every authored vector below under their registered role policies. Mixed code and declarative evidence remains one parent-owned plan; bounded role handoffs return to the originating vector and do not add graph dependencies.
 
-**Sample Size & Power**
-- Find power calculations or sample size justifications
-- Look for: power, sample_size, n_samples, effect_size, minimum_detectable, mde
+<!-- autoskillit:exploration-vector id="sample-size-power" -->
+1. **Sample Size & Power** — Find power calculations or sample-size justifications through `power`, `sample_size`, `n_samples`, `effect_size`, `minimum_detectable`, and `mde` evidence.
+<!-- /autoskillit:exploration-vector -->
 
-**Multiple Comparisons**
-- Find all statistical tests performed and correction strategies
-- Look for: bonferroni, fdr, holm, bh, correction, multiple, comparisons, tests
+<!-- autoskillit:exploration-vector id="multiple-comparisons" -->
+2. **Multiple Comparisons** — Find all statistical tests performed and correction strategies through `bonferroni`, `fdr`, `holm`, `bh`, `correction`, `multiple`, `comparisons`, and `tests` definitions and calls. Route bounded correction configuration and reports through the parent to the profiler.
+<!-- /autoskillit:exploration-vector -->
 
-**Sequential Analysis**
-- Find interim analyses, stopping rules, or sequential monitoring
-- Look for: interim, early_stopping, sequential, alpha_spending, peek, monitor
+<!-- autoskillit:exploration-vector id="sequential-analysis" -->
+3. **Sequential Analysis** — Find interim analyses, stopping rules, and sequential monitoring through `interim`, `early_stopping`, `sequential`, `alpha_spending`, `peek`, and `monitor` control flow. Route bounded stopping configuration through the parent to the profiler.
+<!-- /autoskillit:exploration-vector -->
 
-**Decision Thresholds**
-- Find significance thresholds and decision rules
-- Look for: alpha, p_value, threshold, significance, reject, null, hypothesis
+<!-- autoskillit:exploration-vector id="decision-thresholds" -->
+4. **Decision Thresholds** — Find significance thresholds and decision rules through `alpha`, `p_value`, `threshold`, `significance`, `reject`, `null`, and `hypothesis` evidence. Route semantic decision control flow through the parent to the navigator.
+<!-- /autoskillit:exploration-vector -->
 
-**Effect Size Context**
-- Find practical significance alongside statistical significance
-- Look for: effect_size, cohen, practical, meaningful, magnitude, difference
+<!-- autoskillit:exploration-vector id="effect-size-context" -->
+5. **Effect Size Context** — Find practical significance alongside statistical significance through `effect_size`, `cohen`, `practical`, `meaningful`, `magnitude`, and `difference` evidence.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Build the Error Budget
 

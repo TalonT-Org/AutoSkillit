@@ -72,8 +72,9 @@ CODEX_INTAKE_RULES: Final[tuple[IntakeRuleDef, ...]] = (
         evidence_anchor="must be read completely",
         exception=(
             "Recipe YAML and bundled source-tree SKILL.md paths are never read from disk "
-            "at all — recipes arrive via load_recipe / get_recipe_section and skills via "
-            "the Skill tool."
+            "at all — recipes arrive via load_recipe / get_recipe_section; skills surface "
+            "to Codex through the generated session catalog ($-mention) and to Claude Code "
+            "through the Skill tool."
         ),
         path_classes=("session-skill-md", "plan-file"),
     ),

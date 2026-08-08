@@ -1,0 +1,52 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence locates revision-scoped context and experiment-plan
+    artifacts and reports only fields still absent after direct caller-context parsing.
+- id: palette-colormap-usage
+  role: semantic-code-navigator
+  relationship_classes:
+  - declares
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces palette and colormap declarations and their
+    plotting-call consumers without deciding accessibility.
+- id: hue-encoding-usage
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces quantitative and categorical fields into hue,
+    luminance, and scale encodings while leaving accessibility judgment to the lens.
+- id: series-definitions
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation identifies series declarations, labels, legends,
+    and plotting consumers used to establish the evidence-backed series inventory.
+- id: redundant-encoding-declarations
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation locates marker, line-style, and dash declarations
+    associated with discovered plotted series without issuing warnings.
+- id: text-size-parameters
+  role: semantic-code-navigator
+  relationship_classes:
+  - declares
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces font-size declarations, plotting-call parameters,
+    and global style configuration references without applying publication thresholds.

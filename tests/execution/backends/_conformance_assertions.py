@@ -426,31 +426,64 @@ def assert_generated_child_delivery(
     child_ids: list[str] = []
     child_results: list[tuple[str, int]] = []
     if backend == "codex":
+        child_handles: list[str] = []
         for call in spawn_calls:
-            child_id = _mapping(call.result).get("agent_id")
-            assert isinstance(child_id, str) and child_id, "spawn_agent returned no agent_id"
-            child_ids.append(child_id)
+            authored_task_name = call.arguments.get("task_name")
+            assert isinstance(authored_task_name, str) and authored_task_name, (
+                "spawn_agent omitted task_name"
+            )
+            canonical_task_name = _mapping(call.result).get("task_name")
+            assert isinstance(canonical_task_name, str) and canonical_task_name, (
+                f"spawn_agent returned no canonical task_name: {call.result[:500]!r}"
+            )
+            assert canonical_task_name == authored_task_name or canonical_task_name.endswith(
+                f"/{authored_task_name}"
+            )
+            child_handles.append(canonical_task_name)
+
         wait_calls = [call for call in observed if call.name == "wait_agent"]
-        for child_id in child_ids:
-            matching = [
-                call
-                for call in wait_calls
-                if child_id
-                in (
-                    call.arguments.get("targets", ())
-                    if isinstance(call.arguments.get("targets", ()), list | tuple)
-                    else ()
-                )
-            ]
-            assert matching, f"no wait_agent call targeted spawned child {child_id}"
-            completed = [
-                call
-                for call in matching
-                if '"completed"' in call.result and call.result_index is not None
-            ]
-            assert completed, f"wait_agent never reported child {child_id} completed"
-            terminal = completed[-1]
-            child_results.append((terminal.result, cast(int, terminal.result_index)))
+        successful_waits = [
+            call
+            for call in wait_calls
+            if call.result_index is not None and _mapping(call.result).get("timed_out") is False
+        ]
+        assert successful_waits, "wait_agent never returned successfully"
+        assert max(call.call_index for call in spawn_calls) < min(
+            call.call_index for call in successful_waits
+        ), "Codex awaited a child before all children were spawned"
+
+        completed_notifications: dict[str, list[tuple[str, int]]] = {}
+        notification_start = "<subagent_notification>"
+        notification_end = "</subagent_notification>"
+        for index, event in enumerate(parent_events):
+            payload = event.get("payload", {})
+            if (
+                event.get("type") != "response_item"
+                or not isinstance(payload, Mapping)
+                or payload.get("type") != "message"
+                or payload.get("role") != "user"
+            ):
+                continue
+            for block in _blocks(event):
+                block_text = str(block.get("text", ""))
+                if notification_start not in block_text or notification_end not in block_text:
+                    continue
+                encoded = block_text.split(notification_start, 1)[1].split(notification_end, 1)[0]
+                notification = _mapping(encoded.strip())
+                agent_path = notification.get("agent_path")
+                status = notification.get("status")
+                if not isinstance(agent_path, str) or not isinstance(status, Mapping):
+                    continue
+                completed = status.get("completed")
+                if isinstance(completed, str) and completed:
+                    completed_notifications.setdefault(agent_path, []).append((completed, index))
+
+        for child_handle in child_handles:
+            delivered = completed_notifications.get(child_handle, [])
+            assert len(delivered) == 1, (
+                f"expected one completed notification for {child_handle}, got {len(delivered)}"
+            )
+            child_results.append(delivered[0])
     else:
         for call in spawn_calls:
             assert call.result and call.result_index is not None, (
@@ -522,11 +555,18 @@ def assert_generated_child_delivery(
         for meta in child_session_metas
         if (meta.get("forked_from_id") or meta.get("parent_thread_id")) == parent_id
     ]
-    assert len(linked_children) == len(child_ids), (
-        f"expected {len(child_ids)} children linked to {parent_id}, got {len(linked_children)}"
+    assert len(linked_children) == len(child_handles), (
+        f"expected {len(child_handles)} children linked to {parent_id}, got {len(linked_children)}"
     )
     linked_by_id = {str(child.get("id", "")): child for child in linked_children}
-    assert set(linked_by_id) == set(child_ids)
+    linked_by_path = {str(child.get("agent_path", "")): child for child in linked_children}
+    for child_handle in child_handles:
+        child = linked_by_path.get(child_handle)
+        assert child is not None, f"no linked child session matched {child_handle}"
+        child_id = str(child.get("id", ""))
+        assert child_id
+        child_ids.append(child_id)
+    assert len(set(child_ids)) == len(child_ids)
     for child_id, native_role in zip(child_ids, actual_roles, strict=True):
         child = linked_by_id[child_id]
         assert child_id != parent_id

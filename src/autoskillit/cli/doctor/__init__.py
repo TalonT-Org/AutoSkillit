@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from autoskillit.cli._hooks import _claude_settings_path
@@ -48,6 +47,7 @@ from ._doctor_install import (
     _check_autoskillit_on_path,
     _check_editable_install_source_exists,
     _check_install_classification,
+    _check_publication_obligation,
     _check_source_version_drift,
     _check_stale_entry_points,
     _check_update_dismissal_state,
@@ -73,8 +73,12 @@ from ._doctor_runtime import (
     _check_quota_cache_schema,
     _check_script_binary,
 )
-from ._doctor_skills import _check_skill_capability_authenticity
-from ._doctor_types import _NON_PROBLEM, DoctorResult
+from ._doctor_skills import (
+    _check_project_local_skill_contracts,
+    _check_skill_capability_authenticity,
+)
+from ._doctor_types import _NON_PROBLEM as _NON_PROBLEM
+from ._doctor_types import DoctorResult, _format_results
 
 logger = get_logger(__name__)
 
@@ -155,6 +159,8 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.append(_check_install_classification())
     # Check 17: Update-prompt dismissal state
     results.append(_check_update_dismissal_state())
+    # Check 17b: Pending publication obligation (diagnostic only, no auto-fix)
+    results.append(_check_publication_obligation())
 
     # -- Fleet doctor checks (ambient env + infrastructure health) --
 
@@ -231,25 +237,8 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.extend(_check_skill_capability_authenticity())
     # Check 41: Capture-store ledger/directory statistics (read-only)
     results.append(_check_capture_store_stats())
+    # Check 42: Project-local skill contracts (excluded/shadowed stale copies)
+    results.extend(_check_project_local_skill_contracts())
     # Output
-    if output_json:
-        print(
-            json.dumps(
-                {
-                    "results": [
-                        {"severity": r.severity, "check": r.check, "message": r.message}
-                        for r in results
-                    ]
-                },
-                indent=2,
-            )
-        )
-    else:
-        has_problems = any(r.severity not in _NON_PROBLEM for r in results)
-        if has_problems:
-            for r in results:
-                if r.severity not in _NON_PROBLEM:
-                    print(f"{r.severity.upper()}: {r.message}")
-        else:
-            for r in results:
-                print(f"{r.severity}: {r.message}")
+    for line in _format_results(results, output_json=output_json):
+        print(line)

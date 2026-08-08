@@ -311,7 +311,7 @@ def test_project_local_rewrite_reclassifies_with_process_cache(tmp_path, monkeyp
     first = resolver.resolve_effective("cache-rewrite-target", project)
 
     assert first is not None
-    assert first.invalid_reason is None
+    assert not first.invalidities
     first_evidence = capability_module.classify_skill_capability_evidence(
         first.canonical_content,
         first.name,
@@ -339,7 +339,7 @@ def test_project_local_rewrite_reclassifies_with_process_cache(tmp_path, monkeyp
     )
     assert second_evidence[0].source == "Call `test_check()` for the second sentinel."
     assert second_evidence[0].source_span == (7, 7)
-    assert second.invalid_reason is None
+    assert not second.invalidities
     assert scan_keys == [
         (first.canonical_content, "cache-rewrite-target"),
         (second.canonical_content, "cache-rewrite-target"),
@@ -656,7 +656,7 @@ def test_prepare_skill_projection_authenticates_project_root_not_managed_add_dir
     import hashlib
     from pathlib import Path
 
-    from autoskillit.core import PluginLoadMode, SkillContractError
+    from autoskillit.core import PluginLoadMode
     from autoskillit.execution.backends import get_backend
     from autoskillit.workspace import prepare_skill_projection
     from autoskillit.workspace.skills import DefaultSkillResolver
@@ -717,25 +717,45 @@ def test_prepare_skill_projection_authenticates_project_root_not_managed_add_dir
         )
     assert binding.closed
 
+    # 2.2's resolution-boundary containment supersedes the old fail-closed
+    # pin here: an invalid real project-root override no longer poisons
+    # composition. It falls through to the valid bundled `process-issues`
+    # twin (recorded as a catalog exclusion) instead of raising —
+    # `skill_projection.py:239` is one of the five crash sites the plan
+    # names as needing no individual guard, since post-2.2 they simply
+    # never see an invalid candidate reach them.
     project_override.write_text(
         "---\nname: process-issues\ndescription: invalid user override\n"
         "semantic_version: 0\nsemantic_requirements: {}\n---\n"
         "invalid real project override\n",
         encoding="utf-8",
     )
-    with pytest.raises(
-        SkillContractError,
-        match="effective skill catalog contains invalid contracts",
-    ):
-        prepare_skill_projection(
-            project_root=project_root,
-            cwd=cwd,
-            resolver=DefaultSkillResolver(),
-            visibility=None,
-            default_base_branch=None,
-            recipe_packs=None,
-            recipe_features=None,
+    plugin_authority, preparation = prepare_skill_projection(
+        project_root=project_root,
+        cwd=cwd,
+        resolver=DefaultSkillResolver(),
+        visibility=None,
+        default_base_branch=None,
+        recipe_packs=None,
+        recipe_features=None,
+    )
+
+    assert preparation.catalog is not None
+    exclusions = preparation.catalog.exclusions
+    assert any(exclusion.name == "process-issues" for exclusion in exclusions)
+
+    with plugin_authority.acquire_launch_binding(
+        backend=backend,
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    ) as binding:
+        assert binding.plugin_dir is not None
+        preparation.finalize(backend=backend, binding=binding)
+        projected = (binding.plugin_dir / "skills" / "process-issues" / "SKILL.md").read_text(
+            encoding="utf-8"
         )
+        assert "invalid real project override" not in projected
+        assert "winning project-root body" not in projected
+    assert binding.closed
 
 
 def test_winning_override_identity_policy_projection_and_digests_are_atomic(

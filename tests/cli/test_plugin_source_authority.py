@@ -427,7 +427,7 @@ class TestInstalledPluginArtifactAuthority:
         assert special.exists()
         assert not installed_plugin_artifact_manifest_path(root).exists()
 
-    def test_generated_home_codex_does_not_construct_projection_authority(
+    def test_generated_home_codex_constructs_durable_scripts_authority(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from types import SimpleNamespace
@@ -442,9 +442,10 @@ class TestInstalledPluginArtifactAuthority:
                 plugin_install_capable=False,
             ),
         )
+        authority_marker = object()
         monkeypatch.setattr(
             "autoskillit.workspace.project_default_plugin_authority",
-            lambda **_kwargs: pytest.fail("generated-home Codex projected an unused plugin"),
+            lambda **_kwargs: authority_marker,
         )
 
         authority, load_mode = interactive_plugin_authority(
@@ -452,11 +453,52 @@ class TestInstalledPluginArtifactAuthority:
             project_dir=tmp_path,
             default_base_branch="main",
             skill_catalog=None,
-            generated_home=tmp_path / "generated-home",
+            generated_home_available=True,
         )
 
-        assert authority is None
+        assert authority is authority_marker
         assert load_mode is PluginLoadMode.GENERATED_HOME
+
+    def test_cook_retains_projection_authority_for_non_injecting_backend(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from types import SimpleNamespace
+
+        from autoskillit.cli._plugin_artifact import interactive_plugin_authority
+        from autoskillit.core import PluginLoadMode
+
+        backend = SimpleNamespace(
+            capabilities=SimpleNamespace(skill_injection_capable=False),
+        )
+        authority_marker = object()
+        catalog_marker = object()
+        captured: dict[str, object] = {}
+
+        def select_projection(**kwargs: object) -> object:
+            captured.update(kwargs)
+            return authority_marker
+
+        monkeypatch.setattr(
+            "autoskillit.workspace.project_default_plugin_authority",
+            select_projection,
+        )
+
+        authority, load_mode = interactive_plugin_authority(
+            backend=backend,
+            project_dir=tmp_path,
+            default_base_branch="main",
+            skill_catalog=catalog_marker,  # type: ignore[arg-type]
+            generated_home_available=True,
+            retain_projection_source=True,
+        )
+
+        assert authority is authority_marker
+        assert load_mode is PluginLoadMode.NONE
+        assert captured == {
+            "base_branch": "main",
+            "catalog": catalog_marker,
+            "cwd": tmp_path,
+        }
 
     def test_implicit_binding_rejects_wrong_transaction_identity(
         self,

@@ -207,9 +207,9 @@ def _count_semantic_rule_files() -> int:
 # ----- tests ------------------------------------------------------------------
 
 
-def test_kitchen_tagged_tool_count_is_45() -> None:
+def test_kitchen_tagged_tool_count_is_48() -> None:
     count = _count_kitchen_tools()
-    assert count == 45, f"Expected 45 kitchen-tagged tools; found {count}"
+    assert count == 48, f"Expected 48 kitchen-tagged tools; found {count}"
 
 
 def test_free_range_tool_count_is_20() -> None:
@@ -242,15 +242,11 @@ def test_quota_thresholds_defaults() -> None:
     assert long_ == pytest.approx(95.0)
 
 
-def test_doctor_check_count_is_48() -> None:
-    # 48 total = 22 numbered (16 remaining base + 18–21 ambient env + 22–23 feature)
-    # + 7 lettered sub-checks (2b–2e, 4b, 7b, 7c)
-    # + 6 gated fleet (24–29) + 12 backend/runtime checks (30–40, including
-    # Check 31b claude CLI binary availability for capability-driven rerouting)
-    # + Check 41 capture-store statistics.
+def test_doctor_check_count_is_50() -> None:
+    # Combined-tree canonical count: 41 numbered checks + 9 lettered sub-checks.
     # Update both tests whenever a new doctor check is added.
     count = _count_doctor_checks()
-    assert count == 48, f"Expected 48 doctor checks; found {count}"
+    assert count == 50, f"Expected 50 doctor checks; found {count}"
 
 
 def test_bundled_recipe_count_is_15() -> None:
@@ -303,8 +299,8 @@ def _assert_doc_states_number(doc: Path, label: str, expected: int) -> None:
         DOCS_DIR / "execution" / "tool-access.md",
     ],
 )
-def test_docs_state_65_mcp_tools(doc_path: Path) -> None:
-    _assert_doc_states_number(doc_path, "MCP tools", 65)
+def test_docs_state_68_mcp_tools(doc_path: Path) -> None:
+    _assert_doc_states_number(doc_path, "MCP tools", 68)
 
 
 @pytest.mark.parametrize(

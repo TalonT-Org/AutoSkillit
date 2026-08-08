@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.core import (
     CmdSpec,
     CodingAgentBackend,
+    ExecutionIdentity,
     LaunchPreparation,
     LaunchResolver,
     OutputFormat,
@@ -53,6 +54,27 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _NUDGE_TIMEOUT: float = 60.0
+
+
+def _bind_effective_execution_identity(
+    skill_result: SkillResult,
+    backend: CodingAgentBackend,
+    requested: ExecutionIdentity,
+) -> SkillResult:
+    effective = requested
+    if requested.children and skill_result.session_id:
+        try:
+            effective = backend.resolve_effective_execution_identity(
+                requested=requested,
+                session_id=skill_result.session_id,
+            )
+        except (OSError, ValueError):
+            logger.warning(
+                "effective_execution_identity_resolution_failed",
+                session_id=skill_result.session_id,
+                exc_info=True,
+            )
+    return dataclasses.replace(skill_result, execution_identity=effective)
 
 
 def _report_plugin_binding_close_failure(

@@ -15,6 +15,9 @@ Application contract:
 MCP server constraint:
     stdout is the MCP protocol wire. Logging MUST go to stderr exclusively.
     configure_logging() enforces this — it always routes to sys.stderr.
+
+Exception rendering uses the eagerly imported stdlib traceback path so update
+pivots cannot invalidate a lazily imported formatter.
 """
 
 from __future__ import annotations
@@ -49,11 +52,29 @@ _PLUGIN_ARTIFACT_OUTCOMES = frozenset(
     }
 )
 
+# Shared by every console processor chain.
+_EXCEPTION_FORMATTER = structlog.dev.plain_traceback
+
 # Ensure all module-level get_logger() calls return lazy proxies rather than
 # fully-resolved loggers.  Without this, loggers created before
 # configure_logging() bind to stdout + ConsoleRenderer (structlog defaults),
 # which fatally corrupts the MCP stdio transport.
+#
+# processors= is explicit (not left to structlog's internal default) so this
+# pre-configure chain also renders through _EXCEPTION_FORMATTER: every
+# autoskillit path that logs before configure_logging() runs — including the
+# entire update transaction, which runs ahead of any configure_logging()
+# call (see cli/app.py's main()) — is covered by the crash-proof contract
+# from the very first log call, not just after CLI startup.
 structlog.configure(
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso", utc=True),
+        structlog.processors.StackInfoRenderer(),
+        structlog.dev.set_exc_info,
+        structlog.dev.ConsoleRenderer(exception_formatter=_EXCEPTION_FORMATTER),
+    ],
     cache_logger_on_first_use=True,
     logger_factory=structlog.WriteLoggerFactory(file=sys.stderr),
     wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
@@ -216,7 +237,9 @@ def configure_logging(
             structlog.processors.JSONRenderer(),
         ]
     else:
-        final_processors = [structlog.dev.ConsoleRenderer()]
+        final_processors = [
+            structlog.dev.ConsoleRenderer(exception_formatter=_EXCEPTION_FORMATTER)
+        ]
 
     structlog.configure(
         processors=shared_processors + final_processors,

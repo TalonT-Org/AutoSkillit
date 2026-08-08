@@ -305,12 +305,13 @@ async def test_run_skill_replay_uses_snapshot_over_init_session(
     from autoskillit.server.tools.tools_execution import run_skill
     from tests.fakes import InMemoryHeadlessExecutor
 
-    snap_dir = tmp_path / "snap" / "investigate"
-    skill_md = snap_dir / ".claude" / "skills" / "investigate" / "SKILL.md"
+    # Keep this replay-only test independent of skills with projected exploration packets.
+    snap_dir = tmp_path / "snap" / "smoke-task"
+    skill_md = snap_dir / ".claude" / "skills" / "smoke-task" / "SKILL.md"
     skill_md.parent.mkdir(parents=True)
-    skill_md.write_text("# investigate\n", encoding="utf-8")
+    skill_md.write_text("# smoke-task\n", encoding="utf-8")
 
-    replay_runner = ReplayingSubprocessRunner({}, {}, skill_snapshots={"investigate": snap_dir})
+    replay_runner = ReplayingSubprocessRunner({}, {}, skill_snapshots={"smoke-task": snap_dir})
     tool_ctx_kitchen_open.runner = replay_runner
 
     mock_ssm = MagicMock()
@@ -323,7 +324,7 @@ async def test_run_skill_replay_uses_snapshot_over_init_session(
     tool_ctx_kitchen_open.ephemeral_root = ephemeral_root
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
-    await run_skill("/investigate foo", str(tmp_path), step_name="investigate")
+    await run_skill("/smoke-task", str(tmp_path), step_name="smoke-task")
 
     mock_ssm.materialize_invocation.assert_not_called()
     assert len(executor.calls) == 1

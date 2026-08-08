@@ -378,6 +378,7 @@ _SERVER_TOOL_MODULES = [
     "autoskillit.server.tools.tools_audit_artifacts",
     "autoskillit.server.tools.tools_config",
     "autoskillit.server.tools.tools_kitchen",
+    "autoskillit.server.tools.tools_exploration",
     "autoskillit.server.tools.tools_pipeline_tracker",
 ]
 

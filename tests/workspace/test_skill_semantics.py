@@ -8,7 +8,10 @@ from types import SimpleNamespace
 import pytest
 
 from autoskillit.core import SkillSemanticOperation, SkillSource
-from autoskillit.workspace.skills import _skill_info_from_frontmatter
+from autoskillit.workspace.skills import (
+    _skill_info_from_frontmatter,
+    render_skill_invalidities,
+)
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
@@ -66,7 +69,7 @@ def test_all_skill_sources_parse_the_same_semantic_plan(
 
     info = _skill_info_from_frontmatter("semantic-test", origin, skill_md)
 
-    assert info.invalid_reason is None
+    assert not info.invalidities
     assert info.semantic_plan is not None
     assert info.semantic_plan.operations == frozenset(SkillSemanticOperation)
 
@@ -91,9 +94,10 @@ semantic_requirements:
     )
 
     assert info.semantic_plan is None
-    assert info.invalid_reason is not None
-    assert "unknown semantic model class 'vendor-native-model'" in info.invalid_reason
-    assert "['haiku', 'opus', 'sonnet']" in info.invalid_reason
+    assert info.invalidities
+    reason = render_skill_invalidities(info.invalidities)
+    assert "unknown semantic model class 'vendor-native-model'" in reason
+    assert "['haiku', 'opus', 'sonnet']" in reason
 
 
 @pytest.mark.parametrize(
@@ -130,12 +134,13 @@ def test_unknown_or_retired_semantic_declaration_rejects_only_that_skill(
     bad = _skill_info_from_frontmatter("bad", SkillSource.PROJECT_LOCAL, bad_path)
     good = _skill_info_from_frontmatter("good", SkillSource.PROJECT_LOCAL, good_path)
 
-    assert bad.invalid_reason is not None
-    assert str(bad_path) in bad.invalid_reason
-    assert "schema version" in bad.invalid_reason
-    assert offending in bad.invalid_reason
-    assert replacement in bad.invalid_reason
-    assert good.invalid_reason is None
+    assert bad.invalidities
+    reason = render_skill_invalidities(bad.invalidities)
+    assert str(bad_path) in reason
+    assert "schema version" in reason
+    assert offending in reason
+    assert replacement in reason
+    assert not good.invalidities
 
 
 @pytest.mark.parametrize(
@@ -160,11 +165,12 @@ def test_raw_backend_native_portable_syntax_is_rejected_per_skill(
 
     info = _skill_info_from_frontmatter("raw", SkillSource.PROJECT_LOCAL, skill_md)
 
-    assert info.invalid_reason is not None
-    assert str(skill_md) in info.invalid_reason
-    assert "schema version 1" in info.invalid_reason
-    assert repr(token) in info.invalid_reason
-    assert replacement in info.invalid_reason
+    assert info.invalidities
+    reason = render_skill_invalidities(info.invalidities)
+    assert str(skill_md) in reason
+    assert "schema version 1" in reason
+    assert repr(token) in reason
+    assert replacement in reason
 
 
 def test_projection_appends_backend_native_semantic_instructions(tmp_path: Path) -> None:

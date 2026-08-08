@@ -1,0 +1,53 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence retrieves only IV/DV, hypothesis, control,
+    and success-criterion fields absent from supplied context while the parent preserves
+    experimental interpretation.
+- id: benchmark-dataset-inventory
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories benchmark, dataset, corpus, split,
+    evaluation, and test-suite artifacts without judging representativeness.
+- id: task-scenario-coverage
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories configured tasks, scenarios, domains,
+    categories, difficulty levels, and subsets while the parent evaluates coverage
+    gaps.
+- id: metric-coverage
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories configured and reported quality,
+    performance, cost, and fairness metrics without evaluating whether the metric
+    set is sufficient.
+- id: claimed-generalization-scope
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence finds generalization claims in repository
+    documentation and pre-existing revision-scoped artifacts while the parent assesses
+    claim support.
+- id: distribution-characteristics
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories class balance, skew, size, demographic,
+    diversity, and domain-distribution artifacts while the parent judges representativeness.

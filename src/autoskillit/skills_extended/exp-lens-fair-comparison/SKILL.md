@@ -6,7 +6,7 @@ uses_capabilities: []
 activate_deps:
 - mermaid
 description: Create a comparison fairness matrix assessing whether alternatives are evaluated under symmetric constraints.
-  Fairness lens answering "Are alternatives compared under symmetric constraints?"
+ Fairness lens answering "Are alternatives compared under symmetric constraints?"
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -58,6 +58,8 @@ semantic_requirements:
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-fair-comparison/`
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
+- Import or execute target code, tests, experiments, models, or benchmarks
+- Let an exploration vector judge fairness, attribute improvements, build the symmetry matrix, or create the diagram
 
 **ALWAYS:**
 - Build the full symmetry matrix — every method against every resource dimension
@@ -67,6 +69,11 @@ semantic_requirements:
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch every exploration vector below through the deterministic router
+- Route mixed tuning and data-pipeline evidence through the parent for bounded profiler handoff without creating extra vectors
+- Wait for every exploration result before building the symmetry matrix, attributing effort, or creating the diagram
+- Retain parent authority over experimental, statistical, and comparative judgments in Steps 2+
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-fair-comparison/exp_diag_fair_comparison_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -84,36 +91,55 @@ semantic_requirements:
 If positional arg 1 (context_path) is provided and the file exists, read it to obtain
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
-methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
+methodology. Use supplied structured context as the foundation for Steps 1-5.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses supplied context and experiment-plan arguments, inspect only
+existing revision-scoped CWD artifacts for fields that remain absent. Never rediscover
+or override supplied complete fields. If no fields are missing, return an explicit
+not-applicable result without repository search. If relevant evidence is absent or
+unrelated, explicitly report it as unavailable or unrelated without widening scope,
+inferring meaning, or importing or executing target code, tests, experiments, models,
+or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+### Step 1: Launch the Authored Discovery Vectors (SINGLE MESSAGE)
+
+Dispatch the five authored Step-1 vectors with the ready fallback vector through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Use the registered role for each source block. Parent-mediated profiler handoff for mixed evidence does not create another vector.
 
-**Compute & Resource Allocation**
+<!-- autoskillit:exploration-vector id="compute-resource-allocation" -->
+1. **Compute & Resource Allocation**
 - Find compute resources used per method
 - Look for: gpu, tpu, hours, cost, memory, flops, compute_budget, machine, cluster
+<!-- /autoskillit:exploration-vector -->
 
-**Tuning Protocol per Method**
+<!-- autoskillit:exploration-vector id="tuning-protocol-per-method" -->
+2. **Tuning Protocol per Method**
 - Find tuning procedures for each compared method
 - Look for: grid_search, optuna, bayesian_opt, hyperband, tune, sweep, trials, budget, early_stop
+<!-- /autoskillit:exploration-vector -->
 
-**Data Access & Preprocessing**
+<!-- autoskillit:exploration-vector id="data-access-preprocessing" -->
+3. **Data Access & Preprocessing**
 - Find whether all methods use the same data pipeline
 - Look for: data_augmentation, preprocessing, feature, embedding, pretrained, extra_data, auxiliary
+<!-- /autoskillit:exploration-vector -->
 
-**Engineering Effort Indicators**
+<!-- autoskillit:exploration-vector id="engineering-effort-indicators" -->
+4. **Engineering Effort Indicators**
 - Find differential engineering investment
 - Look for: custom, specialized, trick, hack, ensemble, post_process, calibrate, threshold_tune
+<!-- /autoskillit:exploration-vector -->
 
-**Reporting Completeness**
+<!-- autoskillit:exploration-vector id="reporting-completeness" -->
+5. **Reporting Completeness**
 - Find whether resource usage is disclosed
 - Look for: report, disclose, computational_cost, wall_time, parameter_count, training_time
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Build Symmetry Matrix
 

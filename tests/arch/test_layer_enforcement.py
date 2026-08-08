@@ -40,6 +40,7 @@ SUBPACKAGE_LAYERS: dict[str, int] = {
     "workspace": 1,
     "planner": 1,
     "report": 1,
+    "exploration": 1,
     # IL-2: domain services — may import from IL-0 and IL-1
     "recipe": 2,
     "migration": 2,
@@ -1709,6 +1710,9 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/execution/test_session_log_fields.py": frozenset(
         {"autoskillit.hooks", "autoskillit.pipeline"}
     ),
+    # phase D dispatch rendering contract loads real bundled skills' exploration.yaml
+    # sidecars to build authentic vector fixtures — needs the skill parser
+    "tests/execution/test_explorer_dispatch.py": frozenset({"autoskillit.workspace"}),
 }
 
 

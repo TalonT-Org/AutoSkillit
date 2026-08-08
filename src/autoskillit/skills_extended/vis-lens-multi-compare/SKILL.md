@@ -63,6 +63,8 @@ semantic_requirements:
 - Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-multi-compare/`
 - Use overlapping traces when ≥ 4 conditions are compared — prefer small multiples
 - Use stacked bars for comparisons where the baseline shifts — use grouped bars instead
+- Import or execute target code, tests, experiments, models, plotting pipelines, or benchmarks
+- Let a migrated exploration vector assess visual overlap, choose a layout, assign facets, design the figure, or create the diagram
 
 **ALWAYS:**
 - Prefer small multiples over overlays when: num_conditions ≥ 5, OR data series overlap
@@ -72,6 +74,12 @@ semantic_requirements:
   factor order (main factor changes columns; secondary factor changes rows)
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool — this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
+- Use the registered exploration roles for all repository reads
+- Dispatch every migrated exploration vector below through the deterministic router
+- Keep series-overlap assessment as a retained parent-owned source block
+- Route mixed declarative factor evidence through the parent for bounded profiler handoff without creating extra vectors
+- Wait for every migrated exploration result before choosing overlay, small multiples, grouped bars, or stacked bars
+- Retain parent authority over perceptual overlap, layout, facet, reading-order, and visualization judgments in Steps 1–4
 - Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-multi-compare/vis_spec_multi_compare_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -90,23 +98,44 @@ If positional arg 1 (context_path) is provided and the file exists, read it to o
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
 methodology. Use this structured context as the foundation for Steps 1–4; skip the CWD
-exploration for these fields if the context file supplies them.
+exploration for fields supplied completely by those artifacts.
+
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses supplied context and experiment-plan arguments, inspect only
+existing revision-scoped CWD artifacts for fields that remain absent. Never rediscover
+or override supplied complete fields. If no fields are missing, return an explicit
+not-applicable result without repository search. If relevant evidence is absent or
+unrelated, explicitly report it as unavailable or unrelated without widening scope,
+inferring meaning, or importing or executing target code, tests, experiments, models,
+or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 1: Inventory Conditions and Factors
 
-Scan experiment plan, context file, and codebase for:
+Dispatch the two authored repository-discovery vectors with the ready fallback vector
+through one deterministic router plan before awaiting any result. Supplied context and
+experiment-plan content remain direct parent inputs.
 
 **Condition and Factor Count**
-- Count num_DVs (dependent variables), num_conditions (levels per factor), num_factors (IVs)
+<!-- autoskillit:exploration-vector id="condition-factor-definitions" -->
+- Trace repository-local condition, treatment-arm, group, and factor definitions and their consumers
 - Look for: condition lists, treatment arms, `conditions = [...]`, `groups = [...]`, factor tables
+<!-- /autoskillit:exploration-vector -->
+
+The parent counts num_DVs, num_conditions, and num_factors using supplied context and
+the collected repository evidence.
 
 **Series Overlap**
+<!-- autoskillit:exploration-vector id="series-overlap-assessment" -->
 - Assess whether plotting all conditions on a single axes would create heavy visual overlap
 - Look for: overlapping confidence bands, dense line clusters, label collisions
+<!-- /autoskillit:exploration-vector -->
 
 **Factorial Structure**
+<!-- autoskillit:exploration-vector id="factorial-structure" -->
 - Detect whether the design is factorial (2+ IVs × 2+ levels each)
 - Look for: interaction terms, crossed factors, `factorial`, `grid_search`
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Apply Small-Multiples vs Overlay Decision Rule
 

@@ -1,0 +1,46 @@
+vectors:
+- id: affected-files
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - imports
+  - references
+  rationale: Semantic navigation covers affected source modules, symbols, imports,
+    and structural deviations across the phase scope.
+- id: affected-file-impact
+  role: repository-impact-profiler
+  relationship_classes:
+  - references
+  - affects
+  rationale: Repository impact evidence covers configuration, registries, artifacts,
+    tests, fixtures, and downstream consumers for the affected scope.
+- id: dependency-analysis
+  role: semantic-code-navigator
+  relationship_classes:
+  - imports
+  - calls
+  - references
+  rationale: Semantic navigation covers import, call, and consumer relationships for
+    affected modules.
+- id: test-coverage
+  role: repository-impact-profiler
+  relationship_classes:
+  - references
+  - affects
+  rationale: Repository impact evidence covers tests, coverage surfaces, and downstream
+    verification gaps.
+- id: pattern-discovery
+  role: repository-impact-profiler
+  relationship_classes:
+  - references
+  - affects
+  rationale: Repository impact evidence covers reusable utilities, conventions, tests,
+    fixtures, and artifact consumers within the affected scope.
+- id: cross-phase-boundaries
+  role: semantic-code-navigator
+  relationship_classes:
+  - imports
+  - calls
+  - references
+  rationale: Semantic navigation covers dependency direction and structural handoff
+    surfaces while the parent retains cross-phase synthesis.

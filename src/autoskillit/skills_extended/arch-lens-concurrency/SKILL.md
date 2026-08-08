@@ -19,9 +19,6 @@ hooks:
 semantic_version: 1
 semantic_requirements:
   sibling_skills:
-  - name: arch-lens-error-resilience
-  - name: arch-lens-process-flow
-  - name: make-arch-diag
   - name: mermaid
 ---
 
@@ -52,6 +49,7 @@ semantic_requirements:
 ## Critical Constraints
 
 **NEVER:**
+- Treat Related Skills as executable dependencies or invoke any cross-reference from that section; those entries are documentation-only and do not imply execution. Invoke only the required `/autoskillit:mermaid` skill; never invoke `/autoskillit:make-arch-diag`, another architecture lens, or any other cross-reference.
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for ourselves
@@ -60,6 +58,7 @@ semantic_requirements:
 - Conflate with general process flow (that's a different lens)
 - Ignore thread safety implications
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -77,6 +76,11 @@ semantic_requirements:
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-concurrency/arch_diag_concurrency_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch every exploration vector below through the deterministic router
+- Route bounded declarative configuration, registry, generated-artifact, test, fixture, and consumer handoffs to `repository-impact-profiler` through the parent-owned plan
+- Wait for every exploration result before mapping concurrency boundaries, evaluating thread safety, or creating the diagram
+- Retain parent authority over concurrency and thread-safety judgments, Mermaid generation, and output writing
 
 
 ## Analysis Workflow
@@ -92,43 +96,37 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch every authored vector below under their registered role policies. Mixed code and declarative evidence remains one parent-owned plan; bounded profiler handoffs return to the originating vector and do not add graph dependencies.
 
-**Concurrency Model**
-- Find the primary concurrency approach
-- Is it threading, asyncio, multiprocessing, coroutines?
-- Look for: ThreadPoolExecutor, asyncio, ProcessPoolExecutor, async/await, goroutines, threads
+<!-- autoskillit:exploration-vector id="concurrency-model" -->
+1. **Concurrency Model** — Find the primary concurrency approach: threading, asyncio, multiprocessing, coroutines, goroutines, or executors. Trace definitions, imports, and calls; the parent determines the documented model.
+<!-- /autoskillit:exploration-vector -->
 
-**Worker Pools**
-- Find thread/process pool configurations
-- Identify max_workers settings
-- Look for: Executor, Pool, workers, max_*, thread pool, worker pool
+<!-- autoskillit:exploration-vector id="worker-pools" -->
+2. **Worker Pools** — Find thread or process pool construction, executors, worker limits, `max_workers`, and submission paths. Route declarative worker configuration through the parent to the profiler.
+<!-- /autoskillit:exploration-vector -->
 
-**Parallel Operations**
-- Find what work is parallelized
-- Identify parallel patterns (map, submit, gather)
-- Look for: executor.submit, asyncio.gather, pool.map, parallel processing
+<!-- autoskillit:exploration-vector id="parallel-operations" -->
+3. **Parallel Operations** — Find the work parallelized through map, submit, gather, pool, or equivalent calls and report the definitions and call paths involved.
+<!-- /autoskillit:exploration-vector -->
 
-**Synchronization Points**
-- Find barriers and coordination
-- Identify how parallel work is collected
-- Look for: as_completed, wait, gather, Lock, Semaphore, barriers, sync points
+<!-- autoskillit:exploration-vector id="synchronization-points" -->
+4. **Synchronization Points** — Find barriers, result collection, waits, gathers, locks, semaphores, and other coordination calls, with evidence for each convergence point.
+<!-- /autoskillit:exploration-vector -->
 
-**State Access**
-- Find shared state access
-- Identify thread safety mechanisms
-- Look for: Lock, RLock, Queue, thread-local, immutable, atomic, mutex
+<!-- autoskillit:exploration-vector id="state-access" -->
+5. **State Access** — Trace shared-state reads and writes plus Lock, RLock, Queue, thread-local, immutable, atomic, and mutex mechanisms. The parent evaluates safety and ownership.
+<!-- /autoskillit:exploration-vector -->
 
-**Sequential Boundaries**
-- Find what MUST run sequentially
-- Identify the main thread/process responsibilities
-- Look for: main(), single-threaded, atomic updates
+<!-- autoskillit:exploration-vector id="sequential-boundaries" -->
+6. **Sequential Boundaries** — Trace main-thread or process responsibilities, single-threaded calls, and atomic update paths that provide evidence for required serialization.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Map Concurrency Boundaries
 

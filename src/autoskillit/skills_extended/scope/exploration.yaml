@@ -1,0 +1,37 @@
+retained:
+- id: prior-art-codebase
+  rationale: Repository impact evidence covers existing implementations, tests, benchmarks,
+    documentation, and the gaps between them.
+- id: prior-art-literature
+  rationale: Published literature, established protocols, and known methods require
+    external domain research rather than repository exploration.
+- id: external-research
+  rationale: Web search, papers, external documentation, and community discussion
+    remain external research under parent authority.
+- id: domain-context-architecture
+  rationale: Semantic navigation covers local architecture, modules, data structures,
+    algorithms, and their relationships.
+- id: domain-context-domain-knowledge
+  rationale: Non-software structures, mechanisms, organisms, pathways, models, and
+    processes require domain assessment outside repository exploration.
+- id: evaluation-framework-software
+  rationale: Repository impact evidence covers local metrics, benchmarks, evaluation
+    modules, scoring configuration, and their consumers.
+- id: evaluation-framework-domain-assessment
+  rationale: Domain-standard scales, assays, indices, and rubrics require non-software
+    assessment rather than repository exploration.
+- id: computational-complexity-local
+  rationale: Semantic navigation covers local algorithms, library calls, data structures,
+    and baseline or reference computations needed for complexity analysis.
+- id: computational-complexity-external
+  rationale: Complexity claims and pitfalls from library documentation or prior art
+    require external research under parent authority.
+- id: data-availability-repository
+  rationale: Repository impact evidence covers local datasets, fixtures, synthetic
+    generators, manifests, and their consumers.
+- id: data-availability-external
+  rationale: External datasets, repositories, and domain-standard corpora require
+    acquisition-oriented research beyond local repository exploration.
+- id: custom-research
+  rationale: Non-software scope questions require domain-specific external research
+    that local repository evidence and registered code explorers cannot answer safely.

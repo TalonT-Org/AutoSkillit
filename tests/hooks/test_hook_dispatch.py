@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
 import sys
 import textwrap
@@ -186,7 +187,11 @@ class TestGenerateHooksJsonFormat:
                 for hook in entry.get("hooks", []):
                     cmd = hook["command"]
                     assert "_dispatch.py" in cmd, f"Command does not use dispatcher: {cmd}"
-                    parts = cmd.split()
+                    # shlex, not bare .split(): commands are quoted
+                    # (python3 "${CLAUDE_PLUGIN_ROOT}/hooks/_dispatch.py" name) so the
+                    # dispatcher token carries a trailing quote that defeats a plain
+                    # whitespace split's .endswith("_dispatch.py") check.
+                    parts = shlex.split(cmd)
                     assert parts[-2].endswith("_dispatch.py"), (
                         f"Dispatcher not in expected position: {cmd}"
                     )

@@ -52,6 +52,13 @@ _EXPLICITLY_EXCLUDED: dict[str, str] = {
         "always absolute (dimensions_manifest_path return value); "
         "never a relative path at the run_python call site"
     ),
+    "incarnation_dir": (
+        "_assert_incarnation_hooks_execute is a private helper called only from "
+        "run_cross_interpreter_upgrade_smoke, never itself a run_python entry "
+        "point; incarnation_dir is always constructed internally as "
+        "cache_root / name, where cache_root derives from the absolute work_dir "
+        "the run_python step received; never a relative path at any call site"
+    ),
 }
 
 

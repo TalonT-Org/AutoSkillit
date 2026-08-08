@@ -1,4 +1,4 @@
-"""REQ-FILT-003: cascade entries for planner, _llm_triage, smoke_utils, version."""
+"""REQ-FILT-003: cascade entries for focused package test selection."""
 
 from __future__ import annotations
 
@@ -66,6 +66,20 @@ class TestCascadeNewEntries:
                 FilterMode.AGGRESSIVE,
                 ["planner"],
                 ["planner"],
+            ),
+            # Exploration leaves are isolated IL-1 peers; both modes select only
+            # their dedicated test directory.
+            (
+                "src/autoskillit/exploration/__init__.py",
+                FilterMode.CONSERVATIVE,
+                ["exploration"],
+                ["exploration"],
+            ),
+            (
+                "src/autoskillit/exploration/__init__.py",
+                FilterMode.AGGRESSIVE,
+                ["exploration"],
+                ["exploration"],
             ),
             # Aggressive: _llm_triage scoped to its direct test file
             (

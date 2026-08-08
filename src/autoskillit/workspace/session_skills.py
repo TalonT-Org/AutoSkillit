@@ -12,12 +12,12 @@ import os
 import shutil
 import tempfile
 import time
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from collections.abc import Set as AbstractSet
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, NotRequired, TypeAlias, TypedDict, cast
 
 from autoskillit.core import (
     SESSION_ADD_DIR_SUBDIR,
@@ -27,6 +27,7 @@ from autoskillit.core import (
     EffectiveSkillCatalogAuthority,
     EffectiveSkillInvocationAuthority,
     ManagedSessionHome,
+    RepositoryProfileId,
     ResolvedSkillAuthority,
     SkillAuthority,
     SkillContractError,
@@ -52,8 +53,10 @@ from autoskillit.workspace.skills import (
     DefaultSkillResolver,
     EffectiveSkillCatalog,
     SkillCatalogEntry,
+    SkillExclusion,
     SkillInfo,
     _skill_info_from_frontmatter,
+    render_skill_invalidities,
 )
 from autoskillit.workspace.skills import (
     compute_skill_closure as compute_skill_closure,
@@ -73,6 +76,14 @@ logger = get_logger(__name__)
 
 _SESSION_LEASES_SUBDIR = ".session-leases"
 _SKILL_UNAVAILABILITY_SCHEMA_VERSION = 1
+
+_ExplorerBindingEnv: TypeAlias = Mapping[str, Mapping[str, str]]
+_ExplorerBindingEnvFactory: TypeAlias = Callable[[Path], _ExplorerBindingEnv | None]
+
+
+class _SessionSetupKwargs(TypedDict):
+    parent_sandbox_mode: str
+    explorer_binding_env: NotRequired[_ExplorerBindingEnv]
 
 
 def _raise_failures(message: str, failures: list[BaseException]) -> None:
@@ -264,6 +275,7 @@ def compile_session_skill_catalog(
             skills=tuple(supported),
             execution_role=catalog.execution_role,
             namespace_sources=namespace_sources,
+            exclusions=cast(tuple[SkillExclusion, ...], tuple(catalog.exclusions)),
         ),
         unavailable=tuple(sorted(unavailable, key=lambda item: item.skill)),
     )
@@ -312,14 +324,15 @@ def _codex_profile_skill_infos() -> tuple[SkillInfo, ...]:
                 search_dir=str(profile_skills_root),
             ),
         )
-        if (
-            info.invalid_reason is not None
-            or info.execution_role is not SkillExecutionRole.SESSION
-        ):
+        if info.invalidities or info.execution_role is not SkillExecutionRole.SESSION:
             logger.warning(
                 "codex_profile_skill_contract_rejected",
                 skill=entry.name,
-                reason=info.invalid_reason or "non-session execution role",
+                reason=(
+                    render_skill_invalidities(info.invalidities)
+                    if info.invalidities
+                    else "non-session execution role"
+                ),
             )
             continue
         result.append(info)
@@ -504,8 +517,14 @@ class SkillsDirectoryProvider:
         *,
         gating: bool | None = None,
         backend: CodingAgentBackend | None = None,
+        durable_scripts_root: Path | None = None,
     ) -> SkillProjectionContext:
-        """Build the shared execution-local projection context."""
+        """Build the shared execution-local projection context.
+
+        ``durable_scripts_root`` defaults to ``pkg_root()`` (the dev-source
+        checkout) — correct for this wrapper's callers, none of which hold a
+        plugin artifact binding at call time (see ``catalog_projection_context``).
+        """
         catalog = EffectiveSkillCatalog(
             skills=(SkillCatalogEntry.from_skill_info(skill_info),),
             execution_role=skill_info.execution_role or SkillExecutionRole.SESSION,
@@ -515,6 +534,7 @@ class SkillsDirectoryProvider:
             cwd,
             gating=gating,
             backend=backend,
+            durable_scripts_root=durable_scripts_root,
         )
 
     def catalog_projection_context(
@@ -524,16 +544,31 @@ class SkillsDirectoryProvider:
         *,
         gating: bool | None = None,
         backend: CodingAgentBackend | None = None,
+        durable_scripts_root: Path | None = None,
+        resolved_exploration_profile: RepositoryProfileId | None = None,
     ) -> SkillProjectionContext:
-        """Build one projection context bound to a resolved path-free catalog."""
+        """Build one projection context bound to a resolved path-free catalog.
+
+        ``durable_scripts_root`` is the root a projected document's
+        ``{{AUTOSKILLIT_SCRIPTS}}`` placeholder resolves against — it must
+        never have a shorter lifetime than the session consuming the
+        projected document. Defaults to ``pkg_root()`` (the dev-source
+        checkout, whose lifetime is not tied to the venv) when the caller has
+        no plugin artifact binding to supply instead; callers that hold a
+        retained plugin-cache incarnation (durable across a mid-session
+        `autoskillit update` via retire-don't-delete) must pass it explicitly
+        rather than relying on this default — see ``cli/session/_session_cook.py``.
+        """
+        scripts_root = pkg_root() if durable_scripts_root is None else durable_scripts_root
         return SkillProjectionContext(
             cwd=cwd,
             catalog=catalog,
             backend=backend,
             conventions=backend.conventions if backend is not None else None,
+            resolved_exploration_profile=resolved_exploration_profile,
             substitutions={
                 "{{AUTOSKILLIT_TEMP}}": self._temp_dir_relpath,
-                "{{AUTOSKILLIT_SCRIPTS}}": str(pkg_root() / "recipes" / "scripts"),
+                "{{AUTOSKILLIT_SCRIPTS}}": str(scripts_root / "recipes" / "scripts"),
                 "{{DEFAULT_BASE_BRANCH}}": self._default_base_branch,
             },
             gating=gating,
@@ -585,6 +620,9 @@ class DefaultSessionSkillManager:
         session_id: str,
         invocation: EffectiveSkillInvocationAuthority,
         projection_context: SkillProjectionContextAuthority,
+        *,
+        explorer_binding_env: _ExplorerBindingEnv | None = None,
+        explorer_binding_env_factory: _ExplorerBindingEnvFactory | None = None,
     ) -> ValidatedAddDir:
         """Write only a prevalidated closure from its captured canonical content."""
         self._validate_session_id(session_id)
@@ -593,10 +631,10 @@ class DefaultSessionSkillManager:
         if invocation.execution_role is not SkillExecutionRole.SESSION:
             raise SkillContractError("L1 materialization requires an exact SESSION invocation")
         for member in invocation.closure:
-            if member.invalid_reason is not None:
+            if member.invalidities:
                 raise SkillContractError(
                     f"invalid materialization contract for {member.name!r}: "
-                    f"{member.invalid_reason}"
+                    f"{render_skill_invalidities(member.invalidities)}"
                 )
             if member.execution_role is not SkillExecutionRole.SESSION:
                 actual = (
@@ -617,6 +655,8 @@ class DefaultSessionSkillManager:
             session_id,
             invocation.closure,
             projection_context,
+            explorer_binding_env=explorer_binding_env,
+            explorer_binding_env_factory=explorer_binding_env_factory,
         )
 
     def init_session(
@@ -630,10 +670,10 @@ class DefaultSessionSkillManager:
         if catalog.execution_role is not SkillExecutionRole.SESSION:
             raise SkillContractError("L1 catalog materialization requires SESSION contracts")
         for member in catalog.skills:
-            if member.invalid_reason is not None:
+            if member.invalidities:
                 raise SkillContractError(
                     f"invalid materialization contract for {member.name!r}: "
-                    f"{member.invalid_reason}"
+                    f"{render_skill_invalidities(member.invalidities)}"
                 )
             if member.execution_role is not SkillExecutionRole.SESSION:
                 actual = (
@@ -669,10 +709,10 @@ class DefaultSessionSkillManager:
         if catalog.execution_role is not SkillExecutionRole.SESSION:
             raise SkillContractError("L1 catalog materialization requires SESSION contracts")
         for member in catalog.skills:
-            if member.invalid_reason is not None:
+            if member.invalidities:
                 raise SkillContractError(
                     f"invalid materialization contract for {member.name!r}: "
-                    f"{member.invalid_reason}"
+                    f"{render_skill_invalidities(member.invalidities)}"
                 )
             if member.execution_role is not SkillExecutionRole.SESSION:
                 actual = (
@@ -737,11 +777,16 @@ class DefaultSessionSkillManager:
         session_id: str,
         records: tuple[SkillAuthority, ...],
         projection_context: SkillProjectionContextAuthority,
+        *,
+        explorer_binding_env: _ExplorerBindingEnv | None = None,
+        explorer_binding_env_factory: _ExplorerBindingEnvFactory | None = None,
     ) -> ValidatedAddDir:
         return self._initialize_bound_records(
             session_id,
             records,
             projection_context,
+            explorer_binding_env=explorer_binding_env,
+            explorer_binding_env_factory=explorer_binding_env_factory,
         ).skills_dir
 
     def _initialize_bound_records(
@@ -749,8 +794,13 @@ class DefaultSessionSkillManager:
         session_id: str,
         records: tuple[SkillAuthority, ...],
         projection_context: SkillProjectionContextAuthority,
+        *,
+        explorer_binding_env: _ExplorerBindingEnv | None = None,
+        explorer_binding_env_factory: _ExplorerBindingEnvFactory | None = None,
     ) -> _InitializedSession:
         self._validate_session_id(session_id)
+        if explorer_binding_env is not None and explorer_binding_env_factory is not None:
+            raise ValueError("provide an explorer binding map or factory, not both")
         if (
             session_id in self._session_roots
             or session_id in self._session_leases
@@ -810,6 +860,8 @@ class DefaultSessionSkillManager:
                 records,
                 projection_context,
                 skills_subdir=skills_subdir,
+                explorer_binding_env=explorer_binding_env,
+                explorer_binding_env_factory=explorer_binding_env_factory,
             )
             initialized = _InitializedSession(
                 generated_home=generated_home,
@@ -851,6 +903,8 @@ class DefaultSessionSkillManager:
         projection_context: SkillProjectionContextAuthority,
         *,
         skills_subdir: Path,
+        explorer_binding_env: _ExplorerBindingEnv | None = None,
+        explorer_binding_env_factory: _ExplorerBindingEnvFactory | None = None,
     ) -> ValidatedAddDir:
         backend = projection_context.backend
         add_dir = generated_home / SESSION_ADD_DIR_SUBDIR
@@ -882,8 +936,15 @@ class DefaultSessionSkillManager:
             pre_launch_errors = backend.ensure_pre_launch(session_dir=generated_home)
             if pre_launch_errors:
                 raise RuntimeError(f"Pre-launch check failed: {'; '.join(pre_launch_errors)}")
+        if explorer_binding_env_factory is not None:
+            explorer_binding_env = explorer_binding_env_factory(generated_home)
         if backend is not None:
-            backend.setup_session_dir(generated_home)
+            setup_kwargs: _SessionSetupKwargs = {
+                "parent_sandbox_mode": projection_context.parent_sandbox_mode,
+            }
+            if explorer_binding_env is not None:
+                setup_kwargs["explorer_binding_env"] = explorer_binding_env
+            backend.setup_session_dir(generated_home, **setup_kwargs)
 
         ungated_context = SkillProjectionContext(
             cwd=projection_context.cwd,
@@ -895,6 +956,12 @@ class DefaultSessionSkillManager:
             substitutions=projection_context.substitutions,
             gating=False,
             namespace=projection_context.namespace,
+            exploration_launch_context_ref=projection_context.exploration_launch_context_ref,
+            resolved_exploration_profile=projection_context.resolved_exploration_profile,
+            active_exploration_applicabilities=(
+                projection_context.active_exploration_applicabilities
+            ),
+            parent_sandbox_mode=projection_context.parent_sandbox_mode,
             projection_version=projection_context.projection_version,
         )
         session_records = (

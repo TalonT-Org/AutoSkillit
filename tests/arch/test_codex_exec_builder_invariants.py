@@ -65,10 +65,21 @@ def test_all_exec_builders_start_with_codex_exec(builder) -> None:
     assert spec.cmd[1] == "exec"
 
 
-@pytest.mark.parametrize("builder", ALL_BUILDERS, ids=BUILDER_IDS)
-def test_all_exec_builders_have_sandbox(builder) -> None:
+@pytest.mark.parametrize(
+    ("builder", "expected_cli_sandbox"),
+    [
+        (_build_headless, True),
+        (_build_skill_session, False),
+        (_build_food_truck, True),
+        (_build_resume, True),
+    ],
+    ids=BUILDER_IDS,
+)
+def test_exec_builders_apply_cli_sandbox_only_for_fixed_policy(
+    builder, expected_cli_sandbox
+) -> None:
     spec = builder()
-    assert "--sandbox" in spec.cmd
+    assert ("--sandbox" in spec.cmd) is expected_cli_sandbox
 
 
 @pytest.mark.parametrize("builder", ALL_BUILDERS, ids=BUILDER_IDS)

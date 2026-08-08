@@ -18,6 +18,7 @@ from autoskillit.core import (
     BackendAuthorityKind,
     BackendAuthorityTier,
     ClosureAuthoritySpec,
+    ExecutionIdentity,
     LaunchResolutionRequest,
     LaunchSurface,
     LaunchValueSource,
@@ -177,6 +178,7 @@ async def run_headless_core(
     capability_contract: SkillProjectionBinding | None = None,
     native_shell_capture_decision: NativeShellCaptureDecision | None = None,
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
+    execution_identity: ExecutionIdentity = ExecutionIdentity(),
     on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
@@ -448,6 +450,7 @@ async def run_headless_core(
                 session_id=caller_session_id,
                 inspector_eligible=inspector_eligible,
                 inspector_model=inspector_model,
+                execution_identity=execution_identity,
                 on_launch_resolved=on_launch_resolved,
                 closure_spec=closure_spec,
                 closure_report_root=closure_report_root,

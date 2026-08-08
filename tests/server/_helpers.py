@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from autoskillit.core import (
@@ -18,7 +18,73 @@ from autoskillit.core import (
 from autoskillit.core.types import RetryReason
 from tests.fleet._helpers import _make_recipe_info as _fleet_make_recipe_info
 
+if TYPE_CHECKING:
+    from autoskillit.config.settings import AgentBackendConfig
+
 _HOOK_CONFIG_OVERLAY_RELPATH = (".autoskillit", "temp", ".hook_config_overlay.json")
+
+BUNDLED_RECIPE_STEP_BACKEND_PIN_CASES = (
+    (
+        "implementation",
+        "run_arch_lenses",
+        "agent_backend.recipe_overrides.implementation.run_arch_lenses",
+    ),
+    (
+        "implementation-groups",
+        "run_arch_lenses",
+        "agent_backend.recipe_overrides.implementation-groups.run_arch_lenses",
+    ),
+    (
+        "remediation",
+        "investigate",
+        "agent_backend.recipe_overrides.remediation.investigate",
+    ),
+    (
+        "remediation",
+        "run_arch_lenses",
+        "agent_backend.recipe_overrides.remediation.run_arch_lenses",
+    ),
+    (
+        "research",
+        "run_experiment_lenses",
+        "agent_backend.recipe_overrides.research.run_experiment_lenses",
+    ),
+    (
+        "research",
+        "scope",
+        "agent_backend.recipe_overrides.research.scope",
+    ),
+    (
+        "research",
+        "vis_apply",
+        "agent_backend.recipe_overrides.research.vis_apply",
+    ),
+    (
+        "research-design",
+        "scope",
+        "agent_backend.recipe_overrides.research-design.scope",
+    ),
+    (
+        "research-design",
+        "vis_apply",
+        "agent_backend.recipe_overrides.research-design.vis_apply",
+    ),
+    (
+        "research-review",
+        "run_experiment_lenses",
+        "agent_backend.recipe_overrides.research-review.run_experiment_lenses",
+    ),
+)
+
+
+def _bundled_backend() -> AgentBackendConfig:
+    """Load the bundled backend defaults shared by backend-override tests."""
+    from autoskillit.config.settings import AgentBackendConfig
+    from autoskillit.core.io import load_yaml
+    from autoskillit.core.paths import pkg_root
+
+    defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+    return AgentBackendConfig(**defaults["agent_backend"])
 
 
 def _mock_fmcp_ctx() -> MagicMock:

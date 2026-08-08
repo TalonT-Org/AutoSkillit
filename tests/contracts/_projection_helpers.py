@@ -10,10 +10,39 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-__all__ = ["STALE_VERSION", "plant_stale_snapshot", "session_catalog"]
+if TYPE_CHECKING:
+    from autoskillit.workspace import EffectiveSkillCatalog
+
+__all__ = [
+    "STALE_VERSION",
+    "non_exploration_catalog",
+    "plant_stale_snapshot",
+    "session_catalog",
+]
 
 STALE_VERSION = "0.0.1-stale"
+
+
+def non_exploration_catalog(
+    catalog: EffectiveSkillCatalog,
+) -> EffectiveSkillCatalog:
+    """Return the explicit catalog for tests unrelated to exploration.
+
+    The runtime import stays local to avoid collection-time cross-layer loading.
+    """
+    from autoskillit.workspace import EffectiveSkillCatalog
+
+    skills = tuple(skill for skill in catalog.skills if not skill.exploration_vectors)
+    names = frozenset(skill.name for skill in skills)
+    return EffectiveSkillCatalog(
+        skills=skills,
+        execution_role=catalog.execution_role,
+        namespace_sources={
+            name: source for name, source in catalog.namespace_sources.items() if name in names
+        },
+    )
 
 
 def session_catalog():

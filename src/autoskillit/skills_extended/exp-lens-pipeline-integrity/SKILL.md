@@ -6,7 +6,7 @@ uses_capabilities: []
 activate_deps:
 - mermaid
 description: Create Pipeline Integrity experimental design diagram showing data splits, leakage points, preprocessing order,
-  and label contamination. Integrity lens answering "Could data handling create optimistic bias?"
+ and label contamination. Integrity lens answering "Could data handling create optimistic bias?"
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -58,6 +58,8 @@ semantic_requirements:
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-pipeline-integrity/`
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
+- Import or execute target code, tests, experiments, models, or benchmarks
+- Let an exploration vector classify leakage, assign severity, map the complete pipeline, or create the diagram
 
 **ALWAYS:**
 - Classify every pipeline stage as pre-split or post-split
@@ -67,6 +69,11 @@ semantic_requirements:
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch every exploration vector below through the deterministic router
+- Route mixed dataset, fixture, path, and manifest evidence through the parent for bounded profiler handoff without creating extra vectors
+- Wait for every exploration result before mapping the pipeline, identifying leakage risks, or creating the diagram
+- Retain parent authority over pipeline-integrity, leakage, severity, and experimental judgments in Steps 2+
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-pipeline-integrity/exp_diag_pipeline_integrity_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -84,36 +91,55 @@ semantic_requirements:
 If positional arg 1 (context_path) is provided and the file exists, read it to obtain
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
-methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
+methodology. Use supplied structured context as the foundation for Steps 1-5.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses supplied context and experiment-plan arguments, inspect only
+existing revision-scoped CWD artifacts for fields that remain absent. Never rediscover
+or override supplied complete fields. If no fields are missing, return an explicit
+not-applicable result without repository search. If relevant evidence is absent or
+unrelated, explicitly report it as unavailable or unrelated without widening scope,
+inferring meaning, or importing or executing target code, tests, experiments, models,
+or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+### Step 1: Launch the Authored Discovery Vectors (SINGLE MESSAGE)
+
+Dispatch the five authored Step-1 vectors with the ready fallback vector through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Use the registered role for each source block. Parent-mediated profiler handoff for mixed evidence does not create another vector.
 
-**Data Loading & Sources**
+<!-- autoskillit:exploration-vector id="data-loading-sources" -->
+1. **Data Loading & Sources**
 - Find data ingestion code, raw data paths
 - Look for: load, read, fetch, dataset, csv, parquet, download
+<!-- /autoskillit:exploration-vector -->
 
-**Preprocessing & Transforms**
+<!-- autoskillit:exploration-vector id="preprocessing-transforms" -->
+2. **Preprocessing & Transforms**
 - Find normalization, encoding, imputation steps
 - Look for: transform, normalize, scale, encode, impute, clean, preprocess
+<!-- /autoskillit:exploration-vector -->
 
-**Split Logic**
+<!-- autoskillit:exploration-vector id="split-logic" -->
+3. **Split Logic**
 - Find train/test/validation split code
 - Look for: split, train_test, fold, cross_val, stratify, group
+<!-- /autoskillit:exploration-vector -->
 
-**Feature Engineering**
+<!-- autoskillit:exploration-vector id="feature-engineering" -->
+4. **Feature Engineering**
 - Find feature creation, selection, extraction
 - Look for: feature, extract, select, engineer, embed, vectorize
+<!-- /autoskillit:exploration-vector -->
 
-**Model Training & Evaluation**
+<!-- autoskillit:exploration-vector id="model-training-evaluation" -->
+5. **Model Training & Evaluation**
 - Find training loops and evaluation metrics
 - Look for: fit, train, predict, evaluate, score, metric, loss
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Map the Complete Pipeline
 

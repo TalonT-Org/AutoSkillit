@@ -20,7 +20,8 @@ NEW_HEADLESS_MODULES = [
 HEADLESS_SIZE_BUDGETS = {
     "headless/__init__.py": 550,
     "headless/_headless_helpers.py": 220,
-    "headless/_headless_execute.py": 635,
+    # +1: canonical full-name effective execution-identity binding required by review #4464.
+    "headless/_headless_execute.py": 636,
     "headless/_headless_launch.py": 500,
     "headless/_headless_recovery.py": 540,
     "headless/_headless_path_tokens.py": 190,

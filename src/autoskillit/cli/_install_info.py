@@ -1,12 +1,17 @@
 """Install classification and update policy for autoskillit CLI.
 
-Pure module — no I/O, no network, no subprocess.  Provides the canonical
-source of truth for install-type classification and the three policy helpers
-that drive the unified update check.
+Mostly pure — no network, no subprocess. ``detect_install()`` does read-only
+local I/O: ``direct_url.json`` package metadata (via ``parse_direct_url()``)
+and pre-pivot resolution of the running CLI's own entrypoint. Every other
+function in this module is pure, deriving everything from an
+already-constructed ``InstallInfo``.
 """
 
 from __future__ import annotations
 
+import os
+import shutil
+import sys
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
@@ -41,6 +46,30 @@ class InstallInfo:
     requested_revision: str | None
     url: str | None
     editable_source: Path | None
+    entrypoint: Path | None = None
+    """The executable running this CLI, resolved before an update pivot."""
+
+
+def resolve_autoskillit_entrypoint(
+    *invocation_candidates: str | Path | None,
+    search_path: str | None = None,
+) -> Path | None:
+    """Resolve an executable invocation, then fall back to ``search_path``."""
+    candidates = invocation_candidates or (sys.argv[0],)
+    for raw_candidate in candidates:
+        if raw_candidate is None:
+            continue
+        candidate = Path(raw_candidate)
+        if candidate.name not in {"autoskillit", "autoskillit.exe"}:
+            continue
+        candidate = candidate if candidate.is_absolute() else candidate.absolute()
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
+    resolved = shutil.which("autoskillit", path=search_path)
+    if resolved is None:
+        return None
+    candidate = Path(resolved)
+    return candidate if candidate.is_file() and os.access(candidate, os.X_OK) else None
 
 
 def detect_install() -> InstallInfo:
@@ -52,6 +81,7 @@ def detect_install() -> InstallInfo:
     _unknown = InstallInfo(InstallType.UNKNOWN, None, None, None, None)
     try:
         info = parse_direct_url()
+        entrypoint = resolve_autoskillit_entrypoint()
         url = info["url"] or ""
         if info["install_type"] == "git-vcs":
             return InstallInfo(
@@ -60,6 +90,7 @@ def detect_install() -> InstallInfo:
                 requested_revision=info["requested_revision"],
                 url=url or None,
                 editable_source=None,
+                entrypoint=entrypoint,
             )
         if info["install_type"] == "local-editable":
             if isinstance(url, str) and url.startswith("file://"):
@@ -70,6 +101,7 @@ def detect_install() -> InstallInfo:
                     requested_revision=None,
                     url=url,
                     editable_source=Path(src_path),
+                    entrypoint=entrypoint,
                 )
         if info["install_type"] == "local-path":
             return InstallInfo(
@@ -78,6 +110,7 @@ def detect_install() -> InstallInfo:
                 requested_revision=None,
                 url=url or None,
                 editable_source=None,
+                entrypoint=entrypoint,
             )
         return _unknown
     except Exception:
@@ -125,18 +158,13 @@ def dismissal_window(info: InstallInfo) -> timedelta:
 
 
 def upgrade_command(info: InstallInfo) -> list[str] | None:
-    """Return the subprocess command to upgrade autoskillit for this install.
-
-    - stable / main / release-tag → ``["uv", "tool", "upgrade", "autoskillit"]``
-    - dev-track → ``["uv", "tool", "install", "--force", <git URL>]``
-    - ``LOCAL_EDITABLE`` → ``["uv", "pip", "install", "-e", str(info.editable_source)]``
-    - ``UNKNOWN`` / ``LOCAL_PATH`` → ``None``
-    """
+    """Build the track-aware upgrade command, pinned to this Python minor."""
     if info.install_type == InstallType.LOCAL_EDITABLE and info.editable_source is not None:
         return ["uv", "pip", "install", "-e", str(info.editable_source)]
     if info.install_type != InstallType.GIT_VCS:
         return None
+    python_pin = f"{sys.version_info.major}.{sys.version_info.minor}"
     track = classify_track(info)
     if track == InstallTrack.DEV:
-        return ["uv", "tool", "install", "--force", _INSTALL_FROM_DEVELOP]
-    return ["uv", "tool", "upgrade", "autoskillit"]
+        return ["uv", "tool", "install", "--force", _INSTALL_FROM_DEVELOP, "--python", python_pin]
+    return ["uv", "tool", "upgrade", "autoskillit", "--python", python_pin]

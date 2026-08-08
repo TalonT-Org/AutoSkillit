@@ -39,6 +39,25 @@ from tests.fixtures.plugin_artifact_state import (
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 
+def test_post_pivot_reporter_falls_back_when_logger_raises(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from autoskillit.cli.update import _transaction as transaction_module
+
+    def fail_logger(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("logger unavailable")
+
+    monkeypatch.setattr(transaction_module.logger, "warning", fail_logger)
+
+    try:
+        raise RuntimeError("original failure")
+    except RuntimeError:
+        transaction_module._report_post_pivot_failure("post-pivot operation failed")
+
+    assert capsys.readouterr().err == "post-pivot operation failed\n"
+
+
 def _info() -> InstallInfo:
     return InstallInfo(
         install_type=InstallType.GIT_VCS,
@@ -167,6 +186,313 @@ def _recording_success_runner(
     return runner
 
 
+# ---------------------------------------------------------------------------
+# Pivot-safe update verification and failure reporting.
+# ---------------------------------------------------------------------------
+
+# Purge imported Rich modules before blocking imports so eager and lazy
+# dependency versions exercise the same missing-site-packages behavior.
+_POISON_RICH_PREFIX = """\
+import sys
+
+for _name in list(sys.modules):
+    if _name == "rich" or _name.startswith("rich."):
+        del sys.modules[_name]
+
+
+class _RichBlocker:
+    def find_spec(self, name, path=None, target=None):
+        if name == "rich" or name.startswith("rich."):
+            raise ModuleNotFoundError(f"simulated deleted site-packages tree: {name}")
+        return None
+
+
+sys.meta_path.insert(0, _RichBlocker())
+"""
+
+
+def _run_poisoned_subprocess(driver_body: str) -> subprocess.CompletedProcess[str]:
+    """Run ``driver_body`` in a fresh subprocess with rich purged and blocked.
+
+    ``driver_body`` should print "SURVIVED" on success — the shared success
+    marker every caller asserts on.
+    """
+    script = _POISON_RICH_PREFIX + "\n" + driver_body
+    return subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+
+
+def test_raising_post_pivot_probe_survives_real_logging_chain() -> None:
+    """A raising post-pivot probe remains reportable without Rich imports."""
+    driver = """
+import importlib.metadata
+import subprocess
+import tempfile
+from pathlib import Path
+
+import autoskillit.cli.update._transaction as t
+from autoskillit.cli._install_info import InstallInfo, InstallType
+
+
+def _info():
+    return InstallInfo(InstallType.GIT_VCS, "abc123", "stable", "https://x", None)
+
+
+t.detect_install = _info
+t.upgrade_command = lambda _info: ["uv", "tool", "upgrade", "autoskillit"]
+t.is_git_worktree = lambda _p: False
+t.is_git_main_checkout = lambda _p: False
+
+
+def raising_prober(info, maintenance_env, runner):
+    raise importlib.metadata.PackageNotFoundError("autoskillit")
+
+
+def runner(cmd, **kwargs):
+    return subprocess.CompletedProcess(cmd, 0)
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    result = t.run_update_transaction(
+        home=Path(tmp),
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: "1.0.0",
+        fresh_version_prober=raising_prober,
+        process_runner=runner,
+    )
+    assert result.outcome.value == "failed-upgrade", result.outcome
+    assert result.findings, "expected findings on failure"
+
+print("SURVIVED", flush=True)
+"""
+    result = _run_poisoned_subprocess(driver)
+    assert result.returncode == 0, (
+        f"process crashed instead of reporting the mapped failure.\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    assert "SURVIVED" in result.stdout
+    assert "ModuleNotFoundError" not in result.stderr
+
+
+def test_module_default_logging_survives_deleted_rich_tree() -> None:
+    """Default logging renders exceptions when Rich is unavailable."""
+    driver = """
+from autoskillit.core.logging import get_logger
+
+logger = get_logger("t_b2_default")
+try:
+    raise RuntimeError("simulated post-pivot failure")
+except Exception:
+    logger.warning("simulated_failure", exc_info=True)
+
+print("SURVIVED", flush=True)
+"""
+    result = _run_poisoned_subprocess(driver)
+    assert result.returncode == 0, (
+        f"process crashed rendering the exception.\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    assert "SURVIVED" in result.stdout
+    assert "ModuleNotFoundError" not in result.stderr
+    # The module default's WriteLoggerFactory writes to sys.stderr — assert
+    # the log line actually reached the stream, not just that nothing raised.
+    assert "simulated_failure" in result.stderr
+
+
+def test_configure_logging_console_branch_survives_deleted_rich_tree() -> None:
+    """Configured console logging renders exceptions without Rich."""
+    driver = """
+from autoskillit.core import configure_logging, get_logger
+
+
+class _FakeTTY:
+    def __init__(self):
+        self.buf = []
+
+    def write(self, s):
+        self.buf.append(s)
+        return len(s)
+
+    def flush(self):
+        pass
+
+    def isatty(self):
+        return True
+
+
+stream = _FakeTTY()
+configure_logging(json_output=False, stream=stream)
+logger = get_logger("t_b2_configured")
+try:
+    raise RuntimeError("simulated post-pivot failure")
+except Exception:
+    logger.warning("simulated_failure", exc_info=True)
+
+print("SURVIVED", flush=True)
+print("STREAM_CONTENT_START", flush=True)
+print("".join(stream.buf), flush=True)
+print("STREAM_CONTENT_END", flush=True)
+"""
+    result = _run_poisoned_subprocess(driver)
+    assert result.returncode == 0, (
+        f"process crashed rendering the exception.\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    assert "SURVIVED" in result.stdout
+    assert "ModuleNotFoundError" not in result.stderr
+    # configure_logging()'s console branch writes to the injected `stream`
+    # (never sys.stderr directly) — assert the log line actually reached it,
+    # not just that nothing raised.
+    stream_content = result.stdout.split("STREAM_CONTENT_START\n", 1)[1].split(
+        "STREAM_CONTENT_END\n", 1
+    )[0]
+    assert "simulated_failure" in stream_content
+
+
+def test_verifier_fault_survives_real_logging_chain() -> None:
+    """Artifact-verification faults remain reportable without Rich."""
+    driver = """
+import json
+import subprocess
+import tempfile
+from pathlib import Path
+
+import autoskillit.cli.update._transaction as t
+from autoskillit.cli._install_info import InstallInfo, InstallType
+
+
+def _info():
+    return InstallInfo(InstallType.GIT_VCS, "abc123", "stable", "https://x", None)
+
+
+t.detect_install = _info
+t.upgrade_command = lambda _info: ["uv", "tool", "upgrade", "autoskillit"]
+t.is_git_worktree = lambda _p: False
+t.is_git_main_checkout = lambda _p: False
+
+
+def raising_verify(spec):
+    raise RuntimeError("simulated verification crash (deleted tree)")
+
+
+t.verify_installed_plugin_artifact = raising_verify
+
+
+def runner(cmd, **kwargs):
+    return subprocess.CompletedProcess(cmd, 0)
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    tmp_path = Path(tmp)
+    registry = tmp_path / ".claude" / "plugins" / "installed_plugins.json"
+    registry.parent.mkdir(parents=True)
+    registry.write_text(json.dumps({
+        "version": 2,
+        "plugins": {"autoskillit@autoskillit-local": [{"installPath": str(tmp_path / "x")}]},
+    }))
+    result = t.run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: "1.0.0",
+        fresh_version_prober=lambda _i, _e, _r: "1.1.0",
+        process_runner=runner,
+    )
+    assert result.outcome.value == "failed-postcondition", result.outcome
+    assert result.findings, "expected findings on failure"
+
+print("SURVIVED", flush=True)
+"""
+    result = _run_poisoned_subprocess(driver)
+    assert result.returncode == 0, (
+        f"process crashed instead of reporting the mapped failure.\n"
+        f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    assert "SURVIVED" in result.stdout
+    assert "ModuleNotFoundError" not in result.stderr
+
+
+def test_post_pivot_verification_is_out_of_process(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Post-pivot verification uses the fresh subprocess probe."""
+    _prepare(monkeypatch)
+    call_count = 0
+
+    def counting_version_reader(_name: str) -> str:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return "1.0.0"
+        pytest.fail("post-pivot read must go through fresh_version_prober, not version_reader")
+
+    calls: list[list[str]] = []
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=counting_version_reader,
+        fresh_version_prober=lambda _info, _env, _runner: "1.1.0",
+        process_runner=_recording_success_runner(calls),
+    )
+
+    assert result.outcome is UpdateTransactionOutcome.COMPLETED
+    assert result.expected_version == "1.1.0"
+    assert len(calls) == 2
+    assert call_count == 1
+    assert result.phase_history == UPDATE_TRANSACTION_PHASES
+
+
+def test_default_fresh_version_prober_uses_resolved_autoskillit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The default fresh probe invokes the resolved CLI in the maintenance env."""
+    fake_entrypoint = tmp_path / "bin" / "autoskillit"
+    fake_entrypoint.parent.mkdir()
+    fake_entrypoint.write_text("#!/bin/sh\necho 9.9.9\n")
+    fake_entrypoint.chmod(0o755)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.detect_install",
+        lambda: InstallInfo(
+            InstallType.GIT_VCS,
+            "abc",
+            "stable",
+            "https://x",
+            None,
+            entrypoint=fake_entrypoint,
+        ),
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.upgrade_command",
+        lambda _info: ["uv", "tool", "upgrade", "autoskillit"],
+    )
+    monkeypatch.setattr("autoskillit.cli.update._transaction.is_git_worktree", lambda _path: False)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.is_git_main_checkout", lambda _path: False
+    )
+    calls: list[tuple[list[str], dict[str, Any]]] = []
+
+    def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        calls.append((list(cmd), kwargs))
+        if len(calls) == 2:
+            return subprocess.run(cmd, **kwargs)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        process_runner=runner,
+    )
+
+    probe_cmd, probe_kwargs = calls[1]
+    assert probe_cmd == [str(fake_entrypoint), "--version"]
+    assert probe_kwargs["capture_output"] is True
+    assert probe_kwargs["text"] is True
+    assert probe_kwargs["env"]["PATH"] == "/bin"
+
+
 def test_update_transaction_declares_exact_twelve_phase_pivot_contract() -> None:
     assert UPDATE_TRANSACTION_PHASES == (
         UpdateTransactionPhase.CALLER_ENV_CAPTURE,
@@ -248,6 +574,7 @@ def test_metadata_must_advance_before_install(
         home=tmp_path,
         base_env={"PATH": "/bin"},
         version_reader=lambda _name: "1.0.0",
+        fresh_version_prober=lambda _info, _env, _runner: "1.0.0",
         process_runner=_recording_success_runner(calls),
     )
 
@@ -255,6 +582,33 @@ def test_metadata_must_advance_before_install(
     assert len(calls) == 1
     _assert_terminal_history(result, UpdateTransactionPhase.FRESH_VERSION_METADATA_GATE)
     assert result.irreversible_pivot_crossed is True
+
+
+def test_unregistered_success_preserves_preexisting_obligation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from autoskillit.workspace import read_obligation, write_obligation
+
+    _prepare(monkeypatch)
+    existing = write_obligation(
+        tmp_path,
+        previous_version="0.9.0",
+        originating_phase="earlier-registered-update",
+    )
+
+    def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        return subprocess.CompletedProcess(cmd, 0)
+
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: "1.0.0",
+        fresh_version_prober=lambda _info, _env, _runner: "1.1.0",
+        process_runner=runner,
+    )
+
+    assert result.outcome is UpdateTransactionOutcome.COMPLETED
+    assert read_obligation(tmp_path) == existing
 
 
 @pytest.mark.parametrize(
@@ -322,6 +676,7 @@ def test_install_process_statuses_map_to_distinct_update_outcomes(
         home=tmp_path,
         base_env={"PATH": "/bin"},
         version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
         process_runner=lambda cmd, **kwargs: subprocess.CompletedProcess(cmd, next(statuses)),
     )
 
@@ -360,6 +715,7 @@ def test_success_uses_sealed_env_explicit_cwd_and_maintenance_flags(
             "AUTOSKILLIT_AGENT_BACKEND__BACKEND": "codex",
         },
         version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
         process_runner=runner,
     )
 
@@ -448,6 +804,7 @@ def test_success_from_real_worktree_seals_env_and_uses_home_maintenance_cwd(
             home=home,
             base_env={**approved_base_env, **sensitive_env},
             version_reader=lambda _name: next(versions),
+            fresh_version_prober=lambda _info, _env, _runner: next(versions),
             process_runner=runner,
         )
 
@@ -506,6 +863,7 @@ def test_codex_caller_with_old_claude_registration_completes_only_after_matching
             "AUTOSKILLIT_AGENT_BACKEND__BACKEND": "codex",
         },
         version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
         process_runner=runner,
     )
 
@@ -559,6 +917,7 @@ def test_pre_update_obligation_is_immutable_but_post_update_evidence_is_fresh(
             "AUTOSKILLIT_AGENT_BACKEND__BACKEND": "codex",
         },
         version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
         process_runner=runner,
     )
 
@@ -635,6 +994,7 @@ def test_required_invalid_artifact_states_fail_only_at_final_verification(
         home=tmp_path,
         base_env={"PATH": "/bin"},
         version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
         process_runner=_recording_success_runner(calls),
     )
 
@@ -665,6 +1025,7 @@ def test_verification_error_is_failed_postcondition(
         home=tmp_path,
         base_env={"PATH": "/bin"},
         version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
         process_runner=lambda cmd, **kwargs: subprocess.CompletedProcess(cmd, 0),
     )
 
@@ -860,6 +1221,7 @@ def test_coordinator_runs_real_install_adapter_with_exact_isolated_context(
         home=home,
         base_env=base_env,
         version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
         process_runner=runner,
     )
 
@@ -949,6 +1311,7 @@ def test_registered_plugin_crosses_real_install_cli_with_typed_statuses(
         home=home,
         base_env=base_env,
         version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
         process_runner=runner,
     )
 
@@ -1058,6 +1421,7 @@ def test_real_install_process_launch_signal_and_unknown_statuses_stop_verificati
         home=home,
         base_env=base_env,
         version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
         process_runner=runner,
     )
 
@@ -1093,7 +1457,7 @@ def test_update_consumers_compose_with_registered_real_child_transaction(
     consumer: str,
     claude_behavior: str,
 ) -> None:
-    from autoskillit.cli.update import _update, _update_checks
+    from autoskillit.cli.update import _obligation_repair, _update, _update_checks
 
     _prepare(monkeypatch)
     home, base_env = _isolated_child_environment(tmp_path)
@@ -1106,6 +1470,19 @@ def test_update_consumers_compose_with_registered_real_child_transaction(
     effects: list[tuple[str, Path, dict[str, object] | None]] = []
     dismiss_reads: list[Path] = []
     install_statuses: list[int] = []
+    repair_homes: list[Path] = []
+
+    def defer_obligation_repair(target_home: Path) -> object:
+        repair_homes.append(target_home)
+        return _obligation_repair.ObligationRepairResult(
+            outcome=_obligation_repair.ObligationRepairOutcome.DEFERRED
+        )
+
+    monkeypatch.setattr(
+        _obligation_repair,
+        "attempt_obligation_repair",
+        defer_obligation_repair,
+    )
 
     def runner(
         cmd: list[str],
@@ -1130,6 +1507,7 @@ def test_update_consumers_compose_with_registered_real_child_transaction(
             home=home,
             base_env=base_env,
             version_reader=lambda _name: next(versions),
+            fresh_version_prober=lambda _info, _env, _runner: next(versions),
             process_runner=runner,
         )
         results.append(result)
@@ -1217,8 +1595,223 @@ def test_update_consumers_compose_with_registered_real_child_transaction(
         assert results[0].install_result.failure_kind is InstallFailureKind.CHILD
         assert not effects
         assert not dismiss_reads
+    assert repair_homes == (
+        [home] if consumer == "explicit" and claude_behavior == "child-failure" else []
+    )
     assert [call["argv"][:2] for call in _read_fake_claude_calls(home)] == [
         ["plugin", "marketplace"],
         ["plugin", "install"],
     ]
     assert not Path(calls[1][1]["cwd"]).exists()
+
+
+# ---------------------------------------------------------------------------
+# Publication-obligation journal lifecycle.
+# ---------------------------------------------------------------------------
+
+
+def test_obligation_written_before_upgrade_launch_and_cleared_on_completion(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A successful transaction writes the obligation immediately before the
+    upgrade subprocess launches (observed via an injected runner that reads
+    the journal from inside the upgrade call itself) and clears it by
+    RESULT_FINALIZATION.
+    """
+    from autoskillit.workspace import read_obligation
+
+    _prepare(monkeypatch)
+    _register_plugin(tmp_path)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.verify_installed_plugin_artifact",
+        lambda _spec: SimpleNamespace(
+            identity=SimpleNamespace(semantic_key=f"{_PLUGIN_REF}:1.1.0"),
+            findings=(),
+            lease=None,
+        ),
+    )
+    versions = iter(["1.0.0", "1.1.0"])
+    obligation_present_at_upgrade_launch: list[bool] = []
+
+    def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        if cmd[:3] == ["uv", "tool", "upgrade"]:
+            obligation_present_at_upgrade_launch.append(read_obligation(tmp_path) is not None)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: next(versions),
+        fresh_version_prober=lambda _info, _env, _runner: next(versions),
+        process_runner=runner,
+    )
+
+    assert obligation_present_at_upgrade_launch == [True]
+    assert result.outcome is UpdateTransactionOutcome.COMPLETED
+    assert read_obligation(tmp_path) is None
+
+
+@pytest.mark.parametrize(
+    ("failure_point", "expect_expected_version"),
+    [
+        ("upgrade_nonzero_exit", False),
+        ("uv_oserror", False),
+        ("raising_probe", False),
+        ("child_failure_after_probe", True),
+        ("child_oserror", True),
+        ("verifier_raises_after_probe", True),
+    ],
+)
+def test_obligation_survives_failures_at_or_after_upgrade_subprocess(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    failure_point: str,
+    expect_expected_version: bool,
+) -> None:
+    """For each fault-injected failure at or after the upgrade subprocess,
+    the obligation survives — with expected_version backfilled for failures
+    AFTER the probe succeeded, and None for failures at/before it (the new
+    version was never established, and the record must say so rather than
+    guess).
+    """
+    from autoskillit.hook_registry import generate_hooks_json, validate_plugin_cache_hooks
+    from autoskillit.workspace import read_obligation
+
+    _prepare(monkeypatch)
+    _register_plugin(tmp_path)
+    hooks_dir = (
+        tmp_path
+        / ".claude"
+        / "plugins"
+        / "cache"
+        / "autoskillit-local"
+        / "autoskillit"
+        / "1.0.0"
+        / "hooks"
+    )
+    hooks_dir.mkdir(parents=True)
+    (hooks_dir / "_dispatch.py").write_text("# dispatcher stub", encoding="utf-8")
+    (hooks_dir / "hooks.json").write_text(
+        json.dumps(generate_hooks_json()),
+        encoding="utf-8",
+    )
+    if failure_point == "verifier_raises_after_probe":
+        monkeypatch.setattr(
+            "autoskillit.cli.update._transaction.verify_installed_plugin_artifact",
+            lambda _spec: (_ for _ in ()).throw(RuntimeError("simulated verify crash")),
+        )
+
+    calls: list[list[str]] = []
+
+    def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        calls.append(list(cmd))
+        if failure_point == "upgrade_nonzero_exit" and len(calls) == 1:
+            return subprocess.CompletedProcess(cmd, 7)
+        if failure_point == "uv_oserror" and len(calls) == 1:
+            raise OSError("simulated uv-install launch failure")
+        if failure_point == "child_failure_after_probe" and len(calls) == 2:
+            return subprocess.CompletedProcess(cmd, 9)
+        if failure_point == "child_oserror" and len(calls) == 2:
+            raise OSError("simulated child install launch failure")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    prober = (
+        (lambda _i, _e, _r: (_ for _ in ()).throw(RuntimeError("simulated probe failure")))
+        if failure_point == "raising_probe"
+        else (lambda _i, _e, _r: "1.1.0")
+    )
+
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: "1.0.0",
+        fresh_version_prober=prober,
+        process_runner=runner,
+    )
+
+    assert result.outcome is not UpdateTransactionOutcome.COMPLETED, failure_point
+    obligation = read_obligation(tmp_path)
+    assert obligation is not None, failure_point
+    if expect_expected_version:
+        assert obligation.expected_version == "1.1.0", failure_point
+    else:
+        assert obligation.expected_version is None, failure_point
+    assert validate_plugin_cache_hooks(cache_dir=hooks_dir.parent.parent) == [], failure_point
+
+
+@pytest.mark.parametrize(
+    "failure_point",
+    [
+        "unknown_install_type",
+        "claudecode_deferral",
+        "maintenance_context_failure",
+        "worktree_refusal",
+    ],
+)
+def test_no_obligation_for_failures_before_upgrade_subprocess(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, failure_point: str
+) -> None:
+    """Every failure/deferral strictly before the upgrade subprocess launches
+    mutates nothing and must leave NO obligation — a pending obligation here
+    would trigger spurious repairs forever.
+    """
+    from autoskillit.workspace import read_obligation
+
+    _prepare(monkeypatch)
+    _register_plugin(tmp_path)
+    base_env: dict[str, str] = {"PATH": "/bin"}
+
+    if failure_point == "unknown_install_type":
+        monkeypatch.setattr(
+            "autoskillit.cli.update._transaction.upgrade_command",
+            lambda _info: None,
+        )
+    elif failure_point == "claudecode_deferral":
+        base_env["CLAUDECODE"] = "1"
+    elif failure_point == "maintenance_context_failure":
+        monkeypatch.setattr(
+            "autoskillit.cli.update._transaction.build_maintenance_env",
+            lambda *_a, **_kw: (_ for _ in ()).throw(ValueError("simulated env build failure")),
+        )
+    elif failure_point == "worktree_refusal":
+        monkeypatch.setattr(
+            "autoskillit.cli.update._transaction.is_git_main_checkout",
+            lambda _path: True,
+        )
+
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env=base_env,
+        version_reader=lambda _name: "1.0.0",
+        process_runner=_recording_success_runner([]),
+    )
+
+    assert result.outcome is not UpdateTransactionOutcome.COMPLETED, failure_point
+    assert read_obligation(tmp_path) is None, failure_point
+
+
+def test_failing_obligation_write_aborts_before_upgrade_subprocess(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A failed obligation write aborts the transaction with a mapped
+    failure BEFORE the uv subprocess launches — nothing is yet mutated, so
+    refusing to proceed is safe, and it upholds the invariant that the
+    irreversible region is entered only with the breadcrumb already on disk.
+    """
+    _prepare(monkeypatch)
+    _register_plugin(tmp_path)
+    monkeypatch.setattr(
+        "autoskillit.cli.update._transaction.write_obligation",
+        lambda *_a, **_kw: (_ for _ in ()).throw(OSError("simulated disk full")),
+    )
+    calls: list[list[str]] = []
+
+    result = run_update_transaction(
+        home=tmp_path,
+        base_env={"PATH": "/bin"},
+        version_reader=lambda _name: "1.0.0",
+        process_runner=_recording_success_runner(calls),
+    )
+
+    assert result.outcome is UpdateTransactionOutcome.FAILED_UPGRADE
+    assert not calls, "uv subprocess must never launch when the obligation write fails"

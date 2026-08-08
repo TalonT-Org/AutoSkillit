@@ -19,8 +19,6 @@ hooks:
 semantic_version: 1
 semantic_requirements:
   sibling_skills:
-  - name: arch-lens-c4-container
-  - name: make-arch-diag
   - name: mermaid
 ---
 
@@ -51,6 +49,7 @@ semantic_requirements:
 ## Critical Constraints
 
 **NEVER:**
+- Treat Related Skills as executable dependencies or invoke any cross-reference from that section; those entries are documentation-only and do not imply execution. Invoke only the required `/autoskillit:mermaid` skill; never invoke `/autoskillit:make-arch-diag`, another architecture lens, or any other cross-reference.
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for ourselves
@@ -59,6 +58,7 @@ semantic_requirements:
 - Include runtime behavior details
 - Show external system integrations in detail
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -76,6 +76,10 @@ semantic_requirements:
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-module-dependency/arch_diag_module_dependency_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch all 6 exploration vectors through the deterministic router
+- Wait for every exploration result before interpreting domains, classifying violations, calculating the final metrics, or creating the diagram
+- Retain parent authority over architectural interpretation and diagram creation
 
 
 ## Analysis Workflow
@@ -91,37 +95,37 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+### Step 1: Launch 6 Routed Exploration Vectors (SINGLE MESSAGE)
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch all six concurrently under their registered role policies:
 
-**Layer Identification**
-- Find top-level directories and their purposes
-- Identify the intended layering structure
-- Look for: build configs, project structure, architectural boundaries
+<!-- autoskillit:exploration-vector id="project-build-config-artifacts" -->
+1. **Project, build, and configuration artifacts** — Identify manifests, build files, package declarations, configuration, and generated project metadata that declare or constrain module and package boundaries. Report artifact evidence and consumers without deciding the intended architecture.
+<!-- /autoskillit:exploration-vector -->
 
-**Import Analysis by Layer**
-- For each top-level module, find its imports
-- Categorize: internal vs external, layer violations
-- Look for: import statements, dependencies, module references
+<!-- autoskillit:exploration-vector id="module-layer-structure" -->
+2. **Module and layer structure** — Find top-level modules and packages, their code-defined purposes, and structural layer boundaries. Trace definitions and references that support the structure; leave intended-layer and domain interpretation to the parent.
+<!-- /autoskillit:exploration-vector -->
 
-**Circular Dependency Detection**
-- Find modules that import each other
-- Identify deferred imports (often indicate issues)
-- Look for: conditional imports, late imports, circular references
+<!-- autoskillit:exploration-vector id="import-analysis-by-layer" -->
+3. **Import analysis by layer** — For each top-level module, trace internal and external imports, references, and call direction. Report candidate layer crossings with file paths and evidence; do not classify them as violations.
+<!-- /autoskillit:exploration-vector -->
 
-**High Fan-In Modules**
-- Count how many modules import each module
-- Identify the most depended-upon modules
-- These require stable interfaces
+<!-- autoskillit:exploration-vector id="circular-dependency-detection" -->
+4. **Circular dependency detection** — Trace modules that import or call each other, including conditional, deferred, and late imports, and return evidence for each candidate cycle.
+<!-- /autoskillit:exploration-vector -->
 
-**Cross-Domain Imports**
-- Check for forbidden cross-domain imports
-- Document violations with file paths
+<!-- autoskillit:exploration-vector id="high-fan-in-modules" -->
+5. **Fan metrics** — Count bounded incoming and outgoing module imports and calls, identify the highest fan-in and fan-out modules, and provide the raw values needed for instability calculations. Do not infer interface ownership or stability policy.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="cross-domain-imports" -->
+6. **Cross-domain imports** — Trace imports, references, and calls across domain or package boundaries and document candidate forbidden edges with file paths. The parent decides domain meaning and whether an edge is a violation.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Build Dependency Matrix
 

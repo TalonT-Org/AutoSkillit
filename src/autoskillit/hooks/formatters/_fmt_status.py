@@ -199,6 +199,7 @@ _FMT_CLONE_REPO_RENDERED: frozenset[str] = frozenset(
         "clone_path",
         "source_dir",
         "remote_url",
+        "repository_identity_url",
         "clone_source_type",
         "clone_source_reason",
     }

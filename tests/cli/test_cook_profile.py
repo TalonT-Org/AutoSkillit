@@ -18,10 +18,20 @@ from autoskillit.core import (
     EffectiveSkillCatalogAuthority,
     HookTrustPolicy,
     ManagedSessionHome,
-    SkillContractError,
+    RepositoryProfileId,
+    SkillExecutionRole,
     SkillProjectionContextAuthority,
+    SkillSource,
     ValidatedAddDir,
+    pkg_root,
 )
+from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
+from autoskillit.workspace import (
+    CompiledSessionSkillCatalog,
+    EffectiveSkillCatalog,
+    SkillCatalogEntry,
+)
+from autoskillit.workspace.skills import _skill_info_from_frontmatter
 from tests.fakes import adapt_test_skill_semantics
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
@@ -33,6 +43,7 @@ def _make_mock_backend_class():
     class _MockBackend:
         name = "claude-code"
         conventions = BackendConventions()
+        exploration_dispatch_renderer = ClaudeCodeBackend().exploration_dispatch_renderer
         capabilities = SimpleNamespace(
             hook_trust_policy=HookTrustPolicy.AUTOMATED,
             session_dir_persistent=False,
@@ -116,6 +127,56 @@ def _run_cook(profile, cfg, mock_mgr, generated_home: Path):
     ):
         cook_module.cook(profile=profile, backend=mock_backend_cls())
     return captured
+
+
+def test_cook_skips_repository_profile_resolution_for_ordinary_catalog(
+    _mock_mgr: MagicMock,
+    tmp_path: Path,
+) -> None:
+    cfg = MagicMock()
+    cfg.experimental_enabled = True
+    cfg.providers.profiles = {}
+    ordinary_path = pkg_root() / "skills" / "open-kitchen" / "SKILL.md"
+    ordinary_info = _skill_info_from_frontmatter(
+        "open-kitchen", SkillSource.BUNDLED, ordinary_path
+    )
+    assert not ordinary_info.invalidities, ordinary_info.invalidities
+    ordinary_compilation = CompiledSessionSkillCatalog(
+        backend="claude-code",
+        catalog=EffectiveSkillCatalog(
+            skills=(SkillCatalogEntry.from_skill_info(ordinary_info),),
+            execution_role=SkillExecutionRole.SESSION,
+        ),
+        unavailable=(),
+    )
+
+    with (
+        patch(
+            "autoskillit.workspace.compile_session_skill_catalog",
+            return_value=ordinary_compilation,
+        ),
+        patch("autoskillit.exploration.resolve_repository_profile") as resolve_profile,
+    ):
+        _run_cook(None, cfg, _mock_mgr, tmp_path / "ordinary-home")
+
+    resolve_profile.assert_not_called()
+
+
+def test_cook_resolves_repository_profile_for_active_auto_vector(
+    _mock_mgr: MagicMock,
+    tmp_path: Path,
+) -> None:
+    cfg = MagicMock()
+    cfg.experimental_enabled = True
+    cfg.providers.profiles = {}
+
+    with patch(
+        "autoskillit.exploration.resolve_repository_profile",
+        return_value=RepositoryProfileId.AUTOSKILLIT,
+    ) as resolve_profile:
+        _run_cook(None, cfg, _mock_mgr, tmp_path / "auto-home")
+
+    resolve_profile.assert_called_once_with(Path.cwd())
 
 
 def test_profile_valid_injects_provider_env_var(_mock_mgr, tmp_path: Path):
@@ -231,6 +292,7 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
             persistent_session_root_subdir=Path("codex-sessions"),
             skill_sigil="$",
         )
+        exploration_dispatch_renderer = CodexBackend().exploration_dispatch_renderer
         capabilities = SimpleNamespace(
             hook_trust_policy=HookTrustPolicy.REVIEW_EACH_SESSION,
             session_dir_persistent=True,
@@ -339,8 +401,14 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
     assert captured["pass_fds"] == (3, 5)
 
 
-def test_cook_rejects_orchestrator_skill_in_l1_tier_before_launch() -> None:
-    """Direct cook composition validates configured tiers before materialization."""
+def test_cook_rejects_orchestrator_skill_in_l1_tier_before_launch(capsys) -> None:
+    """Direct cook composition validates configured tiers before materialization.
+
+    Composition-root rendering (2.3) catches SkillContractError around
+    validate_skill_tier_roles and exits cleanly instead of letting a raw
+    traceback propagate — the pin moves from `pytest.raises(SkillContractError)`
+    to `pytest.raises(SystemExit)` plus an output assertion.
+    """
     cfg = AutomationConfig()
     cfg.skills.tier2 = ["process-issues"]
     mock_backend_cls, _ = _make_mock_backend_class()
@@ -352,8 +420,52 @@ def test_cook_rejects_orchestrator_skill_in_l1_tier_before_launch() -> None:
         patch("autoskillit.cli.session._session_cook.resolve_project_dir", Path.cwd),
         patch("autoskillit.cli.session._session_process.run_cook_attempt") as run,
     ):
-        with pytest.raises(SkillContractError, match="process-issues.*ORCHESTRATOR"):
+        with pytest.raises(SystemExit) as exc_info:
             cook_module.cook(backend=mock_backend_cls())
 
+    assert exc_info.value.code == 1
+    out = capsys.readouterr().out
+    assert "process-issues" in out
+    assert "ORCHESTRATOR" in out
+    assert "Traceback" not in out
+    manager_cls.assert_not_called()
+    run.assert_not_called()
+
+
+def test_cook_reports_fully_invalid_tier_skill_with_hint_and_doctor_pointer(
+    tmp_path: Path, capsys
+) -> None:
+    """T5: a tier-configured skill invalid everywhere (no bundled fallback) reports
+    its file path, a remediation hint, and an `autoskillit doctor` pointer — no
+    traceback, clean exit."""
+    skill_dir = tmp_path / ".claude" / "skills" / "my-broken"
+    skill_dir.mkdir(parents=True)
+    skill_path = skill_dir / "SKILL.md"
+    skill_path.write_text(
+        '---\nname: my-broken\n---\nSpawn via `Agent(model="sonnet")`.\n',
+        encoding="utf-8",
+    )
+
+    cfg = AutomationConfig()
+    cfg.skills.tier2 = ["my-broken"]
+    mock_backend_cls, _ = _make_mock_backend_class()
+    with (
+        patch("autoskillit.config.load_config", return_value=cfg),
+        patch("autoskillit.workspace.DefaultSessionSkillManager") as manager_cls,
+        patch(
+            "autoskillit.cli.session._session_cook.resolve_project_dir",
+            return_value=tmp_path,
+        ),
+        patch("autoskillit.cli.session._session_process.run_cook_attempt") as run,
+    ):
+        with pytest.raises(SystemExit) as exc_info:
+            cook_module.cook(backend=mock_backend_cls())
+
+    assert exc_info.value.code == 1
+    out = capsys.readouterr().out
+    assert str(skill_path) in out
+    assert "hint:" in out
+    assert "autoskillit doctor" in out
+    assert "Traceback" not in out
     manager_cls.assert_not_called()
     run.assert_not_called()

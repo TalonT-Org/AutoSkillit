@@ -11,8 +11,49 @@ from autoskillit.cli._hooks_codex import (
     sync_hooks_to_codex_config,
 )
 from autoskillit.execution.backends._codex_config import _read_codex_config
+from autoskillit.execution.backends._codex_hooks import _resolve_codex_hooks_dir
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
+
+
+def test_codex_hooks_require_an_exact_installed_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit
+    from autoskillit.core import (
+        _AUTOSKILLIT_PLUGIN_KEY,
+        ArtifactLease,
+        installed_plugin_artifact_lease_path,
+        installed_plugin_artifact_root,
+        installed_plugin_semantic_key,
+    )
+    from autoskillit.hook_registry import HOOKS_DIR
+    from autoskillit.workspace._installed_artifact import (
+        write_installed_plugin_artifact_manifest_locked,
+    )
+
+    version = "1.2.3"
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(autoskillit, "__version__", version)
+    root = installed_plugin_artifact_root(tmp_path, "autoskillit", version)
+    hooks_dir = root / "hooks"
+    hooks_dir.mkdir(parents=True)
+    dispatcher = hooks_dir / "_dispatch.py"
+    dispatcher.write_text("# exact dispatcher")
+    with ArtifactLease.acquire_exclusive(
+        installed_plugin_artifact_lease_path(root),
+        blocking=True,
+    ):
+        write_installed_plugin_artifact_manifest_locked(
+            root,
+            semantic_key=installed_plugin_semantic_key(_AUTOSKILLIT_PLUGIN_KEY, version),
+            action="publish",
+        )
+
+    assert _resolve_codex_hooks_dir() == hooks_dir
+    dispatcher.write_text("# tampered dispatcher")
+    assert _resolve_codex_hooks_dir() == HOOKS_DIR
 
 
 class TestNoThirdPartyToml:

@@ -476,7 +476,14 @@ def test_workflow_consumes_one_target_policy_authority() -> None:
         if str(step.get("uses", "")).startswith("actions/checkout@")
     )
     assert test_checkout["with"]["fetch-depth"] == 0
+    install_rg = next(step for step in test_job["steps"] if step.get("name") == "Install ripgrep")
     run_tests = next(step for step in test_job["steps"] if step.get("name") == "Run tests")
+    assert test_job["steps"].index(install_rg) < test_job["steps"].index(run_tests)
+    assert install_rg["shell"] == "bash"
+    assert "command -v rg" in install_rg["run"]
+    assert "sudo apt-get install --yes ripgrep" in install_rg["run"]
+    assert "brew install ripgrep" in install_rg["run"]
+    assert 'case "$RUNNER_OS" in' in install_rg["run"]
     assert run_tests["env"]["AUTOSKILLIT_TEST_FILTER"] == (
         "${{ needs.preflight.outputs.test-filter-mode }}"
     )

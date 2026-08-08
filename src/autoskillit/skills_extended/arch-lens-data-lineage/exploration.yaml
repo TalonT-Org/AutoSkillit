@@ -1,0 +1,45 @@
+vectors:
+- id: data-origins-inputs
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces user input, ingestion, external reads, request
+    handlers, and their call paths while the parent classifies data origins.
+- id: transformation-stages
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces adapters, converters, parsers, serializers,
+    mappings, and transformation calls while the parent determines lineage stages.
+- id: format-changes
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces schema and type definitions plus serialization
+    and conversion boundaries while the parent routes declarative schemas to repository
+    impact profiling.
+- id: storage-destinations
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence identifies persistence declarations, files,
+    generated outputs, storage artifacts, and their consumers while the parent routes
+    operation call tracing to semantic navigation.
+- id: access-patterns
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces retrieval, query, load, read, and data-access-layer
+    calls while the parent determines lineage and source-of-truth meaning.

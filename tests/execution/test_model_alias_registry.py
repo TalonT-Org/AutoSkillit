@@ -42,12 +42,17 @@ def test_codex_aliases_use_sol() -> None:
 
 
 def test_codex_native_model_allowlist_preserves_compatibility() -> None:
-    from autoskillit.core.types._type_backend import is_valid_codex_model_id
+    from autoskillit.core.types._type_backend import (
+        CODEX_VALID_REASONING_EFFORTS,
+        is_valid_codex_model_id,
+    )
 
     assert is_valid_codex_model_id("gpt-5.6-sol")
+    assert is_valid_codex_model_id("gpt-5.6-luna")
     assert is_valid_codex_model_id("gpt-5.5")
     assert not is_valid_codex_model_id("gpt-5.4")
     assert not is_valid_codex_model_id("gpt-5.4-mini")
+    assert "max" in CODEX_VALID_REASONING_EFFORTS
 
 
 def test_claude_alias_values_in_allowlist() -> None:

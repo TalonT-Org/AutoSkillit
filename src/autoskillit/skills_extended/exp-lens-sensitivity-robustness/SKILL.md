@@ -57,7 +57,9 @@ semantic_requirements:
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Treat "untested" as equivalent to "robust"
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-sensitivity-robustness/`
+- Execute target code, experiment workflows, or target test commands to gather exploration evidence
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -68,6 +70,11 @@ semantic_requirements:
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Register every exploration vector below and route the missing-context fallback only for fields absent after parent-side argument parsing
+- Allow parent-boundary handoff between code navigation and declarative artifact evidence without creating extra vectors
+- Wait for every applicable exploration result before building the sensitivity matrix, classifying choices, or creating the optional diagram
+- Retain parent authority over perturbation interpretation, load-bearing classification, robustness judgment, recommendations, and diagram creation
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-sensitivity-robustness/exp_diag_sensitivity_robustness_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -86,35 +93,39 @@ If positional arg 1 (context_path) is provided and the file exists, read it to o
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
 methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
+exploration for these fields if the context file supplies them.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
+
+Dispatch all ready, scope-disjoint Step-1 vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch every Step-1 vector below under their registered role policies. The parent/router may hand bounded code or declarative evidence to the other registered role when needed; this does not create another vector. Each leaf returns terminal evidence only and must not execute the target, classify robustness, rank assumptions, recommend perturbations, create diagrams, or write lens output.
 
-**Analytic Choices Made**
-- Find all decision points in the analysis pipeline
-- Look for: choice, option, default, parameter, threshold, method, alternative
+<!-- autoskillit:exploration-vector id="analytic-choices-made" -->
+1. **Analytic choices made** — Trace decision points in the analysis pipeline, including choices, options, defaults, parameters, thresholds, methods, alternatives, and affected control flow.
+<!-- /autoskillit:exploration-vector -->
 
-**Ablation Coverage**
-- Find which factors have been ablated
-- Look for: ablation, without, remove, disable, vary, sweep, drop
+<!-- autoskillit:exploration-vector id="ablation-coverage" -->
+2. **Ablation coverage** — Trace which factors have ablation, removal, disablement, variation, sweep, or drop paths, plus bounded declarative sweep handoffs for profiler evidence.
+<!-- /autoskillit:exploration-vector -->
 
-**Preprocessing Variations**
-- Find preprocessing steps that could be done differently
-- Look for: normalize, tokenize, augment, crop, resize, filter, clean, impute
+<!-- autoskillit:exploration-vector id="preprocessing-variations" -->
+3. **Preprocessing variations** — Trace preprocessing definitions and alternatives, including normalization, tokenization, augmentation, cropping, resizing, filtering, cleaning, and imputation.
+<!-- /autoskillit:exploration-vector -->
 
-**Hyperparameter Sensitivity**
-- Find which hyperparameters were tuned vs fixed
-- Look for: learning_rate, batch_size, epochs, dropout, hidden_size, temperature, alpha, beta
+<!-- autoskillit:exploration-vector id="hyperparameter-sensitivity" -->
+4. **Hyperparameter sensitivity** — Identify which hyperparameters are tuned or fixed, their declarations and sweep configuration, and affected consumers.
+<!-- /autoskillit:exploration-vector -->
 
-**Distribution/Environment Variations**
-- Find evidence of testing under different conditions
-- Look for: shift, domain, transfer, cross, out_of_distribution, generalize, different
+<!-- autoskillit:exploration-vector id="distribution-environment-variations" -->
+5. **Distribution/environment variations** — Identify test artifacts and configuration for distribution shifts, domains, transfer, cross-condition evaluation, out-of-distribution cases, and generalization.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Build the Sensitivity Matrix
 

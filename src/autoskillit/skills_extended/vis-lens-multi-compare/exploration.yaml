@@ -1,0 +1,33 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence locates revision-scoped context and experiment-plan
+    artifacts and reports only fields still absent after direct caller-context parsing.
+- id: condition-factor-definitions
+  role: semantic-code-navigator
+  relationship_classes:
+  - declares
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces repository-local condition, treatment, group,
+    and factor definitions and their consumers without choosing a layout.
+- id: factorial-structure
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces crossed factors, interaction terms, factorial
+    declarations, and grid construction without applying the small-multiples decision
+    rule.
+retained:
+- id: series-overlap-assessment
+  rationale: Predicting visual overlap and label collision is a lens-owned perceptual
+    judgment over supplied context and collected evidence, not a bounded repository
+    scan.

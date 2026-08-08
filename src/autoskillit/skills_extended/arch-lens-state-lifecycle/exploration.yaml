@@ -1,0 +1,53 @@
+vectors:
+- id: state-schema
+  role: semantic-code-navigator
+  relationship_classes:
+  - declares
+  - defines
+  - references
+  rationale: Semantic navigation traces state and context definitions, typed fields,
+    and their code consumers while leaving lifecycle classification to the parent.
+- id: field-categories
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces field reads, writes, and mutation paths needed
+    for parent-owned lifecycle categorization.
+- id: validation-gates
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation follows validation definitions, call order, guarded
+    state, and failure paths while the parent synthesizes gate semantics.
+- id: resume-detection
+  role: semantic-code-navigator
+  relationship_classes:
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces checkpoint reads, restore calls, and fresh-versus-resume
+    branches without deciding the final resume strategy.
+- id: state-updates
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces state mutation entry points, setters, merge
+    paths, and subsequent reads while the parent classifies update policy.
+- id: contract-enforcement
+  role: semantic-code-navigator
+  relationship_classes:
+  - declares
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces contract definitions, enforcement calls, and
+    violation paths while the parent retains contract interpretation and synthesis.

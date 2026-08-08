@@ -32,7 +32,7 @@ from autoskillit.core import (
 from autoskillit.core._plugin_ids import (
     detect_autoskillit_mcp_prefix as _production_mcp_prefix,
 )
-from autoskillit.execution.backends.codex import CodexBackend
+from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from tests.fakes import adapt_test_skill_semantics
 from tests.fixtures.plugin_artifact_state import (
     INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
@@ -80,6 +80,12 @@ class _RecordingBackend:
             CodexBackend().capabilities,
             session_dir_persistent=False,
         )
+
+    @property
+    def exploration_dispatch_renderer(self):
+        if self.name == "claude-code":
+            return ClaudeCodeBackend().exploration_dispatch_renderer
+        return CodexBackend().exploration_dispatch_renderer
 
     def binary_name(self) -> str:
         return "claude" if self.name == "claude-code" else "codex"
@@ -281,7 +287,7 @@ def test_invalid_claude_artifact_fails_before_interactive_child_spawn(
         project_dir=state.home / "project",
         default_base_branch="main",
         skill_catalog=None,
-        generated_home=None,
+        generated_home_available=False,
     )
     assert authority is not None
     assert load_mode is PluginLoadMode.IMPLICIT_INSTALLED
@@ -353,9 +359,9 @@ def test_codex_cook_remains_generated_home_and_ignores_claude_artifacts(
         project_dir=state.home / "project",
         default_base_branch="main",
         skill_catalog=None,
-        generated_home=generated_home,
+        generated_home_available=generated_home is not None,
     )
-    assert authority is None
+    assert authority is not None
     assert load_mode is PluginLoadMode.GENERATED_HOME
 
     cli.cook(backend=backend)

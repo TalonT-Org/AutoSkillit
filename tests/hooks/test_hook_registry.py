@@ -365,6 +365,29 @@ def test_find_broken_hook_scripts_dispatcher_missing(tmp_path: Path) -> None:
     assert "_dispatch.py" in broken[0]
 
 
+def test_find_broken_hook_scripts_flags_dispatcher_without_logical_name(tmp_path: Path) -> None:
+    dispatch = tmp_path / "_dispatch.py"
+    dispatch.write_text("# dispatcher stub")
+    command = f"python3 {dispatch}"
+    settings = tmp_path / "settings.json"
+    settings.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": ".*",
+                            "hooks": [{"type": "command", "command": command}],
+                        }
+                    ]
+                }
+            }
+        )
+    )
+
+    assert find_broken_hook_scripts(settings) == [command]
+
+
 # ---------------------------------------------------------------------------
 # HR-CODEX: Codex compatibility annotation tests
 # ---------------------------------------------------------------------------

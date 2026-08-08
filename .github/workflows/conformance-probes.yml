@@ -70,6 +70,43 @@ jobs:
       - name: Validate installed Codex config parsing
         run: task test-codex-config-parse
 
+      - name: Run non-cached Luna explorer capability gate
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "::error::OPENAI_API_KEY secret is not configured — cannot run explorer gate"
+            exit 1
+          fi
+          task test-smoke-codex-explorer-gate
+
+      - name: Run authenticated production explorer MCP gate
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "::error::OPENAI_API_KEY secret is not configured — cannot run explorer MCP gate"
+            exit 1
+          fi
+          task test-smoke-codex-explorer-live-gate
+
+      - name: Upload production explorer live-gate evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: codex-production-explorer-live-gate-${{ steps.resolve-version.outputs.cli_version }}
+          path: .autoskillit/temp/conformance/live-explorer-gate/live-explorer-gate.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload Luna explorer conformance attestation
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: codex-explorer-conformance-${{ steps.resolve-version.outputs.cli_version }}
+          path: .autoskillit/temp/conformance/
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Export output discipline policy identity
         id: resolve-policy
         run: |

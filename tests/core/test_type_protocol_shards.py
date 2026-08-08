@@ -98,7 +98,9 @@ def test_workspace_shard_all():
         "ResolvedSkillAuthority",
         "SessionSkillManager",
         "SkillAuthority",
+        "SkillExclusionAuthority",
         "SkillFrontmatterAuthority",
+        "SkillInvalidityAuthority",
         "SkillLister",
         "SkillProjectionContextAuthority",
         "SkillResolver",
@@ -172,6 +174,9 @@ def test_backend_shard_all():
         "EnvPolicy",
         "ReadinessProbe",
         "SessionLocator",
+        "ExplorationDispatchConventions",
+        "ExplorationDispatchMaterialization",
+        "ExplorationDispatchRenderer",
         "CodingAgentBackend",
     }
 
@@ -202,13 +207,16 @@ def test_all_protocols_reachable_via_types():
 
 
 def test_workspace_skill_authority_boundary_has_structural_types():
+    from collections.abc import Mapping
     from typing import get_type_hints
 
     from autoskillit.core import (
         EffectiveSkillCatalogAuthority,
         EffectiveSkillInvocationAuthority,
+        ExplorationVectorDef,
         ResolvedSkillAuthority,
         SessionSkillManager,
+        SkillAuthority,
         SkillProjectionContextAuthority,
         SkillResolver,
     )
@@ -228,6 +236,13 @@ def test_workspace_skill_authority_boundary_has_structural_types():
     assert effective_hints["return"] == ResolvedSkillAuthority | None
     assert list_hints["return"] is EffectiveSkillCatalogAuthority
     assert invocation_hints["return"] is EffectiveSkillInvocationAuthority
+
+    vector_hints = get_type_hints(SkillAuthority.exploration_vectors.fget)
+    projection_vector_hints = get_type_hints(
+        SkillProjectionContextAuthority.exploration_vectors.fget
+    )
+    assert vector_hints["return"] == tuple[ExplorationVectorDef, ...]
+    assert projection_vector_hints["return"] == Mapping[str, tuple[ExplorationVectorDef, ...]]
 
 
 def test_plugin_artifact_authority_signature_and_runtime_protocol():

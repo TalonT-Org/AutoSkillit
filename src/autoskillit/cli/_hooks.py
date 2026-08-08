@@ -59,6 +59,12 @@ def _evict_stale_autoskillit_hooks(settings_path: Path) -> None:
     This is a destructive-then-rebuild approach: evict everything autoskillit-
     related, then let sync_hooks_to_settings() write canonical entries fresh.
     Covers all legacy formats (python3 -m, old absolute paths, ${CLAUDE_PLUGIN_ROOT}).
+
+    ${CLAUDE_PLUGIN_ROOT} is evicted here, not written here: the token only
+    expands inside plugin-supplied hooks.json (see hook_registry.PLUGIN_ROOT_TOKEN
+    and generate_hooks_json()) — Claude Code never expands it in settings.json,
+    so a settings.json entry containing it is always stale/foreign and must be
+    swept. sync_hooks_to_settings() below always bakes an absolute path.
     """
     data = _load_settings_data(settings_path)
     hooks = data.get("hooks", {})

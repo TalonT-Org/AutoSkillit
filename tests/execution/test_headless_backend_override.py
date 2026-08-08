@@ -156,7 +156,7 @@ class TestBackendOverrideCommandRouting:
     @pytest.mark.anyio
     @pytest.mark.parametrize(
         ("readonly_skill", "expected_sandbox"),
-        [(False, "workspace-write"), (True, "read-only")],
+        [(False, None), (True, "read-only")],
     )
     async def test_codex_override_uses_effective_backend_sandbox(
         self,
@@ -201,6 +201,9 @@ class TestBackendOverrideCommandRouting:
         sandbox_positions = [
             index for index, value in enumerate(captured_spec.cmd) if value == "--sandbox"
         ]
+        if expected_sandbox is None:
+            assert sandbox_positions == []
+            return
         assert len(sandbox_positions) == 1
         assert captured_spec.cmd[sandbox_positions[0] + 1] == expected_sandbox
 

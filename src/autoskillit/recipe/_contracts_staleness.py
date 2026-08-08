@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from autoskillit.core import SkillResolver
 
+from autoskillit.core import get_logger
 from autoskillit.recipe._contracts_card import _generate_recipe_card_for_recipe
 from autoskillit.recipe._contracts_manifest import compute_skill_hash, load_bundled_manifest
 from autoskillit.recipe._contracts_types import StaleItem
@@ -18,6 +19,8 @@ from autoskillit.recipe.staleness_cache import (
     read_staleness_cache,
     write_staleness_cache,
 )
+
+logger = get_logger(__name__)
 
 
 def check_contract_staleness(
@@ -142,6 +145,15 @@ def check_contract_staleness(
                     "check_staleness called without effective_skills_dir or resolver"
                 )
             info = _resolver.resolve_effective(skill_name, project_root)
+            if info is not None and info.invalidities:
+                from autoskillit.workspace import render_skill_invalidities
+
+                logger.warning(
+                    "skill_staleness_check_skipped_invalid_candidate",
+                    skill=skill_name,
+                    reason=render_skill_invalidities(info.invalidities),
+                )
+                info = None
             current_hash = (
                 compute_skill_hash(skill_name, skills_dir=info.path.parent.parent)
                 if info is not None

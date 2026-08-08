@@ -56,6 +56,7 @@ semantic_requirements:
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-exploratory-confirmatory/`
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -66,6 +67,11 @@ semantic_requirements:
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch every exploration vector below through the deterministic router
+- Route semantic code, symbol, and data-control-flow handoffs to `semantic-code-navigator` and bounded configuration, data, fixture, manifest, generated-artifact, reproduction, test, and pre-existing revision-scoped artifact handoffs to `repository-impact-profiler` through the parent-owned plan
+- Wait for every exploration result before mapping the analytic timeline, evaluating boundary integrity, or creating the diagram
+- Retain parent authority over exploratory-confirmatory and HARKing judgments, Mermaid generation, and output writing
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-exploratory-confirmatory/exp_diag_exploratory_confirmatory_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -84,35 +90,39 @@ If positional arg 1 (context_path) is provided and the file exists, read it to o
 IV/DV tables, H0/H1 hypotheses, controlled variables, and success criteria. If positional
 arg 2 (experiment_plan_path) is provided and exists, read the experiment plan for full
 methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
-exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
+exploration for these fields if the context file supplies them.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+<!-- autoskillit:exploration-vector id="missing-context-fields" -->
+After the parent parses the optional context and experiment plan, dispatch repository retrieval only for required fields still absent. Never rediscover or override a supplied complete field. If no fields remain missing, report this vector not applicable and perform no search. If scoped evidence is absent or unrelated, report the field unavailable or unrelated without widening scope, inferring meaning, or importing or executing target code, tests, experiments, models, or benchmarks.
+<!-- /autoskillit:exploration-vector -->
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
+
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch every authored vector below under their registered role policies. Mixed code and declarative evidence remains one parent-owned plan; bounded role handoffs return to the originating vector and do not add graph dependencies.
 
-**Pre-specified Plans**
-- Find pre-registration documents, analysis plans, hypothesis files
-- Look for: preregister, analysis_plan, hypothesis, registered, protocol, spec
+<!-- autoskillit:exploration-vector id="pre-specified-plans" -->
+1. **Pre-specified Plans** — Find preregistration documents, analysis plans, and hypothesis files through `preregister`, `analysis_plan`, `hypothesis`, `registered`, `protocol`, and `spec` evidence.
+<!-- /autoskillit:exploration-vector -->
 
-**Analytic Flexibility**
-- Find places where multiple analysis paths were possible
-- Look for: alternatively, could_also, option, variant, subset, sensitivity, robustness
+<!-- autoskillit:exploration-vector id="analytic-flexibility" -->
+2. **Analytic Flexibility** — Find places where multiple analysis paths were possible through `alternatively`, `could_also`, `option`, `variant`, `subset`, `sensitivity`, and `robustness` definitions and control flow. Route bounded configuration variants through the parent to the profiler.
+<!-- /autoskillit:exploration-vector -->
 
-**Selective Reporting Signals**
-- Find evidence of selective reporting or cherry-picking
-- Look for: not_significant, excluded, not_shown, supplementary, additional, hidden
+<!-- autoskillit:exploration-vector id="selective-reporting-signals" -->
+3. **Selective Reporting Signals** — Find evidence of selective reporting or cherry-picking through `not_significant`, `excluded`, `not_shown`, `supplementary`, `additional`, and `hidden` artifacts.
+<!-- /autoskillit:exploration-vector -->
 
-**Post-Hoc Rationalization**
-- Find language suggesting post-hoc hypothesis generation
-- Look for: we_noticed, interestingly, surprisingly, unexpectedly, upon_inspection
+<!-- autoskillit:exploration-vector id="post-hoc-rationalization" -->
+4. **Post-Hoc Rationalization** — Find language suggesting post-hoc hypothesis generation through `we_noticed`, `interestingly`, `surprisingly`, `unexpectedly`, and `upon_inspection` evidence.
+<!-- /autoskillit:exploration-vector -->
 
-**Exploration-Confirmation Separation**
-- Find explicit statements about exploratory vs. confirmatory intent
-- Look for: exploratory, pilot, hypothesis_generating, confirmatory, pre_specified
+<!-- autoskillit:exploration-vector id="exploration-confirmation-separation" -->
+5. **Exploration-Confirmation Separation** — Find explicit statements about exploratory versus confirmatory intent through `exploratory`, `pilot`, `hypothesis_generating`, `confirmatory`, and `pre_specified` evidence. Route semantic data-split and analysis-path control flow through the parent to the navigator.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Map Analytic Timeline
 

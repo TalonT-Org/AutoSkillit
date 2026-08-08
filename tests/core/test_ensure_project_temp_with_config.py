@@ -11,6 +11,12 @@ from autoskillit.core.io import ensure_project_temp
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
+def test_repository_profile_artifact_is_project_gitignored() -> None:
+    from autoskillit.core.io import _AUTOSKILLIT_GITIGNORE_ENTRIES
+
+    assert "repository-profile.v1.json" in _AUTOSKILLIT_GITIGNORE_ENTRIES
+
+
 def test_ensure_project_temp_default_writes_self_gitignore(tmp_path: Path) -> None:
     result = ensure_project_temp(tmp_path)
     assert result == tmp_path / ".autoskillit" / "temp"

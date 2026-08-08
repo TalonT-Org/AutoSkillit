@@ -19,9 +19,6 @@ hooks:
 semantic_version: 1
 semantic_requirements:
   sibling_skills:
-  - name: arch-lens-error-resilience
-  - name: arch-lens-process-flow
-  - name: make-arch-diag
   - name: mermaid
 ---
 
@@ -52,6 +49,7 @@ semantic_requirements:
 ## Critical Constraints
 
 **NEVER:**
+- Treat Related Skills as executable dependencies or invoke any cross-reference from that section; those entries are documentation-only and do not imply execution. Invoke only the required `/autoskillit:mermaid` skill; never invoke `/autoskillit:make-arch-diag`, another architecture lens, or any other cross-reference.
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for ourselves
@@ -60,6 +58,7 @@ semantic_requirements:
 - Show business logic details
 - Focus on data content (focus on mutation rules)
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -77,6 +76,11 @@ semantic_requirements:
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-state-lifecycle/arch_diag_state_lifecycle_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch every exploration vector below through the deterministic router
+- Allow parent-boundary handoff of declarative artifacts and configuration consumers to `repository-impact-profiler` without creating another vector
+- Wait for every exploration result before categorizing fields, mapping validation flow, or creating the diagram
+- Retain parent authority over lifecycle, validation, resume, contract, and diagram synthesis
 
 
 ## Analysis Workflow
@@ -92,43 +96,37 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch every vector below under their registered role policies. When a navigator finds a declarative artifact or configuration-consumer surface, the parent/router may reclassify that bounded handoff to `repository-impact-profiler`; it must not create a seventh vector.
 
-**State Schema**
-- Find state/context definitions
-- Identify typed state fields
-- Look for: State classes, Context objects, state schemas, typed dictionaries
+<!-- autoskillit:exploration-vector id="state-schema" -->
+1. **State schema** — Find state and context definitions, typed state fields, schemas, typed dictionaries, and code references to them. Report exact definitions and consumers; leave lifecycle classification to the parent.
+<!-- /autoskillit:exploration-vector -->
 
-**Field Categories**
-- Find field mutation patterns
-- Identify immutable vs mutable fields
-- Look for: immutable fields, readonly, lifecycle annotations, const fields
+<!-- autoskillit:exploration-vector id="field-categories" -->
+2. **Field categories** — Trace field reads, writes, and mutation patterns, including immutable, readonly, lifecycle-annotated, and constant fields. Supply evidence for categorization without assigning the final category.
+<!-- /autoskillit:exploration-vector -->
 
-**Validation Gates**
-- Find state validation code
-- Identify gate patterns
-- Look for: validate_*, gate, check_*, guard, assert, state validators
+<!-- autoskillit:exploration-vector id="validation-gates" -->
+3. **Validation gates** — Trace state validators, guards, checks, assertions, call order, guarded fields, and failure paths. Report the code-defined flow without synthesizing the final gate model.
+<!-- /autoskillit:exploration-vector -->
 
-**Resume Detection**
-- Find resume/checkpoint code
-- Identify resume detection strategy
-- Look for: resume, checkpoint, restore, detect state, load checkpoint
+<!-- autoskillit:exploration-vector id="resume-detection" -->
+4. **Resume detection** — Trace resume, checkpoint, restore, state detection, and checkpoint-loading paths, including differences between fresh and resumed execution. The parent determines the documented resume strategy.
+<!-- /autoskillit:exploration-vector -->
 
-**State Updates**
-- Find state mutation code
-- Identify update patterns
-- Look for: update methods, setState, mutation functions, state setters
+<!-- autoskillit:exploration-vector id="state-updates" -->
+5. **State updates** — Trace update methods, setters, mutation functions, merge behavior, storage writes, and downstream reads. Distinguish evidenced read/write paths from write-only artifacts; leave update-policy classification to the parent.
+<!-- /autoskillit:exploration-vector -->
 
-**Contract Enforcement**
-- Find contract validation
-- Identify violation detection
-- Look for: contract checking, violation detection, enforcement mechanisms
+<!-- autoskillit:exploration-vector id="contract-enforcement" -->
+6. **Contract enforcement** — Trace contract declarations, validation calls, enforcement mechanisms, and violation-detection paths. Report exact evidence while the parent interprets the contract rules and creates the diagram.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Categorize Fields
 

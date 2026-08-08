@@ -576,6 +576,115 @@ class TestMigrateCommand:
         assert "old" in captured.out
         assert "Claude Code session" not in captured.out
 
+    # T10a: default `migrate` reports a pending skill migration, never touches the file
+    def test_migrate_reports_pending_skill_migration_without_touching_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """T10: default `migrate` reports a pending skill migration but never
+        rewrites the file — preserving the report-only contract pinned above."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".autoskillit" / "recipes").mkdir(parents=True)
+        skill_dir = tmp_path / ".claude" / "skills" / "audit-bugs"
+        skill_dir.mkdir(parents=True)
+        skill_path = skill_dir / "SKILL.md"
+        corpus_dir = Path(__file__).parents[1] / "contracts" / "fixtures" / "skill_contract_corpus"
+        original = (corpus_dir / "precontract_audit_bugs.md").read_text(encoding="utf-8")
+        skill_path.write_text(original, encoding="utf-8")
+
+        cli.migrate(check=False, fix=False)
+
+        captured = capsys.readouterr()
+        assert "audit-bugs" in captured.out
+        assert "migrate --fix" in captured.out
+        assert skill_path.read_text(encoding="utf-8") == original
+
+    # T10b: `migrate --fix` rewrites the file — fails while the adapter is
+    # registered but unreachable from the CLI driver.
+    def test_migrate_fix_rewrites_pending_skill_on_disk(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        from autoskillit.workspace import read_skill_frontmatter
+
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".autoskillit" / "recipes").mkdir(parents=True)
+        skill_dir = tmp_path / ".claude" / "skills" / "audit-bugs"
+        skill_dir.mkdir(parents=True)
+        skill_path = skill_dir / "SKILL.md"
+        corpus_dir = Path(__file__).parents[1] / "contracts" / "fixtures" / "skill_contract_corpus"
+        original = (corpus_dir / "precontract_audit_bugs.md").read_text(encoding="utf-8")
+        skill_path.write_text(original, encoding="utf-8")
+
+        cli.migrate(check=False, fix=True)
+
+        captured = capsys.readouterr()
+        assert "fixed: audit-bugs" in captured.out
+        rewritten = skill_path.read_text(encoding="utf-8")
+        assert rewritten != original
+        parsed = read_skill_frontmatter(skill_path)
+        assert parsed.is_valid
+        assert parsed.data is not None
+        capabilities = parsed.data.get("uses_capabilities")
+        assert isinstance(capabilities, list)
+        assert "claude_dir" in capabilities
+
+    def test_migrate_fix_reports_each_failure_and_exits_nonzero(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        from autoskillit.migration import MigrationFile
+        from autoskillit.migration.engine import MigrationResult
+
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".autoskillit" / "recipes").mkdir(parents=True)
+        skill_files: list[MigrationFile] = []
+        for name in ("first", "second"):
+            skill_dir = tmp_path / ".claude" / "skills" / name
+            skill_dir.mkdir(parents=True)
+            skill_path = skill_dir / "SKILL.md"
+            skill_path.write_text(f"---\nname: {name}\n---\nRead .claude/settings.json.\n")
+            skill_files.append(
+                MigrationFile(
+                    name=name,
+                    path=skill_path,
+                    file_type="skill",
+                    current_version=None,
+                )
+            )
+
+        class FakeSkillAdapter:
+            def discover(self, project_dir: Path) -> list[MigrationFile]:
+                return skill_files
+
+            def needs_migration(self, file: MigrationFile) -> bool:
+                return True
+
+        calls: list[str] = []
+
+        class FakeEngine:
+            def get_adapter(self, file_type: str) -> FakeSkillAdapter | None:
+                return FakeSkillAdapter() if file_type == "skill" else None
+
+            async def migrate_file(
+                self, file: MigrationFile, **_kwargs: object
+            ) -> MigrationResult:
+                calls.append(file.name)
+                if file.name == "first":
+                    raise OSError("disk unavailable")
+                return MigrationResult(success=False, name=file.name, error="still invalid")
+
+        monkeypatch.setattr(
+            "autoskillit.migration.default_migration_engine",
+            lambda: FakeEngine(),
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.migrate(check=False, fix=True)
+
+        assert exc_info.value.code == 1
+        assert calls == ["first", "second"]
+        captured = capsys.readouterr()
+        assert "FAILED: first: disk unavailable" in captured.out
+        assert "FAILED: second: still invalid" in captured.out
+
 
 class TestInstallCommand:
     def test_worktree_guard_raises_before_any_mutation(

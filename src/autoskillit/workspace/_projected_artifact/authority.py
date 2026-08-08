@@ -64,6 +64,7 @@ from autoskillit.workspace._projection_cache import (
 from autoskillit.workspace.skills import (
     EffectiveSkillCatalog,
     SkillCatalogEntry,
+    SkillExclusion,
     _skill_info_from_frontmatter,
 )
 
@@ -318,13 +319,14 @@ class ProjectedPluginArtifactAuthority:
                 skills=cast(tuple[SkillCatalogEntry, ...], tuple(self.catalog.skills)),
                 execution_role=self.catalog.execution_role,
                 namespace_sources=self.namespace_sources,
+                exclusions=cast(tuple[SkillExclusion, ...], tuple(self.catalog.exclusions)),
             )
         if not catalog.skills:
             raise PluginArtifactPublicationError(
                 f"direct plugin has no bundled skills: {source_root}"
             )
         skill_identity = "\n".join(
-            f"{info.name}:{info.canonical_digest}"
+            f"{info.name}:{info.canonical_digest}:{info.exploration_sidecar_digest}"
             for info in sorted(catalog.skills, key=lambda skill: skill.name)
         )
         adaptation_identity_parts: list[str] = []

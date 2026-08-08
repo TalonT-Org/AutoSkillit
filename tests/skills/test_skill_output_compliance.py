@@ -4,6 +4,7 @@ and structured output tokens use 'key = value' format (spaces around =).
 
 from __future__ import annotations
 
+import hashlib
 import re
 
 import pytest
@@ -309,6 +310,58 @@ def test_output_path_tokens_synchronized() -> None:
 
 SKILL_CONTRACTS_PATH = pkg_root() / "recipe" / "skill_contracts.yaml"
 
+ARCHITECTURE_LENS_SKILLS = (
+    "arch-lens-c4-container",
+    "arch-lens-concurrency",
+    "arch-lens-data-lineage",
+    "arch-lens-deployment",
+    "arch-lens-development",
+    "arch-lens-error-resilience",
+    "arch-lens-module-dependency",
+    "arch-lens-operational",
+    "arch-lens-process-flow",
+    "arch-lens-repository-access",
+    "arch-lens-scenarios",
+    "arch-lens-security",
+    "arch-lens-state-lifecycle",
+)
+
+EXPERIMENT_LENS_SKILLS = (
+    "exp-lens-estimand-clarity",
+    "exp-lens-causal-assumptions",
+    "exp-lens-comparator-construction",
+    "exp-lens-pipeline-integrity",
+    "exp-lens-variance-stability",
+    "exp-lens-fair-comparison",
+    "exp-lens-reproducibility-artifacts",
+    "exp-lens-measurement-validity",
+    "exp-lens-sensitivity-robustness",
+    "exp-lens-benchmark-representativeness",
+    "exp-lens-unit-interference",
+    "exp-lens-error-budget",
+    "exp-lens-severity-testing",
+    "exp-lens-randomization-blocking",
+    "exp-lens-validity-threats",
+    "exp-lens-iterative-learning",
+    "exp-lens-exploratory-confirmatory",
+    "exp-lens-governance-risk",
+)
+
+VISUALIZATION_LENS_SKILLS = (
+    "vis-lens-always-on",
+    "vis-lens-antipattern",
+    "vis-lens-caption-annot",
+    "vis-lens-chart-select",
+    "vis-lens-color-access",
+    "vis-lens-figure-table",
+    "vis-lens-methodology-norms",
+    "vis-lens-multi-compare",
+    "vis-lens-reproducibility",
+    "vis-lens-story-arc",
+    "vis-lens-temporal",
+    "vis-lens-uncertainty",
+)
+
 # Skills with path-capture contracts that must have their token instruction
 # in ## Critical Constraints (not only in ## Output or a late workflow step).
 PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
@@ -332,6 +385,7 @@ PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
     "arch-lens-scenarios": ["diagram_path"],
     "arch-lens-state-lifecycle": ["diagram_path"],
     "arch-lens-deployment": ["diagram_path"],
+    **{skill_name: ["diagram_path"] for skill_name in EXPERIMENT_LENS_SKILLS},
     "vis-lens-always-on": ["diagram_path"],
     "vis-lens-antipattern": ["diagram_path"],
     "vis-lens-caption-annot": ["diagram_path"],
@@ -403,6 +457,121 @@ def _get_contracted_path_capture_skills() -> dict[str, list[str]]:
         if tokens:
             result[skill_name] = tokens
     return result
+
+
+def test_all_architecture_lenses_keep_the_exact_diagram_path_contract() -> None:
+    raw = load_yaml(SKILL_CONTRACTS_PATH)
+    contracts = raw["skills"]
+    architecture_contracts = tuple(name for name in contracts if name.startswith("arch-lens-"))
+
+    assert len(architecture_contracts) == len(ARCHITECTURE_LENS_SKILLS)
+    assert set(architecture_contracts) == set(ARCHITECTURE_LENS_SKILLS)
+    expected_contract = {
+        "inputs": [
+            {"name": "context_path", "type": "file_path", "required": False},
+            {"name": "experiment_plan_path", "type": "file_path", "required": False},
+            {"name": "project_context", "type": "string", "required": False},
+        ],
+        "outputs": [{"name": "diagram_path", "type": "file_path"}],
+        "expected_output_patterns": [r"diagram_path[ \t]*=[ \t]*/.+"],
+        "pattern_examples": ["diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"],
+    }
+    assert all(contracts[name] == expected_contract for name in ARCHITECTURE_LENS_SKILLS)
+    architecture_path_captures = tuple(
+        name
+        for name, tokens in PATH_CAPTURE_SKILLS.items()
+        if name.startswith("arch-lens-") and tokens == ["diagram_path"]
+    )
+    assert len(architecture_path_captures) == len(ARCHITECTURE_LENS_SKILLS)
+    assert set(architecture_path_captures) == set(ARCHITECTURE_LENS_SKILLS)
+
+
+def test_all_experiment_lenses_keep_exact_output_contracts_and_temp_paths() -> None:
+    raw = load_yaml(SKILL_CONTRACTS_PATH)
+    contracts = raw["skills"]
+    experiment_contracts = tuple(name for name in contracts if name.startswith("exp-lens-"))
+
+    assert len(experiment_contracts) == len(EXPERIMENT_LENS_SKILLS)
+    assert set(experiment_contracts) == set(EXPERIMENT_LENS_SKILLS)
+    expected_contract = {
+        "inputs": [
+            {"name": "context_path", "type": "file_path", "required": False},
+            {"name": "experiment_plan_path", "type": "file_path", "required": True},
+            {"name": "project_context", "type": "string", "required": False},
+        ],
+        "outputs": [{"name": "diagram_path", "type": "file_path"}],
+        "expected_output_patterns": [r"diagram_path[ \t]*=[ \t]*/.+"],
+        "pattern_examples": ["diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"],
+    }
+
+    for skill_name in EXPERIMENT_LENS_SKILLS:
+        assert contracts[skill_name] == expected_contract
+        content = _read_skill_md(skill_name)
+        temp_dir = f"{{{{AUTOSKILLIT_TEMP}}}}/{skill_name}/"
+        file_stem = skill_name.removeprefix("exp-lens-").replace("-", "_")
+        diagram_path = f"{temp_dir}exp_diag_{file_stem}_{{YYYY-MM-DD_HHMMSS}}.md"
+
+        assert f"Create files outside `{temp_dir}`" in content
+        assert f"Write output to `{diagram_path}`" in content
+        assert diagram_path in content
+        assert PATH_CAPTURE_SKILLS[skill_name] == ["diagram_path"]
+
+
+def test_all_visualization_lenses_keep_exact_output_contracts_and_temp_paths() -> None:
+    raw = load_yaml(SKILL_CONTRACTS_PATH)
+    contracts = raw["skills"]
+    visualization_contracts = tuple(name for name in contracts if name.startswith("vis-lens-"))
+
+    assert len(visualization_contracts) == len(VISUALIZATION_LENS_SKILLS)
+    assert set(visualization_contracts) == set(VISUALIZATION_LENS_SKILLS)
+    expected_contract = {
+        "inputs": [
+            {"name": "context_path", "type": "file_path", "required": False},
+            {"name": "experiment_plan_path", "type": "file_path", "required": False},
+            {"name": "project_context", "type": "string", "required": False},
+        ],
+        "outputs": [{"name": "diagram_path", "type": "file_path"}],
+        "expected_output_patterns": [r"diagram_path[ \t]*=[ \t]*/.+"],
+        "pattern_examples": ["diagram_path = /tmp/diagram.md\n%%ORDER_UP%%"],
+    }
+
+    for skill_name in VISUALIZATION_LENS_SKILLS:
+        assert contracts[skill_name] == expected_contract
+        content = _read_skill_md(skill_name)
+        temp_dir = f"{{{{AUTOSKILLIT_TEMP}}}}/{skill_name}/"
+        file_stem = skill_name.removeprefix("vis-lens-").replace("-", "_")
+        diagram_path = f"{temp_dir}vis_spec_{file_stem}_{{YYYY-MM-DD_HHMMSS}}.md"
+
+        assert f"Create files outside `{temp_dir}`" in content
+        assert f"Write output to `{diagram_path}`" in content
+        assert diagram_path in content
+        assert PATH_CAPTURE_SKILLS[skill_name] == ["diagram_path"]
+
+
+@pytest.mark.parametrize(
+    ("skill_name", "step_two_heading", "expected_digest"),
+    [
+        (
+            "arch-lens-data-lineage",
+            "### Step 2: Map Data Flow",
+            "a3dc4ed2d0bb61d033f546abf06d76768b2d00c1766f7f102f280985b786c911",
+        ),
+        (
+            "arch-lens-process-flow",
+            "### Step 2: Map State Transitions",
+            "ea78691daf35480b0e1df7fac8c158f3d23fe83382566bd39f7943ced2d26939",
+        ),
+    ],
+)
+def test_data_and_process_lenses_keep_parent_owned_step_two_and_later_authority(
+    skill_name: str, step_two_heading: str, expected_digest: str
+) -> None:
+    content = _read_skill_md(skill_name)
+    authoritative_tail = content.split(step_two_heading, 1)[1]
+    normalized = f"{step_two_heading}{authoritative_tail}".rstrip() + "\n"
+
+    assert hashlib.sha256(normalized.encode()).hexdigest() == expected_digest
+    assert "diagram_path = {absolute_path_to_diagram_file}" in normalized
 
 
 @pytest.mark.parametrize("skill_name,token_names", list(PATH_CAPTURE_SKILLS.items()))

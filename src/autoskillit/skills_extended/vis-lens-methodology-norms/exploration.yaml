@@ -1,0 +1,42 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence locates revision-scoped context and experiment-plan
+    artifacts and reports only fields still absent after direct caller-context parsing.
+- id: generated-figure-artifacts
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact profiling inventories pre-existing generated figure
+    artifacts and their revision-scoped paths without judging coverage.
+- id: figure-generating-code
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces figure-writing calls, their definitions, and
+    output-path relationships without importing or executing plotting code.
+- id: planned-figure-artifacts
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact profiling inventories declarative figure plans in revision-scoped
+    planning documents, task descriptions, and manifests without inferring completion.
+retained:
+- id: methodology-tradition-resolution
+  rationale: Tradition selection, bundled norm interpretation, out-of-scope handling,
+    and external norm authority remain lens-owned decisions over supplied context
+    rather than native repository discovery.
+- id: mandatory-figure-coverage
+  rationale: Matching collected evidence to methodology-specific mandatory figures
+    and assigning present, partial, or absent status is lens-owned normative synthesis.

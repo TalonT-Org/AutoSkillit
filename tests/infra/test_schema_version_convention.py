@@ -117,12 +117,16 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # staleness_cache.py — cache dict
     ("src/autoskillit/recipe/staleness_cache.py", 67),
     # _lifespan.py — hooks.json self-heal on startup drift (co-owned with Claude plugin system)
-    ("src/autoskillit/server/_lifespan.py", 96),
+    ("src/autoskillit/server/_lifespan.py", 103),
+    # _hook_repair.py — same hooks.json self-heal, triggered by the in-process repair
+    # primitive instead of startup drift detection (co-owned with Claude plugin system;
+    # same rationale and format as the _lifespan.py site above)
+    ("src/autoskillit/workspace/_projected_artifact/_hook_repair.py", 178),
     # tools_kitchen.py — hook config, quota guard, git_ops_policy, ingredient locks overlay
     ("src/autoskillit/server/tools/tools_kitchen.py", 536),
     ("src/autoskillit/server/tools/tools_kitchen.py", 555),
     ("src/autoskillit/server/tools/tools_kitchen.py", 589),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 1907),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 1919),
     # tools_pipeline_tracker.py — tracker_data dict (init) and mark_step_complete write
     # (same tracker file schema as init — not a new format, grandfathered alongside it)
     ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 256),
@@ -138,9 +142,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # tools_config.py — hook config overlay dict (session-scoped, not schema-versioned)
     ("src/autoskillit/server/tools/tools_config.py", 50),
     # _update_checks.py — dismissal state file
-    ("src/autoskillit/cli/update/_update_checks.py", 80),
+    ("src/autoskillit/cli/update/_update_checks.py", 82),
     # _update_checks_fetch.py — fetch cache (extracted from _update_checks.py)
-    ("src/autoskillit/cli/update/_update_checks_fetch.py", 54),
+    ("src/autoskillit/cli/update/_update_checks_fetch.py", 55),
     # smoke_utils/_review.py — enriched handoff and manifest
     ("src/autoskillit/smoke_utils/_review.py", 592),
     ("src/autoskillit/smoke_utils/_review.py", 696),

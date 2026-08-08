@@ -25,6 +25,7 @@ from autoskillit.core.types import (
     CmdSpec,
     CodingAgentBackend,
     DatabaseReader,
+    ExecutionIdentity,
     HeadlessExecutor,
     LaunchAdapter,
     LaunchPreparation,
@@ -664,6 +665,7 @@ class ExecutorCall:
     native_shell_capture_decision: NativeShellCaptureDecision | None = None
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
     on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None
+    execution_identity: ExecutionIdentity = ExecutionIdentity()
 
 
 @dataclasses.dataclass
@@ -789,6 +791,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
+        execution_identity: ExecutionIdentity = ExecutionIdentity(),
     ) -> SkillResult:
         self.calls.append(
             ExecutorCall(
@@ -838,6 +841,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 native_shell_capture_decision=native_shell_capture_decision,
                 managed_lineage_ref=managed_lineage_ref,
                 on_launch_resolved=on_launch_resolved,
+                execution_identity=execution_identity,
             )
         )
         if self._queue:

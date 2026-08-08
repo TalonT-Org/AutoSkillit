@@ -46,6 +46,7 @@ def test_coding_agent_backend_has_setup_session_dir_method():
     from autoskillit.core import CodingAgentBackend
 
     assert callable(getattr(CodingAgentBackend, "setup_session_dir", None))
+    assert callable(getattr(CodingAgentBackend, "clear_explorer_binding_env", None))
 
 
 def test_session_locator_has_project_log_dir_method():
@@ -85,6 +86,7 @@ def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
         CodingAgentBackend,
         CookSessionHandle,
         ExecutableLaunchBinding,
+        ExecutionIdentity,
         ResumeSpec,
     )
 
@@ -142,6 +144,16 @@ def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
         "return": AbstractContextManager[CookSessionHandle],
     }
 
+    identity = inspect.signature(CodingAgentBackend.resolve_effective_execution_identity)
+    assert tuple(identity.parameters) == ("self", "requested", "session_id")
+    assert identity.parameters["requested"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert identity.parameters["session_id"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert typing.get_type_hints(CodingAgentBackend.resolve_effective_execution_identity) == {
+        "requested": ExecutionIdentity,
+        "session_id": str,
+        "return": ExecutionIdentity,
+    }
+
 
 def test_no_autoskillit_imports_in_protocols_backend():
     from autoskillit.core import paths
@@ -175,6 +187,8 @@ def test_stub_class_satisfies_coding_agent_backend():
         CmdSpec,
         CodingAgentBackend,
         EnvPolicy,
+        ExecutionIdentity,
+        ExplorationDispatchRenderer,
         NoResume,
         OutputFormat,
         PluginLaunchBinding,
@@ -203,6 +217,9 @@ def test_stub_class_satisfies_coding_agent_backend():
                 project_local_skill_search_dirs=(),
             )
 
+        @property
+        def exploration_dispatch_renderer(self) -> ExplorationDispatchRenderer: ...
+
         def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec: ...
 
         def stream_parser(self, completion_marker: str = "") -> StreamParser: ...
@@ -212,6 +229,15 @@ def test_stub_class_satisfies_coding_agent_backend():
         def env_policy(self) -> EnvPolicy: ...
 
         def session_locator(self) -> SessionLocator: ...
+
+        def resolve_effective_execution_identity(
+            self,
+            *,
+            requested: ExecutionIdentity,
+            session_id: str,
+        ) -> ExecutionIdentity:
+            del session_id
+            return requested
 
         def write_tool_names(self) -> frozenset[str]: ...
 
@@ -315,7 +341,21 @@ def test_stub_class_satisfies_coding_agent_backend():
         def build_inspector_cmd(self, prompt: str, *, model: str = "") -> CmdSpec:
             return CmdSpec(cmd=(), env={})
 
-        def setup_session_dir(self, session_dir: Path) -> None: ...
+        def setup_session_dir(
+            self,
+            session_dir: Path,
+            *,
+            parent_sandbox_mode: str = "workspace-write",
+            explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
+        ) -> None: ...
+
+        def refresh_explorer_binding_env(
+            self,
+            session_dir: Path,
+            explorer_binding_env: Mapping[str, Mapping[str, str]],
+        ) -> None: ...
+
+        def clear_explorer_binding_env(self, session_dir: Path, roles: frozenset[str]) -> None: ...
 
     assert isinstance(_Backend(), CodingAgentBackend)
 

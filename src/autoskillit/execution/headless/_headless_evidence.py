@@ -14,6 +14,7 @@ from autoskillit.core import (
     WORKTREE_SKILLS,
     AgentSessionResult,
     CliSubtype,
+    ExecutionIdentity,
     FailureRecord,
     RetryReason,
     SessionTelemetry,
@@ -281,6 +282,7 @@ def _build_session_telemetry(
         github_api_requests=_api_usage.get("total_requests", 0) if _api_usage else 0,
         loc_insertions=loc_insertions,
         loc_deletions=loc_deletions,
+        execution_identity=skill_result.execution_identity,
     )
 
 
@@ -289,6 +291,7 @@ def _build_error_path_telemetry(
     session_id: str = "",
     step_name: str = "",
     order_id: str = "",
+    execution_identity: ExecutionIdentity = ExecutionIdentity(),
 ) -> SessionTelemetry:
     """Build SessionTelemetry for crash/cancel paths where no SkillResult exists."""
     if github_api_log is not None:
@@ -303,4 +306,5 @@ def _build_error_path_telemetry(
         github_api_requests=_api_usage.get("total_requests", 0) if _api_usage else 0,
         loc_insertions=0,
         loc_deletions=0,
+        execution_identity=execution_identity,
     )

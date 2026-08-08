@@ -1,0 +1,53 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence retrieves only IV/DV, hypothesis, control,
+    and success-criterion fields absent from supplied context while the parent preserves
+    boundary interpretation.
+- id: pre-specified-plans
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories preregistrations, analysis plans,
+    hypothesis files, protocols, and specifications while the parent assesses pre-specification.
+- id: analytic-flexibility
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation traces alternative, option, variant, subset, sensitivity,
+    and robustness branches while the parent counts forking paths and routes declarative
+    variants to the profiler.
+- id: selective-reporting-signals
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence finds excluded, hidden, supplementary, and
+    non-significant result artifacts while the parent evaluates selective reporting.
+- id: post-hoc-rationalization
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence finds post-hoc language in repository documentation
+    and pre-existing revision-scoped artifacts while the parent determines whether
+    it signals HARKing.
+- id: exploration-confirmation-separation
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories explicit exploratory, pilot, hypothesis-generating,
+    confirmatory, and pre-specified declarations while the parent judges boundary
+    integrity.

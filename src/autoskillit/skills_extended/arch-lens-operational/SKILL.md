@@ -19,9 +19,6 @@ hooks:
 semantic_version: 1
 semantic_requirements:
   sibling_skills:
-  - name: arch-lens-deployment
-  - name: arch-lens-development
-  - name: make-arch-diag
   - name: mermaid
 ---
 
@@ -52,6 +49,7 @@ semantic_requirements:
 ## Critical Constraints
 
 **NEVER:**
+- Treat Related Skills as executable dependencies or invoke any cross-reference from that section; those entries are documentation-only and do not imply execution. Invoke only the required `/autoskillit:mermaid` skill; never invoke `/autoskillit:make-arch-diag`, another architecture lens, or any other cross-reference.
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for ourselves
@@ -61,6 +59,7 @@ semantic_requirements:
 - Show code-level patterns
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
+- Let an exploration vector rank operator workflows, decide configuration precedence, judge recovery safety, or create the diagram
 
 **ALWAYS:**
 - Focus on OPERATOR experience
@@ -77,6 +76,11 @@ semantic_requirements:
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-operational/arch_diag_operational_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch every exploration vector below through the deterministic router
+- Allow parent-boundary handoff of declarative CLI registration from the CLI navigator vector to `repository-impact-profiler` without creating extra vectors
+- Wait for every exploration result before mapping operator workflows, documenting configuration hierarchy, or creating the diagram
+- Retain parent authority over operational hypotheses, judgments, Steps 2+, and diagram synthesis
 
 
 ## Analysis Workflow
@@ -92,43 +96,55 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch every vector below under their registered role policies. The parent/router may hand declarative CLI entry-point registration to `repository-impact-profiler`; this does not create another vector.
 
-**CLI Entry Points**
+<!-- autoskillit:exploration-vector id="cli-entry-points" -->
+1. **CLI Entry Points**
 - Find all CLI commands
 - Identify command groups and subcommands
 - Look for: CLI frameworks (Click, argparse, Commander, etc.), entry points, main commands
+<!-- /autoskillit:exploration-vector -->
 
-**Configuration**
+<!-- autoskillit:exploration-vector id="configuration" -->
+2. **Configuration**
 - Find configuration sources
 - Identify environment variables
 - Look for: config files (config.yaml, .env, settings.json, application.yml), environment variable usage, configuration libraries
+<!-- /autoskillit:exploration-vector -->
 
-**Task Automation**
+<!-- autoskillit:exploration-vector id="task-automation" -->
+3. **Task Automation**
 - Find task runner definitions
 - Identify automation scripts
 - Look for: Taskfile.yml, Makefile, package.json scripts, Rakefile, scripts/ directory
+<!-- /autoskillit:exploration-vector -->
 
-**Logging & Monitoring**
+<!-- autoskillit:exploration-vector id="logging-monitoring" -->
+4. **Logging & Monitoring**
 - Find logging configuration
 - Identify observability outputs
-- Look for: logging configuration, log files, metrics, activity logs, {{AUTOSKILLIT_TEMP}}/ output directories
+- Look for: logging configuration, log files, metrics, activity logs, configured temporary output directories
+<!-- /autoskillit:exploration-vector -->
 
-**Status & Health**
+<!-- autoskillit:exploration-vector id="status-health" -->
+5. **Status & Health**
 - Find status/health commands
 - Identify diagnostic outputs
 - Look for: status, health, info, diagnose, check commands
+<!-- /autoskillit:exploration-vector -->
 
-**Reset & Recovery**
+<!-- autoskillit:exploration-vector id="reset-recovery" -->
+6. **Reset & Recovery**
 - Find reset/cleanup commands
 - Identify recovery operations
 - Look for: reset, clean, clear, purge, restore commands
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Map Operator Workflows
 

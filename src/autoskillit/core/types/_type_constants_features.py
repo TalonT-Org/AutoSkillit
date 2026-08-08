@@ -50,6 +50,15 @@ FEATURE_REGISTRY: dict[str, FeatureDef] = {
         default_enabled=False,
         requires_backend_alignment=True,
     ),
+    "exploration": FeatureDef(
+        lifecycle=FeatureLifecycle.EXPERIMENTAL,
+        description="Read-only bounded repository exploration for specialized agents",
+        tool_tags=frozenset({"exploration"}),
+        skill_categories=frozenset(),
+        import_package="autoskillit.exploration",
+        tier=1,
+        default_enabled=False,
+    ),
     "fleet": FeatureDef(
         lifecycle=FeatureLifecycle.EXPERIMENTAL,
         description="L3 Fleet Orchestrator — multi-session campaign dispatch",

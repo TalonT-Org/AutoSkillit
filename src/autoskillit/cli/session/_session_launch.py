@@ -13,6 +13,7 @@ from autoskillit.core import (
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     NamedResume,
     NoResume,
+    SkillContractError,
     executable_binding_matches_current_file,
     plugin_launch_binding_scope,
     resolve_executable_launch_binding,
@@ -20,7 +21,29 @@ from autoskillit.core import (
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend, ResumeSpec
-    from autoskillit.workspace import EffectiveSkillCatalog
+    from autoskillit.workspace import EffectiveSkillCatalog, SkillExclusion
+
+
+def render_skill_contract_composition_failure(exc: SkillContractError) -> None:
+    """Print a clean, actionable message for a composition-root contract failure.
+
+    No traceback. The underlying message is already actionable (file path,
+    invalidity kind's hint, and — for the tier-role gate — an embedded
+    doctor pointer) after resolution-boundary containment; this guarantees
+    the doctor pointer is present for every SkillContractError shape, not
+    only the ones that already embed it.
+    """
+    print(f"ERROR: {exc}")
+    print("Run: autoskillit doctor")
+
+
+def render_skill_catalog_exclusions(exclusions: tuple[SkillExclusion, ...]) -> None:
+    """Print one operator-visible warning line per excluded skill candidate."""
+    for exclusion in exclusions:
+        hint = "; ".join(exclusion.hints)
+        print(f"WARNING: excluded project-local skill {exclusion.name!r} at {exclusion.path}")
+        if hint:
+            print(f"  hint: {hint}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,7 +116,7 @@ def _run_interactive_session(
         project_dir=_project_dir,
         default_base_branch=default_base_branch,
         skill_catalog=skill_catalog,
-        generated_home=None,
+        generated_home_available=False,
     )
     tools_arg: tuple[str, ...] = (
         ("AskUserQuestion",) if backend.capabilities.skill_injection_capable else ()

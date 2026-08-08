@@ -1,0 +1,166 @@
+vectors:
+- id: standard-core-implementation
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - imports
+  - references
+  rationale: Semantic navigation supplies implementation symbols and local control-flow
+    evidence without choosing a diagnosis or fix.
+- id: standard-dependencies
+  role: semantic-code-navigator
+  relationship_classes:
+  - imports
+  - calls
+  - references
+  rationale: Semantic navigation supplies import, call, and dependency relationships
+    while the parent retains causal synthesis.
+- id: standard-consumer-impact
+  role: repository-impact-profiler
+  relationship_classes:
+  - references
+  - affects
+  rationale: Repository impact evidence covers downstream consumers, registrations,
+    configuration, artifacts, fixtures, and compatibility surfaces.
+- id: standard-test-coverage
+  role: repository-impact-profiler
+  relationship_classes:
+  - references
+  - affects
+  rationale: Repository impact evidence covers tests, fixtures, verification surfaces,
+    and concrete coverage gaps.
+- id: standard-error-provenance
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces the failing call path and origin of invalid
+    state without selecting a remedy.
+- id: standard-similar-patterns
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation finds comparable definitions and control-flow patterns
+    for parent-side comparison.
+- id: standard-architecture-constraints
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence covers architecture guidance, registries,
+    configuration, and constraints affecting the mechanism.
+- id: standard-design-intent-history
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence supplies bounded introducing-commit, change-history,
+    and documented-constraint provenance for later intent reasoning.
+- id: standard-recurrence-history
+  role: repository-impact-profiler
+  relationship_classes:
+  - references
+  - affects
+  rationale: Repository impact evidence supplies bounded investigation-log and fix-history
+    matches after the root cause is known.
+- id: deep-code-paths
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - imports
+  - calls
+  - references
+  rationale: Semantic navigation supplies deep call-path, symbol, import, and data-flow
+    evidence without selecting a hypothesis or fix.
+- id: deep-log-history
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence supplies bounded session-log, change-history,
+    prior-fix, and documented-constraint provenance.
+- id: deep-dependencies
+  role: semantic-code-navigator
+  relationship_classes:
+  - imports
+  - calls
+  - references
+  rationale: Semantic navigation maps deep import, call, and dependency direction
+    evidence while the parent retains causal synthesis.
+- id: deep-related-components
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence maps consumers, registrations, configuration,
+    artifacts, tests, fixtures, and architecture constraints interacting with the
+    target.
+- id: deep-code-deepening
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - imports
+  - calls
+  - references
+  rationale: Semantic navigation supplies batch-specific local code evidence needed
+    to resolve open questions without choosing the primary hypothesis.
+- id: deep-candidate-blast-radius
+  role: repository-impact-profiler
+  relationship_classes:
+  - references
+  - affects
+  - conflicts-with
+  rationale: Repository impact evidence covers each candidate's consumers, tests,
+    configuration, artifacts, compatibility surfaces, and risk without ranking fixes.
+retained:
+- id: standard-web-research
+  rationale: External documentation and issue research requires web access and source
+    interpretation outside repository exploration.
+- id: standard-design-intent-reasoning
+  rationale: Inferring purpose from typed provenance and dependency evidence remains
+    a non-code reasoning responsibility of the existing agent.
+- id: standard-recurrence-reasoning
+  rationale: Comparing prior fixes with the current root cause and judging recurrence
+    remains non-code reasoning for the existing agent.
+- id: deep-web-research
+  rationale: External documentation and issue research requires web access and source
+    interpretation outside repository exploration.
+- id: deep-design-intent-reasoning
+  rationale: Inferring mechanism purpose from typed code, impact, and history evidence
+    remains a non-code reasoning responsibility of the existing agent.
+- id: deep-recurrence-reasoning
+  rationale: Comparing prior fixes with the current root cause and judging recurrence
+    remains non-code reasoning for the existing agent.
+- id: deep-informed-web-research
+  rationale: Batch-specific external research and interpretation remains with the
+    existing web-capable agent.
+- id: deep-design-intent-refresh
+  rationale: Re-evaluating intent for newly surfaced mechanisms from typed evidence
+    remains non-code reasoning for the existing agent.
+- id: deep-hypothesis-challenge
+  rationale: Adversarial hypothesis evaluation is non-code reasoning and must remain
+    with the existing challenge agent.
+- id: deep-solution-generation
+  rationale: Generating and comparing candidate fixes must remain with existing reasoning
+    agents rather than evidence-only explorer leaves.
+- id: deep-breakage-reasoning
+  rationale: Judging downstream contract violations and overall breakage risk from
+    typed impact evidence remains with the existing adversarial agent.
+- id: deep-factual-validation
+  rationale: Cross-checking report claims against evidence is validator reasoning
+    and remains with the existing factual-accuracy agent.
+- id: deep-recommendation-validation
+  rationale: Assessing recommendation safety and scope is validator reasoning and
+    remains with the existing recommendation agent.
+- id: deep-gap-validation
+  rationale: Identifying unexplored reasoning gaps is validator judgment and remains
+    with the existing gap-analysis agent.

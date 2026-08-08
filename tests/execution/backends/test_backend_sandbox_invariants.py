@@ -20,15 +20,23 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 class TestCodexSandboxInvariants:
-    @pytest.mark.parametrize("sandbox_mode", ["workspace-write", "read-only"])
-    def test_build_skill_session_cmd_sandbox_mode(self, sandbox_mode: str) -> None:
+    @pytest.mark.parametrize(
+        ("sandbox_mode", "expected_cli_sandbox"),
+        [("workspace-write", None), ("read-only", "read-only")],
+    )
+    def test_build_skill_session_cmd_sandbox_mode(
+        self, sandbox_mode: str, expected_cli_sandbox: str | None
+    ) -> None:
         config = SkillSessionConfig(sandbox_mode=sandbox_mode)
         spec: CmdSpec = CodexBackend().build_skill_session_cmd(
             "/test-skill", cwd="", config=config
         )
         positions = [i for i, v in enumerate(spec.cmd) if v == "--sandbox"]
+        if expected_cli_sandbox is None:
+            assert positions == []
+            return
         assert len(positions) == 1, f"expected exactly one --sandbox, got {len(positions)}"
-        assert spec.cmd[positions[0] + 1] == sandbox_mode
+        assert spec.cmd[positions[0] + 1] == expected_cli_sandbox
 
     def test_build_food_truck_cmd_sandbox_read_only(self) -> None:
         spec: CmdSpec = CodexBackend().build_food_truck_cmd(

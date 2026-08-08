@@ -8,6 +8,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from ._type_backend import CmdSpec
 from ._type_checkpoint import SessionCheckpoint  # noqa: F401, TC001
+from ._type_execution_identity import ExecutionIdentity
 from ._type_launch import (
     BackendAuthority,
     LaunchAdapterResult,
@@ -253,6 +254,7 @@ class HeadlessExecutor(Protocol):
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
+        execution_identity: ExecutionIdentity = ExecutionIdentity.empty(),
     ) -> SkillResult: ...
 
     async def dispatch_food_truck(

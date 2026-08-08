@@ -5,6 +5,30 @@ import yaml
 
 pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
 
+_DEFAULT_RECIPE_OVERRIDES = {
+    "implementation": {"run_arch_lenses": "codex"},
+    "implementation-groups": {"run_arch_lenses": "codex"},
+    "planner": {
+        "analyze": "codex",
+        "extract_domain": "codex",
+        "elaborate_phases": "codex",
+    },
+    "remediation": {
+        "investigate": "codex",
+        "run_arch_lenses": "codex",
+    },
+    "research": {
+        "run_experiment_lenses": "codex",
+        "scope": "codex",
+        "vis_apply": "codex",
+    },
+    "research-design": {
+        "scope": "codex",
+        "vis_apply": "codex",
+    },
+    "research-review": {"run_experiment_lenses": "codex"},
+}
+
 
 class TestAgentBackendConfigImports:
     def test_agent_backend_config_importable_from_settings(self) -> None:
@@ -84,6 +108,7 @@ class TestAgentBackendConfigLoading:
 
         cfg = load_config(tmp_path)
         assert cfg.agent_backend.backend == "claude-code"
+        assert cfg.agent_backend.recipe_overrides == _DEFAULT_RECIPE_OVERRIDES
 
     def test_defaults_yaml_has_agent_backend_section(self) -> None:
         from autoskillit.core.io import load_yaml
@@ -92,6 +117,30 @@ class TestAgentBackendConfigLoading:
         defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
         assert "agent_backend" in defaults
         assert defaults["agent_backend"]["backend"] == "claude-code"
+        assert defaults["agent_backend"]["recipe_overrides"] == _DEFAULT_RECIPE_OVERRIDES
+
+    def test_defaults_manifest_routes_backend_pins_to_resolver_contracts(self) -> None:
+        from autoskillit.core.io import load_yaml
+        from autoskillit.core.paths import pkg_root
+
+        manifest = load_yaml(pkg_root().parents[1] / ".autoskillit" / "test-filter-manifest.yaml")
+        targets = manifest["src/autoskillit/config/defaults.yaml"]
+
+        assert "server/test_resolve_backend_override.py" in targets
+        assert "server/test_explicit_backend_override.py" in targets
+
+    @pytest.mark.parametrize(
+        "recipe_name",
+        ["implementation", "implementation-groups", "remediation"],
+    )
+    def test_defaults_pin_architecture_consumers_to_codex(self, recipe_name: str) -> None:
+        from autoskillit.core.io import load_yaml
+        from autoskillit.core.paths import pkg_root
+
+        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
+        recipe_overrides = defaults["agent_backend"]["recipe_overrides"]
+
+        assert recipe_overrides[recipe_name]["run_arch_lenses"] == "codex"
 
     def test_agent_backend_env_var_override(self, tmp_path, monkeypatch) -> None:
         from autoskillit.config import load_config
@@ -208,7 +257,9 @@ class TestAgentBackendConfigOverrides:
         ]
         assert len(events) == 1, f"Expected one unknown-backend warning, got: {cap_logs}"
 
-    def test_yaml_loading_with_recipe_overrides(self, tmp_path, monkeypatch) -> None:
+    def test_yaml_recipe_overrides_deep_merge_with_bundled_pins(
+        self, tmp_path, monkeypatch
+    ) -> None:
         from autoskillit.config import load_config
 
         monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
@@ -219,7 +270,10 @@ class TestAgentBackendConfigOverrides:
                 {
                     "agent_backend": {
                         "backend": "codex",
-                        "recipe_overrides": {"remediation": {"dry_walkthrough": "codex"}},
+                        "recipe_overrides": {
+                            "remediation": {"dry_walkthrough": "codex"},
+                            "research": {"custom_review": "claude-code"},
+                        },
                         "step_overrides": {"implement": "claude-code"},
                     }
                 }
@@ -227,7 +281,20 @@ class TestAgentBackendConfigOverrides:
         )
         cfg = load_config(tmp_path)
         assert cfg.agent_backend.backend == "codex"
-        assert cfg.agent_backend.recipe_overrides == {"remediation": {"dry_walkthrough": "codex"}}
+        assert cfg.agent_backend.recipe_overrides == {
+            **_DEFAULT_RECIPE_OVERRIDES,
+            "remediation": {
+                "investigate": "codex",
+                "run_arch_lenses": "codex",
+                "dry_walkthrough": "codex",
+            },
+            "research": {
+                "run_experiment_lenses": "codex",
+                "scope": "codex",
+                "vis_apply": "codex",
+                "custom_review": "claude-code",
+            },
+        }
         assert cfg.agent_backend.step_overrides == {"implement": "claude-code"}
 
     def test_string_shorthand_still_works(self) -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -13,8 +14,23 @@ from autoskillit.core import SKILL_PROJECTION_VERSION, SkillExecutionRole
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
+def test_exploration_vector_contract_versions_invalidate_stale_artifacts() -> None:
+    from autoskillit.core import SKILL_SESSION_CONTRACT_SCHEMA_VERSION
+
+    assert SKILL_PROJECTION_VERSION == 6
+    assert SKILL_SESSION_CONTRACT_SCHEMA_VERSION == 5
+
+
 def _contract(tmp_path: Path, projected_text: str):
     from autoskillit.core import (
+        ChildExecutionIdentity,
+        ExecutionIdentity,
+        ExplorationTaskSpec,
+        ExplorationVectorApplicabilityId,
+        ExplorationVectorDef,
+        ExplorationVectorDisposition,
+        RelationshipKind,
+        RepositoryProfileId,
         SkillExecutionRole,
         SkillSource,
         SkillSourceRef,
@@ -47,6 +63,41 @@ def _contract(tmp_path: Path, projected_text: str):
         member_capabilities={"root": frozenset({"github_api_write"})},
         member_activate_deps={"root": ()},
         canonical_contents={"root": projected_text},
+        exploration_vectors={
+            "root": (
+                ExplorationVectorDef(
+                    id="inspect-consumers",
+                    disposition=ExplorationVectorDisposition.MIGRATED,
+                    rationale="Native semantic navigation covers the reviewed vector.",
+                    applicability=(ExplorationVectorApplicabilityId.PLANNER_EXTRACT_DOMAIN_DEEP),
+                    role="semantic-code-navigator",
+                    profile=RepositoryProfileId.GENERIC_PYTHON,
+                    relationship_classes=(RelationshipKind.REFERENCES,),
+                    task=ExplorationTaskSpec(
+                        task_id="inspect-consumers-task",
+                        frontier_item_id="inspect-consumers-frontier",
+                        profile=RepositoryProfileId.GENERIC_PYTHON,
+                        scope=("src",),
+                    ),
+                    body="Inspect consumers.",
+                ),
+            )
+        },
+        read_only=True,
+        parent_sandbox_mode="read-only",
+        execution_identity=ExecutionIdentity(
+            children=(
+                ChildExecutionIdentity(
+                    task_id="inspect-consumers-task",
+                    role="semantic-code-navigator",
+                    plan_digest="plan-digest",
+                    definition_digest="definition-digest",
+                    requested_backend="codex",
+                    requested_model="gpt-5.6-luna",
+                    requested_effort="max",
+                ),
+            ),
+        ),
     )
 
 
@@ -62,6 +113,31 @@ def _lineage_ref(tmp_path: Path):
         anchor_device=stat_result.st_dev,
         anchor_inode=stat_result.st_ino,
     )
+
+
+def test_skill_session_contract_rejects_incoherent_persisted_authority(tmp_path: Path) -> None:
+    from autoskillit.core import (
+        ExecutionIdentity,
+        ExplorationVectorApplicabilityId,
+        RepositoryProfileId,
+        SkillContractError,
+    )
+
+    contract = _contract(tmp_path, "projected")
+
+    with pytest.raises(SkillContractError, match="does not match.*read_only"):
+        replace(contract, read_only=False)
+    with pytest.raises(SkillContractError, match="cannot be auto"):
+        replace(contract, resolved_exploration_profile=RepositoryProfileId.AUTO)
+    with pytest.raises(SkillContractError, match="must include always"):
+        replace(
+            contract,
+            active_exploration_applicabilities=frozenset(
+                {ExplorationVectorApplicabilityId.PLANNER_EXTRACT_DOMAIN_DEEP}
+            ),
+        )
+    with pytest.raises(SkillContractError, match="execution identity must be typed"):
+        replace(contract, execution_identity=cast(ExecutionIdentity, object()))
 
 
 def test_store_round_trip_preserves_machine_contract_and_projected_snapshot(
@@ -83,6 +159,13 @@ def test_store_round_trip_preserves_machine_contract_and_projected_snapshot(
     stored = store.load("backend/session:final")
 
     assert stored.contract == contract
+    assert stored.contract.exploration_vectors["root"][0].body == "Inspect consumers."
+    assert (
+        stored.contract.exploration_vectors["root"][0].applicability.value
+        == "planner-extract-domain-deep"
+    )
+    assert stored.contract.execution_identity.children[0].requested_model == "gpt-5.6-luna"
+    assert stored.contract.parent_sandbox_mode == "read-only"
     assert stored.raw_session_id == "backend/session:final"
     assert (stored.snapshot_dir / ".claude/skills/root/SKILL.md").read_text() == text
     assert stored.snapshot_dir.resolve().is_relative_to(root.resolve())
@@ -281,6 +364,8 @@ def test_store_rejects_opaque_or_incomplete_source_identity(tmp_path: Path) -> N
         ("completion_required", 1),
         ("projection_gating", "true"),
         ("projection_substitutions", [["incomplete"]]),
+        ("exploration_vectors", {"root": [{"id": "incomplete"}]}),
+        ("execution_identity", {"unexpected": "field"}),
     ],
 )
 def test_store_rejects_malformed_serialized_contract_authority(
@@ -306,3 +391,49 @@ def test_store_rejects_malformed_serialized_contract_authority(
 
     with pytest.raises(ValueError, match="Invalid serialized"):
         store.finalize(correlation_key, "malformed")
+
+
+def test_store_rejects_exploration_vector_body_digest_tampering(tmp_path: Path) -> None:
+    from autoskillit.execution.session import DefaultSkillSessionContractStore
+    from autoskillit.execution.session._skill_session_contract_store import _digest_json
+
+    text = "projected\n"
+    store = DefaultSkillSessionContractStore(root=tmp_path / "contracts")
+    correlation_key = store.create_provisional(
+        contract=_contract(tmp_path, text),
+        snapshot={".claude/skills/root/SKILL.md": text},
+    )
+    entry = store._provisional_path(correlation_key)  # noqa: SLF001
+    manifest = store._read_manifest(entry)  # noqa: SLF001
+    contract_data = manifest["contract"]
+    contract_data["exploration_vectors"]["root"][0]["body"] = "tampered body"
+    manifest["contract_digest"] = _digest_json(contract_data)
+    store._write_manifest(entry, manifest)  # noqa: SLF001
+
+    with pytest.raises(ValueError, match="Invalid serialized"):
+        store.finalize(correlation_key, "tampered-vector")
+
+
+def test_stale_projection_version_rejected_before_enum_construction(tmp_path: Path) -> None:
+    """The raw pre-gate must reject a stale projection_version before
+    ``_contract_from_dict`` attempts to construct enum members that no longer
+    exist (here, the retired ``investigate-standard`` applicability id)."""
+    from autoskillit.execution.session import DefaultSkillSessionContractStore
+    from autoskillit.execution.session._skill_session_contract_store import _digest_json
+
+    text = "projected\n"
+    store = DefaultSkillSessionContractStore(root=tmp_path / "contracts")
+    correlation_key = store.create_provisional(
+        contract=_contract(tmp_path, text),
+        snapshot={".claude/skills/root/SKILL.md": text},
+    )
+    entry = store._provisional_path(correlation_key)  # noqa: SLF001
+    manifest = store._read_manifest(entry)  # noqa: SLF001
+    contract_data = manifest["contract"]
+    contract_data["projection_version"] = 5
+    contract_data["active_exploration_applicabilities"] = ["investigate-standard"]
+    manifest["contract_digest"] = _digest_json(contract_data)
+    store._write_manifest(entry, manifest)  # noqa: SLF001
+
+    with pytest.raises(ValueError, match="unsupported projection_version 5; expected 6"):
+        store.finalize(correlation_key, "stale-projection")

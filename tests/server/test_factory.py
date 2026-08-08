@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 
 from autoskillit.config import AgentBackendConfig, AutomationConfig
+from autoskillit.core import RepositoryIdentity, RepositorySnapshot
 from autoskillit.core.types import SkillResult, SubprocessResult, TerminationReason
 from autoskillit.execution.db import DefaultDatabaseReader
 from autoskillit.execution.github import DefaultGitHubFetcher
@@ -21,6 +23,7 @@ from autoskillit.pipeline.context import ToolContext
 from autoskillit.pipeline.context_admission_ledger import (
     DefaultContextAdmissionLedger,
 )
+from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
 from autoskillit.recipe.contracts import (
     get_skill_contract,
     load_bundled_manifest,
@@ -47,6 +50,145 @@ def _runner() -> MockSubprocessRunner:
         )
     )
     return r
+
+
+def test_make_context_survives_stale_precontract_shadowing_skill(tmp_path):
+    """T6: make_context() (the real factory composition path, no resolver
+    mocking) does not crash when a project-local skill shadows a bundled
+    tier skill with a stale, pre-contract-era copy — it falls through and
+    logs the exclusion instead of raising (#4470)."""
+    import structlog.testing
+
+    stale_dir = tmp_path / ".claude" / "skills" / "audit-bugs"
+    stale_dir.mkdir(parents=True)
+    stale_dir_path = stale_dir / "SKILL.md"
+    stale_dir_path.write_text(
+        "---\n"
+        "name: audit-bugs\n"
+        "description: Stale pre-contract-era copy.\n"
+        "---\n"
+        "# audit-bugs\n\n"
+        'LOG_DIR="$HOME/.claude/projects/${PWD//\\//-}"\n',
+        encoding="utf-8",
+    )
+
+    with structlog.testing.capture_logs() as logs:
+        ctx = make_context(AutomationConfig(), runner=_runner(), project_dir=tmp_path)
+
+    assert isinstance(ctx, ToolContext)
+    assert any(entry.get("event") == "skill_catalog_exclusions" for entry in logs)
+
+
+def _install_shared_explorer_authority(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> tuple[Path, Path, Path]:
+    repository_root = tmp_path / "repository"
+    execution_cwd = tmp_path / "sterile-agent-cwd"
+    authority_home = tmp_path / "authority-home"
+    for path in (repository_root, execution_cwd, authority_home):
+        path.mkdir()
+    service = Mock()
+    service.capture_snapshot.return_value = RepositorySnapshot(
+        RepositoryIdentity("test-repository", "test-revision"),
+        tree_digest="test-tree",
+        collector_manifest_digest="test-manifest",
+    )
+    store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+        trusted_root=repository_root,
+        service=service,
+    )
+    bindings = store.bind_launches(
+        owner_id="uid:1000",
+        session_id="session-a",
+        cwd=execution_cwd,
+        repository_root=repository_root,
+        source_identities={
+            "semantic-code-navigator": "navigator-definition-a:parent-source",
+            "repository-impact-profiler": "profiler-definition-a:parent-source",
+        },
+        authority_home=authority_home,
+    )
+    binding = bindings["semantic-code-navigator"]
+    for key, value in binding.items():
+        monkeypatch.setenv(key, value)
+    return (
+        repository_root.resolve(),
+        execution_cwd.resolve(),
+        Path(binding["AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH"]),
+    )
+
+
+def test_factory_bootstraps_exploration_store_from_verified_launch_authority(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    repository_root, execution_cwd, _authority_path = _install_shared_explorer_authority(
+        monkeypatch, tmp_path
+    )
+    monkeypatch.chdir(execution_cwd)
+
+    ctx = make_context(
+        AutomationConfig(),
+        runner=None,
+        plugin_dir=".",
+        project_dir=execution_cwd,
+    )
+
+    assert ctx.project_dir == execution_cwd
+    assert ctx.exploration_context_store is not None
+    assert ctx.exploration_context_store.trusted_root == repository_root
+
+
+@pytest.mark.parametrize("invalid_authority", ("partial", "tampered", "wrong-cwd"))
+def test_factory_does_not_redirect_for_invalid_launch_authority(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    invalid_authority: str,
+) -> None:
+    repository_root, execution_cwd, authority_path = _install_shared_explorer_authority(
+        monkeypatch, tmp_path
+    )
+    if invalid_authority == "partial":
+        monkeypatch.delenv("AUTOSKILLIT_EXPLORATION_CAPABILITY")
+    elif invalid_authority == "tampered":
+        payload = json.loads(authority_path.read_text(encoding="utf-8"))
+        payload["principal"]["repository_root"] = str(tmp_path / "unsigned-redirect")
+        authority_path.write_text(json.dumps(payload), encoding="utf-8")
+    else:
+        wrong_cwd = tmp_path / "wrong-cwd"
+        wrong_cwd.mkdir()
+        execution_cwd = wrong_cwd.resolve()
+    monkeypatch.chdir(execution_cwd)
+
+    ctx = make_context(
+        AutomationConfig(),
+        runner=None,
+        plugin_dir=".",
+        project_dir=execution_cwd,
+    )
+
+    assert ctx.exploration_context_store is not None
+    assert ctx.exploration_context_store.trusted_root == execution_cwd
+    assert ctx.exploration_context_store.trusted_root != repository_root
+
+
+def test_factory_normal_session_keeps_explicit_project_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    for key in (
+        "AUTOSKILLIT_EXPLORATION_CAPABILITY",
+        "AUTOSKILLIT_EXPLORATION_ROLE",
+        "AUTOSKILLIT_EXPLORATION_SESSION_ID",
+        "AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    ctx = make_context(AutomationConfig(), runner=None, plugin_dir=".", project_dir=tmp_path)
+
+    assert ctx.exploration_context_store is not None
+    assert ctx.exploration_context_store.trusted_root == tmp_path.resolve()
 
 
 def test_make_context_returns_toolcontext(tmp_path):

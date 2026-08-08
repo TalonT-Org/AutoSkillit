@@ -28,6 +28,7 @@ from autoskillit.core import (
     PluginRetirementCoordinator,
     RecipeExecutionId,
     RecipeExecutionSnapshot,
+    SkillContractError,
     SkillExecutionRole,
     SubprocessRunner,
     WriteBehaviorSpec,
@@ -74,6 +75,7 @@ from autoskillit.pipeline import (
     DefaultGitHubApiLog,
     DefaultTimingLog,
     DefaultTokenLog,
+    OwnerBoundExplorationContextStore,
     ToolContext,
 )
 from autoskillit.recipe import (
@@ -88,6 +90,7 @@ from autoskillit.server._audit_authority_materializer import (
     DefaultAuditAuthorityMaterializer,
     DefaultCommittedDispositionResolver,
 )
+from autoskillit.server._exploration_service import DefaultExplorationService
 from autoskillit.server._recipe_execution import DefaultInputPreflightResolver
 from autoskillit.workspace import (
     DefaultCloneManager,
@@ -305,6 +308,10 @@ def make_context(
     gate = DefaultGateState(enabled=False)
 
     project_dir = project_dir if project_dir is not None else resolve_project_dir()
+    exploration_trusted_root = (
+        OwnerBoundExplorationContextStore.verified_repository_root_from_launch_environment()
+        or project_dir
+    )
     temp_dir = resolve_temp_dir(project_dir, config.workspace.temp_dir)
     temp_dir_relpath = temp_dir_display_str(config.workspace.temp_dir)
 
@@ -313,12 +320,30 @@ def make_context(
         default_base_branch=config.branching.default_base_branch,
     )
     skill_visibility = config.skill_visibility_spec()
-    validate_skill_tier_roles(skill_visibility, provider.resolver, project_dir)
-    session_catalog = provider.resolver.list_effective(
-        project_dir,
-        SkillExecutionRole.SESSION,
-        visibility=skill_visibility,
-    )
+    try:
+        validate_skill_tier_roles(skill_visibility, provider.resolver, project_dir)
+        session_catalog = provider.resolver.list_effective(
+            project_dir,
+            SkillExecutionRole.SESSION,
+            visibility=skill_visibility,
+        )
+    except SkillContractError:
+        # Message is already actionable after the resolution-boundary
+        # containment (file path, invalidity kind's hint, doctor pointer).
+        # Re-raised as-is — every MCP-facing caller of make_context() already
+        # wraps composition in try/except SkillContractError and returns a
+        # clean, structured error envelope instead of a stack dump.
+        logger.error("skill_composition_failed", project_dir=str(project_dir))
+        raise
+    if session_catalog.exclusions:
+        logger.warning(
+            "skill_catalog_exclusions",
+            project_dir=str(project_dir),
+            excluded=[
+                {"name": item.name, "path": str(item.path), "hints": list(item.hints)}
+                for item in session_catalog.exclusions
+            ],
+        )
     # Single lazy authority, shared with `autoskillit cook`. No projection is
     # materialized until a physical child launch has resolved its backend and
     # load mode.
@@ -409,6 +434,10 @@ def make_context(
         audit_admission_ledger=audit_admission_ledger,
         audit_authority_materializer=audit_authority_materializer,
         committed_disposition_resolver=committed_disposition_resolver,
+        exploration_context_store=OwnerBoundExplorationContextStore(
+            trusted_root=exploration_trusted_root,
+            service=DefaultExplorationService(),
+        ),
         ephemeral_root=ephemeral_root,
         quota_refresh_task=None,
         session_serve_overrides=None,

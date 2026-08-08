@@ -1,0 +1,55 @@
+vectors:
+- id: exception-hierarchy
+  role: semantic-code-navigator
+  relationship_classes:
+  - declares
+  - defines
+  - references
+  rationale: Semantic navigation traces custom exception definitions, inheritance,
+    and references while the parent retains failure taxonomy judgment.
+- id: validation-gates
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation follows validation definitions, guard calls, fail-fast
+    branches, and affected operations while the parent evaluates gate semantics.
+- id: error-detection
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  rationale: Semantic navigation identifies exception handlers, detection branches,
+    and error callbacks without deciding whether detection coverage is sufficient.
+- id: recovery-mechanisms
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces retry, backoff, and fallback control flow
+    while parent-owned handoff may use repository impact evidence for declarative
+    retry policies.
+- id: circuit-breakers
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces breaker definitions, trip decisions, thresholds,
+    and failure branches while the parent retains resilience judgment and declarative-policy
+    handoff.
+- id: error-routing
+  role: semantic-code-navigator
+  relationship_classes:
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces raises, error returns, propagation calls,
+    and terminal failure states while the parent maps and interprets complete error
+    paths.

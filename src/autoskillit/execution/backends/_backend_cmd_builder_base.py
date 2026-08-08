@@ -33,6 +33,7 @@ from autoskillit.core import (
     MANAGED_LINEAGE_DIGEST_ENV_VAR,
     MANAGED_LINEAGE_REF_ENV_VAR,
     NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
+    ExecutionIdentity,
     ManagedHeadlessSessionLineageRef,
     NativeShellCaptureDecision,
     SkillSessionConfig,
@@ -158,6 +159,16 @@ class BackendCmdBuilderBase(ABC):
     @abstractmethod
     def _flag_vocabulary(self) -> FlagVocabulary:
         """Return the backend's :class:`FlagVocabulary`."""
+
+    def resolve_effective_execution_identity(
+        self,
+        *,
+        requested: ExecutionIdentity,
+        session_id: str,
+    ) -> ExecutionIdentity:
+        """Return requested identity when the backend has no effective evidence source."""
+        del session_id
+        return requested
 
     @staticmethod
     def _assemble_shared_env_extras(

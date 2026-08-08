@@ -11,7 +11,7 @@ import pytest
 
 from autoskillit import cli
 from autoskillit.config import AutomationConfig
-from autoskillit.core import ClaudeFlags, SkillContractError
+from autoskillit.core import ClaudeFlags
 from tests.cli.conftest import _SCRIPT_YAML
 
 pytestmark = [
@@ -33,8 +33,17 @@ def test_order_rejects_orchestrator_skill_in_l1_tier_before_launch(
     resume: bool,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys,
 ) -> None:
-    """Every order catalog branch validates configured L1 tier membership."""
+    """Every order catalog branch validates configured L1 tier membership.
+
+    Composition-root rendering (2.3) catches SkillContractError around
+    validate_skill_tier_roles in _session_order.py too and exits cleanly
+    instead of letting a raw traceback propagate — mirrors the analogous
+    pin update for cook (test_cook_rejects_orchestrator_skill_in_l1_tier_
+    before_launch): the pin moves from `pytest.raises(SkillContractError)`
+    to `pytest.raises(SystemExit)` plus an output assertion.
+    """
     monkeypatch.delenv("CLAUDECODE", raising=False)
     monkeypatch.chdir(tmp_path)
     cfg = AutomationConfig()
@@ -43,9 +52,14 @@ def test_order_rejects_orchestrator_skill_in_l1_tier_before_launch(
         patch("autoskillit.config.load_config", return_value=cfg),
         patch("autoskillit.cli.session._session_order._launch_cook_session") as launch,
     ):
-        with pytest.raises(SkillContractError, match="process-issues.*ORCHESTRATOR"):
+        with pytest.raises(SystemExit) as exc_info:
             cli.order(recipe, resume=resume)
 
+    assert exc_info.value.code == 1
+    out = capsys.readouterr().out
+    assert "process-issues" in out
+    assert "ORCHESTRATOR" in out
+    assert "Traceback" not in out
     launch.assert_not_called()
 
 

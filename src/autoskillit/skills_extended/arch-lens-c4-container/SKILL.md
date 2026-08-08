@@ -19,9 +19,6 @@ hooks:
 semantic_version: 1
 semantic_requirements:
   sibling_skills:
-  - name: arch-lens-deployment
-  - name: arch-lens-module-dependency
-  - name: make-arch-diag
   - name: mermaid
 ---
 
@@ -53,6 +50,7 @@ semantic_requirements:
 ## Critical Constraints
 
 **NEVER:**
+- Treat Related Skills as executable dependencies or invoke any cross-reference from that section; those entries are documentation-only and do not imply execution. Invoke only the required `/autoskillit:mermaid` skill; never invoke `/autoskillit:make-arch-diag`, another architecture lens, or any other cross-reference.
 - Fabricate, invent, or embellish information not supported by the available evidence or the code.
 
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
@@ -61,6 +59,7 @@ semantic_requirements:
 - Include internal implementation details (that's for other lenses)
 - Show runtime behavior or state transitions
 - Detach child delegations instead of joining them (joining every child is required)
+- Run exploration leaves in the background
 - Start independent child delegations sequentially
 
 **ALWAYS:**
@@ -77,6 +76,11 @@ semantic_requirements:
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-c4-container/arch_diag_c4_container_{YYYY-MM-DD_HHMMSS}.md
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch every exploration vector below through the deterministic router
+- Route bounded declarative, configuration, registry, generated-artifact, test, fixture, and consumer handoffs to `repository-impact-profiler` through the parent-owned plan
+- Wait for every exploration result before identifying containers, mapping relationships, or creating the diagram
+- Retain parent authority over C4 container boundaries, technology and responsibility judgments, Mermaid generation, and output writing
 
 
 ## Analysis Workflow
@@ -92,39 +96,33 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch every authored vector below under their registered role policies. Mixed code and declarative work remains one parent-owned plan: navigator findings may produce bounded profiler handoffs, which return evidence to the same vector rather than creating another vector.
 
-**Application Layer**
-- Find CLI entry points and commands
-- Identify web applications and APIs
-- Determine frontend technologies
-- Look for: entry points, main files, CLI commands, app servers
+<!-- autoskillit:exploration-vector id="application-layer" -->
+1. **Application Layer** — Find CLI entry points and commands, web applications and APIs, frontend technologies, main files, and app servers. Trace code-defined entry and call paths; route declarative entry-point or frontend-manifest evidence through the parent to the profiler.
+<!-- /autoskillit:exploration-vector -->
 
-**Service/Business Logic Layer**
-- Find core business logic containers
-- Identify processing engines or workflows
-- Look for: services, core modules, domain logic, handlers
+<!-- autoskillit:exploration-vector id="service-business-logic-layer" -->
+2. **Service/Business Logic Layer** — Find core business-logic containers, processing engines, workflows, services, domain modules, and handlers. Report definitions, imports, and calls without deciding the final C4 boundary.
+<!-- /autoskillit:exploration-vector -->
 
-**Package/Library Layer**
-- Find shared packages and utilities
-- Identify internal libraries
-- Look for: shared modules, utilities, common code, SDKs
+<!-- autoskillit:exploration-vector id="package-library-layer" -->
+3. **Package/Library Layer** — Find shared packages, utilities, internal libraries, common code, and SDK modules, including the imports and references that establish their reuse.
+<!-- /autoskillit:exploration-vector -->
 
-**Data Storage Layer**
-- Find database connections and storage
-- Identify caching layers
-- Look for: database configs, ORM models, repositories, cache clients
+<!-- autoskillit:exploration-vector id="data-storage-layer" -->
+4. **Data Storage Layer** — Find database connections, storage clients, caching layers, ORM models, repositories, and their calls. Route database configuration, declarative schemas, and generated storage artifacts through the parent to the profiler.
+<!-- /autoskillit:exploration-vector -->
 
-**External Integrations**
-- Find API clients and external calls
-- Identify third-party services
-- Look for: HTTP clients, SDK imports, external API calls
+<!-- autoskillit:exploration-vector id="external-integrations" -->
+5. **External Integrations** — Find API clients, HTTP calls, SDK imports, and third-party service interactions. Report code evidence and bounded declarative dependency handoffs; the parent determines external-system and container relationships.
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Identify Containers
 

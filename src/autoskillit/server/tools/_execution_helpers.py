@@ -20,11 +20,16 @@ from autoskillit.core import (
     SKILL_CAPABILITY_REGISTRY,
     WORKTREE_SKILLS,
     BackendCapabilities,
+    BackendPinResolution,
     CapturedStream,
     CodingAgentBackend,
     EffectiveSkillInvocationAuthority,
+    ExecutionIdentity,
+    ExplorationVectorApplicabilityId,
+    ExplorationVectorDef,
     LaunchSurface,
     ManagedHeadlessSessionLineageRef,
+    RepositoryProfileId,
     ResolvedLaunchContract,
     SkillContractError,
     SkillExecutionRole,
@@ -243,12 +248,39 @@ def build_fresh_projection_context(
 def bind_projection_backend(
     context: SkillProjectionContext,
     backend: CodingAgentBackend | None,
+    *,
+    resolution: BackendPinResolution | None = None,
+    parent_sandbox_mode: str = "workspace-write",
+    resolved_exploration_profile: RepositoryProfileId | None = None,
+    active_exploration_applicabilities: frozenset[ExplorationVectorApplicabilityId] | None = None,
 ) -> SkillProjectionContext:
     """Complete fresh projection authority after capability-driven backend selection."""
+    if resolution is not None and (backend is None or backend.name != resolution.backend):
+        effective = None if backend is None else backend.name
+        raise SkillContractError(
+            "projection backend disagrees with resolved backend authority: "
+            f"resolved={resolution.backend!r}, effective={effective!r}, "
+            f"tier={resolution.tier!r}, key_path={resolution.key_path!r}"
+        )
+    if context.backend is not None and context.backend.name != (backend.name if backend else None):
+        raise SkillContractError("projection context cannot be rebound to a different backend")
+    launch_context_ref = (
+        f"skill:{context.invocation.root.name}"
+        if context.invocation is not None and context.exploration_vectors
+        else None
+    )
     return dataclasses.replace(
         context,
         backend=backend,
         conventions=backend.conventions if backend is not None else None,
+        exploration_launch_context_ref=launch_context_ref,
+        resolved_exploration_profile=resolved_exploration_profile,
+        active_exploration_applicabilities=(
+            active_exploration_applicabilities
+            if active_exploration_applicabilities is not None
+            else context.active_exploration_applicabilities
+        ),
+        parent_sandbox_mode=parent_sandbox_mode,
     )
 
 
@@ -292,6 +324,7 @@ def build_skill_session_contract(
     scope_discipline: bool,
     completion_required: bool,
     skill_contract_json: str,
+    execution_identity: ExecutionIdentity,
 ) -> tuple[SkillSessionContract, dict[str, str]]:
     """Capture the exact projected invocation bytes before executor launch."""
     closure = tuple(getattr(invocation, "closure"))
@@ -308,6 +341,8 @@ def build_skill_session_contract(
     member_capabilities: dict[str, frozenset[str]] = {}
     member_activate_deps: dict[str, tuple[str, ...]] = {}
     canonical_contents: dict[str, str] = {}
+    exploration_vectors: dict[str, tuple[ExplorationVectorDef, ...]] = {}
+    exploration_sidecar_digests: dict[str, str] = {}
     session_path = Path(session_root.path)
     for member in closure:
         relative_path = Path(conventions.skills_subdir) / member.name / "SKILL.md"
@@ -324,6 +359,8 @@ def build_skill_session_contract(
         member_capabilities[member.name] = member.uses_capabilities
         member_activate_deps[member.name] = member.activate_deps
         canonical_contents[member.name] = member.canonical_content
+        exploration_vectors[member.name] = member.exploration_vectors
+        exploration_sidecar_digests[member.name] = member.exploration_sidecar_digest
     project_root = getattr(invocation, "project_root")
     if project_root is None:
         raise SkillContractError("Effective invocation requires a project root")
@@ -344,15 +381,21 @@ def build_skill_session_contract(
         member_capabilities=member_capabilities,
         member_activate_deps=member_activate_deps,
         canonical_contents=canonical_contents,
+        exploration_vectors=exploration_vectors,
+        exploration_sidecar_digests=exploration_sidecar_digests,
+        resolved_exploration_profile=projection_context.resolved_exploration_profile,
+        active_exploration_applicabilities=(projection_context.active_exploration_applicabilities),
         expected_output_patterns=expected_output_patterns,
         write_behavior=write_behavior,
         read_only=read_only,
         scope_discipline=scope_discipline,
+        parent_sandbox_mode=projection_context.parent_sandbox_mode,
         completion_required=completion_required,
         skill_contract_json=skill_contract_json,
         projection_substitutions=tuple(sorted((projection_context.substitutions or {}).items())),
         projection_gating=projection_context.gating,
         projection_namespace=projection_context.namespace,
+        execution_identity=execution_identity,
     )
     return contract, snapshot
 
@@ -474,6 +517,8 @@ def rehydrate_skill_invocation(
             uses_capabilities=contract.member_capabilities[name],
             execution_role=contract.member_roles[name],
             activate_deps=contract.member_activate_deps[name],
+            exploration_vectors=contract.exploration_vectors[name],
+            exploration_sidecar_digest=contract.exploration_sidecar_digests.get(name, ""),
             canonical_content=contract.canonical_contents[name],
             canonical_digest=contract.canonical_digests[name],
         )
@@ -495,6 +540,14 @@ def rehydrate_skill_invocation(
         substitutions=dict(contract.projection_substitutions),
         gating=contract.projection_gating,
         namespace=contract.projection_namespace,
+        exploration_launch_context_ref=(
+            f"skill:{contract.root_name}"
+            if any(member.exploration_vectors for member in closure)
+            else None
+        ),
+        resolved_exploration_profile=contract.resolved_exploration_profile,
+        active_exploration_applicabilities=contract.active_exploration_applicabilities,
+        parent_sandbox_mode=contract.parent_sandbox_mode,
         projection_version=contract.projection_version,
     )
     return invocation, projection_context

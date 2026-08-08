@@ -19,9 +19,6 @@ hooks:
 semantic_version: 1
 semantic_requirements:
   sibling_skills:
-  - name: arch-lens-concurrency
-  - name: arch-lens-process-flow
-  - name: make-arch-diag
   - name: mermaid
 ---
 
@@ -52,6 +49,7 @@ semantic_requirements:
 ## Critical Constraints
 
 **NEVER:**
+- Treat Related Skills as executable dependencies or invoke any cross-reference from that section; those entries are documentation-only and do not imply execution. Invoke only the required `/autoskillit:mermaid` skill; never invoke `/autoskillit:make-arch-diag`, another architecture lens, or any other cross-reference.
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for ourselves
@@ -61,6 +59,7 @@ semantic_requirements:
 - Ignore validation and fail-fast patterns
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
+- Let an exploration vector judge resilience effectiveness, select recovery policy, map the final error paths, or create the diagram
 
 **ALWAYS:**
 - Focus on FAILURE paths and recovery
@@ -77,6 +76,11 @@ semantic_requirements:
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-error-resilience/arch_diag_error_resilience_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
 - Start all independent child delegations before awaiting any result to maximize concurrency
+- Use the registered exploration roles for all repository reads
+- Dispatch every exploration vector below through the deterministic router
+- Allow parent-boundary handoff of retry-policy and circuit-breaker configuration from navigator vectors to `repository-impact-profiler` without creating extra vectors
+- Wait for every exploration result before mapping error paths, documenting recovery mechanisms, or creating the diagram
+- Retain parent authority over resilience hypotheses, judgments, Steps 2+, and diagram synthesis
 
 
 ## Analysis Workflow
@@ -92,43 +96,55 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+### Step 1: Launch the Routed Exploration Vectors (SINGLE MESSAGE)
 
-**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+Dispatch all ready, scope-disjoint vectors through the deterministic router in a single message before awaiting any result. Do not iterate across multiple turns.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn child delegations to investigate:
+Dispatch every vector below under their registered role policies. The parent/router may hand declarative retry-policy or circuit-breaker configuration to `repository-impact-profiler`; this does not create another vector.
 
-**Exception Hierarchy**
+<!-- autoskillit:exploration-vector id="exception-hierarchy" -->
+1. **Exception Hierarchy**
 - Find custom exception classes
 - Map inheritance relationships
 - Look for: Exception, Error, raise, error classes, custom exceptions
+<!-- /autoskillit:exploration-vector -->
 
-**Validation Gates**
+<!-- autoskillit:exploration-vector id="validation-gates" -->
+2. **Validation Gates**
 - Find validation/guard functions
 - Identify fail-fast patterns
 - Look for: validate_*, check_*, assert, guard, gate, precondition checks
+<!-- /autoskillit:exploration-vector -->
 
-**Error Detection**
+<!-- autoskillit:exploration-vector id="error-detection" -->
+3. **Error Detection**
 - Find error detection points
 - Identify how failures are recognized
 - Look for: try/except, catch, on_error, handle_error, error handling
+<!-- /autoskillit:exploration-vector -->
 
-**Recovery Mechanisms**
+<!-- autoskillit:exploration-vector id="recovery-mechanisms" -->
+4. **Recovery Mechanisms**
 - Find retry logic
 - Identify fallback strategies
 - Look for: retry, backoff, attempt, max_retries, retry policies
+<!-- /autoskillit:exploration-vector -->
 
-**Circuit Breakers**
+<!-- autoskillit:exploration-vector id="circuit-breakers" -->
+5. **Circuit Breakers**
 - Find patterns that prevent infinite retries
 - Identify failure thresholds
 - Look for: circuit, breaker, max_failures, trip, failure thresholds
+<!-- /autoskillit:exploration-vector -->
 
-**Error Routing**
+<!-- autoskillit:exploration-vector id="error-routing" -->
+6. **Error Routing**
 - Find how errors are propagated
 - Identify error terminal states
 - Look for: raise, return Error, error node, ERROR state
+<!-- /autoskillit:exploration-vector -->
 
 ### Step 2: Map Error Paths
 

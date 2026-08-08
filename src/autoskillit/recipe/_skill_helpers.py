@@ -71,6 +71,23 @@ def _resolve_skill_md(
     skill_info = resolver.resolve_effective(skill_name, project_root)
     if skill_info is None:
         return None
+    if skill_info.invalidities:
+        from autoskillit.workspace import (  # noqa: PLC0415
+            SkillInfo,
+            invalidity_hints,
+            render_skill_invalidities,
+        )
+
+        hints = (
+            invalidity_hints(skill_info.invalidities) if isinstance(skill_info, SkillInfo) else ()
+        )
+        logger.warning(
+            "skill_md_resolution_rejected_invalid_candidate",
+            skill=skill_name,
+            reason=render_skill_invalidities(skill_info.invalidities),
+            hints=hints,
+        )
+        return None
     skill_path = getattr(skill_info, "path", None)
     return skill_path if isinstance(skill_path, Path) else None
 

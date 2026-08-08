@@ -194,6 +194,40 @@ def _check_install_classification() -> DoctorResult:
         )
 
 
+def _check_publication_obligation(home: Path | None = None) -> DoctorResult:
+    """Report a pending publication obligation, if any (diagnostic only).
+
+    No auto-fix here: full publication repair lives at the update-failure
+    handler and non-server CLI startup (see cli.app.main() and
+    cli.update._obligation_repair). MCP startup can repair broken hook
+    commands but cannot satisfy or clear the broader publication obligation.
+    """
+    check_name = "publication_obligation"
+    _home = home or Path.home()
+    try:
+        from autoskillit.workspace import read_obligation
+
+        obligation = read_obligation(_home)
+        if obligation is None:
+            return DoctorResult(Severity.OK, check_name, "No publication obligation pending")
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"Publication owed since {obligation.written_at} "
+            f"(previous_version={obligation.previous_version}, "
+            f"expected_version={obligation.expected_version or 'unknown'}). "
+            f"Run `autoskillit install` from an external terminal, or run a "
+            f"healthy non-server CLI command to trigger automatic repair.",
+        )
+    except Exception as exc:
+        logger.debug("Publication obligation check failed", exc_info=True)
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"Could not determine publication obligation state: {exc}",
+        )
+
+
 def _check_update_dismissal_state(home: Path | None = None) -> DoctorResult:
     """Report the current update-prompt dismissal state."""
     check_name = "update_dismissal_state"

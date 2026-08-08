@@ -1,0 +1,47 @@
+vectors:
+- id: missing-context-fields
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence fills only visualization-context fields missing
+    after parent-side supplied-input parsing; complete caller context remains direct
+    authority.
+- id: figures-error-bearing-quantities
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories pre-existing aggregate figure
+    specifications, generated figures, tables, data declarations, tests, and fixtures,
+    with bounded code tracing through parent-mediated navigator handoff.
+- id: seed-count
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces seed-count definitions, random-state configuration,
+    independent-run construction, and affected figures while the parent judges sufficiency.
+- id: existing-uncertainty-representation
+  role: semantic-code-navigator
+  relationship_classes:
+  - defines
+  - calls
+  - references
+  - affects
+  rationale: Semantic navigation traces uncertainty-overlay definitions, parameters,
+    calls, and affected visualization paths while measure correctness remains a parent
+    judgment.
+- id: claims-about-variance
+  role: repository-impact-profiler
+  relationship_classes:
+  - declares
+  - references
+  - affects
+  rationale: Repository impact evidence inventories pre-existing robustness, stability,
+    reproducibility, significance, and variance claims and maps them to affected figures
+    without interpreting claim validity.

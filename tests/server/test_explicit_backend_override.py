@@ -6,6 +6,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tests.server._helpers import (
+    BUNDLED_RECIPE_STEP_BACKEND_PIN_CASES,
+    _bundled_backend,
+)
+
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
@@ -30,6 +35,25 @@ def _make_backend(**kwargs):
 
 
 class TestExplicitBackendOverrideAdmissionDispatchAgreement:
+    @pytest.mark.parametrize(
+        ("recipe_name", "step_name", "key_path"),
+        BUNDLED_RECIPE_STEP_BACKEND_PIN_CASES,
+    )
+    def test_bundled_recipe_step_pin_drives_admission_with_exact_origin(
+        self, recipe_name: str, step_name: str, key_path: str
+    ) -> None:
+        from autoskillit.server.tools._auto_overrides import _compute_effective_backend_map
+
+        admission_map, origin_map = _compute_effective_backend_map(
+            cast(Any, _make_recipe_steps(step_name)),
+            "claude-code",
+            recipe_name,
+            config_backend=_bundled_backend(),
+        )
+
+        assert admission_map == {step_name: "codex"}
+        assert origin_map == {step_name: key_path}
+
     def test_explicit_backend_override_admission_dispatch_agreement(self) -> None:
         """Both admission (compute_effective_backend_map) and dispatch agree
         on the explicit override: a codex pin must produce codex in both."""

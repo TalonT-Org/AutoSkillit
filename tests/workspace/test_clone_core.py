@@ -43,6 +43,14 @@ class TestCloneRepo:
         with pytest.raises(ValueError, match="source_dir does not exist"):
             clone_repo("/nonexistent/path/that/does/not/exist", "name")
 
+    def test_clone_repo_rejects_url_as_source_dir(self, tmp_path: Path) -> None:
+        """A git remote URL is not a valid source_dir — clone_repo requires a local
+        filesystem path. Codifies the contract the display layer must respect: URL and
+        local-path are different types, which is the assumption the display layer
+        (build_ingredient_rows) violated before caller-sovereign filtering was added."""
+        with pytest.raises(ValueError, match="source_dir does not exist or is not a directory"):
+            clone_repo("https://github.com/owner/repo.git", "probe")
+
     def test_non_git_dir_raises_runtime_error(self, tmp_path: Path) -> None:
         # tmp_path exists but is not a git repo — probe fails with reason="error"
         with pytest.raises(RuntimeError, match="clone_origin_probe_failed"):

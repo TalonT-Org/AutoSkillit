@@ -1002,6 +1002,23 @@ def test_build_ingredient_rows_returns_tuples():
     assert any(len(d) > 60 for d in all_descs), "Expected at least one long description"
 
 
+def test_build_ingredient_rows_caller_sovereign_resolved_value_not_displayed():
+    """T7: a caller-sovereign key's resolved value (e.g. source_dir's clone URL) must
+    never be displayed as the ingredient's default — clone_repo rejects URLs, so
+    displaying one here would leak an authority value the consumer cannot accept."""
+    from autoskillit.recipe._api import build_ingredient_rows
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    recipe = _make_recipe_with_ingredient(
+        "source_dir",
+        RecipeIngredient(description="Source repository", default="", authority="config"),
+    )
+    rows = build_ingredient_rows(
+        recipe, resolved_defaults={"source_dir": "https://github.com/owner/repo.git"}
+    )
+    assert ("source_dir", "Source repository", "auto-detect") in rows
+
+
 # ---------------------------------------------------------------------------
 # T5 — _drop_sub_recipe_step uses dataclasses.replace
 # ---------------------------------------------------------------------------

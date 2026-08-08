@@ -37,6 +37,8 @@ class TestDispositionRegistryTotality:
                 FAILURE_DISPOSITIONS[reason].disposition
                 is CaptureFailureDisposition.PRESERVE_OUTPUT
             ), f"{reason!r} should preserve output"
+        # ADR-0009 Accepted Gap 1: UNKNOWN_SETUP remains the verify-stage
+        # tamper wire label and must fail closed until it gets a dedicated reason.
         assert (
             FAILURE_DISPOSITIONS[CaptureFailureReason.UNKNOWN_SETUP].disposition
             is CaptureFailureDisposition.DISCARD_OUTPUT

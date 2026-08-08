@@ -7,7 +7,7 @@ and server dispatch share these values without importing one another.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
 from typing import TypeAlias
@@ -29,6 +29,7 @@ __all__ = [
     "ToolDef",
     "ToolInitializationOperation",
     "ToolParamDef",
+    "ToolParamRole",
     "ToolWireType",
 ]
 
@@ -58,6 +59,33 @@ class ToolInitializationOperation(StrEnum):
     MUTATION = "mutation"
 
 
+class ToolParamRole(StrEnum):
+    """The single classification authority for what a tool parameter is for.
+
+    The runtime attestation gate's always-admit set, the actual-kwargs
+    assembly, and the server-side ``RecipeStep`` fallback obligation for
+    execution-tuning parameters are all derived from this field — see
+    ``runtime_exempt_param_names`` (core/tool_registry.py) and
+    ``bind_runtime_skill_invocation`` (recipe/_binding.py).
+    """
+
+    PROTOCOL = "protocol"
+    """Attestation identity (step_name, recipe_execution_id, invocation_template_digest);
+    always admitted."""
+
+    CHILD_INPUT = "child_input"
+    """Child-skill inputs; admitted iff with:-compiled."""
+
+    EXECUTION_TUNING = "execution_tuning"
+    """Server-resolved from RecipeStep; forward only via with:."""
+
+    ORCHESTRATOR_SCOPING = "orchestrator_scoping"
+    """Runtime scoping; never recipe-authorable; always admitted."""
+
+    SESSION_FLOW = "session_flow"
+    """Resume/retry/capture plumbing; admitted iff with:-compiled."""
+
+
 @dataclass(frozen=True, slots=True)
 class ToolParamDef:
     """Static definition of one public MCP handler parameter."""
@@ -67,6 +95,7 @@ class ToolParamDef:
     required: bool = False
     structured_skill_inputs: bool = False
     handler_parameter: bool = True
+    role: ToolParamRole = field(kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)

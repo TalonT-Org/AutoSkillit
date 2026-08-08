@@ -18,10 +18,13 @@ from autoskillit.core import (
     BoundValueState,
     InvocationTemplate,
     RecipeBindingProjection,
+    ToolDef,
     ToolParamDef,
+    ToolParamRole,
     ToolWireType,
     get_tool_def,
     resolve_skill_name,
+    runtime_exempt_param_names,
 )
 from autoskillit.recipe._contracts_manifest import (
     compute_skill_contract_identity as _compute_skill_contract_identity,
@@ -843,6 +846,34 @@ def _is_dynamic_binding(value: BoundValue) -> bool:
     return bool(value.context_dependencies or value.input_dependencies)
 
 
+def _undeclared_runtime_param_message(tool_def: ToolDef, undeclared_names: list[str]) -> str:
+    """Denial text for undeclared non-empty runtime tool parameters.
+
+    Keeps the original generic shape naming every undeclared parameter, and
+    appends an actionable remedy for any EXECUTION_TUNING name: it is
+    server-resolved from the recipe step, must be omitted from the call,
+    and declaring it under the step's ``with:`` block is the only per-step
+    override channel. Every other role keeps the plain generic shape.
+    """
+    message = (
+        f"runtime tool parameters are absent from the compiled template: {undeclared_names!r}"
+    )
+    tuning_names = [
+        name
+        for name in undeclared_names
+        if (param := tool_def.param_def(name)) is not None
+        and param.role is ToolParamRole.EXECUTION_TUNING
+    ]
+    if tuning_names:
+        remedies = "; ".join(
+            f"{name!r} is server-resolved from the recipe step — omit it, or declare "
+            f"{name!r} under this step's with: block for a per-step override"
+            for name in tuning_names
+        )
+        message = f"{message}; {remedies}"
+    return message
+
+
 def bind_runtime_skill_invocation(
     template: InvocationTemplate,
     *,
@@ -860,6 +891,11 @@ def bind_runtime_skill_invocation(
             "runtime skill identity differs from the compiled template",
         )
     compiled_mcp_names = frozenset(value.name for value in invocation.mcp_kwargs)
+    # protocol_mcp_values is used solely for its value-binding duty below (the
+    # three protocol params are checked/bound against their expected values).
+    # It no longer doubles as the undeclared-name membership allow-list — that
+    # allow-list is the role-derived runtime_exempt_param_names() set, the
+    # single source of truth for "which params are always admitted."
     protocol_mcp_values = {
         "step_name": step_name,
         "recipe_execution_id": execution_id,
@@ -871,18 +907,22 @@ def bind_runtime_skill_invocation(
                 "recipe_execution_tool_shape",
                 f"attestation parameter {name!r} differs from the active invocation",
             )
+    bound_tool_def = get_tool_def(invocation.tool_name)
+    if bound_tool_def is None:
+        raise RuntimeBindingError(
+            "recipe_execution_tool_shape",
+            f"no canonical tool definition for {invocation.tool_name!r}",
+        )
+    runtime_admitted_names = compiled_mcp_names | runtime_exempt_param_names(bound_tool_def)
     undeclared_effective_names = sorted(
         name
         for name, value in actual_mcp_kwargs.items()
-        if name not in compiled_mcp_names and name not in protocol_mcp_values and value != ""
+        if name not in runtime_admitted_names and value != ""
     )
     if undeclared_effective_names:
         raise RuntimeBindingError(
             "recipe_execution_tool_shape",
-            (
-                "runtime tool parameters are absent from the compiled template: "
-                f"{undeclared_effective_names!r}"
-            ),
+            _undeclared_runtime_param_message(bound_tool_def, undeclared_effective_names),
         )
     manifest = load_bundled_manifest()
     contract = get_skill_contract(invocation.skill_name or "", manifest)

@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -57,6 +58,7 @@ from autoskillit.core import (
     SkillExecutionRole,
     SkillResult,
     TerminationReason,
+    ToolDef,
     ValidatedAddDir,
     WriteBehaviorSpec,
     closure_authority_spec_from_args,
@@ -67,6 +69,7 @@ from autoskillit.core import (
     extract_skill_name,
     find_caller_session_id,
     get_logger,
+    get_tool_def,
     is_feature_enabled,
     parse_plan_paths,
     render_target_skill_command,
@@ -811,6 +814,72 @@ async def run_python(
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
+def _build_actual_mcp_kwargs(
+    tool_def: ToolDef, values: Mapping[str, BoundScalar | None]
+) -> dict[str, BoundScalar]:
+    """Assemble the actual runtime kwargs the attestation gate checks.
+
+    Iterates ``tool_def``'s handler params only — a param declared
+    ``handler_parameter=False`` (e.g. ``dispatch_items``) or
+    ``structured_skill_inputs=True`` (``skill_inputs``, which has its own
+    dedicated channel) is excluded — and pulls each remaining param's
+    runtime value from ``values``, keyed by param name, which the caller
+    builds from the handler's locals.
+
+    A param missing from ``values``, or a ``values`` key absent from the
+    filtered param set, is a loud construction-time bug: adding a
+    ``ToolParamDef`` without wiring its runtime value (or vice versa) fails
+    the first attested call instead of silently drifting. ``None`` values
+    are omitted — the vacancy sentinel for optional params such as
+    ``stale_threshold``/``idle_output_timeout`` (subsumes the prior
+    hand-typed ``if ... is not None`` special case).
+    """
+    handler_param_names = frozenset(
+        param.name
+        for param in tool_def.params
+        if param.handler_parameter and not param.structured_skill_inputs
+    )
+    missing = handler_param_names - values.keys()
+    if missing:
+        raise ValueError(
+            f"{tool_def.name}: no runtime value supplied for handler params: {sorted(missing)!r}"
+        )
+    unknown = values.keys() - handler_param_names
+    if unknown:
+        raise ValueError(
+            f"{tool_def.name}: runtime values supplied for unknown handler params: "
+            f"{sorted(unknown)!r}"
+        )
+    result: dict[str, BoundScalar] = {}
+    for name in handler_param_names:
+        value = values[name]
+        if value is not None:
+            result[name] = value
+    return result
+
+
+# EXECUTION_TUNING params server-resolved from the matching RecipeStep field
+# when the caller left the run_skill param at its vacancy sentinel (empty
+# string for str params, None for int params — see the fallback block
+# below). Single source of truth for "which EXECUTION_TUNING params get a
+# RecipeStep fallback"; every loop-table entry is actually read, and this
+# set is verified disjoint from _EXECUTION_TUNING_EXTERNALLY_RESOLVED by
+# tests/contracts/test_tool_param_roles.py.
+_EXECUTION_TUNING_STEP_FIELDS: Mapping[str, str] = {
+    "model": "model",
+    "stale_threshold": "stale_threshold",
+    "idle_output_timeout": "idle_output_timeout",
+}
+# EXECUTION_TUNING params resolved elsewhere (site named per entry) rather
+# than by the fallback block below. Contract-coverage documentation only —
+# not consumed at runtime.
+_EXECUTION_TUNING_EXTERNALLY_RESOLVED: Mapping[str, str] = {
+    # Pre-gate profile resolution — see the step_provider_resolved_from_recipe
+    # block earlier in run_skill().
+    "step_provider": "provider",
+}
+
+
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @_cancellation_shield()
 @track_response_size("run_skill")
@@ -1147,30 +1216,33 @@ async def run_skill(
                     "recipe_execution_step_missing",
                     "an attested recipe invocation requires its exact step_name",
                 )
-            _actual_mcp_kwargs: dict[str, BoundScalar] = {
-                "skill_command": skill_command,
-                "cwd": cwd,
-                "model": model,
-                "step_name": step_name,
-                "recipe_execution_id": recipe_execution_id,
-                "invocation_template_digest": invocation_template_digest,
-                "step_provider": step_provider,
-                "order_id": order_id,
-                "output_dir": output_dir,
-                "resume_session_id": resume_session_id,
-                "closure_authority_path": closure_authority_path,
-                "closure_authority_hash": closure_authority_hash,
-                "closure_plan_paths": closure_plan_paths,
-                "closure_base_sha": closure_base_sha,
-                "closure_diff_sha": closure_diff_sha,
-                "closure_target_sha": closure_target_sha,
-                "retry_after_audit_attempt_id": retry_after_audit_attempt_id,
-                "native_shell_capture_mode": native_shell_capture_mode,
-            }
-            if stale_threshold is not None:
-                _actual_mcp_kwargs["stale_threshold"] = stale_threshold
-            if idle_output_timeout is not None:
-                _actual_mcp_kwargs["idle_output_timeout"] = idle_output_timeout
+            _run_skill_tool_def = get_tool_def("run_skill")
+            assert _run_skill_tool_def is not None, "run_skill must be a registered ToolDef"
+            _actual_mcp_kwargs = _build_actual_mcp_kwargs(
+                _run_skill_tool_def,
+                {
+                    "skill_command": skill_command,
+                    "cwd": cwd,
+                    "model": model,
+                    "step_name": step_name,
+                    "recipe_execution_id": recipe_execution_id,
+                    "invocation_template_digest": invocation_template_digest,
+                    "step_provider": step_provider,
+                    "order_id": order_id,
+                    "stale_threshold": stale_threshold,
+                    "idle_output_timeout": idle_output_timeout,
+                    "output_dir": output_dir,
+                    "resume_session_id": resume_session_id,
+                    "closure_authority_path": closure_authority_path,
+                    "closure_authority_hash": closure_authority_hash,
+                    "closure_plan_paths": closure_plan_paths,
+                    "closure_base_sha": closure_base_sha,
+                    "closure_diff_sha": closure_diff_sha,
+                    "closure_target_sha": closure_target_sha,
+                    "retry_after_audit_attempt_id": retry_after_audit_attempt_id,
+                    "native_shell_capture_mode": native_shell_capture_mode,
+                },
+            )
             try:
                 _bound_recipe_inputs, _invocation_template = bind_attested_runtime_invocation(
                     _installed_execution,
@@ -1447,6 +1519,9 @@ async def run_skill(
             _in_fleet_dispatch = bool(os.environ.get(DISPATCH_ID_ENV_VAR))
             _inspector_model = _cfg.fleet.inspector_model if _in_fleet_dispatch else ""
 
+            # step_provider's execution-tuning fallback lives here (pre-gate,
+            # profile-interplay semantics) rather than in the post-gate
+            # fallback loop — see _EXECUTION_TUNING_EXTERNALLY_RESOLVED.
             if not step_provider and step_name and tool_ctx.active_recipe_steps is not None:
                 _recipe_step_pre = tool_ctx.active_recipe_steps.get(step_name)
                 if _recipe_step_pre is not None and _recipe_step_pre.provider:
@@ -1701,6 +1776,20 @@ async def run_skill(
                                 step=step_name,
                                 output_dir=output_dir,
                             )
+
+                    # Vacancy sentinels are per-type identity checks, never a
+                    # blanket falsy check: model is "==  ''" (a str param),
+                    # stale_threshold/idle_output_timeout are "is None" (int
+                    # params) — an explicit caller idle_output_timeout=0 (the
+                    # documented "disabled for this step" value) must survive
+                    # untouched. See _EXECUTION_TUNING_STEP_FIELDS.
+                    if effective_model == "" and _recipe_step.model:
+                        effective_model = _recipe_step.model
+                        logger.warning(
+                            "model_resolved_from_recipe",
+                            step=step_name,
+                            value=effective_model,
+                        )
 
                     if stale_threshold is None and _recipe_step.stale_threshold is not None:
                         stale_threshold = _recipe_step.stale_threshold

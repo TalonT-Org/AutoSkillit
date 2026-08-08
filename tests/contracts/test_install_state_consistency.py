@@ -616,4 +616,7 @@ class TestRetiredArtifactShapeRegistry:
             fail_enqueue,
         )
 
-        assert reconcile_install_artifacts() == ()
+        assert reconcile_install_artifacts() == (
+            ".claude/plugins/cache/autoskillit-local/autoskillit",
+        )
+        assert legacy_version.is_dir()

@@ -253,7 +253,7 @@ class InstalledPluginArtifactAuthority:
                     source_root,
                     staging_root,
                     catalog,
-                    SkillProjectionContext(cwd=Path.cwd(), catalog=catalog),
+                    SkillProjectionContext(cwd=source_root, catalog=catalog),
                 )
                 hooks_dir = staging_root / "hooks"
                 hooks_dir.mkdir(parents=True, exist_ok=True)

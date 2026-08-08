@@ -235,6 +235,10 @@ def test_no_retired_intake_rule_id_is_live() -> None:
     )
 
 
+def test_removed_intake_rule_id_is_retired() -> None:
+    assert "instruction-file-completeness" in RETIRED_INTAKE_RULE_IDS
+
+
 def test_retired_intake_rule_ids_are_lowercase_and_kebab_case() -> None:
     kebab_re = re.compile(r"^[a-z][a-z0-9-]*$")
     for retired_id in RETIRED_INTAKE_RULE_IDS:

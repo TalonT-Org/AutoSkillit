@@ -33,8 +33,7 @@ class MaintenanceInstallArgv:
     ``expected_version`` string. The ``.to_argv()`` method produces the
     canonical argv for the install --maintenance-update child process. Use
     this type for ALL subprocess self-invocation of the autoskillit install
-    child with ``--maintenance-update``; hand-built argv literals bypass the
-    type contract and were the root cause of issue #4485.
+    child with ``--maintenance-update``.
     """
 
     entrypoint: Path
@@ -57,10 +56,7 @@ class MaintenanceInstallArgv:
         """Build the canonical child argv for ``install --maintenance-update``.
 
         ``require_registered_plugin`` controls whether the
-        ``--require-registered-plugin`` flag is appended; it is False by
-        default because the obligation-repair helper and the cross-interpreter
-        smoke utility do not register plugins during their maintenance
-        install. Pass True from the explicit update transaction.
+        ``--require-registered-plugin`` flag is appended.
         """
         argv: list[_MaintenanceArgvElement | str] = [
             str(self.entrypoint),

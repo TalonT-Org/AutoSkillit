@@ -1,14 +1,4 @@
-"""CLI repair and verified clearing of pending publication obligations.
-
-The repair helper spawns ``autoskillit install --maintenance-update`` as a
-child subprocess to clear a pending publication obligation. The child enforces
-its own strict contract at the cli boundary (``--maintenance-update`` requires
-``--expected-version``); this module unconditionally probes ``--version``
-before spawning the install child, cross-checks the persisted obligation's
-``expected_version`` against the live distribution version, and constructs
-the install argv via ``MaintenanceInstallArgv.to_argv()`` so the contract
-holds at every call site. See issue #4485.
-"""
+"""Repair and verify pending publication obligations."""
 
 from __future__ import annotations
 
@@ -100,27 +90,10 @@ def attempt_obligation_repair(
     process_runner: _ProcessRunner | None = None,
     entrypoint: Path | None = None,
 ) -> ObligationRepairResult:
-    """Repair and verify a pending publication obligation before clearing it.
+    """Repair an obligation and clear it only after installed-state verification.
 
-    The flow is:
-      1. Read the obligation; bail with ``NO_OBLIGATION`` if absent.
-      2. Bail with ``DEFERRED`` if running under ``CLAUDECODE``.
-      3. **Probe unconditionally**: launch ``<entrypoint> --version`` BEFORE
-         spawning the install child. The maintenance install does not change
-         the distribution version, so the parent's probe equals the post-install
-         child's version. Bail with ``MISSING_EXPECTED_VERSION`` if the probe
-         is unparseable.
-      4. **Cross-check** the persisted obligation's ``expected_version``
-         against the probed version. Bail with ``MISSING_EXPECTED_VERSION``
-         on mismatch — the obligation journal is stale relative to the live
-         distribution and the install subprocess must not be spawned.
-      5. Build the typed install argv via ``MaintenanceInstallArgv`` (which
-         enforces ``--expected-version`` is present).
-      6. Spawn the install child. On non-zero exit or ``OSError`` at spawn
-         time, bail with ``FAILED`` and a precise finding.
-      7. Validate hooks, verify the resolved generation's artifact identity
-         matches the probed version, and ``clear_obligation``. On any
-         verification failure, bail with ``FAILED``.
+    The live version is probed before child launch and must match any valid
+    persisted expectation. The maintenance install uses the typed argv contract.
     """
     env = environment if environment is not None else os.environ
     obligation = read_obligation(home)
@@ -147,9 +120,7 @@ def attempt_obligation_repair(
     child_env = dict(env)
     child_env["HOME"] = str(home)
 
-    # Step 3: Pre-launch --version probe. The maintenance install does not
-    # change the distribution version, so the parent's probe equals the
-    # post-install child's version and we don't need to probe twice.
+    # A maintenance install does not change the distribution version, so probe once.
     try:
         version_check = runner(
             [str(repair_entrypoint), "--version"],
@@ -178,11 +149,7 @@ def attempt_obligation_repair(
             findings=(f"obligation_repair_probe_unparseable: {probed_version!r}",),
         )
 
-    # Step 4: Cross-check persisted obligation against live distribution
-    # version. A mismatch means the obligation journal is stale; spawning
-    # the install with the persisted version would mismatch the actual
-    # distribution and the install() child would reject the call at the
-    # distribution-version-equality gate (cli/_marketplace.py).
+    # A stale persisted version would be rejected by the install child.
     persisted_version = _valid_version_or_unknown(obligation.expected_version)
     if persisted_version is not None and persisted_version != probed_version:
         return ObligationRepairResult(
@@ -192,13 +159,11 @@ def attempt_obligation_repair(
             ),
         )
 
-    # Step 5: Build the typed install argv.
     install_argv = MaintenanceInstallArgv(
         entrypoint=repair_entrypoint,
         expected_version=probed_version,
     ).to_argv()
 
-    # Step 6: Spawn the install child.
     try:
         install_result = runner(
             install_argv,
@@ -234,7 +199,6 @@ def attempt_obligation_repair(
             findings=(f"{len(broken)} broken hook command(s) remain after repair install",),
         )
 
-    # Step 7: Verify generation identity matches the probed version.
     expected_version = probed_version
     try:
         from autoskillit.core import (

@@ -1,12 +1,4 @@
-"""Integration tests for the obligation-repair subprocess composition.
-
-These tests spawn a real subprocess through attempt_obligation_repair,
-exercising the full argv-construction contract (the typed builder) end
-to end. The fake `autoskillit` entrypoint is a thin shell script that
-records argv and exits 0 — sufficient to verify that the parent
-process produces the canonical argv, not to verify the child's full
-behavior (covered by unit tests in test_publication_obligation_loop.py).
-"""
+"""Integration coverage for obligation-repair subprocess composition."""
 
 from __future__ import annotations
 

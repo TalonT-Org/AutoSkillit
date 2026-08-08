@@ -1,16 +1,4 @@
-"""Shared subprocess test helpers for autoskillit self-invocation.
-
-The argv-validation contract here mirrors the strict child-process contract
-enforced at the cli boundary (``autoskillit install --maintenance-update``
-requires ``--expected-version``). Every fake runner that handles a
-maintenance-update install call MUST route its argv through
-``assert_valid_maintenance_install_argv`` — without this check, hand-built
-argv that omits ``--expected-version`` will be accepted by the fake and
-silently violate the child contract, exactly as issue #4485 described.
-
-There is no opt-out parameter: skip cases are detected by content (if the
-cmd does not contain 'install', it is not a maintenance install call).
-"""
+"""Subprocess argv assertions for autoskillit self-invocation tests."""
 
 from __future__ import annotations
 

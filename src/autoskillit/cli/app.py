@@ -257,13 +257,8 @@ def install(
 ) -> None:
     """Install the plugin for Claude Code and refresh the cache.
 
-    In DIRECT mode (default) the expected version is taken from ``__version__``
-    (the in-process distribution version of the running interpreter). In
-    MAINTENANCE_UPDATE mode (``--maintenance-update``) the expected version
-    MUST be supplied via the ``--expected-version`` CLI parameter — the
-    boundary check below raises ``ValueError`` if it is missing, since the
-    maintenance install enforces the strict child contract at
-    ``_marketplace.install()``.
+    Maintenance updates require the caller to supply the expected version;
+    direct installs use the running distribution version.
     """
     from autoskillit import __version__
     from autoskillit.cli._init_helpers import _print_next_steps

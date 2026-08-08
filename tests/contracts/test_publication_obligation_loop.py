@@ -662,10 +662,7 @@ def test_remaining_broken_hooks_keep_obligation(tmp_path: Path) -> None:
         previous_version="1.0.0",
         originating_phase="upgrade-subprocess-gate",
     )
-    # Backfill expected_version so the pre-launch --version probe is
-    # allowed to run (the runner returns "1.1.0\n" for --version); the
-    # persisted and probed versions match, install runs with valid argv,
-    # then hook validation fails and the obligation survives.
+    # Backfill the persisted version so repair reaches post-install validation.
     update_obligation_expected_version(tmp_path, expected=obligation, expected_version="1.1.0")
     original_validate = m.validate_plugin_cache_hooks
     m.validate_plugin_cache_hooks = lambda **_kwargs: ["broken command"]
@@ -911,15 +908,7 @@ def test_probe_failure_returns_missing_expected_version_no_install_spawn(
 def test_stale_obligation_probe_mismatch_returns_missing_expected_version(
     tmp_path: Path,
 ) -> None:
-    """Stale persisted expected_version (older than live distribution) returns
-    MISSING_EXPECTED_VERSION without spawning the install.
-
-    Pins the cross-check: when persisted "0.9.0" disagrees with probed
-    "1.1.0", the obligation journal is stale relative to the live
-    distribution. Spawning the install with the persisted version would
-    mismatch the actual distribution and the install() child would reject
-    the call at the distribution-version-equality gate.
-    """
+    """A stale persisted version blocks the maintenance install."""
     from autoskillit.cli.update import _obligation_repair as m
     from autoskillit.workspace import (
         read_obligation,

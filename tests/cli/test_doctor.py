@@ -1519,10 +1519,12 @@ def test_check_publication_obligation_message_recommends_functional_repair(
     result = _check_publication_obligation(home=tmp_path)
 
     assert result.severity == Severity.WARNING
-    assert "1.0.0" in result.message
-    assert "1.1.0" in result.message
-    # The automatic-repair half of the message must remain accurate.
-    assert "automatic repair" in result.message.lower()
+    assert result.message == (
+        f"Publication owed since {obligation.written_at} "
+        "(previous_version=1.0.0, expected_version=1.1.0). "
+        "Run `autoskillit install` from an external terminal, or run a "
+        "healthy non-server CLI command to trigger automatic repair."
+    )
 
 
 # T-CACHE-INTEGRITY-1: doctor detects plugin cache hooks.json with broken paths

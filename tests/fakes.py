@@ -554,9 +554,7 @@ class FakePluginArtifactAuthority:
             raise RuntimeError("fake plugin artifact authority is closed")
         binding = PluginLaunchBinding(
             load_mode=load_mode,
-            plugin_dir=(
-                None if load_mode is PluginLoadMode.IMPLICIT_INSTALLED else self.plugin_dir
-            ),
+            plugin_dir=self.plugin_dir,
             identity=PluginArtifactIdentity(
                 semantic_key="test-plugin-artifact",
                 incarnation_id=(f"00000000000040008000{len(self.bindings) + 1:012x}"),

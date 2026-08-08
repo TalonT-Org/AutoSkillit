@@ -1001,6 +1001,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         {
             "hooks",
             "cli",
+            "core",
             "execution",
             # +workspace: _hook_repair repairs a broken plugin-cache hooks.json by
             # calling find_broken_hook_scripts/generate_hooks_json directly.
@@ -1142,7 +1143,7 @@ LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {
     "server": frozenset({"server"}),
     "cli": frozenset({"cli"}),
     "hooks": frozenset({"hooks"}),
-    "hook_registry": frozenset({"hooks"}),
+    "hook_registry": frozenset({"hooks", "core"}),
     "planner": frozenset({"planner"}),
     "_llm_triage": frozenset({"test_llm_triage.py"}),
     "_recipe_delivery_framing": frozenset({"server", "hooks", "infra"}),

@@ -96,9 +96,23 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 - `tests/contracts/` — tests that verify SKILL.md contract content: required sections,
   output patterns, schema validity
 
+## Environment Parity
+
+The test harness sets env vars (via Taskfile `env:` blocks) that diverge from
+production. Every override is registered with a justification in
+`TEST_HARNESS_ENV_OVERRIDES` (`tests/_test_env_parity.py`), enforced in both
+directions by `tests/contracts/test_test_env_parity.py` — its failure messages
+walk you through registration. What no contract test can catch: an override
+silently masking the production behavior your test needs to observe. When that
+happens (e.g. observing real bytecode writes under `PYTHONDONTWRITEBYTECODE=1`),
+build the child-process env with the override's parity helper — a plain function
+in `tests/conftest.py` named by the registry's `parity_fixture` field, e.g.
+`production_interpreter_env()` — instead of popping env vars ad hoc.
+
 ## Performance
 
-- `PYTHONDONTWRITEBYTECODE=1` is set via Taskfile — no `.pyc` disk writes
+- `PYTHONDONTWRITEBYTECODE=1` is set via Taskfile — no `.pyc` disk writes (registered
+  in `TEST_HARNESS_ENV_OVERRIDES` with `production_interpreter_env` as parity fixture)
 - Test temp I/O is routed to platform-resolved paths:
   - **Linux / WSL2**: `/dev/shm/pytest-tmp` (kernel tmpfs, RAM-backed)
   - **macOS**: `/tmp/pytest-tmp` (disk-backed system default)

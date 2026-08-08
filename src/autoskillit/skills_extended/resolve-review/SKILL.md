@@ -538,6 +538,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | Pipeline ordering | `test_pipeline_ordering.py` | Moving `run_semantic_rules` before `_prune_skipped_steps` in `load_and_validate` — semantic rules must run on post-prune recipe |
 | Hook env-var authority | `test_hook_env_var_authority.py` | Hook scripts that read `AUTOSKILLIT_PROVIDER_PROFILE` without also reading `AUTOSKILLIT_AGENT_BACKEND` — provider profile is a credentials label, not a backend-identity signal |
 | Evidence-bound intake rules | `test_intake_rule_registry.py` | `CODEX_INTAKE_RULES` entries stating an absolute imperative without a declared `exception`; `basis`/`evidence`/`evidence_anchor` that does not resolve to a live backend capability, ADR, or issue; a `path_classes` entry naming a file class `recipe_read_guard` denies |
+| Interpreter bytecode suppression | `test_interpreter_bytecode_suppression.py` | `sys.executable`/`python3` interpreter-spawn sites under `hooks/`, `hook_registry.py`, or `_codex_hooks.py` missing the `-B` flag — must suppress bytecode writes unconditionally |
 
 When a reviewer suggestion would cause a change matching any row above, classify
 the finding as `REJECT` with `category: "arch_violation"` and `evidence` referencing

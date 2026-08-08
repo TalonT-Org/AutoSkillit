@@ -121,7 +121,7 @@ def _render_harness(argv: list[str], *, policy_command: str | None = None) -> st
     if policy_command is not None:
         policy_text = json.dumps(policy_command, ensure_ascii=True)
         lines.append(f": {shlex.quote(policy_text)}")
-    lines.append(shlex.join(argv))
+    lines.append(f"PYTHONDONTWRITEBYTECODE=1 {shlex.join(argv)}")
     return "\n".join(lines)
 
 
@@ -133,6 +133,7 @@ def _runner_argv(request: CaptureRequest) -> list[str]:
     return [
         sys.executable,
         "-I",
+        "-B",
         str(_runner_path()),
         encode_capture_request(request),
     ]

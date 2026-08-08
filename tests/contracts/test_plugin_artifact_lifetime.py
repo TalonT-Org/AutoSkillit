@@ -463,7 +463,6 @@ def test_writer_to_reader_handoff_revalidates_exact_incarnation(
     "load_mode",
     [
         PluginLoadMode.GENERATED_HOME,
-        PluginLoadMode.IMPLICIT_INSTALLED,
         PluginLoadMode.NONE,
     ],
 )

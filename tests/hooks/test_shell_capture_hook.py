@@ -65,15 +65,20 @@ def _runner_argv(command: str) -> list[str]:
     lines = command.splitlines()
     assert lines[0] == _SENTINEL
     assert len(lines) >= 2
-    return shlex.split(lines[-1])
+    tokens = shlex.split(lines[-1])
+    # Strip env-var prefix (PYTHONDONTWRITEBYTECODE=1) from the harness line.
+    while tokens and "=" in tokens[0]:
+        tokens.pop(0)
+    return tokens
 
 
 def _runner_request(command: str) -> CaptureRequest:
     argv = _runner_argv(command)
     assert argv[1] == "-I"
-    assert Path(argv[2]).name == "_capture_artifacts.py"
-    assert len(argv) == 4
-    return decode_capture_request(argv[3])
+    assert argv[2] == "-B"
+    assert Path(argv[3]).name == "_capture_artifacts.py"
+    assert len(argv) == 5
+    return decode_capture_request(argv[4])
 
 
 def _transported_command(command: str) -> str:
@@ -301,8 +306,9 @@ def test_verified_disabled_policy_is_runner_owned(monkeypatch, tmp_path):
 
     assert argv[0] == sys.executable
     assert argv[1] == "-I"
-    assert Path(argv[2]).name == "_capture_artifacts.py"
-    request = decode_capture_request(argv[3])
+    assert argv[2] == "-B"
+    assert Path(argv[3]).name == "_capture_artifacts.py"
+    request = decode_capture_request(argv[4])
     assert request.action == "run"
     assert request.command == "echo hello"
     assert request.cwd == str(tmp_path)
@@ -364,7 +370,7 @@ def test_invalid_command_transport_builds_nonexecuting_rejection(command):
     harness = _build_harness(command, "/abs/project", "0123456789abcdef")
     argv = _runner_argv(harness)
 
-    request = decode_capture_request(argv[3])
+    request = decode_capture_request(argv[4])
     assert request == CaptureRequest(
         protocol_version=CAPTURE_REQUEST_PROTOCOL_VERSION,
         action="reject",
@@ -506,10 +512,11 @@ def test_marker_provenance_is_emitted_by_runner(monkeypatch, tmp_path):
     )
     command = _updated_command(output)
     argv = _runner_argv(command)
-    request = decode_capture_request(argv[3])
+    request = decode_capture_request(argv[4])
 
     assert argv[1] == "-I"
-    assert Path(argv[2]).name == "_capture_artifacts.py"
+    assert argv[2] == "-B"
+    assert Path(argv[3]).name == "_capture_artifacts.py"
     assert len(request.capture_id) == 16
     assert "printf 0123456789abcdef" in command
     assert "AutoSkillit hook shell_capture_hook" not in command

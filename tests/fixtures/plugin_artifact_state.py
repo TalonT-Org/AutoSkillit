@@ -41,6 +41,7 @@ class PluginArtifactStateKind(StrEnum):
     DANGLING_MANAGED_ROOT = "dangling_managed_root"
     DANGLING_MANIFEST = "dangling_manifest"
     DANGLING_LEASE = "dangling_lease"
+    BYTECODE_CONTAMINATED = "bytecode_contaminated"
 
 
 PLUGIN_ARTIFACT_STATE_KINDS = tuple(PluginArtifactStateKind)
@@ -117,6 +118,9 @@ PLUGIN_ARTIFACT_STATE_EXPECTATIONS = {
     ),
     PluginArtifactStateKind.DANGLING_LEASE: PluginArtifactStateExpectation(
         _LEASE_UNAVAILABLE, False, False
+    ),
+    PluginArtifactStateKind.BYTECODE_CONTAMINATED: PluginArtifactStateExpectation(
+        _ARTIFACT_INVALID, False, False
     ),
 }
 
@@ -352,6 +356,13 @@ def build_plugin_artifact_state(
                     "content added after identity publication",
                     encoding="utf-8",
                 )
+            elif selected is PluginArtifactStateKind.BYTECODE_CONTAMINATED:
+                hooks_dir = spec.managed_root / "hooks"
+                if not hooks_dir.is_dir():
+                    hooks_dir.mkdir(parents=True)
+                pycache = hooks_dir / "__pycache__"
+                pycache.mkdir()
+                (pycache / "_dispatch.cpython-311.pyc").write_bytes(b"fixture bytecode")
             elif selected is PluginArtifactStateKind.MISSING_LEASE:
                 spec.lease_path.unlink()
 

@@ -28,6 +28,18 @@ from ._plugin_artifact_identity import (
     INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION as INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,  # noqa: E501
 )
 from ._plugin_artifact_identity import (
+    generation_artifact_root as generation_artifact_root,
+)
+from ._plugin_artifact_identity import (
+    generation_selector_path as generation_selector_path,
+)
+from ._plugin_artifact_identity import (
+    generation_store_root as generation_store_root,
+)
+from ._plugin_artifact_identity import (
+    generation_version_root as generation_version_root,
+)
+from ._plugin_artifact_identity import (
     installed_plugin_artifact_lease_path as installed_plugin_artifact_lease_path,
 )
 from ._plugin_artifact_identity import (
@@ -42,8 +54,12 @@ from ._plugin_artifact_identity import (
 from ._plugin_artifact_identity import (
     installed_plugin_cache_dir as installed_plugin_cache_dir,
 )
+from ._plugin_artifact_identity import is_python_bytecode_path as is_python_bytecode_path
 from ._plugin_artifact_identity import (
     read_installed_plugin_artifact_identity as read_installed_plugin_artifact_identity,
+)
+from ._plugin_artifact_identity import (
+    resolve_current_generation as resolve_current_generation,
 )
 from ._plugin_cache import PluginArtifactRetirementEngine as PluginArtifactRetirementEngine
 from ._plugin_cache import _InstallLock as _InstallLock

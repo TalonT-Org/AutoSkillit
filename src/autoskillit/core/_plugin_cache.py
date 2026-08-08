@@ -478,6 +478,7 @@ class PluginArtifactRetirementEngine:
         lease_path: Callable[[Path], Path],
         current_identity: Callable[[RetiringArtifactRecord], PluginArtifactIdentity],
         logger: Any,
+        is_current: Callable[[Path], bool] | None = None,
     ) -> None:
         self.managed_root = Path(managed_root).expanduser().resolve(strict=False)
         self.artifact_kind = artifact_kind
@@ -485,6 +486,7 @@ class PluginArtifactRetirementEngine:
         self._lease_path = lease_path
         self._current_identity = current_identity
         self._logger = logger
+        self._is_current = is_current
 
     def contains(self, path: Path) -> bool:
         """Return whether *path* is a child artifact owned by this engine."""
@@ -625,6 +627,12 @@ class PluginArtifactRetirementEngine:
                     )
                 if now < queued.not_before:
                     return RetirementOutcome.DEFERRED_NOT_DUE
+                if self._is_current is not None and self._is_current(record.managed_path):
+                    return self._log_reclaim(
+                        record,
+                        RetirementOutcome.DEFERRED_CONTENDED,
+                        detail="managed_path is the actively selected generation",
+                    )
                 staging_path = _retirement_staging_path(record)
                 managed_exists = record.managed_path.exists() or record.managed_path.is_symlink()
                 manifest_exists = (

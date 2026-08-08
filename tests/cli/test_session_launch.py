@@ -401,18 +401,20 @@ def test_run_interactive_session_exits_when_claude_missing(
 
 
 # ---------------------------------------------------------------------------
-# no plugin dir when plugin installed
+# plugin dir passed via explicit binding regardless of marketplace install
 # ---------------------------------------------------------------------------
 
 
-def test_run_interactive_session_no_plugin_dir_when_installed(
+def test_run_interactive_session_includes_plugin_dir_when_installed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """_run_interactive_session omits --plugin-dir when plugin is installed."""
+    """_run_interactive_session always passes --plugin-dir for a plugin-install-capable
+    backend — EXPLICIT_PLUGIN_DIR generation-store binding, not marketplace-install
+    detection, governs the flag (IMPLICIT_INSTALLED was retired in #4480)."""
     _stub_plugin_installed(monkeypatch, installed=True)
     captured = _capture_subprocess(monkeypatch)
     _run_interactive_session(system_prompt="test")
-    assert ClaudeFlags.PLUGIN_DIR not in captured["cmd"]
+    assert ClaudeFlags.PLUGIN_DIR in captured["cmd"]
 
 
 # ---------------------------------------------------------------------------

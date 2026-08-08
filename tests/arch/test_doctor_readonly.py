@@ -1,7 +1,7 @@
 """AST guard: run_doctor() must not perform filesystem mutations (REQ-DOCTOR-READONLY).
 
 Doctor is a diagnostic command — it reads and reports but must never modify
-the filesystem. Any destructive call (shutil.rmtree, os.remove, _clear_plugin_cache, …)
+the filesystem. Any destructive call (shutil.rmtree, os.remove, …)
 in run_doctor() or its direct callees within _doctor.py is a structural violation.
 """
 
@@ -23,7 +23,6 @@ FORBIDDEN_WRITE_CALLS = frozenset(
         "os.unlink",
         "Path.unlink",
         "Path.rmdir",
-        "_clear_plugin_cache",
     }
 )
 

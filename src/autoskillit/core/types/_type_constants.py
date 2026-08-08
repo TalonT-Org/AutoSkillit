@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from hashlib import sha256
 from types import MappingProxyType
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
 from ._type_enums import RemediationAction, SkillInvalidityKind
 from ._type_skill_semantics import SKILL_SEMANTIC_SCHEMA_VERSION
@@ -210,11 +210,19 @@ class RetiredArtifactShape(NamedTuple):
     real directory, file to directory, …) strands every pre-existing install.
     Declaring the retirement here is what gives the reconciler something to
     repair and the guard test something to enforce.
+
+    ``disposition`` controls how the reconciler handles the retired shape:
+
+    - ``"delete"`` — unconditional removal (the original behavior).
+    - ``"retire_via_engine"`` — enqueue into the retirement engine with
+      the standard grace window and per-path lease gating, so a live
+      session's inherited shared-lease fd is never invalidated.
     """
 
     shape: str
     retired_in: str
     reason: str
+    disposition: Literal["delete", "retire_via_engine"] = "delete"
 
 
 # Artifact key -> the shape that was retired. Keys are ``Path.home()``-relative
@@ -238,6 +246,25 @@ RETIRED_INSTALL_ARTIFACT_SHAPES: Mapping[str, RetiredArtifactShape] = MappingPro
                 "its own source root."
             ),
         ),
+        ".claude/plugins/cache/autoskillit-local/autoskillit": RetiredArtifactShape(
+            shape="directory",
+            retired_in="0.10.933",
+            reason=(
+                "The Claude-cache installed plugin artifact was replaced by generation-keyed "
+                "publication under ~/.autoskillit/plugin-generations/. Live sessions may "
+                "hold inherited shared-lease fds on version subdirectories, so the store "
+                "is routed through the retirement engine rather than deleted immediately."
+            ),
+            disposition="retire_via_engine",
+        ),
+        # ".autoskillit/plugin-projections" is deliberately NOT registered here yet.
+        # It is still the live store `ProjectedPluginArtifactAuthority`
+        # (workspace/_projected_artifact/authority.py) publishes to and binds cook
+        # and headless sessions from on every launch (PROJECTED_HOME/
+        # EXPLICIT_PLUGIN_DIR). Registering it as retired before that authority's
+        # dual-store logic collapses onto the generation store (tracked separately)
+        # would make verify_install_state() flag a healthy, actively-served store
+        # as broken on every machine that has ever run `autoskillit cook`.
     }
 )
 

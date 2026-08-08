@@ -34,6 +34,7 @@ from autoskillit.core import (
     get_logger,
     is_canonical_plugin_artifact_digest,
     is_canonical_plugin_artifact_incarnation_id,
+    is_python_bytecode_path,
     read_versioned_json,
 )
 
@@ -230,10 +231,18 @@ def is_projected_asset(entry: Path, *, top_level: bool) -> bool:
 
     The single predicate behind both the copier and the cache-key digest, so
     the two can never disagree about what a projection is made of.
+
+    Bytecode artifacts (``__pycache__`` directories and ``*.pyc``/``*.pyo``
+    files) are excluded at every depth — they are interpreter-generated
+    ephemera that must never enter a published file set whose identity is
+    bound by a content digest.
     """
-    if entry.name in _CANONICAL_SKILL_DIRS:
+    name = entry.name
+    if is_python_bytecode_path(entry):
         return False
-    return not (top_level and entry.name not in _PUBLIC_PLUGIN_ASSET_NAMES)
+    if name in _CANONICAL_SKILL_DIRS:
+        return False
+    return not (top_level and name not in _PUBLIC_PLUGIN_ASSET_NAMES)
 
 
 def iter_public_plugin_asset_files(source_root: Path, *, top_level: bool = True) -> Iterator[Path]:

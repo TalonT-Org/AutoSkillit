@@ -43,7 +43,7 @@ def test_generate_hooks_json_commands_are_relocatable() -> None:
         str(pkg_root()),
     )
     data = generate_hooks_json()
-    expected_prefix = f'python3 "{PLUGIN_ROOT_TOKEN}/hooks/_dispatch.py" '
+    expected_prefix = f'python3 -B "{PLUGIN_ROOT_TOKEN}/hooks/_dispatch.py" '
     for event_type, entries in data["hooks"].items():
         for entry in entries:
             for hook in entry.get("hooks", []):

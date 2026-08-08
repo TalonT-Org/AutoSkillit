@@ -382,8 +382,9 @@ def test_shell_capture_hook_is_input_rewrite_and_excluded_from_deny_matrix(
     runner_index = next(
         index for index, value in enumerate(argv) if value.endswith("_capture_artifacts.py")
     )
-    assert argv[runner_index - 2] == sys.executable
-    assert argv[runner_index - 1] == "-I"
+    assert argv[runner_index - 3] == sys.executable
+    assert argv[runner_index - 2] == "-I"
+    assert argv[runner_index - 1] == "-B"
     assert runner_index + 2 == len(argv)
     request = decode_capture_request(argv[runner_index + 1])
     assert request.action == "run"

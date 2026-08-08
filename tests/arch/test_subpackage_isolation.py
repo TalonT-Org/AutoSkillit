@@ -78,6 +78,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "settings",  # config/settings.py: _CONFIG_SCHEMA = _build_config_schema()
         "_headless_path_tokens",  # execution/_headless_path_tokens.py: _OUTPUT_PATH_TOKENS
         "_probe_cache",  # execution/backends/_probe_cache.py: PROBE_CACHE_TTL = timedelta(...)
+        # _STAGING_ORPHAN_GRACE = timedelta(hours=1)
+        "_generation_publication",
         # _STABLE_DISMISS_WINDOW = timedelta(days=7), _DEV_DISMISS_WINDOW = timedelta(hours=12)
         "_install_info",  # cli/_install_info.py: window constants (see comment above)
         # KITCHEN_GUARDED_COMMANDS: frozenset[str]
@@ -1297,7 +1299,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "prompt-injection composition (+14 net lines)",
     ),
     "execution/backends/claude.py": (
-        1107,
+        1108,
         "REQ-CNST-010-E19: Claude backend protocol parity keeps managed native-shell "
         "decision/reference disposition beside executable launch-binding validation; "
         "both are shared builder-interface obligations even though Claude deliberately "
@@ -1305,7 +1307,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "adaptation remains on this registered backend so native child syntax and model "
         "alias resolution cannot drift into a second adapter registry; #4443 also threads "
         "parent sandbox authority through the shared no-op setup boundary and explorer "
-        "dispatch rendering preserves the same backend-owned syntax authority.",
+        "dispatch rendering preserves the same backend-owned syntax authority; #4480 adds "
+        "the plugin_dir launch-binding validation parameter for cross-backend signature "
+        "parity.",
     ),
     "workspace/skill_capabilities.py": (
         1100,

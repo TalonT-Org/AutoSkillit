@@ -181,13 +181,15 @@ class TestCLIOrderCommand:
         assert "stdin" not in kwargs
 
     @patch("autoskillit.cli.subprocess.run")
-    def test_order_suppresses_plugin_dir_when_plugin_installed(
+    def test_order_includes_plugin_dir_when_plugin_installed(
         self,
         mock_run: MagicMock,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """order omits --plugin-dir when marketplace plugin is installed."""
+        """order still passes --plugin-dir when a marketplace plugin is installed —
+        EXPLICIT_PLUGIN_DIR generation-store binding is unconditional for a
+        plugin-install-capable backend (IMPLICIT_INSTALLED was retired in #4480)."""
         monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -244,7 +246,10 @@ class TestCLIOrderCommand:
 
         mock_run.assert_called_once()
         cmd = mock_run.call_args[0][0]
-        assert ClaudeFlags.PLUGIN_DIR not in cmd
+        # After the generation-keyed publication migration (#4480), all
+        # bindings carry a concrete plugin_dir, so --plugin-dir is always
+        # passed — even when the marketplace registry has an entry.
+        assert ClaudeFlags.PLUGIN_DIR in cmd
 
     @patch("autoskillit.cli.subprocess.run")
     def test_order_includes_plugin_dir_when_no_plugin_installed(

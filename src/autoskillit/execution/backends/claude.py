@@ -559,7 +559,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             builder.kv_flag(ClaudeFlags.APPEND_SYSTEM_PROMPT, system_prompt)
         if model:
             builder.kv_flag(ClaudeFlags.MODEL, self.translate_model(model))
-        if plugin_binding is not None and plugin_binding.plugin_dir is not None:
+        if plugin_binding is not None:
             builder.kv_flag(ClaudeFlags.PLUGIN_DIR, str(plugin_binding.plugin_dir))
         if initial_prompt is not None:
             builder.positional(initial_prompt)
@@ -621,7 +621,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS,
         ]
         _apply_output_format(cmd, output_format)
-        if plugin_binding is not None and plugin_binding.plugin_dir is not None:
+        if plugin_binding is not None:
             cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_binding.plugin_dir)]
         merged: dict[str, str] = dict(SHARED_BASELINE_ENV)
         merged[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
@@ -751,7 +751,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             required=SKILL_SESSION_REQUIRED_ENV,
         )
         cmd: list[str] = [*spec.cmd]
-        if plugin_binding is not None and plugin_binding.plugin_dir is not None:
+        if plugin_binding is not None:
             cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_binding.plugin_dir)]
         _apply_output_format(cmd, output_format)
         for validated_dir in add_dirs:
@@ -850,7 +850,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         )
 
         cmd: list[str] = [*spec.cmd]
-        if plugin_binding is not None and plugin_binding.plugin_dir is not None:
+        if plugin_binding is not None:
             cmd += [ClaudeFlags.PLUGIN_DIR, str(plugin_binding.plugin_dir)]
         _apply_output_format(cmd, output_format)
         cmd += [ClaudeFlags.TOOLS, "AskUserQuestion"]
@@ -1023,8 +1023,9 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         *,
         session_dir: Path | None = None,
         executable: ExecutableLaunchBinding | None = None,
+        plugin_dir: Path | None = None,
     ) -> list[str]:
-        del session_dir
+        del session_dir, plugin_dir
         if executable is None:
             return ["Claude Code launch requires an exact executable binding"]
         if not executable_binding_matches_current_file(executable):

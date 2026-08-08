@@ -556,9 +556,7 @@ class ProjectedPluginArtifactAuthority:
         )
         return PluginLaunchBinding(
             load_mode=load_mode,
-            plugin_dir=(
-                None if load_mode is PluginLoadMode.IMPLICIT_INSTALLED else plan.destination
-            ),
+            plugin_dir=plan.destination,
             identity=identity,
             inherited_fds=reader.inherited_fds,
             _lease=PluginArtifactLifecycleLease(

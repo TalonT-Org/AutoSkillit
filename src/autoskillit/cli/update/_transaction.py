@@ -35,7 +35,6 @@ from autoskillit.cli._install_info import (
 from autoskillit.cli._installed_plugins import InstalledPluginsFile
 from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
-    Severity,
     _installed_plugins_path,
     build_maintenance_env,
     get_logger,
@@ -43,12 +42,9 @@ from autoskillit.core import (
     is_git_worktree,
 )
 from autoskillit.workspace import (
-    InstallStateLeaseMode,
-    InstallStateSpec,
     PublicationObligation,
     clear_obligation,
     update_obligation_expected_version,
-    verify_installed_plugin_artifact,
     write_obligation,
 )
 
@@ -562,15 +558,34 @@ def run_update_transaction(
             )
 
         try:
-            verification = verify_installed_plugin_artifact(
-                InstallStateSpec(
-                    home=resolved_home,
-                    plugin_ref=_AUTOSKILLIT_PLUGIN_KEY,
-                    expected_version=expected_version,
-                    require_registered_plugin=True,
-                    lease_mode=InstallStateLeaseMode.SHARED,
-                )
+            from autoskillit.core import (
+                installed_plugin_artifact_manifest_path,
+                installed_plugin_semantic_key,
+                read_installed_plugin_artifact_identity,
+                resolve_current_generation,
             )
+
+            gen_root = resolve_current_generation(
+                resolved_home,
+                _AUTOSKILLIT_PLUGIN_KEY,
+                expected_version,
+            )
+            verified_identity: str | None
+            verification_findings: tuple[str, ...]
+            if gen_root is None:
+                verified_identity = None
+                verification_findings = ("No current generation found after install",)
+            else:
+                gen_identity = read_installed_plugin_artifact_identity(
+                    gen_root,
+                    expected_semantic_key=installed_plugin_semantic_key(
+                        _AUTOSKILLIT_PLUGIN_KEY,
+                        expected_version,
+                    ),
+                    manifest_path=installed_plugin_artifact_manifest_path(gen_root),
+                )
+                verified_identity = gen_identity.semantic_key
+                verification_findings = ()
         except Exception as exc:
             _report_post_pivot_failure("update_artifact_verification_failed")
             return progress.finish(
@@ -580,48 +595,36 @@ def run_update_transaction(
                 findings=(f"Installed plugin verification failed: {exc}",),
             )
 
-        verified_identity = (
-            verification.identity.semantic_key if verification.identity is not None else None
-        )
-        verification_findings = tuple(
-            f"{finding.check}: {finding.message}" for finding in verification.findings
-        )
-        try:
-            has_error = any(
-                finding.severity is Severity.ERROR for finding in verification.findings
-            )
-            if has_error or verified_identity is None:
-                if verified_identity is None and not verification_findings:
-                    verification_findings = (
-                        "Installed plugin verification returned no exact identity.",
-                    )
-                return progress.finish(
-                    UpdateTransactionOutcome.FAILED_POSTCONDITION,
-                    expected_version=expected_version,
-                    install_result=install_result,
-                    verified_identity=verified_identity,
-                    findings=install_result.findings + verification_findings,
-                )
-            assert obligation is not None
-            if not clear_obligation(resolved_home, expected=obligation):
-                return progress.finish(
-                    UpdateTransactionOutcome.FAILED_POSTCONDITION,
-                    expected_version=expected_version,
-                    install_result=install_result,
-                    verified_identity=verified_identity,
-                    findings=install_result.findings
-                    + verification_findings
-                    + ("Publication succeeded but its obligation could not be cleared.",),
+        has_error = bool(verification_findings)
+        if has_error or verified_identity is None:
+            if verified_identity is None and not verification_findings:
+                verification_findings = (
+                    "Installed plugin verification returned no exact identity.",
                 )
             return progress.finish(
-                UpdateTransactionOutcome.COMPLETED,
+                UpdateTransactionOutcome.FAILED_POSTCONDITION,
                 expected_version=expected_version,
                 install_result=install_result,
                 verified_identity=verified_identity,
                 findings=install_result.findings + verification_findings,
             )
-        finally:
-            if verification.lease is not None:
-                verification.lease.close()
+        assert obligation is not None
+        if not clear_obligation(resolved_home, expected=obligation):
+            return progress.finish(
+                UpdateTransactionOutcome.FAILED_POSTCONDITION,
+                expected_version=expected_version,
+                install_result=install_result,
+                verified_identity=verified_identity,
+                findings=install_result.findings
+                + verification_findings
+                + ("Publication succeeded but its obligation could not be cleared.",),
+            )
+        return progress.finish(
+            UpdateTransactionOutcome.COMPLETED,
+            expected_version=expected_version,
+            install_result=install_result,
+            verified_identity=verified_identity,
+            findings=install_result.findings + verification_findings,
+        )
     finally:
         shutil.rmtree(working_dir, ignore_errors=True)

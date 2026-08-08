@@ -390,11 +390,14 @@ def test_hook_repair_does_not_follow_incarnation_symlinks(tmp_path: Path) -> Non
 # ---------------------------------------------------------------------------
 
 
-def test_expected_version_present_uses_full_verification(tmp_path: Path) -> None:
-    """With expected_version present, verification includes
-    verify_installed_plugin_artifact and clears the obligation on success.
+def test_expected_version_present_uses_full_verification(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With expected_version present, verification resolves the current
+    generation for that exact version and clears the obligation on success.
     """
     from autoskillit.cli.update import _obligation_repair as m
+    from autoskillit.core import installed_plugin_artifact_manifest_path
     from autoskillit.workspace import (
         read_obligation,
         update_obligation_expected_version,
@@ -407,38 +410,105 @@ def test_expected_version_present_uses_full_verification(tmp_path: Path) -> None
     )
     update_obligation_expected_version(home, expected=obligation, expected_version="1.1.0")
 
-    captured_specs: list[object] = []
-    captured_kwargs: list[dict[str, object]] = []
+    gen_root = tmp_path / "generation-root"
+    captured_generation_calls: list[tuple[object, str, str]] = []
+    captured_identity_calls: list[tuple[object, dict[str, object]]] = []
 
-    def fake_verify(spec: object) -> MagicMock:
-        captured_specs.append(spec)
-        return MagicMock(identity=MagicMock(semantic_key="x"), findings=(), lease=None)
+    def fake_resolve_current_generation(home_arg: object, plugin_ref: str, version: str) -> Path:
+        captured_generation_calls.append((home_arg, plugin_ref, version))
+        return gen_root
+
+    def fake_read_identity(managed_path: object, **_kwargs: object) -> MagicMock:
+        captured_identity_calls.append((managed_path, dict(_kwargs)))
+        return MagicMock(semantic_key="x")
+
+    monkeypatch.setattr(
+        "autoskillit.core.resolve_current_generation", fake_resolve_current_generation
+    )
+    monkeypatch.setattr(
+        "autoskillit.core.read_installed_plugin_artifact_identity", fake_read_identity
+    )
 
     calls: list[list[str]] = []
+    captured_kwargs: list[dict[str, object]] = []
 
     def runner(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
         calls.append(list(cmd))
         captured_kwargs.append(kwargs)
         return subprocess.CompletedProcess(cmd, 0)
 
-    original = m.verify_installed_plugin_artifact
-    m.verify_installed_plugin_artifact = fake_verify
-    try:
-        result = m.attempt_obligation_repair(
-            home,
-            environment={},
-            process_runner=runner,
-            entrypoint=Path("autoskillit"),
-        )
-    finally:
-        m.verify_installed_plugin_artifact = original
+    result = m.attempt_obligation_repair(
+        home,
+        environment={},
+        process_runner=runner,
+        entrypoint=Path("autoskillit"),
+    )
 
     assert result.outcome is m.ObligationRepairOutcome.CLEARED
     assert read_obligation(home) is None
-    assert len(captured_specs) == 1
-    assert captured_specs[0].expected_version == "1.1.0"  # type: ignore[attr-defined]
+    assert len(captured_generation_calls) == 1
+    assert captured_generation_calls[0][2] == "1.1.0"
+    assert captured_identity_calls == [
+        (
+            gen_root,
+            {
+                "expected_semantic_key": "autoskillit@autoskillit-local:1.1.0",
+                "manifest_path": installed_plugin_artifact_manifest_path(gen_root),
+            },
+        )
+    ]
     assert calls == [["autoskillit", "install", "--maintenance-update"]]
     assert captured_kwargs[0]["env"] == {"HOME": str(home)}
+
+
+def test_mismatched_generation_identity_keeps_obligation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from autoskillit.cli.update import _obligation_repair as m
+    from autoskillit.core import PluginArtifactValidationError
+    from autoskillit.workspace import (
+        read_obligation,
+        update_obligation_expected_version,
+        write_obligation,
+    )
+
+    obligation = write_obligation(
+        tmp_path,
+        previous_version="1.0.0",
+        originating_phase="upgrade-subprocess-gate",
+    )
+    update_obligation_expected_version(
+        tmp_path,
+        expected=obligation,
+        expected_version="1.1.0",
+    )
+    gen_root = tmp_path / "generation-root"
+
+    monkeypatch.setattr(
+        "autoskillit.core.resolve_current_generation",
+        lambda _home, _plugin_ref, _version: gen_root,
+    )
+
+    def reject_mismatched_identity(_managed_path: object, **kwargs: object) -> None:
+        assert kwargs["expected_semantic_key"] == "autoskillit@autoskillit-local:1.1.0"
+        raise PluginArtifactValidationError("installed plugin semantic identity mismatch")
+
+    monkeypatch.setattr(
+        "autoskillit.core.read_installed_plugin_artifact_identity",
+        reject_mismatched_identity,
+    )
+
+    result = m.attempt_obligation_repair(
+        tmp_path,
+        environment={},
+        process_runner=lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 0),
+        entrypoint=Path("autoskillit"),
+    )
+
+    assert result.outcome is m.ObligationRepairOutcome.FAILED
+    remaining = read_obligation(tmp_path)
+    assert remaining is not None
+    assert remaining.expected_version == "1.1.0"
 
 
 @pytest.mark.parametrize("persisted_version", [None, "not a version"])
@@ -477,11 +547,22 @@ def test_unknown_version_probes_then_verifies_exact_state(
     entrypoint.write_text("#!/bin/sh\n")
     entrypoint.chmod(0o755)
 
-    captured_specs: list[object] = []
+    gen_root = tmp_path / "generation-root"
+    captured_generation_calls: list[tuple[object, str, str]] = []
 
-    def fake_verify(spec: object) -> MagicMock:
-        captured_specs.append(spec)
-        return MagicMock(identity=MagicMock(semantic_key="x"), findings=(), lease=None)
+    def fake_resolve_current_generation(home_arg: object, plugin_ref: str, version: str) -> Path:
+        captured_generation_calls.append((home_arg, plugin_ref, version))
+        return gen_root
+
+    def fake_read_identity(managed_path: object, **_kwargs: object) -> MagicMock:
+        return MagicMock(semantic_key="x")
+
+    monkeypatch.setattr(
+        "autoskillit.core.resolve_current_generation", fake_resolve_current_generation
+    )
+    monkeypatch.setattr(
+        "autoskillit.core.read_installed_plugin_artifact_identity", fake_read_identity
+    )
 
     calls: list[list[str]] = []
 
@@ -490,27 +571,24 @@ def test_unknown_version_probes_then_verifies_exact_state(
         stdout = "1.1.0\n" if cmd[-1] == "--version" else None
         return subprocess.CompletedProcess(cmd, 0, stdout=stdout)
 
-    original = m.verify_installed_plugin_artifact
-    m.verify_installed_plugin_artifact = fake_verify
-    try:
-        result = m.attempt_obligation_repair(
-            home,
-            environment={"PATH": str(entrypoint.parent)},
-            process_runner=runner,
-        )
-    finally:
-        m.verify_installed_plugin_artifact = original
+    result = m.attempt_obligation_repair(
+        home,
+        environment={"PATH": str(entrypoint.parent)},
+        process_runner=runner,
+    )
 
     assert result.outcome is m.ObligationRepairOutcome.CLEARED
     assert read_obligation(home) is None
-    assert captured_specs[0].expected_version == "1.1.0"  # type: ignore[attr-defined]
+    assert captured_generation_calls[0][2] == "1.1.0"
     assert calls == [
         [str(entrypoint), "install", "--maintenance-update"],
         [str(entrypoint), "--version"],
     ]
 
 
-def test_unknown_version_requires_exact_installed_identity(tmp_path: Path) -> None:
+def test_unknown_version_requires_exact_installed_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from autoskillit.cli.update import _obligation_repair as m
     from autoskillit.workspace import read_obligation, write_obligation
 
@@ -524,21 +602,19 @@ def test_unknown_version_requires_exact_installed_identity(tmp_path: Path) -> No
         stdout = "1.1.0\n" if cmd[-1] == "--version" else None
         return subprocess.CompletedProcess(cmd, 0, stdout=stdout)
 
-    original = m.verify_installed_plugin_artifact
-    m.verify_installed_plugin_artifact = lambda _spec: MagicMock(
-        identity=None,
-        findings=(),
-        lease=None,
+    # No current generation resolves for the probed version — the exact
+    # installed identity required to clear the obligation is unavailable.
+    monkeypatch.setattr(
+        "autoskillit.core.resolve_current_generation",
+        lambda _home, _plugin_ref, _version: None,
     )
-    try:
-        result = m.attempt_obligation_repair(
-            tmp_path,
-            environment={},
-            process_runner=runner,
-            entrypoint=Path("autoskillit"),
-        )
-    finally:
-        m.verify_installed_plugin_artifact = original
+
+    result = m.attempt_obligation_repair(
+        tmp_path,
+        environment={},
+        process_runner=runner,
+        entrypoint=Path("autoskillit"),
+    )
 
     assert result.outcome is m.ObligationRepairOutcome.FAILED
     assert read_obligation(tmp_path) is not None
@@ -570,7 +646,12 @@ def test_remaining_broken_hooks_keep_obligation(tmp_path: Path) -> None:
     assert read_obligation(tmp_path) is not None
 
 
-def test_compare_and_clear_occurs_before_verification_lease_release(tmp_path: Path) -> None:
+def test_compare_and_clear_occurs_after_generation_identity_is_verified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The obligation is only cleared after the current generation resolves
+    and its identity is read back — never before verification completes.
+    """
     from autoskillit.cli.update import _obligation_repair as m
     from autoskillit.workspace import update_obligation_expected_version, write_obligation
 
@@ -585,15 +666,23 @@ def test_compare_and_clear_occurs_before_verification_lease_release(tmp_path: Pa
         expected_version="1.1.0",
     )
     events: list[str] = []
-    lease = MagicMock()
-    lease.close.side_effect = lambda: events.append("close")
-    original_verify = m.verify_installed_plugin_artifact
-    original_clear = m.clear_obligation
-    m.verify_installed_plugin_artifact = lambda _spec: MagicMock(
-        identity=MagicMock(semantic_key="x"),
-        findings=(),
-        lease=lease,
+    gen_root = tmp_path / "generation-root"
+
+    def fake_resolve_current_generation(_home: object, _plugin_ref: str, _version: str) -> Path:
+        events.append("resolve")
+        return gen_root
+
+    def fake_read_identity(_managed_path: object, **_kwargs: object) -> MagicMock:
+        events.append("verify")
+        return MagicMock(semantic_key="x")
+
+    monkeypatch.setattr(
+        "autoskillit.core.resolve_current_generation", fake_resolve_current_generation
     )
+    monkeypatch.setattr(
+        "autoskillit.core.read_installed_plugin_artifact_identity", fake_read_identity
+    )
+    original_clear = m.clear_obligation
     m.clear_obligation = lambda *_args, **_kwargs: events.append("clear") or True
     try:
         result = m.attempt_obligation_repair(
@@ -603,14 +692,15 @@ def test_compare_and_clear_occurs_before_verification_lease_release(tmp_path: Pa
             entrypoint=Path("autoskillit"),
         )
     finally:
-        m.verify_installed_plugin_artifact = original_verify
         m.clear_obligation = original_clear
 
     assert result.outcome is m.ObligationRepairOutcome.CLEARED
-    assert events == ["clear", "close"]
+    assert events == ["resolve", "verify", "clear"]
 
 
-def test_unexpected_verification_error_is_mapped_to_failure(tmp_path: Path) -> None:
+def test_unexpected_verification_error_is_mapped_to_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from autoskillit.cli.update import _obligation_repair as m
     from autoskillit.workspace import (
         read_obligation,
@@ -628,19 +718,18 @@ def test_unexpected_verification_error_is_mapped_to_failure(tmp_path: Path) -> N
         expected=obligation,
         expected_version="1.1.0",
     )
-    original_verify = m.verify_installed_plugin_artifact
-    m.verify_installed_plugin_artifact = lambda _spec: (_ for _ in ()).throw(
-        RuntimeError("verification backend failed")
+
+    def raise_backend_failure(_home: object, _plugin_ref: str, _version: str) -> Path:
+        raise RuntimeError("verification backend failed")
+
+    monkeypatch.setattr("autoskillit.core.resolve_current_generation", raise_backend_failure)
+
+    result = m.attempt_obligation_repair(
+        tmp_path,
+        environment={},
+        process_runner=lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 0),
+        entrypoint=Path("autoskillit"),
     )
-    try:
-        result = m.attempt_obligation_repair(
-            tmp_path,
-            environment={},
-            process_runner=lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 0),
-            entrypoint=Path("autoskillit"),
-        )
-    finally:
-        m.verify_installed_plugin_artifact = original_verify
 
     assert result.outcome is m.ObligationRepairOutcome.FAILED
     assert "verification backend failed" in result.findings[0]

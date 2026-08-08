@@ -36,6 +36,8 @@ _PLUGIN_ARTIFACT_ACTIONS = frozenset(
         "acquire",
         "release",
         "publish",
+        "publish_generation",
+        "self_heal_republish",
         "repair",
         "retire",
         "cancel_retirement",

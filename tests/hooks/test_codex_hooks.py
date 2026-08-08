@@ -51,9 +51,14 @@ def test_codex_hooks_require_an_exact_installed_artifact(
             action="publish",
         )
 
+    # Bindingless path resolves from legacy cache
     assert _resolve_codex_hooks_dir() == hooks_dir
     dispatcher.write_text("# tampered dispatcher")
     assert _resolve_codex_hooks_dir() == HOOKS_DIR
+
+    # With explicit plugin_dir, hooks resolve from the provided path
+    dispatcher.write_text("# exact dispatcher restored")
+    assert _resolve_codex_hooks_dir(plugin_dir=root) == hooks_dir
 
 
 class TestNoThirdPartyToml:

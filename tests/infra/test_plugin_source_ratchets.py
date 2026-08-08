@@ -70,9 +70,14 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "A failed snapshot construction removes only its private transaction staging directory.",
     ),
-    ("cli/_marketplace.py", "upgrade", "scripts_dir.rename"): (
+    (
+        "workspace/_projected_artifact/_generation_publication.py",
+        "_sweep_orphaned_staging",
+        "shutil.rmtree",
+    ): (
         1,
-        "Legacy package layout migration runs inside the installed-plugin transaction.",
+        "Orphan-staging sweep removes only private staging directories that were "
+        "never promoted to a published generation (crash-before-flip debris).",
     ),
     ("core/_plugin_cache.py", "try_reclaim", "record.manifest_path.unlink"): (
         1,
@@ -201,6 +206,66 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Non-public staging cleanup precedes artifact publication.",
     ),
     (
+        "workspace/_projected_artifact/_generation_publication.py",
+        "_replace_symlink",
+        "temporary.unlink",
+    ): (
+        1,
+        "Clears a leftover process-private temp symlink candidate (PID-scoped name) "
+        "before staging the atomic generation-selector flip.",
+    ),
+    (
+        "workspace/_projected_artifact/_generation_publication.py",
+        "_replace_symlink",
+        "os.replace",
+    ): (
+        1,
+        "The sole generation-selector commit point: renames the process-private temp "
+        "symlink onto the public selector path under the caller's install lock.",
+    ),
+    (
+        "workspace/_projected_artifact/_generation_publication.py",
+        "publish_generation",
+        "os.rename",
+    ): (
+        1,
+        "Moves digest-verified staged content from its private staging directory to "
+        "its final generation path; the tree is unpublished until this rename.",
+    ),
+    (
+        "workspace/_projected_artifact/_generation_publication.py",
+        "publish_generation",
+        "shutil.rmtree",
+    ): (
+        1,
+        "Failure cleanup removes only the private, unpublished staging directory "
+        "created for this publish attempt.",
+    ),
+    (
+        "workspace/_projected_artifact/_generation_publication.py",
+        "publish_generation",
+        "selector.unlink",
+    ): (
+        1,
+        "Restores an absent pre-publication selector after a failed atomic flip.",
+    ),
+    (
+        "workspace/_projected_artifact/_generation_publication.py",
+        "_discard_unpublished_generation",
+        "shutil.rmtree",
+    ): (
+        1,
+        "Removes only the exact fresh generation that failed before selector commitment.",
+    ),
+    (
+        "workspace/_projected_artifact/_generation_publication.py",
+        "_discard_unpublished_generation",
+        "path.unlink",
+    ): (
+        1,
+        "Removes the manifest and lease sidecars for the exact unpublished generation.",
+    ),
+    (
         "execution/backends/codex.py",
         "_atomically_replace_explorer_projection",
         "os.replace",
@@ -220,10 +285,6 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
 }
 
 PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
-    ("cli/_marketplace.py", "_run_claude_admin", "()"): (
-        1,
-        "The centralized Claude administration gateway intentionally consumes no launch binding.",
-    ),
     ("cli/session/_session_cook.py", "cook", "pass_fds"): (
         1,
         "Cook passes the stable merge of command, home, and attempt descriptors.",

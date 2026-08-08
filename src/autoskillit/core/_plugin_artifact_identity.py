@@ -32,6 +32,52 @@ def installed_plugin_artifact_root(
     return installed_plugin_cache_dir(home, plugin_ref) / version
 
 
+# ---------------------------------------------------------------------------
+# Generation store — AutoSkillit-owned immutable-path publication
+# ---------------------------------------------------------------------------
+
+_GENERATION_STORE_ROOT = ".autoskillit/plugin-generations"
+
+
+def generation_store_root(home: Path, plugin_ref: str) -> Path:
+    """Return the generation store root for a plugin."""
+    plugin_name = plugin_ref.partition("@")[0]
+    return Path(home) / _GENERATION_STORE_ROOT / plugin_name
+
+
+def generation_version_root(home: Path, plugin_ref: str, version: str) -> Path:
+    """Return the version directory inside the generation store."""
+    return generation_store_root(home, plugin_ref) / version
+
+
+def generation_artifact_root(
+    home: Path, plugin_ref: str, version: str, incarnation_id: str
+) -> Path:
+    """Return the immutable generation directory for one incarnation."""
+    return generation_version_root(home, plugin_ref, version) / incarnation_id
+
+
+def generation_selector_path(home: Path, plugin_ref: str, version: str) -> Path:
+    """Return the ``current`` symlink that selects the active generation."""
+    return generation_version_root(home, plugin_ref, version) / "current"
+
+
+def resolve_current_generation(home: Path, plugin_ref: str, version: str) -> Path | None:
+    """Resolve the ``current`` selector to the active generation directory.
+
+    Returns ``None`` when no selector exists or the target is missing.
+    """
+    selector = generation_selector_path(home, plugin_ref, version)
+    if not selector.is_symlink():
+        return None
+    try:
+        version_root = selector.parent.resolve(strict=True)
+        target = selector.resolve(strict=True)
+    except OSError:
+        return None
+    return target if target.is_dir() and target.parent == version_root else None
+
+
 def installed_plugin_artifact_manifest_path(managed_root: Path) -> Path:
     """Return the stable external manifest for one installed plugin root."""
     root = Path(managed_root)
@@ -74,6 +120,33 @@ def installed_plugin_artifact_manifest_payload(
         "managed_path": str(identity.managed_path),
         "manifest_path": str(identity.manifest_path),
     }
+
+
+def is_python_bytecode_path(path: Path) -> bool:
+    """Return whether *path* names interpreter-generated Python bytecode."""
+    return (path.name == "__pycache__" and path.is_dir()) or (
+        path.name.endswith((".pyc", ".pyo")) and path.is_file()
+    )
+
+
+def _classify_bytecode_contamination(root: Path) -> str:
+    """Scan an artifact tree for bytecode contamination.
+
+    Returns a short description if ``__pycache__``/``*.pyc``/``*.pyo`` are
+    found, empty string otherwise. Claims co-occurrence, not causation —
+    "digest mismatch with bytecode contamination present."
+    """
+    bytecode_paths = [path for path in root.rglob("*") if is_python_bytecode_path(path)]
+    pycache_dirs = [path for path in bytecode_paths if path.name == "__pycache__"]
+    pyc_files = [path for path in bytecode_paths if path.name != "__pycache__"]
+    if not pycache_dirs and not pyc_files:
+        return ""
+    parts: list[str] = []
+    if pycache_dirs:
+        parts.append(f"{len(pycache_dirs)} __pycache__ dir(s)")
+    if pyc_files:
+        parts.append(f"{len(pyc_files)} .pyc/.pyo file(s)")
+    return ", ".join(parts)
 
 
 def read_installed_plugin_artifact_identity(
@@ -176,6 +249,19 @@ def read_installed_plugin_artifact_identity(
         raise PluginArtifactValidationError("installed plugin managed path identity mismatch")
     if raw.get("manifest_path") != str(canonical_manifest):
         raise PluginArtifactValidationError("installed plugin manifest path identity mismatch")
+    # Generation-store identity cross-check: when the directory name IS a
+    # canonical incarnation_id (uuid4 hex), it must match the manifest's
+    # incarnation_id — the path IS the identity.  Legacy Claude-cache
+    # artifacts use version strings as directory names, so only enforce
+    # this for directories that look like incarnation ids.
+    if (
+        is_canonical_plugin_artifact_incarnation_id(canonical_root.name)
+        and raw["incarnation_id"] != canonical_root.name
+    ):
+        raise PluginArtifactValidationError(
+            f"installed plugin incarnation_id {raw['incarnation_id']!r} does not "
+            f"match directory name {canonical_root.name!r}"
+        )
     try:
         observed_digest = directory_tree_digest(canonical_root)
     except OSError as exc:
@@ -187,6 +273,12 @@ def read_installed_plugin_artifact_identity(
             f"installed plugin artifact cannot be digested: {canonical_root}"
         ) from exc
     if raw["artifact_digest"] != observed_digest:
+        contamination = _classify_bytecode_contamination(canonical_root)
+        if contamination:
+            raise PluginArtifactValidationError(
+                f"installed plugin content digest mismatch "
+                f"(bytecode contamination present: {contamination})"
+            )
         raise PluginArtifactValidationError("installed plugin content digest mismatch")
     return PluginArtifactIdentity(
         semantic_key=raw["semantic_key"],

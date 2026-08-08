@@ -201,7 +201,10 @@ def test_main_repair_classifies_missing_expected_version_as_incomplete(
     that might enumerate specific outcomes.
     """
     app_module = importlib.import_module("autoskillit.cli.app")
-    from autoskillit.cli.update._obligation_repair import ObligationRepairOutcome
+    from autoskillit.cli.update._obligation_repair import (
+        ObligationRepairOutcome,
+        ObligationRepairResult,
+    )
 
     monkeypatch.setattr(app_module, "app", lambda: None)
     monkeypatch.setattr(
@@ -216,7 +219,7 @@ def test_main_repair_classifies_missing_expected_version_as_incomplete(
     monkeypatch.setattr(sys, "argv", ["autoskillit", "doctor", "--json"])
     monkeypatch.setattr(
         "autoskillit.cli.update._obligation_repair.attempt_obligation_repair",
-        lambda _home: MagicMock(
+        lambda _home: ObligationRepairResult(
             outcome=ObligationRepairOutcome.MISSING_EXPECTED_VERSION,
             findings=("obligation_stale: expected 0.9.0, observed 1.1.0",),
         ),

@@ -14,6 +14,14 @@ from tests.cli._self_invoke_helpers import assert_valid_maintenance_install_argv
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 
+def _successful_maintenance_process_runner(
+    cmd: list[str], **_kwargs: object
+) -> subprocess.CompletedProcess[str]:
+    assert_valid_maintenance_install_argv(cmd)
+    stdout = "1.1.0\n" if cmd[-1] == "--version" else None
+    return subprocess.CompletedProcess(cmd, 0, stdout=stdout)
+
+
 def _publish_cache_incarnation(
     cache_dir: Path,
     version: str,
@@ -514,12 +522,7 @@ def test_mismatched_generation_identity_keeps_obligation(
     result = m.attempt_obligation_repair(
         tmp_path,
         environment={},
-        process_runner=lambda cmd, **_kwargs: (
-            assert_valid_maintenance_install_argv(cmd),
-            subprocess.CompletedProcess(
-                cmd, 0, stdout=("1.1.0\n" if cmd[-1] == "--version" else None)
-            ),
-        )[1],
+        process_runner=_successful_maintenance_process_runner,
         entrypoint=Path("autoskillit"),
     )
 
@@ -670,12 +673,7 @@ def test_remaining_broken_hooks_keep_obligation(tmp_path: Path) -> None:
         result = m.attempt_obligation_repair(
             tmp_path,
             environment={},
-            process_runner=lambda cmd, **_kwargs: (
-                assert_valid_maintenance_install_argv(cmd),
-                subprocess.CompletedProcess(
-                    cmd, 0, stdout=("1.1.0\n" if cmd[-1] == "--version" else None)
-                ),
-            )[1],
+            process_runner=_successful_maintenance_process_runner,
             entrypoint=Path("autoskillit"),
         )
     finally:
@@ -728,12 +726,7 @@ def test_compare_and_clear_occurs_after_generation_identity_is_verified(
         result = m.attempt_obligation_repair(
             tmp_path,
             environment={},
-            process_runner=lambda cmd, **_kwargs: (
-                assert_valid_maintenance_install_argv(cmd),
-                subprocess.CompletedProcess(
-                    cmd, 0, stdout=("1.1.0\n" if cmd[-1] == "--version" else None)
-                ),
-            )[1],
+            process_runner=_successful_maintenance_process_runner,
             entrypoint=Path("autoskillit"),
         )
     finally:
@@ -772,12 +765,7 @@ def test_unexpected_verification_error_is_mapped_to_failure(
     result = m.attempt_obligation_repair(
         tmp_path,
         environment={},
-        process_runner=lambda cmd, **_kwargs: (
-            assert_valid_maintenance_install_argv(cmd),
-            subprocess.CompletedProcess(
-                cmd, 0, stdout=("1.1.0\n" if cmd[-1] == "--version" else None)
-            ),
-        )[1],
+        process_runner=_successful_maintenance_process_runner,
         entrypoint=Path("autoskillit"),
     )
 

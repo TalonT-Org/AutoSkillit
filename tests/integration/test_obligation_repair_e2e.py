@@ -121,8 +121,9 @@ def test_obligation_repair_e2e_clears_obligation_with_typed_argv(
     # then the install call with both flags.
     recorded = log_path.read_text(encoding="utf-8").splitlines()
     assert len(recorded) == 1, recorded
-    argv_words = recorded[0].split()
-    assert "--maintenance-update" in argv_words
-    assert "--expected-version" in argv_words
-    idx = argv_words.index("--expected-version")
-    assert argv_words[idx + 1] == "1.1.0"
+    assert recorded[0].split() == [
+        "install",
+        "--maintenance-update",
+        "--expected-version",
+        "1.1.0",
+    ]

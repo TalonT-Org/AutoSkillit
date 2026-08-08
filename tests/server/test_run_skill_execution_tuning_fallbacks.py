@@ -146,15 +146,24 @@ def test_execution_tuning_step_fields_have_matching_runtime_read_sites() -> None
     inside run_skill(), so a table entry added without a matching if-block
     — the exact silent-no-op drift this table exists to prevent — fails CI
     instead of silently doing nothing at runtime."""
+    import ast
     import inspect
 
     from autoskillit.server.tools import tools_execution
 
-    source = inspect.getsource(tools_execution.run_skill)
+    tree = ast.parse(inspect.getsource(tools_execution.run_skill))
+    read_fields = {
+        node.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "_recipe_step"
+        and isinstance(node.ctx, ast.Load)
+    }
     missing = [
         field_name
         for field_name in tools_execution._EXECUTION_TUNING_STEP_FIELDS.values()
-        if f"_recipe_step.{field_name}" not in source
+        if field_name not in read_fields
     ]
     assert not missing, (
         f"EXECUTION_TUNING RecipeStep field(s) in _EXECUTION_TUNING_STEP_FIELDS have "

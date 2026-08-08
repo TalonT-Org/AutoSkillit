@@ -591,3 +591,34 @@ class TestRetiredArtifactShapeRegistry:
 
         assert reconcile_install_artifacts() == ()
         assert reconcile_install_artifacts() == ()
+
+    def test_legacy_retirement_enqueue_failure_does_not_abort_reconciliation(
+        self,
+        home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from autoskillit.core import PluginArtifactRetirementEngine
+        from autoskillit.workspace import (
+            reconcile_install_artifacts,
+            write_installed_plugin_artifact_manifest_locked,
+        )
+
+        legacy_version = home / ".claude/plugins/cache/autoskillit-local/autoskillit/1.2.3"
+        legacy_version.mkdir(parents=True)
+        (legacy_version / "content.txt").write_text("legacy", encoding="utf-8")
+        write_installed_plugin_artifact_manifest_locked(
+            legacy_version,
+            semantic_key="autoskillit@autoskillit-local:1.2.3",
+            action="publish",
+        )
+
+        def fail_enqueue(*_args: object, **_kwargs: object) -> None:
+            raise ValueError("corrupt retirement cache")
+
+        monkeypatch.setattr(
+            PluginArtifactRetirementEngine,
+            "enqueue_retirement",
+            fail_enqueue,
+        )
+
+        assert reconcile_install_artifacts() == ()

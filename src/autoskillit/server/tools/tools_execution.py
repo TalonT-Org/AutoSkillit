@@ -1223,7 +1223,8 @@ async def run_skill(
                     "an attested recipe invocation requires its exact step_name",
                 )
             _run_skill_tool_def = get_tool_def("run_skill")
-            assert _run_skill_tool_def is not None, "run_skill must be a registered ToolDef"
+            if _run_skill_tool_def is None:
+                raise RuntimeError("run_skill must be a registered ToolDef")
             _actual_mcp_kwargs = _build_actual_mcp_kwargs(
                 _run_skill_tool_def,
                 {

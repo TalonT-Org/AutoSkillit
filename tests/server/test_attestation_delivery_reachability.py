@@ -212,6 +212,37 @@ async def test_attested_run_skill_never_forwards_an_unresolved_model_template(
     )
 
 
+async def test_attested_run_skill_reports_missing_canonical_tool_def(
+    tmp_path,
+    tool_ctx_ready_recipe,
+    monkeypatch,
+) -> None:
+    """A missing canonical run_skill definition remains a loud runtime invariant."""
+    from autoskillit.server.tools import tools_execution
+
+    ready = tool_ctx_ready_recipe
+    with_args = ready.with_args
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    monkeypatch.setattr(tools_execution, "get_tool_def", lambda _name: None)
+
+    result = json.loads(
+        await tools_execution.run_skill(
+            with_args["skill_command"],
+            str(work_dir),
+            step_name=with_args["step_name"],
+            output_dir=with_args["output_dir"],
+            recipe_execution_id=ready.credential["execution_id"],
+            invocation_template_digest=ready.template_digest,
+            skill_inputs={name: "probe value" for name in with_args["skill_inputs"]},
+        )
+    )
+
+    assert result["success"] is False
+    assert result["subtype"] == "crashed"
+    assert "RuntimeError: run_skill must be a registered ToolDef" in result["result"]
+
+
 async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
     tmp_path,
     tool_ctx_ready_recipe,

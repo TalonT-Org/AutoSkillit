@@ -56,9 +56,7 @@ def _build_cook_projection_context(
         resolved_exploration_profile=resolved_exploration_profile,
     )
     if explorer_provisioning_eligible is not None:
-        from dataclasses import replace as _replace
-
-        return _replace(
+        return replace(
             base,
             explorer_provisioning_eligible=explorer_provisioning_eligible,
             parent_sandbox_mode=(

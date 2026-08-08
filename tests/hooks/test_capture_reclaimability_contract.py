@@ -31,14 +31,3 @@ class TestReclaimabilityTotality:
             elif entry.kind is ReclaimKind.FORENSIC_HOLD:
                 assert isinstance(entry.duration_seconds, (int, float))
                 assert entry.duration_seconds > 0
-
-    def test_no_state_is_counted_but_unreclaimable(self) -> None:
-        """Every state whose frames are counted must have finite reclaim."""
-        for state in CaptureState:
-            if state is CaptureState.DELETED:
-                continue  # tombstone — bounded by max_tombstones
-            entry = STATE_RECLAIMABILITY[state]
-            if entry.kind is ReclaimKind.FORENSIC_HOLD:
-                assert entry.duration_seconds is not None and entry.duration_seconds > 0
-            elif entry.kind is ReclaimKind.SWEEP_AFTER_GRACE:
-                assert entry.duration_seconds is not None and entry.duration_seconds >= 0

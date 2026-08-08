@@ -295,7 +295,9 @@ class InstalledPluginArtifactAuthority:
         """Acquire a shared lease on a generation, re-resolving on reclaim race."""
         lease_path = installed_plugin_artifact_lease_path(managed_root)
         last_error: OSError | None = None
+        attempts = 0
         for _attempt in range(max_retries):
+            attempts = _attempt + 1
             try:
                 return ArtifactLease.acquire_existing_shared(lease_path)
             except OSError as exc:
@@ -312,7 +314,7 @@ class InstalledPluginArtifactAuthority:
                 break
         raise PluginArtifactValidationError(
             f"installed plugin generation lease unavailable after "
-            f"{max_retries} attempts: {last_error}"
+            f"{attempts} attempt(s): {last_error}"
         ) from last_error
 
     def _acquire_from_root(

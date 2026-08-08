@@ -144,7 +144,7 @@ def _generation_store_findings() -> list[InstallStateFinding]:
             )
         ]
     try:
-        identity = read_installed_plugin_artifact_identity(
+        read_installed_plugin_artifact_identity(
             current,
             manifest_path=installed_plugin_artifact_manifest_path(current),
         )
@@ -177,17 +177,6 @@ def _generation_store_findings() -> list[InstallStateFinding]:
                 Severity.ERROR,
                 "generation_artifact_error",
                 f"Current generation at {current} could not be verified: {exc}. "
-                "Run `autoskillit install` to republish.",
-            )
-        ]
-    # Verify incarnation_id matches directory name
-    if identity.incarnation_id != current.name:
-        return [
-            InstallStateFinding(
-                Severity.ERROR,
-                "generation_incarnation_mismatch",
-                f"Current generation directory {current.name} does not match "
-                f"manifest incarnation_id {identity.incarnation_id}. "
                 "Run `autoskillit install` to republish.",
             )
         ]

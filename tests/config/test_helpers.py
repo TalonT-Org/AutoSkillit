@@ -215,20 +215,9 @@ def test_config_authority_keys_superset_of_server_authoritative() -> None:
     from autoskillit.config.ingredient_defaults import SERVER_AUTHORITATIVE_INGREDIENTS
     from autoskillit.core import CALLER_SOVEREIGN_INGREDIENTS, CONFIG_AUTHORITY_KEYS
 
+    assert isinstance(CALLER_SOVEREIGN_INGREDIENTS, frozenset)
     assert SERVER_AUTHORITATIVE_INGREDIENTS <= CONFIG_AUTHORITY_KEYS
     assert CONFIG_AUTHORITY_KEYS - SERVER_AUTHORITATIVE_INGREDIENTS == CALLER_SOVEREIGN_INGREDIENTS
-
-
-def test_caller_sovereign_ingredients_partition_config_authority_keys() -> None:
-    """CALLER_SOVEREIGN_INGREDIENTS must partition CONFIG_AUTHORITY_KEYS together with
-    SERVER_AUTHORITATIVE_INGREDIENTS: non-empty, disjoint, and union-complete."""
-    from autoskillit.config.ingredient_defaults import SERVER_AUTHORITATIVE_INGREDIENTS
-    from autoskillit.core import CALLER_SOVEREIGN_INGREDIENTS, CONFIG_AUTHORITY_KEYS
-
-    assert isinstance(CALLER_SOVEREIGN_INGREDIENTS, frozenset)
-    assert CALLER_SOVEREIGN_INGREDIENTS
-    assert CONFIG_AUTHORITY_KEYS == SERVER_AUTHORITATIVE_INGREDIENTS | CALLER_SOVEREIGN_INGREDIENTS
-    assert SERVER_AUTHORITATIVE_INGREDIENTS & CALLER_SOVEREIGN_INGREDIENTS == frozenset()
     assert "source_dir" in CALLER_SOVEREIGN_INGREDIENTS
 
 

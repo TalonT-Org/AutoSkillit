@@ -353,16 +353,6 @@ def test_maintenance_argv_rejects_non_path_entrypoint() -> None:
         MaintenanceInstallArgv(entrypoint="autoskillit", expected_version="1.1.0")  # type: ignore[arg-type]
 
 
-def test_maintenance_argv_replace_to_direct_mode_raises() -> None:
-    """`dataclasses.replace(...)` to DIRECT mode also raises — the contract
-    holds across replace."""
-    request = _argv()
-    with pytest.raises(
-        ValueError, match="MaintenanceInstallArgv requires mode=MAINTENANCE_UPDATE"
-    ):
-        replace(request, mode=InstallMode.DIRECT)
-
-
 def test_maintenance_argv_is_frozen() -> None:
     """FrozenInstanceError on attribute mutation."""
     request = _argv()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError, replace
+from pathlib import Path
 
 import pytest
 
@@ -13,6 +14,7 @@ from autoskillit.cli._install_contract import (
     InstallProcessStatus,
     InstallRequest,
     InstallResult,
+    MaintenanceInstallArgv,
     process_status_for_result,
     result_from_process_status,
 )
@@ -276,3 +278,103 @@ def test_result_rejects_mutable_or_non_string_findings() -> None:
         InstallResult(outcome=InstallOutcome.COMPLETED, findings=["mutable"])  # type: ignore[arg-type]
     with pytest.raises(TypeError):
         InstallResult(outcome=InstallOutcome.COMPLETED, findings=("ok", 1))  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# MaintenanceInstallArgv — typed argv builder for the maintenance-install
+# child process. These tests pin the construction-time invariants that the
+# rest of the project depends on; hand-built argv must funnel through here.
+# ---------------------------------------------------------------------------
+
+
+def _argv(
+    *,
+    entrypoint: Path | str = Path("/resolved/autoskillit"),
+    expected_version: str = "1.1.0",
+    mode: InstallMode = InstallMode.MAINTENANCE_UPDATE,
+) -> MaintenanceInstallArgv:
+    return MaintenanceInstallArgv(
+        entrypoint=Path(entrypoint) if not isinstance(entrypoint, Path) else entrypoint,
+        expected_version=expected_version,
+        mode=mode,
+    )
+
+
+def test_maintenance_argv_default_to_argv_is_canonical_five_element() -> None:
+    """Default to_argv produces the canonical 5-element argv."""
+    argv = _argv().to_argv()
+    assert argv == [
+        str(Path("/resolved/autoskillit")),
+        "install",
+        "--maintenance-update",
+        "--expected-version",
+        "1.1.0",
+    ]
+
+
+def test_maintenance_argv_to_argv_with_require_registered_plugin_appends_flag() -> None:
+    """require_registered_plugin=True appends the 6th flag."""
+    argv = _argv().to_argv(require_registered_plugin=True)
+    assert argv == [
+        str(Path("/resolved/autoskillit")),
+        "install",
+        "--maintenance-update",
+        "--expected-version",
+        "1.1.0",
+        "--require-registered-plugin",
+    ]
+
+
+@pytest.mark.parametrize("bad_version", ["", "   ", "\t\n"])
+def test_maintenance_argv_rejects_empty_or_whitespace_expected_version(bad_version: str) -> None:
+    """Empty or whitespace-only expected_version raises ValueError."""
+    with pytest.raises(
+        ValueError,
+        match="maintenance update requires a non-empty expected_version string",
+    ):
+        MaintenanceInstallArgv(entrypoint=Path("autoskillit"), expected_version=bad_version)
+
+
+def test_maintenance_argv_rejects_direct_mode() -> None:
+    """Setting mode=DIRECT raises — this builder is maintenance-mode only."""
+    with pytest.raises(
+        ValueError, match="MaintenanceInstallArgv requires mode=MAINTENANCE_UPDATE"
+    ):
+        MaintenanceInstallArgv(
+            entrypoint=Path("autoskillit"),
+            expected_version="1.1.0",
+            mode=InstallMode.DIRECT,
+        )
+
+
+def test_maintenance_argv_rejects_non_path_entrypoint() -> None:
+    """Non-Path entrypoint raises TypeError."""
+    with pytest.raises(TypeError, match="entrypoint must be Path, got str"):
+        MaintenanceInstallArgv(entrypoint="autoskillit", expected_version="1.1.0")  # type: ignore[arg-type]
+
+
+def test_maintenance_argv_replace_to_direct_mode_raises() -> None:
+    """`dataclasses.replace(...)` to DIRECT mode also raises — the contract
+    holds across replace."""
+    request = _argv()
+    with pytest.raises(
+        ValueError, match="MaintenanceInstallArgv requires mode=MAINTENANCE_UPDATE"
+    ):
+        replace(request, mode=InstallMode.DIRECT)
+
+
+def test_maintenance_argv_is_frozen() -> None:
+    """FrozenInstanceError on attribute mutation."""
+    request = _argv()
+    with pytest.raises(FrozenInstanceError):
+        request.expected_version = "2.0.0"  # type: ignore[misc]
+
+
+def test_maintenance_argv_string_entrypoint_via_path_is_accepted() -> None:
+    """A string entrypoint is auto-coerced to Path via _argv helper but the
+    public constructor must reject it; verify the canonical use is Path-only."""
+    argv = MaintenanceInstallArgv(
+        entrypoint=Path("/usr/local/bin/autoskillit"),
+        expected_version="2.0.0",
+    ).to_argv()
+    assert argv[0] == "/usr/local/bin/autoskillit"

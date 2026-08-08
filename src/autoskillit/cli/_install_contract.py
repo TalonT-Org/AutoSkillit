@@ -1,13 +1,18 @@
 """Typed install boundary shared by CLI callers and install implementations.
 
 This module is intentionally a dependency leaf: it performs no I/O and imports
-only from the standard library.
+only from the standard library. It exposes typed requests/results and an argv
+builder for the canonical ``autoskillit install --maintenance-update`` child
+invocation — call sites that spawn the child subprocess must use
+``MaintenanceInstallArgv.to_argv()`` to construct their argv.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
+from pathlib import Path
+from typing import Literal
 
 __all__ = [
     "InstallFailureKind",
@@ -16,6 +21,7 @@ __all__ = [
     "InstallProcessStatus",
     "InstallRequest",
     "InstallResult",
+    "MaintenanceInstallArgv",
     "process_status_for_result",
     "result_from_process_status",
 ]
@@ -114,6 +120,63 @@ class InstallResult:
             isinstance(finding, str) for finding in self.findings
         ):
             raise TypeError("findings must be a tuple of strings")
+
+
+_MaintenanceArgvElement = Literal[
+    "install",
+    "--maintenance-update",
+    "--expected-version",
+    "--require-registered-plugin",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class MaintenanceInstallArgv:
+    """Validated child argv for ``autoskillit install --maintenance-update``.
+
+    Construction enforces ``mode=MAINTENANCE_UPDATE`` and a non-empty
+    ``expected_version`` string. The ``.to_argv()`` method produces the
+    canonical argv for the install --maintenance-update child process. Use
+    this type for ALL subprocess self-invocation of the autoskillit install
+    child with ``--maintenance-update``; hand-built argv literals bypass the
+    type contract and were the root cause of issue #4485.
+    """
+
+    entrypoint: Path
+    expected_version: str
+    mode: InstallMode = InstallMode.MAINTENANCE_UPDATE
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.entrypoint, Path):
+            raise TypeError(f"entrypoint must be Path, got {type(self.entrypoint).__name__}")
+        if not isinstance(self.expected_version, str) or not self.expected_version.strip():
+            raise ValueError("maintenance update requires a non-empty expected_version string")
+        if self.mode is not InstallMode.MAINTENANCE_UPDATE:
+            raise ValueError("MaintenanceInstallArgv requires mode=MAINTENANCE_UPDATE")
+
+    def to_argv(
+        self,
+        *,
+        require_registered_plugin: bool = False,
+    ) -> list[_MaintenanceArgvElement | str]:
+        """Build the canonical child argv for ``install --maintenance-update``.
+
+        ``require_registered_plugin`` controls whether the
+        ``--require-registered-plugin`` flag is appended; it is False by
+        default because the obligation-repair helper and the cross-interpreter
+        smoke utility do not register plugins during their maintenance
+        install. Pass True from the explicit update transaction.
+        """
+        argv: list[_MaintenanceArgvElement | str] = [
+            str(self.entrypoint),
+            "install",
+            "--maintenance-update",
+            "--expected-version",
+            self.expected_version,
+        ]
+        if require_registered_plugin:
+            argv.append("--require-registered-plugin")
+        return argv
 
 
 _OUTCOME_BY_STATUS: dict[

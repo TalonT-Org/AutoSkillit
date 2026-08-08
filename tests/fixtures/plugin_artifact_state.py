@@ -357,28 +357,12 @@ def build_plugin_artifact_state(
                     encoding="utf-8",
                 )
             elif selected is PluginArtifactStateKind.BYTECODE_CONTAMINATED:
-                import os
-                import subprocess
-                import sys
-
                 hooks_dir = spec.managed_root / "hooks"
                 if not hooks_dir.is_dir():
                     hooks_dir.mkdir(parents=True)
-                # Write a sibling module and a script that imports it —
-                # the import triggers __pycache__/*.pyc creation.
-                (hooks_dir / "_sibling.py").write_text("VALUE = 1\n")
-                runner = hooks_dir / "_contaminant.py"
-                runner.write_text("import _sibling\n")
-                env = dict(os.environ)
-                env.pop("PYTHONDONTWRITEBYTECODE", None)
-                env.pop("PYTHONPYCACHEPREFIX", None)
-                subprocess.run(
-                    [sys.executable, str(runner)],
-                    env=env,
-                    capture_output=True,
-                    timeout=10,
-                    check=False,
-                )
+                pycache = hooks_dir / "__pycache__"
+                pycache.mkdir()
+                (pycache / "_dispatch.cpython-311.pyc").write_bytes(b"fixture bytecode")
             elif selected is PluginArtifactStateKind.MISSING_LEASE:
                 spec.lease_path.unlink()
 

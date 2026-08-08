@@ -263,7 +263,7 @@ def install(
     MUST be supplied via the ``--expected-version`` CLI parameter — the
     boundary check below raises ``ValueError`` if it is missing, since the
     maintenance install enforces the strict child contract at
-    ``_marketplace.py:286-294``.
+    ``_marketplace.install()``.
     """
     from autoskillit import __version__
     from autoskillit.cli._init_helpers import _print_next_steps

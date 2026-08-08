@@ -739,6 +739,7 @@ def compute_tool_contract_identity(tool_def: ToolDef) -> str:
         {
             "name": tool_def.name,
             "initialization_operation": tool_def.initialization_operation.value,
+            # Parameter roles are server-side gate policy, not client-visible wire shape.
             "params": [
                 {
                     "handler_parameter": param.handler_parameter,

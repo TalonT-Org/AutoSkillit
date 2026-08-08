@@ -309,3 +309,38 @@ class TestPerCorridorConsumptionChecks:
                     assert not tool.startswith(MARKETPLACE_PREFIX), (
                         "projected artifact must never use MARKETPLACE_PREFIX"
                     )
+
+
+class TestRenderCoherence:
+    """I4: both pipelines share _render_agent_definitions — no third unrendered path."""
+
+    def test_both_pipelines_share_one_renderer(self) -> None:
+        """The two production staging pipelines must use the same render function."""
+        import ast
+        import inspect
+
+        from autoskillit.workspace._projected_artifact import authority, materialization
+
+        mat_source = inspect.getsource(materialization.materialize_sanitized_plugin_root)
+        mat_tree = ast.parse(mat_source)
+        mat_calls = {
+            node.func.id
+            for node in ast.walk(mat_tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_render_agent_definitions"
+        }
+
+        auth_source = inspect.getsource(authority._stage_projected_plugin_artifact)
+        auth_tree = ast.parse(auth_source)
+        auth_calls = {
+            node.func.id
+            for node in ast.walk(auth_tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_render_agent_definitions"
+        }
+
+        assert mat_calls, "materialize_sanitized_plugin_root must call _render_agent_definitions"
+        assert auth_calls, "_stage_projected_plugin_artifact must call _render_agent_definitions"
+        assert mat_calls == auth_calls, "both pipelines must use the same render function name"

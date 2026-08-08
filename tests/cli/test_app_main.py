@@ -187,6 +187,61 @@ def test_main_repair_diagnostics_never_write_stdout(
     ]
 
 
+def test_main_repair_classifies_missing_expected_version_as_incomplete(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """MISSING_EXPECTED_VERSION is auto-classified as an incomplete repair.
+
+    The caller uses an exclusion-based check (`outcome not in {NO_OBLIGATION,
+    CLEARED}`) so any new outcome — including the new MISSING_EXPECTED_VERSION
+    for stale obligations — is treated as an incomplete repair that warrants
+    the warning emission. This test pins the contract against future refactors
+    that might enumerate specific outcomes.
+    """
+    app_module = importlib.import_module("autoskillit.cli.app")
+    from autoskillit.cli.update._obligation_repair import ObligationRepairOutcome
+
+    monkeypatch.setattr(app_module, "app", lambda: None)
+    monkeypatch.setattr(
+        "autoskillit.cli._init_helpers.evict_direct_mcp_entry",
+        lambda *a, **kw: None,
+    )
+    monkeypatch.setattr(
+        "autoskillit.cli.update._update_checks.run_update_checks",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(sys, "argv", ["autoskillit", "doctor", "--json"])
+    monkeypatch.setattr(
+        "autoskillit.cli.update._obligation_repair.attempt_obligation_repair",
+        lambda _home: MagicMock(
+            outcome=ObligationRepairOutcome.MISSING_EXPECTED_VERSION,
+            findings=("obligation_stale: expected 0.9.0, observed 1.1.0",),
+        ),
+    )
+    warnings: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        app_module.logger,
+        "warning",
+        lambda event, **kwargs: warnings.append((event, kwargs)),
+    )
+
+    app_module.main()
+
+    assert capsys.readouterr().out == ""
+    assert warnings == [
+        (
+            "publication_obligation_repair_incomplete",
+            {
+                "outcome": ObligationRepairOutcome.MISSING_EXPECTED_VERSION.value,
+                "finding": "obligation_stale: expected 0.9.0, observed 1.1.0",
+            },
+        )
+    ]
+
+
 def test_serve_activity_check_uses_backend_derived_marker_dir(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

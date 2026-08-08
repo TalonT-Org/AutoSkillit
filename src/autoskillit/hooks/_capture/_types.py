@@ -340,11 +340,5 @@ TRANSITION_RESCUE_BUDGET = SweepBudgetSpec(
 # sweep-grace when a failure record is committed — a record that failed
 # *by* capacity must not *hold* capacity.
 _CAPACITY_FAILURE_REASON_VALUES = frozenset(
-    {
-        _failure_policy.CaptureFailureReason.ACTIVE_CAPACITY_EXHAUSTED.value,
-        _failure_policy.CaptureFailureReason.RETENTION_CAPACITY_EXHAUSTED.value,
-        _failure_policy.CaptureFailureReason.EVIDENCE_CAPACITY_EXHAUSTED.value,
-        _failure_policy.CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED.value,
-        _failure_policy.CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED.value,
-    }
+    reason.value for reason in _failure_policy.CAPACITY_FAILURE_REASONS
 )

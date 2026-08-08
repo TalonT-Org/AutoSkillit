@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from enum import StrEnum
 
 from . import _ledger
-from ._failure_policy import CaptureFailureReason
+from ._failure_policy import CAPACITY_FAILURE_REASONS, CaptureFailureReason
 from ._module_identity import register_module_aliases
 from ._types import CaptureCapacityReason, CaptureCapacitySpec
 
@@ -71,6 +71,10 @@ _FAILURE_REASONS = {
         CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED
     ),
 }
+if frozenset(_FAILURE_REASONS.values()) != CAPACITY_FAILURE_REASONS:
+    raise AssertionError(
+        "_FAILURE_REASONS must cover exactly the capacity CaptureFailureReason members"
+    )
 
 
 def reason_detail(reason: CaptureCapacityReason) -> str:

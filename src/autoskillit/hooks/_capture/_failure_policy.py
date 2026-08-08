@@ -32,6 +32,17 @@ class CaptureFailureReason(StrEnum):
     UNKNOWN_SETUP = "UNKNOWN_SETUP"
 
 
+CAPACITY_FAILURE_REASONS = frozenset(
+    {
+        CaptureFailureReason.ACTIVE_CAPACITY_EXHAUSTED,
+        CaptureFailureReason.RETENTION_CAPACITY_EXHAUSTED,
+        CaptureFailureReason.EVIDENCE_CAPACITY_EXHAUSTED,
+        CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED,
+        CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED,
+    }
+)
+
+
 def os_failure_reason(exc: OSError) -> CaptureFailureReason:
     if exc.errno in {errno.EACCES, errno.EPERM}:
         return CaptureFailureReason.PERMISSION_DENIED

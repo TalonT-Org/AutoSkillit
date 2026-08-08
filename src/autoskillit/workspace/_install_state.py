@@ -38,6 +38,7 @@ from pathlib import Path
 
 from autoskillit.core import (  # IL-005: core only — never cli.InstalledPluginsFile
     RETIRED_INSTALL_ARTIFACT_SHAPES,
+    ArtifactLease,
     PluginArtifactKind,
     PluginArtifactRetirementEngine,
     PluginArtifactUnavailableError,
@@ -48,6 +49,7 @@ from autoskillit.core import (  # IL-005: core only — never cli.InstalledPlugi
     get_logger,
     installed_plugin_artifact_lease_path,
     installed_plugin_artifact_manifest_path,
+    installed_plugin_semantic_key,
     read_installed_plugin_artifact_identity,
     read_retiring_cache,
     registered_install_paths,
@@ -144,11 +146,16 @@ def _generation_store_findings() -> list[InstallStateFinding]:
             )
         ]
     try:
-        read_installed_plugin_artifact_identity(
-            current,
-            manifest_path=installed_plugin_artifact_manifest_path(current),
-        )
-    except PluginArtifactUnavailableError as exc:
+        with ArtifactLease.acquire_existing_shared(installed_plugin_artifact_lease_path(current)):
+            read_installed_plugin_artifact_identity(
+                current,
+                expected_semantic_key=installed_plugin_semantic_key(
+                    plugin_ref,
+                    expected_version,
+                ),
+                manifest_path=installed_plugin_artifact_manifest_path(current),
+            )
+    except (PluginArtifactUnavailableError, OSError) as exc:
         return [
             InstallStateFinding(
                 Severity.ERROR,

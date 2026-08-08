@@ -290,6 +290,46 @@ class TestVerifyInstallState:
 
         assert "generation_artifact_invalid" in _checks(home)
 
+    def test_generation_artifact_invalid_when_semantic_key_mismatches(self, home: Path) -> None:
+        from autoskillit import __version__
+
+        identity = _publish_generation(home, __version__)
+        raw = json.loads(identity.manifest_path.read_text(encoding="utf-8"))
+        raw["semantic_key"] = "different-plugin:9.9.9"
+        identity.manifest_path.write_text(json.dumps(raw), encoding="utf-8")
+
+        assert "generation_artifact_invalid" in _checks(home)
+
+    def test_generation_verification_leases_the_exact_resolved_generation(
+        self,
+        home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import autoskillit.workspace._install_state as install_state
+        from autoskillit import __version__
+        from autoskillit.core import ArtifactLease
+
+        first = _publish_generation(home, __version__)
+        acquire_existing_shared = ArtifactLease.acquire_existing_shared
+        advanced = False
+
+        def advance_then_acquire(_cls: type[ArtifactLease], lock_path: Path) -> ArtifactLease:
+            nonlocal advanced
+            if not advanced:
+                advanced = True
+                _publish_generation(home, __version__)
+            return acquire_existing_shared(lock_path)
+
+        monkeypatch.setattr(
+            ArtifactLease,
+            "acquire_existing_shared",
+            classmethod(advance_then_acquire),
+        )
+
+        assert install_state._generation_store_findings() == []
+        assert advanced is True
+        assert first.managed_path.is_dir()
+
     def test_generation_incarnation_mismatch_when_manifest_disagrees_with_directory(
         self, home: Path
     ) -> None:

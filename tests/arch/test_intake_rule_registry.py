@@ -253,7 +253,7 @@ def test_data_file_bounded_read_exception_does_not_reference_retired_rules() -> 
     assert "completeness rule above" not in rule.exception
 
 
-def test_surviving_intake_rule_wire_order_is_stable_after_removal() -> None:
+def test_intake_rule_wire_order_is_stable() -> None:
     assert [rule.id for rule in CODEX_INTAKE_RULES] == [
         "data-file-bounded-read",
         "outer-result-token-ceiling",

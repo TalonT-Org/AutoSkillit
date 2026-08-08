@@ -984,7 +984,7 @@ def run_capture(
         # B-I5: copy per-store byte-pressure flag to module level so
         # _sweep_after_runner can escalate its budget.
         global _BYTE_PRESSURE_OBSERVED  # noqa: PLW0603
-        if lifecycle is not None and getattr(lifecycle, "byte_pressure_observed", False):
+        if lifecycle is not None and lifecycle.byte_pressure_observed:
             _BYTE_PRESSURE_OBSERVED = True
         if process is not None and process.stdout is not None:
             try:

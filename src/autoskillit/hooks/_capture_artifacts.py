@@ -834,10 +834,8 @@ def run_capture(
                 # PRESERVE_OUTPUT: best-effort failure bookkeeping, then
                 # deliver the bounded verified output with the child's
                 # real exit code.
+                finalization_detail = _capture_replay._bounded_detail(f"{failure_stage} failed")
                 try:
-                    finalization_detail = _capture_replay._bounded_detail(
-                        f"{failure_stage} failed"
-                    )
                     lifecycle.commit_capture_failure(
                         artifact.authority,
                         CaptureFailureEvidence(
@@ -867,7 +865,7 @@ def run_capture(
                 degraded_failure = _capture_replay.failure_transport(
                     reason=finalization_reason,
                     stage=failure_stage,
-                    detail=_capture_replay._bounded_detail(f"{failure_stage} failed"),
+                    detail=finalization_detail,
                     shell_returncode=command_returncode,
                     settlement=None,
                 )

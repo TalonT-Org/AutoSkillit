@@ -7,24 +7,30 @@ disable-model-invocation: true
 
 # Open Kitchen
 
-Call the `open_kitchen` MCP tool to reveal all 24 kitchen tools for this session.
+Activate the AutoSkillit kitchen when the host has not already made its tools available.
 
 ## Critical Constraints
 
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
-- Skip calling `open_kitchen` and assume the kitchen is already open
 - Call this skill from a headless or automated session (it is human-only)
 
 **ALWAYS:**
-- Call `open_kitchen` with no arguments
-- Confirm to the user that kitchen tools are now available
+- Treat authoritative host/session guidance about pre-revealed tools as the source of truth
+- Preserve explicit human-requested activation or promotion, named recipe loading, and
+  reopening after `close_kitchen`
 
 ## Steps
 
-1. Call `open_kitchen` with no arguments.
-2. Confirm the kitchen is open by displaying the list of newly available tools.
-3. Inform the user that all kitchen tools are now available for this session.
+1. Check the host/session guidance and the user's requested outcome.
+2. If the host says the kitchen tools are pre-revealed and the user did not explicitly
+   request promotion, confirm that they are already active and do not make a redundant
+   no-argument `open_kitchen` call solely to gain access.
+3. If the user explicitly requests activation or promotion, call `open_kitchen` with no
+   arguments; promotion remains valid even when the tools are pre-revealed.
+4. Confirm that the requested kitchen state is active.
 
-The kitchen state is session-scoped. Each new coding-agent session starts with kitchen tools hidden. Use `/autoskillit:open-kitchen` to reveal them at the start of each session.
+The kitchen state is session-scoped. `open_kitchen(name=...)` remains valid for named
+recipe loading, and a no-argument call remains valid to reopen the kitchen after
+`close_kitchen`.

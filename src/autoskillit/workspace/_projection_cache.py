@@ -34,6 +34,7 @@ from autoskillit.core import (
     get_logger,
     is_canonical_plugin_artifact_digest,
     is_canonical_plugin_artifact_incarnation_id,
+    is_python_bytecode_path,
     read_versioned_json,
 )
 
@@ -237,9 +238,7 @@ def is_projected_asset(entry: Path, *, top_level: bool) -> bool:
     bound by a content digest.
     """
     name = entry.name
-    if name == "__pycache__":
-        return False
-    if name.endswith((".pyc", ".pyo")):
+    if is_python_bytecode_path(entry):
         return False
     if name in _CANONICAL_SKILL_DIRS:
         return False

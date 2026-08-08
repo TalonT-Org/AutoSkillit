@@ -121,6 +121,11 @@ def installed_plugin_artifact_manifest_payload(
     }
 
 
+def is_python_bytecode_path(path: Path) -> bool:
+    """Return whether *path* names interpreter-generated Python bytecode."""
+    return path.name == "__pycache__" or path.name.endswith((".pyc", ".pyo"))
+
+
 def _classify_bytecode_contamination(root: Path) -> str:
     """Scan an artifact tree for bytecode contamination.
 
@@ -128,8 +133,9 @@ def _classify_bytecode_contamination(root: Path) -> str:
     found, empty string otherwise. Claims co-occurrence, not causation —
     "digest mismatch with bytecode contamination present."
     """
-    pycache_dirs = list(root.rglob("__pycache__"))
-    pyc_files = [*root.rglob("*.pyc"), *root.rglob("*.pyo")]
+    bytecode_paths = [path for path in root.rglob("*") if is_python_bytecode_path(path)]
+    pycache_dirs = [path for path in bytecode_paths if path.name == "__pycache__"]
+    pyc_files = [path for path in bytecode_paths if path.name != "__pycache__"]
     if not pycache_dirs and not pyc_files:
         return ""
     parts: list[str] = []

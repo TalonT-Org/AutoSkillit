@@ -54,6 +54,7 @@ from ._plugin_artifact_identity import (
 from ._plugin_artifact_identity import (
     installed_plugin_cache_dir as installed_plugin_cache_dir,
 )
+from ._plugin_artifact_identity import is_python_bytecode_path as is_python_bytecode_path
 from ._plugin_artifact_identity import (
     read_installed_plugin_artifact_identity as read_installed_plugin_artifact_identity,
 )

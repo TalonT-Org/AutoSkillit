@@ -191,15 +191,32 @@ def test_exemption_registry_starts_empty() -> None:
     assert _BYTECODE_SUPPRESSION_EXEMPT == {}
 
 
-def _has_env_bytecode_suppression(source_text: str) -> bool:
-    """Check if a module's source sets PYTHONDONTWRITEBYTECODE anywhere.
+def _has_env_bytecode_suppression(tree: ast.Module) -> bool:
+    """Check if a module structurally sets PYTHONDONTWRITEBYTECODE.
 
     This is a file-level check because the env injection may happen in a
     different function than the argv construction (e.g. ``_runner_argv``
     builds the list, ``_render_harness`` adds the ``PYTHONDONTWRITEBYTECODE=1``
     prefix in the rendered bash command).
     """
-    return "PYTHONDONTWRITEBYTECODE" in source_text
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Subscript)
+            and isinstance(target.slice, ast.Constant)
+            and target.slice.value == "PYTHONDONTWRITEBYTECODE"
+            for target in node.targets
+        ):
+            return True
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "append"
+            and node.args
+            and isinstance(node.args[0], (ast.Constant, ast.JoinedStr))
+            and _render_string_node(node.args[0]).startswith("PYTHONDONTWRITEBYTECODE=1 ")
+        ):
+            return True
+    return False
 
 
 def _subprocess_sites_missing_env_suppression() -> list[str]:
@@ -213,7 +230,7 @@ def _subprocess_sites_missing_env_suppression() -> list[str]:
             isinstance(node, ast.List) and any(_is_sys_executable(elt) for elt in node.elts)
             for node in ast.walk(tree)
         )
-        if has_spawn and not _has_env_bytecode_suppression(source):
+        if has_spawn and not _has_env_bytecode_suppression(tree):
             violations.append(
                 f"{rel} — has subprocess spawn with sys.executable "
                 "but no PYTHONDONTWRITEBYTECODE assignment in the module"
@@ -236,6 +253,20 @@ def test_subprocess_spawns_also_set_env_suppression() -> None:
         "add env['PYTHONDONTWRITEBYTECODE'] = '1' for ordinary-descendant coverage:\n"
         + "\n".join(f"  {v}" for v in violations)
     )
+
+
+def test_env_suppression_detector_ignores_comments_and_docstrings() -> None:
+    tree = ast.parse(
+        '"""PYTHONDONTWRITEBYTECODE=1"""\n# env[\'PYTHONDONTWRITEBYTECODE\'] = \'1\'\n'
+    )
+
+    assert not _has_env_bytecode_suppression(tree)
+
+
+def test_env_suppression_detector_accepts_child_env_assignment() -> None:
+    tree = ast.parse("env['PYTHONDONTWRITEBYTECODE'] = '1'\n")
+
+    assert _has_env_bytecode_suppression(tree)
 
 
 # --- Detector self-tests (synthetic AST, no repository dependency) ---------

@@ -81,3 +81,24 @@ class TestSessionScopedVisibility:
             f"after session-scoped bind + tag enable, exploration tools must be visible, "
             f"missing: {EXPLORATION_TOOLS - visible}"
         )
+
+    @pytest.mark.asyncio
+    async def test_orchestrator_session_reveals_nothing_even_with_tag(self) -> None:
+        """ORCHESTRATOR sessions must not reveal exploration tools regardless of intent."""
+        from autoskillit.server import mcp
+
+        visible_before = {tool.name for tool in await mcp.list_tools()}
+        assert not (visible_before & EXPLORATION_TOOLS), (
+            "ORCHESTRATOR session must not reveal exploration tools without tag enable"
+        )
+
+    @pytest.mark.asyncio
+    async def test_fleet_session_reveals_nothing_without_tag(self) -> None:
+        """FLEET sessions without explicit tag enable reveal no exploration tools."""
+        from autoskillit.server import mcp
+
+        visible = {tool.name for tool in await mcp.list_tools()}
+        assert not (visible & EXPLORATION_TOOLS), (
+            f"FLEET session without tag enable must not reveal exploration tools, "
+            f"found: {visible & EXPLORATION_TOOLS}"
+        )

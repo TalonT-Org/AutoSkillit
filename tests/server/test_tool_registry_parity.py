@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.core.tool_registry as tool_registry
 from autoskillit.core import (
     EXPLORATION_TOOLS,
     TOOL_REGISTRY,
@@ -68,6 +69,15 @@ def test_handler_collection_rejects_duplicate_registrations(tmp_path: Path) -> N
 
 def test_registry_matches_handler_names_bidirectionally() -> None:
     assert set(TOOL_REGISTRY) == set(_handler_signatures())
+
+
+def test_tool_builder_rejects_roles_for_unknown_parameters() -> None:
+    with pytest.raises(ValueError, match="unknown parameter.*typo"):
+        tool_registry._tool(
+            "run_cmd",
+            ("cmd",),
+            roles={"typo": ToolParamRole.PROTOCOL},
+        )
 
 
 def test_registry_matches_handler_order_and_requiredness() -> None:

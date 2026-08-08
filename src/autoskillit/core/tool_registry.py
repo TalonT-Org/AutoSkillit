@@ -129,6 +129,11 @@ def _tool(
     required_set = frozenset(required)
     declared_wire_types = wire_types or {}
     declared_roles = roles or {}
+    unknown_role_params = set(declared_roles) - set(params)
+    if unknown_role_params:
+        raise ValueError(
+            f"Tool {name!r} declares roles for unknown parameter(s): {sorted(unknown_role_params)}"
+        )
     return ToolDef(
         name=name,
         params=tuple(

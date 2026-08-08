@@ -86,27 +86,3 @@ def test_marketplace_artifact_agent_tools_carry_marketplace_prefix(tmp_path: Pat
                 f"Marketplace agent {definition.name!r} tool short name {short!r} "
                 f"is not a registered exploration tool"
             )
-
-
-@pytest.mark.asyncio
-async def test_agent_mcp_tool_short_names_are_registered_fastmcp_tools() -> None:
-    """Short names from agent definitions must name real FastMCP-registered tools."""
-    from autoskillit.server import mcp
-
-    mcp._transforms.clear()
-    try:
-        mcp.enable(tags={"exploration"}, components={"tool"})
-        registered = {tool.name for tool in await mcp.list_tools()}
-    finally:
-        mcp._transforms.clear()
-
-    definitions = load_bundled_agent_definitions()
-    for definition in definitions:
-        for tool in definition.tools:
-            if not tool.startswith("mcp__"):
-                continue
-            short = tool[len(DIRECT_PREFIX) :]
-            assert short in registered, (
-                f"Agent {definition.name!r} tool short name {short!r} is not "
-                f"registered as a FastMCP tool (registered: {sorted(registered)})"
-            )

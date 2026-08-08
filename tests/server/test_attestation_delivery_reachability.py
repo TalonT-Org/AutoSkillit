@@ -206,8 +206,8 @@ async def test_attested_run_skill_never_forwards_an_unresolved_model_template(
 
     assert result.get("stage") != "preflight:recipe_execution", result
     assert len(executor.calls) == 1
-    assert "${{" not in executor.calls[0].model, (
-        f"unresolved recipe template leaked into the executor's model kwarg: "
+    assert executor.calls[0].model == "", (
+        "unresolved recipe model must preserve the executor's vacancy sentinel, got "
         f"{executor.calls[0].model!r}"
     )
 

@@ -871,6 +871,7 @@ def test_codex_caller_with_old_claude_registration_completes_only_after_matching
 
     def read_installed_plugin_artifact_identity(managed_path: Path, **_kwargs: Any) -> Any:
         assert managed_path == gen_root
+        assert _kwargs["expected_semantic_key"] == f"{_PLUGIN_REF}:1.1.0"
         return SimpleNamespace(semantic_key=f"{_PLUGIN_REF}:1.1.0")
 
     monkeypatch.setattr(

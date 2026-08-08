@@ -118,6 +118,7 @@ class SkillProjectionContext:
         {ExplorationVectorApplicabilityId.ALWAYS}
     )
     parent_sandbox_mode: str = "workspace-write"
+    explorer_provisioning_eligible: bool = False
     projection_version: int = SKILL_PROJECTION_VERSION
 
     def __post_init__(self) -> None:
@@ -407,7 +408,18 @@ def project_agent_skill_document(
                 for vector in migrated
                 if vector.applicability not in context.active_exploration_applicabilities
             }
-            if not active_vectors:
+            if not active_vectors or not context.explorer_provisioning_eligible:
+                if not context.explorer_provisioning_eligible and active_vectors:
+                    replacements.update(
+                        {
+                            vector.id: (
+                                "Explorer provisioning is unavailable in this context; "
+                                "do not dispatch this exploration vector."
+                            )
+                            for vector in active_vectors
+                            if vector.id not in replacements
+                        }
+                    )
                 content = replace_exploration_vector_bodies(content, vectors, replacements)
             else:
                 plan = _exploration_router_plan(active_vectors)

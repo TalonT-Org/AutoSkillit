@@ -30,6 +30,7 @@ from autoskillit.core import (
     strip_context_window_suffix,
 )
 from autoskillit.exploration import resolve_repository_profile
+from autoskillit.pipeline.exploration_context import is_explorer_binding_eligible
 from autoskillit.server._misc import SkillProjectionContext
 
 if TYPE_CHECKING:
@@ -146,11 +147,23 @@ def _issue_explorer_binding_env(
     authority_home: Path,
 ) -> dict[str, dict[str, str]] | None:
     """Mint one shared principal replicated to both terminal role projections."""
-    if identity is None or projection_context.backend is None:
+    if not is_explorer_binding_eligible(
+        has_identity=identity is not None,
+        has_backend=projection_context.backend is not None,
+        terminal_explorer_capable=(
+            projection_context.backend.capabilities.terminal_explorer_capable
+            if projection_context.backend is not None
+            else False
+        ),
+        session_scoped_explorer_capable=(
+            projection_context.backend.capabilities.session_scoped_explorer_capable
+            if projection_context.backend is not None
+            else False
+        ),
+        parent_sandbox_mode=projection_context.parent_sandbox_mode,
+    ):
         return None
-    if not projection_context.backend.capabilities.terminal_explorer_capable:
-        return None
-    if projection_context.parent_sandbox_mode != "read-only":
+    if identity is None:
         return None
     store = tool_ctx.exploration_context_store
     if store is None:

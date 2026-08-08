@@ -84,6 +84,39 @@ def _get_store() -> ExplorationContextStoreProtocol[object] | None:
     return _get_ctx().exploration_context_store
 
 
+def _get_session_id() -> str | None:
+    from autoskillit.server import _get_ctx  # circular-break: server composition root
+
+    ctx = _get_ctx()
+    return ctx.session_id if hasattr(ctx, "session_id") else None
+
+
+def _try_session_scoped_submit(
+    store: ExplorationContextStoreProtocol[object],
+    request: ExplorationQuerySpec,
+) -> EvidencePage | None:
+    """Try session-scoped authority when launch-environment is unavailable."""
+    from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
+
+    if not isinstance(store, OwnerBoundExplorationContextStore):
+        return None
+    session_id = _get_session_id()
+    if session_id is None:
+        return None
+    capability = store.session_scoped_capability(session_id)
+    if capability is None:
+        return None
+    try:
+        _replacement, page = store.submit_for_capability(
+            capability=capability,
+            query=request,
+            page_size=min(request.max_results, _MAX_RESPONSE_PAGE_SIZE),
+        )
+        return page
+    except (RuntimeError, ValueError):
+        return None
+
+
 def _bounded_terms(values: tuple[str, ...]) -> list[str]:
     return [value[:512] for value in values[:16]]
 
@@ -208,7 +241,9 @@ async def submit_exploration_query(
             page_size=min(request.max_results, _MAX_RESPONSE_PAGE_SIZE),
         )
         if status is not CapabilityResolutionStatus.OK or page is None:
-            return _failure(_FAILURE_CONTEXT_UNAVAILABLE)
+            page = _try_session_scoped_submit(store, request)
+            if page is None:
+                return _failure(_FAILURE_CONTEXT_UNAVAILABLE)
         return _page_payload(page, status="accepted")
     except Exception:
         logger.warning("exploration query submission failed", exc_info=True)

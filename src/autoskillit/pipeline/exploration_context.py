@@ -52,6 +52,7 @@ __all__ = [
     "ExplorationContextStoreProtocol",
     "ExplorationServiceProtocol",
     "OwnerBoundExplorationContextStore",
+    "is_explorer_binding_eligible",
 ]
 
 
@@ -77,6 +78,33 @@ EXPLORATION_ROLE_ENV = "AUTOSKILLIT_EXPLORATION_ROLE"
 EXPLORATION_SESSION_ENV = "AUTOSKILLIT_EXPLORATION_SESSION_ID"
 EXPLORATION_AUTHORITY_PATH_ENV = "AUTOSKILLIT_EXPLORATION_AUTHORITY_PATH"
 EXPLORATION_PRINCIPAL_ROLE = "shared-explorer-session"
+
+
+def is_explorer_binding_eligible(
+    *,
+    has_identity: bool,
+    has_backend: bool,
+    terminal_explorer_capable: bool,
+    session_scoped_explorer_capable: bool,
+    parent_sandbox_mode: str,
+    session_type_name: str | None = None,
+) -> bool:
+    """Pure eligibility predicate for explorer binding mint.
+
+    Shared by both the server corridor (``_explorer_projection.py``) and the
+    CLI corridor (``_session_cook.py``).  The server wrapper adds store
+    presence and invocation-identity resolution; this function owns only the
+    structural gates.
+    """
+    if not has_identity or not has_backend:
+        return False
+    if session_type_name in {"ORCHESTRATOR", "FLEET"}:
+        return False
+    if terminal_explorer_capable:
+        return parent_sandbox_mode == "read-only"
+    if session_scoped_explorer_capable:
+        return parent_sandbox_mode == "read-only"
+    return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -569,6 +597,67 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
                 authority_path=authority_path,
             )
             return {role: binding for role in sorted(EXPLORER_ROLE_NAMES)}
+
+    def bind_session_scoped(
+        self,
+        *,
+        owner_id: str,
+        session_id: str,
+        cwd: Path,
+        repository_root: Path,
+        source_identity: str,
+    ) -> str:
+        """Mint session-scoped in-process authority without env/sidecar round-trip.
+
+        Used by the Claude-native exploration path where subagents share the
+        parent process and per-child env binding is structurally impossible.
+        Returns the capability string for per-call verification.
+        """
+        self._validate_binding(owner_id=owner_id, role="server", session_id=session_id)
+        if not source_identity or len(source_identity) > _MAX_SOURCE_IDENTITY_LENGTH:
+            raise ValueError("source_identity must be bounded non-empty text")
+        canonical_cwd = cwd.resolve()
+        canonical_repository_root = repository_root.resolve()
+        if canonical_repository_root != self._trusted_root:
+            raise ValueError("repository_root does not match the trusted project root")
+        if self._service is None:
+            raise RuntimeError("exploration service is not configured")
+        issuance_snapshot = self._service.capture_snapshot(canonical_repository_root)
+        if issuance_snapshot.stale or issuance_snapshot.truncated:
+            raise ValueError("exploration issuance requires a complete immutable snapshot")
+        with self._lock:
+            if self._closed:
+                raise RuntimeError("exploration context store is closed")
+            self._cleanup_expired_locked()
+            replaced_count = len(self._session_capabilities.get(session_id, ()))
+            if len(self._leases) - replaced_count + 1 > self._max_active_leases:
+                raise RuntimeError("exploration context store capacity exceeded")
+            capability = self._new_capability_locked()
+            self._discard_session_locked(session_id)
+            self._leases[capability] = _CapabilityLease(
+                owner_id=owner_id,
+                role=EXPLORATION_PRINCIPAL_ROLE,
+                session_id=session_id,
+                expires_at=self._clock() + self._max_ttl_seconds,
+                value=cast(_T, None),
+                cwd=canonical_cwd,
+                repository_root=canonical_repository_root,
+                source_identity=source_identity,
+            )
+            self._session_capabilities.setdefault(session_id, set()).add(capability)
+        return capability
+
+    def session_scoped_capability(self, session_id: str) -> str | None:
+        """Return the session-scoped capability if one is active, else None."""
+        with self._lock:
+            caps = self._session_capabilities.get(session_id)
+            if not caps:
+                return None
+            for cap in caps:
+                lease = self._leases.get(cap)
+                if lease is not None and lease.expires_at > self._clock():
+                    return cap
+            return None
 
     def resolve(
         self,

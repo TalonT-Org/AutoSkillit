@@ -199,3 +199,53 @@ def test_explicit_passes_home_and_fresh_process_runner(
 
     assert captured[0]["home"] == tmp_path
     assert captured[0]["process_runner"] is _update.subprocess.run
+
+
+def test_missing_expected_version_prints_warning_at_update_command(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Pair to test_missing_expected_version_logs_warning_at_main: when
+    attempt_obligation_repair returns MISSING_EXPECTED_VERSION, the
+    _update.run_update_command caller emits the finding via print()
+    (this caller uses print() instead of structured logger).
+
+    Pins the second caller's exclusion-based outcome classification for
+    MISSING_EXPECTED_VERSION at cli/update/_update.py:43-55.
+    """
+    from autoskillit.cli.update import _update
+    from autoskillit.cli.update._obligation_repair import ObligationRepairOutcome
+    from autoskillit.cli.update._transaction import UpdateTransactionResult
+
+    _patch_result(
+        monkeypatch,
+        UpdateTransactionResult(
+            outcome=UpdateTransactionOutcome.FAILED_UPGRADE,
+            findings=("transaction failed",),
+        ),
+    )
+
+    def fake_repair(_home: Path) -> object:
+        from dataclasses import dataclass
+
+        @dataclass(frozen=True, slots=True)
+        class _Result:
+            outcome: ObligationRepairOutcome
+            findings: tuple[str, ...]
+
+        return _Result(
+            outcome=ObligationRepairOutcome.MISSING_EXPECTED_VERSION,
+            findings=("obligation_stale: expected 0.9.0, observed 1.1.0",),
+        )
+
+    monkeypatch.setattr(
+        "autoskillit.cli.update._obligation_repair.attempt_obligation_repair",
+        fake_repair,
+    )
+
+    with pytest.raises(SystemExit):
+        _update.run_update_command(home=tmp_path)
+
+    captured = capsys.readouterr()
+    assert "obligation_stale: expected 0.9.0, observed 1.1.0" in captured.out

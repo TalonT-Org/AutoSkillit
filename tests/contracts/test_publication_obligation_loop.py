@@ -849,6 +849,168 @@ def test_install_side_oserror_is_reported_as_failed(tmp_path: Path) -> None:
     assert read_obligation(tmp_path) is not None
 
 
+def test_probe_failure_returns_missing_expected_version_no_install_spawn(
+    tmp_path: Path,
+) -> None:
+    """Pre-launch --version probe yielding an unparseable (empty) stdout
+    returns MISSING_EXPECTED_VERSION and never spawns the install child.
+
+    Pins the structural invariant: when the probe yields no usable
+    version, the obligation is reported as repairable (incomplete) and
+    no install subprocess is attempted (which would otherwise fail the
+    strict child contract at the cli boundary).
+    """
+    from autoskillit.cli.update import _obligation_repair as m
+    from autoskillit.workspace import read_obligation, write_obligation
+
+    write_obligation(
+        tmp_path,
+        previous_version="1.0.0",
+        originating_phase="upgrade-subprocess-gate",
+    )
+
+    calls: list[list[str]] = []
+
+    def runner(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        assert_valid_maintenance_install_argv(cmd)
+        calls.append(list(cmd))
+        # Zero return + empty stdout simulates a probe with no usable version.
+        return subprocess.CompletedProcess(cmd, 0, stdout="")
+
+    result = m.attempt_obligation_repair(
+        tmp_path,
+        environment={},
+        process_runner=runner,
+        entrypoint=Path("autoskillit"),
+    )
+
+    assert result.outcome is m.ObligationRepairOutcome.MISSING_EXPECTED_VERSION
+    assert any("obligation_repair_probe_unparseable" in f for f in result.findings)
+    # Probe was called; install was NOT called.
+    assert calls == [[str(Path("autoskillit")), "--version"]]
+    assert read_obligation(tmp_path) is not None
+
+
+def test_stale_obligation_probe_mismatch_returns_missing_expected_version(
+    tmp_path: Path,
+) -> None:
+    """Stale persisted expected_version (older than live distribution) returns
+    MISSING_EXPECTED_VERSION without spawning the install.
+
+    Pins the cross-check: when persisted "0.9.0" disagrees with probed
+    "1.1.0", the obligation journal is stale relative to the live
+    distribution. Spawning the install with the persisted version would
+    mismatch the actual distribution and the install() child would reject
+    the call at the distribution-version-equality gate.
+    """
+    from autoskillit.cli.update import _obligation_repair as m
+    from autoskillit.workspace import (
+        read_obligation,
+        update_obligation_expected_version,
+        write_obligation,
+    )
+
+    obligation = write_obligation(
+        tmp_path,
+        previous_version="0.9.0",
+        originating_phase="earlier-update",
+    )
+    update_obligation_expected_version(tmp_path, expected=obligation, expected_version="0.9.0")
+
+    calls: list[list[str]] = []
+
+    def runner(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        assert_valid_maintenance_install_argv(cmd)
+        calls.append(list(cmd))
+        # Probe returns the live distribution version (newer than persisted).
+        return subprocess.CompletedProcess(cmd, 0, stdout="1.1.0\n")
+
+    result = m.attempt_obligation_repair(
+        tmp_path,
+        environment={},
+        process_runner=runner,
+        entrypoint=Path("autoskillit"),
+    )
+
+    assert result.outcome is m.ObligationRepairOutcome.MISSING_EXPECTED_VERSION
+    assert any("obligation_stale" in f for f in result.findings)
+    # Probe was called; install was NOT called.
+    assert calls == [[str(Path("autoskillit")), "--version"]]
+    assert read_obligation(tmp_path) is not None
+
+
+def test_valid_obligation_probe_first_then_install_clears(
+    tmp_path: Path,
+) -> None:
+    """Valid expected_version: probe runs FIRST, install (with both flags)
+    runs SECOND, obligation is CLEARED.
+
+    Pins the recovery-path ordering for the happy path and the post-fix
+    argv shape including --expected-version.
+    """
+    from autoskillit.cli.update import _obligation_repair as m
+    from autoskillit.workspace import (
+        read_obligation,
+        update_obligation_expected_version,
+        write_obligation,
+    )
+
+    obligation = write_obligation(
+        tmp_path,
+        previous_version="1.0.0",
+        originating_phase="upgrade-subprocess-gate",
+    )
+    update_obligation_expected_version(tmp_path, expected=obligation, expected_version="1.1.0")
+
+    gen_root = tmp_path / "generation-root"
+    monkeypatch = pytest.MonkeyPatch()
+
+    def fake_resolve_current_generation(_home: object, _ref: str, _version: str) -> Path:
+        return gen_root
+
+    def fake_read_identity(_path: object, **_kwargs: object) -> MagicMock:
+        return MagicMock(semantic_key="x")
+
+    monkeypatch.setattr(
+        "autoskillit.core.resolve_current_generation", fake_resolve_current_generation
+    )
+    monkeypatch.setattr(
+        "autoskillit.core.read_installed_plugin_artifact_identity", fake_read_identity
+    )
+
+    calls: list[list[str]] = []
+
+    def runner(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        assert_valid_maintenance_install_argv(cmd)
+        calls.append(list(cmd))
+        stdout = "1.1.0\n" if cmd[-1] == "--version" else None
+        return subprocess.CompletedProcess(cmd, 0, stdout=stdout)
+
+    try:
+        result = m.attempt_obligation_repair(
+            tmp_path,
+            environment={},
+            process_runner=runner,
+            entrypoint=Path("autoskillit"),
+        )
+    finally:
+        monkeypatch.undo()
+
+    assert result.outcome is m.ObligationRepairOutcome.CLEARED
+    assert read_obligation(tmp_path) is None
+    # Probe FIRST, install SECOND; install carries --expected-version 1.1.0.
+    assert calls == [
+        [str(Path("autoskillit")), "--version"],
+        [
+            str(Path("autoskillit")),
+            "install",
+            "--maintenance-update",
+            "--expected-version",
+            "1.1.0",
+        ],
+    ]
+
+
 def test_claudecode_defers_and_leaves_obligation_intact(tmp_path: Path) -> None:
     """Under CLAUDECODE=1 the repair defers with an instruction finding and
     leaves the obligation intact.

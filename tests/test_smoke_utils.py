@@ -6430,3 +6430,71 @@ def test_extract_investigation_accepts_report_without_recommendations(
         output_dir=str(tmp_path / "unused"),
     )
     assert result["investigation_report"] == str(report)
+
+
+def test_cross_interpreter_upgrade_smoke_republish_argv_includes_expected_version(
+    tmp_path: Path,
+) -> None:
+    """The cross-interpreter smoke utility's republish step must include
+    ``--expected-version`` alongside ``--maintenance-update``.
+
+    Pins the post-fix contract: the strict child contract at
+    ``_marketplace.py:286-294`` requires ``--expected-version`` for any
+    maintenance-update install. Before the fix, this smoke deterministically
+    failed because the argv omitted the flag.
+    """
+
+
+    # Build a fake `autoskillit` entrypoint that records argv.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(parents=True)
+    log_path = bin_dir / "fake-args.jsonl"
+    entrypoint = bin_dir / "autoskillit"
+    entrypoint.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        f"LOG = {str(log_path)!r}\n"
+        f"VERSION_OUTPUT = '1.1.0\\n'\n"
+        "if '--version' in sys.argv:\n"
+        "    sys.stdout.write(VERSION_OUTPUT)\n"
+        "    sys.exit(0)\n"
+        "with open(LOG, 'a', encoding='utf-8') as f:\n"
+        "    f.write(' '.join(sys.argv[1:]) + '\\n')\n"
+        "sys.exit(0)\n",
+        encoding="utf-8",
+    )
+    entrypoint.chmod(0o755)
+
+    # The smoke utility does its own `uv tool install` calls which we
+    # can't easily run here; instead exercise the relevant argv-building
+    # path directly by mirroring the smoke's structure.
+    # We simulate the post-upgrade probe + republish sequence to verify
+    # the typed builder produces the canonical argv.
+    import subprocess
+
+    from autoskillit.cli._install_contract import MaintenanceInstallArgv
+
+    # 1) Pre-launch version probe.
+    version_check = subprocess.run(
+        [str(entrypoint), "--version"], capture_output=True, text=True, timeout=60
+    )
+    resolved_version = (version_check.stdout or "").strip()
+    assert resolved_version == "1.1.0", (version_check.stdout, version_check.stderr)
+
+    # 2) Republish argv via the typed builder.
+    argv = MaintenanceInstallArgv(
+        entrypoint=entrypoint,
+        expected_version=resolved_version,
+    ).to_argv()
+    assert "--maintenance-update" in argv
+    assert "--expected-version" in argv
+    assert argv[argv.index("--expected-version") + 1] == "1.1.0"
+
+    # 3) Execute the argv and verify the child receives both flags.
+    subprocess.run([str(x) for x in argv], check=True, capture_output=True, text=True)
+    recorded = log_path.read_text(encoding="utf-8").splitlines()
+    assert len(recorded) == 1, recorded
+    argv_words = recorded[0].split()
+    assert "--maintenance-update" in argv_words
+    assert "--expected-version" in argv_words
+    assert argv_words[argv_words.index("--expected-version") + 1] == "1.1.0"

@@ -186,6 +186,7 @@ def test_capacity_rescue_records_only_byte_pressure(
 
 def test_retention_seconds_use_lifecycle_policy_authority() -> None:
     assert capture_lifecycle._RETENTION_SECONDS == SWEEP_GRACE_SECONDS
+    assert capture_lifecycle._RETENTION_SECONDS >= capture_lifecycle._REFERENCE_LIFETIME_SECONDS
 
 
 def test_capacity_spec_derives_total_recovery_headroom() -> None:

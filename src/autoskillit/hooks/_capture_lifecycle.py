@@ -98,6 +98,8 @@ MAX_ACTIVE_RECORDS = 4096
 # Single source of truth: the reclaimability declaration owns the sweep grace.
 _RETENTION_SECONDS = float(_capture_lifecycle_policy.SWEEP_GRACE_SECONDS)
 _REFERENCE_LIFETIME_SECONDS = 1800.0
+if _RETENTION_SECONDS < _REFERENCE_LIFETIME_SECONDS:
+    raise AssertionError("capture retention must cover the replay-reference lifetime")
 _MAX_RETRY_SECONDS = 3600.0
 _BYTE_CAPACITY_REASONS = frozenset(
     {

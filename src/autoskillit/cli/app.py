@@ -255,7 +255,16 @@ def install(
     require_registered_plugin: Annotated[bool, Parameter(show=False)] = False,
     expected_version: Annotated[str | None, Parameter(show=False)] = None,
 ) -> None:
-    """Install the plugin for Claude Code and refresh the cache."""
+    """Install the plugin for Claude Code and refresh the cache.
+
+    In DIRECT mode (default) the expected version is taken from ``__version__``
+    (the in-process distribution version of the running interpreter). In
+    MAINTENANCE_UPDATE mode (``--maintenance-update``) the expected version
+    MUST be supplied via the ``--expected-version`` CLI parameter — the
+    boundary check below raises ``ValueError`` if it is missing, since the
+    maintenance install enforces the strict child contract at
+    ``_marketplace.py:286-294``.
+    """
     from autoskillit import __version__
     from autoskillit.cli._init_helpers import _print_next_steps
     from autoskillit.cli._install_contract import (

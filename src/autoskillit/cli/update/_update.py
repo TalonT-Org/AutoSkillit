@@ -18,6 +18,13 @@ def run_update_command(home: Path | None = None) -> None:
     """Upgrade autoskillit to the latest version on the install's branch.
 
     Only a fully completed update clears prompt state or restarts the process.
+
+    After any non-SUCCESS update, this adapter invokes
+    ``attempt_obligation_repair`` to clear any pending publication obligation.
+    The repair helper classifies outcomes via an exclusion-based check on
+    ``{NO_OBLIGATION, CLEARED}``; any other outcome (including the new
+    ``MISSING_EXPECTED_VERSION`` for stale obligations) is treated as an
+    incomplete repair and surfaces its findings.
     """
     from autoskillit.cli.update._update_checks import (
         _read_dismiss_state,

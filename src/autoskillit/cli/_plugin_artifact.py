@@ -293,8 +293,8 @@ class InstalledPluginArtifactAuthority:
         lease_path = installed_plugin_artifact_lease_path(managed_root)
         last_error: OSError | None = None
         attempts = 0
-        for _attempt in range(max_retries):
-            attempts = _attempt + 1
+        for attempt in range(max_retries):
+            attempts = attempt + 1
             try:
                 return managed_root, ArtifactLease.acquire_existing_shared(lease_path)
             except OSError as exc:

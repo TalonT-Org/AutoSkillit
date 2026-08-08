@@ -167,13 +167,12 @@ CODEX_INTAKE_DISCIPLINE_DIGEST: Final[str] = render_intake_digest()
 CODEX_SCOPE_DISCIPLINE_DIGEST: Final[str] = (
     "SCOPE DISCIPLINE (this backend tends to over-engineer; these rules are mandatory):\n"
     "S1. Maintainability is the goal. Every line you add must be read, understood, and kept\n"
-    "    working by someone else — it is a standing cost, not progress. Volume the\n"
-    "    requirement genuinely forces is fine; volume from speculation is not.\n"
+    "    working by someone else. Volume the requirement genuinely forces is fine; volume\n"
+    "    from speculation is not.\n"
     'S2. Build the smallest design that satisfies the stated requirements. "Immunity",\n'
     '    "architectural", or "contract" framing is not a mandate for maximal machinery —\n'
     "    deliver the minimal mechanism that closes the enumerated gaps. When the problem\n"
-    "    truly needs a complex solution, build it — elegance is the smallest design that\n"
-    "    meets the need, not the shortest diff.\n"
+    "    truly needs a complex solution, build it.\n"
     "S3. No speculative machinery: do not introduce a new registry, enum, ID-wrapper/newtype\n"
     "    class, state machine, protocol, event vocabulary, or abstraction layer unless the\n"
     "    task text names it explicitly OR two existing call sites need it today. One concrete\n"
@@ -183,7 +182,11 @@ CODEX_SCOPE_DISCIPLINE_DIGEST: Final[str] = (
     "    Trace only the symbols you will modify or whose contracts you rely on.\n"
     "S5. Tests cover the behavior this change introduces — one focused test per new behavior\n"
     "    or reachable edge. No permutation matrices for hypothetical states. Prefer\n"
-    "    parametrization over near-duplicate test bodies."
+    "    parametrization over near-duplicate test bodies.\n"
+    "S6. Reason as long as you need before writing — depth of thought is free; depth of code\n"
+    "    is not. The finished change introduces the fewest new concepts that satisfy the\n"
+    "    requirement, as deep modules: simple interfaces hiding substantial implementation,\n"
+    "    never layers of shallow pass-throughs."
 )
 
 _RULE_IDS = [rule.id for rule in CODEX_INTAKE_RULES]

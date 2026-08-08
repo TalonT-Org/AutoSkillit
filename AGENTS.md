@@ -18,8 +18,9 @@ A coding-agent plugin that orchestrates automated skill-driven workflows using h
 ### **3.1. Code and Implementation**
 
   * **Do Not Oversimplify**: Implement logic with required complexity. No shortcuts that compromise correctness.
+  * **Do Not Over-Engineer**: Complexity must pay rent immediately. An abstraction, registry, wrapper, state machine, or new subsystem is justified only when the change at hand lands more simply on it — never for hypothetical future needs. Every added line is a maintenance liability someone must read, understand, and keep working. When the problem genuinely requires a complex solution, build it; prefer one deep module (simple interface, substantial implementation) over layers of shallow pass-throughs.
   * **Respect the Existing Architecture**: Build on established patterns. Understand existing code before modifying.
-  * **Address the Root Cause**: Debug to find and fix root causes. No hardcoded workarounds.
+  * **Address the Root Cause**: Debug to find and fix root causes. No hardcoded workarounds. When a clean fix requires it, do preparatory refactoring — first make the change easy, then make the easy change; the structural work must immediately simplify the change at hand, not generalize for imagined ones.
   * **No Backward Compatibility Hacks**: No comments about dead code. Remove dead code entirely.
   * **Avoid Redundancy**: Do not duplicate logic or utilities.
   * **Use Current Package Versions**: Web search for current stable versions when adding dependencies.

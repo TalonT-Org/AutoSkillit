@@ -46,6 +46,7 @@ from autoskillit.hooks._capture._snapshot import (
 from autoskillit.hooks._capture._syntax import PUBLIC_NAME_RE
 from autoskillit.hooks._capture._types import (
     BLOCKER_FAMILY,
+    TRANSITION_RESCUE_BUDGET,
     CaptureCapacitySpec,
     CaptureCleanupOutcome,
     CaptureFailureEvidence,
@@ -183,6 +184,69 @@ def test_capacity_rescue_records_only_byte_pressure(
                 CaptureCapacityReason.HARD_LEDGER_CAPACITY,
             }
         )
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_capacity_rescue_sweeps_once_then_returns_retry_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    attempts = 0
+    observed_budgets: list[SweepBudgetSpec] = []
+    expected = object()
+
+    def attempt() -> object:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise CaptureCapacityError(CaptureCapacityReason.PROJECTED_COMPACTED_BYTES)
+        return expected
+
+    def record_sweep(budget: SweepBudgetSpec) -> CaptureCleanupOutcome:
+        observed_budgets.append(budget)
+        return CaptureCleanupOutcome()
+
+    monkeypatch.setattr(store, "sweep", record_sweep)
+    try:
+        assert store._with_capacity_rescue(attempt) is expected
+        assert attempts == 2
+        assert observed_budgets == [TRANSITION_RESCUE_BUDGET]
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_capacity_rescue_propagates_second_capacity_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(project, clock)
+    attempts = 0
+    observed_budgets: list[SweepBudgetSpec] = []
+
+    def attempt() -> object:
+        nonlocal attempts
+        attempts += 1
+        raise CaptureCapacityError(CaptureCapacityReason.PROJECTED_COMPACTED_BYTES)
+
+    def record_sweep(budget: SweepBudgetSpec) -> CaptureCleanupOutcome:
+        observed_budgets.append(budget)
+        return CaptureCleanupOutcome()
+
+    monkeypatch.setattr(store, "sweep", record_sweep)
+    try:
+        with pytest.raises(CaptureCapacityError) as raised:
+            store._with_capacity_rescue(attempt)
+        assert raised.value.reason is CaptureCapacityReason.PROJECTED_COMPACTED_BYTES
+        assert attempts == 2
+        assert observed_budgets == [TRANSITION_RESCUE_BUDGET]
     finally:
         root.close()
         anchor.close()

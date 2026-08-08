@@ -641,7 +641,7 @@ def _render_agent_definitions(agents_dir: Path, mcp_tool_prefix: str) -> None:
         ]
         lines[tools_line_idx] = f"{indent}tools: {new_tools_value}\n"
         rendered = "".join(lines)
-        path.write_text(rendered, encoding="utf-8")
+        atomic_write(path, rendered)
 
         rendered_def = load_agent_definition(path)
         if rendered_def.name != source_def.name:

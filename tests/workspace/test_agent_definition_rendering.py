@@ -118,6 +118,48 @@ class TestRenderAgentDefinitionsByteIdentity:
                 f"the authored prefix"
             )
 
+    def test_marketplace_render_changes_only_tools_line(self, tmp_path: Path) -> None:
+        """REQ-10: rendering with a different prefix changes only the tools: line."""
+        from autoskillit.workspace._projected_artifact.materialization import (
+            _render_agent_definitions,
+        )
+
+        source_agents = pkg_root() / "agents"
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        import shutil
+
+        for path in sorted(source_agents.iterdir()):
+            if path.is_file():
+                shutil.copy2(path, agents_dir / path.name)
+
+        originals = {}
+        for defn in load_bundled_agent_definitions():
+            if any(tool.startswith("mcp__") for tool in defn.tools):
+                originals[f"{defn.name}.md"] = (agents_dir / f"{defn.name}.md").read_text()
+
+        assert originals, "Expected at least one MCP-tool-bearing agent"
+
+        _render_agent_definitions(agents_dir, MARKETPLACE_PREFIX)
+
+        for name, original_text in originals.items():
+            rendered_text = (agents_dir / name).read_text()
+            original_lines = original_text.splitlines()
+            rendered_lines = rendered_text.splitlines()
+            assert len(original_lines) == len(rendered_lines), (
+                f"{name}: line count changed after rendering"
+            )
+            differing_indices = [
+                i for i, (a, b) in enumerate(zip(original_lines, rendered_lines)) if a != b
+            ]
+            assert len(differing_indices) == 1, (
+                f"{name}: expected exactly 1 line to differ (the tools: line), "
+                f"but {len(differing_indices)} lines differ at indices {differing_indices}"
+            )
+            assert rendered_lines[differing_indices[0]].lstrip().startswith("tools:"), (
+                f"{name}: the only differing line must be the tools: line"
+            )
+
     def test_all_builtin_only_agents_rendered_byte_identical(self, tmp_path: Path) -> None:
         from autoskillit.workspace._projected_artifact.materialization import (
             _render_agent_definitions,

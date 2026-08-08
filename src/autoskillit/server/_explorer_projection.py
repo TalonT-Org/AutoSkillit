@@ -165,6 +165,11 @@ def _issue_explorer_binding_env(
         return None
     if identity is None:
         return None
+    # Session-scoped backends (Claude) are eligible but use a different authority
+    # model — per-child env bindings structurally cannot apply.
+    assert projection_context.backend is not None
+    if not projection_context.backend.capabilities.terminal_explorer_capable:
+        return None
     store = tool_ctx.exploration_context_store
     if store is None:
         raise SkillContractError("Explorer context store is unavailable")

@@ -117,6 +117,34 @@ def _try_session_scoped_submit(
         return None
 
 
+def _try_session_scoped_page(
+    store: ExplorationContextStoreProtocol[object],
+    *,
+    page_size: int,
+    cursor: ContinuationCursor | None = None,
+) -> EvidencePage | None:
+    """Try session-scoped authority for page retrieval."""
+    from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
+
+    if not isinstance(store, OwnerBoundExplorationContextStore):
+        return None
+    session_id = _get_session_id()
+    if session_id is None:
+        return None
+    capability = store.session_scoped_capability(session_id)
+    if capability is None:
+        return None
+    try:
+        status, page = store.get_page_for_capability(
+            capability=capability,
+            page_size=page_size,
+            cursor=cursor,
+        )
+        return page if status is CapabilityResolutionStatus.OK else None
+    except (RuntimeError, ValueError):
+        return None
+
+
 def _bounded_terms(values: tuple[str, ...]) -> list[str]:
     return [value[:512] for value in values[:16]]
 
@@ -269,11 +297,18 @@ async def get_exploration_page(
         if (gate := _require_enabled()) is not None:
             return gate
         cursor = None if continuation is None else ContinuationCursor.decode(continuation)
-        return _fetch_page_from_launch_environment(
+        result = _fetch_page_from_launch_environment(
             page_size=page_size,
             cursor=cursor,
             success_status="ready",
         )
+        if result == _failure(_FAILURE_CONTEXT_UNAVAILABLE):
+            store = _get_store()
+            if store is not None:
+                page = _try_session_scoped_page(store, page_size=page_size, cursor=cursor)
+                if page is not None:
+                    return _page_payload(page, status="ready")
+        return result
     except Exception:
         logger.warning("exploration page retrieval failed", exc_info=True)
         return _failure(_FAILURE_BROKER_UNAVAILABLE)
@@ -297,10 +332,17 @@ async def resume_exploration_context(
     try:
         if (gate := _require_enabled()) is not None:
             return gate
-        return _fetch_page_from_launch_environment(
+        result = _fetch_page_from_launch_environment(
             page_size=page_size,
             success_status="resumed",
         )
+        if result == _failure(_FAILURE_CONTEXT_UNAVAILABLE):
+            store = _get_store()
+            if store is not None:
+                page = _try_session_scoped_page(store, page_size=page_size)
+                if page is not None:
+                    return _page_payload(page, status="resumed")
+        return result
     except Exception:
         logger.warning("exploration context resumption failed", exc_info=True)
         return _failure(_FAILURE_BROKER_UNAVAILABLE)

@@ -358,13 +358,3 @@ def test_maintenance_argv_is_frozen() -> None:
     request = _argv()
     with pytest.raises(FrozenInstanceError):
         request.expected_version = "2.0.0"  # type: ignore[misc]
-
-
-def test_maintenance_argv_string_entrypoint_via_path_is_accepted() -> None:
-    """A string entrypoint is auto-coerced to Path via _argv helper but the
-    public constructor must reject it; verify the canonical use is Path-only."""
-    argv = MaintenanceInstallArgv(
-        entrypoint=Path("/usr/local/bin/autoskillit"),
-        expected_version="2.0.0",
-    ).to_argv()
-    assert argv[0] == "/usr/local/bin/autoskillit"

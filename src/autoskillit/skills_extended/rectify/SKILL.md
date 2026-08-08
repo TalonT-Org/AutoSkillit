@@ -50,7 +50,7 @@ The approach should make it so the architecture, structure and/or pattern is inn
 
 Explore the architecture of the systems involved very carefully and map the components they connect to with subagents.
 
-Find what the architectural solution would be instead of just applying a direct fix to the immediate issue. The solution should solve more than just the issue at hand. Immunity must be proportionate: the smallest change that makes the bug class impossible, scoped to failures that can actually occur — every added line must earn its maintenance cost.
+Find what the architectural solution would be instead of just applying a direct fix to the immediate issue. The solution should solve more than just the issue at hand.
 
 Do not change any code.
 

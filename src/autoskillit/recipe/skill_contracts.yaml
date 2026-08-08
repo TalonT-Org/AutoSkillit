@@ -291,22 +291,12 @@ skills:
       type: string
     - name: has_implementation_progress
       type: string
-    - name: scope_verdict
-      type: string
-      allowed_values:
-      - proceed
-      - split
-    - name: split_proposal_path
-      type: optional_string
     expected_output_patterns:
     - "worktree_path[ \\t]*=[ \\t]*/.+"
     - "%%ORDER_UP::[a-f0-9]+%%"
     pattern_examples:
-    - "worktree_path = /tmp/worktrees/impl-foo-20260316\nscope_verdict = proceed\n%%ORDER_UP::a1b2c3d4%%"
-    - "worktree_path = /tmp/worktrees/impl-foo-20260316\nscope_verdict = split\nsplit_proposal_path = /tmp/split.md\n%%ORDER_UP::a1b2c3d4%%"
-    write_behavior: conditional
-    write_expected_when:
-    - "scope_verdict[ \\t]*=[ \\t]*proceed"
+    - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP::a1b2c3d4%%"
+    write_behavior: always
     completion_required: true
     scope_discipline: true
   investigate:
@@ -450,19 +440,11 @@ skills:
       type: optional_string
     - name: has_implementation_progress
       type: string
-    - name: scope_verdict
-      type: string
-      allowed_values:
-      - proceed
-      - split
-    - name: split_proposal_path
-      type: optional_string
     expected_output_patterns:
     - "worktree_path[ \\t]*=[ \\t]*/.+"
     - "%%ORDER_UP::[a-f0-9]+%%"
     pattern_examples:
-    - "worktree_path = /tmp/worktrees/impl-foo-20260316\nbranch_name = feature/123\nphases_implemented = 2\nscope_verdict = proceed\n%%ORDER_UP::a1b2c3d4%%"
-    - "worktree_path = /tmp/worktrees/impl-foo-20260316\nbranch_name = feature/123\nphases_implemented = 2\nscope_verdict = split\nsplit_proposal_path = /tmp/split.md\n%%ORDER_UP::a1b2c3d4%%"
+    - "worktree_path = /tmp/worktrees/impl-foo-20260316\nbranch_name = feature/123\nphases_implemented = 2\n%%ORDER_UP::a1b2c3d4%%"
     write_behavior: conditional
     write_expected_when:
     - "phases_implemented[ \\t]*=[ \\t]*[1-9][0-9]*"

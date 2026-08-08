@@ -810,6 +810,7 @@ ALWAYS_WRITE_SKILLS = {
     "generate-report",
     "implement-experiment",
     "implement-worktree",
+    "implement-worktree-no-merge",
     "investigate",
     "make-campaign",
     "make-groups",
@@ -877,7 +878,6 @@ def test_always_write_skills_matches_yaml() -> None:
 CONDITIONAL_WRITE_SKILLS: dict[str, str] = {
     # skill_name → substring that must appear in write_expected_when patterns
     "compose-pr": "pr_url",
-    "implement-worktree-no-merge": "scope_verdict",
     "promote-to-main": "verdict",
     "resolve-failures": "verdict",
     "resolve-merge-conflicts": "conflict_report_path",

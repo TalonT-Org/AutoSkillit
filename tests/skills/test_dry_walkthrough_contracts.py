@@ -261,9 +261,3 @@ def test_dry_walkthrough_size_budget_step_positioned(skill_text: str) -> None:
     assert step_43_idx < step_44_idx < step_45_idx, (
         "Step 4.4 must be positioned after Step 4.3 and before Step 4.5"
     )
-
-
-def test_dry_walkthrough_prefers_proportionate_health(skill_text: str) -> None:
-    """The proportionality revision must be present; the old phrasing must be gone."""
-    assert "smallest design that secures it" in skill_text
-    assert "over quick, easy, and minimal fixes" not in skill_text

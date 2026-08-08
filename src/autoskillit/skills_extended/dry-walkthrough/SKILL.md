@@ -87,7 +87,7 @@ The plan file must remain a **clean, self-contained implementation instruction s
 - Verify assumptions against actual codebase
 - Remove deprecation code/notes and rollback mechanisms
 - Make sure the plan includes warning against using the codebase as a notepad with useless comments
-- Prefer the long-term health of the project — and the smallest design that secures it. Proportionality is part of long-term health: every added line must earn its maintenance cost
+- Prefer the long term health of project over quick, easy, and minimal fixes
 - Start all independent child delegations before awaiting any result to maximize concurrency
 
 ## Context Limit Behavior

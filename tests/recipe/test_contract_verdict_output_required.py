@@ -148,8 +148,6 @@ def test_conditional_write_skills_have_verdict_or_fixes_applied_declared() -> No
         "bundle-local-report",
         # compose-pr uses pr_url as the gating output (not verdict)
         "compose-pr",
-        # implement-worktree-no-merge uses scope_verdict oracle (#4476)
-        "implement-worktree-no-merge",
     }
     manifest = load_bundled_manifest()
     violations: list[str] = []

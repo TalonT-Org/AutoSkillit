@@ -370,22 +370,12 @@ steps:
     capture:
       worktree_path: ${{ result.worktree_path }}
       has_implementation_progress: ${{ result.has_implementation_progress }}
-      scope_verdict: ${{ result.scope_verdict }}
-      split_proposal_path:
-        from: ${{ result.split_proposal_path }}
-        type: optional_string
     retries: 0
     on_context_limit: retry_worktree
     on_rate_limit: retry_worktree
-    on_result:
-    - when: ${{ result.scope_verdict }} == split
-      route: check_scope_split_loop
-    - when: ${{ result.scope_verdict }} == proceed
-      route: check_changes
-    - route: check_changes
+    on_success: check_changes
     on_failure: release_issue_failure
-    note: "On proceed, clear stale split_proposal_path; malformed or missing scope_verdict\
-      \ falls back to check_changes.\n"
+    note: Extracts worktree_path from result for use in subsequent steps.
   retry_worktree:
     tool: run_skill
     model: ''
@@ -405,14 +395,8 @@ steps:
       deviation_manifest_path:
         from: ${{ result.deviation_manifest_path }}
         type: optional_string
-      scope_verdict: ${{ result.scope_verdict }}
-      split_proposal_path:
-        from: ${{ result.split_proposal_path }}
-        type: optional_string
     on_result:
-    - when: ${{ result.scope_verdict }} == split
-      route: check_scope_split_loop
-    - when: ${{ result.scope_verdict }} == proceed
+    - when: ${{ result.phases_implemented }} > 0
       route: check_changes
     - route: check_changes
     on_context_limit: check_changes

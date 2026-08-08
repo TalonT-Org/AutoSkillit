@@ -61,22 +61,3 @@ def test_make_plan_instructs_deferred_items() -> None:
 def test_rectify_template_has_size_budget() -> None:
     content = _read_rectify()
     assert "size_budget = " in content
-
-
-def test_rectify_has_proportionality_sentence() -> None:
-    """Proportionality sentence must be within 3 lines of the maximalist mandate."""
-    content = _read_rectify()
-    lines = content.splitlines()
-    mandate_idx = None
-    proportionality_idx = None
-    for i, line in enumerate(lines):
-        if "solve more than just the issue at hand" in line:
-            mandate_idx = i
-        if "Immunity must be proportionate" in line:
-            proportionality_idx = i
-    assert mandate_idx is not None, "Maximalist mandate not found"
-    assert proportionality_idx is not None, "Proportionality sentence not found"
-    assert abs(proportionality_idx - mandate_idx) <= 3, (
-        f"Proportionality sentence (line {proportionality_idx}) must be within "
-        f"3 lines of the mandate (line {mandate_idx})"
-    )

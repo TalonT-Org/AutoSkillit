@@ -247,16 +247,6 @@ git rebase "$REMOTE/${BASE_BRANCH}"
 
 If conflicts occur, resolve them, `git rebase --continue`, then re-run tests. Report rebase status.
 
-### Scope Stop (S2)
-
-If continuing the implementation would exceed the plan's declared `size_budget` (or,
-absent one, the session's injected scope budget of 1,500 added lines or 40 changed
-files), **STOP**. Write a split proposal to `{{AUTOSKILLIT_TEMP}}/retry-worktree/`
-containing a `Part A/B/C` decomposition or a descope note. Emit
-`scope_verdict = split` and `split_proposal_path = <absolute path>` in the final
-token block. A split stop is the only sanctioned zero-change exit; the zero-changes
-prohibition still governs `proceed` completions.
-
 ### Step 6: Completion Report
 
 Output to terminal: worktree path, branch name, base branch (`$BASE_BRANCH`), status, summary of changes, and next steps (fast-forward merge then clean up).
@@ -276,7 +266,6 @@ Then emit these structured output tokens on their own lines so recipe capture bl
 worktree_path = ${WORKTREE_PATH}
 branch_name = ${CURRENT_BRANCH}
 phases_implemented = ${PHASES_IMPLEMENTED}
-scope_verdict = proceed
 ```
 
 If deviations were recorded during Step 4 (i.e., the deviation manifest file exists at `{{AUTOSKILLIT_TEMP}}/retry-worktree/deviation_manifest_{SESSION_TS}.json`), also emit:

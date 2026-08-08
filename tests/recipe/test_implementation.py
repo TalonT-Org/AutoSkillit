@@ -408,35 +408,6 @@ def test_check_scope_split_loop_exists(recipe) -> None:
     assert default_conditions[0].route == "pre_scope_replan_cleanup"
 
 
-def test_implement_step_captures_scope_verdict(recipe) -> None:
-    """implement must capture scope_verdict and route both split and proceed values
-    explicitly via on_result."""
-    step = recipe.steps["implement"]
-    capture = step.capture or {}
-    assert "scope_verdict" in capture
-    assert step.on_result is not None
-    when_texts = [c.when for c in step.on_result.conditions if c.when]
-    assert any("split" in w for w in when_texts), "implement must route scope_verdict == split"
-    assert any("proceed" in w for w in when_texts), "implement must route scope_verdict == proceed"
-
-
-def test_retry_worktree_scope_verdict_routing(recipe) -> None:
-    """retry_worktree must route both split and proceed scope_verdict values explicitly,
-    and must no longer branch on phases_implemented > 0 (superseded by scope-verdict routing)."""
-    step = recipe.steps["retry_worktree"]
-    assert step.on_result is not None
-    when_texts = [c.when for c in step.on_result.conditions if c.when]
-    assert any("split" in w for w in when_texts), (
-        "retry_worktree must route scope_verdict == split"
-    )
-    assert any("proceed" in w for w in when_texts), (
-        "retry_worktree must route scope_verdict == proceed"
-    )
-    assert not any("phases_implemented" in w for w in when_texts), (
-        "retry_worktree must not route on phases_implemented after scope-verdict routing"
-    )
-
-
 def test_plan_step_accepts_split_proposal(recipe) -> None:
     """plan must forward split_proposal_path to make-plan and declare it optional
     so a scope-split re-plan can feed the prior split proposal back in."""
@@ -454,24 +425,3 @@ def test_scope_ingredients_exist(recipe) -> None:
     assert recipe.ingredients["diff_size_budget"].default == "6000"
     assert "scope_split_max_retries" in recipe.ingredients
     assert recipe.ingredients["scope_split_max_retries"].default == "2"
-
-
-@pytest.mark.parametrize(
-    "recipe_name", ["implementation", "remediation", "implementation-groups", "merge-prs"]
-)
-def test_scope_verdict_routed_explicitly_in_implement_and_retry(recipe_name: str) -> None:
-    """Every bundled recipe's implement and retry_worktree steps must route both
-    scope_verdict values (split, proceed) explicitly rather than relying on the
-    catch-all arm, regardless of whether that recipe has a scope-split re-plan loop."""
-    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
-    for step_name in ("implement", "retry_worktree"):
-        assert step_name in recipe.steps, f"{recipe_name}: {step_name} step not found"
-        step = recipe.steps[step_name]
-        assert step.on_result is not None, f"{recipe_name}.{step_name} must declare on_result"
-        when_texts = [c.when for c in step.on_result.conditions if c.when]
-        assert any("split" in w for w in when_texts), (
-            f"{recipe_name}.{step_name} must route scope_verdict == split explicitly"
-        )
-        assert any("proceed" in w for w in when_texts), (
-            f"{recipe_name}.{step_name} must route scope_verdict == proceed explicitly"
-        )

@@ -83,20 +83,26 @@ class TestSessionScopedVisibility:
         )
 
     @pytest.mark.asyncio
-    async def test_orchestrator_session_reveals_nothing_even_with_tag(self) -> None:
+    async def test_orchestrator_session_reveals_nothing_even_with_intent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """ORCHESTRATOR sessions must not reveal exploration tools regardless of intent."""
         from autoskillit.server import mcp
 
-        visible_before = {tool.name for tool in await mcp.list_tools()}
-        assert not (visible_before & EXPLORATION_TOOLS), (
-            "ORCHESTRATOR session must not reveal exploration tools without tag enable"
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "ORCHESTRATOR")
+        visible = {tool.name for tool in await mcp.list_tools()}
+        assert not (visible & EXPLORATION_TOOLS), (
+            "ORCHESTRATOR session must not reveal exploration tools by default"
         )
 
     @pytest.mark.asyncio
-    async def test_fleet_session_reveals_nothing_without_tag(self) -> None:
+    async def test_fleet_session_reveals_nothing_by_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """FLEET sessions without explicit tag enable reveal no exploration tools."""
         from autoskillit.server import mcp
 
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "FLEET")
         visible = {tool.name for tool in await mcp.list_tools()}
         assert not (visible & EXPLORATION_TOOLS), (
             f"FLEET session without tag enable must not reveal exploration tools, "

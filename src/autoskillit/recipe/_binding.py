@@ -891,11 +891,7 @@ def bind_runtime_skill_invocation(
             "runtime skill identity differs from the compiled template",
         )
     compiled_mcp_names = frozenset(value.name for value in invocation.mcp_kwargs)
-    # protocol_mcp_values is used solely for its value-binding duty below (the
-    # three protocol params are checked/bound against their expected values).
-    # It no longer doubles as the undeclared-name membership allow-list — that
-    # allow-list is the role-derived runtime_exempt_param_names() set, the
-    # single source of truth for "which params are always admitted."
+    # Bind the three protocol parameters against their expected attestation values.
     protocol_mcp_values = {
         "step_name": step_name,
         "recipe_execution_id": execution_id,

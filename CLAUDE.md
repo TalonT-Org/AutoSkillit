@@ -11,30 +11,9 @@ Mandatory instructions for AI-assisted development in this repository.
 
 ## Pyright LSP Usage
 
-The `LSP` tool provides type-aware code intelligence via Pyright. Use it for precise
-navigation instead of grep when tracing symbols through imports, re-exports, or protocols.
+The `LSP` tool provides Pyright-backed navigation — operations `goToDefinition`, `findReferences`, `documentSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls`, `outgoingCalls` (all take `filePath`, `line`, `character`, 1-based).
 
-**Available operations** (all take `filePath`, `line`, `character` — 1-based):
-
-| Operation | Use case |
-|-----------|----------|
-| `goToDefinition` | Jump to where a symbol is defined (follows imports/re-exports) |
-| `findReferences` | Find all usages of a symbol across the codebase |
-| `documentSymbol` | List all classes, functions, and variables in a file |
-| `goToImplementation` | Find concrete implementations of a Protocol or ABC |
-| `prepareCallHierarchy` | Get the call hierarchy item at a position |
-| `incomingCalls` | Find all functions/methods that call the function at a position |
-| `outgoingCalls` | Find all functions/methods called by a function |
-
-**When to use LSP over grep:**
-- Tracing a symbol through re-exports (e.g., `core/__init__.py` -> actual definition)
-- Finding all implementations of a Protocol
-- Mapping call hierarchies (who calls X, what does X call)
-- Understanding a file's structure before editing
-
-**When grep is still better:**
-- Searching for string literals, comments, or non-symbol patterns
-- Searching across non-Python files (YAML, JSON, markdown)
+Prefer LSP over grep for tracing symbols through imports/re-exports (e.g., `core/__init__.py` → actual definition), finding Protocol implementations, and mapping call hierarchies. Grep remains better for string literals, comments, and non-Python files (YAML, JSON, markdown).
 
 ## Subagent Configuration
 

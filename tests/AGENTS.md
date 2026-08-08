@@ -207,3 +207,33 @@ tests/
 
 temp/                        # Temporary/working files (gitignored)
 ```
+
+## Retirement Registries
+
+Root `AGENTS.md` § 3.1 states the invariant once; this section is the authoritative
+detail, kept beside the contract tests that enforce it. Renaming or retiring a
+registered entity must update its retirement registry in the SAME commit:
+
+- **Hook scripts** (`src/autoskillit/hooks/`): update `HOOK_REGISTRY` in
+  `hook_registry.py` AND add the old basename to `RETIRED_SCRIPT_BASENAMES`.
+  `test_no_retired_name_has_a_live_file` fails otherwise.
+- **Skills** (`src/autoskillit/skills_extended/` or `skills/`): update the skill's
+  `SKILL.md` `name:` field AND add the old directory name to `RETIRED_SKILL_NAMES`
+  in `src/autoskillit/core/types/_type_constants.py`.
+  `test_no_retired_skill_name_has_a_live_directory` fails otherwise.
+- **Install artifact shapes** (`~/.autoskillit/`, `~/.claude/plugins/`): changing an
+  artifact's *shape* (symlink → real directory, file → directory, …) must add an entry
+  to `RETIRED_INSTALL_ARTIFACT_SHAPES` in `_type_constants.py`. `~/.autoskillit/`
+  persists across years of releases while every contract test builds it fresh in
+  `tmp_path` — a shape change with no registry entry strands every pre-existing
+  install and no test notices. `test_no_retired_artifact_shape_is_unhandled` and
+  `test_reconciler_handles_every_retired_artifact_shape` fail otherwise.
+- **Skill contract validations**: adding or tightening an `invalid_reason`-producing
+  skill validation must mint a `SkillInvalidityKind` member AND register a
+  `SkillContractRemediationDef` in `SKILL_CONTRACT_REMEDIATIONS`
+  (`core/types/_type_constants.py`), extending
+  `tests/contracts/fixtures/skill_contract_corpus/` when the new validation would
+  strand a previously-valid shape. Project-local skill copies persist in external
+  repos with no way to see a tightened contract coming; the registry forces every new
+  validation to declare a `DETERMINISTIC` migration or `ADVISORY` hint before it can
+  ship. `tests/contracts/test_skill_contract_remediations.py` fails otherwise.

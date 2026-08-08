@@ -62,33 +62,13 @@ def test_claude_md_no_shared_content_duplicated() -> None:
         )
 
 
-def test_agents_md_architecture_tree_has_subpackages() -> None:
+def test_agents_md_architecture_tree_has_top_level_layout() -> None:
+    """Trimmed 2026-08: subpackage enumeration is inferable from the tree and lives
+    in package-local guides; the root keeps only the top-level layout."""
     assert AGENTS_MD.exists(), f"AGENTS.md not found at {AGENTS_MD}"
     content = AGENTS_MD.read_text()
-    for subpkg in [
-        "types/",
-        "runtime/",
-        "headless/",
-        "process/",
-        "merge_queue/",
-        "rules/",
-        "tools/",
-        "doctor/",
-        "fleet/",
-        "session/",
-        "ui/",
-        "update/",
-        "guards/",
-        "formatters/",
-    ]:
-        assert subpkg in content, f"AGENTS.md tree missing {subpkg}"
-
-
-def test_agents_md_dataclass_count_is_28() -> None:
-    assert AGENTS_MD.exists(), f"AGENTS.md not found at {AGENTS_MD}"
-    content = AGENTS_MD.read_text()
-    assert "29 leaf dataclasses" in content
-    assert "28 leaf dataclasses" not in content
+    for entry in ["src/autoskillit/", "tests/", "Taskfile.yml", "pyproject.toml"]:
+        assert entry in content, f"AGENTS.md top-level layout missing {entry}"
 
 
 def test_claude_md_has_lsp_section() -> None:

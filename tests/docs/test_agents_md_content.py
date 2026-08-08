@@ -95,11 +95,10 @@ class TestAgentsMdNoClaude:
 UNIVERSAL_PROJECT_RULE_MARKERS: list[tuple[str, str]] = [
     ("Version Bumps", "version-bumps"),
     ("pre-commit run --all-files", "pre-commit"),
-    ("HOOK_REGISTRY", "hook-renames"),
     ("RETIRED_SCRIPT_BASENAMES", "hook-renames"),
     ("RETIRED_SKILL_NAMES", "skill-renames"),
     ("POSIX ERE", "search-tool-ere"),
-    ("use `|` for OR-alternation", "search-tool-ere"),
+    ('Grep(pattern="foo|bar")', "search-tool-ere"),
     ("autoskillit init", "worktree-init-prohibition"),
     ("task install-worktree", "worktree-init-prohibition"),
     ("Naming convention", "def-vs-spec-suffixes"),
@@ -139,8 +138,9 @@ class TestAgentsMdContentQuality:
     def test_agents_md_github_api_has_sleep_rule(self, agents_md: str) -> None:
         assert "sleep 1" in agents_md or "asyncio.sleep(1)" in agents_md
 
-    def test_agents_md_architecture_has_package_table(self, agents_md: str) -> None:
-        assert "| Package | IL | Purpose |" in agents_md
+    def test_agents_md_architecture_points_to_discoverable_layout(self, agents_md: str) -> None:
+        assert "ls src/autoskillit/" in agents_md
+        assert "nearest ancestor guide" in agents_md
 
     def test_agents_md_has_import_layer_table(self, agents_md: str) -> None:
         assert "| IL-N (single digit)" in agents_md or "Import layer" in agents_md
@@ -151,9 +151,11 @@ class TestAgentsMdContentQuality:
     def test_agents_md_testing_mentions_parallel_safety(self, agents_md: str) -> None:
         assert "parallel" in agents_md.lower()
 
-    def test_agents_md_package_table_is_marked_as_index(self, agents_md: str) -> None:
+    def test_agents_md_carries_no_package_index_table(self, agents_md: str) -> None:
+        """Trimmed 2026-08: the package index is inferable from the codebase and must
+        not creep back into the root instruction surface."""
         assert "an index, not required reading" in agents_md
-        assert "| Package | IL | Purpose |" in agents_md
+        assert "| Package | IL | Purpose |" not in agents_md
 
     def test_agents_md_diagnostics_mentions_codex(self, agents_md: str) -> None:
         parts = agents_md.split("## **6. Session Diagnostics**")

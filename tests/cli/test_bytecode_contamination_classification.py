@@ -61,7 +61,7 @@ def test_regular_file_named_pycache_is_not_classified_as_bytecode(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    state = build_plugin_artifact_state(tmp_path, PluginArtifactStateKind.VALID)
+    state = build_plugin_artifact_state(tmp_path, PluginArtifactStateKind.VALID_CURRENT)
     (state.managed_root / "__pycache__").write_text("ordinary file", encoding="utf-8")
     from autoskillit.core._plugin_artifact_identity import read_installed_plugin_artifact_identity
     from autoskillit.core._plugin_ids import installed_plugin_semantic_key

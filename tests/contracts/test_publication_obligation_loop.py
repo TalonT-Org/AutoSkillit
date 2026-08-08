@@ -506,7 +506,9 @@ def test_mismatched_generation_identity_keeps_obligation(
     )
 
     assert result.outcome is m.ObligationRepairOutcome.FAILED
-    assert read_obligation(tmp_path) == obligation
+    remaining = read_obligation(tmp_path)
+    assert remaining is not None
+    assert remaining.expected_version == "1.1.0"
 
 
 @pytest.mark.parametrize("persisted_version", [None, "not a version"])

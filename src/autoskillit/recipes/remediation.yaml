@@ -42,7 +42,6 @@ ingredients:
     description: Source repository
     required: false
     default: ''
-    authority: config
   run_name:
     description: Run name prefix
     default: remediation

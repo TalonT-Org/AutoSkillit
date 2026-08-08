@@ -7,8 +7,7 @@
     "source_dir": {
       "description": "Source repository (inherited from parent recipe context)",
       "required": false,
-      "default": "",
-      "authority": "config"
+      "default": ""
     },
     "base_branch": {
       "description": "Merge target branch (inherited from parent recipe context)",

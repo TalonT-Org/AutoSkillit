@@ -24,7 +24,6 @@ ingredients:
     description: "Source repository path"
     required: false
     default: ""
-    authority: config
   execution_map:
     description: >-
       Path to pre-computed BEM execution map JSON. When provided (campaign

@@ -25,8 +25,7 @@
     "source_dir": {
       "description": "Source repository",
       "required": false,
-      "default": "",
-      "authority": "config"
+      "default": ""
     },
     "run_name": {
       "description": "Run name prefix",

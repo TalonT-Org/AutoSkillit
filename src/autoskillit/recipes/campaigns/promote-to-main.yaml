@@ -20,7 +20,6 @@ ingredients:
   source_dir:
     description: "Source repository path"
     required: true
-    authority: config
   batch_branch:
     description: "Integration branch to promote"
     default: "develop"

@@ -91,6 +91,18 @@ def valid_failure_detail(value: object) -> bool:
     )
 
 
+def valid_failure_reason(value: object) -> bool:
+    if value is None:
+        return True
+    if not isinstance(value, str):
+        return False
+    try:
+        CaptureFailureReason(value)
+    except ValueError:
+        return False
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Failure disposition registry — A-I1 (workstream A)
 # ---------------------------------------------------------------------------

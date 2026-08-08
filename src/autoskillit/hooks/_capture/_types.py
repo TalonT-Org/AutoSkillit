@@ -283,7 +283,7 @@ class CaptureFailureEvidence:
                 self.settlement_returncode is not None
                 and (type(self.settlement_returncode) is not int)
             )
-            or (self.failure_reason is not None and not isinstance(self.failure_reason, str))
+            or not _failure_policy.valid_failure_reason(self.failure_reason)
         ):
             raise _descriptor.CaptureAuthorityError("invalid capture failure evidence")
 

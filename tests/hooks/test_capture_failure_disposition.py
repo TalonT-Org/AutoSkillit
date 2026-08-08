@@ -10,6 +10,8 @@ from autoskillit.hooks._capture._failure_policy import (
     CaptureFailureDispositionDef,
     CaptureFailureReason,
 )
+from autoskillit.hooks._capture._snapshot import CaptureAuthorityError
+from autoskillit.hooks._capture._types import CaptureFailureEvidence
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
@@ -38,4 +40,13 @@ class TestDispositionRegistryTotality:
         assert (
             FAILURE_DISPOSITIONS[CaptureFailureReason.UNKNOWN_SETUP].disposition
             is CaptureFailureDisposition.DISCARD_OUTPUT
+        )
+
+
+def test_failure_evidence_rejects_unknown_reason_wire_value() -> None:
+    with pytest.raises(CaptureAuthorityError, match="invalid capture failure evidence"):
+        CaptureFailureEvidence(
+            stage="capture_failure",
+            detail="failure detail",
+            failure_reason="NOT_A_CAPTURE_FAILURE_REASON",
         )

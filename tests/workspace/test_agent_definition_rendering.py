@@ -84,6 +84,37 @@ class TestRenderAgentDefinitionsValidation:
         after = (agents_dir / "builtin-only.md").read_bytes()
         assert before == after, "non-MCP agent files must be byte-identical after rendering"
 
+    def test_projection_preserves_crlf_line_endings(self, tmp_path: Path) -> None:
+        from autoskillit.workspace._projected_artifact.materialization import (
+            _render_agent_definitions,
+        )
+
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        path = agents_dir / "crlf-agent.md"
+        path.write_bytes(
+            (
+                "---\r\n"
+                "name: crlf-agent\r\n"
+                'description: "Test agent."\r\n'
+                f"tools: [{DIRECT_PREFIX}submit_exploration_query]\r\n"
+                "model: sonnet\r\n"
+                "maxTurns: 5\r\n"
+                "---\r\n"
+                "\r\n"
+                "Test agent body.\r\n"
+            ).encode()
+        )
+
+        _render_agent_definitions(agents_dir, MARKETPLACE_PREFIX)
+
+        rendered = path.read_bytes()
+        projected_tools_line = (
+            f"tools: [{MARKETPLACE_PREFIX}submit_exploration_query]\r\n".encode()
+        )
+        assert projected_tools_line in rendered
+        assert b"\n" not in rendered.replace(b"\r\n", b"")
+
 
 class TestRenderAgentDefinitionsByteIdentity:
     """T4: rendering with DIRECT_PREFIX produces byte-identical output for source files."""

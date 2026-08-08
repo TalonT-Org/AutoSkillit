@@ -612,7 +612,7 @@ def _render_agent_definitions(agents_dir: Path, mcp_tool_prefix: str) -> None:
     for path in sorted(agents_dir.glob("*.md")):
         if path.name in {"AGENTS.md", "CLAUDE.md"}:
             continue
-        content = path.read_text(encoding="utf-8")
+        content = path.read_bytes().decode("utf-8")
         lines = content.splitlines(keepends=True)
         tools_line_idx: int | None = None
         for idx, line in enumerate(lines):
@@ -636,10 +636,18 @@ def _render_agent_definitions(agents_dir: Path, mcp_tool_prefix: str) -> None:
             project_agent_tool_name(tool, mcp_tool_prefix) for tool in source_def.tools
         )
         new_tools_value = "[" + ", ".join(projected_tools) + "]"
-        indent = lines[tools_line_idx][
-            : len(lines[tools_line_idx]) - len(lines[tools_line_idx].lstrip())
+        original_tools_line = lines[tools_line_idx]
+        indent = original_tools_line[
+            : len(original_tools_line) - len(original_tools_line.lstrip())
         ]
-        lines[tools_line_idx] = f"{indent}tools: {new_tools_value}\n"
+        line_ending = (
+            "\r\n"
+            if original_tools_line.endswith("\r\n")
+            else "\n"
+            if original_tools_line.endswith("\n")
+            else ""
+        )
+        lines[tools_line_idx] = f"{indent}tools: {new_tools_value}{line_ending}"
         rendered = "".join(lines)
         atomic_write(path, rendered)
 

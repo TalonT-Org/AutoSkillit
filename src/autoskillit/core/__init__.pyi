@@ -764,6 +764,7 @@ from .types import InputSpecType as InputSpecType
 from .types import InspectorCallback as InspectorCallback
 from .types import InspectorEvidence as InspectorEvidence
 from .types import InspectorVerdict as InspectorVerdict
+from .types import InstallMode as InstallMode
 from .types import InstallationVersion as InstallationVersion
 from .types import InstalledRecipeExecution as InstalledRecipeExecution
 from .types import IntakeRuleDef as IntakeRuleDef
@@ -790,6 +791,7 @@ from .types import LensEntry as LensEntry
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
 from .types import LogicalRoleSpec as LogicalRoleSpec
+from .types import MaintenanceInstallArgv as MaintenanceInstallArgv
 from .types import ManagedHeadlessSessionKind as ManagedHeadlessSessionKind
 from .types import ManagedHeadlessSessionLineage as ManagedHeadlessSessionLineage
 from .types import ManagedHeadlessSessionLineageRef as ManagedHeadlessSessionLineageRef

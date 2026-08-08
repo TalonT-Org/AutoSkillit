@@ -27,7 +27,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 # Files that legitimately contain the literal (the canonical builder).
 _ALLOWLIST: frozenset[Path] = frozenset(
     {
-        Path("src/autoskillit/cli/_install_contract.py"),
+        Path("src/autoskillit/core/types/_type_install.py"),
     },
 )
 

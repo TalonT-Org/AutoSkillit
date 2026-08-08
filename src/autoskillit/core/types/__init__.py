@@ -54,6 +54,8 @@ from ._type_helpers import *  # noqa: F401, F403
 from ._type_helpers import __all__ as _helpers_all
 from ._type_inspector import *  # noqa: F401, F403
 from ._type_inspector import __all__ as _inspector_all
+from ._type_install import *  # noqa: F401, F403
+from ._type_install import __all__ as _install_all
 from ._type_intake_policy import *  # noqa: F401, F403
 from ._type_intake_policy import __all__ as _intake_policy_all
 from ._type_invariant_registry import *  # noqa: F401, F403
@@ -132,6 +134,7 @@ __all__ = (
     + _helpers_all
     + _inspector_all
     + _intake_policy_all
+    + _install_all
     + _invariant_registry_all
     + _launch_all
     + _native_shell_capture_all

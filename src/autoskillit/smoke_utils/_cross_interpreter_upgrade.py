@@ -152,7 +152,7 @@ def run_cross_interpreter_upgrade_smoke(*, work_dir: str) -> bool:
     # on the upgraded interpreter's distribution version. Without this, the
     # maintenance-install child rejects the call at the strict
     # --expected-version boundary.
-    from autoskillit.cli._install_contract import MaintenanceInstallArgv
+    from autoskillit.core import MaintenanceInstallArgv
 
     version_check = subprocess.run(
         [entrypoint, "--version"], env=env, capture_output=True, text=True, timeout=60

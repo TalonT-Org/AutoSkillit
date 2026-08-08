@@ -71,10 +71,11 @@ def resolve_current_generation(home: Path, plugin_ref: str, version: str) -> Pat
     if not selector.is_symlink():
         return None
     try:
+        version_root = selector.parent.resolve(strict=True)
         target = selector.resolve(strict=True)
     except OSError:
         return None
-    return target if target.is_dir() else None
+    return target if target.is_dir() and target.parent == version_root else None
 
 
 def installed_plugin_artifact_manifest_path(managed_root: Path) -> Path:

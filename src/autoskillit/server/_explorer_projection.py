@@ -150,29 +150,21 @@ def _issue_explorer_binding_env(
     authority_home: Path,
 ) -> dict[str, dict[str, str]] | None:
     """Mint one shared principal replicated to both terminal role projections."""
+    backend = projection_context.backend
+    if identity is None or backend is None:
+        return None
     if not is_explorer_binding_eligible(
-        has_identity=identity is not None,
-        has_backend=projection_context.backend is not None,
-        terminal_explorer_capable=(
-            projection_context.backend.capabilities.terminal_explorer_capable
-            if projection_context.backend is not None
-            else False
-        ),
-        session_scoped_explorer_capable=(
-            projection_context.backend.capabilities.session_scoped_explorer_capable
-            if projection_context.backend is not None
-            else False
-        ),
+        has_identity=True,
+        has_backend=True,
+        terminal_explorer_capable=backend.capabilities.terminal_explorer_capable,
+        session_scoped_explorer_capable=backend.capabilities.session_scoped_explorer_capable,
         parent_sandbox_mode=projection_context.parent_sandbox_mode,
         session_type=_resolve_session_type(),
     ):
         return None
-    if identity is None:
-        return None
     # Session-scoped backends (Claude) are eligible but use a different authority
     # model — per-child env bindings structurally cannot apply.
-    assert projection_context.backend is not None
-    if not projection_context.backend.capabilities.terminal_explorer_capable:
+    if not backend.capabilities.terminal_explorer_capable:
         return None
     store = tool_ctx.exploration_context_store
     if store is None:

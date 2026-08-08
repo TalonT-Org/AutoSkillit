@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import TypedDict
 
@@ -384,14 +385,13 @@ async def enable_exploration(
                 separators=(",", ":"),
             )
 
-        ctx = _get_ctx()
-        store = ctx.exploration_context_store
+        store = _get_ctx().exploration_context_store
         if not isinstance(store, OwnerBoundExplorationContextStore):
             return json.dumps(
                 {"status": "error", "code": "exploration_store_unavailable"},
                 separators=(",", ":"),
             )
-        session_id = getattr(ctx, "session_id", None)
+        session_id = _get_session_id()
         if session_id is None:
             return json.dumps(
                 {"status": "error", "code": "no_session_id"},
@@ -399,25 +399,16 @@ async def enable_exploration(
             )
         cwd = Path(project_dir) if project_dir else Path.cwd()
         repository_root = store.trusted_root
-        import os
-
-        capability = store.bind_session_scoped(
+        store.bind_session_scoped(
             owner_id=f"uid:{os.getuid()}",
             session_id=session_id,
             cwd=cwd,
             repository_root=repository_root,
             source_identity=f"interactive:{session_id}",
         )
-        if capability:
-            from autoskillit.server import mcp as _mcp
-
-            _mcp.enable(tags={"exploration"}, components={"tool"})
-            return json.dumps(
-                {"status": "ok", "exploration_enabled": True},
-                separators=(",", ":"),
-            )
+        mcp.enable(tags={"exploration"}, components={"tool"})
         return json.dumps(
-            {"status": "error", "code": "bind_failed"},
+            {"status": "ok", "exploration_enabled": True},
             separators=(",", ":"),
         )
     except Exception:

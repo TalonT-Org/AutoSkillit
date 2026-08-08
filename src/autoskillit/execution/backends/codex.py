@@ -2177,15 +2177,20 @@ class CodexBackend(BackendCmdBuilderBase):
         if env_source.exists():
             shutil.copy2(env_source, session_dir / ".env")
 
+        toml_definitions = (
+            projected_definitions
+            if explorer_binding_envs
+            else tuple(d for d in projected_definitions if d.name not in BUNDLED_EXPLORER_ROLES)
+        )
         _generate_agent_tomls(
             session_dir,
-            projected_definitions,
+            toml_definitions,
             explorer_binding_envs=explorer_binding_envs,
             explorer_mcp_transport=explorer_mcp_transport,
         )
         registered = _register_agent_tomls(
             session_dir,
-            projected_definitions,
+            toml_definitions,
             explorer_binding_envs=explorer_binding_envs,
         )
         logger.debug("codex_agents_registered", count=registered)

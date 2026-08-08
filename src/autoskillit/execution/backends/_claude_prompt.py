@@ -251,14 +251,13 @@ CODEX_CO_INJECTED_POLICIES: tuple[CoInjectedPolicyDef, ...] = (
         constant_name="CODEX_INTAKE_DISCIPLINE_DIGEST",
         subjects=frozenset(
             {
-                "instruction-file-intake",
                 "data-file-intake",
                 "tool-result-budget",
                 "package-table-orientation",
                 "subagent-spawning",
             }
         ),
-        scope_marker="Instruction files",
+        scope_marker="250 lines",
         delivery="universal",
     ),
     CoInjectedPolicyDef(

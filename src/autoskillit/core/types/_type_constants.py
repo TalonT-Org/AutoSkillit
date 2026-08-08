@@ -22,6 +22,7 @@ __all__ = [
     "OUTPUT_DISCIPLINE_REQUIRED_SKILLS",
     "RETIRED_SKILL_NAMES",
     "RETIRED_AGENT_NAMES",
+    "RETIRED_INTAKE_RULE_IDS",
     "RETIRED_INSTALL_ARTIFACT_SHAPES",
     "RetiredArtifactShape",
     "SkillContractRemediationDef",
@@ -199,6 +200,22 @@ if any(n != n.lower() for n in RETIRED_AGENT_NAMES):
     raise AssertionError(
         "RETIRED_AGENT_NAMES entries must be lowercase. "
         f"Offending: {sorted(n for n in RETIRED_AGENT_NAMES if n != n.lower())}"
+    )
+
+RETIRED_INTAKE_RULE_IDS: frozenset[str] = frozenset(
+    {
+        # Intake-rule ids that have been removed from CODEX_INTAKE_RULES.
+        # Append retired ids here atomically with the removal commit.
+        # DO NOT REMOVE entries — this registry is append-only.
+        # Removed #4487; harness injection made the re-read redundant.
+        "instruction-file-completeness",
+    }
+)
+
+if any(n != n.lower() for n in RETIRED_INTAKE_RULE_IDS):
+    raise AssertionError(
+        "RETIRED_INTAKE_RULE_IDS entries must be lowercase. "
+        f"Offending: {sorted(n for n in RETIRED_INTAKE_RULE_IDS if n != n.lower())}"
     )
 
 

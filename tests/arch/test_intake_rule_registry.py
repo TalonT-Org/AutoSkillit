@@ -15,6 +15,7 @@ from autoskillit.core import (
     CODEX_INTAKE_DISCIPLINE_DIGEST,
     CODEX_INTAKE_DISCIPLINE_VERSION,
     CODEX_INTAKE_RULES,
+    RETIRED_INTAKE_RULE_IDS,
     render_intake_digest,
 )
 from autoskillit.execution.backends._claude_prompt import CODEX_CO_INJECTED_POLICIES
@@ -224,3 +225,53 @@ def test_every_rule_subject_is_declared_for_the_intake_digest() -> None:
         if entry.constant_name == "CODEX_INTAKE_DISCIPLINE_DIGEST"
     )
     assert rule_subjects == set(matrix_entry.subjects)
+
+
+def test_no_retired_intake_rule_id_is_live() -> None:
+    live_ids = {rule.id for rule in CODEX_INTAKE_RULES}
+    overlap = live_ids & set(RETIRED_INTAKE_RULE_IDS)
+    assert overlap == set(), (
+        f"Retired intake-rule ids must not appear in CODEX_INTAKE_RULES: {overlap}"
+    )
+
+
+def test_retired_intake_rule_ids_are_lowercase_and_kebab_case() -> None:
+    kebab_re = re.compile(r"^[a-z][a-z0-9-]*$")
+    for retired_id in RETIRED_INTAKE_RULE_IDS:
+        assert retired_id, "RETIRED_INTAKE_RULE_IDS entries must be non-empty"
+        assert kebab_re.fullmatch(retired_id), (
+            f"Retired intake-rule id {retired_id!r} must match {kebab_re.pattern!r}"
+        )
+
+
+def test_data_file_bounded_read_exception_does_not_reference_retired_rules() -> None:
+    (rule,) = (rule for rule in CODEX_INTAKE_RULES if rule.id == "data-file-bounded-read")
+    assert "completeness rule" not in rule.exception, (
+        f"data-file-bounded-read.exception still references retired completeness rule: "
+        f"{rule.exception!r}"
+    )
+    assert "completeness rule above" not in rule.exception
+
+
+def test_surviving_intake_rule_wire_order_is_stable_after_removal() -> None:
+    assert [rule.id for rule in CODEX_INTAKE_RULES] == [
+        "data-file-bounded-read",
+        "outer-result-token-ceiling",
+        "agents-md-package-table",
+        "subagent-fresh-context",
+        "subagent-parent-wait",
+    ]
+
+
+def test_retired_intake_rule_ids_gateway_is_a_frozenset() -> None:
+    """`RETIRED_INTAKE_RULE_IDS` must be reachable via the public `autoskillit.core` gateway.
+
+    Companion to `test_no_retired_intake_rule_id_is_live`; proves the IL-0
+    hard constraint (production code imports only from `autoskillit.core`,
+    never from `autoskillit.core.types` directly) is honoured for the new
+    retirement registry.
+    """
+    from autoskillit.core import RETIRED_INTAKE_RULE_IDS as GatewayRetiredIntakeRuleIds
+
+    assert isinstance(GatewayRetiredIntakeRuleIds, frozenset)
+    assert GatewayRetiredIntakeRuleIds is RETIRED_INTAKE_RULE_IDS

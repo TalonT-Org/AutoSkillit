@@ -52,6 +52,7 @@ from autoskillit.hooks._capture_contract import (
     CaptureRequest,
     CaptureV2Fields,
     encode_capture_request,
+    parse_capture_degraded_v3,
     parse_capture_failure_v3,
     parse_capture_v2,
 )
@@ -103,6 +104,16 @@ def _single_failure_marker(output: str) -> CaptureFailureV3:
     ]
     assert len(candidates) == 1
     return parse_capture_failure_v3(candidates[0])
+
+
+def _single_degraded_marker(output: str) -> CaptureFailureV3:
+    candidates = [
+        line.encode()
+        for line in output.splitlines()
+        if line.startswith("[AutoSkillit shell capture degraded v3:")
+    ]
+    assert len(candidates) == 1
+    return parse_capture_degraded_v3(candidates[0])
 
 
 def _runner_request(
@@ -2037,6 +2048,35 @@ def test_stdout_delivery_failure_closes_resources_without_success(
     for fd in observed_fds:
         with pytest.raises(OSError):
             os.fstat(fd)
+
+
+def test_degraded_finalization_delivers_verified_output_and_child_status(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    process = _FakeCaptureProcess(b"captured-output")
+
+    def fail_finalization(*_args, **_kwargs):
+        raise CaptureCapacityError(CaptureCapacityReason.PROJECTED_COMPACTED_BYTES)
+
+    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(
+        CaptureLifecycleStore,
+        "commit_verified_snapshot",
+        fail_finalization,
+    )
+
+    assert run_capture("printf output", str(project), _CAPTURE_ID) == 0
+    captured = capfd.readouterr()
+    degraded = _single_degraded_marker(captured.err)
+    assert captured.out == "captured-output"
+    assert degraded.reason is CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED
+    assert degraded.stage == "capture_finalization"
+    assert degraded.shell_returncode == 0
+    assert degraded.settlement_returncode is None
 
 
 def test_degraded_stdout_failure_preserves_delivery_error_as_cause(

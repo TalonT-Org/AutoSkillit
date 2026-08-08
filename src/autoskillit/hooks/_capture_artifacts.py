@@ -10,7 +10,7 @@ import os
 import stat
 import subprocess
 import sys
-from dataclasses import InitVar, dataclass
+from dataclasses import InitVar, dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -398,9 +398,7 @@ def _policy_capacity(value: object) -> CaptureCapacitySpec | None:
     if not validated:
         return None
     try:
-        from dataclasses import replace as _replace
-
-        return _replace(CaptureCapacitySpec(), **validated)
+        return replace(CaptureCapacitySpec(), **validated)
     except (TypeError, ValueError):
         return None
 

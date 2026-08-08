@@ -123,10 +123,14 @@ class _NativeExplorationDispatchRenderer:
             )
             replacements[vector.id] = self._native_call(definition, prompt)
             definition_digests[vector.id] = definition_digest
-        # Build shared preamble — routing contract + task constants
         context_ref = launch_context_ref or "runtime-bound"
+        provisioning = (
+            f"\n\n{self.conventions.provisioning_preamble}"
+            if self.conventions.provisioning_preamble
+            else ""
+        )
         preamble = (
-            f"{_PARENT_ROUTING_INSTRUCTIONS}\n\n"
+            f"{_PARENT_ROUTING_INSTRUCTIONS}{provisioning}\n\n"
             f"Shared exploration task constants:\n"
             f"profile: {migrated[0].profile.value}\n"
             f"depends_on: none\n"
@@ -149,6 +153,12 @@ CLAUDE_EXPLORATION_DISPATCH_RENDERER = _NativeExplorationDispatchRenderer(
         description_argument="description",
         message_argument="prompt",
         role_prefix="autoskillit:",
+        provisioning_preamble=(
+            "Before dispatching explorer subagents, call enable_exploration() to "
+            "establish session-scoped exploration authority. The three broker tools "
+            "(submit_exploration_query, get_exploration_page, resume_exploration_context) "
+            "become visible only after enable_exploration succeeds."
+        ),
     )
 )
 

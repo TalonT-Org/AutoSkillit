@@ -56,6 +56,7 @@ class ExplorationDispatchConventions:
     message_argument: str
     role_prefix: str = ""
     description_argument: str | None = None
+    provisioning_preamble: str | None = None
 
     def __post_init__(self) -> None:
         values = (self.launcher, self.role_argument, self.message_argument)

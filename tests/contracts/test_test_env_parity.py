@@ -21,11 +21,61 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 _TASKFILE = Path(__file__).resolve().parent.parent.parent / "Taskfile.yml"
 
 
-def _taskfile_env_vars() -> set[str]:
+_ENV_KEY_RE = re.compile(r"^([A-Z][A-Z_0-9]+):(?:\s|$)")
+
+
+def _taskfile_env_vars(content: str | None = None) -> set[str]:
     """Extract env vars set in Taskfile.yml pytest task env blocks."""
-    content = _TASKFILE.read_text()
-    # Match lines like "      VARNAME: value" in env: blocks
-    return set(re.findall(r"^\s+([A-Z][A-Z_0-9]+):\s", content, re.MULTILINE))
+    taskfile_content = _TASKFILE.read_text() if content is None else content
+    env_vars: set[str] = set()
+    env_indent: int | None = None
+    key_indent: int | None = None
+
+    for raw_line in taskfile_content.splitlines():
+        stripped = raw_line.lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(raw_line) - len(stripped)
+
+        if env_indent is not None and indent <= env_indent:
+            env_indent = None
+            key_indent = None
+        if stripped == "env:":
+            env_indent = indent
+            key_indent = None
+            continue
+        if env_indent is None:
+            continue
+
+        if key_indent is None:
+            key_indent = indent
+        if indent != key_indent:
+            continue
+        match = _ENV_KEY_RE.match(stripped)
+        if match is not None:
+            env_vars.add(match.group(1))
+
+    return env_vars
+
+
+def test_taskfile_env_extraction_is_scoped_to_direct_env_entries() -> None:
+    content = """
+vars:
+  NOT_AN_ENV: value
+tasks:
+  first:
+    env:
+      FIRST_ENV: value
+      COMPLEX_ENV:
+        NOT_A_DIRECT_ENTRY: value
+    vars:
+      ALSO_NOT_ENV: value
+  second:
+    env:
+      SECOND_ENV: value
+"""
+
+    assert _taskfile_env_vars(content) == {"COMPLEX_ENV", "FIRST_ENV", "SECOND_ENV"}
 
 
 # Taskfile vars that are NOT parity concerns — paths, feature toggles,

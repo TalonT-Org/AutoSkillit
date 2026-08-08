@@ -50,15 +50,15 @@ class TestDirectoryTreeDigest:
 
     def test_entry_kind_sensitivity(self, tmp_path: Path) -> None:
         """A file vs. a directory with the same name produce different digests."""
-        root_a = tmp_path / "variant_a"
-        root_a.mkdir()
-        (root_a / "x").write_text("file")
+        entry = tmp_path / "x"
+        entry.write_text("file")
+        file_digest = directory_tree_digest(tmp_path)
 
-        root_b = tmp_path / "variant_b"
-        root_b.mkdir()
-        (root_b / "x").mkdir()
+        entry.unlink()
+        entry.mkdir()
+        directory_digest = directory_tree_digest(tmp_path)
 
-        assert directory_tree_digest(root_a) != directory_tree_digest(root_b)
+        assert file_digest != directory_digest
 
     def test_empty_tree(self, tmp_path: Path) -> None:
         d = directory_tree_digest(tmp_path)

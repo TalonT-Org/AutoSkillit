@@ -978,6 +978,9 @@ def _generate_agent_tomls(
 ) -> int:
     definitions = _bundled_agent_definitions() if agent_defs is None else agent_defs
     bindings = explorer_binding_envs or {}
+    eligible = tuple(
+        d for d in definitions if d.name not in BUNDLED_EXPLORER_ROLES or d.name in bindings
+    )
     rendered = {
         definition.name: _render_agent_toml(
             definition,
@@ -987,27 +990,33 @@ def _generate_agent_tomls(
             ),
             project_explorer_mcp=definition.name in bindings,
         )
-        for definition in definitions
+        for definition in eligible
     }
     out_dir = session_dir / "agents"
     out_dir.mkdir(exist_ok=True)
-    for definition in definitions:
+    for definition in eligible:
         toml_path = out_dir / f"{definition.name}.toml"
         atomic_write(toml_path, rendered[definition.name])
-    logger.debug("codex_agents_generated", count=len(definitions), dest=str(out_dir))
-    return len(definitions)
+    logger.debug("codex_agents_generated", count=len(eligible), dest=str(out_dir))
+    return len(eligible)
 
 
 def _register_agent_tomls(
     session_dir: Path,
     agent_defs: tuple[AgentDef, ...] | None = None,
+    *,
+    explorer_binding_envs: Mapping[str, Mapping[str, str]] | None = None,
 ) -> int:
     config_path = session_dir / "config.toml"
     config_text = config_path.read_text(encoding="utf-8")
     tomllib.loads(config_text)
     registrations: list[str] = []
     definitions = _bundled_agent_definitions() if agent_defs is None else agent_defs
-    for definition in definitions:
+    bindings = explorer_binding_envs or {}
+    eligible = tuple(
+        d for d in definitions if d.name not in BUNDLED_EXPLORER_ROLES or d.name in bindings
+    )
+    for definition in eligible:
         agent_path = session_dir / "agents" / f"{definition.name}.toml"
         agent = tomllib.loads(agent_path.read_text(encoding="utf-8"))
         if agent.get("name") != definition.name:
@@ -2168,7 +2177,11 @@ class CodexBackend(BackendCmdBuilderBase):
             explorer_binding_envs=explorer_binding_envs,
             explorer_mcp_transport=explorer_mcp_transport,
         )
-        registered = _register_agent_tomls(session_dir, projected_definitions)
+        registered = _register_agent_tomls(
+            session_dir,
+            projected_definitions,
+            explorer_binding_envs=explorer_binding_envs,
+        )
         logger.debug("codex_agents_registered", count=registered)
         _materialize_profile_skills(
             session_dir,

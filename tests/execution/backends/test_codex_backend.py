@@ -13,6 +13,7 @@ import structlog.testing
 
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
+    BUNDLED_EXPLORER_ROLES,
     CAMPAIGN_ID_ENV_VAR,
     CODEX_MODEL_ALIASES,
     DIRECT_PREFIX,
@@ -1723,9 +1724,11 @@ class TestCodexBackendSetupSessionDir:
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)
         toml_files = list((self.session_dir / "agents").glob("*.toml"))
+        # Unbound setup excludes explorer roles (no bindings = not advertised)
         expected_names = {
             f"{definition.name}.toml"
             for definition in load_agent_definitions(pkg_root() / "agents")
+            if definition.name not in BUNDLED_EXPLORER_ROLES
         }
         actual_names = {path.name for path in toml_files}
         assert actual_names == expected_names, (
@@ -1758,8 +1761,6 @@ class TestCodexBackendSetupSessionDir:
                 in {
                     "pr-review-auditor-reachability",
                     "pr-review-auditor-abstraction-surface",
-                    "semantic-code-navigator",
-                    "repository-impact-profiler",
                 }
                 else "workspace-write"
             )
@@ -1770,11 +1771,12 @@ class TestCodexBackendSetupSessionDir:
     def test_read_only_agent_tools_project_to_read_only_sandbox(self) -> None:
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)
+        # Explorer roles (semantic-code-navigator, repository-impact-profiler)
+        # are excluded from unbound generation — verify only the always-present
+        # read-only roles.
         for name in (
             "pr-review-auditor-reachability",
             "pr-review-auditor-abstraction-surface",
-            "semantic-code-navigator",
-            "repository-impact-profiler",
         ):
             data = tomllib.loads(
                 (self.session_dir / "agents" / f"{name}.toml").read_text(encoding="utf-8")

@@ -3,13 +3,51 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from enum import StrEnum
 
 from . import _ledger
-from ._failure_policy import CaptureFailureReason
+from ._failure_policy import CAPACITY_FAILURE_REASONS, CaptureFailureReason
 from ._module_identity import register_module_aliases
 from ._types import CaptureCapacityReason, CaptureCapacitySpec
 
 register_module_aliases(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Gate declaration
+# ---------------------------------------------------------------------------
+
+
+class CapacityGate(StrEnum):
+    """Which capacity gate a reason can fire from."""
+
+    ADMISSION = "ADMISSION"
+    TRANSITION = "TRANSITION"
+
+
+CAPACITY_REASON_GATES: dict[CaptureCapacityReason, frozenset[CapacityGate]] = {
+    CaptureCapacityReason.ACTIVE_CAPACITY: frozenset({CapacityGate.ADMISSION}),
+    CaptureCapacityReason.RETENTION_CAPACITY: frozenset({CapacityGate.ADMISSION}),
+    CaptureCapacityReason.EVIDENCE_CAPACITY: frozenset({CapacityGate.ADMISSION}),
+    CaptureCapacityReason.PROJECTED_COMPACTED_BYTES: frozenset(
+        {CapacityGate.ADMISSION, CapacityGate.TRANSITION}
+    ),
+    CaptureCapacityReason.HARD_LEDGER_CAPACITY: frozenset(
+        {CapacityGate.ADMISSION, CapacityGate.TRANSITION}
+    ),
+}
+
+# Import-time totality assertion: a new CaptureCapacityReason member
+# without a gate declaration prevents this module from loading.
+if set(CAPACITY_REASON_GATES) != set(CaptureCapacityReason):
+    raise AssertionError(
+        "CAPACITY_REASON_GATES must cover exactly the CaptureCapacityReason members: "
+        f"missing={set(CaptureCapacityReason) - set(CAPACITY_REASON_GATES)}, "
+        f"extra={set(CAPACITY_REASON_GATES) - set(CaptureCapacityReason)}"
+    )
+for _key, _gates in CAPACITY_REASON_GATES.items():
+    if not _gates:
+        raise AssertionError(f"CAPACITY_REASON_GATES[{_key!r}] has empty gate set")
 
 Record = _ledger.CaptureLifecycleRecord
 CompactedFrameSizeCache = dict[str, tuple[Record, int, int]]
@@ -33,6 +71,10 @@ _FAILURE_REASONS = {
         CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED
     ),
 }
+if frozenset(_FAILURE_REASONS.values()) != CAPACITY_FAILURE_REASONS:
+    raise AssertionError(
+        "_FAILURE_REASONS must cover exactly the capacity CaptureFailureReason members"
+    )
 
 
 def reason_detail(reason: CaptureCapacityReason) -> str:

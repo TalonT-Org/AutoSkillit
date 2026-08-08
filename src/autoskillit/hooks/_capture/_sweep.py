@@ -9,7 +9,7 @@ from collections.abc import Callable, Collection, Iterable
 from dataclasses import replace
 from typing import NamedTuple, Protocol
 
-from . import _orphan_scan, _store_port, _sweep_cursor
+from . import _lifecycle_policy, _orphan_scan, _store_port, _sweep_cursor
 from ._cleanup import close_preserving_primary
 from ._ledger import (
     CaptureLifecycleRecord,
@@ -610,7 +610,7 @@ def sweep_one(
             now = store._wall_clock()
             if (
                 record is None
-                or record.state in {CaptureState.DELETED, CaptureState.TAMPERED}
+                or record.state is CaptureState.DELETED
                 or record.next_attempt_at > now
             ):
                 return (SweepAttempt.NOT_DUE, 0, 0)
@@ -717,6 +717,14 @@ def sweep_one(
         return (SweepAttempt.CARRIER_LEASE_LIVE, 0, 0)
     except Tampered:
         if expected is not None:
+            # Set next_attempt_at to hold-expiry time so the record
+            # becomes sweep-eligible after the forensic window.
+            _tampered_hold = _lifecycle_policy.STATE_RECLAIMABILITY[
+                CaptureState.TAMPERED
+            ].duration_seconds
+            if _tampered_hold is None:
+                raise lifecycle_error("tampered state requires a forensic hold duration")
+            _tampered_expiry = store._wall_clock() + _tampered_hold
             _transition_if_current(
                 store,
                 expected,
@@ -724,6 +732,7 @@ def sweep_one(
                     record,
                     state=CaptureState.TAMPERED,
                     retention_phase=CaptureRetentionPhase.TAMPERED,
+                    next_attempt_at=_tampered_expiry,
                     revision=record.revision + 1,
                 ),
             )

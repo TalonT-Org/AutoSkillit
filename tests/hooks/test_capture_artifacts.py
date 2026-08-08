@@ -10,6 +10,7 @@ import os
 import shlex
 import stat
 import subprocess
+import sys
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 from types import SimpleNamespace
@@ -51,10 +52,13 @@ from autoskillit.hooks._capture_contract import (
     CaptureRequest,
     CaptureV2Fields,
     encode_capture_request,
+    parse_capture_degraded_v3,
     parse_capture_failure_v3,
     parse_capture_v2,
 )
 from autoskillit.hooks._capture_lifecycle import (
+    CaptureCapacityError,
+    CaptureCapacityReason,
     CaptureDeliveryStatus,
     CaptureLifecycleError,
     CaptureLifecycleRecord,
@@ -100,6 +104,16 @@ def _single_failure_marker(output: str) -> CaptureFailureV3:
     ]
     assert len(candidates) == 1
     return parse_capture_failure_v3(candidates[0])
+
+
+def _single_degraded_marker(output: str) -> CaptureFailureV3:
+    candidates = [
+        line.encode()
+        for line in output.splitlines()
+        if line.startswith("[AutoSkillit shell capture degraded v3:")
+    ]
+    assert len(candidates) == 1
+    return parse_capture_degraded_v3(candidates[0])
 
 
 def _runner_request(
@@ -1129,6 +1143,31 @@ def test_valid_reject_runs_one_runner_tail_sweep(
     assert "capture request rejected before command execution" in capfd.readouterr().err
 
 
+def test_runner_tail_consumes_byte_pressure_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    budgets = []
+
+    def reconcile(_requested_cwd, budget):
+        budgets.append(budget)
+        return CaptureCleanupOutcome()
+
+    monkeypatch.setattr(capture_artifacts, "_BYTE_PRESSURE_OBSERVED", True)
+    monkeypatch.setattr(
+        capture_artifacts._capture_reconcile,
+        "reconcile_capture_store",
+        reconcile,
+    )
+
+    capture_artifacts._sweep_after_runner("/abs/project")
+    capture_artifacts._sweep_after_runner("/abs/project")
+
+    assert budgets == [
+        capture_artifacts._capture_types.TRANSITION_RESCUE_BUDGET,
+        capture_artifacts._capture_reconcile.RUNNER_TAIL_BUDGET,
+    ]
+
+
 def test_runner_tail_preserves_dispatch_result_and_order(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2034,6 +2073,80 @@ def test_stdout_delivery_failure_closes_resources_without_success(
     for fd in observed_fds:
         with pytest.raises(OSError):
             os.fstat(fd)
+
+
+def test_degraded_finalization_delivers_verified_output_and_child_status(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    process = _FakeCaptureProcess(b"captured-output")
+
+    def fail_finalization(*_args, **_kwargs):
+        raise CaptureCapacityError(CaptureCapacityReason.PROJECTED_COMPACTED_BYTES)
+
+    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(
+        CaptureLifecycleStore,
+        "commit_verified_snapshot",
+        fail_finalization,
+    )
+
+    assert run_capture("printf output", str(project), _CAPTURE_ID) == 0
+    captured = capfd.readouterr()
+    degraded = _single_degraded_marker(captured.err)
+    assert captured.out == "captured-output"
+    assert degraded.reason is CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED
+    assert degraded.stage == "capture_finalization"
+    assert degraded.shell_returncode == 0
+    assert degraded.settlement_returncode is None
+
+
+def test_degraded_stdout_failure_preserves_delivery_error_as_cause(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    process = _FakeCaptureProcess(b"captured-output")
+    finalization_error = CaptureCapacityError(CaptureCapacityReason.PROJECTED_COMPACTED_BYTES)
+    delivery_error = OSError("degraded stdout delivery failed")
+    logged_exceptions: list[BaseException] = []
+
+    def fail_finalization(*_args, **_kwargs):
+        raise finalization_error
+
+    def fail_stdout_delivery(*_args, **_kwargs) -> None:
+        raise delivery_error
+
+    def record_error(message: str, *, exc_info: bool = False) -> None:
+        if message == "capture_shell_execution_failed" and exc_info:
+            logged = sys.exc_info()[1]
+            assert logged is not None
+            logged_exceptions.append(logged)
+
+    monkeypatch.setattr(capture_artifacts, "_spawn_bash", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(
+        CaptureLifecycleStore,
+        "commit_verified_snapshot",
+        fail_finalization,
+    )
+    monkeypatch.setattr(
+        capture_replay,
+        "write_and_flush_hook_stdout",
+        fail_stdout_delivery,
+    )
+    monkeypatch.setattr(capture_artifacts.logger, "error", record_error)
+
+    assert run_capture("printf output", str(project), _CAPTURE_ID) == 1
+    captured = capfd.readouterr()
+    assert logged_exceptions == [finalization_error]
+    assert finalization_error.__cause__ is delivery_error
+    assert '"status":"capture_degraded"' not in captured.err
+    assert _single_failure_marker(captured.err).stage == "capture_finalization"
 
 
 @pytest.mark.parametrize(

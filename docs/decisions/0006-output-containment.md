@@ -163,6 +163,22 @@ hook can be retired in favor of that mechanism.
   budget — no new configuration knob — so a contended lock recovers within the
   same invocation instead of zeroing it.
 
+## Enforcement
+
+Whether a failure occurring after this ADR's containment mechanism has
+already captured and verified output may still discard that output is
+governed by [ADR-0009](0009-verified-output-delivery-disposition.md)'s
+`FAILURE_DISPOSITIONS` registry (`hooks/_capture/_failure_policy.py`). The
+arch rule is the registry's own import-time totality assertion — a
+`CaptureFailureReason` member with no declared disposition raises
+`AssertionError` at import, so the module cannot load until every reason is
+classified — backed by `tests/hooks/test_capture_failure_disposition.py`'s
+`TestDispositionRegistryTotality`. `DS-012` in
+`audit-defense-standards/SKILL.md` is the periodic audit-time check that no
+bookkeeping failure discards or misreports a verified primary result outside
+of what the import-time assertion alone can catch (e.g. a `PRESERVE_OUTPUT`
+classification applied to a reason that should be `DISCARD_OUTPUT`).
+
 ## Consequences
 
 - Claude Code sessions no longer see AutoSkillit shell deny or rewrite surfaces.

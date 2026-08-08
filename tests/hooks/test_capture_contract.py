@@ -43,9 +43,11 @@ from autoskillit.hooks._capture_contract import (
     decode_capture_request,
     decode_lineage_ref_json,
     encode_capture_request,
+    parse_capture_degraded_v3,
     parse_capture_failure_v2,
     parse_capture_failure_v3,
     parse_capture_v2,
+    render_capture_degraded_v3,
     render_capture_failure_v2,
     render_capture_failure_v3,
     render_capture_v2,
@@ -583,6 +585,7 @@ def test_v3_failure_reason_values_remain_uppercase_and_pinned() -> None:
         "PERMISSION_DENIED": "PERMISSION_DENIED",
         "FILESYSTEM_IO": "FILESYSTEM_IO",
         "RECOVERY_CONTENDED": "RECOVERY_CONTENDED",
+        "SNAPSHOT_INTEGRITY": "SNAPSHOT_INTEGRITY",
         "UNKNOWN_SETUP": "UNKNOWN_SETUP",
     }
 
@@ -616,6 +619,19 @@ def test_v3_failure_frame_has_closed_reason_and_is_canonical(
     assert len(encoded) <= MAX_CAPTURE_FAILURE_V3_BYTES
     with pytest.raises(CaptureContractError):
         parse_capture_failure_v2(encoded)
+
+
+def test_v3_degraded_parser_is_public_and_round_trips() -> None:
+    failure = CaptureFailureV3(
+        reason=CaptureFailureReason.LEDGER_INTEGRITY,
+        stage="capture_finalization",
+        detail="capture finalization failed",
+        shell_returncode=0,
+        settlement_returncode=None,
+    )
+
+    assert parse_capture_degraded_v3(render_capture_degraded_v3(failure)) == failure
+    assert {"parse_capture_degraded_v3", "render_capture_degraded_v3"} <= set(contract.__all__)
 
 
 @pytest.mark.parametrize(

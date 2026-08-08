@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture import _failure_policy as _capture_failure_policy
     from autoskillit.hooks._capture import _ledger as _capture_ledger
     from autoskillit.hooks._capture import _ledger_view as _capture_ledger_view
+    from autoskillit.hooks._capture import _lifecycle_policy as _capture_lifecycle_policy
     from autoskillit.hooks._capture import _migration as _capture_migration
     from autoskillit.hooks._capture import _reader as _capture_reader
     from autoskillit.hooks._capture import _resolver as _capture_resolver
@@ -42,6 +43,9 @@ else:
     )
     _capture_ledger = importlib.import_module(f"{_module_identity.__package__}._ledger")
     _capture_ledger_view = importlib.import_module(f"{_module_identity.__package__}._ledger_view")
+    _capture_lifecycle_policy = importlib.import_module(
+        f"{_module_identity.__package__}._lifecycle_policy"
+    )
     _capture_migration = importlib.import_module(f"{_module_identity.__package__}._migration")
     _capture_reader = importlib.import_module(f"{_module_identity.__package__}._reader")
     _capture_resolver = importlib.import_module(f"{_module_identity.__package__}._resolver")
@@ -91,9 +95,18 @@ LEDGER_NAME = ".capture-lifecycle.ledger"
 LOCK_NAME = ".capture-lifecycle.lock"
 MAX_LEDGER_BYTES = _capture_ledger.MAX_LEDGER_BYTES
 MAX_ACTIVE_RECORDS = 4096
-_RETENTION_SECONDS = 3600.0
+# Single source of truth: the reclaimability declaration owns the sweep grace.
+_RETENTION_SECONDS = float(_capture_lifecycle_policy.SWEEP_GRACE_SECONDS)
 _REFERENCE_LIFETIME_SECONDS = 1800.0
+if _RETENTION_SECONDS < _REFERENCE_LIFETIME_SECONDS:
+    raise AssertionError("capture retention must cover the replay-reference lifetime")
 _MAX_RETRY_SECONDS = 3600.0
+_BYTE_CAPACITY_REASONS = frozenset(
+    {
+        CaptureCapacityReason.PROJECTED_COMPACTED_BYTES,
+        CaptureCapacityReason.HARD_LEDGER_CAPACITY,
+    }
+)
 _COMPACTION_THRESHOLD_BYTES = 31 * 1024 * 1024 // 8
 _MAX_COMPACTION_BYTES = 4 * 1024 * 1024
 _CAPTURE_ID_RE = _capture_syntax.CAPTURE_ID_RE
@@ -181,6 +194,7 @@ class CaptureLifecycleStore:
         root_identity: tuple[int, int],
         wall_clock: Callable[[], float] = time.time,
         monotonic: Callable[[], float] = time.monotonic,
+        capacity: _capture_types.CaptureCapacitySpec | None = None,
         _factory_token: object | None = None,
     ) -> None:
         if _factory_token is not _STORE_FACTORY_TOKEN:
@@ -191,12 +205,13 @@ class CaptureLifecycleStore:
         self._wall_clock = wall_clock
         self._monotonic = monotonic
         self._ledger_view = _capture_ledger_view.LedgerView()
-        self._capacity = _capture_types.CaptureCapacitySpec()
+        self._capacity = capacity if capacity is not None else _capture_types.CaptureCapacitySpec()
         self._capacity_frame_sizes: _capture_capacity.CompactedFrameSizeCache = {}
         self._sweep_budget: SweepBudgetSpec | None = None
         self._sweep_started_monotonic: float | None = None
         self._sweep_records_inspected = self._sweep_replay_bytes = 0
         self._sweep_transitions = self._sweep_cursor_writes = 0
+        self.byte_pressure_observed = False
 
     @classmethod
     def from_open_authorities(
@@ -207,6 +222,7 @@ class CaptureLifecycleStore:
         wall_clock: Callable[[], float] = time.time,
         monotonic: Callable[[], float] = time.monotonic,
         open_budget: SweepBudgetSpec | None = None,
+        capacity: _capture_types.CaptureCapacitySpec | None = None,
     ) -> CaptureLifecycleStore:
         """Open a store and normalize interrupted deliveries.
 
@@ -221,7 +237,12 @@ class CaptureLifecycleStore:
         ``open_capture_lifecycle`` resets it when its ``with`` block exits.
         Every other caller (``create_artifact``, direct construction in
         tests, ...) passes nothing and blocks until the lock is acquired.
+
+        ``capacity``, when supplied, overrides the default capacity spec.
+        ``None`` preserves the production default (``CaptureCapacitySpec()``).
         """
+        if capacity is not None and type(capacity) is not _capture_types.CaptureCapacitySpec:
+            raise CaptureLifecycleError("invalid capture capacity specification")
         anchor_identity = getattr(anchor, "identity")
         root_identity = getattr(root, "identity")
         store = cls(
@@ -230,6 +251,7 @@ class CaptureLifecycleStore:
             root_identity=(root_identity.device, root_identity.inode),
             wall_clock=wall_clock,
             monotonic=monotonic,
+            capacity=capacity,
             _factory_token=_STORE_FACTORY_TOKEN,
         )
         if open_budget is not None:
@@ -553,40 +575,87 @@ class CaptureLifecycleStore:
                 transform=transform,
             )
 
+    def _with_capacity_rescue(
+        self,
+        attempt: Callable[[], object],
+        *,
+        rescuable_reasons: frozenset[CaptureCapacityReason] | None = None,
+    ) -> object:
+        """Attempt an operation; on byte-ceiling breach, sweep and retry once.
+
+        Each call of ``attempt`` must perform a complete fresh cycle: acquire
+        lock, reload the ledger, rebuild the candidate, run the transition.
+        Nothing loaded in a failed attempt may be reused by the retry.
+
+        ``rescuable_reasons`` controls which capacity reasons trigger the
+        rescue.  Default (``None``) rescues only the soft ceiling
+        (``PROJECTED_COMPACTED_BYTES``).  At the admission gate,
+        ``reserve_capture`` passes both byte reasons so that hard-ceiling
+        breaches with reclaimable bytes also get one rescue attempt.
+        Record-count ceilings are never rescued (they already have a
+        proven recovery story under the existing integration test).
+        """
+        _default_rescuable = frozenset({CaptureCapacityReason.PROJECTED_COMPACTED_BYTES})
+        effective = rescuable_reasons if rescuable_reasons is not None else _default_rescuable
+        try:
+            return attempt()
+        except CaptureCapacityError as exc:
+            if exc.reason in _BYTE_CAPACITY_REASONS:
+                self.byte_pressure_observed = True
+            if exc.reason not in effective:
+                raise
+            # Run a bounded rescue sweep with the lock released (sweep
+            # acquires it itself — sequential, no re-entrancy).
+            self.sweep(_capture_types.TRANSITION_RESCUE_BUDGET)
+            # Retry exactly once.
+            return attempt()
+
     def reserve_capture(self, capture_id: str) -> CaptureLifecycleRecord:
         if not _CAPTURE_ID_RE.fullmatch(capture_id):
             raise CaptureLifecycleError("invalid capture id")
-        now = self._wall_clock()
-        nonce = secrets.token_hex(8)
-        incarnation = secrets.token_hex(16)
-        record = CaptureLifecycleRecord(
-            capture_id=capture_id,
-            state=CaptureState.RESERVED,
-            staging_name=f".capture-staging-{capture_id}-{nonce}",
-            public_name=f"shell_{capture_id}.log",
-            project_identity=self._project_identity,
-            root_identity=self._root_identity,
-            created_at=now,
-            next_attempt_at=now + _RETENTION_SECONDS,
-            incarnation=incarnation,
-            revision=1,
-        )
-        with self._locked():
-            records, compaction_epoch, size = self._load_locked()
-            previous = records.get(capture_id)
-            if previous is not None and previous.state is not CaptureState.DELETED:
-                raise CaptureLifecycleError("capture id already reserved")
-            reason = _capture_capacity.admission_reason(
-                records,
-                record,
-                compaction_epoch=compaction_epoch,
-                spec=self._capacity,
-                active_limit=min(MAX_ACTIVE_RECORDS, self._capacity.max_operational_records),
+
+        def _attempt() -> CaptureLifecycleRecord:
+            now = self._wall_clock()
+            nonce = secrets.token_hex(8)
+            incarnation = secrets.token_hex(16)
+            record = CaptureLifecycleRecord(
+                capture_id=capture_id,
+                state=CaptureState.RESERVED,
+                staging_name=f".capture-staging-{capture_id}-{nonce}",
+                public_name=f"shell_{capture_id}.log",
+                project_identity=self._project_identity,
+                root_identity=self._root_identity,
+                created_at=now,
+                next_attempt_at=now + _RETENTION_SECONDS,
+                incarnation=incarnation,
+                revision=1,
             )
-            if reason is not None:
-                raise CaptureCapacityError(reason)
-            self._append_locked(record, records, compaction_epoch, size)
-        return record
+            with self._locked():
+                records, compaction_epoch, size = self._load_locked()
+                previous = records.get(capture_id)
+                if previous is not None and previous.state is not CaptureState.DELETED:
+                    raise CaptureLifecycleError("capture id already reserved")
+                reason = _capture_capacity.admission_reason(
+                    records,
+                    record,
+                    compaction_epoch=compaction_epoch,
+                    spec=self._capacity,
+                    active_limit=min(MAX_ACTIVE_RECORDS, self._capacity.max_operational_records),
+                )
+                if reason is not None:
+                    raise CaptureCapacityError(reason)
+                self._append_locked(record, records, compaction_epoch, size)
+            return record
+
+        # Admission gate: rescue on both byte reasons (soft + hard ceiling),
+        # not just soft.  Record-count ceilings keep existing behavior.
+        result = self._with_capacity_rescue(
+            _attempt,
+            rescuable_reasons=_BYTE_CAPACITY_REASONS,
+        )
+        if type(result) is not CaptureLifecycleRecord:
+            raise CaptureLifecycleError("reserve_capture rescue produced invalid result")
+        return result
 
     def mark_staged(
         self,
@@ -700,11 +769,17 @@ class CaptureLifecycleStore:
                     CaptureState.STAGED,
                     CaptureState.PUBLISHED_WRITING,
                 }:
+                    # Resolve the failure reason so capacity-caused
+                    # failures get zero sweep-grace.
+                    _create_failure_reason = _capture_failure_policy.runtime_failure_reason(
+                        primary_error
+                    )
                     self.commit_capture_failure(
                         self._authority_for(current),
                         CaptureFailureEvidence(
                             stage="artifact_publication",
                             detail=f"{type(primary_error).__name__}: {primary_error}",
+                            failure_reason=_create_failure_reason.value,
                         ),
                         observed_size=os.fstat(fd).st_size if fd >= 0 else 0,
                     )
@@ -731,6 +806,14 @@ class CaptureLifecycleStore:
         if not _capture_ledger._plain_int(observed_size):
             raise CaptureLifecycleError("invalid observed capture size")
         now = self._wall_clock()
+        # Capacity-caused failure records get zero grace — a record
+        # that failed *by* capacity must not *hold* capacity.
+        grace = _RETENTION_SECONDS
+        if (
+            evidence.failure_reason is not None
+            and evidence.failure_reason in _capture_types._CAPACITY_FAILURE_REASON_VALUES
+        ):
+            grace = 0.0
         return self._transition(
             authority,
             allowed_states={
@@ -742,7 +825,7 @@ class CaptureLifecycleStore:
                 record,
                 state=CaptureState.FAILED,
                 retention_at=now,
-                next_attempt_at=now + _RETENTION_SECONDS,
+                next_attempt_at=now + grace,
                 observed_size=observed_size,
                 failure=evidence,
                 capture_status=CaptureStatus.FAILED,
@@ -761,9 +844,14 @@ class CaptureLifecycleStore:
         if type(verified) is not VerifiedCaptureSnapshot or not isinstance(issue_reference, bool):
             raise CaptureLifecycleError("invalid verified finalization request")
         base = verified.manifest
-        candidate: CaptureLifecycleRecord | None = None
-        finalized: FinalizedCapture | None = None
-        try:
+        # Mutable state shared between attempt closure and post-attempt recovery.
+        candidate_holder: list[CaptureLifecycleRecord | None] = [None]
+        finalized_holder: list[FinalizedCapture | None] = [None]
+
+        def _attempt() -> FinalizedCapture:
+            """One complete lock-load-transition cycle; safe to call twice."""
+            candidate_holder[0] = None
+            finalized_holder[0] = None
             with self._locked():
                 records, compaction_epoch, size = self._load_locked()
                 previous = records.get(base.capture_id)
@@ -816,6 +904,8 @@ class CaptureLifecycleStore:
                     delivery_status=CaptureDeliveryStatus.NOT_ATTEMPTED,
                     retention_phase=CaptureRetentionPhase.ACTIVE,
                 )
+                candidate_holder[0] = candidate
+                finalized_holder[0] = finalized
                 self._transition_locked(
                     records=records,
                     compaction_epoch=compaction_epoch,
@@ -824,7 +914,13 @@ class CaptureLifecycleStore:
                     allowed_states={CaptureState.PUBLISHED_WRITING},
                     transform=lambda _current: candidate,
                 )
+            return finalized
+
+        try:
+            result = self._with_capacity_rescue(_attempt)
         except CaptureTransitionCommittedError as commit_error:
+            candidate = candidate_holder[0]
+            finalized = finalized_holder[0]
             if candidate is None or finalized is None:
                 raise
             try:
@@ -845,9 +941,9 @@ class CaptureLifecycleStore:
                 ):
                     return finalized
             raise
-        if finalized is None:
+        if not isinstance(result, FinalizedCapture):
             raise CaptureLifecycleError("verified finalization produced no authority")
-        return finalized
+        return result
 
     def publish_reference(self, finalized: FinalizedCapture) -> PublishedCaptureReference:
         return _capture_delivery.publish_reference(
@@ -1038,7 +1134,7 @@ class CaptureLifecycleStore:
             self,
             now,
             max_records,
-            {CaptureState.DELETED, CaptureState.TAMPERED},
+            {CaptureState.DELETED},
         )
 
     def _advance_sweep_cursor(self, due_key: DueKey) -> None:

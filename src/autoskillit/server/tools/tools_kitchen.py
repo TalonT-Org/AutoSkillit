@@ -11,7 +11,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypedDict, cast
+from typing import TYPE_CHECKING, Any, NotRequired, TypedDict, cast
 
 if TYPE_CHECKING:
     from autoskillit.config.settings import OutputBudgetConfig, QuotaGuardConfig
@@ -476,6 +476,7 @@ class QuotaGuardHookPayload(TypedDict):
 class OutputBudgetPolicyHookPayload(TypedDict):
     disabled: bool
     shell_max_inline_bytes: int
+    capture_capacity: NotRequired[dict[str, int]]
 
 
 def _quota_guard_hook_payload(cfg: QuotaGuardConfig) -> QuotaGuardHookPayload:
@@ -503,10 +504,13 @@ def _output_budget_policy_hook_payload(
     Keep these keys in sync with ``OUTPUT_BUDGET_POLICY_HOOK_PAYLOAD_KEYS``
     in the stdlib-only hook settings bridge.
     """
-    return {
+    payload: OutputBudgetPolicyHookPayload = {
         "disabled": not cfg.guard_enabled,
         "shell_max_inline_bytes": cfg.shell_max_inline_bytes,
     }
+    if cfg.capture_capacity is not None:
+        payload["capture_capacity"] = cfg.capture_capacity
+    return payload
 
 
 def _write_hook_config() -> None:

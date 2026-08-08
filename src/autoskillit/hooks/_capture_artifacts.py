@@ -813,7 +813,7 @@ def run_capture(
                     issue_reference=result.measurement.total_bytes > policy.inline_bytes,
                 )
             except _CAPTURE_RUNTIME_ERRORS as finalization_exc:
-                # A-I3: Narrow finalization guard — check disposition before
+                # Narrow finalization guard — check disposition before
                 # discarding verified output on a bookkeeping failure.
                 finalization_reason = _capture_failure_policy.runtime_failure_reason(
                     finalization_exc
@@ -932,7 +932,7 @@ def run_capture(
             logger.error("capture_shell_execution_failed", exc_info=True)
             if command_outcome is None and process is not None:
                 settlement = _settle_failed_capture(process)
-            # B-I3: resolve the transported reason early so it can be passed
+            # Resolve the transported reason early so it can be passed
             # to commit_capture_failure for zero-grace on capacity reasons.
             transport_reason = _capture_failure_policy.runtime_failure_reason(exc)
             transport_detail = f"{failure_stage} failed"
@@ -979,7 +979,7 @@ def run_capture(
                 )
             )
     finally:
-        # B-I5: copy per-store byte-pressure flag to module level so
+        # Copy per-store byte-pressure flag to module level so
         # _sweep_after_runner can escalate its budget.
         global _BYTE_PRESSURE_OBSERVED  # noqa: PLW0603
         if lifecycle is not None and lifecycle.byte_pressure_observed:
@@ -1053,7 +1053,7 @@ def _dispatch_runner(request: CaptureRequest) -> int:
         )
 
 
-# B-I5: Module-level byte-pressure flag — set by run_capture when a
+# Module-level byte-pressure flag — set by run_capture when a
 # byte-reason CaptureCapacityError was raised or rescued.  The runner is
 # a single-command ``python3 -I`` process; the flag's lifetime is exactly
 # one invocation.
@@ -1078,7 +1078,7 @@ def _emit_runner_tail_crash_diagnostic() -> None:
 
 def _sweep_after_runner(requested_cwd: str) -> None:
     try:
-        # B-I5: escalate the sweep budget when byte pressure was observed
+        # Escalate the sweep budget when byte pressure was observed
         # during this invocation — converge the session instead of
         # oscillating on the 50ms lock race.
         budget = (

@@ -246,7 +246,7 @@ def is_retention_successor(
 
 
 # ---------------------------------------------------------------------------
-# Reclaimability declarations — B-I1 (workstream B)
+# Reclaimability declarations
 # ---------------------------------------------------------------------------
 
 # The canonical sweep-grace constant.  Formerly ``_RETENTION_SECONDS`` in

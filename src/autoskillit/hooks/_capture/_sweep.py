@@ -717,7 +717,7 @@ def sweep_one(
         return (SweepAttempt.CARRIER_LEASE_LIVE, 0, 0)
     except Tampered:
         if expected is not None:
-            # B-I2: set next_attempt_at to hold-expiry time so the record
+            # Set next_attempt_at to hold-expiry time so the record
             # becomes sweep-eligible after the forensic window.
             _tampered_hold = _lifecycle_policy.STATE_RECLAIMABILITY[
                 CaptureState.TAMPERED

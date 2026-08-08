@@ -769,7 +769,7 @@ class CaptureLifecycleStore:
                     CaptureState.STAGED,
                     CaptureState.PUBLISHED_WRITING,
                 }:
-                    # B-I3: resolve the failure reason so capacity-caused
+                    # Resolve the failure reason so capacity-caused
                     # failures get zero sweep-grace.
                     _create_failure_reason = _capture_failure_policy.runtime_failure_reason(
                         primary_error
@@ -806,7 +806,7 @@ class CaptureLifecycleStore:
         if not _capture_ledger._plain_int(observed_size):
             raise CaptureLifecycleError("invalid observed capture size")
         now = self._wall_clock()
-        # B-I3: capacity-caused failure records get zero grace — a record
+        # Capacity-caused failure records get zero grace — a record
         # that failed *by* capacity must not *hold* capacity.
         grace = _RETENTION_SECONDS
         if (

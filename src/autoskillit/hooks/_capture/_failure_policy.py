@@ -104,7 +104,7 @@ def valid_failure_reason(value: object) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Failure disposition registry — A-I1 (workstream A)
+# Failure disposition registry
 # ---------------------------------------------------------------------------
 
 
@@ -199,8 +199,7 @@ FAILURE_DISPOSITIONS: dict[CaptureFailureReason, CaptureFailureDispositionDef] =
         disposition=CaptureFailureDisposition.DISCARD_OUTPUT,
         rationale=(
             "unknown/unclassified failure — currently doubles as wire label for the "
-            "verify-stage tamper detector; fail-closed until workstream C splits "
-            "SNAPSHOT_INTEGRITY out"
+            "verify-stage tamper detector; unclassified failures must remain fail-closed"
         ),
     ),
 }

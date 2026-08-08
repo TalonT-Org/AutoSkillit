@@ -51,10 +51,24 @@ def _valid_version_or_unknown(value: str | None) -> str | None:
 
 
 class ObligationRepairOutcome(StrEnum):
-    """Closed outcomes for one publication-obligation repair attempt."""
+    """Closed outcomes for one publication-obligation repair attempt.
+
+    Members:
+    - NO_OBLIGATION: no on-disk obligation journal; nothing to repair.
+    - DEFERRED: deferral condition (e.g., CLAUDECODE); repair not attempted.
+    - MISSING_EXPECTED_VERSION: pre-launch probe failed (no version from
+      ``--version``) or the persisted obligation's expected_version is
+      stale relative to the live distribution version; the install subprocess
+      was never spawned. Callers must treat this as a repairable obligation
+      that warrants a warning emission.
+    - FAILED: an explicit failure (subprocess non-zero exit, OSError on
+      spawn, broken-hook detection, identity mismatch, etc.).
+    - CLEARED: obligation verified and cleared.
+    """
 
     NO_OBLIGATION = "no_obligation"
     DEFERRED = "deferred"
+    MISSING_EXPECTED_VERSION = "missing_expected_version"
     FAILED = "failed"
     CLEARED = "cleared"
 

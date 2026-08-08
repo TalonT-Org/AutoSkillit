@@ -95,6 +95,80 @@ class TestCookExplorationEligibility:
                 None,
             )
 
+    def test_codex_terminal_sets_read_only_sandbox(self) -> None:
+        """REQ-56: Codex cook with terminal explorer sets read-only parent."""
+        from autoskillit.cli.session._session_cook import _build_cook_projection_context
+
+        base_context = MagicMock()
+        base_context.parent_sandbox_mode = "workspace-write"
+
+        provider = _mock_skills_provider(base_context)
+        backend = _mock_backend(terminal=True)
+        binding = _mock_binding()
+        catalog = MagicMock()
+
+        with patch("autoskillit.cli.session._session_cook.replace") as mock_replace:
+            mock_replace.return_value = MagicMock()
+            _build_cook_projection_context(
+                provider,
+                catalog,
+                Path("/fake/project"),
+                backend,
+                binding,
+                None,
+                explorer_provisioning_eligible=True,
+            )
+            mock_replace.assert_called_once()
+            call_kwargs = mock_replace.call_args
+            assert call_kwargs[1]["parent_sandbox_mode"] == "read-only"
+
+    def test_claude_session_scoped_preserves_sandbox(self) -> None:
+        """Claude cook does NOT force read-only — session-scoped model uses enable_exploration."""
+        from autoskillit.cli.session._session_cook import _build_cook_projection_context
+
+        base_context = MagicMock()
+        base_context.parent_sandbox_mode = "workspace-write"
+
+        provider = _mock_skills_provider(base_context)
+        backend = _mock_backend(session_scoped=True)
+        binding = _mock_binding()
+        catalog = MagicMock()
+
+        with patch("autoskillit.cli.session._session_cook.replace") as mock_replace:
+            mock_replace.return_value = MagicMock()
+            _build_cook_projection_context(
+                provider,
+                catalog,
+                Path("/fake/project"),
+                backend,
+                binding,
+                None,
+                explorer_provisioning_eligible=True,
+            )
+            mock_replace.assert_called_once()
+            call_kwargs = mock_replace.call_args
+            assert call_kwargs[1]["parent_sandbox_mode"] == "workspace-write"
+
+    def test_ordinary_cook_stays_permissive(self) -> None:
+        """REQ-47/61: ordinary cook (no exploration) is unchanged."""
+        from autoskillit.cli.session._session_cook import _build_cook_projection_context
+
+        base_context = MagicMock()
+        provider = _mock_skills_provider(base_context)
+        backend = _mock_backend()
+        binding = _mock_binding()
+        catalog = MagicMock()
+
+        result = _build_cook_projection_context(
+            provider,
+            catalog,
+            Path("/fake/project"),
+            backend,
+            binding,
+            None,
+        )
+        assert result is base_context
+
     def test_open_kitchen_not_required(self) -> None:
         """REQ-63: cook exploration wiring does not depend on open_kitchen."""
         import inspect

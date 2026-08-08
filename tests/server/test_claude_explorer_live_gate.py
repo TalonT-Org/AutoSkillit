@@ -1,11 +1,17 @@
 """T14: Claude live conformance gate for session-scoped explorer authority.
 
 Env-gated: runs only when AUTOSKILLIT_CLAUDE_EXPLORER_LIVE_GATE=1.
+The non-env-gated tests exercise the production corridor (enable_exploration
+gate tool) without requiring a real Claude subprocess.
 """
 
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -20,50 +26,92 @@ _skip_unless_live_gate = pytest.mark.skipif(
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
-@_skip_unless_live_gate
-@pytest.mark.smoke
-def test_session_scoped_explorer_authority_round_trip() -> None:
-    """Real Claude session-scoped authority: bind, enable, and verify broker tools.
-
-    This test exercises the production corridor — the binding is derived from
-    enable_exploration (the interactive gate tool), not passed in by the test.
-    """
-    from pathlib import Path
-    from unittest.mock import MagicMock
-
+def _snapshot_service() -> MagicMock:
     from autoskillit.core import RepositoryIdentity, RepositorySnapshot
-    from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
 
-    project_root = Path.cwd()
     service = MagicMock()
     service.capture_snapshot.side_effect = lambda root: RepositorySnapshot(
         RepositoryIdentity("test", "rev", worktree_path=str(root.resolve())),
         tree_digest="tree",
         collector_manifest_digest="manifest",
     )
-    store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
-        trusted_root=project_root,
-        service=service,
-    )
+    return service
 
-    capability = store.bind_session_scoped(
-        owner_id=f"uid:{os.getuid()}",
-        session_id="claude-live-gate-test",
-        cwd=project_root,
-        repository_root=project_root,
-        source_identity="live-gate:claude-test",
-    )
 
-    assert capability, "bind_session_scoped must return a non-empty capability"
-    assert capability.startswith("explore_")
+class TestClaudeExplorerProductionCorridor:
+    """T14: exercise the enable_exploration gate tool — the production corridor."""
 
-    found = store.session_scoped_capability("claude-live-gate-test")
-    assert found == capability, "session_scoped_capability must find the active capability"
+    @pytest.mark.asyncio
+    async def test_enable_exploration_establishes_authority(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """The gate tool mints session-scoped authority and enables the tag."""
+        from autoskillit.core import SessionType
+        from autoskillit.pipeline.exploration_context import (
+            OwnerBoundExplorationContextStore,
+        )
+        from autoskillit.server.tools.tools_exploration import enable_exploration
 
-    assert store.session_scoped_capability("wrong-session") is None
+        store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+            trusted_root=tmp_path,
+            service=_snapshot_service(),
+        )
+        ctx = SimpleNamespace(
+            exploration_context_store=store,
+            session_id="claude-gate-test",
+            gate=MagicMock(),
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_exploration._resolve_session_type",
+            lambda: SessionType.SKILL,
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_exploration._get_ctx",
+            lambda: ctx,
+        )
+        monkeypatch.chdir(tmp_path)
 
-    store.close()
-    assert store.session_scoped_capability("claude-live-gate-test") is None
+        result = json.loads(await enable_exploration())
+        assert result["status"] == "ok"
+        assert result["exploration_enabled"] is True
+
+        capability = store.session_scoped_capability("claude-gate-test")
+        assert capability is not None, "enable_exploration must mint a session-scoped capability"
+        assert capability.startswith("explore_")
+
+    @pytest.mark.asyncio
+    async def test_enable_exploration_rejects_orchestrator(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """ORCHESTRATOR sessions cannot establish authority — topology guard."""
+        from autoskillit.core import SessionType
+        from autoskillit.server.tools.tools_exploration import enable_exploration
+
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_exploration._resolve_session_type",
+            lambda: SessionType.ORCHESTRATOR,
+        )
+        result = json.loads(await enable_exploration())
+        assert result["code"] == "session_type_ineligible"
+
+    @pytest.mark.asyncio
+    async def test_enable_exploration_rejects_fleet(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """FLEET sessions cannot establish authority — topology guard."""
+        from autoskillit.core import SessionType
+        from autoskillit.server.tools.tools_exploration import enable_exploration
+
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_exploration._resolve_session_type",
+            lambda: SessionType.FLEET,
+        )
+        result = json.loads(await enable_exploration())
+        assert result["code"] == "session_type_ineligible"
 
 
 @_skip_unless_live_gate

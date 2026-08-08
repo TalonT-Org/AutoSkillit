@@ -99,7 +99,7 @@ def _replace_symlink(path: Path, target: Path) -> None:
 
 def _fsync_tree_contents(root: Path) -> None:
     """Fsync every regular file and directory entry under *root*."""
-    for current_root, dirs, files in os.walk(root):
+    for current_root, _dirs, files in os.walk(root):
         current = Path(current_root)
         for name in files:
             fpath = current / name

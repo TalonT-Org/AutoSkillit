@@ -568,6 +568,17 @@ class TestRetiredArtifactShapeRegistry:
             # Raises ValueError on an unknown shape rather than silently skipping.
             _has_retired_shape(home / key, retired.shape)
 
+    def test_retirement_engine_handlers_match_registry_dispositions(self) -> None:
+        from autoskillit.workspace._install_state import _RETIRE_VIA_ENGINE_HANDLERS
+
+        expected = {
+            key
+            for key, retired in RETIRED_INSTALL_ARTIFACT_SHAPES.items()
+            if retired.disposition == "retire_via_engine"
+        }
+
+        assert set(_RETIRE_VIA_ENGINE_HANDLERS) == expected
+
     def test_reconciler_rejects_a_shape_it_does_not_know(self, home: Path) -> None:
         """Meta-test: the coverage half actually has teeth."""
         from autoskillit.workspace._install_state import _has_retired_shape

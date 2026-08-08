@@ -172,7 +172,7 @@ For each phase:
 1. Announce phase objective and files to modify
 2. Implement changes guided by understanding from Step 2
 3. Run per-phase verification if plan specifies it
-4. Commit per phase if possible
+4. Commit per phase if possible. Commit preparatory refactoring separately from behavioral changes — a reviewer must be able to verify the structural change is behavior-preserving on its own
 5. Report phase completion
 
 Where practical, delegate test updates to subagents to keep main conversation context lean.

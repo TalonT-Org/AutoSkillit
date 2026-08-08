@@ -191,7 +191,7 @@ after the previous phase completes.
 For each remaining/incomplete phase, begin implementation immediately (no announcement):
 1. Implement changes
 2. Run per-phase verification if plan specifies it
-3. Commit per phase if possible
+3. Commit per phase if possible. Commit preparatory refactoring separately from behavioral changes — a reviewer must be able to verify the structural change is behavior-preserving on its own
 4. Increment the counter: `PHASES_IMPLEMENTED=$((PHASES_IMPLEMENTED + 1))`
 
 Where practical, delegate test updates to subagents to keep main conversation context lean.
@@ -212,7 +212,7 @@ If tests fail, fix the issue and re-run.
 
 **Deviation check:** If a fix applied in this step contradicts what the plan specified, record a deviation. If the fix aligns with the plan, skip this sub-step.
 
-Ensure the output directory exists: `mkdir -p {{AUTOSKILLIT_TEMP}}/retry-worktree/` (idempotent — the directory may not exist yet, unlike resolve-failures which already writes to its temp subdirectory).
+Ensure the output directory exists relative to the current working directory: `mkdir -p {{AUTOSKILLIT_TEMP}}/retry-worktree/` (idempotent — the directory may not exist yet, unlike resolve-failures which already writes to its temp subdirectory).
 
 Read the existing deviation manifest at `{{AUTOSKILLIT_TEMP}}/retry-worktree/deviation_manifest_{SESSION_TS}.json` (if it exists and is valid JSON), or start a new structure. Append a new entry to the `deviations` array and write the complete file:
 

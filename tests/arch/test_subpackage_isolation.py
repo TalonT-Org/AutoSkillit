@@ -1260,10 +1260,15 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "decision and lineage-reference injection remain adjacent to the Codex command "
         "builders that own the protected environment boundary; #4443 adds canonical "
         "agent-definition projection, parent/child sandbox precedence, and specialized "
-        "Codex explorer role registration and invocation wiring",
+        "Codex explorer role registration and invocation wiring; #4478 review "
+        "remediation: build_skill_session_cmd/build_resume_cmd gain an "
+        "include_scope_discipline parameter and build_interactive_cmd's suffix call is "
+        "widened to codex_discipline_suffix(include_scope=True) so scope-discipline "
+        "delivery scoping stays adjacent to the same command builders that already own "
+        "prompt-injection composition (+14 net lines)",
     ),
     "execution/backends/claude.py": (
-        1103,
+        1107,
         "REQ-CNST-010-E19: Claude backend protocol parity keeps managed native-shell "
         "decision/reference disposition beside executable launch-binding validation; "
         "both are shared builder-interface obligations even though Claude deliberately "

@@ -1556,6 +1556,7 @@ class CodexBackend(BackendCmdBuilderBase):
         resume_message: str | None = None,
         sandbox_mode: str = "workspace-write",
         network_access: bool = False,
+        include_scope_discipline: bool = False,
     ) -> CmdSpec:
         if config is not None:
             cfg = self._apply_config(config)
@@ -1577,6 +1578,7 @@ class CodexBackend(BackendCmdBuilderBase):
             resume_message = cfg["resume_message"]
             sandbox_mode = cfg["sandbox_mode"]
             network_access = cfg.get("network_access", False)
+            include_scope_discipline = cfg["include_scope_discipline"]
             native_shell_capture_decision = cfg["native_shell_capture_decision"]
             managed_lineage_ref = cfg["managed_lineage_ref"]
             managed_attempt_id = cfg["managed_attempt_id"]
@@ -1620,6 +1622,7 @@ class CodexBackend(BackendCmdBuilderBase):
                 profile_name=profile_name,
                 include_output_discipline=True,
                 include_intake_discipline=True,
+                include_scope_discipline=include_scope_discipline,
             ),
         )
 
@@ -1868,10 +1871,15 @@ class CodexBackend(BackendCmdBuilderBase):
                 builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, override)
         builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED)
         if isinstance(resume_spec, NoResume):
+            # Interactive TUI sessions keep full scope-discipline coverage deliberately:
+            # the task is unknown at launch (manual $rectify/$resolve-review runs also
+            # over-size), and there is no dispatch-time skill identity to key the
+            # narrower skill-session delivery off of.
+            _interactive_suffix = codex_discipline_suffix(include_scope=True)
             developer_instructions = (
-                f"{system_prompt}\n\n{codex_discipline_suffix()}"
+                f"{system_prompt}\n\n{_interactive_suffix}"
                 if system_prompt is not None
-                else codex_discipline_suffix()
+                else _interactive_suffix
             )
             builder.kv_flag(
                 CodexFlags.CONFIG_OVERRIDE,
@@ -1944,6 +1952,7 @@ class CodexBackend(BackendCmdBuilderBase):
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         managed_attempt_id: str | None = None,
+        include_scope_discipline: bool = False,
     ) -> CmdSpec:
         if not resume_session_id.strip():
             msg = "resume_session_id must be a non-empty string"
@@ -1951,7 +1960,9 @@ class CodexBackend(BackendCmdBuilderBase):
         cmd = _codex_exec_base(sandbox="read-only", json=(output_format == OutputFormat.JSON))
         cmd.append(CodexFlags.RESUME_SUBCOMMAND)
         cmd.append(resume_session_id)
-        cmd.append(f"{codex_discipline_suffix()}\n\n{prompt}")
+        cmd.append(
+            f"{codex_discipline_suffix(include_scope=include_scope_discipline)}\n\n{prompt}"
+        )
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         resume_extras = _codex_exec_extras(
             session_type="", include_session_baseline=True, include_agent_backend_flat=True

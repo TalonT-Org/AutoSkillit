@@ -160,6 +160,7 @@ def _skill_launch_spec_builder(
     resume_checkpoint: SessionCheckpoint | None,
     resume_message: str | None,
     readonly_skill: bool,
+    scope_discipline_skill: bool,
     network_access: bool,
     native_shell_capture_decision: NativeShellCaptureDecision | None,
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
@@ -191,6 +192,7 @@ def _skill_launch_spec_builder(
             sandbox_mode=(
                 "read-only" if readonly_skill else backend.capabilities.default_skill_sandbox_mode
             ),
+            include_scope_discipline=scope_discipline_skill,
             network_access=network_access,
             native_shell_capture_decision=native_shell_capture_decision,
             managed_lineage_ref=managed_lineage_ref,

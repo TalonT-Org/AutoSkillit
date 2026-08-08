@@ -51,7 +51,7 @@ SKILL_MODEL_CLASS_REGISTRY: Mapping[str, SkillModelClassDef] = MappingProxyType(
     }
 )
 
-SKILL_REASONING_EFFORTS: frozenset[str] = frozenset({"medium", "high", "xhigh"})
+SKILL_REASONING_EFFORTS: frozenset[str] = frozenset({"medium", "high"})
 
 SKILL_SEMANTIC_SCHEMA_VERSION = 1
 

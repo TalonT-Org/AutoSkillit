@@ -181,7 +181,11 @@ class TestResumePromptPreservation:
         assert marker_text in prompt
 
     def test_claude_resume_cmd_excludes_discipline_digests(self) -> None:
-        from autoskillit.core import CODEX_INTAKE_DISCIPLINE_DIGEST, OUTPUT_DISCIPLINE_DIGEST
+        from autoskillit.core import (
+            CODEX_INTAKE_DISCIPLINE_DIGEST,
+            CODEX_SCOPE_DISCIPLINE_DIGEST,
+            OUTPUT_DISCIPLINE_DIGEST,
+        )
 
         backend = ClaudeCodeBackend()
         spec = backend.build_resume_cmd(
@@ -191,6 +195,7 @@ class TestResumePromptPreservation:
         prompt = self._extract_prompt(spec.cmd)
         assert OUTPUT_DISCIPLINE_DIGEST not in prompt
         assert CODEX_INTAKE_DISCIPLINE_DIGEST not in prompt
+        assert CODEX_SCOPE_DISCIPLINE_DIGEST not in prompt
 
 
 class TestOutputDisciplineDelivery:
@@ -216,6 +221,18 @@ class TestOutputDisciplineDelivery:
 
         spec = ClaudeCodeBackend().build_skill_session_cmd("/plan", **SKILL_BASE)
         assert CODEX_INTAKE_DISCIPLINE_DIGEST not in self._extract_prompt(spec)
+
+    def test_claude_prompt_excludes_scope_discipline(self) -> None:
+        from autoskillit.core import CODEX_SCOPE_DISCIPLINE_DIGEST
+
+        spec = ClaudeCodeBackend().build_skill_session_cmd("/plan", **SKILL_BASE)
+        assert CODEX_SCOPE_DISCIPLINE_DIGEST not in self._extract_prompt(spec)
+
+    def test_claude_food_truck_excludes_scope_discipline(self) -> None:
+        from autoskillit.core import CODEX_SCOPE_DISCIPLINE_DIGEST
+
+        spec = ClaudeCodeBackend().build_food_truck_cmd(**FOOD_TRUCK_BASE)
+        assert CODEX_SCOPE_DISCIPLINE_DIGEST not in self._extract_prompt(spec)
 
 
 class TestBuildSkillSessionCmdConfigAdapter:

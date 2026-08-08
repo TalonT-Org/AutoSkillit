@@ -132,6 +132,7 @@ skills:
     write_behavior: conditional
     write_expected_when:
     - "verdict[ \\t]*=[ \\t]*real_fix"
+    scope_discipline: true
   resolve-merge-conflicts:
     inputs:
     - name: worktree_path
@@ -163,6 +164,7 @@ skills:
     write_expected_when:
     - "conflict_report_path[ \\t]*=[ \\t]*/.+"
     completion_required: true
+    scope_discipline: true
   resolve-review:
     inputs:
     - name: feature_branch
@@ -238,6 +240,7 @@ skills:
     success_qualifiers:
     - when: "accept_count > 0 and fixes_applied == 0 and fix_failures == 0"
       qualifier: "accepted_without_changes"
+    scope_discipline: true
   dry-walkthrough:
     inputs:
     - name: plan_path
@@ -275,6 +278,7 @@ skills:
     - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP::a1b2c3d4%%"
     write_behavior: always
     completion_required: true
+    scope_discipline: true
   implement-worktree-no-merge:
     inputs:
     - name: plan_path
@@ -294,6 +298,7 @@ skills:
     - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP::a1b2c3d4%%"
     write_behavior: always
     completion_required: true
+    scope_discipline: true
   investigate:
     inputs:
     - name: topic
@@ -356,6 +361,7 @@ skills:
     - "verdict = plan\nplan_path = /tmp/plan.md\nplan_parts = /tmp/plan.md\n%%ORDER_UP::a1b2c3d4%%"
     write_behavior: always
     completion_required: true
+    scope_discipline: true
   write-recipe:
     inputs: []
     outputs:
@@ -411,6 +417,7 @@ skills:
     pattern_examples:
     - "plan_path = /tmp/plan.md\n%%ORDER_UP%%"
     write_behavior: always
+    scope_discipline: true
   retry-worktree:
     inputs:
     - name: plan_path
@@ -439,6 +446,7 @@ skills:
     write_expected_when:
     - "phases_implemented[ \\t]*=[ \\t]*[1-9][0-9]*"
     completion_required: true
+    scope_discipline: true
   review-approach:
     inputs:
     - name: plan_path
@@ -1774,6 +1782,7 @@ skills:
     - "worktree_path = /tmp/worktrees/research-20260101-120000\n%%ORDER_UP::a1b2c3d4%%"
     write_behavior: always
     completion_required: true
+    scope_discipline: true
 
   run-experiment:
     inputs:

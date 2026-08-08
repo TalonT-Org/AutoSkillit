@@ -1754,11 +1754,13 @@ async def run_skill(
 
             if _stored_contract is not None:
                 is_read_only = _stored_contract.read_only
+                scope_discipline_skill = _stored_contract.scope_discipline
                 completion_required = _stored_contract.completion_required
             else:
                 if projection_context is None:
                     raise SkillContractError("Projection context was not prepared")
                 is_read_only = projection_context.parent_sandbox_mode == "read-only"
+                scope_discipline_skill = bool(_skill_contract and _skill_contract.scope_discipline)
                 completion_required = bool(
                     tool_ctx.completion_required_resolver
                     and tool_ctx.completion_required_resolver(skill_command)
@@ -1953,6 +1955,7 @@ async def run_skill(
                     expected_output_patterns=tuple(expected_output_patterns),
                     write_behavior=write_spec or WriteBehaviorSpec(),
                     read_only=is_read_only,
+                    scope_discipline=scope_discipline_skill,
                     completion_required=completion_required,
                     skill_contract_json=_serialize_skill_contract(_skill_contract),
                     execution_identity=_execution_identity,
@@ -2059,6 +2062,7 @@ async def run_skill(
                                 allowed_write_prefix=allowed_write_prefix,
                                 allowed_write_prefixes=allowed_write_prefixes,
                                 readonly_skill=is_read_only,
+                                scope_discipline_skill=scope_discipline_skill,
                                 completion_required=completion_required,
                                 write_watch_dirs=write_watch_dirs,
                                 provider_extras=provider_extras,

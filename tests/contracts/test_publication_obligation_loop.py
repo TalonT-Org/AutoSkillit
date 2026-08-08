@@ -451,11 +451,62 @@ def test_expected_version_present_uses_full_verification(
     assert captured_identity_calls == [
         (
             gen_root,
-            {"manifest_path": installed_plugin_artifact_manifest_path(gen_root)},
+            {
+                "expected_semantic_key": "autoskillit@autoskillit-local:1.1.0",
+                "manifest_path": installed_plugin_artifact_manifest_path(gen_root),
+            },
         )
     ]
     assert calls == [["autoskillit", "install", "--maintenance-update"]]
     assert captured_kwargs[0]["env"] == {"HOME": str(home)}
+
+
+def test_mismatched_generation_identity_keeps_obligation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from autoskillit.cli.update import _obligation_repair as m
+    from autoskillit.core import PluginArtifactValidationError
+    from autoskillit.workspace import (
+        read_obligation,
+        update_obligation_expected_version,
+        write_obligation,
+    )
+
+    obligation = write_obligation(
+        tmp_path,
+        previous_version="1.0.0",
+        originating_phase="upgrade-subprocess-gate",
+    )
+    update_obligation_expected_version(
+        tmp_path,
+        expected=obligation,
+        expected_version="1.1.0",
+    )
+    gen_root = tmp_path / "generation-root"
+
+    monkeypatch.setattr(
+        "autoskillit.core.resolve_current_generation",
+        lambda _home, _plugin_ref, _version: gen_root,
+    )
+
+    def reject_mismatched_identity(_managed_path: object, **kwargs: object) -> None:
+        assert kwargs["expected_semantic_key"] == "autoskillit@autoskillit-local:1.1.0"
+        raise PluginArtifactValidationError("installed plugin semantic identity mismatch")
+
+    monkeypatch.setattr(
+        "autoskillit.core.read_installed_plugin_artifact_identity",
+        reject_mismatched_identity,
+    )
+
+    result = m.attempt_obligation_repair(
+        tmp_path,
+        environment={},
+        process_runner=lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 0),
+        entrypoint=Path("autoskillit"),
+    )
+
+    assert result.outcome is m.ObligationRepairOutcome.FAILED
+    assert read_obligation(tmp_path) == obligation
 
 
 @pytest.mark.parametrize("persisted_version", [None, "not a version"])

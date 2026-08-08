@@ -168,6 +168,7 @@ def attempt_obligation_repair(
     try:
         from autoskillit.core import (
             installed_plugin_artifact_manifest_path,
+            installed_plugin_semantic_key,
             read_installed_plugin_artifact_identity,
             resolve_current_generation,
         )
@@ -180,6 +181,10 @@ def attempt_obligation_repair(
             )
         read_installed_plugin_artifact_identity(
             gen_root,
+            expected_semantic_key=installed_plugin_semantic_key(
+                _AUTOSKILLIT_PLUGIN_KEY,
+                expected_version,
+            ),
             manifest_path=installed_plugin_artifact_manifest_path(gen_root),
         )
     except Exception as exc:

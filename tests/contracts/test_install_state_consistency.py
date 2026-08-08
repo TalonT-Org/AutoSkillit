@@ -717,3 +717,34 @@ class TestRetiredArtifactShapeRegistry:
             ".claude/plugins/cache/autoskillit-local/autoskillit",
         )
         assert legacy_version.is_dir()
+
+    def test_running_legacy_version_waits_for_generation_publication(self, home: Path) -> None:
+        from autoskillit import __version__
+        from autoskillit.core import read_retiring_cache
+        from autoskillit.workspace import (
+            reconcile_install_artifacts,
+            write_installed_plugin_artifact_manifest_locked,
+        )
+
+        legacy_version = home / ".claude/plugins/cache/autoskillit-local/autoskillit" / __version__
+        legacy_version.mkdir(parents=True)
+        (legacy_version / "content.txt").write_text("legacy", encoding="utf-8")
+        write_installed_plugin_artifact_manifest_locked(
+            legacy_version,
+            semantic_key=f"{_PLUGIN_KEY}:{__version__}",
+            action="publish",
+        )
+
+        reconcile_install_artifacts()
+
+        assert legacy_version.is_dir()
+        assert all(
+            record.managed_path != legacy_version for record in read_retiring_cache().records
+        )
+
+        _publish_generation(home, __version__)
+        reconcile_install_artifacts()
+
+        assert any(
+            record.managed_path == legacy_version for record in read_retiring_cache().records
+        )

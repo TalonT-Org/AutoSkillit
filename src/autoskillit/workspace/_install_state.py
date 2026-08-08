@@ -364,6 +364,14 @@ def _enqueue_legacy_installed_plugin_versions(artifact: Path) -> None:
     is already contended is skipped and retried on the next reconciliation
     pass rather than aborting the whole sweep.
     """
+    from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY
+
+    running_version = importlib.metadata.version("autoskillit")
+    running_generation = resolve_current_generation(
+        _home(),
+        _AUTOSKILLIT_PLUGIN_KEY,
+        running_version,
+    )
     engine = PluginArtifactRetirementEngine(
         managed_root=artifact,
         artifact_kind=PluginArtifactKind.INSTALLED_PLUGIN,
@@ -386,9 +394,15 @@ def _enqueue_legacy_installed_plugin_versions(artifact: Path) -> None:
         key=lambda item: item.name,
     )
     for candidate in candidates:
+        if candidate.name == running_version and running_generation is None:
+            continue
         try:
             identity = read_installed_plugin_artifact_identity(
                 candidate,
+                expected_semantic_key=installed_plugin_semantic_key(
+                    _AUTOSKILLIT_PLUGIN_KEY,
+                    candidate.name,
+                ),
                 manifest_path=installed_plugin_artifact_manifest_path(candidate),
             )
         except (PluginArtifactValidationError, PluginArtifactUnavailableError, OSError) as exc:

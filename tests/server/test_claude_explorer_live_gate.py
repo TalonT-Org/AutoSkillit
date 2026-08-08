@@ -23,7 +23,7 @@ _skip_unless_live_gate = pytest.mark.skipif(
     reason=f"Claude explorer live gate requires {_LIVE_ENV}=1",
 )
 
-pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 def _snapshot_service() -> MagicMock:

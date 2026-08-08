@@ -86,9 +86,6 @@ def interactive_plugin_authority(
             ),
             PluginLoadMode.NONE,
         )
-    # All artifact-consuming backends use generation-store publication with
-    # explicit --plugin-dir binding.  IMPLICIT_INSTALLED was retired in the
-    # generation-keyed publication migration (#4480).
     from autoskillit.workspace import project_default_plugin_authority
 
     authority = project_default_plugin_authority(

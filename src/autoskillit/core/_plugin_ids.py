@@ -89,11 +89,9 @@ def registered_install_paths(home: Path | None = None) -> tuple[Path, ...]:
 def detect_autoskillit_mcp_prefix(capabilities: BackendCapabilities) -> str:
     """Return the MCP prefix that autoskillit tools will use in a spawned session.
 
-    Since the generation-keyed publication migration (#4480), all sessions
-    are bound via ``--plugin-dir``, which always produces the direct prefix
-    regardless of marketplace registration.  The marketplace-prefix path is
-    retained only for sessions where a legacy ``installed_plugins.json``
-    entry is still present AND the backend is capable of consuming it.
+    Backends without marketplace-prefix support always use the direct prefix.
+    Marketplace-capable backends use the marketplace prefix only while an
+    ``installed_plugins.json`` registration is present.
     """
     if not capabilities.claude_marketplace_tool_prefix_capable:
         return DIRECT_PREFIX

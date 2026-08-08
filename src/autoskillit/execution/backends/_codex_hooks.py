@@ -47,9 +47,9 @@ def _resolve_codex_hooks_dir(plugin_dir: Path | None = None) -> Path:
     short-lived resolve→validate of the current generation selector is
     performed through the same generation-store authority as launch binding.
 
-    The silent ``except Exception → HOOKS_DIR`` fallback was removed in the
-    generation-keyed publication migration (#4480) — a validation failure now
-    surfaces as a classified error, not a quiet dev-checkout resolution.
+    If neither the generation store nor the legacy installed cache supplies a
+    dispatcher, the failure is logged before falling back to ``HOOKS_DIR`` in
+    the development checkout.
     """
     if plugin_dir is not None:
         candidate = plugin_dir / "hooks"

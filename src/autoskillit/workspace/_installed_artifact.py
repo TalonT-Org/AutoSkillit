@@ -61,8 +61,7 @@ def write_installed_plugin_artifact_manifest_locked(
     When ``incarnation_id`` is supplied, that value is used verbatim (the
     caller has already minted it at staging time and threaded it through the
     staging directory name, retirement records, and lifecycle logging).
-    When ``None`` (the default, backward-compatible path), a fresh uuid4
-    hex is minted internally.
+    When ``None``, a fresh uuid4 hex is minted internally.
     """
     manifest_path = installed_plugin_artifact_manifest_path(managed_path)
     resolved_incarnation = (

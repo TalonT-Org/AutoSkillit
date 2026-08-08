@@ -249,6 +249,7 @@ class TestBytecodeExclusion:
         (source / "hooks" / "guards" / "__pycache__" / "quota_guard.cpython-311.pyc").write_bytes(
             b"fake pyc"
         )
+        (source / "hooks" / "stale.pyc").write_bytes(b"standalone fake pyc")
         (source / "hooks" / "stale.pyo").write_bytes(b"fake pyo")
         (source / "scripts" / "__pycache__").mkdir(parents=True)
         (source / "scripts" / "module.py").write_text("real script\n")
@@ -282,6 +283,7 @@ class TestBytecodeExclusion:
         assert not is_projected_asset(
             source / "hooks" / "__pycache__" / "quota_guard.cpython-311.pyc", top_level=False
         )
+        assert not is_projected_asset(source / "hooks" / "stale.pyc", top_level=False)
         assert not is_projected_asset(source / "hooks" / "stale.pyo", top_level=False)
 
         # Sanity: the copier did real work, so the empty assertions above
@@ -326,8 +328,9 @@ class TestBytecodeExclusion:
 
         for pycache in list(source.rglob("__pycache__")):
             shutil.rmtree(pycache)
-        for artifact in list(source.rglob("*.pyo")):
-            artifact.unlink()
+        for pattern in ("*.pyc", "*.pyo"):
+            for artifact in list(source.rglob(pattern)):
+                artifact.unlink()
         digest_after = public_plugin_asset_digest(source)
 
         assert iterated == copied, (
@@ -338,6 +341,12 @@ class TestBytecodeExclusion:
         assert digest_before == digest_after, (
             "public_plugin_asset_digest changed when only bytecode was removed — "
             "the digest hashes a different set than the iterator yields"
+        )
+
+        ordinary_asset = source / "hooks" / "guard_one.py"
+        ordinary_asset.write_text("changed hook\n", encoding="utf-8")
+        assert public_plugin_asset_digest(source) != digest_after, (
+            "public_plugin_asset_digest ignored an ordinary file yielded by the iterator"
         )
 
     def test_iter_walk_excludes_bytecode_directly(self, tmp_path: Path) -> None:

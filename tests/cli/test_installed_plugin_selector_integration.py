@@ -320,7 +320,8 @@ def test_matching_claude_artifact_binds_through_real_selector_session_launch(
     assert len(backend.build_calls) == 2
     binding = cast(PluginLaunchBinding, backend.build_calls[-1]["plugin_binding"])
     assert binding.load_mode is PluginLoadMode.EXPLICIT_PLUGIN_DIR
-    assert isinstance(binding.plugin_dir, Path)
+    assert binding.plugin_dir.is_relative_to(state.home / ".autoskillit" / "plugin-projections")
+    assert (binding.plugin_dir / "hooks" / "_dispatch.py").is_file()
     assert binding.closed
     assert len(spawn_calls) == 1
 

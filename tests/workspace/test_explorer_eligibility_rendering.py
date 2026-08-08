@@ -26,8 +26,8 @@ def test_ineligible_context_renders_unavailable_text(tmp_path: Path) -> None:
     source_infos = tuple(
         s for s in DefaultSkillResolver().list_all() if s.source is SkillSource.BUNDLED
     )
-    has_exploration = any(s.exploration_vectors for s in source_infos)
-    if not has_exploration:
+    exploration_skill_names = {skill.name for skill in source_infos if skill.exploration_vectors}
+    if not exploration_skill_names:
         pytest.skip("no bundled skills with exploration vectors")
 
     catalog = EffectiveSkillCatalog(
@@ -43,14 +43,13 @@ def test_ineligible_context_renders_unavailable_text(tmp_path: Path) -> None:
     destination = tmp_path / "skills"
     documents = materialize_agent_skill_tree(destination, catalog, context)
 
-    for name, doc in documents.items():
-        if "do not dispatch this exploration vector" in doc.content:
-            return
-        if "Explorer provisioning is unavailable" in doc.content:
-            return
-    if has_exploration:
-        pytest.fail(
-            "Expected at least one skill to contain 'do not dispatch' or "
+    for name in sorted(exploration_skill_names):
+        content = documents[name].content
+        assert (
+            "do not dispatch this exploration vector" in content
+            or "Explorer provisioning is unavailable" in content
+        ), (
+            f"Expected exploration skill {name!r} to contain 'do not dispatch' or "
             "'Explorer provisioning is unavailable' when eligible=False"
         )
 

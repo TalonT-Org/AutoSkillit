@@ -32,7 +32,11 @@ from autoskillit.hooks._capture._failure_policy import (
     CaptureFailureReason,
     runtime_failure_reason,
 )
-from autoskillit.hooks._capture._lifecycle_policy import SWEEP_GRACE_SECONDS, CaptureStatus
+from autoskillit.hooks._capture._lifecycle_policy import (
+    STATE_RECLAIMABILITY,
+    SWEEP_GRACE_SECONDS,
+    CaptureStatus,
+)
 from autoskillit.hooks._capture._snapshot import (
     CaptureAuthorityError,
     CaptureMeasurement,
@@ -518,6 +522,27 @@ def _legacy_record(
         "staging_name": f".capture-staging-{capture_id}-{'1' * 16}",
         "state": state.value,
     }
+
+
+def test_legacy_tampered_record_receives_forensic_hold_before_migration() -> None:
+    legacy = _legacy_record(
+        capture_id=_CAPTURE_ID,
+        state=CaptureState.TAMPERED,
+        project_identity=(1, 2),
+        root_identity=(3, 4),
+        artifact_identity=(5, 6),
+        observed_size=len(b"captured"),
+    )
+
+    record = capture_lifecycle._capture_ledger.legacy_record_from_dict(
+        legacy,
+        revision=1,
+        compaction_epoch=2,
+    )
+
+    hold = STATE_RECLAIMABILITY[CaptureState.TAMPERED].duration_seconds
+    assert hold is not None
+    assert record.next_attempt_at == 2_000_000.0 + hold
 
 
 def _race_calls(

@@ -15,6 +15,7 @@ from typing import Any, cast
 from . import _snapshot
 from ._failure_policy import CaptureFailureReason
 from ._lifecycle_policy import (
+    STATE_RECLAIMABILITY,
     CaptureDeliveryStatus,
     CaptureReferenceStatus,
     CaptureRetentionPhase,
@@ -640,6 +641,13 @@ def legacy_record_from_dict(
             CaptureState.DELETED: CaptureRetentionPhase.DELETED,
             CaptureState.TAMPERED: CaptureRetentionPhase.TAMPERED,
         }.get(state, CaptureRetentionPhase.ELIGIBLE)
+        created_at = _finite_timestamp(value["created_at"], "created timestamp")
+        next_attempt_at = _finite_timestamp(value["next_attempt_at"], "next-attempt timestamp")
+        if state is CaptureState.TAMPERED:
+            tampered_hold = STATE_RECLAIMABILITY[CaptureState.TAMPERED].duration_seconds
+            if tampered_hold is None:
+                raise LedgerCodecError("tampered state requires a forensic hold duration")
+            next_attempt_at = max(created_at, next_attempt_at) + tampered_hold
         legacy_bytes = canonical_json(value)
         incarnation = hashlib.sha256(
             b"autoskillit:legacy-capture:v1\0" + legacy_bytes
@@ -651,8 +659,8 @@ def legacy_record_from_dict(
             public_name=value["public_name"],
             project_identity=_pair(value["project_identity"], "project identity"),
             root_identity=_pair(value["root_identity"], "root identity"),
-            created_at=_finite_timestamp(value["created_at"], "created timestamp"),
-            next_attempt_at=_finite_timestamp(value["next_attempt_at"], "next-attempt timestamp"),
+            created_at=created_at,
+            next_attempt_at=next_attempt_at,
             incarnation=incarnation,
             revision=revision,
             compaction_epoch=compaction_epoch,

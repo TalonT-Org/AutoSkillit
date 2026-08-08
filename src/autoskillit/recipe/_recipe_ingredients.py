@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, NotRequired, TypedDict
 
 from autoskillit.core import (
+    CALLER_SOVEREIGN_INGREDIENTS,
     FinalizedRecipeProjection,
     TerminalColumn,
     _render_gfm_table,
@@ -63,9 +64,10 @@ def build_ingredient_rows(
         required = getattr(ing, "required", False)
         default = getattr(ing, "default", None)
         sort_key = _ingredient_sort_key(name, required, default)
+        res = resolved.get(name)
         if default is None and required:
             default_str, name_str = "(required)", f"{name} *"
-        elif res := resolved.get(name):
+        elif res and name not in CALLER_SOVEREIGN_INGREDIENTS:
             default_str, name_str = res, name
         elif default == "":
             default_str, name_str = "auto-detect", name

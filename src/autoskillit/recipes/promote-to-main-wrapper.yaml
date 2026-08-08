@@ -26,7 +26,6 @@ ingredients:
       Absolute path to the source repository. Required — no default prevents
       silent cwd inheritance from the MCP server when an empty string is passed.
     required: true
-    authority: config
 
 steps:
   promote:

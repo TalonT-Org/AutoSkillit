@@ -24,8 +24,7 @@
     "source_dir": {
       "description": "Path to the project root",
       "required": true,
-      "type": "absolute_path",
-      "authority": "config"
+      "type": "absolute_path"
     },
     "issue_url": {
       "description": "Optional URL to an existing GitHub issue describing the research goal. Provided as context to scope and plan_experiment.",

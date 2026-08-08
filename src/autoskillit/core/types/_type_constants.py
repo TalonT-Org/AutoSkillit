@@ -47,6 +47,7 @@ __all__ = [
     "QUOTA_POST_WARNING_TRIGGER",
     "QUOTA_POST_BUDGET_EXCEEDED_TRIGGER",
     "CONFIG_AUTHORITY_KEYS",
+    "CALLER_SOVEREIGN_INGREDIENTS",
     "RUN_PYTHON_PATH_LIKE_ARGS",
     "RUN_PYTHON_SENTINEL_KEYS",
     "SCOPE_DIRECTION_SOURCE_TYPES",
@@ -599,6 +600,17 @@ CONFIG_AUTHORITY_KEYS: frozenset[str] = frozenset(
         "adversarial_review_level",
         "is_fleet_dispatch",
         "dispatch_id",
+    }
+)
+
+# Config-authority keys that are legitimately caller-supplied rather than
+# server-resolved (e.g. source_dir is project-identity — the clone URL — supplied
+# by the dispatching caller, not injected from local project config). The named
+# registry replaces the implicit CONFIG_AUTHORITY_KEYS - {"source_dir"} set-difference
+# that was previously scattered across ingredient_defaults.py and test assertions.
+CALLER_SOVEREIGN_INGREDIENTS: frozenset[str] = frozenset(
+    {
+        "source_dir",
     }
 )
 

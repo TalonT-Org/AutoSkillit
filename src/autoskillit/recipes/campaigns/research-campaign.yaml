@@ -28,7 +28,6 @@ ingredients:
     description: Path to the project root
     required: true
     type: absolute_path
-    authority: config
   issue_url:
     description: >-
       Optional URL to an existing GitHub issue describing the research goal.

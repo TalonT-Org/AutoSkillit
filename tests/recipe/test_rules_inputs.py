@@ -455,9 +455,72 @@ def test_unreachable_steps_first_step_clean() -> None:
 
 
 def test_known_config_authority_keys_derived_from_registries():
-    """CONFIG_AUTHORITY_KEYS must equal server-authoritative keys plus source_dir."""
+    """CONFIG_AUTHORITY_KEYS must equal server-authoritative keys plus caller-sovereign keys."""
     from autoskillit.config import SERVER_AUTHORITATIVE_INGREDIENTS
-    from autoskillit.core import CONFIG_AUTHORITY_KEYS
+    from autoskillit.core import CALLER_SOVEREIGN_INGREDIENTS, CONFIG_AUTHORITY_KEYS
 
-    expected = SERVER_AUTHORITATIVE_INGREDIENTS | frozenset({"source_dir"})
+    expected = SERVER_AUTHORITATIVE_INGREDIENTS | CALLER_SOVEREIGN_INGREDIENTS
     assert CONFIG_AUTHORITY_KEYS == expected
+
+
+@pytest.mark.parametrize(
+    ("required", "default"),
+    [
+        pytest.param(True, None, id="required-true-no-default"),
+        pytest.param(False, "", id="optional-empty-default"),
+    ],
+)
+def test_config_authority_rejects_caller_sovereign_key(
+    required: bool, default: str | None
+) -> None:
+    """A caller-sovereign key (source_dir) declaring authority='config' must fail with
+    an ERROR regardless of required/default shape — these are the two recipe-ingredient
+    shapes found across the 15 bundled recipes that leaked the URL default. This also
+    validates the elif ordering: the caller-sovereign ERROR branch must fire before the
+    existing required-check WARNING branch."""
+    recipe = Recipe(
+        name="test-recipe",
+        description="Test recipe",
+        ingredients={
+            "source_dir": RecipeIngredient(
+                description="Source repository",
+                authority="config",
+                required=required,
+                default=default,
+            )
+        },
+        steps={"done": RecipeStep(action="stop", message="done")},
+    )
+    findings = run_semantic_rules(recipe)
+    errors = [
+        f
+        for f in findings
+        if f.rule == "config-authority-requires-resolve-source" and f.severity == Severity.ERROR
+    ]
+    assert errors, "Expected an ERROR finding for caller-sovereign key with authority='config'"
+
+
+def test_config_authority_accepts_server_authoritative_key() -> None:
+    """A server-authoritative key (base_branch) declaring authority='config' must not
+    trigger the new caller-sovereign ERROR branch — proves the gate suppresses only
+    caller-sovereign keys, not legitimate authority='config' declarations."""
+    recipe = Recipe(
+        name="test-recipe",
+        description="Test recipe",
+        ingredients={
+            "base_branch": RecipeIngredient(
+                description="Base branch",
+                authority="config",
+                required=False,
+                default="",
+            )
+        },
+        steps={"done": RecipeStep(action="stop", message="done")},
+    )
+    findings = run_semantic_rules(recipe)
+    errors = [
+        f
+        for f in findings
+        if f.rule == "config-authority-requires-resolve-source" and f.severity == Severity.ERROR
+    ]
+    assert errors == [], f"Unexpected ERROR findings: {errors}"

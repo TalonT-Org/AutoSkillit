@@ -58,6 +58,35 @@ def test_no_unbounded_cycle_findings_in_bundled_recipes(recipe_yaml: Path) -> No
     )
 
 
+@pytest.mark.parametrize(
+    "recipe_yaml",
+    _ALL_RECIPE_PATHS,
+    ids=lambda p: p.stem,
+)
+def test_no_caller_sovereign_config_authority_findings_in_bundled_recipes(
+    recipe_yaml: Path,
+) -> None:
+    """Every bundled recipe must have zero config-authority-requires-resolve-source ERROR
+    findings that reference a CALLER_SOVEREIGN_INGREDIENTS member (e.g. source_dir) —
+    declaring authority='config' on a caller-sovereign key is the misconfiguration that
+    produced the display-layer URL leak."""
+    from autoskillit.core import CALLER_SOVEREIGN_INGREDIENTS
+
+    recipe = load_recipe(recipe_yaml)
+    findings = run_semantic_rules(recipe)
+    leak_findings = [
+        f
+        for f in findings
+        if f.rule == "config-authority-requires-resolve-source"
+        and f.severity == Severity.ERROR
+        and any(key in f.message for key in CALLER_SOVEREIGN_INGREDIENTS)
+    ]
+    assert leak_findings == [], (
+        f"{recipe_yaml.stem}: "
+        f"{[f'{f.severity.name} {f.step_name}: {f.message[:80]}' for f in leak_findings]}"
+    )
+
+
 _PRE_MERGE_CYCLE_RECIPES = ["implementation", "implementation-groups", "remediation"]
 
 

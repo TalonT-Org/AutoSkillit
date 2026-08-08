@@ -122,7 +122,7 @@ def test_build_actual_mcp_kwargs_fails_fast_on_drift() -> None:
         _build_actual_mcp_kwargs(tool_def, excess)
 
     result = _build_actual_mcp_kwargs(tool_def, complete_values)
-    assert set(result) <= handler_param_names
+    assert set(result) == handler_param_names
 
 
 def test_run_skill_attestation_params_is_subset_of_protocol_role() -> None:

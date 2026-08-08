@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import TypedDict
 
 from autoskillit.core import (
@@ -346,3 +347,71 @@ async def resume_exploration_context(
     except Exception:
         logger.warning("exploration context resumption failed", exc_info=True)
         return _failure(_FAILURE_BROKER_UNAVAILABLE)
+
+
+@mcp.tool(
+    tags={"autoskillit"},
+    annotations={"readOnlyHint": True},
+)
+@_cancellation_shield()
+async def enable_exploration(
+    project_dir: str = "",
+) -> str:
+    """Establish session-scoped exploration authority for Claude-native sessions.
+
+    Call this before dispatching explorer subagents (Agent calls with
+    subagent_type ``autoskillit:semantic-code-navigator`` or
+    ``autoskillit:repository-impact-profiler``). The three broker tools
+    become visible after this call succeeds.
+
+    Not required for Codex sessions (per-child terminal binding) or for
+    headless run_skill corridors (factory-based binding).
+
+    Never raises.
+    """
+    try:
+        from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
+        from autoskillit.server import _get_ctx
+
+        ctx = _get_ctx()
+        store = ctx.exploration_context_store
+        if not isinstance(store, OwnerBoundExplorationContextStore):
+            return json.dumps(
+                {"status": "error", "code": "exploration_store_unavailable"},
+                separators=(",", ":"),
+            )
+        session_id = getattr(ctx, "session_id", None)
+        if session_id is None:
+            return json.dumps(
+                {"status": "error", "code": "no_session_id"},
+                separators=(",", ":"),
+            )
+        cwd = Path(project_dir) if project_dir else Path.cwd()
+        repository_root = store.trusted_root
+        import os
+
+        capability = store.bind_session_scoped(
+            owner_id=f"uid:{os.getuid()}",
+            session_id=session_id,
+            cwd=cwd,
+            repository_root=repository_root,
+            source_identity=f"interactive:{session_id}",
+        )
+        if capability:
+            from autoskillit.server import mcp as _mcp
+
+            _mcp.enable(tags={"exploration"}, components={"tool"})
+            return json.dumps(
+                {"status": "ok", "exploration_enabled": True},
+                separators=(",", ":"),
+            )
+        return json.dumps(
+            {"status": "error", "code": "bind_failed"},
+            separators=(",", ":"),
+        )
+    except Exception:
+        logger.warning("exploration provisioning failed", exc_info=True)
+        return json.dumps(
+            {"status": "error", "code": "exploration_provisioning_failed"},
+            separators=(",", ":"),
+        )

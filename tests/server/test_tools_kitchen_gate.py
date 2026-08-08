@@ -248,6 +248,19 @@ async def test_open_kitchen_has_always_load_meta() -> None:
     )
 
 
+@pytest.mark.anyio
+async def test_open_kitchen_description_distinguishes_valid_calls() -> None:
+    from autoskillit.server import mcp
+
+    tool = await mcp.get_tool("open_kitchen")
+    assert tool is not None
+    description = tool.description.lower()
+    assert "pre-revealed" in description and "no-argument" in description
+    assert "human-requested activation or promotion" in description
+    assert "name=" in description
+    assert "after close_kitchen" in description
+
+
 # ---------------------------------------------------------------------------
 # Triple-ID unification: kitchen_id inherits AUTOSKILLIT_CAMPAIGN_ID
 # ---------------------------------------------------------------------------

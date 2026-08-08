@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import tomllib
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
@@ -67,8 +68,11 @@ def _stub_plugin_artifact_authority(
 
     def choose(**kwargs: object):
         backend = kwargs["backend"]
-        if getattr(backend, "name", None) == "codex" and kwargs["generated_home"] is not None:
-            return None, PluginLoadMode.GENERATED_HOME
+        if (
+            getattr(backend, "name", None) == "codex"
+            and kwargs["generated_home_available"] is True
+        ):
+            return authority, PluginLoadMode.GENERATED_HOME
         return authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR
 
     monkeypatch.setattr(
@@ -84,6 +88,7 @@ class _Backend:
         hook_trust_policy=HookTrustPolicy.AUTOMATED,
         session_dir_persistent=False,
         skill_injection_capable=True,
+        supports_tool_list_changed=True,
     )
     adapt_skill_semantics = staticmethod(adapt_test_skill_semantics)
 
@@ -235,6 +240,64 @@ def _install_harness(
     captured["generated_home"] = generated_home
     captured["skills_dir"] = skills_dir
     return captured
+
+
+def test_codex_cook_adds_pre_reveal_developer_guidance(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.execution.backends.codex import CodexBackend, CodexFlags
+
+    class _DelegatingCodexBackend(_Backend):
+        name = "codex"
+        capabilities = CodexBackend.capabilities
+
+        def __init__(self) -> None:
+            super().__init__()
+            self._command_backend = CodexBackend()
+
+        def binary_name(self) -> str:
+            return "codex"
+
+        def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
+            self.build_calls.append(kwargs)
+            return self._command_backend.build_interactive_cmd(**kwargs)  # type: ignore[arg-type]
+
+    backend = _DelegatingCodexBackend()
+    captured = _install_harness(monkeypatch, tmp_path)
+
+    cli.cook(backend=backend)
+
+    spec = captured["spec"]
+    assert isinstance(spec, CmdSpec)
+    overrides = (
+        spec.cmd[index + 1]
+        for index, value in enumerate(spec.cmd[:-1])
+        if value == CodexFlags.CONFIG_OVERRIDE
+    )
+    rendered = next(
+        value.removeprefix("developer_instructions=")
+        for value in overrides
+        if value.startswith("developer_instructions=")
+    )
+    guidance = tomllib.loads(f"developer_instructions = {rendered}")["developer_instructions"]
+    assert "kitchen tools are already active" in guidance
+    assert "no arguments solely to gain tool access" in guidance
+    assert "explicitly requests activation or promotion" in guidance
+    assert "open_kitchen(name=...)" in guidance
+    assert "after close_kitchen()" in guidance
+
+
+def test_notification_capable_cook_has_no_pre_reveal_guidance(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    backend = _Backend()
+    _install_harness(monkeypatch, tmp_path)
+
+    cli.cook(backend=backend)
+
+    assert backend.build_calls[0]["system_prompt"] is None
 
 
 def test_cook_uses_managed_home_for_final_child_context(
@@ -485,6 +548,7 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
             hook_trust_policy=HookTrustPolicy.AUTOMATED,
             session_dir_persistent=False,
             skill_injection_capable=True,
+            supports_tool_list_changed=True,
         )
         adapt_skill_semantics = staticmethod(adapt_test_skill_semantics)
 
@@ -577,6 +641,7 @@ def test_cook_does_not_treat_persistent_sessions_as_codex(
         session_dir_persistent=True,
         cook_startup_observer_capable=False,
         skill_injection_capable=True,
+        supports_tool_list_changed=True,
     )
     captured = _install_harness(monkeypatch, tmp_path)
 

@@ -35,7 +35,9 @@ Controls whether the tool appears in `tools/list` (whether the agent can see it)
   - **FLEET** sessions: `fleet`-tagged tools revealed; `fleet-dispatch` revealed only in dispatch mode
   - **ORCHESTRATOR + HEADLESS**: `kitchen` (or `kitchen-core` + pack tags) revealed
   - **SKILL + HEADLESS**: `headless`-tagged tools revealed (`test_check`); with `HEADLESS_AUTO_GATE=1`, `kitchen-core` also revealed
-  - **Interactive** (no HEADLESS): nothing pre-revealed; `open_kitchen` reveals `kitchen` tag
+  - **ORCHESTRATOR/SKILL + interactive + non-notification backend**: lifespan boot runs `_pre_reveal_kitchen()`
+  - **ORCHESTRATOR/SKILL + interactive + notification-capable backend**: nothing pre-revealed; `open_kitchen` reveals the `kitchen` tag
+  - **Direct sessions without a registered ORCHESTRATOR/SKILL interactive handler**: not implicitly pre-revealed
 - All tags in `ALL_VISIBILITY_TAGS` are disabled at startup via `for tag in sorted(ALL_VISIBILITY_TAGS): mcp.disable(tags={tag})`. Session-type dispatch and `open_kitchen` selectively re-enable per session. `ALL_VISIBILITY_TAGS` is defined in `core/types/_type_constants_registries.py`.
 
 ### Application-Gate (Python layer)

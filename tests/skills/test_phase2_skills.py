@@ -24,6 +24,19 @@ def test_open_kitchen_skill_has_disable_model_invocation() -> None:
     assert fm.get("name") == "open-kitchen"
 
 
+def test_open_kitchen_skill_respects_host_declared_visibility() -> None:
+    content = (pkg_root() / "skills" / "open-kitchen" / "SKILL.md").read_text()
+
+    assert "Each new coding-agent session starts with kitchen tools hidden" not in content
+    assert "Skip calling `open_kitchen` and assume the kitchen is already open" not in content
+    assert "**ALWAYS:**\n- Call `open_kitchen` with no arguments" not in content
+    assert "host" in content and "pre-revealed" in content
+    assert "no-argument" in content and "redundant" in content
+    assert "human" in content and "activation" in content
+    assert "name=" in content
+    assert "close_kitchen" in content and "reopen" in content
+
+
 def test_close_kitchen_skill_has_disable_model_invocation() -> None:
     skill_md = pkg_root() / "skills" / "close-kitchen" / "SKILL.md"
     assert skill_md.exists()

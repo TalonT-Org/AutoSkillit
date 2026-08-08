@@ -102,3 +102,34 @@ def detect_autoskillit_mcp_prefix(capabilities: BackendCapabilities) -> str:
     except (OSError, json.JSONDecodeError, AttributeError, TypeError):
         pass
     return DIRECT_PREFIX
+
+
+def validate_agent_tool_canonical(tool: str) -> str:
+    """Assert a tool string is in DIRECT-canonical form and return its short name.
+
+    Raises ValueError if the tool does not start with DIRECT_PREFIX or
+    its short name is not a registered exploration tool.
+    """
+    from .types import EXPLORATION_TOOLS
+
+    if not tool.startswith(DIRECT_PREFIX):
+        raise ValueError(
+            f"agent tool {tool!r} must use the direct-install canonical prefix {DIRECT_PREFIX!r}"
+        )
+    short = tool[len(DIRECT_PREFIX) :]
+    if short not in EXPLORATION_TOOLS:
+        raise ValueError(f"agent tool short name {short!r} is not a registered exploration tool")
+    return short
+
+
+def project_agent_tool_name(tool: str, target_prefix: str) -> str:
+    """Project a DIRECT-canonical agent tool name to a target prefix form.
+
+    Validates that *tool* is in authored (DIRECT_PREFIX) form, then replaces
+    the prefix with *target_prefix*.  Non-MCP tools (those without the
+    ``mcp__`` prefix) are returned unchanged.
+    """
+    if not tool.startswith("mcp__"):
+        return tool
+    short = validate_agent_tool_canonical(tool)
+    return f"{target_prefix}{short}"

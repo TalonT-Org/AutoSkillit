@@ -37,9 +37,12 @@ from autoskillit.core import (
     atomic_write,
     destination_location,
     dump_yaml_str,
+    load_agent_definition,
     normalize_parent_sandbox_mode,
+    project_agent_tool_name,
     read_versioned_json,
     temp_dir_display_str,
+    validate_agent_tool_canonical,
     write_versioned_json,
 )
 from autoskillit.workspace._projection_cache import is_projected_asset
@@ -581,11 +584,79 @@ def _projection_skills_manifest(
     }
 
 
+def _render_agent_definitions(agents_dir: Path, mcp_tool_prefix: str) -> None:
+    """Rewrite MCP tool prefixes in copied agent definitions.
+
+    Performs a format-preserving line-level rewrite of the ``tools:`` frontmatter
+    line only: each DIRECT-canonical MCP tool name is projected to the target
+    prefix.  Non-MCP tools pass through unchanged.  The source definitions are
+    validated before projection — a non-canonical MCP tool raises immediately.
+
+    Each rendered file is re-parsed via the canonical fail-closed loader to
+    assert semantic equality with the source definition (modulo tools prefix).
+    """
+    if not agents_dir.is_dir():
+        return
+    for path in sorted(agents_dir.glob("*.md")):
+        if path.name in {"AGENTS.md", "CLAUDE.md"}:
+            continue
+        content = path.read_text(encoding="utf-8")
+        lines = content.splitlines(keepends=True)
+        tools_line_idx: int | None = None
+        for idx, line in enumerate(lines):
+            stripped = line.lstrip()
+            if stripped.startswith("tools:"):
+                tools_line_idx = idx
+                break
+        if tools_line_idx is None:
+            continue
+
+        source_def = load_agent_definition(path)
+        has_mcp_tools = any(tool.startswith("mcp__") for tool in source_def.tools)
+        if not has_mcp_tools:
+            continue
+
+        for tool in source_def.tools:
+            if tool.startswith("mcp__"):
+                validate_agent_tool_canonical(tool)
+
+        projected_tools = tuple(
+            project_agent_tool_name(tool, mcp_tool_prefix) for tool in source_def.tools
+        )
+        new_tools_value = "[" + ", ".join(projected_tools) + "]"
+        indent = lines[tools_line_idx][
+            : len(lines[tools_line_idx]) - len(lines[tools_line_idx].lstrip())
+        ]
+        lines[tools_line_idx] = f"{indent}tools: {new_tools_value}\n"
+        rendered = "".join(lines)
+        path.write_text(rendered, encoding="utf-8")
+
+        rendered_def = load_agent_definition(path)
+        if rendered_def.name != source_def.name:
+            raise SkillContractError(
+                f"agent definition name changed after rendering: "
+                f"{source_def.name!r} → {rendered_def.name!r}"
+            )
+        if rendered_def.body != source_def.body:
+            raise SkillContractError(
+                f"agent definition body changed after rendering: {source_def.name!r}"
+            )
+        if (
+            tuple(project_agent_tool_name(tool, mcp_tool_prefix) for tool in source_def.tools)
+            != rendered_def.tools
+        ):
+            raise SkillContractError(
+                f"agent definition tool projection mismatch after rendering: {source_def.name!r}"
+            )
+
+
 def materialize_sanitized_plugin_root(
     source_root: Path,
     destination: Path,
     catalog: EffectiveSkillCatalogAuthority | Iterable[SkillContractRecord],
     context: SkillProjectionContext,
+    *,
+    mcp_tool_prefix: str,
 ) -> Path:
     """Copy plugin assets and replace its public skills with safe projections.
 
@@ -611,6 +682,7 @@ def materialize_sanitized_plugin_root(
     )
     try:
         _copy_non_skill_plugin_assets(source_root, staging)
+        _render_agent_definitions(staging / "agents", mcp_tool_prefix)
         skill_infos = _skill_sequence(catalog)
         documents = materialize_agent_skill_tree(staging / "skills", skill_infos, context)
         _replace_directory(staging, destination)

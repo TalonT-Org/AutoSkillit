@@ -13,6 +13,7 @@ from types import MappingProxyType
 from typing import cast
 
 from autoskillit.core import (
+    DIRECT_PREFIX,
     SKILL_PROJECTION_VERSION,
     ArtifactLease,
     ArtifactLeaseContention,
@@ -45,6 +46,7 @@ from autoskillit.workspace._projected_artifact.materialization import (
     _default_base_branch,
     _direct_install_projection_context,
     _projection_skills_manifest,
+    _render_agent_definitions,
     _replace_directory,
     _skill_sequence,
     materialize_agent_skill_tree,
@@ -125,6 +127,10 @@ def _stage_projected_plugin_artifact(
     )
     try:
         _copy_non_skill_plugin_assets(plan.source_root, staging_root)
+        # Projected artifact — consumed exclusively via --plugin-dir, which
+        # registers the plugin verbatim; never detect_autoskillit_mcp_prefix(),
+        # which answers a different question (host-level registry presence).
+        _render_agent_definitions(staging_root / "agents", DIRECT_PREFIX)
         skill_infos = _skill_sequence(plan.catalog)
         documents = materialize_agent_skill_tree(
             staging_root / "skills",

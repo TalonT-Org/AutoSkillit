@@ -10,6 +10,7 @@ import pytest
 from autoskillit.core import (
     BUNDLED_EXPLORER_ROLES,
     CODEX_EXPLORER_IDENTITY,
+    DIRECT_PREFIX,
     EXPLORATION_TOOLS,
     REPOSITORY_IMPACT_PROFILER_ROLE,
     SEMANTIC_CODE_NAVIGATOR_ROLE,
@@ -24,7 +25,7 @@ from autoskillit.core import (
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
-_EXPLORATION_BROKER_TOOLS = frozenset(f"mcp__autoskillit__{tool}" for tool in EXPLORATION_TOOLS)
+_EXPLORATION_BROKER_TOOLS = frozenset(f"{DIRECT_PREFIX}{tool}" for tool in EXPLORATION_TOOLS)
 
 
 @pytest.mark.parametrize(

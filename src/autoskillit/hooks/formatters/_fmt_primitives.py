@@ -83,7 +83,7 @@ def _maybe_audit_lines(data: dict, lines: list[str]) -> None:
 def _extract_tool_short_name(tool_name: str) -> str:
     """Extract short tool name from full MCP tool name.
 
-    "mcp__plugin_autoskillit_autoskillit__run_skill" -> "run_skill"
+    "mcp__some_plugin__run_skill" -> "run_skill"
     Falls back to the full tool_name if no __ separator found.
     """
     return tool_name.rsplit("__", 1)[-1] if "__" in tool_name else tool_name

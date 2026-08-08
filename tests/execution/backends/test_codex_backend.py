@@ -15,6 +15,7 @@ from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     CAMPAIGN_ID_ENV_VAR,
     CODEX_MODEL_ALIASES,
+    DIRECT_PREFIX,
     KITCHEN_SESSION_ID_ENV_VAR,
     MCP_CLIENT_BACKEND_ENV_VAR,
     SESSION_TYPE_ORCHESTRATOR,
@@ -2178,7 +2179,7 @@ class TestCodexBackendSetupSessionDir:
             parsed = tomllib.loads(role_text)
             projection = parsed["mcp_servers"]["autoskillit"]
             assert projection["enabled_tools"] == [
-                tool.removeprefix("mcp__autoskillit__") for tool in definition.tools
+                tool.removeprefix(DIRECT_PREFIX) for tool in definition.tools
             ]
             assert "env" not in projection
             for key in binding_envs[definition.name]:

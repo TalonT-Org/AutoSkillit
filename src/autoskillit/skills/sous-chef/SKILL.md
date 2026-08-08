@@ -521,7 +521,7 @@ parallel run of the same step reports under the same canonical step name.
 
 ---
 
-## PARAMETER FORWARDING — step_name, output_dir, stale_threshold, idle_output_timeout, step_provider
+## PARAMETER FORWARDING — step_name, output_dir
 
 When a recipe step's `with:` block contains `step_name`, you MUST pass it as the
 `step_name` parameter of `run_skill`. This enables ingredient lock enforcement,
@@ -532,14 +532,13 @@ When a recipe step's `with:` block contains `output_dir`, you MUST pass it as th
 `output_dir` parameter of `run_skill`. This controls the write guard — omitting it
 causes the session to write to the wrong directory.
 
-When a recipe step has a top-level `stale_threshold` or `idle_output_timeout` field,
-pass it as the corresponding `run_skill` parameter. These control session kill thresholds.
-
-When a recipe step has a top-level `provider` field, pass the value as the
-`step_provider` parameter of `run_skill`. This controls which LLM provider
-(e.g., Minimax, Bedrock) the session uses. Omitting it causes the session to
-fall back to the default Anthropic provider, silently ignoring the recipe's
-declared provider.
+`model`, `stale_threshold`, `idle_output_timeout`, and `step_provider` are a
+different case: each is resolved server-side from the step's matching
+top-level field (`model:`, `stale_threshold:`, `idle_output_timeout:`,
+`provider:`). Do not include any of them in an attested `run_skill` call — the
+runtime attestation gate denies all four outright unless the step's `with:`
+block itself declares the name (a genuine per-step call-time override,
+distinct from the top-level field).
 
 **Example:**
 ```yaml
@@ -554,9 +553,10 @@ implement:
     output_dir: "${{ context.work_dir }}/${{ context.autoskillit_temp }}"
 ```
 
-Call: `run_skill(skill_command=..., cwd=..., step_name="implement", output_dir="...", stale_threshold=2400, step_provider="minimax")`
+Call: `run_skill(skill_command=..., cwd=..., step_name="implement", output_dir="...")`
 
-This provides defense-in-depth: the server resolves parameters server-side, AND the LLM is instructed to forward them.
+The server resolves `stale_threshold` and `step_provider` from the step
+definition above without either name appearing in the call.
 
 ---
 
@@ -609,9 +609,15 @@ the call with: `"arg 'output_dir' is a relative path but work_dir was not provid
 
 ---
 
-## MODEL PROPAGATION — MANDATORY
+## MODEL RESOLUTION
 
-**MODEL PROPAGATION** — When the user specifies a model (e.g. "use opus"), apply it to the `model` parameter of ALL `run_skill` calls for steps that declare a `model:` field — including follow-on steps (retry_worktree, fix, resolve_review, resolve_ci, conflict resolution). All `run_skill` steps in orchestrated recipes must declare a `model:` field; steps that omit it are ineligible for propagation and silently bypass user model selection.
+The server resolves `model` from the step's top-level `model:` field — this is
+how user model selection (e.g. "use opus") reaches child sessions, including
+follow-on steps (retry_worktree, fix, resolve_review, resolve_ci, conflict
+resolution). All `run_skill` steps in orchestrated recipes should still
+declare a `model:` field; steps that omit it are ineligible for selection. Do
+not include `model` in an attested `run_skill` call; declare it under the
+step's `with:` block only for a genuine per-step call-time override.
 
 ---
 

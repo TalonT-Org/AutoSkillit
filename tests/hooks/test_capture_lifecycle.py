@@ -458,6 +458,19 @@ def test_lifecycle_record_rejects_invalid_identity_at_construction() -> None:
         )
 
 
+def test_store_factory_rejects_invalid_capacity_specification(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    anchor = open_project_anchor(str(project))
+    root = open_capture_root(anchor, create=True)
+    try:
+        with pytest.raises(CaptureLifecycleError, match="invalid capture capacity"):
+            CaptureLifecycleStore.from_open_authorities(anchor, root, capacity=object())  # type: ignore[arg-type]
+    finally:
+        root.close()
+        anchor.close()
+
+
 @pytest.mark.parametrize("field_name", ("created_at", "next_attempt_at", "retention_at"))
 @pytest.mark.parametrize("value", (float("nan"), float("inf"), float("-inf")))
 def test_ledger_rejects_nonfinite_timestamps(field_name: str, value: float) -> None:

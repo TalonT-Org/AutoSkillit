@@ -241,6 +241,8 @@ class CaptureLifecycleStore:
         ``capacity``, when supplied, overrides the default capacity spec.
         ``None`` preserves the production default (``CaptureCapacitySpec()``).
         """
+        if capacity is not None and type(capacity) is not _capture_types.CaptureCapacitySpec:
+            raise CaptureLifecycleError("invalid capture capacity specification")
         anchor_identity = getattr(anchor, "identity")
         root_identity = getattr(root, "identity")
         store = cls(

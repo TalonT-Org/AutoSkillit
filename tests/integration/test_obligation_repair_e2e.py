@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -65,6 +64,7 @@ def test_obligation_repair_e2e_clears_obligation_with_typed_argv(
     from unittest.mock import MagicMock
 
     from autoskillit.cli.update import _obligation_repair as m
+
     attempt_obligation_repair = m.attempt_obligation_repair
     from autoskillit.workspace import (
         read_obligation,

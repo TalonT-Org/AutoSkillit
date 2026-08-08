@@ -6432,69 +6432,71 @@ def test_extract_investigation_accepts_report_without_recommendations(
     assert result["investigation_report"] == str(report)
 
 
-def test_cross_interpreter_upgrade_smoke_republish_argv_includes_expected_version(
+@pytest.mark.parametrize(
+    ("version_returncode", "version_stdout", "error_match"),
+    [
+        (0, "1.1.0\n", None),
+        (1, "1.1.0\n", "version probe failed"),
+        (0, "not-a-version\n", "invalid post-upgrade version"),
+    ],
+)
+def test_cross_interpreter_upgrade_smoke_validates_version_before_republish(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    version_returncode: int,
+    version_stdout: str,
+    error_match: str | None,
 ) -> None:
-    """The cross-interpreter smoke utility's republish step must include
-    ``--expected-version`` alongside ``--maintenance-update``.
+    """The real smoke path must validate the probe before constructing republish argv."""
+    from autoskillit import core
+    from autoskillit.smoke_utils import _cross_interpreter_upgrade as smoke
 
-    Pins the post-fix contract: the strict child contract at
-    ``_marketplace.py:286-294`` requires ``--expected-version`` for any
-    maintenance-update install. Before the fix, this smoke deterministically
-    failed because the argv omitted the flag.
-    """
+    entrypoint = tmp_path / "bin" / "autoskillit"
+    cache_root = tmp_path / "cache"
+    run_calls: list[list[str]] = []
 
+    def fake_subprocess_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if cmd[:3] == ["uv", "python", "find"]:
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+        assert cmd == [str(entrypoint), "--version"]
+        return subprocess.CompletedProcess(
+            cmd,
+            version_returncode,
+            stdout=version_stdout,
+            stderr="probe error",
+        )
 
-    # Build a fake `autoskillit` entrypoint that records argv.
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir(parents=True)
-    log_path = bin_dir / "fake-args.jsonl"
-    entrypoint = bin_dir / "autoskillit"
-    entrypoint.write_text(
-        "#!/usr/bin/env python3\n"
-        "import sys\n"
-        f"LOG = {str(log_path)!r}\n"
-        f"VERSION_OUTPUT = '1.1.0\\n'\n"
-        "if '--version' in sys.argv:\n"
-        "    sys.stdout.write(VERSION_OUTPUT)\n"
-        "    sys.exit(0)\n"
-        "with open(LOG, 'a', encoding='utf-8') as f:\n"
-        "    f.write(' '.join(sys.argv[1:]) + '\\n')\n"
-        "sys.exit(0)\n",
-        encoding="utf-8",
+    def fake_run(cmd: list[str], *, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        del env
+        run_calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    incarnations = iter([{"current"}, {"current", "retained"}])
+    monkeypatch.setattr(smoke.subprocess, "run", fake_subprocess_run)
+    monkeypatch.setattr(smoke, "_run", fake_run)
+    monkeypatch.setattr(smoke, "_find_source_root", lambda: tmp_path / "source")
+    monkeypatch.setattr(smoke.shutil, "which", lambda _name, path: str(entrypoint))
+    monkeypatch.setattr(core, "installed_plugin_cache_dir", lambda _home, _name: cache_root)
+    monkeypatch.setattr(smoke, "_cache_incarnations", lambda _root: next(incarnations))
+    monkeypatch.setattr(
+        smoke,
+        "_preserve_pre_upgrade_incarnation",
+        lambda _root, _source, _minor: "retained",
     )
-    entrypoint.chmod(0o755)
+    monkeypatch.setattr(smoke, "_assert_incarnation_hooks_execute", lambda _path: None)
 
-    # The smoke utility does its own `uv tool install` calls which we
-    # can't easily run here; instead exercise the relevant argv-building
-    # path directly by mirroring the smoke's structure.
-    # We simulate the post-upgrade probe + republish sequence to verify
-    # the typed builder produces the canonical argv.
-    import subprocess
+    if error_match is not None:
+        with pytest.raises(RuntimeError, match=error_match):
+            smoke.run_cross_interpreter_upgrade_smoke(work_dir=str(tmp_path))
+        assert not any("--maintenance-update" in cmd for cmd in run_calls)
+        return
 
-    from autoskillit.cli._install_contract import MaintenanceInstallArgv
-
-    # 1) Pre-launch version probe.
-    version_check = subprocess.run(
-        [str(entrypoint), "--version"], capture_output=True, text=True, timeout=60
-    )
-    resolved_version = (version_check.stdout or "").strip()
-    assert resolved_version == "1.1.0", (version_check.stdout, version_check.stderr)
-
-    # 2) Republish argv via the typed builder.
-    argv = MaintenanceInstallArgv(
-        entrypoint=entrypoint,
-        expected_version=resolved_version,
-    ).to_argv()
-    assert "--maintenance-update" in argv
-    assert "--expected-version" in argv
-    assert argv[argv.index("--expected-version") + 1] == "1.1.0"
-
-    # 3) Execute the argv and verify the child receives both flags.
-    subprocess.run([str(x) for x in argv], check=True, capture_output=True, text=True)
-    recorded = log_path.read_text(encoding="utf-8").splitlines()
-    assert len(recorded) == 1, recorded
-    argv_words = recorded[0].split()
-    assert "--maintenance-update" in argv_words
-    assert "--expected-version" in argv_words
-    assert argv_words[argv_words.index("--expected-version") + 1] == "1.1.0"
+    assert smoke.run_cross_interpreter_upgrade_smoke(work_dir=str(tmp_path)) is True
+    republish = next(cmd for cmd in run_calls if "--maintenance-update" in cmd)
+    assert republish == [
+        str(entrypoint),
+        "install",
+        "--maintenance-update",
+        "--expected-version",
+        "1.1.0",
+    ]

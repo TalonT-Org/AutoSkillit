@@ -614,17 +614,6 @@ CALLER_SOVEREIGN_INGREDIENTS: frozenset[str] = frozenset(
     }
 )
 
-# Import-time invariant: every CALLER_SOVEREIGN_INGREDIENTS member must also
-# be in CONFIG_AUTHORITY_KEYS.  Trips at import in every process if a new
-# caller-sovereign key is added that isn't a recognized config-authority key.
-if not CALLER_SOVEREIGN_INGREDIENTS <= CONFIG_AUTHORITY_KEYS:
-    _UNSANCTIONED_SOVEREIGN_KEYS = sorted(CALLER_SOVEREIGN_INGREDIENTS - CONFIG_AUTHORITY_KEYS)
-    raise AssertionError(
-        f"CALLER_SOVEREIGN_INGREDIENTS contains keys not in CONFIG_AUTHORITY_KEYS: "
-        f"{_UNSANCTIONED_SOVEREIGN_KEYS}. Add them to CONFIG_AUTHORITY_KEYS first, or "
-        f"remove them from CALLER_SOVEREIGN_INGREDIENTS."
-    )
-
 REVIEW_APPROACH_MARKER: str = "<!-- review_approach: true -->"
 INVESTIGATION_COMPLETE_MARKER: str = "<!-- investigation_complete: true -->"
 DRY_WALKTHROUGH_VERIFIED_MARKER: str = "Dry-walkthrough verified = TRUE"

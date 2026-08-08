@@ -9,6 +9,7 @@ MCP server startup, and post-install verification so it cannot rot.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -61,6 +62,60 @@ def _publish_generation(
             semantic_key=f"{plugin_ref}:{version}",
             source_root=source_root,
         )
+
+
+@pytest.mark.parametrize("failure_stage", ["manifest", "digest", "selector"])
+def test_failed_generation_publication_discards_unpublished_artifacts(
+    home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_stage: str,
+) -> None:
+    import autoskillit.workspace._projected_artifact._generation_publication as publication
+    from autoskillit.core import _InstallLock, generation_version_root
+
+    source_root = home / "failure-source"
+    source_root.mkdir()
+    (source_root / "content.txt").write_text("content", encoding="utf-8")
+    original_write = publication.write_installed_plugin_artifact_manifest_locked
+
+    if failure_stage == "manifest":
+
+        def fail_manifest(*_args: object, **_kwargs: object) -> None:
+            raise OSError("injected manifest write failure")
+
+        monkeypatch.setattr(
+            publication,
+            "write_installed_plugin_artifact_manifest_locked",
+            fail_manifest,
+        )
+    elif failure_stage == "digest":
+
+        def mismatched_digest(*args: object, **kwargs: object) -> PluginArtifactIdentity:
+            identity = original_write(*args, **kwargs)
+            return replace(identity, artifact_digest="0" * 64)
+
+        monkeypatch.setattr(
+            publication,
+            "write_installed_plugin_artifact_manifest_locked",
+            mismatched_digest,
+        )
+    else:
+
+        def fail_selector(*_args: object, **_kwargs: object) -> None:
+            raise OSError("injected selector replacement failure")
+
+        monkeypatch.setattr(publication, "_replace_symlink", fail_selector)
+
+    with _InstallLock(), pytest.raises((OSError, RuntimeError)):
+        publication.publish_generation(
+            home=home,
+            plugin_ref=_PLUGIN_KEY,
+            version="1.2.3",
+            semantic_key=f"{_PLUGIN_KEY}:1.2.3",
+            source_root=source_root,
+        )
+
+    assert list(generation_version_root(home, _PLUGIN_KEY, "1.2.3").iterdir()) == []
 
 
 @pytest.fixture
@@ -201,9 +256,11 @@ class TestVerifyInstallState:
 
     def test_valid_current_generation_reports_nothing(self, home: Path) -> None:
         from autoskillit import __version__
+        from autoskillit.core import installed_plugin_artifact_lease_path
         from autoskillit.workspace import verify_install_state
 
-        _publish_generation(home, __version__)
+        identity = _publish_generation(home, __version__)
+        assert installed_plugin_artifact_lease_path(identity.managed_path).is_file()
         assert verify_install_state() == ()
 
     def test_generation_artifact_unreadable_is_reported(

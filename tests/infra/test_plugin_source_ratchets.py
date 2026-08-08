@@ -242,6 +242,30 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "created for this publish attempt.",
     ),
     (
+        "workspace/_projected_artifact/_generation_publication.py",
+        "publish_generation",
+        "selector.unlink",
+    ): (
+        1,
+        "Restores an absent pre-publication selector after a failed atomic flip.",
+    ),
+    (
+        "workspace/_projected_artifact/_generation_publication.py",
+        "_discard_unpublished_generation",
+        "shutil.rmtree",
+    ): (
+        1,
+        "Removes only the exact fresh generation that failed before selector commitment.",
+    ),
+    (
+        "workspace/_projected_artifact/_generation_publication.py",
+        "_discard_unpublished_generation",
+        "path.unlink",
+    ): (
+        1,
+        "Removes the manifest and lease sidecars for the exact unpublished generation.",
+    ),
+    (
         "execution/backends/codex.py",
         "_atomically_replace_explorer_projection",
         "os.replace",

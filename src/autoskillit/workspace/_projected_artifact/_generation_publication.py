@@ -18,6 +18,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from autoskillit.core import (
+    ArtifactLease,
     PluginArtifactIdentity,
     PluginArtifactKind,
     PluginArtifactValidationError,
@@ -110,6 +111,25 @@ def _fsync_tree_contents(root: Path) -> None:
         _fsync_directory(current)
 
 
+def _discard_unpublished_generation(generation_root: Path) -> None:
+    """Best-effort removal of one exact generation that never became current."""
+    paths = (
+        installed_plugin_artifact_manifest_path(generation_root),
+        installed_plugin_artifact_lease_path(generation_root),
+    )
+    try:
+        shutil.rmtree(generation_root)
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        logger.warning("unpublished_generation_removal_failed: %s", exc)
+    for path in paths:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("unpublished_generation_sidecar_removal_failed: %s: %s", path, exc)
+
+
 def publish_generation(
     *,
     home: Path,
@@ -129,6 +149,7 @@ def publish_generation(
     version_root = generation_version_root(home, plugin_ref, version)
     generation_root = generation_artifact_root(home, plugin_ref, version, incarnation_id)
     selector = generation_selector_path(home, plugin_ref, version)
+    lease_path = installed_plugin_artifact_lease_path(generation_root)
 
     version_root.mkdir(parents=True, exist_ok=True)
     _sweep_orphaned_staging(version_root)
@@ -140,6 +161,8 @@ def publish_generation(
             dir=version_root,
         )
     )
+    promoted = False
+    safe_to_discard = True
     try:
         # Copy the entire source tree
         shutil.copytree(source_root, staging / "content", dirs_exist_ok=False)
@@ -153,53 +176,58 @@ def publish_generation(
 
         # Move staging content to the final generation path
         os.rename(staging / "content", generation_root)
+        promoted = True
         _fsync_directory(version_root)
 
-    except Exception:
-        shutil.rmtree(staging, ignore_errors=True)
-        raise
+        # The immutable generation owns a stable lease sidecar before any
+        # reader can discover it through the selector.
+        with ArtifactLease.acquire_exclusive(lease_path, blocking=True):
+            identity = write_installed_plugin_artifact_manifest_locked(
+                generation_root,
+                semantic_key=semantic_key,
+                action="publish_generation",
+                incarnation_id=incarnation_id,
+            )
 
-    # Clean up the empty staging dir
+            if identity.artifact_digest != staged_digest:
+                raise RuntimeError(
+                    f"generation digest changed between staging and publication: "
+                    f"staged {staged_digest}, published {identity.artifact_digest}"
+                )
+
+            prior_target = resolve_current_generation(home, plugin_ref, version)
+            try:
+                _replace_symlink(selector, generation_root)
+            except OSError:
+                safe_to_discard = False
+                try:
+                    if prior_target is None:
+                        selector.unlink(missing_ok=True)
+                        _fsync_directory(version_root)
+                    else:
+                        _replace_symlink(selector, prior_target)
+                    safe_to_discard = True
+                except OSError as restore_error:
+                    logger.error(
+                        "generation_selector_restore_failed: prior=%s",
+                        prior_target,
+                        exc_info=restore_error,
+                    )
+                raise
+            safe_to_discard = False
+    except Exception:
+        if promoted and safe_to_discard:
+            _discard_unpublished_generation(generation_root)
+            _fsync_directory(version_root)
+        raise
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+    # Clean up the empty staging dir if the platform retained it.
     try:
         staging.rmdir()
     except OSError:
         pass
-
-    # Write manifest at the final location (sibling of generation_root)
-    # This must happen AFTER the rename so the manifest path matches the
-    # generation directory's actual location on disk.
-    identity = write_installed_plugin_artifact_manifest_locked(
-        generation_root,
-        semantic_key=semantic_key,
-        action="publish_generation",
-        incarnation_id=incarnation_id,
-    )
-
-    # Verify the digest matches what we computed in staging
-    if identity.artifact_digest != staged_digest:
-        raise RuntimeError(
-            f"generation digest changed between staging and publication: "
-            f"staged {staged_digest}, published {identity.artifact_digest}"
-        )
-
-    # Record prior target for rollback
-    prior_target = resolve_current_generation(home, plugin_ref, version)
-
-    # Flip the selector — the sole commit point
-    try:
-        _replace_symlink(selector, generation_root)
-    except OSError:
-        # Flip failed — restore prior if we had one
-        if prior_target is not None:
-            try:
-                _replace_symlink(selector, prior_target)
-            except OSError as restore_error:
-                logger.error(
-                    "generation_selector_restore_failed: prior=%s",
-                    prior_target,
-                    exc_info=restore_error,
-                )
-        raise
 
     log_plugin_artifact_lifecycle(
         logger,

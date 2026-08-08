@@ -31,8 +31,9 @@ def test_open_kitchen_skill_respects_host_declared_visibility() -> None:
     assert "Skip calling `open_kitchen` and assume the kitchen is already open" not in content
     assert "**ALWAYS:**\n- Call `open_kitchen` with no arguments" not in content
     assert "host" in content and "pre-revealed" in content
-    assert "no-argument" in content and "redundant" in content
-    assert "human" in content and "activation" in content
+    assert "no-argument" in content and "solely to gain access" in content
+    assert "explicitly requests activation or promotion" in content
+    assert "promotion remains valid even when the tools are pre-revealed" in content
     assert "name=" in content
     assert "close_kitchen" in content and "reopen" in content
 

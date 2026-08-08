@@ -18,15 +18,18 @@ Activate the AutoSkillit kitchen when the host has not already made its tools av
 
 **ALWAYS:**
 - Treat authoritative host/session guidance about pre-revealed tools as the source of truth
-- Preserve human-requested activation, named recipe loading, and reopening after `close_kitchen`
+- Preserve explicit human-requested activation or promotion, named recipe loading, and
+  reopening after `close_kitchen`
 
 ## Steps
 
-1. Check the host/session guidance for the current tool state.
-2. If the host says the kitchen tools are pre-revealed, confirm that they are already
-   active and do not make a redundant no-argument `open_kitchen` call.
-3. Otherwise, honor the human-requested activation by calling `open_kitchen` with no
-   arguments, then confirm that the kitchen tools are available.
+1. Check the host/session guidance and the user's requested outcome.
+2. If the host says the kitchen tools are pre-revealed and the user did not explicitly
+   request promotion, confirm that they are already active and do not make a redundant
+   no-argument `open_kitchen` call solely to gain access.
+3. If the user explicitly requests activation or promotion, call `open_kitchen` with no
+   arguments; promotion remains valid even when the tools are pre-revealed.
+4. Confirm that the requested kitchen state is active.
 
 The kitchen state is session-scoped. `open_kitchen(name=...)` remains valid for named
 recipe loading, and a no-argument call remains valid to reopen the kitchen after

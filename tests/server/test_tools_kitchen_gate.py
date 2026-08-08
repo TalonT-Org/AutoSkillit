@@ -255,8 +255,10 @@ async def test_open_kitchen_description_distinguishes_valid_calls() -> None:
     tool = await mcp.get_tool("open_kitchen")
     assert tool is not None
     description = tool.description.lower()
-    assert "pre-revealed" in description and "no-argument" in description
-    assert "human-requested activation or promotion" in description
+    assert "pre-revealed" in description and "solely to gain access" in description
+    assert "human-requested promotion" in description
+    assert "including from a pre-revealed session" in description
+    assert "activation or promotion when access is not active" not in description
     assert "name=" in description
     assert "after close_kitchen" in description
 

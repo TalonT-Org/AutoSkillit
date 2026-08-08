@@ -113,6 +113,119 @@ async def test_attested_run_skill_succeeds_using_only_delivered_values(
     assert len(ready.tool_ctx.runner.call_args_list) > calls_before
 
 
+async def test_attested_run_skill_admits_explicit_order_id(
+    tmp_path,
+    tool_ctx_ready_recipe,
+) -> None:
+    """#4402/T3.a — order_id is ORCHESTRATOR_SCOPING: an attested call may pass
+    it explicitly alongside the delivered protocol values without denial (the
+    #4296 escape hatch), and the passed value reaches the executor ahead of
+    the AUTOSKILLIT_DISPATCH_ID env fallback (effective_order_id = order_id or
+    env, tools_execution.py). Unreachable for attested calls before #4402 —
+    order_id had no with:-declared template entry, so any non-empty value was
+    an "undeclared effective name" and the gate denied it outright.
+
+    model/stale_threshold RecipeStep-fallback e2e coverage (T3.b/T3.c) lives
+    in test_run_skill_execution_tuning_fallbacks.py instead of here: that
+    fallback block runs whenever step_name and tool_ctx.active_recipe_steps
+    are set, independent of attestation status, and the real "remediation"
+    recipe's investigate step declares only a templated model: field (bare
+    aliases, #4412 — out of scope here) and no stale_threshold: field at all,
+    so it cannot pin a literal fallback value without a bespoke fixture
+    recipe this plan does not add.
+    """
+    from autoskillit.server.tools.tools_execution import run_skill
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    ready = tool_ctx_ready_recipe
+    executor = InMemoryHeadlessExecutor()
+    ready.tool_ctx.executor = executor
+    with_args = ready.with_args
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+
+    result = json.loads(
+        await run_skill(
+            with_args["skill_command"],
+            str(work_dir),
+            step_name=with_args["step_name"],
+            output_dir=with_args["output_dir"],
+            recipe_execution_id=ready.credential["execution_id"],
+            invocation_template_digest=ready.template_digest,
+            skill_inputs={name: "probe value" for name in with_args["skill_inputs"]},
+            order_id="AB",
+        )
+    )
+
+    serialized = json.dumps(result)
+    assert "recipe_execution_attestation_missing" not in serialized
+    assert "RECIPE EXECUTION REJECTED" not in serialized
+    assert result.get("stage") != "preflight:recipe_execution"
+    assert len(executor.calls) == 1
+    assert executor.calls[0].order_id == "AB"
+
+
+async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
+    tmp_path,
+    tool_ctx_ready_recipe,
+) -> None:
+    """#4402/T8 — tool_ctx_ready_recipe must yield a genuinely attested context,
+    not a mock of one: its installed snapshot's template digest round-trips
+    through a real ``run_skill`` admission — the genuine digest succeeds, a
+    fabricated one is denied at ``preflight:recipe_execution``. A mock that
+    accepted any digest would pass the first half and fail to distinguish
+    the second.
+    """
+    from autoskillit.server.tools.tools_execution import run_skill
+
+    ready = tool_ctx_ready_recipe
+    with_args = ready.with_args
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    ready.tool_ctx.runner.push(_make_result(returncode=1))
+    ready.tool_ctx.runner.push(
+        _make_result(
+            0,
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": "done",
+                    "session_id": "session-1",
+                }
+            ),
+            "",
+        )
+    )
+
+    genuine = json.loads(
+        await run_skill(
+            with_args["skill_command"],
+            str(work_dir),
+            step_name=with_args["step_name"],
+            output_dir=with_args["output_dir"],
+            recipe_execution_id=ready.credential["execution_id"],
+            invocation_template_digest=ready.template_digest,
+            skill_inputs={name: "probe value" for name in with_args["skill_inputs"]},
+        )
+    )
+    assert genuine.get("stage") != "preflight:recipe_execution", genuine
+
+    fabricated = json.loads(
+        await run_skill(
+            with_args["skill_command"],
+            str(work_dir),
+            step_name=with_args["step_name"],
+            output_dir=with_args["output_dir"],
+            recipe_execution_id=ready.credential["execution_id"],
+            invocation_template_digest="sha256:" + "0" * 64,
+            skill_inputs={name: "probe value" for name in with_args["skill_inputs"]},
+        )
+    )
+    assert fabricated.get("stage") == "preflight:recipe_execution", fabricated
+
+
 @pytest.mark.parametrize("mode", list(RecipeDeliveryMode), ids=lambda m: m.value)
 async def test_no_delivery_mode_omits_the_attestation_credential(
     mode: RecipeDeliveryMode,

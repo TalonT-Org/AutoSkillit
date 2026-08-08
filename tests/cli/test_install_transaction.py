@@ -107,11 +107,27 @@ def _configure_transaction(
         "_ensure_marketplace",
         lambda **_kwargs: tmp_path / ".autoskillit" / "marketplace",
     )
-    published_identity = SimpleNamespace(
-        semantic_key=f"{_PLUGIN_REF}:{_VERSION}",
-        incarnation_id="0" * 32,
-    )
-    monkeypatch.setattr(workspace, "publish_generation", lambda **_kwargs: published_identity)
+
+    def publish_generation(
+        *,
+        home: Path,
+        plugin_ref: str,
+        version: str,
+        semantic_key: str,
+        source_root: Path,
+    ) -> SimpleNamespace:
+        assert home == tmp_path
+        assert plugin_ref == _PLUGIN_REF
+        assert semantic_key == f"{plugin_ref}:{version}"
+        assert source_root == (
+            tmp_path / ".autoskillit" / "marketplace" / "plugins" / "autoskillit"
+        )
+        return SimpleNamespace(
+            semantic_key=semantic_key,
+            incarnation_id="0" * 32,
+        )
+
+    monkeypatch.setattr(workspace, "publish_generation", publish_generation)
     monkeypatch.setattr(_marketplace, "evict_direct_mcp_entry", lambda _path: False)
     monkeypatch.setattr(
         _marketplace._hooks_mod,

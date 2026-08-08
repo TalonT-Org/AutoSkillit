@@ -99,18 +99,15 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 ## Environment Parity
 
 The test harness sets env vars (via Taskfile `env:` blocks) that diverge from
-production. Every such override must be registered in `TEST_HARNESS_ENV_OVERRIDES`
-(`tests/_test_env_parity.py`) with:
-
-- The var name and value
-- A ≥40-char justification explaining why the override exists
-- A `parity_fixture` name (or `None`) — when an override masks production behavior,
-  this names the callable that undoes it (e.g. `production_interpreter_env` strips
-  `PYTHONDONTWRITEBYTECODE` so tests can observe real bytecode-write behavior)
-
-The double-bind pincer in `tests/contracts/test_test_env_parity.py` enforces:
-- Every registry entry still appears in the Taskfile (orphan → fail)
-- Declared parity fixtures exist and are callable
+production. Every override is registered with a justification in
+`TEST_HARNESS_ENV_OVERRIDES` (`tests/_test_env_parity.py`), enforced in both
+directions by `tests/contracts/test_test_env_parity.py` — its failure messages
+walk you through registration. What no contract test can catch: an override
+silently masking the production behavior your test needs to observe. When that
+happens (e.g. observing real bytecode writes under `PYTHONDONTWRITEBYTECODE=1`),
+build the child-process env with the override's parity helper — a plain function
+in `tests/conftest.py` named by the registry's `parity_fixture` field, e.g.
+`production_interpreter_env()` — instead of popping env vars ad hoc.
 
 ## Performance
 

@@ -1099,8 +1099,9 @@ def production_interpreter_env() -> dict[str, str]:
     The test harness sets ``PYTHONDONTWRITEBYTECODE=1`` on every pytest path
     (see ``TEST_HARNESS_ENV_OVERRIDES`` in ``tests/_test_env_parity.py``),
     which masks production behavior where hooks execute without suppression.
-    This fixture lifts that mask so a child interpreter runs exactly as it
-    does under a real Claude Code hook invocation.
+    This helper (a plain function, not a pytest fixture) lifts that mask so a
+    child interpreter runs exactly as it does under a real Claude Code hook
+    invocation.
     """
     env = dict(os.environ)
     env.pop("PYTHONDONTWRITEBYTECODE", None)

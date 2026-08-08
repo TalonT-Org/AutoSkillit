@@ -139,6 +139,42 @@ Defense standards come from the `/autoskillit:design-guards` pipeline:
 
 ---
 
+### DS-012: Verified Output Survives Bookkeeping Failure
+
+**Rule:** No bookkeeping failure may discard or misreport a verified primary result.
+
+**Audit Strategy:**
+- Find every place a primary result is verified (checksum, digest, schema, or
+  equivalent proof of correctness) before a separate bookkeeping step
+  (ledger commit, telemetry write, cache update, cleanup, capacity
+  accounting) runs against it. Check that an exception from the bookkeeping
+  step cannot cause the verified result to be dropped or reported as failed
+  without qualification.
+- For any registry that classifies failure reasons by whether they may still
+  deliver a verified result (e.g. `FAILURE_DISPOSITIONS` in
+  `hooks/_capture/_failure_policy.py`), confirm the registry is total over
+  its enum — an import-time or construction-time assertion that a new enum
+  member without a declared classification breaks the module, not a
+  convention enforced only by code review.
+- Verify that a "deliver under degradation" path never invents output: it
+  must gate on the same live verified artifact and completed source
+  operation that the ordinary success path required, not on the disposition
+  classification alone.
+- Where a wrapping process or runner reports its own exit/return status,
+  check that a bookkeeping-only failure occurring after the underlying
+  operation completed does not overwrite that operation's real, meaningful
+  status with a synthesized failure status.
+- Grep for `except` blocks between a verification/proof step and its final
+  delivery or commit; for each one, confirm the catch either preserves the
+  already-proven result or the failure message explicitly states that the
+  result — not just the bookkeeping — could not be delivered.
+
+**Severity:** HIGH
+
+**Citations:** ADR-0006 (docs/decisions/0006-output-containment.md), Issue #4479
+
+---
+
 ## Audit Workflow (SINGLE MESSAGE)
 
 **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**

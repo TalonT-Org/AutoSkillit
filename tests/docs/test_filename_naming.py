@@ -24,6 +24,7 @@ ALLOWLIST = {
         "0002-ban-inline-shell-scripts-from-cmd.md",
         "0005-output-budget-protocol.md",  # prescribed by issue #4272
         "0008-shell-capture-snapshot-authority.md",  # prescribed by issue #4322
+        "0009-verified-output-delivery-disposition.md",  # prescribed by issue #4479
         "paper-backend-n3-exercise.md",  # 4 segments; prescribed by issue #4052
     },
 }

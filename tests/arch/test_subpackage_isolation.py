@@ -128,6 +128,9 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "methodology_venue_appendix",  # recipe/methodology_venue_appendix.py: _ML_SUB_AREA_CACHE
         "rules_blocks",  # recipe/rules/rules_blocks.py: _BUDGETS_CACHE = YamlFileCache()
         "rules_phoropter_adjacency",  # recipe/rules/rules_phoropter_adjacency.py: _PREFIXES_CACHE
+        # _RETENTION_SECONDS resolved once at import time from the single-source-of-truth
+        # STATE_RECLAIMABILITY sweep grace (_lifecycle_policy.SWEEP_GRACE_SECONDS).
+        "_capture_lifecycle",
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -157,10 +160,11 @@ _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
 )
 _SINGLETON_SAFE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
     {
-        ("context_admission_ledger", "_EVENT_TYPES"),
-        ("context_admission_ledger", "_EFFECT_TYPES"),
-        ("context_admission_ledger", "_STATE_TYPES"),
-        ("tools_kitchen", "_OPEN_KITCHEN_REQUEST_CTX"),
+        ("src/autoskillit/hooks/_capture/_types.py", "TRANSITION_RESCUE_BUDGET"),
+        ("src/autoskillit/pipeline/context_admission_ledger.py", "_EVENT_TYPES"),
+        ("src/autoskillit/pipeline/context_admission_ledger.py", "_EFFECT_TYPES"),
+        ("src/autoskillit/pipeline/context_admission_ledger.py", "_STATE_TYPES"),
+        ("src/autoskillit/server/tools/tools_kitchen.py", "_OPEN_KITCHEN_REQUEST_CTX"),
     }
 )
 
@@ -275,6 +279,7 @@ def test_no_sync_manifest_imports_in_production_code():
 def test_singleton_definition_locality(source_file: Path) -> None:
     """Module-level constructor calls are only permitted in SINGLETON_ALLOWED_MODULES."""
     mod_stem = source_file.stem
+    source_path = _rel(source_file)
     if mod_stem in SINGLETON_ALLOWED_MODULES:
         pytest.skip(f"{mod_stem!r} is in SINGLETON_ALLOWED_MODULES")
 
@@ -296,7 +301,7 @@ def test_singleton_definition_locality(source_file: Path) -> None:
         if (
             target_name is not None
             and (
-                mod_stem,
+                source_path,
                 target_name,
             )
             in _SINGLETON_SAFE_ASSIGNMENTS
@@ -321,9 +326,22 @@ def test_context_admission_ledger_singletons_are_assignment_scoped() -> None:
     assert "context_admission_ledger" not in SINGLETON_ALLOWED_MODULES
     assert {
         target
-        for module, target in _SINGLETON_SAFE_ASSIGNMENTS
-        if module == "context_admission_ledger"
+        for path, target in _SINGLETON_SAFE_ASSIGNMENTS
+        if path == "src/autoskillit/pipeline/context_admission_ledger.py"
     } == {"_EVENT_TYPES", "_EFFECT_TYPES", "_STATE_TYPES"}
+
+
+def test_capture_types_singleton_is_path_and_assignment_scoped(tmp_path: Path) -> None:
+    assert "_types" not in SINGLETON_ALLOWED_MODULES
+    assert (
+        "src/autoskillit/hooks/_capture/_types.py",
+        "TRANSITION_RESCUE_BUDGET",
+    ) in _SINGLETON_SAFE_ASSIGNMENTS
+    unrelated = tmp_path / "_types.py"
+    unrelated.write_text("TRANSITION_RESCUE_BUDGET = SweepBudgetSpec()\n")
+
+    with pytest.raises(AssertionError, match="Singleton locality violations"):
+        test_singleton_definition_locality(unrelated)
 
 
 # ── Rule 4: test_no_module_level_io ───────────────────────────────────────────
@@ -1054,23 +1072,34 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "circular imports; all enums/protocols/constants consolidated here",
     ),
     "hooks/_capture_artifacts.py": (
-        1050,
+        1200,
         "REQ-CNST-010-E22: descriptor-anchored capture authority and isolated runner — "
         "re-exports capture_store_stats, reconcile_capture_store, CaptureStoreStats, "
         "CleanupBlocker, CleanupProgress, and SweepBudgetSpec from its own dual-mode "
         "(flat sys.path / dotted package) _capture import bootstrap so hooks/__init__.py "
         "can gateway them to cli/_capture_store.py without importing _capture submodules "
         "directly, which would race the standalone hook scripts' own flat-style bootstrap "
-        "of sys.modules['_capture'].",
+        "of sys.modules['_capture']. Bumped for ADR-0009's failure-disposition routing "
+        "(bookkeeping vs. integrity) and the capacity injection seam (issue #4479).",
     ),
     "hooks/_capture_lifecycle.py": (
-        1150,
+        1250,
         "REQ-CNST-010-E21: capture lifecycle store — the lock-retry primitive "
         "(_acquire_flock, jittered exponential backoff bounded by the active sweep's "
         "own budget) and directory-reconciliation orphan admission "
         "(_admission_reason, _admit_new_record, _scan_and_adopt_orphans) must stay "
         "adjacent to the transition/capacity accounting they share; splitting would "
-        "separate self-accounting invariants from the store methods that enforce them.",
+        "separate self-accounting invariants from the store methods that enforce them. "
+        "Bumped for ADR-0009's rescue-sweep-and-retry pressure immunity at both the "
+        "admission and transition gates (issue #4479).",
+    ),
+    "hooks/_capture_contract.py": (
+        1100,
+        "REQ-CNST-010-E23: CaptureFailureV3 envelope framing — carries the full "
+        "CaptureFailureReason wire vocabulary and its (V2 marker) rendering; ADR-0009 "
+        "added the SNAPSHOT_INTEGRITY reason and degraded-delivery envelope fields, "
+        "which must stay co-located with the rest of the envelope schema they extend "
+        "(issue #4479).",
     ),
     "hooks/_command_classification.py": (
         1900,
@@ -1262,10 +1291,15 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "decision and lineage-reference injection remain adjacent to the Codex command "
         "builders that own the protected environment boundary; #4443 adds canonical "
         "agent-definition projection, parent/child sandbox precedence, and specialized "
-        "Codex explorer role registration and invocation wiring",
+        "Codex explorer role registration and invocation wiring; #4478 review "
+        "remediation: build_skill_session_cmd/build_resume_cmd gain an "
+        "include_scope_discipline parameter and build_interactive_cmd's suffix call is "
+        "widened to codex_discipline_suffix(include_scope=True) so scope-discipline "
+        "delivery scoping stays adjacent to the same command builders that already own "
+        "prompt-injection composition (+14 net lines)",
     ),
     "execution/backends/claude.py": (
-        1104,
+        1108,
         "REQ-CNST-010-E19: Claude backend protocol parity keeps managed native-shell "
         "decision/reference disposition beside executable launch-binding validation; "
         "both are shared builder-interface obligations even though Claude deliberately "

@@ -73,6 +73,7 @@ _FAILURE_BLOCKERS = {
     CaptureFailureReason.FILESYSTEM_IO: CleanupBlocker.FILESYSTEM_IO,
     CaptureFailureReason.LEDGER_INTEGRITY: CleanupBlocker.LEDGER_INTEGRITY,
     CaptureFailureReason.MIGRATION_BLOCKED: CleanupBlocker.MIGRATION_BLOCKED,
+    CaptureFailureReason.SNAPSHOT_INTEGRITY: CleanupBlocker.LEDGER_INTEGRITY,
 }
 
 

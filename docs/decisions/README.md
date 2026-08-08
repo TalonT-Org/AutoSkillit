@@ -8,3 +8,4 @@
 - [0006-output-containment.md](0006-output-containment.md) — Retire pre-execution command-shape classification in favor of per-backend output-boundary bounding on measured bytes
 - [0007-context-admission.md](0007-context-admission.md) — Freeze the versioned cumulative context-admission boundary, authority contract, producer coverage, and privacy rules
 - [0008-shell-capture-snapshot-authority.md](0008-shell-capture-snapshot-authority.md) — Make verified pipe-EOF snapshots, opaque V2 references, and checked delivery the sole Codex shell-capture authority
+- [0009-verified-output-delivery-disposition.md](0009-verified-output-delivery-disposition.md) — A checksum-verified capture is delivered or the failure explicitly says why not; a bookkeeping failure never discards it

@@ -6,6 +6,7 @@ from collections import deque
 from pathlib import PurePosixPath
 
 from autoskillit.core import (
+    RUN_PYTHON_PATH_LIKE_ARGS,
     SKILL_TOOLS,
     TOOL_REGISTRY,
     TOOL_SUBSET_TAGS,
@@ -26,10 +27,6 @@ from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 logger = get_logger(__name__)
 
 _ALL_TOOLS: frozenset[str] = frozenset(TOOL_REGISTRY)
-
-_RUN_PYTHON_PATH_LIKE_ARGS: frozenset[str] = frozenset(
-    {"output_dir", "workspace", "diagnostics_log_dir", "investigation_path"}
-)
 
 # Registry of context variables that are captured upstream and MUST be forwarded
 # to any tool step that accepts them. Each entry maps a tool name to the set of
@@ -472,7 +469,7 @@ def _check_run_python_requires_work_dir(ctx: ValidationContext) -> list[RuleFind
             continue
         with_args = step.with_args or {}
         has_relative_path_like = any(
-            k in _RUN_PYTHON_PATH_LIKE_ARGS
+            k in RUN_PYTHON_PATH_LIKE_ARGS
             and isinstance(v, str)
             and v
             and "${{" not in v

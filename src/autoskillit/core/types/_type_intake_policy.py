@@ -13,17 +13,28 @@ __all__ = [
     "CODEX_INTAKE_DISCIPLINE_VERSION",
     "CODEX_INTAKE_DISCIPLINE_BYTE_BUDGET",
     "CODEX_DISCIPLINE_SUFFIX_BYTE_BUDGET",
+    "CODEX_SCOPE_DISCIPLINE_BYTE_BUDGET",
+    "CODEX_SCOPE_DISCIPLINE_DIGEST",
     "render_intake_digest",
     "CODEX_INTAKE_DISCIPLINE_DIGEST",
 ]
 
 CODEX_INTAKE_DISCIPLINE_VERSION: Final[int] = 3
 
-# Always-on injection: every byte is replicated into 11 bundled agent TOMLs at session
+# Always-on injection: every byte is replicated into 13 bundled agent TOMLs at session
 # setup plus one copy per session prompt across 5 delivery surfaces. Raising either
 # ceiling is a decision, not a consequence — record measured before/after in the PR.
 CODEX_INTAKE_DISCIPLINE_BYTE_BUDGET: Final[int] = 1200
+# Governs the UNIVERSAL composed suffix only (output-discipline + intake-discipline +
+# recipe-delivery-contract — codex_discipline_suffix()'s default form), delivered to
+# every Codex session including bundled agent TOMLs. The scope digest is a separate
+# change-authoring policy
+# (CODEX_SCOPE_DISCIPLINE_DIGEST, own budget below) delivered only to skill sessions
+# whose contract declares `scope_discipline: true`, to interactive TUI sessions
+# (deliberate — task unknown at launch), and to resumes that opt in explicitly via
+# codex_discipline_suffix(include_scope=True).
 CODEX_DISCIPLINE_SUFFIX_BYTE_BUDGET: Final[int] = 3150
+CODEX_SCOPE_DISCIPLINE_BYTE_BUDGET: Final[int] = 1700
 
 
 class IntakeRuleDef(NamedTuple):
@@ -154,6 +165,31 @@ def render_intake_digest(
 
 CODEX_INTAKE_DISCIPLINE_DIGEST: Final[str] = render_intake_digest()
 
+CODEX_SCOPE_DISCIPLINE_DIGEST: Final[str] = (
+    "SCOPE DISCIPLINE (this backend tends to over-engineer; these rules are mandatory):\n"
+    "S1. Maintainability is the goal. Every line you add must be read, understood, and kept\n"
+    "    working by someone else. Volume the requirement genuinely forces is fine; volume\n"
+    "    from speculation is not.\n"
+    'S2. Build the smallest design that satisfies the stated requirements. "Immunity",\n'
+    '    "architectural", or "contract" framing is not a mandate for maximal machinery —\n'
+    "    deliver the minimal mechanism that closes the enumerated gaps. When the problem\n"
+    "    truly needs a complex solution, build it.\n"
+    "S3. No speculative machinery: do not introduce a new registry, enum, ID-wrapper/newtype\n"
+    "    class, state machine, protocol, event vocabulary, or abstraction layer unless the\n"
+    "    task text names it explicitly OR two existing call sites need it today. One concrete\n"
+    "    implementation beats an extensible framework.\n"
+    "S4. Reuse before invention: extend existing modules, types, and helpers. Do not rewrite,\n"
+    '    "harden", or defensively refactor adjacent code the requirement does not touch.\n'
+    "    Trace only the symbols you will modify or whose contracts you rely on.\n"
+    "S5. Tests cover the behavior this change introduces — one focused test per new behavior\n"
+    "    or reachable edge. No permutation matrices for hypothetical states. Prefer\n"
+    "    parametrization over near-duplicate test bodies.\n"
+    "S6. Reason as long as you need before writing — depth of thought is free; depth of code\n"
+    "    is not. The finished change introduces the fewest new concepts that satisfy the\n"
+    "    requirement, as deep modules: simple interfaces hiding substantial implementation,\n"
+    "    never layers of shallow pass-throughs."
+)
+
 _RULE_IDS = [rule.id for rule in CODEX_INTAKE_RULES]
 if len(_RULE_IDS) != len(set(_RULE_IDS)):
     raise AssertionError(f"CODEX_INTAKE_RULES ids must be unique: {_RULE_IDS}")
@@ -179,3 +215,14 @@ if _DIGEST_BYTES > CODEX_INTAKE_DISCIPLINE_BYTE_BUDGET:
         f"{CODEX_INTAKE_DISCIPLINE_BYTE_BUDGET}-byte budget"
     )
 del _DIGEST_BYTES
+
+_SCOPE_DIGEST_BYTES = len(CODEX_SCOPE_DISCIPLINE_DIGEST.encode("utf-8"))
+if _SCOPE_DIGEST_BYTES > CODEX_SCOPE_DISCIPLINE_BYTE_BUDGET:
+    raise AssertionError(
+        f"CODEX_SCOPE_DISCIPLINE_DIGEST is {_SCOPE_DIGEST_BYTES} bytes, exceeding the "
+        f"{CODEX_SCOPE_DISCIPLINE_BYTE_BUDGET}-byte budget"
+    )
+del _SCOPE_DIGEST_BYTES
+
+if "'''" in CODEX_SCOPE_DISCIPLINE_DIGEST:
+    raise AssertionError("CODEX_SCOPE_DISCIPLINE_DIGEST must not contain triple single-quotes")

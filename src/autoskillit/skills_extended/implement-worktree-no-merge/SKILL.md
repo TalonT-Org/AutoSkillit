@@ -200,9 +200,11 @@ task install-worktree   # or equivalent for the project type
 For each phase, begin implementation immediately (no announcement):
 1. Implement changes guided by understanding from Step 2
 2. Run per-phase verification if plan specifies it
-3. Commit per phase with descriptive messages. If the project has pre-commit
-   hooks, run `pre-commit run --all-files` and stage any auto-fixed files
-   before each commit.
+3. Commit per phase with descriptive messages. Commit preparatory refactoring
+   separately from behavioral changes — a reviewer must be able to verify the
+   structural change is behavior-preserving on its own. If the project has
+   pre-commit hooks, run `pre-commit run --all-files` and stage any auto-fixed
+   files before each commit.
 
 Where practical, delegate test updates to subagents to keep main conversation context lean.
 

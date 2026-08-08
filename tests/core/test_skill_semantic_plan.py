@@ -28,7 +28,7 @@ def test_skill_semantic_taxonomy_is_closed_and_exported() -> None:
         "git_metadata_write",
     }
     assert SKILL_MODEL_CLASSES == frozenset({"haiku", "sonnet", "opus"})
-    assert SKILL_REASONING_EFFORTS == frozenset({"medium", "high", "xhigh"})
+    assert SKILL_REASONING_EFFORTS == frozenset({"medium", "high"})
     assert "SKILL_REASONING_EFFORTS" in _type_skill_semantics.__all__
 
 

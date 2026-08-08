@@ -375,6 +375,7 @@ class OutputBudgetConfig:
     response_max_bytes: int = 90_000
     guard_enabled: bool = True
     shell_max_inline_bytes: int = 12_000
+    capture_capacity: dict[str, int] | None = None
 
     def __post_init__(self) -> None:
         if self.response_max_bytes < RECIPE_SECTION_RESPONSE_FLOOR_BYTES:

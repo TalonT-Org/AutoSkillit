@@ -116,6 +116,7 @@ Inspect consumers.
         expected_output_patterns=(),
         write_behavior=WriteBehaviorSpec(),
         read_only=True,
+        scope_discipline=False,
         completion_required=False,
         skill_contract_json="",
         execution_identity=identity,

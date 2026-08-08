@@ -453,7 +453,7 @@ def _publish(
     due = sorted(
         DueKey(record.next_attempt_at, record.capture_id)
         for record in records.values()
-        if record.state not in {_ledger.CaptureState.DELETED, _ledger.CaptureState.TAMPERED}
+        if record.state is not _ledger.CaptureState.DELETED
     )
     if due:
         _sweep.write_cursor_accounted(
@@ -494,7 +494,7 @@ def migrate_legacy(
     candidates = sorted(
         DueKey(record.next_attempt_at, record.capture_id)
         for record in projected.values()
-        if record.state not in {_ledger.CaptureState.DELETED, _ledger.CaptureState.TAMPERED}
+        if record.state is not _ledger.CaptureState.DELETED
         and record.next_attempt_at <= store._wall_clock()
     )
     candidates = _sweep_cursor.rotate_after(candidates, txn.cursor)
@@ -594,7 +594,7 @@ def finish_published(
     due = sorted(
         DueKey(record.next_attempt_at, record.capture_id)
         for record in records.values()
-        if record.state not in {_ledger.CaptureState.DELETED, _ledger.CaptureState.TAMPERED}
+        if record.state is not _ledger.CaptureState.DELETED
     )
     if due:
         _sweep.write_cursor_accounted(

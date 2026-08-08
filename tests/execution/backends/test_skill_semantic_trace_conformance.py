@@ -352,7 +352,7 @@ def test_codex_semantic_policy_matches_generated_native_role_toml(tmp_path: Path
             ChildModelPolicySpec(
                 role=_REVIEW_ROLE,
                 model_class="sonnet",
-                reasoning_effort="high",
+                reasoning_effort="medium",
             ),
         ),
     )

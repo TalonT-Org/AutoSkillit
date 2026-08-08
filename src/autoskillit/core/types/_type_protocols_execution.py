@@ -228,6 +228,7 @@ class HeadlessExecutor(Protocol):
         allowed_write_prefix: str = "",
         allowed_write_prefixes: tuple[str, ...] = (),
         readonly_skill: bool = False,
+        scope_discipline_skill: bool = False,
         completion_required: bool = False,
         write_watch_dirs: Sequence[Path] = (),
         provider_extras: Mapping[str, str] | None = None,

@@ -283,6 +283,7 @@ class SkillSessionContract:
     expected_output_patterns: tuple[str, ...] = ()
     write_behavior: WriteBehaviorSpec = WriteBehaviorSpec()
     read_only: bool = False
+    scope_discipline: bool = False
     parent_sandbox_mode: str = "workspace-write"
     completion_required: bool = False
     skill_contract_json: str = ""

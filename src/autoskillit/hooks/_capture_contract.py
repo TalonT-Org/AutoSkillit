@@ -71,9 +71,11 @@ __all__ = [
     "decode_capture_request",
     "decode_lineage_ref_json",
     "encode_capture_request",
+    "parse_capture_degraded_v3",
     "parse_capture_failure_v2",
     "parse_capture_failure_v3",
     "parse_capture_v2",
+    "render_capture_degraded_v3",
     "render_capture_failure_v2",
     "render_capture_failure_v3",
     "render_capture_v2",
@@ -108,6 +110,7 @@ PROTECTED_CAPTURE_ENV_VARS: Final = frozenset(
 _CAPTURE_PREFIX = b"[AutoSkillit shell capture v2:"
 _FAILURE_PREFIX = b"[AutoSkillit shell capture failure v2:"
 _FAILURE_V3_PREFIX = b"[AutoSkillit shell capture failure v3:"
+_DEGRADED_V3_PREFIX = b"[AutoSkillit shell capture degraded v3:"
 _FRAME_SUFFIX = b"]"
 _MAX_COMMAND_BYTES = 64 * 1024
 _MAX_SIGNED_VALUE = (1 << 63) - 1
@@ -996,4 +999,60 @@ def parse_capture_failure_v3(value: bytes) -> CaptureFailureV3:
     )
     if render_capture_failure_v3(failure) != value:
         raise CaptureContractError("capture failure V3 transport is not canonical")
+    return failure
+
+
+def _degraded_v3_primitive(value: CaptureFailureV3) -> dict[str, object]:
+    _validate_failure_v3(value)
+    return {
+        "detail": value.detail,
+        "producer": CAPTURE_FAILURE_V3_PRODUCER,
+        "reason": value.reason.value,
+        "schema_version": CAPTURE_FAILURE_V3_SCHEMA_VERSION,
+        "settlement_returncode": value.settlement_returncode,
+        "shell_returncode": value.shell_returncode,
+        "stage": value.stage,
+        "status": "capture_degraded",
+    }
+
+
+_DEGRADED_V3_KEYS = _FAILURE_V3_KEYS
+
+
+def render_capture_degraded_v3(value: CaptureFailureV3) -> bytes:
+    """Render a degraded-delivery diagnostic marker — distinct prefix from failure."""
+    encoded = _DEGRADED_V3_PREFIX + _canonical_json(_degraded_v3_primitive(value)) + _FRAME_SUFFIX
+    if len(encoded) > MAX_CAPTURE_FAILURE_V3_BYTES:
+        raise CaptureContractError("capture degraded V3 marker exceeds bound")
+    return encoded
+
+
+def parse_capture_degraded_v3(value: bytes) -> CaptureFailureV3:
+    """Parse a degraded-delivery diagnostic marker."""
+    decoded = _decode_frame(
+        value,
+        prefix=_DEGRADED_V3_PREFIX,
+        maximum=MAX_CAPTURE_FAILURE_V3_BYTES,
+    )
+    if set(decoded) != _DEGRADED_V3_KEYS:
+        raise CaptureContractError("capture degraded V3 fields do not match schema")
+    if (
+        decoded["schema_version"] != CAPTURE_FAILURE_V3_SCHEMA_VERSION
+        or decoded["producer"] != CAPTURE_FAILURE_V3_PRODUCER
+        or decoded["status"] != "capture_degraded"
+    ):
+        raise CaptureContractError("capture degraded status does not match V3")
+    try:
+        reason = CaptureFailureReason(_string_field(decoded["reason"]))
+    except ValueError as exc:
+        raise CaptureContractError("capture degraded V3 reason is unknown") from exc
+    failure = CaptureFailureV3(
+        reason=reason,
+        stage=_string_field(decoded["stage"]),
+        detail=_string_field(decoded["detail"]),
+        shell_returncode=_optional_integer_field(decoded["shell_returncode"]),
+        settlement_returncode=_optional_integer_field(decoded["settlement_returncode"]),
+    )
+    if render_capture_degraded_v3(failure) != value:
+        raise CaptureContractError("capture degraded V3 transport is not canonical")
     return failure

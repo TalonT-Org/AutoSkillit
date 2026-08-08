@@ -115,11 +115,11 @@ class TestClaudeBuildCmdTranslatesModel:
 class TestCodexModelConfigOverrides:
     def test_returns_effort_for_sonnet_alias(self) -> None:
         overrides = CodexBackend().model_config_overrides("sonnet")
-        assert "model_reasoning_effort=high" in overrides
+        assert "model_reasoning_effort=medium" in overrides
 
     def test_returns_effort_for_opus_alias(self) -> None:
         overrides = CodexBackend().model_config_overrides("opus")
-        assert "model_reasoning_effort=xhigh" in overrides
+        assert "model_reasoning_effort=high" in overrides
 
     def test_returns_effort_for_haiku_alias(self) -> None:
         overrides = CodexBackend().model_config_overrides("haiku")
@@ -127,7 +127,7 @@ class TestCodexModelConfigOverrides:
 
     def test_strips_context_suffix_before_lookup(self) -> None:
         overrides = CodexBackend().model_config_overrides("opus[1m]")
-        assert "model_reasoning_effort=xhigh" in overrides
+        assert "model_reasoning_effort=high" in overrides
 
     def test_no_effort_for_native_model(self) -> None:
         overrides = CodexBackend().model_config_overrides("gpt-5.5")
@@ -143,16 +143,16 @@ class TestClaudeModelConfigOverrides:
 
 
 class TestCodexEffortInjectionInCmds:
-    def test_headless_cmd_sonnet_has_effort_high(self) -> None:
+    def test_headless_cmd_sonnet_has_effort_medium(self) -> None:
         spec = CodexBackend().build_headless_cmd("test prompt", model="sonnet")
         cmd = list(spec.cmd)
         assert "-c" in cmd
-        assert "model_reasoning_effort=high" in cmd
+        assert "model_reasoning_effort=medium" in cmd
 
-    def test_headless_cmd_opus_has_effort_xhigh(self) -> None:
+    def test_headless_cmd_opus_has_effort_high(self) -> None:
         spec = CodexBackend().build_headless_cmd("test prompt", model="opus")
         cmd = list(spec.cmd)
-        assert "model_reasoning_effort=xhigh" in cmd
+        assert "model_reasoning_effort=high" in cmd
 
     def test_headless_cmd_haiku_has_effort_medium(self) -> None:
         spec = CodexBackend().build_headless_cmd("test prompt", model="haiku")
@@ -162,7 +162,7 @@ class TestCodexEffortInjectionInCmds:
     def test_skill_session_cmd_has_effort(self) -> None:
         config = SkillSessionConfig(model="sonnet", completion_marker="%%DONE%%")
         spec = CodexBackend().build_skill_session_cmd("/test", "/repo", config)
-        assert "model_reasoning_effort=high" in list(spec.cmd)
+        assert "model_reasoning_effort=medium" in list(spec.cmd)
 
     def test_food_truck_cmd_has_effort(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(
@@ -172,9 +172,9 @@ class TestCodexEffortInjectionInCmds:
             completion_marker="%%DONE%%",
             model="sonnet",
         )
-        assert "model_reasoning_effort=high" in list(spec.cmd)
+        assert "model_reasoning_effort=medium" in list(spec.cmd)
 
-    def test_food_truck_opus_suffix_uses_shared_model_with_xhigh_effort(self) -> None:
+    def test_food_truck_opus_suffix_uses_shared_model_with_high_effort(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(
             orchestrator_prompt="test",
             plugin_binding=plugin_binding("/tmp/plugin"),
@@ -186,11 +186,11 @@ class TestCodexEffortInjectionInCmds:
         model_idx = cmd.index("--model")
         assert cmd[model_idx + 1] == CODEX_MODEL_ALIASES["opus"]
         assert "[1m]" not in cmd[model_idx + 1]
-        assert "model_reasoning_effort=xhigh" in cmd
+        assert "model_reasoning_effort=high" in cmd
 
     def test_interactive_cmd_has_effort(self) -> None:
         spec = CodexBackend().build_interactive_cmd(model="sonnet")
-        assert "model_reasoning_effort=high" in list(spec.cmd)
+        assert "model_reasoning_effort=medium" in list(spec.cmd)
 
     def test_no_effort_for_native_model_in_headless_cmd(self) -> None:
         spec = CodexBackend().build_headless_cmd("test prompt", model="gpt-5.5")

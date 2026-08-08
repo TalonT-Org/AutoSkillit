@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, NamedTuple
+from typing import Any, Literal, NamedTuple
 
 from autoskillit.core import (
     CODEX_INTAKE_DISCIPLINE_DIGEST,
+    CODEX_SCOPE_DISCIPLINE_DIGEST,
     MANAGED_ATTEMPT_ID_ENV_VAR,
     MANAGED_LAUNCH_ID_ENV_VAR,
     MANAGED_LINEAGE_DIGEST_ENV_VAR,
@@ -219,6 +220,14 @@ class CoInjectedPolicyDef(NamedTuple):
     ``scope_marker`` must appear in the text, so a text cannot silently widen past the
     subject it declares.
 
+    ``delivery`` declares the channel: ``"universal"`` texts are session-mechanics
+    policies (output byte-bounding, file-intake discipline, recipe-delivery
+    attestation) that apply to any Codex session and must stay task-neutral —
+    codex_discipline_suffix()'s default form carries only these. ``"change-authoring"``
+    texts presuppose the session has a plan or is producing a diff, and ride only
+    surfaces serving sessions that author code changes (opt in via
+    ``codex_discipline_suffix(include_scope=True)``).
+
     Not to be confused with ``InjectorDef`` below, which names a *stage of the
     prompt-injection chain* ("intake-discipline"). This names a *constant whose text
     is injected* ("CODEX_INTAKE_DISCIPLINE_DIGEST"). The field is ``constant_name``, not
@@ -228,6 +237,7 @@ class CoInjectedPolicyDef(NamedTuple):
     constant_name: str
     subjects: frozenset[str]
     scope_marker: str
+    delivery: Literal["universal", "change-authoring"]
 
 
 CODEX_CO_INJECTED_POLICIES: tuple[CoInjectedPolicyDef, ...] = (
@@ -235,6 +245,7 @@ CODEX_CO_INJECTED_POLICIES: tuple[CoInjectedPolicyDef, ...] = (
         constant_name="OUTPUT_DISCIPLINE_DIGEST",
         subjects=frozenset({"producer-byte-bounding", "saved-artifact-inspection"}),
         scope_marker="saved output",
+        delivery="universal",
     ),
     CoInjectedPolicyDef(
         constant_name="CODEX_INTAKE_DISCIPLINE_DIGEST",
@@ -248,11 +259,19 @@ CODEX_CO_INJECTED_POLICIES: tuple[CoInjectedPolicyDef, ...] = (
             }
         ),
         scope_marker="Instruction files",
+        delivery="universal",
     ),
     CoInjectedPolicyDef(
         constant_name="CODEX_RECIPE_DELIVERY_CALLING_CONTRACT",
         subjects=frozenset({"recipe-delivery-attestation"}),
         scope_marker="delivery_request",
+        delivery="universal",
+    ),
+    CoInjectedPolicyDef(
+        constant_name="CODEX_SCOPE_DISCIPLINE_DIGEST",
+        subjects=frozenset({"change-scope-sizing"}),
+        scope_marker="SCOPE DISCIPLINE",
+        delivery="change-authoring",
     ),
 )
 
@@ -262,15 +281,26 @@ _CO_INJECTED_POLICY_TEXTS: dict[str, str] = {
     "OUTPUT_DISCIPLINE_DIGEST": OUTPUT_DISCIPLINE_DIGEST,
     "CODEX_INTAKE_DISCIPLINE_DIGEST": CODEX_INTAKE_DISCIPLINE_DIGEST,
     "CODEX_RECIPE_DELIVERY_CALLING_CONTRACT": CODEX_RECIPE_DELIVERY_CALLING_CONTRACT,
+    "CODEX_SCOPE_DISCIPLINE_DIGEST": CODEX_SCOPE_DISCIPLINE_DIGEST,
 }
 
 
-def codex_discipline_suffix() -> str:
-    """Canonical combined discipline suffix: output-discipline + intake-discipline."""
-    return (
-        f"{OUTPUT_DISCIPLINE_DIGEST}\n\n{CODEX_INTAKE_DISCIPLINE_DIGEST}\n\n"
-        f"{CODEX_RECIPE_DELIVERY_CALLING_CONTRACT}"
-    )
+def codex_discipline_suffix(*, include_scope: bool = False) -> str:
+    """Canonical combined discipline suffix.
+
+    Default form: output + intake + delivery-contract (the universal
+    session-mechanics policies, delivered to every Codex session). Pass
+    ``include_scope=True`` to additionally append the change-authoring
+    scope-discipline policy, for surfaces serving sessions that author code
+    changes (skill sessions whose contract declares ``scope_discipline: true``,
+    interactive TUI sessions, and resumes that opt in explicitly).
+    """
+    parts = [
+        _CO_INJECTED_POLICY_TEXTS[entry.constant_name]
+        for entry in CODEX_CO_INJECTED_POLICIES
+        if entry.delivery == "universal" or include_scope
+    ]
+    return "\n\n".join(parts)
 
 
 def _inject_output_discipline(prompt: str, *, include: bool = False) -> str:
@@ -285,6 +315,13 @@ def _inject_intake_discipline(prompt: str, *, include: bool = False) -> str:
     if not include:
         return prompt
     return f"{prompt}\n\n{CODEX_INTAKE_DISCIPLINE_DIGEST}"
+
+
+def _inject_scope_discipline(prompt: str, *, include: bool = False) -> str:
+    """Append the scope-discipline digest on Codex delivery surfaces."""
+    if not include:
+        return prompt
+    return f"{prompt}\n\n{CODEX_SCOPE_DISCIPLINE_DIGEST}"
 
 
 def _inject_completion_reminder(prompt: str, marker: str) -> str:
@@ -324,6 +361,7 @@ class PromptBuildContext:
     profile_name: str = ""
     include_output_discipline: bool = False
     include_intake_discipline: bool = False
+    include_scope_discipline: bool = False
 
 
 class InjectorDef(NamedTuple):
@@ -338,6 +376,7 @@ PROMPT_INJECTOR_CHAIN: tuple[InjectorDef, ...] = (
     InjectorDef("narration-suppression"),
     InjectorDef("output-discipline"),
     InjectorDef("intake-discipline"),
+    InjectorDef("scope-discipline"),
     InjectorDef("output-format-reinforcement"),
     InjectorDef("completion-reminder"),
 )
@@ -354,6 +393,7 @@ def apply_prompt_injector_chain(prompt: str, ctx: PromptBuildContext) -> str:
     prompt = _inject_narration_suppression(prompt, has_skill_prefix=ctx.has_skill_prefix)
     prompt = _inject_output_discipline(prompt, include=ctx.include_output_discipline)
     prompt = _inject_intake_discipline(prompt, include=ctx.include_intake_discipline)
+    prompt = _inject_scope_discipline(prompt, include=ctx.include_scope_discipline)
     prompt = _inject_output_format_reinforcement(prompt, profile_name=ctx.profile_name)
     prompt = _inject_completion_reminder(prompt, ctx.completion_marker)
     return prompt

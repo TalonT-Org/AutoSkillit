@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
+    RUN_PYTHON_PATH_LIKE_ARGS,
     RUN_PYTHON_SENTINEL_KEYS,
     SKILL_CAPABILITY_REGISTRY,
     WORKTREE_SKILLS,
@@ -80,10 +81,6 @@ _SERVER_INJECTED_RUN_PYTHON_PARAMS: dict[str, frozenset[str]] = {
 if TYPE_CHECKING:
     from autoskillit.core import SkillResult
     from autoskillit.pipeline import ToolContext
-
-_PATH_LIKE_ARGS: frozenset[str] = frozenset(
-    {"output_dir", "workspace", "diagnostics_log_dir", "investigation_path"}
-)
 
 
 @dataclasses.dataclass(slots=True)
@@ -324,6 +321,7 @@ def build_skill_session_contract(
     expected_output_patterns: tuple[str, ...],
     write_behavior: WriteBehaviorSpec,
     read_only: bool,
+    scope_discipline: bool,
     completion_required: bool,
     skill_contract_json: str,
     execution_identity: ExecutionIdentity,
@@ -390,6 +388,7 @@ def build_skill_session_contract(
         expected_output_patterns=expected_output_patterns,
         write_behavior=write_behavior,
         read_only=read_only,
+        scope_discipline=scope_discipline,
         parent_sandbox_mode=projection_context.parent_sandbox_mode,
         completion_required=completion_required,
         skill_contract_json=skill_contract_json,
@@ -423,6 +422,9 @@ def deserialize_skill_contract(payload: str) -> SkillContract | None:
         read_only = data.get("read_only", False)
         if not isinstance(read_only, bool):
             raise ValueError("read_only must be a boolean")
+        scope_discipline = data.get("scope_discipline", False)
+        if not isinstance(scope_discipline, bool):
+            raise ValueError("scope_discipline must be a boolean")
         completion_required = data.get("completion_required", False)
         if not isinstance(completion_required, bool):
             raise ValueError("completion_required must be a boolean")
@@ -778,7 +780,7 @@ def validate_path_arg_anchoring(args: dict[str, object] | None, work_dir: str) -
     """Return error message if args contain relative path-like values without work_dir."""
     if not args:
         return None
-    for key in _PATH_LIKE_ARGS:
+    for key in RUN_PYTHON_PATH_LIKE_ARGS:
         val = args.get(key)
         if isinstance(val, str) and val and not Path(val).is_absolute() and not work_dir:
             if "work_dir" in args:
@@ -797,7 +799,7 @@ def validate_path_arg_anchoring(args: dict[str, object] | None, work_dir: str) -
 def resolve_relative_path_args(args: dict[str, object], work_dir: str) -> dict[str, object]:
     """Anchor relative path arguments to work_dir."""
     resolved = dict(args)
-    for key in _PATH_LIKE_ARGS:
+    for key in RUN_PYTHON_PATH_LIKE_ARGS:
         val = resolved.get(key)
         if isinstance(val, str) and val and not Path(val).is_absolute():
             resolved[key] = str(Path(work_dir) / val)

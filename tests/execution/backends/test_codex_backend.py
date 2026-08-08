@@ -593,6 +593,19 @@ class TestCodexBuildSkillSessionCmd:
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
         assert CODEX_INTAKE_DISCIPLINE_DIGEST in spec.cmd[-1]
 
+    def test_fresh_headless_excludes_scope_discipline_digest_by_default(self) -> None:
+        """Scope discipline is a change-authoring policy; default sessions don't get it (#4478)."""
+        from autoskillit.core import CODEX_SCOPE_DISCIPLINE_DIGEST
+
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert CODEX_SCOPE_DISCIPLINE_DIGEST not in spec.cmd[-1]
+
+    def test_fresh_headless_includes_scope_discipline_digest_when_opted_in(self) -> None:
+        from autoskillit.core import CODEX_SCOPE_DISCIPLINE_DIGEST
+
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE, include_scope_discipline=True)
+        assert CODEX_SCOPE_DISCIPLINE_DIGEST in spec.cmd[-1]
+
     def test_completion_reminder_injected(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
         assert "Remember: end your final response with" in spec.cmd[-1]
@@ -895,7 +908,9 @@ class TestCodexBuildInteractiveCmd:
             if value.startswith("developer_instructions=")
         )
         parsed = tomllib.loads(f"developer_instructions = {rendered}")
-        assert parsed["developer_instructions"] == f"foo\n\n{codex_discipline_suffix()}"
+        assert parsed["developer_instructions"] == (
+            f"foo\n\n{codex_discipline_suffix(include_scope=True)}"
+        )
         assert "features.image_generation=false" in overrides
 
     def test_system_prompt_with_named_resume_does_not_append_config_override(self) -> None:
@@ -1089,6 +1104,13 @@ class TestCodexBuildFoodTruckCmd:
 
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
         assert CODEX_INTAKE_DISCIPLINE_DIGEST in spec.cmd[-1]
+
+    def test_food_truck_excludes_scope_discipline_digest(self) -> None:
+        """Orchestrators dispatch run_skill calls; they never author code changes (#4478)."""
+        from autoskillit.core import CODEX_SCOPE_DISCIPLINE_DIGEST
+
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert CODEX_SCOPE_DISCIPLINE_DIGEST not in spec.cmd[-1]
 
     def test_prompt_is_last_token(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)

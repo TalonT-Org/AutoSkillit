@@ -76,7 +76,8 @@ def _find_violations(text: str, names: tuple[str, ...]) -> list[str]:
             local_start = max(0, match.start() - _PROSE_TRIGGER_WINDOW)
             local_end = min(len(text), match.end() + _PROSE_TRIGGER_WINDOW)
             local_window = text[local_start:local_end]
-            if not any(word in local_window for word in _PROSE_TRIGGER_WORDS):
+            normalized_local_window = local_window.lower()
+            if not any(word in normalized_local_window for word in _PROSE_TRIGGER_WORDS):
                 continue
             wide_start = max(0, match.start() - _RUN_SKILL_WINDOW)
             wide_end = min(len(text), match.end() + _RUN_SKILL_WINDOW)
@@ -132,6 +133,10 @@ def test_no_bundled_skill_instructs_forwarding_execution_tuning_params() -> None
             '(e.g. "use opus"), apply it to the `model` parameter of ALL '
             "`run_skill` calls for steps that declare a `model:` field",
             id="model_prose_mandate",
+        ),
+        pytest.param(
+            "Forward the `model` Parameter to `run_skill` when selected.",
+            id="mixed_case_trigger_words",
         ),
         pytest.param(
             "Call: `run_skill(skill_command=..., cwd=..., "

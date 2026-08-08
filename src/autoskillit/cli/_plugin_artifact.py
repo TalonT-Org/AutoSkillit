@@ -288,7 +288,7 @@ class InstalledPluginArtifactAuthority:
         managed_root: Path,
         *,
         max_retries: int = 3,
-    ) -> ArtifactLease:
+    ) -> tuple[Path, ArtifactLease]:
         """Acquire a shared lease on a generation, re-resolving on reclaim race."""
         lease_path = installed_plugin_artifact_lease_path(managed_root)
         last_error: OSError | None = None
@@ -296,7 +296,7 @@ class InstalledPluginArtifactAuthority:
         for _attempt in range(max_retries):
             attempts = _attempt + 1
             try:
-                return ArtifactLease.acquire_existing_shared(lease_path)
+                return managed_root, ArtifactLease.acquire_existing_shared(lease_path)
             except OSError as exc:
                 last_error = exc
                 refreshed = resolve_current_generation(
@@ -320,12 +320,12 @@ class InstalledPluginArtifactAuthority:
         load_mode: PluginLoadMode,
     ) -> PluginLaunchBinding:
         """Lease + validate one exact incarnation directory."""
-        lease = self._acquire_shared_lease_with_retry(managed_root)
+        leased_root, lease = self._acquire_shared_lease_with_retry(managed_root)
         try:
             identity = read_installed_plugin_artifact_identity(
-                managed_root,
+                leased_root,
                 expected_semantic_key=self._semantic_key,
-                manifest_path=installed_plugin_artifact_manifest_path(managed_root),
+                manifest_path=installed_plugin_artifact_manifest_path(leased_root),
             )
             InstalledPluginArtifactRetirementOwner(
                 identity.managed_path.parent

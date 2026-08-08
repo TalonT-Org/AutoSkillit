@@ -16,6 +16,7 @@ import structlog
 
 from autoskillit.core import (
     ArtifactLease,
+    PluginArtifactIdentity,
     PluginArtifactKind,
     RetirementOutcome,
     RetiringArtifactRecord,
@@ -310,6 +311,60 @@ def test_installed_lifecycle_events_use_the_shared_schema(
     assert all(entry["semantic_key"] == identity.semantic_key for entry in lifecycle)
     assert all(entry["incarnation"] == identity.incarnation_id for entry in lifecycle)
     assert all("actor_pid" in entry and "child_pid" in entry for entry in lifecycle)
+
+
+def test_launch_binding_validates_generation_selected_during_lease_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.cli._plugin_artifact import InstalledPluginArtifactAuthority
+    from autoskillit.core import PluginLoadMode, _InstallLock
+    from autoskillit.workspace import publish_generation
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    (source_root / "content.txt").write_text("first", encoding="utf-8")
+
+    def publish() -> PluginArtifactIdentity:
+        with _InstallLock():
+            return publish_generation(
+                home=tmp_path,
+                plugin_ref="autoskillit",
+                version="1.0.0",
+                semantic_key="autoskillit@autoskillit-local:1.0.0",
+                source_root=source_root,
+            )
+
+    first = publish()
+    acquire_existing_shared = ArtifactLease.acquire_existing_shared
+    refreshed: list[PluginArtifactIdentity] = []
+
+    def advance_then_acquire(_cls: type[ArtifactLease], lock_path: Path) -> ArtifactLease:
+        if not refreshed:
+            (source_root / "content.txt").write_text("second", encoding="utf-8")
+            refreshed.append(publish())
+            raise OSError("injected reclaim race")
+        return acquire_existing_shared(lock_path)
+
+    monkeypatch.setattr(
+        ArtifactLease,
+        "acquire_existing_shared",
+        classmethod(advance_then_acquire),
+    )
+
+    binding = InstalledPluginArtifactAuthority(
+        tmp_path / "legacy" / "1.0.0",
+        semantic_key="autoskillit@autoskillit-local:1.0.0",
+    ).acquire_launch_binding(
+        backend=object(),  # type: ignore[arg-type]
+        load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+    )
+    try:
+        assert binding.plugin_dir == refreshed[0].managed_path
+        assert binding.plugin_dir != first.managed_path
+    finally:
+        binding.close()
 
 
 def test_identity_mismatch_removes_record_without_deleting_current_path(

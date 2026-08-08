@@ -268,6 +268,7 @@ from .tool_registry import TOOL_REGISTRY as TOOL_REGISTRY
 from .tool_registry import all_tool_names as all_tool_names
 from .tool_registry import compute_tool_contract_identity as compute_tool_contract_identity
 from .tool_registry import get_tool_def as get_tool_def
+from .tool_registry import runtime_exempt_param_names as runtime_exempt_param_names
 from .tool_registry import unsupported_tool_params as unsupported_tool_params
 from .tool_sequence_analysis import DFG as DFG
 from .tool_sequence_analysis import AnalysisResult as AnalysisResult
@@ -1012,6 +1013,7 @@ from .types import ToolCallId as ToolCallId
 from .types import ToolDef as ToolDef
 from .types import ToolInitializationOperation as ToolInitializationOperation
 from .types import ToolParamDef as ToolParamDef
+from .types import ToolParamRole as ToolParamRole
 from .types import ToolWireType as ToolWireType
 from .types import TraditionManifest as TraditionManifest
 from .types import TurnId as TurnId

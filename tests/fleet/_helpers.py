@@ -115,6 +115,7 @@ async def _run(
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
     )
+    assert not any(key.owner_kind == "dispatch" for key in tool_ctx.tracker_leases)
     return json.loads(result.outcome.to_envelope())
 
 

@@ -153,6 +153,7 @@ def classify_dispatch_outcome(
 def build_dispatch_result(
     *,
     parsed_result: L3ParseResult | None,
+    result_success: bool,
     final_status: DispatchStatus,
     reason: str,
     dispatch_id: str,
@@ -179,9 +180,7 @@ def build_dispatch_result(
     if parsed_result is not None and parsed_result.outcome == "completed_clean":
         return DispatchResult(
             DispatchCompleted(
-                success=bool(
-                    parsed_result.payload and parsed_result.payload.get("success", False)
-                ),
+                success=result_success,
                 dispatch_status=final_status,
                 reason=reason,
                 l3_payload=parsed_result.payload,

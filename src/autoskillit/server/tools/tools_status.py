@@ -12,12 +12,14 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
+    TrackerAuthorityTarget,
     atomic_write,
     compute_analysis,
     filter_sessions_by_recipe,
     format_top_bigrams,
     get_logger,
     parse_sessions_from_summary_dir,
+    read_tracker_authority,
     render_adjacency_table,
     render_dot,
     render_mermaid,
@@ -93,6 +95,42 @@ async def kitchen_status() -> str:
                 github_client.has_token if github_client is not None else False
             )
             status["github_default_repo"] = _get_config().github.default_repo
+            ctx = _get_ctx()
+            from autoskillit.server.tools._pipeline_deps import (  # circular-break
+                _derive_phase_a_deps,
+            )
+            from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
+                _release_context_tracker,
+                _retain_context_tracker,
+            )
+
+            expected = bool(
+                ctx.active_recipe_steps and _derive_phase_a_deps(ctx.active_recipe_steps)
+            )
+            target = TrackerAuthorityTarget.for_project(
+                ctx.project_dir,
+                ctx.kitchen_id,
+                expected=expected,
+            )
+            key, lease = _retain_context_tracker(
+                ctx,
+                target,
+                owner_kind="kitchen",
+                owner_id=ctx.kitchen_id,
+            )
+            try:
+                authority = read_tracker_authority(target, lease)
+            finally:
+                _release_context_tracker(ctx, key)
+            status["tracker_authority"] = {
+                "target_order_id": target.target_order_id,
+                "path": str(target.path),
+                "expected": target.expected,
+                "available": authority.data is not None,
+                "error": authority.error,
+            }
+            if authority.error is not None:
+                status["error"] = authority.error
             return json.dumps(status)
         except Exception as exc:
             logger.error("kitchen_status unhandled exception", exc_info=True)

@@ -126,6 +126,11 @@ def _fmt_kitchen_status(data: dict, _pipeline: bool) -> str:
     ):
         if key in data:
             lines.append(f"{key}: {data[key]}")
+    tracker_authority = data.get("tracker_authority")
+    if isinstance(tracker_authority, dict):
+        state = "available" if tracker_authority.get("available") else "unavailable"
+        lines.append(f"tracker_authority: {state}")
+        lines.append(f"tracker_target_order_id: {tracker_authority.get('target_order_id', '')}")
     warning = data.get("warning")
     if warning:
         lines.extend(["", f"warning: {warning}"])
@@ -185,6 +190,7 @@ _FMT_KITCHEN_STATUS_RENDERED: frozenset[str] = frozenset(
         "quota_guard_enabled",
         "github_token_configured",
         "github_default_repo",
+        "tracker_authority",
         "warning",
     }
 )

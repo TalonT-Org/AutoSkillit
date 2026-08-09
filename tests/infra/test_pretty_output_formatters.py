@@ -202,6 +202,10 @@ def test_format_kitchen_status():
                 "quota_guard_enabled": True,
                 "github_token_configured": True,
                 "github_default_repo": "acme/myrepo",
+                "tracker_authority": {
+                    "target_order_id": "kitchen-1",
+                    "available": True,
+                },
             }
         ),
     }
@@ -210,6 +214,8 @@ def test_format_kitchen_status():
     assert "kitchen_status" in text
     assert "package_version: 0.2.0" in text
     assert "tools_enabled: True" in text
+    assert "tracker_authority: available" in text
+    assert "tracker_target_order_id: kitchen-1" in text
 
 
 # PHK-17

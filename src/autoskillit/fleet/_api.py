@@ -28,12 +28,14 @@ from autoskillit.core import (
     SkillResult,
     atomic_write,
     get_logger,
+    release_tracker_lease,
     select_child_session_deadline,
 )
 from autoskillit.fleet._capture import _extract_captures, _normalize_capture_spec
 from autoskillit.fleet._checkpoint_bridge import (
     bind_dispatch_launch_contract,
     load_dispatch_progress,
+    retain_dispatch_tracker_authority,
 )
 from autoskillit.fleet._expressions import _CAMPAIGN_REF_RE, _interpolate_campaign_refs
 from autoskillit.fleet._issue_url_helpers import extract_issue_urls
@@ -897,660 +899,692 @@ async def _run_dispatch(
     resume_message = lineage_preparation.resume_message
     prior_session_chain = list(lineage_preparation.prior_session_chain)
     prior_dispatched_session_id = lineage_preparation.prior_dispatched_session_id
-    if lineage_preparation.halted_reason is not None:
-        return DispatchResult(
-            outcome=DispatchRejected(
-                error_code=FleetErrorCode.FLEET_CAMPAIGN_HALTED,
-                message=lineage_preparation.halted_reason,
-                effect_provenance=provenance.snapshot(),
-                dispatch_id=dispatch_id,
-            ),
-            per_dispatch_state_path=state_path,
-        )
-
+    tracker_key, tracker_lease = retain_dispatch_tracker_authority(tool_ctx, dispatch_id)
     try:
-        current_state = read_state(state_path)
-        current_record = (
-            next(
-                (d for d in current_state.dispatches if d.name == effective_name),
-                None,
+        if lineage_preparation.halted_reason is not None:
+            return DispatchResult(
+                outcome=DispatchRejected(
+                    error_code=FleetErrorCode.FLEET_CAMPAIGN_HALTED,
+                    message=lineage_preparation.halted_reason,
+                    effect_provenance=provenance.snapshot(),
+                    dispatch_id=dispatch_id,
+                ),
+                per_dispatch_state_path=state_path,
             )
-            if current_state is not None
-            else None
-        )
-        if current_record is None:
-            current_record = DispatchRecord(name=effective_name)
-        current_record.dispatch_id = dispatch_id
-        current_record.campaign_id = campaign_id
-        current_record.caller_session_id = caller_session_id
-        current_record.caller_backend_name = _caller_backend_name
-        current_record.backend_name = lineage_backend_name
-        current_record.effect_provenance = provenance.snapshot().to_dict()
-        current_record.managed_lineage_ref = managed_lineage_ref
-        upsert_dispatch_record_by_name(state_path, current_record)
-    except Exception:
-        logger.warning("managed_food_truck_lineage_state_write_failed", exc_info=True)
-        return _complete_failure_with_state(
-            FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
-            "Food-truck dispatch initialization failed.",
-        )
 
-    _locator = _effective_backend.session_locator() if _effective_backend is not None else None
-
-    if resume_session_id:
-        _primary_jsonl = (
-            _locator.session_log_path(str(tool_ctx.project_dir), resume_session_id)
-            if _locator is not None
-            else None
-        )
-        if _primary_jsonl is None or not _primary_jsonl.exists():
-            logger.warning(
-                "resume_jsonl_missing",
-                resume_session_id=resume_session_id,
-                expected_path=str(_primary_jsonl) if _primary_jsonl else "none",
-            )
-            _fallback_session_id = prior_session_chain[-1] if prior_session_chain else ""
-            if _fallback_session_id:
-                _fallback_jsonl = (
-                    _locator.session_log_path(str(tool_ctx.project_dir), _fallback_session_id)
-                    if _locator is not None
-                    else None
+        try:
+            current_state = read_state(state_path)
+            current_record = (
+                next(
+                    (d for d in current_state.dispatches if d.name == effective_name),
+                    None,
                 )
-                if _fallback_jsonl is not None and _fallback_jsonl.exists():
-                    logger.info(
-                        "resume_session_fallback",
-                        original_session_id=resume_session_id,
-                        fallback_session_id=_fallback_session_id,
+                if current_state is not None
+                else None
+            )
+            if current_record is None:
+                current_record = DispatchRecord(name=effective_name)
+            current_record.dispatch_id = dispatch_id
+            current_record.campaign_id = campaign_id
+            current_record.caller_session_id = caller_session_id
+            current_record.caller_backend_name = _caller_backend_name
+            current_record.backend_name = lineage_backend_name
+            current_record.effect_provenance = provenance.snapshot().to_dict()
+            current_record.managed_lineage_ref = managed_lineage_ref
+            upsert_dispatch_record_by_name(state_path, current_record)
+        except Exception:
+            logger.warning("managed_food_truck_lineage_state_write_failed", exc_info=True)
+            return _complete_failure_with_state(
+                FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+                "Food-truck dispatch initialization failed.",
+            )
+
+        _locator = _effective_backend.session_locator() if _effective_backend is not None else None
+
+        if resume_session_id:
+            _primary_jsonl = (
+                _locator.session_log_path(str(tool_ctx.project_dir), resume_session_id)
+                if _locator is not None
+                else None
+            )
+            if _primary_jsonl is None or not _primary_jsonl.exists():
+                logger.warning(
+                    "resume_jsonl_missing",
+                    resume_session_id=resume_session_id,
+                    expected_path=str(_primary_jsonl) if _primary_jsonl else "none",
+                )
+                _fallback_session_id = prior_session_chain[-1] if prior_session_chain else ""
+                if _fallback_session_id:
+                    _fallback_jsonl = (
+                        _locator.session_log_path(str(tool_ctx.project_dir), _fallback_session_id)
+                        if _locator is not None
+                        else None
                     )
-                    resume_session_id = _fallback_session_id
+                    if _fallback_jsonl is not None and _fallback_jsonl.exists():
+                        logger.info(
+                            "resume_session_fallback",
+                            original_session_id=resume_session_id,
+                            fallback_session_id=_fallback_session_id,
+                        )
+                        resume_session_id = _fallback_session_id
+                    else:
+                        return _complete_failure_with_state(
+                            FleetErrorCode.FLEET_RESUME_SESSION_MISSING,
+                            f"JSONL log for session {resume_session_id} not found",
+                        )
                 else:
                     return _complete_failure_with_state(
                         FleetErrorCode.FLEET_RESUME_SESSION_MISSING,
                         f"JSONL log for session {resume_session_id} not found",
                     )
-            else:
-                return _complete_failure_with_state(
-                    FleetErrorCode.FLEET_RESUME_SESSION_MISSING,
-                    f"JSONL log for session {resume_session_id} not found",
-                )
 
-    if resume_session_id:
-        provenance.start(
-            DispatchEffectName.EFFECTIVE_RESUME_BINDING,
-            retry_relevant=False,
-            identities={"resume_session_id": resume_session_id},
-        )
-        provenance.confirm(
-            DispatchEffectName.EFFECTIVE_RESUME_BINDING,
-            receipt="effective resume session resolved",
-            retry_relevant=False,
-            identities={"resume_session_id": resume_session_id},
-        )
-
-    resume_line_offset = 0
-    if resume_session_id:
-        _resume_jsonl = (
-            _locator.session_log_path(str(tool_ctx.project_dir), resume_session_id)
-            if _locator is not None
-            else None
-        )
-        if _resume_jsonl is not None and _resume_jsonl.exists():
-            resume_line_offset = len(_resume_jsonl.read_text(encoding="utf-8").splitlines())
-
-    completion_marker = identity.completion_marker
-    sentinel_contract = identity.sentinel_contract
-    from autoskillit.fleet.sidecar import sidecar_path as compute_sidecar_path  # noqa: PLC0415
-
-    dispatch_sidecar_path = str(compute_sidecar_path(dispatch_id, tool_ctx.project_dir))
-    started_at = time.time()
-    _dispatched_pid: list[int] = []
-    _dispatched_ticks: list[int] = []
-    _dispatched_create_time: list[float] = []
-    _dispatched_boot_id: list[str] = []
-    _dispatched_session_id: list[str] = []
-    _spawn_error: list[str] = []
-    # Collect prior dispatch_ids from attempt_history for defense-in-depth parsing
-    prior_ids: list[str] = []
-    try:
-        state = read_state(state_path)
-        if state:
-            for d in state.dispatches:
-                if d.name == effective_name:
-                    for attempt in d.attempt_history:
-                        aid = attempt.get("dispatch_id", "")
-                        if aid and aid != dispatch_id:
-                            prior_ids.append(aid)
-    except Exception:
-        logger.warning(
-            "failed to collect prior dispatch_ids from state",
-            state_path=str(state_path),
-            exc_info=True,
-        )
-    prior_completion_markers = (
-        [f"%%L3_DONE::{pid[:8]}%%" for pid in prior_ids] if prior_ids else None
-    )
-    _issue_urls_raw = extract_issue_urls(effective_ingredients)
-
-    def _on_spawn(pid: int, ticks: int) -> None:
-        from autoskillit.core import read_boot_id
-
-        _dispatched_pid.append(pid)
-        provenance.start(
-            DispatchEffectName.CHILD_DISCOVERY,
-            identities={"pid": pid, "dispatch_id": dispatch_id},
-        )
-        try:
-            create_time = psutil.Process(pid).create_time()
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            create_time = 0.0
-        boot_id = read_boot_id() or ""
-        _dispatched_ticks.append(ticks)
-        _dispatched_create_time.append(create_time)
-        _dispatched_boot_id.append(boot_id)
-        provenance.confirm(
-            DispatchEffectName.CHILD_DISCOVERY,
-            receipt="captured one process identity tuple",
-            identities={
-                "pid": pid,
-                "starttime_ticks": ticks,
-                "create_time": create_time,
-                "boot_id": boot_id,
-                "identity_degraded": ticks == 0 or create_time == 0.0 or not boot_id,
-            },
-        )
-        # Resume branch iff preflight was returned by prepare_resume above.
-        # Cap enforcement (MAX_CONSECUTIVE_RESUME_ATTEMPTS) lives one layer down
-        # in mark_dispatch_running.
-        is_resume_branch = preflight is not None
-        # Record instead of raising: the executor converts callback errors to a crashed result.
-        err = _write_pid(
-            state_path,
-            effective_name,
-            dispatch_id,
-            pid,
-            ticks,
-            dispatch_sidecar_path,
-            create_time,
-            identity_degraded=(ticks == 0 or create_time == 0.0 or not boot_id),
-            issue_url=_issue_urls_raw,
-            dispatched_boot_id=boot_id,
-            provenance=provenance,
-            enforce_max_resume_attempts=is_resume_branch,
-        )
-        if err is not None:
-            _spawn_error.append(err)
-
-    def _on_session_id(session_id: str) -> None:
-        from autoskillit.fleet.state import mark_dispatch_session_identity
-
-        _dispatched_session_id.append(session_id)
-        mark_dispatch_session_identity(
-            state_path, effective_name, dispatched_session_id=session_id
-        )
-        provenance.confirm(
-            DispatchEffectName.PROCESS_SPAWN,
-            receipt="executor reported spawned process and authoritative session identity",
-            identities={
-                "pid": _dispatched_pid[0] if _dispatched_pid else 0,
-                "starttime_ticks": _dispatched_ticks[0] if _dispatched_ticks else 0,
-                "dispatch_id": dispatch_id,
-                "dispatched_session_id": session_id,
-            },
-        )
-
-    def _on_launch_resolved(launch_contract: ResolvedLaunchContract) -> None:
-        bind_dispatch_launch_contract(state_path, effective_name, launch_contract)
-
-    marker_dir: Path | None = None
-    if _locator is not None:
-        try:
-            marker_dir = _locator.project_log_dir(str(tool_ctx.project_dir))
-        except OSError:
-            pass
-
-    from autoskillit.core import execution_marker  # noqa: PLC0415
-
-    _dispatch_completed_normally = False
-    try:
-        provenance.start(
-            DispatchEffectName.PROCESS_SPAWN,
-            identities={"dispatch_id": dispatch_id},
-        )
-        async with execution_marker(
-            marker_dir,
-            caller_session_id,
-            "dispatch",
-        ):
-            async with _dispatch_heartbeat(dispatches_dir, dispatch_id):
-                skill_result = await tool_ctx.executor.dispatch_food_truck(
-                    orchestrator_prompt=prompt,
-                    cwd=str(tool_ctx.project_dir),
-                    completion_marker=completion_marker,
-                    plugin_authority=food_truck_plugin_authority,
-                    capability_preparation=food_truck_capability_preparation,
-                    prior_completion_markers=prior_completion_markers,
-                    resume_session_id=resume_session_id,
-                    resume_checkpoint=resume_checkpoint,
-                    kitchen_id=tool_ctx.kitchen_id,
-                    order_id=dispatch_id,
-                    campaign_id=campaign_id,
-                    dispatch_id=dispatch_id,
-                    caller_session_id=caller_session_id,
-                    project_dir=str(tool_ctx.project_dir),
-                    marker_dir=marker_dir,
-                    session_id=caller_session_id,
-                    on_session_id_resolved=_on_session_id,
-                    timeout=resolved_timeout,
-                    idle_output_timeout=float(idle_output_timeout)
-                    if idle_output_timeout is not None
-                    else None,
-                    env_extras={
-                        "AUTOSKILLIT_PROJECT_DIR": str(tool_ctx.project_dir),
-                        "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
-                        "AUTOSKILLIT_DISPATCH_ID": dispatch_id,
-                        "AUTOSKILLIT_SESSION_DEADLINE": select_child_session_deadline(
-                            started_at + resolved_timeout,
-                            os.environ.get("AUTOSKILLIT_SESSION_DEADLINE", ""),
-                        ),
-                        **(
-                            {
-                                FLEET_INSPECTOR_MODEL_ENV_VAR: (
-                                    tool_ctx.config.fleet.inspector_model
-                                )
-                            }
-                            if tool_ctx.config.fleet.inspector_model
-                            else {}
-                        ),
-                    },
-                    requires_packs=list(full_recipe.requires_packs) or ["kitchen-core"],
-                    on_spawn=_on_spawn,
-                    sentinel_contract=sentinel_contract,
-                    resume_message=resume_message,
-                    backend_authority=(
-                        BackendAuthority(
-                            backend=dispatch_backend.name,
-                            kind=BackendAuthorityKind.CALLER,
-                            tier=BackendAuthorityTier.CALLER,
-                            key_path="dispatch.backend",
-                        )
-                        if dispatch_backend is not None
-                        else None
-                    ),
-                    native_shell_capture_decision=capture_decision,
-                    managed_lineage_ref=managed_lineage_ref,
-                    on_launch_resolved=_on_launch_resolved,
-                )
-
-        # L2 fail-closed spawn gate: check closure-scoped error state.
-        # If _on_spawn recorded a transition failure (and killed the child
-        # via kill_process_tree), translate it to a structured envelope
-        # instead of letting the dispatch proceed on a stale record.
-        if _spawn_error:
-            return _complete_failure_with_state(
-                FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
-                _spawn_error[0],
-                dispatch_status=DispatchStatus.FAILURE,
-                dispatched_session_id=(
-                    _dispatched_session_id[0] if _dispatched_session_id else ""
-                ),
+        if resume_session_id:
+            provenance.start(
+                DispatchEffectName.EFFECTIVE_RESUME_BINDING,
+                retry_relevant=False,
+                identities={"resume_session_id": resume_session_id},
             )
-        if skill_result.session_id and not _dispatched_session_id:
-            _on_session_id(skill_result.session_id)
-
-        ended_at = max(time.time(), started_at + 1e-6)
-        _dispatch_completed_normally = True
-    except asyncio.CancelledError:
-        provenance.request_cancel()
-        try:
-            with anyio.CancelScope(shield=True):
-                set_lineage_terminal_state(
-                    tool_ctx,
-                    managed_lineage_ref,
-                    ManagedHeadlessSessionTerminalState.CANCELLED,
-                )
-        except Exception:
-            logger.warning(
-                "failed to record managed lineage cancellation",
-                dispatch_name=effective_name,
-                exc_info=True,
+            provenance.confirm(
+                DispatchEffectName.EFFECTIVE_RESUME_BINDING,
+                receipt="effective resume session resolved",
+                retry_relevant=False,
+                identities={"resume_session_id": resume_session_id},
             )
-        if _dispatched_pid:
-            try:
-                from autoskillit.execution import kill_process_tree  # noqa: PLC0415
 
-                provenance.start(
-                    DispatchEffectName.LOCAL_PROCESS_CLEANUP,
-                    identities={"pid": _dispatched_pid[0]},
-                )
-                with anyio.CancelScope(shield=True):
-                    cleanup_result = await anyio.to_thread.run_sync(
-                        kill_process_tree,
-                        _dispatched_pid[0],
-                        2.0,
-                    )
-                provenance.record_local_cleanup(cleanup_result)
-                if cleanup_result.complete:
-                    provenance.confirm(
-                        DispatchEffectName.LOCAL_PROCESS_CLEANUP,
-                        receipt="bounded process-tree wait confirmed no survivors",
-                        identities={"pid": _dispatched_pid[0]},
-                    )
-                else:
-                    provenance.mark_ambiguous(
-                        DispatchEffectName.LOCAL_PROCESS_CLEANUP,
-                        evidence="local process-tree cleanup left survivors",
-                        identities={"pid": _dispatched_pid[0]},
-                    )
-            except Exception:
-                provenance.mark_ambiguous(
-                    DispatchEffectName.LOCAL_PROCESS_CLEANUP,
-                    evidence="local process-tree cleanup raised",
-                    identities={"pid": _dispatched_pid[0]},
-                )
-                logger.warning(
-                    "failed to capture local process cleanup evidence",
-                    dispatch_name=effective_name,
-                    exc_info=True,
-                )
-            try:
-                from autoskillit.fleet.state import mark_dispatch_interrupted  # noqa: PLC0415
-
-                captured_session_id = _dispatched_session_id[0] if _dispatched_session_id else ""
-                if not captured_session_id:
-                    sr = locals().get("skill_result")
-                    if sr is not None:
-                        captured_session_id = getattr(sr, "session_id", "") or ""
-
-                with anyio.CancelScope(shield=True):
-                    provenance.record_state_cleanup(confirmed=True)
-                    mark_dispatch_interrupted(
-                        state_path,
-                        effective_name,
-                        reason="signal_induced_cancellation",
-                        dispatched_session_id=captured_session_id,
-                        dispatched_session_log_dir=str(marker_dir)
-                        if marker_dir is not None
-                        else "",
-                        effect_provenance=provenance.snapshot().to_dict(),
-                    )
-            except Exception:
-                provenance.record_state_cleanup(confirmed=False)
-                logger.warning(
-                    "failed to record interrupted state on cancel",
-                    dispatch_name=effective_name,
-                    exc_info=True,
-                )
-        raise
-    except Exception:
-        try:
-            set_lineage_terminal_state(
-                tool_ctx,
-                managed_lineage_ref,
-                ManagedHeadlessSessionTerminalState.FAILED,
-            )
-        except Exception:
-            logger.warning(
-                "failed to record managed lineage failure",
-                dispatch_name=effective_name,
-                exc_info=True,
-            )
-        raise
-    finally:
-        if not _dispatch_completed_normally:
-            from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels  # noqa: PLC0415
-
-            with anyio.CancelScope(shield=True):
-                provenance.start(
-                    DispatchEffectName.LABEL_CLEANUP,
-                    identities={"dispatch_id": dispatch_id},
-                )
-                labels_cleaned = await cleanup_orphaned_labels(
-                    dispatch_sidecar_path, tool_ctx.github_client, issue_url=_issue_urls_raw
-                )
-                provenance.record_labels_cleanup(confirmed=labels_cleaned)
-                if labels_cleaned:
-                    provenance.confirm(
-                        DispatchEffectName.LABEL_CLEANUP,
-                        receipt="cancellation cleanup helper confirmed label cleanup",
-                        identities={"dispatch_id": dispatch_id},
-                    )
-                else:
-                    provenance.mark_ambiguous(
-                        DispatchEffectName.LABEL_CLEANUP,
-                        evidence="cancellation cleanup did not confirm label cleanup",
-                        identities={"dispatch_id": dispatch_id},
-                    )
-
-    sidecar_file, sidecar_entries, dispatch_checkpoint = load_dispatch_progress(
-        tool_ctx=tool_ctx,
-        dispatch_sidecar_path=dispatch_sidecar_path,
-        dispatch_id=dispatch_id,
-        backend_name=_effective_backend.name if _effective_backend else "",
-        recipe=recipe,
-    )
-
-    extended_chain = prior_session_chain[:]
-    additional_jsonl_paths: list[Path] = []
-    if skill_result.subtype == "timeout":
-        parsed_result = None
-    else:
-        if prior_dispatched_session_id and prior_dispatched_session_id not in extended_chain:
-            extended_chain.append(prior_dispatched_session_id)
-
-        for sid in extended_chain:
-            path = (
-                _locator.session_log_path(str(tool_ctx.project_dir), sid)
+        resume_line_offset = 0
+        if resume_session_id:
+            _resume_jsonl = (
+                _locator.session_log_path(str(tool_ctx.project_dir), resume_session_id)
                 if _locator is not None
                 else None
             )
-            if path is not None:
-                additional_jsonl_paths.append(path)
+            if _resume_jsonl is not None and _resume_jsonl.exists():
+                resume_line_offset = len(_resume_jsonl.read_text(encoding="utf-8").splitlines())
 
-        jsonl_path = (
-            _locator.session_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
-            if _locator is not None
-            else None
-        )
-        if resume_line_offset and skill_result.session_id and resume_session_id:
-            if skill_result.session_id != resume_session_id:
-                logger.warning(
-                    "resume_line_offset_invalidated",
-                    resume_session_id=resume_session_id,
-                    actual_session_id=skill_result.session_id,
-                )
-                resume_line_offset = 0
-        parsed_result = parse_l3_result_block(
-            stdout=skill_result.result or "",
-            expected_dispatch_id=dispatch_id,
-            assistant_messages_path=jsonl_path,
-            prior_dispatch_ids=prior_ids or None,
-            additional_jsonl_paths=additional_jsonl_paths or None,
-            resume_line_offset=resume_line_offset,
-        )
+        completion_marker = identity.completion_marker
+        sentinel_contract = identity.sentinel_contract
+        from autoskillit.fleet.sidecar import sidecar_path as compute_sidecar_path  # noqa: PLC0415
 
-    _dispatched_issue_list = [u.strip() for u in _issue_urls_raw.split(",") if u.strip()]
-    dispatched_issue_count = len(_dispatched_issue_list)
-    if parsed_result is not None and parsed_result.outcome == "no_sentinel" and sidecar_entries:
-        from autoskillit.fleet._sidecar_synthesis import synthesize_from_sidecar  # noqa: PLC0415
-
-        parsed_result = synthesize_from_sidecar(
-            parsed_result,
-            sidecar_entries,
-            dispatched_issue_count=dispatched_issue_count,
-        )
-
-    final_status, reason = classify_dispatch_outcome(
-        parsed_result,
-        skill_result,
-        sidecar_exists=sidecar_file.exists(),
-        checkpoint=dispatch_checkpoint,
-        subtype=skill_result.subtype,
-    )
-    if final_status != DispatchStatus.RESUMABLE:
-        terminal_state = (
-            ManagedHeadlessSessionTerminalState.SUCCEEDED
-            if final_status == DispatchStatus.SUCCESS
-            else ManagedHeadlessSessionTerminalState.FAILED
-        )
+        dispatch_sidecar_path = str(compute_sidecar_path(dispatch_id, tool_ctx.project_dir))
+        started_at = time.time()
+        _dispatched_pid: list[int] = []
+        _dispatched_ticks: list[int] = []
+        _dispatched_create_time: list[float] = []
+        _dispatched_boot_id: list[str] = []
+        _dispatched_session_id: list[str] = []
+        _spawn_error: list[str] = []
+        # Collect prior dispatch_ids from attempt_history for defense-in-depth parsing
+        prior_ids: list[str] = []
         try:
-            set_lineage_terminal_state(
-                tool_ctx,
-                managed_lineage_ref,
-                terminal_state,
-            )
+            state = read_state(state_path)
+            if state:
+                for d in state.dispatches:
+                    if d.name == effective_name:
+                        for attempt in d.attempt_history:
+                            aid = attempt.get("dispatch_id", "")
+                            if aid and aid != dispatch_id:
+                                prior_ids.append(aid)
         except Exception:
             logger.warning(
-                "failed to record managed lineage terminal state",
-                dispatch_name=effective_name,
-                terminal_state=terminal_state.value,
+                "failed to collect prior dispatch_ids from state",
+                state_path=str(state_path),
                 exc_info=True,
             )
-
-    _branch_name = ""
-    if sidecar_entries and tool_ctx.runner is not None:
-        for _entry in sidecar_entries:
-            if _entry.pr_url:
-                try:
-                    _pr_info = await tool_ctx.runner(
-                        ["gh", "pr", "view", _entry.pr_url, "--json", "headRefName"],
-                        cwd=tool_ctx.project_dir,
-                        timeout=15,
-                    )
-                    if _pr_info.returncode == 0 and _pr_info.stdout:
-                        import json as _json  # noqa: PLC0415
-
-                        _branch_name = _json.loads(_pr_info.stdout).get("headRefName", "")
-                except Exception:
-                    logger.debug("branch_name_extraction_failed", exc_info=True)
-                break
-
-    _labels_cleaned = False
-    if final_status not in (DispatchStatus.SUCCESS, DispatchStatus.RESUMABLE):
-        from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels  # noqa: PLC0415
-
-        provenance.start(
-            DispatchEffectName.LABEL_CLEANUP,
-            identities={"dispatch_id": dispatch_id},
+        prior_completion_markers = (
+            [f"%%L3_DONE::{pid[:8]}%%" for pid in prior_ids] if prior_ids else None
         )
-        _labels_cleaned = await cleanup_orphaned_labels(
-            dispatch_sidecar_path, tool_ctx.github_client, issue_url=_issue_urls_raw
-        )
-        provenance.record_labels_cleanup(confirmed=_labels_cleaned)
-        if _labels_cleaned:
+        _issue_urls_raw = extract_issue_urls(effective_ingredients)
+
+        def _on_spawn(pid: int, ticks: int) -> None:
+            from autoskillit.core import read_boot_id
+
+            _dispatched_pid.append(pid)
+            provenance.start(
+                DispatchEffectName.CHILD_DISCOVERY,
+                identities={"pid": pid, "dispatch_id": dispatch_id},
+            )
+            try:
+                create_time = psutil.Process(pid).create_time()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                create_time = 0.0
+            boot_id = read_boot_id() or ""
+            _dispatched_ticks.append(ticks)
+            _dispatched_create_time.append(create_time)
+            _dispatched_boot_id.append(boot_id)
             provenance.confirm(
-                DispatchEffectName.LABEL_CLEANUP,
-                receipt="label cleanup helper confirmed cleanup",
-                identities={"dispatch_id": dispatch_id},
+                DispatchEffectName.CHILD_DISCOVERY,
+                receipt="captured one process identity tuple",
+                identities={
+                    "pid": pid,
+                    "starttime_ticks": ticks,
+                    "create_time": create_time,
+                    "boot_id": boot_id,
+                    "identity_degraded": ticks == 0 or create_time == 0.0 or not boot_id,
+                },
             )
-        else:
-            provenance.mark_ambiguous(
-                DispatchEffectName.LABEL_CLEANUP,
-                evidence="label cleanup helper did not confirm cleanup",
-                identities={"dispatch_id": dispatch_id},
+            # Resume branch iff preflight was returned by prepare_resume above.
+            # Cap enforcement (MAX_CONSECUTIVE_RESUME_ATTEMPTS) lives one layer down
+            # in mark_dispatch_running.
+            is_resume_branch = preflight is not None
+            # Record instead of raising: the executor converts callback errors to a crashed result.
+            err = _write_pid(
+                state_path,
+                effective_name,
+                dispatch_id,
+                pid,
+                ticks,
+                dispatch_sidecar_path,
+                create_time,
+                identity_degraded=(ticks == 0 or create_time == 0.0 or not boot_id),
+                issue_url=_issue_urls_raw,
+                dispatched_boot_id=boot_id,
+                provenance=provenance,
+                enforce_max_resume_attempts=is_resume_branch,
+            )
+            if err is not None:
+                _spawn_error.append(err)
+
+        def _on_session_id(session_id: str) -> None:
+            from autoskillit.fleet.state import mark_dispatch_session_identity
+
+            _dispatched_session_id.append(session_id)
+            mark_dispatch_session_identity(
+                state_path, effective_name, dispatched_session_id=session_id
+            )
+            provenance.confirm(
+                DispatchEffectName.PROCESS_SPAWN,
+                receipt="executor reported spawned process and authoritative session identity",
+                identities={
+                    "pid": _dispatched_pid[0] if _dispatched_pid else 0,
+                    "starttime_ticks": _dispatched_ticks[0] if _dispatched_ticks else 0,
+                    "dispatch_id": dispatch_id,
+                    "dispatched_session_id": session_id,
+                },
             )
 
-    project_log_dir = ""
-    if _locator is not None:
+        def _on_launch_resolved(launch_contract: ResolvedLaunchContract) -> None:
+            bind_dispatch_launch_contract(state_path, effective_name, launch_contract)
+
+        marker_dir: Path | None = None
+        if _locator is not None:
+            try:
+                marker_dir = _locator.project_log_dir(str(tool_ctx.project_dir))
+            except OSError:
+                pass
+
+        from autoskillit.core import execution_marker  # noqa: PLC0415
+
+        _dispatch_completed_normally = False
         try:
-            project_log_dir = str(_locator.project_log_dir(str(tool_ctx.project_dir)))
-        except OSError:
-            logger.warning("project_log_dir_unavailable", exc_info=True)
+            provenance.start(
+                DispatchEffectName.PROCESS_SPAWN,
+                identities={"dispatch_id": dispatch_id},
+            )
+            async with execution_marker(
+                marker_dir,
+                caller_session_id,
+                "dispatch",
+            ):
+                async with _dispatch_heartbeat(dispatches_dir, dispatch_id):
+                    skill_result = await tool_ctx.executor.dispatch_food_truck(
+                        orchestrator_prompt=prompt,
+                        cwd=str(tool_ctx.project_dir),
+                        completion_marker=completion_marker,
+                        plugin_authority=food_truck_plugin_authority,
+                        capability_preparation=food_truck_capability_preparation,
+                        prior_completion_markers=prior_completion_markers,
+                        resume_session_id=resume_session_id,
+                        resume_checkpoint=resume_checkpoint,
+                        kitchen_id=tool_ctx.kitchen_id,
+                        order_id=dispatch_id,
+                        campaign_id=campaign_id,
+                        dispatch_id=dispatch_id,
+                        caller_session_id=caller_session_id,
+                        project_dir=str(tool_ctx.project_dir),
+                        marker_dir=marker_dir,
+                        session_id=caller_session_id,
+                        on_session_id_resolved=_on_session_id,
+                        timeout=resolved_timeout,
+                        idle_output_timeout=float(idle_output_timeout)
+                        if idle_output_timeout is not None
+                        else None,
+                        env_extras={
+                            "AUTOSKILLIT_PROJECT_DIR": str(tool_ctx.project_dir),
+                            "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
+                            "AUTOSKILLIT_DISPATCH_ID": dispatch_id,
+                            "AUTOSKILLIT_SESSION_DEADLINE": select_child_session_deadline(
+                                started_at + resolved_timeout,
+                                os.environ.get("AUTOSKILLIT_SESSION_DEADLINE", ""),
+                            ),
+                            **(
+                                {
+                                    FLEET_INSPECTOR_MODEL_ENV_VAR: (
+                                        tool_ctx.config.fleet.inspector_model
+                                    )
+                                }
+                                if tool_ctx.config.fleet.inspector_model
+                                else {}
+                            ),
+                        },
+                        requires_packs=list(full_recipe.requires_packs) or ["kitchen-core"],
+                        on_spawn=_on_spawn,
+                        sentinel_contract=sentinel_contract,
+                        resume_message=resume_message,
+                        backend_authority=(
+                            BackendAuthority(
+                                backend=dispatch_backend.name,
+                                kind=BackendAuthorityKind.CALLER,
+                                tier=BackendAuthorityTier.CALLER,
+                                key_path="dispatch.backend",
+                            )
+                            if dispatch_backend is not None
+                            else None
+                        ),
+                        native_shell_capture_decision=capture_decision,
+                        managed_lineage_ref=managed_lineage_ref,
+                        on_launch_resolved=_on_launch_resolved,
+                    )
 
-    if (
-        resume_session_id
-        and skill_result.session_id
-        and resume_session_id != skill_result.session_id
-    ):
-        logger.warning(
-            "session_id_continuity_mismatch",
-            resume_session_id=resume_session_id,
-            returned_session_id=skill_result.session_id,
+            # L2 fail-closed spawn gate: check closure-scoped error state.
+            # If _on_spawn recorded a transition failure (and killed the child
+            # via kill_process_tree), translate it to a structured envelope
+            # instead of letting the dispatch proceed on a stale record.
+            if _spawn_error:
+                return _complete_failure_with_state(
+                    FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+                    _spawn_error[0],
+                    dispatch_status=DispatchStatus.FAILURE,
+                    dispatched_session_id=(
+                        _dispatched_session_id[0] if _dispatched_session_id else ""
+                    ),
+                )
+            if skill_result.session_id and not _dispatched_session_id:
+                _on_session_id(skill_result.session_id)
+
+            ended_at = max(time.time(), started_at + 1e-6)
+            _dispatch_completed_normally = True
+        except asyncio.CancelledError:
+            provenance.request_cancel()
+            try:
+                with anyio.CancelScope(shield=True):
+                    set_lineage_terminal_state(
+                        tool_ctx,
+                        managed_lineage_ref,
+                        ManagedHeadlessSessionTerminalState.CANCELLED,
+                    )
+            except Exception:
+                logger.warning(
+                    "failed to record managed lineage cancellation",
+                    dispatch_name=effective_name,
+                    exc_info=True,
+                )
+            if _dispatched_pid:
+                try:
+                    from autoskillit.execution import kill_process_tree  # noqa: PLC0415
+
+                    provenance.start(
+                        DispatchEffectName.LOCAL_PROCESS_CLEANUP,
+                        identities={"pid": _dispatched_pid[0]},
+                    )
+                    with anyio.CancelScope(shield=True):
+                        cleanup_result = await anyio.to_thread.run_sync(
+                            kill_process_tree,
+                            _dispatched_pid[0],
+                            2.0,
+                        )
+                    provenance.record_local_cleanup(cleanup_result)
+                    if cleanup_result.complete:
+                        provenance.confirm(
+                            DispatchEffectName.LOCAL_PROCESS_CLEANUP,
+                            receipt="bounded process-tree wait confirmed no survivors",
+                            identities={"pid": _dispatched_pid[0]},
+                        )
+                    else:
+                        provenance.mark_ambiguous(
+                            DispatchEffectName.LOCAL_PROCESS_CLEANUP,
+                            evidence="local process-tree cleanup left survivors",
+                            identities={"pid": _dispatched_pid[0]},
+                        )
+                except Exception:
+                    provenance.mark_ambiguous(
+                        DispatchEffectName.LOCAL_PROCESS_CLEANUP,
+                        evidence="local process-tree cleanup raised",
+                        identities={"pid": _dispatched_pid[0]},
+                    )
+                    logger.warning(
+                        "failed to capture local process cleanup evidence",
+                        dispatch_name=effective_name,
+                        exc_info=True,
+                    )
+                try:
+                    from autoskillit.fleet.state import mark_dispatch_interrupted  # noqa: PLC0415
+
+                    captured_session_id = (
+                        _dispatched_session_id[0] if _dispatched_session_id else ""
+                    )
+                    if not captured_session_id:
+                        sr = locals().get("skill_result")
+                        if sr is not None:
+                            captured_session_id = getattr(sr, "session_id", "") or ""
+
+                    with anyio.CancelScope(shield=True):
+                        provenance.record_state_cleanup(confirmed=True)
+                        mark_dispatch_interrupted(
+                            state_path,
+                            effective_name,
+                            reason="signal_induced_cancellation",
+                            dispatched_session_id=captured_session_id,
+                            dispatched_session_log_dir=str(marker_dir)
+                            if marker_dir is not None
+                            else "",
+                            effect_provenance=provenance.snapshot().to_dict(),
+                        )
+                except Exception:
+                    provenance.record_state_cleanup(confirmed=False)
+                    logger.warning(
+                        "failed to record interrupted state on cancel",
+                        dispatch_name=effective_name,
+                        exc_info=True,
+                    )
+            raise
+        except Exception:
+            try:
+                set_lineage_terminal_state(
+                    tool_ctx,
+                    managed_lineage_ref,
+                    ManagedHeadlessSessionTerminalState.FAILED,
+                )
+            except Exception:
+                logger.warning(
+                    "failed to record managed lineage failure",
+                    dispatch_name=effective_name,
+                    exc_info=True,
+                )
+            raise
+        finally:
+            if not _dispatch_completed_normally:
+                from autoskillit.fleet._label_cleanup import (
+                    cleanup_orphaned_labels,  # noqa: PLC0415
+                )
+
+                with anyio.CancelScope(shield=True):
+                    provenance.start(
+                        DispatchEffectName.LABEL_CLEANUP,
+                        identities={"dispatch_id": dispatch_id},
+                    )
+                    labels_cleaned = await cleanup_orphaned_labels(
+                        dispatch_sidecar_path, tool_ctx.github_client, issue_url=_issue_urls_raw
+                    )
+                    provenance.record_labels_cleanup(confirmed=labels_cleaned)
+                    if labels_cleaned:
+                        provenance.confirm(
+                            DispatchEffectName.LABEL_CLEANUP,
+                            receipt="cancellation cleanup helper confirmed label cleanup",
+                            identities={"dispatch_id": dispatch_id},
+                        )
+                    else:
+                        provenance.mark_ambiguous(
+                            DispatchEffectName.LABEL_CLEANUP,
+                            evidence="cancellation cleanup did not confirm label cleanup",
+                            identities={"dispatch_id": dispatch_id},
+                        )
+
+        (
+            sidecar_file,
+            sidecar_entries,
+            dispatch_checkpoint,
+            tracker_authority_error,
+        ) = load_dispatch_progress(
+            tool_ctx=tool_ctx,
+            dispatch_sidecar_path=dispatch_sidecar_path,
+            dispatch_id=dispatch_id,
+            backend_name=_effective_backend.name if _effective_backend else "",
+            recipe=recipe,
+            tracker_lease=tracker_lease,
         )
 
-    if final_status == DispatchStatus.SUCCESS:
+        extended_chain = prior_session_chain[:]
+        additional_jsonl_paths: list[Path] = []
+        if skill_result.subtype == "timeout":
+            parsed_result = None
+        else:
+            if prior_dispatched_session_id and prior_dispatched_session_id not in extended_chain:
+                extended_chain.append(prior_dispatched_session_id)
+
+            for sid in extended_chain:
+                path = (
+                    _locator.session_log_path(str(tool_ctx.project_dir), sid)
+                    if _locator is not None
+                    else None
+                )
+                if path is not None:
+                    additional_jsonl_paths.append(path)
+
+            jsonl_path = (
+                _locator.session_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
+                if _locator is not None
+                else None
+            )
+            if resume_line_offset and skill_result.session_id and resume_session_id:
+                if skill_result.session_id != resume_session_id:
+                    logger.warning(
+                        "resume_line_offset_invalidated",
+                        resume_session_id=resume_session_id,
+                        actual_session_id=skill_result.session_id,
+                    )
+                    resume_line_offset = 0
+            parsed_result = parse_l3_result_block(
+                stdout=skill_result.result or "",
+                expected_dispatch_id=dispatch_id,
+                assistant_messages_path=jsonl_path,
+                prior_dispatch_ids=prior_ids or None,
+                additional_jsonl_paths=additional_jsonl_paths or None,
+                resume_line_offset=resume_line_offset,
+            )
+
+        _dispatched_issue_list = [u.strip() for u in _issue_urls_raw.split(",") if u.strip()]
+        dispatched_issue_count = len(_dispatched_issue_list)
+        if (
+            parsed_result is not None
+            and parsed_result.outcome == "no_sentinel"
+            and sidecar_entries
+        ):
+            from autoskillit.fleet._sidecar_synthesis import (
+                synthesize_from_sidecar,  # noqa: PLC0415
+            )
+
+            parsed_result = synthesize_from_sidecar(
+                parsed_result,
+                sidecar_entries,
+                dispatched_issue_count=dispatched_issue_count,
+            )
+
+        final_status, reason = classify_dispatch_outcome(
+            parsed_result,
+            skill_result,
+            sidecar_exists=sidecar_file.exists(),
+            checkpoint=dispatch_checkpoint,
+            subtype=skill_result.subtype,
+        )
+        result_success = bool(
+            parsed_result is not None
+            and parsed_result.outcome == "completed_clean"
+            and parsed_result.payload
+            and parsed_result.payload.get("success", False)
+        )
+        if tracker_authority_error is not None:
+            final_status = DispatchStatus.FAILURE
+            reason = tracker_authority_error
+            result_success = False
+        if final_status != DispatchStatus.RESUMABLE:
+            terminal_state = (
+                ManagedHeadlessSessionTerminalState.SUCCEEDED
+                if final_status == DispatchStatus.SUCCESS
+                else ManagedHeadlessSessionTerminalState.FAILED
+            )
+            try:
+                set_lineage_terminal_state(
+                    tool_ctx,
+                    managed_lineage_ref,
+                    terminal_state,
+                )
+            except Exception:
+                logger.warning(
+                    "failed to record managed lineage terminal state",
+                    dispatch_name=effective_name,
+                    terminal_state=terminal_state.value,
+                    exc_info=True,
+                )
+
+        _branch_name = ""
+        if sidecar_entries and tool_ctx.runner is not None:
+            for _entry in sidecar_entries:
+                if _entry.pr_url:
+                    try:
+                        _pr_info = await tool_ctx.runner(
+                            ["gh", "pr", "view", _entry.pr_url, "--json", "headRefName"],
+                            cwd=tool_ctx.project_dir,
+                            timeout=15,
+                        )
+                        if _pr_info.returncode == 0 and _pr_info.stdout:
+                            import json as _json  # noqa: PLC0415
+
+                            _branch_name = _json.loads(_pr_info.stdout).get("headRefName", "")
+                    except Exception:
+                        logger.debug("branch_name_extraction_failed", exc_info=True)
+                    break
+
+        _labels_cleaned = False
+        if final_status not in (DispatchStatus.SUCCESS, DispatchStatus.RESUMABLE):
+            from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels  # noqa: PLC0415
+
+            provenance.start(
+                DispatchEffectName.LABEL_CLEANUP,
+                identities={"dispatch_id": dispatch_id},
+            )
+            _labels_cleaned = await cleanup_orphaned_labels(
+                dispatch_sidecar_path, tool_ctx.github_client, issue_url=_issue_urls_raw
+            )
+            provenance.record_labels_cleanup(confirmed=_labels_cleaned)
+            if _labels_cleaned:
+                provenance.confirm(
+                    DispatchEffectName.LABEL_CLEANUP,
+                    receipt="label cleanup helper confirmed cleanup",
+                    identities={"dispatch_id": dispatch_id},
+                )
+            else:
+                provenance.mark_ambiguous(
+                    DispatchEffectName.LABEL_CLEANUP,
+                    evidence="label cleanup helper did not confirm cleanup",
+                    identities={"dispatch_id": dispatch_id},
+                )
+
+        project_log_dir = ""
+        if _locator is not None:
+            try:
+                project_log_dir = str(_locator.project_log_dir(str(tool_ctx.project_dir)))
+            except OSError:
+                logger.warning("project_log_dir_unavailable", exc_info=True)
+
+        if (
+            resume_session_id
+            and skill_result.session_id
+            and resume_session_id != skill_result.session_id
+        ):
+            logger.warning(
+                "session_id_continuity_mismatch",
+                resume_session_id=resume_session_id,
+                returned_session_id=skill_result.session_id,
+            )
+
+        if final_status == DispatchStatus.SUCCESS:
+            provenance.start(
+                DispatchEffectName.COMMIT,
+                identities={
+                    "dispatch_id": dispatch_id,
+                    "dispatched_session_id": skill_result.session_id or "",
+                },
+            )
+            provenance.confirm(
+                DispatchEffectName.COMMIT,
+                receipt="dispatch outcome classifier confirmed success",
+                identities={
+                    "dispatch_id": dispatch_id,
+                    "dispatched_session_id": skill_result.session_id or "",
+                },
+            )
+
+        record = DispatchRecord(
+            name=effective_name,
+            status=final_status,
+            dispatch_id=dispatch_id,
+            campaign_id=campaign_id,
+            caller_session_id=caller_session_id,
+            caller_backend_name=_caller_backend_name,
+            dispatched_session_id=_dispatched_session_id[0]
+            if _dispatched_session_id
+            else skill_result.session_id,
+            session_chain=extended_chain,
+            dispatched_session_log_dir=project_log_dir,
+            dispatched_pid=_dispatched_pid[0] if _dispatched_pid else 0,
+            dispatched_starttime_ticks=_dispatched_ticks[0] if _dispatched_ticks else 0,
+            dispatched_boot_id=_dispatched_boot_id[0] if _dispatched_boot_id else "",
+            dispatched_create_time=_dispatched_create_time[0] if _dispatched_create_time else 0.0,
+            reason=reason,
+            retry_reason=skill_result.retry_reason or "",
+            infra_exit_category=skill_result.infra.exit_category or "",
+            token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
+            started_at=started_at,
+            ended_at=ended_at,
+            sidecar_path=dispatch_sidecar_path,
+            labels_cleaned=_labels_cleaned,
+            issue_url=_issue_urls_raw,
+            branch_name=_branch_name,
+            backend_name=_effective_backend.name if _effective_backend else "",
+            resume_checkpoint=_checkpoint_to_dict(dispatch_checkpoint),
+            effect_provenance=provenance.snapshot().to_dict(),
+            managed_lineage_ref=managed_lineage_ref,
+        )
+
+        extracted: dict[str, str] = {}
+        if (
+            final_status == DispatchStatus.SUCCESS
+            and capture
+            and parsed_result is not None
+            and parsed_result.payload
+            and parsed_result.source != "sidecar"
+        ):
+            extracted = _extract_captures(capture, parsed_result.payload)
+
         provenance.start(
-            DispatchEffectName.COMMIT,
-            identities={
-                "dispatch_id": dispatch_id,
-                "dispatched_session_id": skill_result.session_id or "",
-            },
+            DispatchEffectName.CAMPAIGN_STATE_WRITE,
+            identities={"dispatch_id": dispatch_id, "state_path": state_path},
         )
+        upsert_dispatch_record_by_name(state_path, record)
+        if extracted:
+            write_captured_values(state_path, extracted)
         provenance.confirm(
-            DispatchEffectName.COMMIT,
-            receipt="dispatch outcome classifier confirmed success",
-            identities={
-                "dispatch_id": dispatch_id,
-                "dispatched_session_id": skill_result.session_id or "",
-            },
+            DispatchEffectName.CAMPAIGN_STATE_WRITE,
+            receipt="per-dispatch state and captures persisted",
+            identities={"dispatch_id": dispatch_id, "state_path": state_path},
         )
+        record.effect_provenance = provenance.snapshot().to_dict()
+        upsert_dispatch_record_by_name(state_path, record)
+        _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
 
-    record = DispatchRecord(
-        name=effective_name,
-        status=final_status,
-        dispatch_id=dispatch_id,
-        campaign_id=campaign_id,
-        caller_session_id=caller_session_id,
-        caller_backend_name=_caller_backend_name,
-        dispatched_session_id=_dispatched_session_id[0]
-        if _dispatched_session_id
-        else skill_result.session_id,
-        session_chain=extended_chain,
-        dispatched_session_log_dir=project_log_dir,
-        dispatched_pid=_dispatched_pid[0] if _dispatched_pid else 0,
-        dispatched_starttime_ticks=_dispatched_ticks[0] if _dispatched_ticks else 0,
-        dispatched_boot_id=_dispatched_boot_id[0] if _dispatched_boot_id else "",
-        dispatched_create_time=_dispatched_create_time[0] if _dispatched_create_time else 0.0,
-        reason=reason,
-        retry_reason=skill_result.retry_reason or "",
-        infra_exit_category=skill_result.infra.exit_category or "",
-        token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
-        started_at=started_at,
-        ended_at=ended_at,
-        sidecar_path=dispatch_sidecar_path,
-        labels_cleaned=_labels_cleaned,
-        issue_url=_issue_urls_raw,
-        branch_name=_branch_name,
-        backend_name=_effective_backend.name if _effective_backend else "",
-        resume_checkpoint=_checkpoint_to_dict(dispatch_checkpoint),
-        effect_provenance=provenance.snapshot().to_dict(),
-        managed_lineage_ref=managed_lineage_ref,
-    )
-
-    extracted: dict[str, str] = {}
-    if (
-        final_status == DispatchStatus.SUCCESS
-        and capture
-        and parsed_result is not None
-        and parsed_result.payload
-        and parsed_result.source != "sidecar"
-    ):
-        extracted = _extract_captures(capture, parsed_result.payload)
-
-    provenance.start(
-        DispatchEffectName.CAMPAIGN_STATE_WRITE,
-        identities={"dispatch_id": dispatch_id, "state_path": state_path},
-    )
-    upsert_dispatch_record_by_name(state_path, record)
-    if extracted:
-        write_captured_values(state_path, extracted)
-    provenance.confirm(
-        DispatchEffectName.CAMPAIGN_STATE_WRITE,
-        receipt="per-dispatch state and captures persisted",
-        identities={"dispatch_id": dispatch_id, "state_path": state_path},
-    )
-    record.effect_provenance = provenance.snapshot().to_dict()
-    upsert_dispatch_record_by_name(state_path, record)
-    _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
-
-    return build_dispatch_result(
-        parsed_result=parsed_result,
-        final_status=final_status,
-        reason=reason,
-        dispatch_id=dispatch_id,
-        skill_result=skill_result,
-        dispatch_checkpoint=dispatch_checkpoint,
-        started_at=started_at,
-        ended_at=ended_at,
-        state_path=state_path,
-        effect_provenance=provenance.snapshot(),
-    )
+        return build_dispatch_result(
+            parsed_result=parsed_result,
+            result_success=result_success,
+            final_status=final_status,
+            reason=reason,
+            dispatch_id=dispatch_id,
+            skill_result=skill_result,
+            dispatch_checkpoint=dispatch_checkpoint,
+            started_at=started_at,
+            ended_at=ended_at,
+            state_path=state_path,
+            effect_provenance=provenance.snapshot(),
+        )
+    finally:
+        with tool_ctx.tracker_leases_lock:
+            release_tracker_lease(tool_ctx.tracker_leases, tracker_key)

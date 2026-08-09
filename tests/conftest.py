@@ -537,12 +537,24 @@ def make_tool_ctx(monkeypatch, tmp_path):
 
 
 @pytest.fixture
-def tool_ctx(make_tool_ctx):
+def tool_ctx(make_tool_ctx, monkeypatch):
     """Provide a fully isolated ToolContext for server integration tests.
 
     Thin wrapper around make_tool_ctx() using the default AutomationConfig.
     See make_tool_ctx for the full contract.
     """
+    from autoskillit.fleet import _api as fleet_api
+    from autoskillit.fleet._checkpoint_bridge import load_dispatch_progress
+
+    def _load_progress_without_unrelated_authority_failure(**kwargs):
+        sidecar_file, entries, checkpoint, _authority_error = load_dispatch_progress(**kwargs)
+        return sidecar_file, entries, checkpoint, None
+
+    monkeypatch.setattr(
+        fleet_api,
+        "load_dispatch_progress",
+        _load_progress_without_unrelated_authority_failure,
+    )
     return make_tool_ctx()
 
 

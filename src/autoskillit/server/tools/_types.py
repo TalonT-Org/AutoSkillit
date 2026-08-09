@@ -181,6 +181,7 @@ class KitchenStatusResult(TypedDict, total=False):
     quota_guard_enabled: bool
     github_token_configured: bool
     github_default_repo: str
+    tracker_authority: dict[str, Any]
     warning: str
     success: bool
     error: str

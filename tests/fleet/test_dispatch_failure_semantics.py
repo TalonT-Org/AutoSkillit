@@ -468,6 +468,68 @@ class TestSidecarBasedResultSynthesis:
 
 class TestTrackerBridgeIntegration:
     @pytest.mark.anyio
+    async def test_missing_tracker_overrides_clean_result_and_persisted_status(
+        self, tool_ctx, monkeypatch
+    ):
+        from autoskillit.fleet._checkpoint_bridge import load_dispatch_progress
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.load_dispatch_progress",
+            load_dispatch_progress,
+        )
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: _make_completed_clean(success=True),
+        )
+
+        result = await _run(tool_ctx)
+        record = _read_dispatch_record(tool_ctx)
+
+        assert result["success"] is False
+        assert result["dispatch_status"] == "failure"
+        assert "Expected pipeline tracker" in result["reason"]
+        assert record["status"] == "failure"
+        assert record["reason"] == result["reason"]
+
+    @pytest.mark.anyio
+    async def test_progress_load_exception_releases_dispatch_lease(self, tool_ctx, monkeypatch):
+        _setup_dispatch(tool_ctx, monkeypatch)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: _make_completed_clean(success=True),
+        )
+
+        def fail_progress_load(**_kwargs):
+            raise OSError("progress unavailable")
+
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.load_dispatch_progress",
+            fail_progress_load,
+        )
+
+        result = await _run(tool_ctx)
+
+        assert result["success"] is False
+        assert not any(key.owner_kind == "dispatch" for key in tool_ctx.tracker_leases)
+
+    @pytest.mark.anyio
+    async def test_dispatch_cancellation_releases_dispatch_lease(self, tool_ctx, monkeypatch):
+        import asyncio
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        async def cancel_dispatch(*_args, **_kwargs):
+            raise asyncio.CancelledError
+
+        monkeypatch.setattr(tool_ctx.executor, "dispatch_food_truck", cancel_dispatch)
+
+        with pytest.raises(asyncio.CancelledError):
+            await _run(tool_ctx)
+
+        assert not any(key.owner_kind == "dispatch" for key in tool_ctx.tracker_leases)
+
+    @pytest.mark.anyio
     async def test_single_issue_killed_with_tracker_progress_is_resumable(
         self, tool_ctx, monkeypatch
     ):
@@ -476,9 +538,14 @@ class TestTrackerBridgeIntegration:
         import json
 
         from autoskillit.core import DispatchIdentity, InfraOutcome
+        from autoskillit.fleet._checkpoint_bridge import load_dispatch_progress
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
         _setup_dispatch(tool_ctx, monkeypatch)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.load_dispatch_progress",
+            load_dispatch_progress,
+        )
 
         fixed_dispatch_id = "aaaabbbb-aaaa-bbbb-cccc-111111111111"
         _fixed_identity = DispatchIdentity.from_dispatch_id(fixed_dispatch_id)

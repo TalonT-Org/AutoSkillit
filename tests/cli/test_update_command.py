@@ -211,8 +211,8 @@ def test_missing_expected_version_prints_warning_at_update_command(
     _update.run_update_command caller emits the finding via print()
     (this caller uses print() instead of structured logger).
 
-    Pins the second caller's exclusion-based outcome classification for
-    MISSING_EXPECTED_VERSION at cli/update/_update.py:43-55.
+    Pins run_update_command's exclusion-based classification of
+    MISSING_EXPECTED_VERSION.
     """
     from autoskillit.cli.update import _update
     from autoskillit.cli.update._obligation_repair import (

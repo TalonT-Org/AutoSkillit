@@ -799,7 +799,7 @@ def kitchen_entry_alive(entry: dict) -> bool:
     """Return True if an active_kitchens.json entry's process is still running."""
     try:
         identity = _identity_from_entry(entry)
-    except (TypeError, ValueError):
+    except ValueError:
         return False
     return _pid_alive(identity.pid, stored_create_time=identity.create_time)
 

@@ -23,7 +23,7 @@ from ._plugin_cache import (
     kitchen_entry_alive,
 )
 from .io import atomic_write
-from .runtime.artifact_lease import ArtifactLease, ArtifactLeaseContention
+from .runtime.artifact_lease import ArtifactLease
 
 TrackerOwnerKind = Literal["kitchen", "dispatch", "manual"]
 TrackerData = dict[str, Any]
@@ -240,7 +240,7 @@ def _read_tracker_unlocked(target: TrackerAuthorityTarget) -> TrackerAuthorityRe
     try:
         parsed = json.loads(raw_bytes)
         data = _validate_tracker_data(parsed)
-    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+    except ValueError as exc:
         return TrackerAuthorityReadResult(
             target,
             error=(
@@ -328,7 +328,7 @@ def try_retire_tracker(target: TrackerAuthorityTarget) -> bool:
     """Retire exactly one unleased, valid tracker after fresh liveness checks."""
     try:
         exclusive = ArtifactLease.acquire_exclusive(tracker_lease_path(target), blocking=False)
-    except (ArtifactLeaseContention, OSError, RuntimeError):
+    except (OSError, RuntimeError):
         return False
     try:
         with _TrackerLock(target):

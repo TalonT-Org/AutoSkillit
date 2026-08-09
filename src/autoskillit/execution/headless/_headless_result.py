@@ -7,7 +7,7 @@ import errno
 import stat
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
@@ -224,9 +224,7 @@ def _apply_post_session_adjudication(
             value = fields.get(output.name)
             if output.type != "file_path" or value is None:
                 continue
-            if not isinstance(value, str):
-                return _artifact_contract_failure(sr, output.name, str(value))
-            failure = _validate_declared_artifact(cwd, output.name, value)
+            failure = _validate_declared_artifact(cwd, output.name, cast(str, value))
             if failure is not None:
                 subtype, detail = failure
                 retry_reason = (
@@ -246,22 +244,6 @@ def _apply_post_session_adjudication(
                 )
 
     return sr
-
-
-def _artifact_contract_failure(sr: SkillResult, field_name: str, value: str) -> SkillResult:
-    safe_name = Path(value).name or "."
-    return dataclasses.replace(
-        sr,
-        success=False,
-        is_error=True,
-        subtype="artifact_contract_violation",
-        needs_retry=True,
-        retry_reason=RetryReason.CONTRACT_RECOVERY,
-        result=(
-            f"Skill output '{field_name}' did not identify a contained regular file: {safe_name}"
-        ),
-        outcome_fields=None,
-    )
 
 
 def _validate_declared_artifact(cwd: str, field_name: str, value: str) -> tuple[str, str] | None:

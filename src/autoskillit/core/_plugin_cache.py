@@ -9,6 +9,7 @@ import os
 import shutil
 import uuid
 from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any
@@ -17,7 +18,6 @@ import psutil
 
 from .io import (
     _AtomicWriteDurabilityError,
-    read_versioned_json,
     write_versioned_json,
 )
 from .logging import get_logger, log_plugin_artifact_lifecycle
@@ -38,7 +38,10 @@ from .types import (
 
 logger = get_logger(__name__)
 
-_ACTIVE_KITCHENS_SCHEMA_VERSION = 1
+_ACTIVE_KITCHENS_SCHEMA_VERSION = 2
+_ACTIVE_KITCHEN_FIELDS = frozenset(
+    {"kitchen_id", "pid", "create_time", "project_path", "opened_at"}
+)
 _RETIRING_CACHE_SCHEMA_VERSION = 2
 _RETIRING_CACHE_V2_FIELDS = frozenset(
     {
@@ -727,14 +730,78 @@ class PluginArtifactRetirementEngine:
         return outcome
 
 
+@dataclass(frozen=True, slots=True)
+class KitchenProcessIdentity:
+    kitchen_id: str
+    pid: int
+    create_time: float
+    project_path: str
+
+
+def sample_kitchen_process_identity(
+    kitchen_id: str,
+    pid: int,
+    project_path: str | os.PathLike[str],
+) -> KitchenProcessIdentity:
+    """Resolve one complete process incarnation for the kitchen lifetime."""
+    if not isinstance(kitchen_id, str) or not kitchen_id:
+        raise ValueError("kitchen_id must be a nonempty string")
+    if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
+        raise ValueError("pid must be a positive integer")
+    resolved_project = str(Path(project_path).resolve(strict=True))
+    create_time = float(psutil.Process(pid).create_time())
+    return KitchenProcessIdentity(kitchen_id, pid, create_time, resolved_project)
+
+
+def _identity_from_entry(entry: object) -> KitchenProcessIdentity:
+    if not isinstance(entry, dict) or frozenset(entry) != _ACTIVE_KITCHEN_FIELDS:
+        raise ValueError("active kitchen entry does not match the exact v2 schema")
+    kitchen_id = entry.get("kitchen_id")
+    pid = entry.get("pid")
+    create_time = entry.get("create_time")
+    project_path = entry.get("project_path")
+    opened_at = entry.get("opened_at")
+    if not isinstance(kitchen_id, str) or not kitchen_id:
+        raise ValueError("active kitchen kitchen_id must be nonempty")
+    if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
+        raise ValueError("active kitchen pid must be a positive integer")
+    if (
+        isinstance(create_time, bool)
+        or not isinstance(create_time, (int, float))
+        or create_time <= 0
+    ):
+        raise ValueError("active kitchen create_time must be a positive number")
+    if not isinstance(project_path, str) or not project_path:
+        raise ValueError("active kitchen project_path must be nonempty")
+    _parse_utc(opened_at, field_name="active kitchen opened_at")
+    return KitchenProcessIdentity(kitchen_id, pid, float(create_time), project_path)
+
+
+def _read_active_kitchens_unlocked(path: Path) -> list[dict[str, object]]:
+    if not path.exists():
+        return []
+    raw = json.loads(path.read_text())
+    if not isinstance(raw, dict) or frozenset(raw) != {"schema_version", "kitchens"}:
+        raise ValueError("active kitchen registry does not match the exact v2 schema")
+    if raw.get("schema_version") != _ACTIVE_KITCHENS_SCHEMA_VERSION:
+        raise ValueError("active kitchen registry schema is unsupported")
+    kitchens = raw.get("kitchens")
+    if not isinstance(kitchens, list):
+        raise ValueError("active kitchen registry kitchens must be a list")
+    entries: list[dict[str, object]] = []
+    for entry in kitchens:
+        _identity_from_entry(entry)
+        entries.append(dict(entry))
+    return entries
+
+
 def kitchen_entry_alive(entry: dict) -> bool:
     """Return True if an active_kitchens.json entry's process is still running."""
-    pid = entry.get("pid")
-    if not isinstance(pid, int):
+    try:
+        identity = _identity_from_entry(entry)
+    except (TypeError, ValueError):
         return False
-    create_time = entry.get("create_time")
-    stored: float | None = float(create_time) if isinstance(create_time, (int, float)) else None
-    return _pid_alive(pid, stored_create_time=stored)
+    return _pid_alive(identity.pid, stored_create_time=identity.create_time)
 
 
 def read_active_kitchens_registry() -> list[dict]:
@@ -747,12 +814,9 @@ def read_active_kitchens_registry() -> list[dict]:
     """
     akp = _active_kitchens_path()
     lock = _active_kitchens_lock()
-    if not akp.exists():
-        return []
     fh = _open_lock(lock)
     try:
-        data = read_versioned_json(akp, _ACTIVE_KITCHENS_SCHEMA_VERSION, logger=logger)
-        return data.get("kitchens", []) if data is not None else []
+        return _read_active_kitchens_unlocked(akp)
     finally:
         fh.close()
 
@@ -779,25 +843,22 @@ def _pid_alive(pid: int, stored_create_time: float | None = None) -> bool:
     return True
 
 
-def register_active_kitchen(kitchen_id: str, pid: int, project_path: str) -> None:
+def register_active_kitchen(identity: KitchenProcessIdentity) -> None:
     lock = _active_kitchens_lock()
     akp = _active_kitchens_path()
     fh = _open_lock(lock)
     try:
-        entries: list[dict[str, object]] = []
-        if akp.exists():
-            data = read_versioned_json(akp, _ACTIVE_KITCHENS_SCHEMA_VERSION, logger=logger)
-            entries = data.get("kitchens", []) if data is not None else []
-        try:
-            create_time: float | None = psutil.Process(pid).create_time()
-        except psutil.NoSuchProcess:
-            create_time = None
+        entries = [
+            entry
+            for entry in _read_active_kitchens_unlocked(akp)
+            if _identity_from_entry(entry) != identity
+        ]
         entries.append(
             {
-                "kitchen_id": kitchen_id,
-                "pid": pid,
-                "create_time": create_time,
-                "project_path": project_path,
+                "kitchen_id": identity.kitchen_id,
+                "pid": identity.pid,
+                "create_time": identity.create_time,
+                "project_path": identity.project_path,
                 "opened_at": datetime.now(UTC).isoformat(),
             }
         )
@@ -810,35 +871,13 @@ def register_active_kitchen(kitchen_id: str, pid: int, project_path: str) -> Non
         fh.close()
 
 
-def unregister_active_kitchen(kitchen_id: str) -> None:
+def unregister_active_kitchen(identity: KitchenProcessIdentity) -> None:
     lock = _active_kitchens_lock()
     akp = _active_kitchens_path()
     fh = _open_lock(lock)
     try:
-        entries: list[dict[str, object]] = []
-        if akp.exists():
-            data = read_versioned_json(akp, _ACTIVE_KITCHENS_SCHEMA_VERSION, logger=logger)
-            entries = data.get("kitchens", []) if data is not None else []
-        survivors = [e for e in entries if e.get("kitchen_id") != kitchen_id]
-        write_versioned_json(
-            akp,
-            {"kitchens": survivors},
-            schema_version=_ACTIVE_KITCHENS_SCHEMA_VERSION,
-        )
-    finally:
-        fh.close()
-
-
-def clear_kitchens_for_pid(pid: int) -> None:
-    lock = _active_kitchens_lock()
-    akp = _active_kitchens_path()
-    fh = _open_lock(lock)
-    try:
-        entries: list[dict[str, object]] = []
-        if akp.exists():
-            data = read_versioned_json(akp, _ACTIVE_KITCHENS_SCHEMA_VERSION, logger=logger)
-            entries = data.get("kitchens", []) if data is not None else []
-        survivors = [e for e in entries if e.get("pid") != pid]
+        entries = _read_active_kitchens_unlocked(akp)
+        survivors = [e for e in entries if _identity_from_entry(e) != identity]
         write_versioned_json(
             akp,
             {"kitchens": survivors},
@@ -855,30 +894,11 @@ def any_kitchen_open(project_path: str | None = None) -> bool:
         return False
     fh = _open_lock(lock)
     try:
-        data = read_versioned_json(akp, _ACTIVE_KITCHENS_SCHEMA_VERSION, logger=logger)
-        if data is None:
-            return False
-        entries: list[dict[str, object]] = data.get("kitchens", [])
-        survivors = []
-        for entry in entries:
-            pid = entry.get("pid")
-            if not isinstance(pid, int):
-                continue
-            create_time = entry.get("create_time")
-            stored: float | None = (
-                float(create_time) if isinstance(create_time, (int, float)) else None
-            )
-            if _pid_alive(pid, stored_create_time=stored):
-                survivors.append(entry)
-        if len(survivors) < len(entries):
-            try:
-                write_versioned_json(
-                    akp,
-                    {"kitchens": survivors},
-                    schema_version=_ACTIVE_KITCHENS_SCHEMA_VERSION,
-                )
-            except OSError as exc:
-                logger.warning("any_kitchen_open: failed to persist pruned kitchens: %s", exc)
+        try:
+            entries = _read_active_kitchens_unlocked(akp)
+        except (OSError, ValueError, json.JSONDecodeError):
+            return True
+        survivors = [entry for entry in entries if kitchen_entry_alive(entry)]
         if project_path is not None:
             return any(entry.get("project_path") == project_path for entry in survivors)
         return len(survivors) > 0

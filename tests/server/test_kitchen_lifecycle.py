@@ -4,6 +4,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
+import psutil
 import pytest
 
 from autoskillit.config import AutomationConfig
@@ -199,7 +200,7 @@ def test_open_without_close_prunes_dead_kitchen_tracker(monkeypatch, tmp_path):
         [
             {
                 "kitchen_id": "K1",
-                "pid": 99999,
+                "pid": 999999999,
                 "create_time": 1234567890.0,
                 "project_path": str(tmp_path),
                 "opened_at": datetime.now(UTC).isoformat(),
@@ -223,7 +224,7 @@ def test_open_preserves_live_foreign_kitchen_tracker(monkeypatch, tmp_path):
             {
                 "kitchen_id": "K1",
                 "pid": os.getpid(),
-                "create_time": None,
+                "create_time": psutil.Process(os.getpid()).create_time(),
                 "project_path": str(tmp_path),
                 "opened_at": datetime.now(UTC).isoformat(),
             }
@@ -271,7 +272,7 @@ def test_multi_entry_same_kitchen_one_alive_preserves_tracker(monkeypatch, tmp_p
         [
             {
                 "kitchen_id": "K1",
-                "pid": 99999,
+                "pid": 999999999,
                 "create_time": 1234567890.0,
                 "project_path": str(tmp_path),
                 "opened_at": datetime.now(UTC).isoformat(),
@@ -279,7 +280,7 @@ def test_multi_entry_same_kitchen_one_alive_preserves_tracker(monkeypatch, tmp_p
             {
                 "kitchen_id": "K1",
                 "pid": os.getpid(),
-                "create_time": None,
+                "create_time": psutil.Process(os.getpid()).create_time(),
                 "project_path": str(tmp_path),
                 "opened_at": datetime.now(UTC).isoformat(),
             },
@@ -302,7 +303,7 @@ def test_same_process_reopen_replaces_registry_entry(monkeypatch, tmp_path):
             {
                 "kitchen_id": "K1",
                 "pid": os.getpid(),
-                "create_time": None,
+                "create_time": psutil.Process(os.getpid()).create_time(),
                 "project_path": str(tmp_path),
                 "opened_at": datetime.now(UTC).isoformat(),
             }
@@ -319,7 +320,7 @@ def test_same_process_reopen_replaces_registry_entry(monkeypatch, tmp_path):
         [
             {
                 "kitchen_id": "K1",
-                "pid": 99999,
+                "pid": 999999999,
                 "create_time": 1234567890.0,
                 "project_path": str(tmp_path),
                 "opened_at": datetime.now(UTC).isoformat(),
@@ -384,12 +385,7 @@ async def test_open_kitchen_sweeps_stale_kitchen_state_markers(monkeypatch, tmp_
 
 
 def test_deferred_recall_open_still_prunes(monkeypatch, tmp_path):
-    """The deferred-recall open_kitchen path must prune stale trackers.
-
-    When gate_infrastructure_ready is already True, open_kitchen skips
-    _open_kitchen_handler entirely and takes the deferred-recall path.
-    prune_stale_kitchen_state must still execute on that path.
-    """
+    """The deferred-recall path prunes stale trackers."""
     tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
     _write_tracker(
         tracker_dir, "dead-kitchen", initialized_at=datetime.now(UTC) - timedelta(hours=2)
@@ -400,7 +396,7 @@ def test_deferred_recall_open_still_prunes(monkeypatch, tmp_path):
         [
             {
                 "kitchen_id": "dead-kitchen",
-                "pid": 99999,
+                "pid": 999999999,
                 "create_time": 1234567890.0,
                 "project_path": str(tmp_path),
                 "opened_at": datetime.now(UTC).isoformat(),

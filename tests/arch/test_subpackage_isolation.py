@@ -1691,6 +1691,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "recipe_initialization_state",
         "recipe_terminal_response_cache",
         "kitchen_open_state",
+        "kitchen_process_identity",
         "temp_dir",
         "project_dir",
         "ephemeral_root",

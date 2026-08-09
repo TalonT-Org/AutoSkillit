@@ -19,16 +19,46 @@ from autoskillit.core import (
     due_retiring_records,
 )
 from autoskillit.core._plugin_cache import (
+    KitchenProcessIdentity,
     any_kitchen_open,
     append_retiring_record,
-    clear_kitchens_for_pid,
     migrate_retiring_cache_v1,
     read_retiring_cache,
     register_active_kitchen,
+    sample_kitchen_process_identity,
     unregister_active_kitchen,
 )
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
+
+
+def test_kitchen_identity_samples_process_incarnation_once(monkeypatch, tmp_path: Path) -> None:
+    calls: list[int] = []
+
+    class Process:
+        def __init__(self, pid: int) -> None:
+            calls.append(pid)
+
+        def create_time(self) -> float:
+            return 123.5
+
+    monkeypatch.setattr("autoskillit.core._plugin_cache.psutil.Process", Process)
+
+    identity = sample_kitchen_process_identity("kitchen", 42, tmp_path)
+
+    assert identity == KitchenProcessIdentity("kitchen", 42, 123.5, str(tmp_path.resolve()))
+    assert calls == [42]
+
+
+def test_repeated_exact_registration_does_not_grow_registry(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    identity = KitchenProcessIdentity("kitchen", 42, 123.5, str(tmp_path))
+
+    register_active_kitchen(identity)
+    register_active_kitchen(identity)
+
+    registry = json.loads((tmp_path / ".autoskillit" / "active_kitchens.json").read_text())
+    assert len(registry["kitchens"]) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -368,71 +398,31 @@ class TestRetiringCacheSchemaValidation:
         assert result.records == ()
         assert kitchens.read_bytes() == kitchens_before
 
-    def test_register_active_kitchen_ignores_stale_version(self, monkeypatch, tmp_path):
-        """Stale active_kitchens.json must be overwritten with fresh data.
-
-        register_active_kitchen reads the existing file before writing.
-        When the file has a stale schema version, it must be treated as empty
-        and the newly registered kitchen must be the only entry.
-        """
+    def test_register_active_kitchen_preserves_unsafe_registry(self, monkeypatch, tmp_path):
         monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
         kitchens_path = tmp_path / ".autoskillit" / "active_kitchens.json"
-        _make_kitchen_file(
-            kitchens_path,
-            schema_version=99,
-            kitchens=[
-                {
-                    "kitchen_id": "old-kitchen",
-                    "pid": 99999,
-                    "create_time": None,
-                    "project_path": "/old",
-                }
-            ],
-        )
+        kitchens_path.parent.mkdir(parents=True)
+        before = b'{"schema_version":99,"kitchens":[]}'
+        kitchens_path.write_bytes(before)
 
-        written: list[str] = []
+        with pytest.raises(ValueError, match="unsupported"):
+            register_active_kitchen(
+                KitchenProcessIdentity("new-kitchen", 12345, 1.0, str(tmp_path))
+            )
 
-        def spy_write(path, data, schema_version):
-            from autoskillit.core.io import write_versioned_json as real
+        assert kitchens_path.read_bytes() == before
 
-            real(path, data, schema_version)
-            written.append(json.loads(Path(path).read_text()))
-
-        monkeypatch.setattr("autoskillit.core._plugin_cache.write_versioned_json", spy_write)
-
-        register_active_kitchen("new-kitchen", 12345, "/new")
-
-        last = written[-1]
-        # Stale kitchen must not be present
-        ids = [k["kitchen_id"] for k in last.get("kitchens", [])]
-        assert "old-kitchen" not in ids
-        # New kitchen must be present
-        assert "new-kitchen" in ids
-
-    def test_any_kitchen_open_returns_false_on_stale_version(self, monkeypatch, tmp_path):
-        """any_kitchen_open must return False when active_kitchens.json has stale schema version.
-
-        Even if the stale file contains kitchen entries, the stale version causes
-        it to be treated as absent, so the function returns False.
-        """
+    def test_any_kitchen_open_fails_safe_on_unsafe_registry(self, monkeypatch, tmp_path):
         monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
         kitchens_path = tmp_path / ".autoskillit" / "active_kitchens.json"
-        _make_kitchen_file(
-            kitchens_path,
-            schema_version=99,
-            kitchens=[
-                {
-                    "kitchen_id": "stale-kitchen",
-                    "pid": 99999,
-                    "create_time": None,
-                    "project_path": "/x",
-                }
-            ],
-        )
+        kitchens_path.parent.mkdir(parents=True)
+        before = b"{not-json"
+        kitchens_path.write_bytes(before)
 
         result = any_kitchen_open()
 
-        assert result is False, "Must return False for stale schema version"
+        assert result is True
+        assert kitchens_path.read_bytes() == before
 
 
 class TestActiveKitchensSchemaValidation:
@@ -441,67 +431,16 @@ class TestActiveKitchensSchemaValidation:
 
         _reset_schema_drift_logged_for_tests()
 
-    def test_unregister_active_kitchen_ignores_stale_version(self, monkeypatch, tmp_path):
-        """Stale active_kitchens.json must be treated as empty during unregister."""
+    def test_unregister_active_kitchen_preserves_unsafe_registry(self, monkeypatch, tmp_path):
         monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
         kitchens_path = tmp_path / ".autoskillit" / "active_kitchens.json"
-        _make_kitchen_file(
-            kitchens_path,
-            schema_version=99,
-            kitchens=[
-                {
-                    "kitchen_id": "stale-kitchen",
-                    "pid": 99999,
-                    "create_time": None,
-                    "project_path": "/x",
-                }
-            ],
-        )
+        kitchens_path.parent.mkdir(parents=True)
+        before = b'{"schema_version":99,"kitchens":[]}'
+        kitchens_path.write_bytes(before)
 
-        written: list[str] = []
+        with pytest.raises(ValueError, match="unsupported"):
+            unregister_active_kitchen(
+                KitchenProcessIdentity("stale-kitchen", 12345, 1.0, str(tmp_path))
+            )
 
-        def spy_write(path, data, schema_version):
-            from autoskillit.core.io import write_versioned_json as real
-
-            real(path, data, schema_version)
-            written.append(json.loads(Path(path).read_text()))
-
-        monkeypatch.setattr("autoskillit.core._plugin_cache.write_versioned_json", spy_write)
-
-        unregister_active_kitchen("stale-kitchen")
-
-        # Must not crash; the stale file is treated as empty so nothing is written
-        last = written[-1]
-        assert last["kitchens"] == []
-
-    def test_clear_kitchens_for_pid_ignores_stale_version(self, monkeypatch, tmp_path):
-        """Stale active_kitchens.json must be treated as empty during clear_kitchens_for_pid."""
-        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
-        kitchens_path = tmp_path / ".autoskillit" / "active_kitchens.json"
-        _make_kitchen_file(
-            kitchens_path,
-            schema_version=99,
-            kitchens=[
-                {
-                    "kitchen_id": "some-kitchen",
-                    "pid": 12345,
-                    "create_time": None,
-                    "project_path": "/x",
-                }
-            ],
-        )
-
-        written: list[str] = []
-
-        def spy_write(path, data, schema_version):
-            from autoskillit.core.io import write_versioned_json as real
-
-            real(path, data, schema_version)
-            written.append(json.loads(Path(path).read_text()))
-
-        monkeypatch.setattr("autoskillit.core._plugin_cache.write_versioned_json", spy_write)
-
-        clear_kitchens_for_pid(12345)
-
-        last = written[-1]
-        assert last["kitchens"] == []
+        assert kitchens_path.read_bytes() == before

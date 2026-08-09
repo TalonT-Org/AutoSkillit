@@ -35,11 +35,12 @@ from autoskillit.core import (
     _collect_disabled_feature_tags,
     atomic_write,
     cleanup_readiness_sentinel,
-    clear_kitchens_for_pid,
     get_logger,
     installed_plugin_cache_dir,
     register_active_kitchen,
     resolve_kitchen_id,
+    sample_kitchen_process_identity,
+    unregister_active_kitchen,
     write_readiness_sentinel,
 )
 from autoskillit.core import (
@@ -84,6 +85,18 @@ if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend
 
 logger = get_logger(__name__)
+
+
+def _context_kitchen_identity(ctx: Any) -> Any:
+    identity = ctx.kitchen_process_identity
+    if identity is None:
+        identity = sample_kitchen_process_identity(
+            ctx.kitchen_id,
+            os.getpid(),
+            ctx.project_dir,
+        )
+        ctx.kitchen_process_identity = identity
+    return identity
 
 
 def run_startup_drift_check() -> None:
@@ -426,7 +439,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
         logger.warning("fleet_auto_gate_boot_quota_refresh_failed", exc_info=True)
 
     try:
-        register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
+        register_active_kitchen(_context_kitchen_identity(ctx))
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("fleet_auto_gate_boot_registry_failed", exc_info=True)
@@ -492,7 +505,7 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
         _mcp.disable(tags={subset})
     for tag in _collect_disabled_feature_tags(ctx.config.features, experimental_enabled=False):
         _mcp.disable(tags={tag})
-    register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
+    register_active_kitchen(_context_kitchen_identity(ctx))
     _activate_recipe_kitchen(ctx.kitchen_id)
     _write_hook_config()
     _supports_quota = _backend_supports_quota(ctx)
@@ -582,7 +595,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
         logger.warning("food_truck_auto_gate_boot_refresh_loop_failed", exc_info=True)
 
     try:
-        register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
+        register_active_kitchen(_context_kitchen_identity(ctx))
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("food_truck_auto_gate_boot_registry_failed", exc_info=True)
@@ -684,7 +697,7 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
         logger.warning("skill_auto_gate_boot_quota_cache_failed", exc_info=True)
 
     try:
-        register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
+        register_active_kitchen(_context_kitchen_identity(ctx))
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("skill_auto_gate_boot_registry_failed", exc_info=True)
@@ -807,7 +820,9 @@ async def _autoskillit_lifespan(server: Any) -> Any:
         except Exception:
             logger.exception("lifespan sentinel cleanup error")
         try:
-            clear_kitchens_for_pid(os.getpid())
+            if _boot_ctx is not None and _boot_ctx.kitchen_process_identity is not None:
+                unregister_active_kitchen(_boot_ctx.kitchen_process_identity)
+                _boot_ctx.kitchen_process_identity = None
         except Exception:
             logger.exception("lifespan kitchen registry cleanup error")
         try:

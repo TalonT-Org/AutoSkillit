@@ -682,7 +682,6 @@ class TestExplorerBindingVisibility:
         monkeypatch.setattr(_lifespan, "run_startup_fix_required_coverage_check", lambda: None)
         monkeypatch.setattr(_lifespan, "write_readiness_sentinel", lambda: None)
         monkeypatch.setattr(_lifespan, "cleanup_readiness_sentinel", lambda: None)
-        monkeypatch.setattr(_lifespan, "clear_kitchens_for_pid", lambda *_args: None)
         monkeypatch.setattr(_lifespan, "_finalize_recorder", lambda: None)
 
         def _discard_background(coroutine, *, label):

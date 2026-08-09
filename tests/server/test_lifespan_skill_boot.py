@@ -246,8 +246,11 @@ class TestSkillAutoGateBoot:
                 with patch(_rk) as mock_register_kitchen:
                     await _skill_auto_gate_boot(ctx)
 
-        mock_register_kitchen.assert_called_once_with(
-            ctx.kitchen_id, os.getpid(), str(different_dir)
+        identity = mock_register_kitchen.call_args.args[0]
+        assert (identity.kitchen_id, identity.pid, identity.project_path) == (
+            ctx.kitchen_id,
+            os.getpid(),
+            str(different_dir),
         )
 
     @pytest.mark.anyio

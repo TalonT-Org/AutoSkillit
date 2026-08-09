@@ -88,6 +88,9 @@ def _scan_read_versioned_json_callers() -> set[str]:
 # Documented exceptions: modules that write versioned JSON but do not read it back.
 # Rationale for each is in the comment.
 _READ_SIDE_EXCEPTIONS: dict[str, str] = {
+    "src/autoskillit/core/_plugin_cache.py": (
+        "Active-kitchen mutations use the stricter exact-schema registry validator"
+    ),
     "src/autoskillit/planner/manifests.py": "Transient artifacts — always same code version",
     "src/autoskillit/planner/compiler.py": "Transient single-pipeline-run artifacts",
     "src/autoskillit/planner/merge.py": "Transient single-pipeline-run artifacts",

@@ -36,6 +36,7 @@ from autoskillit.core import (
     GitHubReviewPosterProtocol,
     HeadlessExecutor,
     InputContractResolver,
+    KitchenProcessIdentity,
     KitchenTransitionLock,
     LaunchResolver,
     ManagedHeadlessSessionLineageStore,
@@ -252,6 +253,7 @@ class ToolContext:
     recipe_version: str = field(default="")
     gate_infrastructure_ready: bool = field(default=False)
     kitchen_id: str = field(default="")
+    kitchen_process_identity: KitchenProcessIdentity | None = field(default_factory=lambda: None)
     kitchen_open_state: KitchenOpenState = field(default_factory=closed_kitchen_open_state)
     kitchen_transition_lock: KitchenTransitionLock = field(
         default_factory=threading.RLock,

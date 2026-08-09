@@ -186,7 +186,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_plugin_artifact_identity": frozenset(
         {"core", "cli", "execution", "hook_registry", "server", "smoke_utils", "workspace"}
     ),
-    "_plugin_cache": frozenset({"core", "cli", "server", "workspace"}),
+    "_plugin_cache": frozenset({"core", "cli", "pipeline", "server", "workspace"}),
     "git_remote": frozenset({"core", "execution", "exploration"}),
     "github_url": frozenset({"core", "cli", "execution", "fleet", "server"}),
     # +smoke_utils: _cross_interpreter_upgrade resolves the repo root above the

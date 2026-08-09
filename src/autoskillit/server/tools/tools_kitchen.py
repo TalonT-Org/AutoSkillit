@@ -37,7 +37,6 @@ from autoskillit.core import (
     RecipeLoadError,
     _collect_disabled_feature_tags,
     atomic_write,
-    clear_kitchens_for_pid,
     detect_autoskillit_mcp_prefix,
     fast_dumps,
     find_latest_session_id,
@@ -49,6 +48,7 @@ from autoskillit.core import (
     read_marker,
     register_active_kitchen,
     resolve_kitchen_id,
+    sample_kitchen_process_identity,
     sweep_stale_markers,
     unregister_active_kitchen,
 )
@@ -787,18 +787,9 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
             downstream_identity=str(id(ctx.quota_refresh_task)),
         )
 
-    if _transition_start(ctx, "registry_prune"):
-        try:
-            clear_kitchens_for_pid(os.getpid())
-        except Exception as exc:
-            transition_degraded(ctx, "registry_prune", exc)
-            logger.warning("open_kitchen_clear_pid_failed", exc_info=True)
-        else:
-            transition_confirm(ctx, "registry_prune", receipt="registry:pid_cleared")
-
     if _transition_start(ctx, "registry_update"):
         try:
-            _register_active_recipe_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
+            _register_active_recipe_kitchen(ctx)
         except Exception as exc:
             transition_degraded(ctx, "registry_update", exc)
             logger.warning("open_kitchen_registry_failed", exc_info=True)
@@ -915,7 +906,9 @@ def _close_kitchen_handler() -> None:
         ctx.config = baseline_config
         ctx.fleet_lock = baseline_lock
     try:
-        unregister_active_kitchen(ctx.kitchen_id)
+        if ctx.kitchen_process_identity is not None:
+            unregister_active_kitchen(ctx.kitchen_process_identity)
+            ctx.kitchen_process_identity = None
     except Exception:
         logger.warning("close_kitchen_registry_failed", exc_info=True)
     if isinstance(ctx.kitchen_id, str) and ctx.kitchen_id:
@@ -2127,13 +2120,13 @@ async def reload_session() -> str:
         return json.dumps({"status": "error", "error": f"{type(exc).__name__}: {exc}"})
 
 
-def _register_active_recipe_kitchen(
-    kitchen_id: str,
-    pid: int,
-    project_path: str,
-) -> None:
+def _register_active_recipe_kitchen(ctx: Any) -> None:
     """Publish one kitchen to both process and recipe-generation lifecycles."""
     from autoskillit.server._recipe_generation import activate_kitchen  # circular-break
 
-    register_active_kitchen(kitchen_id, pid, project_path)
-    activate_kitchen(kitchen_id)
+    identity = ctx.kitchen_process_identity
+    if identity is None:
+        identity = sample_kitchen_process_identity(ctx.kitchen_id, os.getpid(), ctx.project_dir)
+        ctx.kitchen_process_identity = identity
+    register_active_kitchen(identity)
+    activate_kitchen(identity.kitchen_id)

@@ -61,11 +61,11 @@ from ._plugin_artifact_identity import (
 from ._plugin_artifact_identity import (
     resolve_current_generation as resolve_current_generation,
 )
+from ._plugin_cache import KitchenProcessIdentity as KitchenProcessIdentity
 from ._plugin_cache import PluginArtifactRetirementEngine as PluginArtifactRetirementEngine
 from ._plugin_cache import _InstallLock as _InstallLock
 from ._plugin_cache import any_kitchen_open as any_kitchen_open
 from ._plugin_cache import append_retiring_record as append_retiring_record
-from ._plugin_cache import clear_kitchens_for_pid as clear_kitchens_for_pid
 from ._plugin_cache import due_retiring_records as due_retiring_records
 from ._plugin_cache import kitchen_entry_alive as kitchen_entry_alive
 from ._plugin_cache import migrate_retiring_cache_v1 as migrate_retiring_cache_v1
@@ -73,6 +73,7 @@ from ._plugin_cache import read_active_kitchens_registry as read_active_kitchens
 from ._plugin_cache import read_retiring_cache as read_retiring_cache
 from ._plugin_cache import register_active_kitchen as register_active_kitchen
 from ._plugin_cache import remove_retiring_records as remove_retiring_records
+from ._plugin_cache import sample_kitchen_process_identity as sample_kitchen_process_identity
 from ._plugin_cache import unregister_active_kitchen as unregister_active_kitchen
 from ._plugin_ids import _AUTOSKILLIT_PLUGIN_KEY as _AUTOSKILLIT_PLUGIN_KEY
 from ._plugin_ids import DIRECT_INSTALL_CACHE_SUBDIR as DIRECT_INSTALL_CACHE_SUBDIR

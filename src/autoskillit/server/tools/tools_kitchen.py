@@ -1880,7 +1880,7 @@ def _write_ingredient_locks(
     new_locked: dict[str, str] | None,
     unlock_keys: list[str] | None,
     active_steps: dict,
-) -> tuple[bool, dict]:
+) -> dict:
     """Atomically read-modify-write ingredient locks under the session lock."""
 
     def _mutate(existing: dict) -> None:
@@ -1897,7 +1897,7 @@ def _write_ingredient_locks(
                 current,
             )
 
-    return True, update_overlay(project_dir, _mutate)
+    return update_overlay(project_dir, _mutate)
 
 
 def _compute_unlocked_steps(
@@ -2021,7 +2021,7 @@ async def lock_ingredients(
                     }
                 )
 
-        success, updated = _write_ingredient_locks(
+        updated = _write_ingredient_locks(
             ctx.project_dir,
             effective_pipeline_id,
             locked,
@@ -2031,7 +2031,7 @@ async def lock_ingredients(
 
         return json.dumps(
             {
-                "success": success,
+                "success": True,
                 "locked": updated.get("locked_ingredients", {}).get(effective_pipeline_id, {}),
                 "locked_steps": updated.get("locked_steps", {}).get(effective_pipeline_id, {}),
             }

@@ -661,10 +661,7 @@ def _render_agent_definitions(agents_dir: Path, mcp_tool_prefix: str) -> None:
             raise SkillContractError(
                 f"agent definition body changed after rendering: {source_def.name!r}"
             )
-        if (
-            tuple(project_agent_tool_name(tool, mcp_tool_prefix) for tool in source_def.tools)
-            != rendered_def.tools
-        ):
+        if projected_tools != rendered_def.tools:
             raise SkillContractError(
                 f"agent definition tool projection mismatch after rendering: {source_def.name!r}"
             )

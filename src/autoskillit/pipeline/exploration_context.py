@@ -94,10 +94,9 @@ def is_explorer_binding_eligible(
 ) -> bool:
     """Pure eligibility predicate for explorer binding mint.
 
-    Shared by both the server corridor (``_explorer_projection.py``) and the
-    CLI corridor (``_session_cook.py``).  The server wrapper adds store
-    presence and invocation-identity resolution; this function owns only the
-    structural gates.
+    Used by the server corridor in ``_explorer_projection.py``.  The server
+    wrapper adds store presence and invocation-identity resolution; this
+    function owns only the structural gates.
     """
     if not has_identity or not has_backend:
         return False

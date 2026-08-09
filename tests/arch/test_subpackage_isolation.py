@@ -1259,7 +1259,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "run_skill launch denial paths before command construction (+139 net lines)",
     ),
     "execution/backends/codex.py": (
-        2370,
+        2371,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1303,7 +1303,8 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "delivery scoping stays adjacent to the same command builders that already own "
         "prompt-injection composition (+14 net lines)"
         "; #4488/#4489/#4492 explorer surface authority: setup_session_dir gains "
-        "explorer-role TOML exclusion filter for unbound sessions (+7 net lines)",
+        "explorer-role TOML exclusion filter for unbound sessions (+7 net lines) and "
+        "explicit session-scoped capability disposition (+1 net line)",
     ),
     "execution/backends/claude.py": (
         1108,

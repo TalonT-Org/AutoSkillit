@@ -236,6 +236,7 @@ def test_every_tool_has_an_explicit_initialization_operation() -> None:
             "create_unique_branch",
             "disable_quota_guard",
             "dispatch_food_truck",
+            "enable_exploration",
             "enqueue_pr",
             "enrich_issues",
             "lock_ingredients",

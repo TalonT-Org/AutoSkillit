@@ -32,7 +32,6 @@ from autoskillit.config import (
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     PIPELINE_FORBIDDEN_TOOLS,
-    ArtifactLease,
     ProcessStaleError,
     RecipeDeliveryRequest,
     RecipeLoadError,
@@ -607,7 +606,7 @@ def _update_hook_config_with_git_ops_policy() -> None:
 
 def _retain_kitchen_tracker_authority(
     tool_ctx: ToolContext,
-) -> tuple[TrackerParticipantKey, ArtifactLease]:
+) -> tuple[TrackerParticipantKey, Any]:
     """Retain this process incarnation's kitchen tracker lease."""
     target = TrackerAuthorityTarget.for_project(
         tool_ctx.project_dir,

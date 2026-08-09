@@ -29,8 +29,9 @@ from autoskillit.execution import (
     CODEX_LIMITS_LAST_VERIFIED_VERSION,
     QUOTA_CACHE_SCHEMA_VERSION,
     CodexBackend,
+    resolve_log_dir,
+    session_index_lock_path,
 )
-from autoskillit.execution.session_log import _session_index_lock_path, resolve_log_dir
 
 from ._doctor_types import DoctorResult
 
@@ -483,7 +484,7 @@ def _read_session_index_projection(
 def _check_session_index_projection(*, log_dir: str = "") -> DoctorResult:
     check_name = "session_index_projection"
     log_root = resolve_log_dir(log_dir)
-    lock_path = _session_index_lock_path(log_root)
+    lock_path = session_index_lock_path(log_root)
 
     if lock_path.is_file():
         with ArtifactLease.acquire_existing_shared(lock_path):

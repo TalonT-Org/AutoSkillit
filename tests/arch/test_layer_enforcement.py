@@ -997,14 +997,7 @@ def test_migration_no_forbidden_imports() -> None:
 # ── REQ-ARCH-001: No cross-package submodule imports ─────────────────────────
 
 
-_CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
-    {
-        (
-            "cli/doctor/_doctor_runtime.py",
-            "autoskillit.execution.session_log",
-        ),
-    }
-)
+_CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset()
 
 
 def test_no_cross_package_submodule_imports() -> None:

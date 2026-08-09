@@ -71,7 +71,7 @@ def resolve_log_dir(log_dir: str) -> Path:
     return default_log_dir()
 
 
-def _session_index_lock_path(log_root: Path) -> Path:
+def session_index_lock_path(log_root: Path) -> Path:
     """Return the stable lease path for session-index transactions."""
     return Path(log_root) / ".locks" / "sessions-index.lock"
 
@@ -269,7 +269,7 @@ def flush_session_log(
         except OSError:
             logger.debug("channel_b_log_read_error", path=cc_log_str, exc_info=True)
 
-    with ArtifactLease.acquire_exclusive(_session_index_lock_path(log_root), blocking=True):
+    with ArtifactLease.acquire_exclusive(session_index_lock_path(log_root), blocking=True):
         sessions_dir = log_root / "sessions"
         session_dir = sessions_dir / dir_name
         sessions_dir.mkdir(parents=True, exist_ok=True)

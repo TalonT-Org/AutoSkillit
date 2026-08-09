@@ -262,11 +262,11 @@ class TestCheckSessionIndexProjection:
     def test_waits_for_existing_writer_lease(self, tmp_path: Path) -> None:
         from autoskillit.cli.doctor._doctor_runtime import _check_session_index_projection
         from autoskillit.core import ArtifactLease
-        from autoskillit.execution.session_log import _session_index_lock_path
+        from autoskillit.execution import session_index_lock_path
 
         self._write_summary(tmp_path, "complete")
         self._write_index(tmp_path, "complete")
-        lock_path = _session_index_lock_path(tmp_path)
+        lock_path = session_index_lock_path(tmp_path)
         writer = ArtifactLease.acquire_exclusive(lock_path, blocking=True)
         completed = threading.Event()
         result: list[object] = []
@@ -291,7 +291,7 @@ class TestCheckSessionIndexProjection:
     ) -> None:
         import autoskillit.cli.doctor._doctor_runtime as doctor_runtime
         from autoskillit.core import ArtifactLease
-        from autoskillit.execution.session_log import _session_index_lock_path
+        from autoskillit.execution import session_index_lock_path
 
         self._write_summary(tmp_path, "complete")
         self._write_index(tmp_path, "complete")
@@ -304,7 +304,7 @@ class TestCheckSessionIndexProjection:
             snapshot = original_read(log_root)
             if reads == 1:
                 with ArtifactLease.acquire_exclusive(
-                    _session_index_lock_path(log_root), blocking=True
+                    session_index_lock_path(log_root), blocking=True
                 ):
                     pass
             return snapshot

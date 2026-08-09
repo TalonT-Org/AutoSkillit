@@ -383,7 +383,7 @@ def _complete_resumed_audit(
         tool_ctx.audit_admission_ledger.finalize_response(
             result.attempt_id,
             outcome,
-            required_effect_names=_required_audit_finalization_effect_names(step_name),
+            required_effect_names=_required_audit_finalization_effect_names(),
         )
         return response
     return _audit_response(
@@ -2586,7 +2586,7 @@ async def run_skill(
                             kill_reason=_audit_outcome_to_finalize.kill_reason,
                             replay_response_json=_replay_response,
                         ),
-                        required_effect_names=_required_audit_finalization_effect_names(step_name),
+                        required_effect_names=_required_audit_finalization_effect_names(),
                     )
                 return _finalize_run_skill_completion(
                     tool_ctx,

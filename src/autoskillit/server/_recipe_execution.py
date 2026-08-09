@@ -636,7 +636,7 @@ _BASE_AUDIT_FINALIZATION_EFFECT_NAMES = (
 )
 
 
-def required_audit_finalization_effect_names(step_name: str) -> tuple[str, ...]:
+def required_audit_finalization_effect_names() -> tuple[str, ...]:
     """Return the closed required-effect set for one attested audit response."""
     return _BASE_AUDIT_FINALIZATION_EFFECT_NAMES
 

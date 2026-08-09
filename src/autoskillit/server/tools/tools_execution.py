@@ -75,6 +75,7 @@ from autoskillit.core import (
     get_tool_def,
     is_feature_enabled,
     parse_plan_paths,
+    read_tracker_authority,
     render_target_skill_command,
     resolve_temp_dir,
 )
@@ -1142,6 +1143,8 @@ async def run_skill(
                 _resolved, _ambiguous = _resolve_step_name_from_recipe(
                     skill_command, tool_ctx.active_recipe_steps
                 )
+                if _tracker_target is not None and _tracker_lease is not None:
+                    _tracker_authority = read_tracker_authority(_tracker_target, _tracker_lease)
                 if _resolved:
                     step_name = _resolved
                     logger.warning(

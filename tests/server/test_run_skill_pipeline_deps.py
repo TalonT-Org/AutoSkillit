@@ -243,6 +243,40 @@ class TestPipelineDepsKitchenScopedFallback:
 
 class TestPipelineDepsEmptyStepNameBypass:
     @pytest.mark.anyio
+    async def test_refreshes_tracker_after_implicit_step_resolution(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ):
+        _setup_project(tmp_path, tool_ctx_kitchen_open)
+        _write_tracker(
+            tmp_path,
+            "AB",
+            {
+                "a": {"status": "complete", "completed_at": "2026-05-31T01:05:00Z"},
+                "b": {"status": "pending"},
+            },
+            {"b": ["a"]},
+        )
+
+        def _resolve_after_tracker_change(skill_command, active_recipe_steps):
+            _write_tracker(
+                tmp_path,
+                "AB",
+                {"a": {"status": "pending"}, "b": {"status": "pending"}},
+                {"b": ["a"]},
+            )
+            return "b", False
+
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_execution._resolve_step_name_from_recipe",
+            _resolve_after_tracker_change,
+        )
+        result = json.loads(
+            await run_skill("/do-b task", str(tmp_path), step_name="", order_id="AB")
+        )
+        assert result["success"] is False
+        assert "DEPENDENCY UNMET" in result["error"]
+
+    @pytest.mark.anyio
     async def test_run_skill_denies_empty_step_name_with_active_deps(
         self, tool_ctx_kitchen_open, tmp_path
     ):

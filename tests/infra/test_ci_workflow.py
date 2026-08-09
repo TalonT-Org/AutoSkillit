@@ -468,7 +468,7 @@ def test_workflow_consumes_one_target_policy_authority() -> None:
     assert test_job["name"] == "Test (${{ matrix.shard }}) on ${{ matrix.os }}"
     assert test_job["strategy"]["matrix"] == {
         "os": "${{ fromJSON(needs.preflight.outputs.os-matrix) }}",
-        "shard": ["execution", "general"],
+        "shard": ["execution", "recipe", "general"],
     }
     test_checkout = next(
         step
@@ -485,7 +485,10 @@ def test_workflow_consumes_one_target_policy_authority() -> None:
     assert "brew install ripgrep" in install_rg["run"]
     assert 'case "$RUNNER_OS" in' in install_rg["run"]
     assert run_tests["env"]["AUTOSKILLIT_TEST_FILTER"] == (
-        "${{ needs.preflight.outputs.test-filter-mode }}"
+        "${{ github.event_name == 'pull_request' && github.base_ref == 'develop' && "
+        "github.head_ref == 'experiment/4355-ci-shard-profile' && "
+        "github.event.pull_request.head.repo.full_name == github.repository && 'none' || "
+        "needs.preflight.outputs.test-filter-mode }}"
     )
     assert run_tests["env"]["AUTOSKILLIT_TEST_BASE_REF"] == (
         "${{ needs.preflight.outputs.test-base-revision }}"

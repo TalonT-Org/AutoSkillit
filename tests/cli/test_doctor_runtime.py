@@ -259,6 +259,15 @@ class TestCheckSessionIndexProjection:
         assert result.severity is severity
         assert not (tmp_path / ".locks" / "sessions-index.lock").exists()
 
+    def test_reports_malformed_index_row(self, tmp_path: Path) -> None:
+        from autoskillit.cli.doctor._doctor_runtime import _check_session_index_projection
+
+        (tmp_path / "sessions.jsonl").write_text("not-json\n")
+
+        result = _check_session_index_projection(log_dir=str(tmp_path))
+
+        assert result.severity is Severity.WARNING
+
     def test_waits_for_existing_writer_lease(self, tmp_path: Path) -> None:
         from autoskillit.cli.doctor._doctor_runtime import _check_session_index_projection
         from autoskillit.core import ArtifactLease

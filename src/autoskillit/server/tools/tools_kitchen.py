@@ -699,9 +699,7 @@ def _auto_init_pipeline_tracker(tool_ctx: ToolContext) -> str | None:
         return None
 
     lease = _retain_kitchen_tracker_authority(tool_ctx)
-    key = tool_ctx.kitchen_tracker_key
-    if key is None:
-        raise RuntimeError("kitchen tracker lease retained without an ownership key")
+    key = cast(TrackerParticipantKey, tool_ctx.kitchen_tracker_key)
     steps: dict[str, dict[str, str]] = {name: {"status": "pending"} for name in active_steps}
     dependencies: dict[str, list[str]] = dict(deps)
 

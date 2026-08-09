@@ -22,6 +22,7 @@ FABRICATED_COMPLETION_DENY_TRIGGER: str = "FABRICATED BACKGROUND COMPLETION"
 
 _MAX_TRANSCRIPT_TAIL_BYTES = 256 * 1024
 _MAX_MARKER_AGE_SECONDS = 90.0
+_MAX_FUTURE_MARKER_SKEW_SECONDS = 5.0
 _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _BG_RESULT_RE = re.compile(
     r"\s*<bg_result(?:\s+[^>]*)?>.+?</bg_result>\s*", re.IGNORECASE | re.DOTALL
@@ -142,7 +143,8 @@ def _has_fresh_matching_marker(transcript: Path, session_id: str) -> bool:
         now = time.time()
         for marker in candidates:
             try:
-                if now - marker.stat().st_mtime > _MAX_MARKER_AGE_SECONDS:
+                age = now - marker.stat().st_mtime
+                if age < -_MAX_FUTURE_MARKER_SKEW_SECONDS or age > _MAX_MARKER_AGE_SECONDS:
                     continue
                 payload = json.loads(marker.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError, ValueError):

@@ -149,6 +149,7 @@ def test_fastmcp_request_session_cannot_supply_hook_marker_identity(tmp_path: Pa
         ),
         ([_claude_record(_BG_RESULT)], {"marker_session": "different-session"}),
         ([_claude_record(_BG_RESULT)], {"marker_age": 120}),
+        ([_claude_record(_BG_RESULT)], {"marker_age": -3600}),
         ([_claude_record(_BG_RESULT)], {"marker_session": None}),
         ([_claude_record(_BG_RESULT)], {"payload": {"agent_id": "subagent"}}),
         (

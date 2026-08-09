@@ -161,6 +161,7 @@ _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
 )
 _SINGLETON_SAFE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
     {
+        ("src/autoskillit/core/types/_type_dimensions.py", "ASCII_YAML_POLICY"),
         ("src/autoskillit/hooks/_capture/_types.py", "TRANSITION_RESCUE_BUDGET"),
         ("src/autoskillit/pipeline/context_admission_ledger.py", "_EVENT_TYPES"),
         ("src/autoskillit/pipeline/context_admission_ledger.py", "_EFFECT_TYPES"),
@@ -975,8 +976,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +GitHub review types, portable launch authority, stable contract,
         # closed skill semantics, non-executable projection binding, explorer contracts,
         # execution-identity value objects/protocols, and the typed maintenance-install
-        # subprocess boundary.
-        "core/types": 52,
+        # subprocess boundary, and dimension-safe recipe delivery limits.
+        "core/types": 53,
         "cli": 24,  # +_install_contract typed install process boundary (#4409);
         # +_capture_store capture-store stats/reclaim command
         "cli/doctor": 12,  # +_doctor_skills capability declaration authenticity checks;

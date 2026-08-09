@@ -983,6 +983,7 @@ def finalize_recipe_delivery(
     )
     response_budget = getattr(getattr(tool_ctx, "config", None), "output_budget", None)
     response_max_bytes = getattr(response_budget, "response_max_bytes", None)
+    page_max_bytes = getattr(response_budget, "page_max_bytes", None)
     response_ceiling_bytes = (
         response_max_bytes
         if isinstance(response_max_bytes, int) and response_max_bytes > 0
@@ -995,6 +996,7 @@ def finalize_recipe_delivery(
             else OutputBudgetConfig().response_max_bytes
         ),
         ordinary_limit,
+        page_max_bytes if isinstance(page_max_bytes, int) else None,
     )
     if (
         decision.mode is RecipeDeliveryMode.ORDINARY_INLINE

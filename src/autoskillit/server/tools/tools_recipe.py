@@ -113,6 +113,7 @@ def _recipe_section_request_state_factory() -> RecipeSectionRequestState:
     admitted = tool_ctx is not None and tool_ctx.recipes is not None
     response_max_bytes = 90_000
     conservative_limit = 10_000
+    page_max_bytes: int | None = None
     if tool_ctx is not None:
         configured_response_max = getattr(
             getattr(tool_ctx.config, "output_budget", None),
@@ -121,6 +122,11 @@ def _recipe_section_request_state_factory() -> RecipeSectionRequestState:
         )
         if isinstance(configured_response_max, int) and configured_response_max > 0:
             response_max_bytes = configured_response_max
+        configured_page_max = getattr(
+            getattr(tool_ctx.config, "output_budget", None), "page_max_bytes", None
+        )
+        if isinstance(configured_page_max, int) and configured_page_max > 0:
+            page_max_bytes = configured_page_max
         backend_capabilities = (
             tool_ctx.backend.capabilities
             if tool_ctx.backend is not None
@@ -137,6 +143,7 @@ def _recipe_section_request_state_factory() -> RecipeSectionRequestState:
         recipe_section_bound_bytes=resolve_recipe_section_bound_bytes(
             response_max_bytes,
             conservative_limit,
+            page_max_bytes,
         ),
     )
 

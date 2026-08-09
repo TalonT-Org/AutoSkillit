@@ -171,7 +171,7 @@ it to 90% of the resolved context window (244,800 for gpt-5.6-sol), per
 and `RECIPE_SECTION_RESPONSE_FLOOR_BYTES` is their maximum UTF-8 size. Configuration
 below that floor is invalid. After request admission, the request-specific ceiling is:
 
-`recipe_section_bound_bytes = min(response_max_bytes, conservative_general_result_limit)`
+`recipe_section_bound_bytes = page_max_bytes ?? min(response_max_bytes, conservative_general_result_limit)`
 
 This runtime projection is subordinate to the packaging-time fitness check: every
 bounded initialization plan must fit the fixed round-trip budget below. Runtime
@@ -192,6 +192,18 @@ including `open_kitchen`, both required section pulls, and completion. Page plan
 records each section's compiled byte and page counts and rejects a plan with more than
 one page per required section. Receivers must not assume that recovery can continue for
 an unbounded number of calls.
+
+### Typed dimensional bounds
+
+Token and UTF-8 byte limits are represented by the distinct `TokenLimit` and
+`Utf8ByteLimit` frozen value objects. They deliberately provide no integer coercion or
+cross-unit ordering. Conversion uses `BytesToTokensPolicy` with an exact `Fraction`
+ratio; implicit byte/token arithmetic is not permitted at a consumer boundary.
+
+`output_budget.page_max_bytes` is an explicit operator calibration for bounded recipe
+pages. When present it selects the measured UTF-8 page ceiling instead of treating a
+backend token count as bytes. The bundled-recipe calibration task reports a conservative
+lower-percentile ratio so tokenizer or corpus drift is visible during packaging review.
 
 ## Operational Signals
 

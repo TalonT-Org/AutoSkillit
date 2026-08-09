@@ -10,7 +10,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
+    ASCII_YAML_POLICY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+    Utf8ByteLimit,
     atomic_write,
     get_logger,
 )
@@ -73,13 +75,13 @@ def _canonical_json(value: Any) -> str:
 
 
 def _estimated_tokens(original_size: int) -> int:
-    """Estimate tokens via the four-UTF-8-byte ceiling-division heuristic.
+    """Estimate tokens through the explicit ASCII-YAML conversion policy.
 
     Uses the general output token limit as a coarse
     transport-layer estimate, not a tokenizer count. Used to compare
     payload size against ``selected_result_token_limit``.
     """
-    return (original_size + 3) // 4
+    return ASCII_YAML_POLICY.to_tokens(Utf8ByteLimit(original_size)).value
 
 
 def _serialized(value: Any) -> str:

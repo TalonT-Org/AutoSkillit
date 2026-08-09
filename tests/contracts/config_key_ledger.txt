@@ -65,6 +65,7 @@ output_budget.capture_capacity
 output_budget.guard_enabled
 output_budget.head_chars
 output_budget.inline_max_chars
+output_budget.page_max_bytes
 output_budget.response_max_bytes
 output_budget.shell_max_inline_bytes
 output_budget.tail_chars

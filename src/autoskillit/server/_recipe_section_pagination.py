@@ -238,8 +238,11 @@ register_kitchen_retirement_callback(_evict_retired_kitchen)
 def resolve_recipe_section_bound_bytes(
     response_max_bytes: int,
     conservative_general_result_limit: int,
+    page_max_bytes_override: int | None = None,
 ) -> int:
     """Resolve the deliberately conservative ordinary recipe-pull ceiling."""
+    if page_max_bytes_override is not None:
+        return page_max_bytes_override
     return min(response_max_bytes, conservative_general_result_limit)
 
 

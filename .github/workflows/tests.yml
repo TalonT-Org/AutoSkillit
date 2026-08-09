@@ -50,7 +50,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ${{ fromJSON(needs.preflight.outputs.os-matrix) }}
-        shard: [execution, recipe, server, general]
+        shard: [execution, recipe, general]
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -113,8 +113,7 @@ jobs:
         id: test-paths
         run: |
           SHARD_A_DIRS="tests/execution tests/contracts tests/core tests/exploration tests/planner tests/pipeline tests/migration tests/integration"
-          SHARD_B_DIRS="tests/recipe tests/docs"
-          SHARD_C_DIRS="tests/server"
+          SHARD_B_DIRS="tests/recipe tests/docs tests/server"
           if find tests/ -maxdepth 1 -name 'test_*.py' -print0 | grep -qz ' '; then
             echo "::error::Test filenames with spaces are not supported by the shard path splitter"
             exit 1
@@ -127,12 +126,9 @@ jobs:
             recipe)
               echo "PYTEST_TEST_PATHS=${SHARD_B_DIRS}" >> "$GITHUB_ENV"
               ;;
-            server)
-              echo "PYTEST_TEST_PATHS=${SHARD_C_DIRS}" >> "$GITHUB_ENV"
-              ;;
             general)
               IGNORES=""
-              for d in $SHARD_A_DIRS $SHARD_B_DIRS $SHARD_C_DIRS; do
+              for d in $SHARD_A_DIRS $SHARD_B_DIRS; do
                 IGNORES="$IGNORES --ignore=$d"
               done
               ROOT_IGNORES=$(find tests/ -maxdepth 1 -name 'test_*.py' | sort | sed 's|^|--ignore=|' | tr '\n' ' ')

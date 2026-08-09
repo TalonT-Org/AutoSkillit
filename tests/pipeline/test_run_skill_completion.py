@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier, Event
+
 import pytest
 
 from autoskillit.pipeline import DefaultRunSkillCompletionAuthority
@@ -137,6 +140,64 @@ def test_success_credit_is_retained_until_tracker_completes() -> None:
             **binding,
             effect=lambda: {"success": True, "status": "complete"},
         )
+
+
+def test_acknowledgement_and_two_repairs_consume_credit_exactly_once() -> None:
+    authority = DefaultRunSkillCompletionAuthority()
+    receipt = authority.draft(
+        _begin(authority),
+        classification="success",
+        success=True,
+        result_digest="digest",
+    )
+    authority.publish(receipt.receipt_id)
+    acknowledged = Event()
+    contenders = Barrier(3)
+    effects: list[str] = []
+    binding = {
+        "tracker_order_id": "order",
+        "tracker_path": "/tracker.json",
+        "tracker_kitchen_id": "kitchen",
+        "tracker_incarnation_id": "incarnation",
+        "step_name": "investigate",
+        "receipt_id": receipt.receipt_id,
+    }
+
+    def consume() -> bool:
+        contenders.wait()
+        try:
+            authority.apply_tracker_credit(
+                **binding,
+                effect=lambda: (
+                    effects.append("complete") or {"success": True, "status": "complete"}
+                ),
+            )
+        except ValueError:
+            return False
+        return True
+
+    def acknowledge_and_consume() -> bool:
+        authority.acknowledge(
+            receipt.receipt_id,
+            kitchen_id="kitchen",
+            request_session_id="session",
+        )
+        acknowledged.set()
+        return consume()
+
+    def repair() -> bool:
+        assert acknowledged.wait(timeout=1)
+        return consume()
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        outcomes = [
+            pool.submit(acknowledge_and_consume),
+            pool.submit(repair),
+            pool.submit(repair),
+        ]
+
+    assert sum(future.result() for future in outcomes) == 1
+    assert effects == ["complete"]
 
 
 def test_reinitialized_tracker_invalidates_retained_credit() -> None:

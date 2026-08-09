@@ -120,6 +120,17 @@ def test_denies_completed_task_notification(tmp_path: Path) -> None:
     assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+def test_fastmcp_request_session_cannot_supply_hook_marker_identity(tmp_path: Path) -> None:
+    result = _run_guard(
+        tmp_path,
+        [_claude_record(_BG_RESULT)],
+        marker_session="different-session",
+        payload={"request_session_id": _SESSION},
+    )
+
+    assert result is None
+
+
 @pytest.mark.parametrize(
     ("records", "kwargs"),
     [

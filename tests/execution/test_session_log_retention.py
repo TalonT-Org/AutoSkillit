@@ -135,14 +135,27 @@ def test_recovery_replay_upserts_without_rewriting_committed_directory(
     monkeypatch.setattr(Path, "unlink", original_unlink)
 
     session_dir = next((tmp_path / "logs" / "sessions").iterdir())
+    newer_dir = tmp_path / "logs" / "sessions" / "newer"
+    newer_dir.mkdir()
+    (newer_dir / "summary.json").write_text(json.dumps({"dir_name": "newer"}))
+    with (tmp_path / "logs" / "sessions.jsonl").open("a") as index_file:
+        index_file.write(json.dumps({"dir_name": "newer"}) + "\n")
+    os.utime(session_dir, (1_000_000_000, 1_000_000_000))
+    os.utime(newer_dir, (1_000_000_001, 1_000_000_001))
     committed_mtime = session_dir.stat().st_mtime_ns
-    assert recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs")) == 1
+    assert (
+        recover_crashed_sessions(
+            tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs"), max_sessions=1
+        )
+        == 1
+    )
 
     rows = [
         json.loads(line)
         for line in (tmp_path / "logs" / "sessions.jsonl").read_text().splitlines()
     ]
     assert [row["dir_name"] for row in rows].count(session_dir.name) == 1
+    assert newer_dir.is_dir()
     assert session_dir.stat().st_mtime_ns == committed_mtime
 
 

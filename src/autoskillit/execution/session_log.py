@@ -699,6 +699,9 @@ def flush_session_log(
             else frozenset()
         )
         for candidate in expired:
+            if reuse_committed_recovery and candidate.name == dir_name:
+                surviving_names.add(candidate.name)
+                continue
             if protected_ids:
                 try:
                     meta = json.loads((candidate / "meta.json").read_text(encoding="utf-8"))

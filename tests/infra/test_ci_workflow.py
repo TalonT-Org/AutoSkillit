@@ -468,7 +468,7 @@ def test_workflow_consumes_one_target_policy_authority() -> None:
     assert test_job["name"] == "Test (${{ matrix.shard }}) on ${{ matrix.os }}"
     assert test_job["strategy"]["matrix"] == {
         "os": "${{ fromJSON(needs.preflight.outputs.os-matrix) }}",
-        "shard": ["execution", "general"],
+        "shard": ["execution", "recipe", "general"],
     }
     test_checkout = next(
         step

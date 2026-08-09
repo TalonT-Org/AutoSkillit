@@ -7,7 +7,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias, get_args
 
 from .io import load_yaml
 from .paths import pkg_root
@@ -77,7 +77,8 @@ _CODEX_DISABLEABLE_FEATURES = (
     "unified_exec_zsh_fork",
 )
 _CODEX_DISABLEABLE_FEATURE_SET = frozenset(_CODEX_DISABLEABLE_FEATURES)
-_CODEX_WEB_SEARCH_MODES = frozenset({"disabled", "cached", "indexed", "live"})
+_CodexWebSearchMode: TypeAlias = Literal["disabled", "cached", "indexed", "live"]
+_CODEX_WEB_SEARCH_MODES: frozenset[str] = frozenset(get_args(_CodexWebSearchMode))
 
 
 class AgentDefinitionError(ValueError):
@@ -105,7 +106,7 @@ class CodexAgentProjectionDef:
     sandbox_mode: str
     disabled_features: tuple[str, ...] = ()
     agents_enabled: bool = True
-    web_search: Literal["disabled", "cached", "indexed", "live"] | None = None
+    web_search: _CodexWebSearchMode | None = None
 
     def __post_init__(self) -> None:
         if self.model is not None and self.model not in CODEX_VALID_MODEL_IDS:
@@ -137,9 +138,8 @@ class CodexAgentProjectionDef:
         if type(self.agents_enabled) is not bool:
             raise AgentDefinitionError("Codex agents_enabled must be a boolean")
         if self.web_search is not None and self.web_search not in _CODEX_WEB_SEARCH_MODES:
-            raise AgentDefinitionError(
-                "Codex web_search must be one of 'cached', 'disabled', 'indexed', or 'live'"
-            )
+            allowed = ", ".join(repr(mode) for mode in sorted(_CODEX_WEB_SEARCH_MODES))
+            raise AgentDefinitionError(f"Codex web_search must be one of {allowed}")
 
 
 @dataclass(frozen=True, slots=True)

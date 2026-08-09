@@ -72,6 +72,13 @@ def _result_text(result: ToolResult) -> str:
     return result.content[0].text
 
 
+def _registered_tool(name: str = "kitchen_status") -> FunctionTool:
+    async def placeholder() -> str:
+        return "unused"
+
+    return FunctionTool.from_function(placeholder, name=name)
+
+
 def test_exact_receipt_requires_single_conformant_text_and_exact_json_field() -> None:
     finalized = _finalized()
     receipt_id = finalized.receipt.receipt_id
@@ -100,16 +107,18 @@ def test_compact_fallback_preserves_authoritative_projection_and_full_result() -
 
 @pytest.mark.anyio
 async def test_middleware_denies_other_tools_while_receipt_is_pending(monkeypatch) -> None:
-    from autoskillit.server import mcp
-
     authority = _finalized().authority
     monkeypatch.setattr(
         "autoskillit.server._state._get_ctx_or_none",
         lambda: SimpleNamespace(run_skill_completion=authority),
     )
     call_next = AsyncMock()
+    registered = _registered_tool()
+    fake_mcp = SimpleNamespace(get_tool=AsyncMock(return_value=registered))
 
-    result = await RunSkillCompletionMiddleware(mcp).on_call_tool(_context(), call_next)
+    result = await RunSkillCompletionMiddleware(fake_mcp).on_call_tool(  # type: ignore[arg-type]
+        _context(), call_next
+    )
 
     assert json.loads(_result_text(result))["error"] == "run_skill_completion_pending"
     call_next.assert_not_awaited()
@@ -121,15 +130,13 @@ async def test_middleware_denies_other_tools_while_receipt_is_pending(monkeypatc
 async def test_middleware_publishes_exact_and_compacted_deliveries(
     monkeypatch, exact_delivery: bool
 ) -> None:
-    from autoskillit.server import mcp
-
     authority = DefaultRunSkillCompletionAuthority()
     monkeypatch.setattr(
         "autoskillit.server._state._get_ctx_or_none",
         lambda: SimpleNamespace(run_skill_completion=authority),
     )
-    registered = await mcp.get_tool("kitchen_status")
-    assert isinstance(registered, FunctionTool)
+    registered = _registered_tool()
+    fake_mcp = SimpleNamespace(get_tool=AsyncMock(return_value=registered))
     finalized: FinalizedRunSkillCompletionResponse | None = None
 
     async def call_next(_context):
@@ -139,7 +146,9 @@ async def test_middleware_publishes_exact_and_compacted_deliveries(
         delivered = finalized.rendered if exact_delivery else "rewritten"
         return registered.convert_result(delivered)
 
-    result = await RunSkillCompletionMiddleware(mcp).on_call_tool(_context(), call_next)
+    result = await RunSkillCompletionMiddleware(fake_mcp).on_call_tool(  # type: ignore[arg-type]
+        _context(), call_next
+    )
 
     assert finalized is not None
     assert json.loads(_result_text(result))["receipt_id"] == finalized.receipt.receipt_id

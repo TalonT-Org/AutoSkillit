@@ -248,6 +248,10 @@ def _expand_scope_to_files(scope: set[Path], tests_root: Path) -> set[str]:
     return result
 
 
+def _intersected_shards(files: set[str], ownership: dict[str, set[str]]) -> set[str]:
+    return {shard for shard, shard_files in ownership.items() if files & shard_files}
+
+
 class TestCIShardConfig:
     def test_explicit_sets_define_execution_and_recipe_with_exact_paths(self) -> None:
         text = _read_workflow_text()
@@ -437,21 +441,34 @@ class TestCIShardConfig:
         exec_body = arms["execution"]
         assert "SHARD_EXECUTION_DIRS" in exec_body
         assert "${ROOT_FILES}" in exec_body
-        assert "PYTEST_TEST_PATHS" in exec_body
+        assert re.search(
+            r'(?m)^\s*echo "PYTEST_TEST_PATHS=\${SHARD_EXECUTION_DIRS} '
+            r'\${ROOT_FILES}" >> "\$GITHUB_ENV"\s*$',
+            exec_body,
+        )
         assert "PYTEST_IGNORE_PATHS" not in exec_body
 
         recipe_body = arms["recipe"]
         assert "SHARD_RECIPE_DIRS" in recipe_body
-        assert "PYTEST_TEST_PATHS" in recipe_body
+        assert re.search(
+            r'(?m)^\s*echo "PYTEST_TEST_PATHS=\${SHARD_RECIPE_DIRS}" '
+            r'>> "\$GITHUB_ENV"\s*$',
+            recipe_body,
+        )
         assert "find tests/ -maxdepth 1" not in recipe_body
         assert "ROOT_FILES" not in recipe_body
         assert "ROOT_IGNORES" not in recipe_body
 
         general_body = arms["general"]
-        assert re.search(r"PYTEST_TEST_PATHS=tests/?\b", general_body), (
-            f"General arm does not select tests/ root: {general_body!r}"
+        assert re.search(
+            r'(?m)^\s*echo "PYTEST_TEST_PATHS=tests/" >> "\$GITHUB_ENV"\s*$',
+            general_body,
+        ), f"General arm does not select tests/ root: {general_body!r}"
+        assert re.search(
+            r'(?m)^\s*echo "PYTEST_IGNORE_PATHS=\${EXEC_IGNORES} '
+            r'\${RECIPE_IGNORES} \${ROOT_IGNORES}" >> "\$GITHUB_ENV"\s*$',
+            general_body,
         )
-        assert "PYTEST_IGNORE_PATHS" in general_body
         assert "SHARD_EXECUTION_DIRS" in general_body
         assert "SHARD_RECIPE_DIRS" in general_body
         assert "${ROOT_IGNORES}" in general_body
@@ -500,13 +517,7 @@ class TestConservativeFilterShardIntersection:
         expanded = _expand_scope_to_files(set(scope), tests_root)
         ownership = self._ownership()
 
-        assert expanded & ownership["execution"], (
-            f"No execution intersect for headless_execute change: {sorted(expanded)[:5]}"
-        )
-        assert expanded & ownership["recipe"], (
-            f"No recipe intersect (server cascade) for headless_execute change: "
-            f"{sorted(expanded)[:5]}"
-        )
+        assert _intersected_shards(expanded, ownership) == {"execution", "recipe"}
         assert exec_file in expanded
         assert server_file in expanded
 
@@ -536,15 +547,11 @@ class TestConservativeFilterShardIntersection:
         expanded = _expand_scope_to_files(set(scope), tests_root)
         ownership = self._ownership()
 
-        assert expanded & ownership["recipe"], (
-            f"No recipe intersect for recipe/schema change: {sorted(expanded)[:5]}"
-        )
-        assert expanded & ownership["execution"], (
-            f"No execution intersect for recipe/schema change: {sorted(expanded)[:5]}"
-        )
-        assert expanded & ownership["general"], (
-            f"No general intersect for recipe/schema change: {sorted(expanded)[:5]}"
-        )
+        assert _intersected_shards(expanded, ownership) == {
+            "execution",
+            "general",
+            "recipe",
+        }
 
     def test_server_state_intersects_recipe_and_execution(self, tmp_path: Path) -> None:
         from tests._test_filter import FilterMode, FullRunReason, build_test_scope
@@ -569,13 +576,7 @@ class TestConservativeFilterShardIntersection:
         expanded = _expand_scope_to_files(set(scope), tests_root)
         ownership = self._ownership()
 
-        assert expanded & ownership["recipe"], (
-            f"No recipe intersect (server) for server/_state change: {sorted(expanded)[:5]}"
-        )
-        assert expanded & ownership["execution"], (
-            f"No execution intersect (pipeline cross-layer) for server/_state change: "
-            f"{sorted(expanded)[:5]}"
-        )
+        assert _intersected_shards(expanded, ownership) == {"execution", "recipe"}
 
     def test_unrelated_cli_change_intersects_all_three_shards(self, tmp_path: Path) -> None:
         from tests._test_filter import FilterMode, FullRunReason, build_test_scope
@@ -601,12 +602,8 @@ class TestConservativeFilterShardIntersection:
         expanded = _expand_scope_to_files(set(scope), tests_root)
         ownership = self._ownership()
 
-        assert expanded & ownership["execution"], (
-            f"No execution intersect (contracts always-run) for cli change: {sorted(expanded)[:5]}"
-        )
-        assert expanded & ownership["recipe"], (
-            f"No recipe intersect (docs direct selection) for cli change: {sorted(expanded)[:5]}"
-        )
-        assert expanded & ownership["general"], (
-            f"No general intersect (infra unconditional) for cli change: {sorted(expanded)[:5]}"
-        )
+        assert _intersected_shards(expanded, ownership) == {
+            "execution",
+            "general",
+            "recipe",
+        }

@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal
 
 __all__ = ["InstallMode", "MaintenanceInstallArgv"]
 
@@ -15,14 +14,6 @@ class InstallMode(StrEnum):
 
     DIRECT = "direct"
     MAINTENANCE_UPDATE = "maintenance-update"
-
-
-_MaintenanceArgvElement = Literal[
-    "install",
-    "--maintenance-update",
-    "--expected-version",
-    "--require-registered-plugin",
-]
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,13 +43,13 @@ class MaintenanceInstallArgv:
         self,
         *,
         require_registered_plugin: bool = False,
-    ) -> list[_MaintenanceArgvElement | str]:
+    ) -> list[str]:
         """Build the canonical child argv for ``install --maintenance-update``.
 
         ``require_registered_plugin`` controls whether the
         ``--require-registered-plugin`` flag is appended.
         """
-        argv: list[_MaintenanceArgvElement | str] = [
+        argv = [
             str(self.entrypoint),
             "install",
             "--maintenance-update",

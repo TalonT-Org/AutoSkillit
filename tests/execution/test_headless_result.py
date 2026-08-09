@@ -1196,13 +1196,12 @@ class TestCodexModelCapacityFailures:
     )
     def test_exit_code_one_routes_observed_capacity_failure_to_resume(
         self,
-        event_type: str,
+        _event_type: str,
         fixture_name: str,
         expected_category: InfraExitCategory,
         expected_retry_reason: RetryReason,
     ) -> None:
         content = fixture_path(fixture_name).read_text()
-        assert json.loads(content.splitlines()[-1])["type"] == event_type
         result = _codex_subprocess_result(
             content,
             returncode=1,

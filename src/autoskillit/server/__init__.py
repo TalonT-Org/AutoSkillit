@@ -148,6 +148,9 @@ from autoskillit.server.tools import (  # noqa: E402, F401
     tools_recipe as _tools_recipe,
 )
 from autoskillit.server.tools import (  # noqa: E402, F401
+    tools_run_skill_completion as _tools_run_skill_completion,
+)
+from autoskillit.server.tools import (  # noqa: E402, F401
     tools_status as _tools_status,
 )
 from autoskillit.server.tools import (  # noqa: E402, F401

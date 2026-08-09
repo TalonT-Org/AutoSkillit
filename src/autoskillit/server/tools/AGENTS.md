@@ -1,6 +1,6 @@
 # tools/
 
-MCP `@mcp.tool()` handlers registered on import (21 tool modules).
+MCP `@mcp.tool()` handlers registered on import (22 tool modules).
 
 The package initializer is docstring-only; importing tool modules performs registration.
 `serve_recipe()` is the only legal caller of `load_and_validate` within `server/tools/`.

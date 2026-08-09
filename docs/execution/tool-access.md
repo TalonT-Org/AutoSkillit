@@ -132,8 +132,8 @@ GH = `github`, CI = `ci`, CL = `clone`, TL = `telemetry`, FL = `fleet`
 | `run_cmd` | AS, K | `server/tools_execution.py` |
 | `run_python` | AS, K | `server/tools_execution.py` |
 | `run_skill` | AS, K | `server/tools_execution.py` |
-| `recover_run_skill_result` | AS, K | `server/tools_execution.py` |
-| `complete_run_skill_result` | AS, K | `server/tools_execution.py` |
+| `recover_run_skill_result` | AS, K | `server/tools_run_skill_completion.py` |
+| `complete_run_skill_result` | AS, K | `server/tools_run_skill_completion.py` |
 
 ---
 

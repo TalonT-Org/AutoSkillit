@@ -2704,6 +2704,58 @@ async def run_skill(
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @_cancellation_shield()
+@track_response_size("recover_run_skill_result")
+async def recover_run_skill_result(
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Recover the sole delivered ``run_skill`` receipt after transport loss. Never raises."""
+    if (tier_gate := _require_orchestrator_exact("recover_run_skill_result")) is not None:
+        return tier_gate
+    if (gate := _require_enabled()) is not None:
+        return gate
+    try:
+        from autoskillit.server import _get_ctx  # circular-break
+
+        tool_ctx = _get_ctx()
+        authority = tool_ctx.run_skill_completion
+        if authority is None:
+            raise RuntimeError("run_skill completion authority is unavailable")
+        receipt = authority.recover(
+            kitchen_id=tool_ctx.kitchen_id,
+            request_session_id=_request_session_identity(ctx),
+        )
+        return json.dumps(
+            {
+                "success": True,
+                "receipt_id": receipt.receipt_id,
+                "run_skill_success": receipt.success,
+                "classification": receipt.classification,
+                "session_id": receipt.child_session_id,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    except ValueError as exc:
+        return json.dumps(
+            deny_envelope(
+                f"recover_run_skill_result: {exc}",
+                stage="preflight:run_skill_completion",
+                retriable=False,
+            )
+        )
+    except Exception:
+        logger.exception("recover_run_skill_result_unexpected_error")
+        return json.dumps(
+            deny_envelope(
+                "recover_run_skill_result: unexpected internal error.",
+                stage="complete:run_skill_completion",
+                retriable=True,
+            )
+        )
+
+
+@mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("complete_run_skill_result")
 async def complete_run_skill_result(
     receipt_id: str,

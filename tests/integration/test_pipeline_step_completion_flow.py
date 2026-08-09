@@ -16,7 +16,11 @@ from mcp.types import CallToolRequestParams, TextContent
 from autoskillit.core.types import RetryReason
 from autoskillit.core.types._type_results import SkillResult
 from autoskillit.server._run_skill_completion import RunSkillCompletionMiddleware
-from autoskillit.server.tools.tools_execution import complete_run_skill_result, run_skill
+from autoskillit.server.tools.tools_execution import (
+    complete_run_skill_result,
+    recover_run_skill_result,
+    run_skill,
+)
 from tests.server._pipeline_test_helpers import (
     _ack_direct_run_skill_result,
     _write_tracker,
@@ -133,6 +137,62 @@ class TestServerSideStepCompletionMarking:
             )
         )
 
+        assert completed["success"] is True
+        assert completed["tracker"]["success"] is True
+        assert _read_tracker(tmp_path)["steps"]["rectify"]["status"] == "complete"
+
+    @pytest.mark.anyio
+    async def test_lost_delivery_is_recovered_by_replacement_request_session(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ):
+        monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
+        _setup_project(tmp_path, tool_ctx_kitchen_open)
+        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
+        _write_tracker(
+            tmp_path,
+            "test-kitchen",
+            {"rectify": {"status": "pending"}},
+            {},
+        )
+        tool_ctx_kitchen_open.executor = AsyncMock()
+        tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=_SUCCESS_RESULT)
+
+        async def placeholder() -> str:
+            return "unused"
+
+        registered = FunctionTool.from_function(placeholder, name="run_skill")
+        fake_mcp = SimpleNamespace(get_tool=AsyncMock(return_value=registered))
+        original_context = MiddlewareContext(
+            message=CallToolRequestParams(name="run_skill", arguments={}),
+            fastmcp_context=SimpleNamespace(session_id="disconnected"),  # type: ignore[arg-type]
+            method="tools/call",
+            type="request",
+        )
+
+        async def call_next(_context) -> ToolResult:
+            rendered = await run_skill(
+                "/autoskillit:rectify task",
+                str(tmp_path),
+                step_name="rectify",
+            )
+            return registered.convert_result(rendered)
+
+        await RunSkillCompletionMiddleware(fake_mcp).on_call_tool(  # type: ignore[arg-type]
+            original_context, call_next
+        )
+        replacement_context = SimpleNamespace(session_id="replacement")
+
+        recovered = json.loads(
+            await recover_run_skill_result(ctx=replacement_context)  # type: ignore[arg-type]
+        )
+        completed = json.loads(
+            await complete_run_skill_result(
+                recovered["receipt_id"],
+                ctx=replacement_context,  # type: ignore[arg-type]
+            )
+        )
+
+        assert recovered["success"] is True
         assert completed["success"] is True
         assert completed["tracker"]["success"] is True
         assert _read_tracker(tmp_path)["steps"]["rectify"]["status"] == "complete"

@@ -989,6 +989,10 @@ or calling any other recipe tool, call
 receipt from that response; never reuse a prior receipt or substitute a session ID,
 order ID, execution marker, or narrated result. Only the acknowledgement response may
 confirm that a successful result advanced the tracker or retained repair credit.
+If the delivered response was lost with its request session, call
+`recover_run_skill_result()` once from the replacement session, then acknowledge the exact
+`receipt_id` returned by recovery. Recovery refuses draft-only, already acknowledged,
+wrong-kitchen, ambiguous multi-receipt, and previously recovered states.
 
 ---
 

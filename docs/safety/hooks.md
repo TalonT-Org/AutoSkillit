@@ -386,7 +386,9 @@ fresh `run-skill-in-progress` marker binds it to the same hook session. Transcri
 paths come only from the trusted hook payload; missing, malformed, older, quoted,
 code-fenced, subagent, synthetic, wrong-session, or stale provenance fails open.
 This hook is defense in depth: the server's one-shot `run_skill` receipt and
-`complete_run_skill_result` acknowledgement are the completion authority.
+`complete_run_skill_result` acknowledgement are the completion authority. After transport
+loss, `recover_run_skill_result` may rebind the sole delivered receipt once to the current
+request session in the same kitchen; ambiguous or previously recovered receipts are refused.
 
 ## PostToolUse hooks (9)
 

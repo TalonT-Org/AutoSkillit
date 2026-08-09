@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import uuid
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from autoskillit.pipeline.tokens import canonical_step_name
@@ -52,6 +52,7 @@ class DefaultRunSkillCompletionAuthority:
         self._in_flight: dict[str, _Invocation] = {}
         self._drafts: dict[str, RunSkillCompletionReceipt] = {}
         self._delivered: dict[str, RunSkillCompletionReceipt] = {}
+        self._recovered: set[str] = set()
         self._consumed: set[str] = set()
         self._credits: dict[tuple[str, str, str, str, str], set[str]] = {}
 
@@ -59,7 +60,10 @@ class DefaultRunSkillCompletionAuthority:
         """Return whether ``tool_name`` is admissible in the current phase."""
         with self._lock:
             if self._drafts or self._delivered:
-                return tool_name == "complete_run_skill_result", "result awaiting acknowledgement"
+                return tool_name in {
+                    "complete_run_skill_result",
+                    "recover_run_skill_result",
+                }, "result awaiting acknowledgement"
             if self._in_flight:
                 return tool_name in {
                     "run_skill",
@@ -136,6 +140,32 @@ class DefaultRunSkillCompletionAuthority:
             self._delivered[receipt_id] = receipt
             return receipt
 
+    def recover(
+        self,
+        *,
+        kitchen_id: str,
+        request_session_id: str,
+    ) -> RunSkillCompletionReceipt:
+        """Rebind the sole delivered receipt to one replacement request session."""
+        with self._lock:
+            if len(self._delivered) > 1:
+                raise ValueError("multiple run_skill receipts are awaiting acknowledgement")
+            if not self._delivered:
+                if self._drafts:
+                    raise ValueError("run_skill receipt has not been delivered")
+                if self._consumed:
+                    raise ValueError("run_skill receipt has already been acknowledged")
+                raise ValueError("no delivered run_skill receipt is available for recovery")
+            receipt_id, receipt = next(iter(self._delivered.items()))
+            if receipt.kitchen_id != kitchen_id:
+                raise ValueError("run_skill receipt belongs to another kitchen")
+            if receipt_id in self._recovered:
+                raise ValueError("run_skill receipt has already been recovered")
+            recovered = replace(receipt, request_session_id=request_session_id)
+            self._delivered[receipt_id] = recovered
+            self._recovered.add(receipt_id)
+            return recovered
+
     def acknowledge(
         self,
         receipt_id: str,
@@ -155,6 +185,7 @@ class DefaultRunSkillCompletionAuthority:
             if receipt.request_session_id != request_session_id:
                 raise ValueError("run_skill receipt belongs to another request session")
             del self._delivered[receipt_id]
+            self._recovered.discard(receipt_id)
             self._consumed.add(receipt_id)
             if receipt.success and receipt.tracker_incarnation_id:
                 self._credits.setdefault(self._credit_key(receipt), set()).add(receipt_id)
@@ -209,6 +240,7 @@ class DefaultRunSkillCompletionAuthority:
             if self._in_flight or self._drafts or self._delivered:
                 return False
             self._credits.clear()
+            self._recovered.clear()
             self._consumed.clear()
             return True
 

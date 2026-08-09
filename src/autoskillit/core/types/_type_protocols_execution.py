@@ -80,6 +80,13 @@ class RunSkillCompletionAuthority(Protocol):
 
     def publish(self, receipt_id: str) -> Any: ...
 
+    def recover(
+        self,
+        *,
+        kitchen_id: str,
+        request_session_id: str,
+    ) -> Any: ...
+
     def acknowledge(
         self,
         receipt_id: str,

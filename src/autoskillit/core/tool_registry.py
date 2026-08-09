@@ -56,7 +56,12 @@ _INSPECTION_TOOLS = frozenset(
 )
 _LIFECYCLE_CONTROL_TOOLS = frozenset({"close_kitchen", "open_kitchen"})
 _RECOVERY_TOOLS = frozenset(
-    {"complete_recipe_initialization", "complete_run_skill_result", "get_recipe_section"}
+    {
+        "complete_recipe_initialization",
+        "complete_run_skill_result",
+        "get_recipe_section",
+        "recover_run_skill_result",
+    }
 )
 _EXECUTION_TOOLS = frozenset({"run_cmd", "run_python", "run_skill", "test_check"})
 _MUTATION_TOOLS = frozenset(
@@ -406,6 +411,7 @@ _TOOL_DEFS = (
         wire_types={"args": ToolWireType.OBJECT},
     ),
     _run_skill(),
+    _tool("recover_run_skill_result", ()),
     _tool("complete_run_skill_result", ("receipt_id",), required=("receipt_id",)),
     _tool(
         "dispatch_food_truck",

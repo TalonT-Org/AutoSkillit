@@ -7,14 +7,19 @@ from threading import Barrier, Event
 
 import pytest
 
-from autoskillit.pipeline import DefaultRunSkillCompletionAuthority
+from autoskillit.pipeline import DefaultRunSkillCompletionAuthority, RunSkillCompletionReceipt
 
 pytestmark = [pytest.mark.layer("pipeline"), pytest.mark.small]
 
 
-def _begin(authority: DefaultRunSkillCompletionAuthority, *, session: str = "session") -> str:
+def _begin(
+    authority: DefaultRunSkillCompletionAuthority,
+    *,
+    kitchen: str = "kitchen",
+    session: str = "session",
+) -> str:
     return authority.begin(
-        kitchen_id="kitchen",
+        kitchen_id=kitchen,
         request_session_id=session,
         tracker_order_id="order",
         tracker_path="/tracker.json",
@@ -22,6 +27,21 @@ def _begin(authority: DefaultRunSkillCompletionAuthority, *, session: str = "ses
         tracker_incarnation_id="incarnation",
         step_name="investigate-2",
     )
+
+
+def _publish(
+    authority: DefaultRunSkillCompletionAuthority,
+    *,
+    kitchen: str = "kitchen",
+    session: str = "session",
+) -> RunSkillCompletionReceipt:
+    receipt = authority.draft(
+        _begin(authority, kitchen=kitchen, session=session),
+        classification="success",
+        success=True,
+        result_digest="digest",
+    )
+    return authority.publish(receipt.receipt_id)
 
 
 def test_parallel_invocations_publish_distinct_receipts() -> None:
@@ -104,6 +124,79 @@ def test_acknowledgement_is_one_shot() -> None:
             receipt.receipt_id,
             kitchen_id="kitchen",
             request_session_id="session",
+        )
+
+
+def test_recovery_rebinds_the_sole_delivered_receipt_once() -> None:
+    authority = DefaultRunSkillCompletionAuthority()
+    receipt = _publish(authority, session="disconnected")
+
+    assert authority.admission("recover_run_skill_result")[0] is True
+    recovered = authority.recover(
+        kitchen_id="kitchen",
+        request_session_id="replacement",
+    )
+
+    assert recovered.receipt_id == receipt.receipt_id
+    assert recovered.request_session_id == "replacement"
+    with pytest.raises(ValueError, match="already been recovered"):
+        authority.recover(
+            kitchen_id="kitchen",
+            request_session_id="third-session",
+        )
+    assert (
+        authority.acknowledge(
+            receipt.receipt_id,
+            kitchen_id="kitchen",
+            request_session_id="replacement",
+        )
+        == recovered
+    )
+
+
+@pytest.mark.parametrize(
+    ("state", "message"),
+    [
+        ("draft", "has not been delivered"),
+        ("consumed", "already been acknowledged"),
+        ("multiple", "multiple run_skill receipts"),
+        ("wrong_kitchen", "belongs to another kitchen"),
+    ],
+)
+def test_recovery_refuses_nonrecoverable_receipt_states(state: str, message: str) -> None:
+    authority = DefaultRunSkillCompletionAuthority()
+    if state == "draft":
+        authority.draft(
+            _begin(authority),
+            classification="success",
+            success=True,
+            result_digest="digest",
+        )
+    elif state == "consumed":
+        receipt = _publish(authority)
+        authority.acknowledge(
+            receipt.receipt_id,
+            kitchen_id="kitchen",
+            request_session_id="session",
+        )
+    elif state == "multiple":
+        first = _begin(authority)
+        second = _begin(authority)
+        for invocation in (first, second):
+            receipt = authority.draft(
+                invocation,
+                classification="success",
+                success=True,
+                result_digest="digest",
+            )
+            authority.publish(receipt.receipt_id)
+    else:
+        _publish(authority, kitchen="other-kitchen")
+
+    with pytest.raises(ValueError, match=message):
+        authority.recover(
+            kitchen_id="kitchen",
+            request_session_id="replacement",
         )
 
 

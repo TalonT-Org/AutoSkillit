@@ -456,7 +456,6 @@ def flush_session_log(
             else None
         )
 
-        # Write summary.json
         summary = {
             "session_id": session_id,
             "dir_name": dir_name,

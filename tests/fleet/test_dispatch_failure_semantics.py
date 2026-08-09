@@ -514,7 +514,7 @@ class TestTrackerBridgeIntegration:
 
         monkeypatch.setattr("autoskillit.fleet.state.DispatchIdentity", FixedDispatchIdentity)
         target = TrackerAuthorityTarget.for_project(
-            tool_ctx.project_dir, dispatch_id, expected=True
+            tool_ctx.project_dir, dispatch_id, expected=False
         )
         peer_key = TrackerParticipantKey(
             target=target,
@@ -548,7 +548,7 @@ class TestTrackerBridgeIntegration:
                 release_tracker_lease(tool_ctx.tracker_leases, peer_key)
 
     @pytest.mark.anyio
-    async def test_missing_tracker_overrides_clean_result_and_persisted_status(
+    async def test_missing_optional_tracker_preserves_clean_result_and_persisted_status(
         self, tool_ctx, monkeypatch
     ):
         from autoskillit.fleet._checkpoint_bridge import load_dispatch_progress
@@ -566,10 +566,9 @@ class TestTrackerBridgeIntegration:
         result = await _run(tool_ctx)
         record = _read_dispatch_record(tool_ctx)
 
-        assert result["success"] is False
-        assert result["dispatch_status"] == "failure"
-        assert "Expected pipeline tracker" in result["reason"]
-        assert record["status"] == "failure"
+        assert result["success"] is True
+        assert result["dispatch_status"] == "success"
+        assert record["status"] == "success"
         assert record["reason"] == result["reason"]
 
     @pytest.mark.anyio

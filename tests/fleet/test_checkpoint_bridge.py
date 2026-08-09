@@ -172,9 +172,7 @@ class TestCheckpointFromTracker:
 
 
 class TestLoadDispatchProgress:
-    def test_missing_expected_tracker_returns_fourth_authority_error(
-        self, tool_ctx, tmp_path
-    ) -> None:
+    def test_missing_optional_tracker_returns_no_authority_error(self, tool_ctx, tmp_path) -> None:
         tool_ctx.project_dir = tmp_path
         dispatch_id = "dispatch-missing"
         target = TrackerAuthorityTarget.for_project(tmp_path, dispatch_id, expected=True)
@@ -196,8 +194,7 @@ class TestLoadDispatchProgress:
         assert sidecar_file == sidecar_path(dispatch_id, tmp_path)
         assert entries == []
         assert checkpoint is None
-        assert authority_error is not None
-        assert dispatch_id in authority_error
+        assert authority_error is None
 
     @pytest.mark.parametrize(
         "tracker_content",

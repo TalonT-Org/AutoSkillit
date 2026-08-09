@@ -128,6 +128,9 @@ def test_live_web_agent_is_luna_xhigh_read_only_leaf(
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
+    subprocess.run(  # noqa: S603
+        ["git", "init", "--quiet"], cwd=workspace, check=True, timeout=30
+    )
     prompt = f"""
 Spawn exactly one child with agent_type={WEB_EVIDENCE_RESEARCHER_ROLE!r},
 fork_turns='none', and task_name='live_web_evidence'. Do not pass model or

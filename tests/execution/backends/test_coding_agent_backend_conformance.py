@@ -83,6 +83,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "supports_claude_format_stdout": "REQUIRED",
     "supports_context_exhaustion_detection": "OPTIONAL",
     "supports_context_window_suffix": "OPTIONAL",
+    "supports_model_capacity_error_detection": "OPTIONAL",
     "supports_model_invocation_gating": "OPTIONAL",
     "supports_thinking_blocks": "OPTIONAL",
     "supports_tool_list_changed": "OPTIONAL",
@@ -426,6 +427,13 @@ class TestCodingAgentBackendConformance(BackendContractBase):
     def test_supports_context_exhaustion_detection_is_bool(self) -> None:
         """BackendCapabilities.supports_context_exhaustion_detection — capability is bool-typed."""
         assert isinstance(self.backend.capabilities.supports_context_exhaustion_detection, bool)
+
+    def test_supports_model_capacity_error_detection_is_bool(self) -> None:
+        """BackendCapabilities.supports_model_capacity_error_detection is bool-typed."""
+        assert isinstance(
+            self.backend.capabilities.supports_model_capacity_error_detection,
+            bool,
+        )
 
     def test_protected_recipe_delivery_capable_is_bool(self) -> None:
         """BackendCapabilities.protected_recipe_delivery_capable — protected host gate is bool."""

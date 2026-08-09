@@ -50,6 +50,21 @@ _RATE_LIMIT_PATTERNS: tuple[re.Pattern[str], ...] = (
 _CODEX_CONTEXT_EXHAUSTION_PATTERN: re.Pattern[str] = re.compile(
     CODEX_CONTEXT_EXHAUSTION_MARKER, re.IGNORECASE
 )
+_MODEL_CAPACITY_ERROR: str = "Selected model is at capacity. Please try a different model."
+
+
+def _has_model_capacity_error(
+    session: ClaudeSessionResult,
+    result: SubprocessResult,
+    capabilities: BackendCapabilities,
+) -> bool:
+    """Match exact provider capacity evidence from backend-owned error channels."""
+    if not capabilities.supports_model_capacity_error_detection:
+        return False
+    expected = _MODEL_CAPACITY_ERROR.casefold()
+    return any(error.strip().casefold() == expected for error in session.errors) or any(
+        line.strip().casefold() == expected for line in result.stderr.splitlines()
+    )
 
 
 def _all_text_sources(
@@ -122,6 +137,8 @@ def classify_infra_exit(
         p.search(msg) for p in _RATE_LIMIT_PATTERNS for msg in _all_text_sources(session, result)
     ):
         return InfraExitCategory.RATE_LIMITED
+    if _has_model_capacity_error(session, result, capabilities):
+        return InfraExitCategory.API_ERROR
     if session._has_api_error() or any(p.search(result.stderr) for p in _KNOWN_API_ERROR_PATTERNS):
         return InfraExitCategory.API_ERROR
     # Separate guard: _has_api_error() scans message text for known patterns, but

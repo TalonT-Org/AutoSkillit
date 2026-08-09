@@ -1417,12 +1417,12 @@ class CodexBackend(BackendCmdBuilderBase):
             session_record_types=frozenset({"item.completed"}),
             triage_capable=False,
             supports_context_exhaustion_detection=False,
+            supports_model_capacity_error_detection=True,
             supports_tool_list_changed=False,
             required_skill_fields=frozenset({"name", "description"}),
             required_session_files=frozenset({"config.toml"}),
             session_dir_symlinks=frozenset({"sessions", "archived_sessions"}),
             applicable_guards=frozenset({"write_guard"}),
-            # Codex uses run_cmd instead of Write/Edit — those tools don't exist in Codex
             write_guard_tool_names=frozenset({"apply_patch", "Bash", "run_cmd"}),
             env_denylist_prefixes=CODEX_ENV_PREFIX_DENYLIST,
             min_version="0.130.0",

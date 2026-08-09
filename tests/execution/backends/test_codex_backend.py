@@ -171,6 +171,9 @@ class TestCodexBackend:
     def test_capabilities_supports_context_exhaustion_detection_false(self) -> None:
         assert CodexBackend().capabilities.supports_context_exhaustion_detection is False
 
+    def test_capabilities_supports_model_capacity_error_detection_true(self) -> None:
+        assert CodexBackend().capabilities.supports_model_capacity_error_detection is True
+
     def test_capabilities_required_skill_fields(self) -> None:
         assert CodexBackend().capabilities.required_skill_fields == frozenset(
             {"name", "description"}

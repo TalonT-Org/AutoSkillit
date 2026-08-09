@@ -18,6 +18,7 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
+from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.commands import _ensure_skill_prefix
 from autoskillit.execution.headless import (
     NormalizedMessages,
@@ -27,6 +28,7 @@ from autoskillit.execution.headless import (
 )
 from tests.conftest import _make_result, _make_timeout_result
 from tests.execution.conftest import _mock_backend, _sr, _success_session_json
+from tests.fixtures.codex import TURN_FAILED_MODEL_CAPACITY, fixture_path
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -2918,6 +2920,29 @@ class TestRetryBudgetEnforcement:
             max_consecutive_retries=3,
             backend=ClaudeCodeBackend(),
         )
+        assert sr.needs_retry is False
+        assert sr.retry_reason == RetryReason.BUDGET_EXHAUSTED
+
+    def test_budget_caps_codex_model_capacity_resume(self) -> None:
+        skill_command = "/autoskillit:implement-worktree-no-merge"
+        audit = self._make_audit_with_failures(skill_command, 3)
+        result = SubprocessResult(
+            returncode=1,
+            stdout=fixture_path(TURN_FAILED_MODEL_CAPACITY).read_text(),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+        )
+
+        sr = _build_skill_result(
+            result,
+            skill_command=skill_command,
+            audit=audit,  # type: ignore[arg-type]
+            max_consecutive_retries=3,
+            supports_claude_format_stdout=False,
+            backend=CodexBackend(),
+        )
+
         assert sr.needs_retry is False
         assert sr.retry_reason == RetryReason.BUDGET_EXHAUSTED
 

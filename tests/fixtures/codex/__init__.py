@@ -9,10 +9,12 @@ CODEX_FIXTURE_MIN_VERSION: str = "0.130.0"
 
 HAPPY_PATH_SINGLE_TURN: str = "happy_path_single_turn_v0133.ndjson"
 HAPPY_PATH_V0136: str = "happy_path_v0136.ndjson"
+FLAT_ERROR_MODEL_CAPACITY: str = "flat_error_model_capacity_v0133.ndjson"
 MARKER_DETECTION_V0136: str = "marker_detection_v0136.ndjson"
 LARGE_EMBEDDED_PAYLOAD_V1: str = "large_embedded_payload_v1.jsonl"
 MULTI_TURN_WITH_COMPACTION: str = "multi_turn_with_compaction_v0133.ndjson"
 TURN_FAILED_ERROR: str = "turn_failed_error_v0133.ndjson"
+TURN_FAILED_MODEL_CAPACITY: str = "turn_failed_model_capacity_v0133.ndjson"
 SESSION_WITH_REASONING: str = "session_with_reasoning_v0133.ndjson"
 SESSION_WITH_MCP_TOOL_CALL: str = "session_with_mcp_tool_call_v0133.ndjson"
 
@@ -25,6 +27,7 @@ def fixture_path(name: str) -> Path:
 __all__ = [
     "CODEX_FIXTURE_MIN_VERSION",
     "CODEX_SCHEMA_VERSION",
+    "FLAT_ERROR_MODEL_CAPACITY",
     "HAPPY_PATH_SINGLE_TURN",
     "HAPPY_PATH_V0136",
     "LARGE_EMBEDDED_PAYLOAD_V1",
@@ -33,5 +36,6 @@ __all__ = [
     "SESSION_WITH_MCP_TOOL_CALL",
     "SESSION_WITH_REASONING",
     "TURN_FAILED_ERROR",
+    "TURN_FAILED_MODEL_CAPACITY",
     "fixture_path",
 ]

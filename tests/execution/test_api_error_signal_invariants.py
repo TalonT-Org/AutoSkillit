@@ -1,9 +1,8 @@
-"""API error signal invariants: API errors must be detected regardless of channel.
+"""Consistency checks for API error patterns already registered in production.
 
-Architectural immunity test: classify_infra_exit must return API_ERROR (or
-RATE_LIMITED for rate-limit signals) whether the signal arrives via stderr
-(non-PTY) or via stdout/NDJSON assistant messages (PTY). Adding a new detection
-path that only reads one channel will cause this test to fail immediately.
+Each registered generic pattern must classify consistently across stderr (non-PTY)
+and stdout/NDJSON assistant messages (PTY). Observed provider failures that are not
+part of the generic pattern union have independent fixture-based acceptance tests.
 """
 
 from __future__ import annotations
@@ -41,8 +40,8 @@ _RATE_LIMIT_SIGNAL_STRINGS: frozenset[str] = frozenset(
     }
 )
 
-# All patterns that _KNOWN_API_ERROR_PATTERNS covers
-API_ERROR_SIGNALS: list[str] = [
+# Plain strings corresponding to patterns already in _KNOWN_API_ERROR_PATTERNS.
+REGISTERED_API_ERROR_SIGNALS: list[str] = [
     "overloaded",
     "529",
     "503",
@@ -104,10 +103,10 @@ def _make_result(
 # ---------------------------------------------------------------------------
 
 
-class TestApiErrorChannelInvariant:
-    """API errors must be classified as API_ERROR (or RATE_LIMITED) regardless of channel."""
+class TestRegisteredApiErrorChannelConsistency:
+    """Registered generic patterns classify consistently across supported channels."""
 
-    @pytest.mark.parametrize("signal", API_ERROR_SIGNALS)
+    @pytest.mark.parametrize("signal", REGISTERED_API_ERROR_SIGNALS)
     def test_api_error_in_assistant_messages(self, signal: str) -> None:
         """PTY mode: signal in assistant_messages (via stdout NDJSON) → correct category."""
         session = _make_api_error_session(signal)
@@ -116,7 +115,7 @@ class TestApiErrorChannelInvariant:
             signal
         )
 
-    @pytest.mark.parametrize("signal", API_ERROR_SIGNALS)
+    @pytest.mark.parametrize("signal", REGISTERED_API_ERROR_SIGNALS)
     def test_api_error_in_result_field(self, signal: str) -> None:
         """Signal in session.result (via parsed stdout) → correct category."""
         session = ClaudeSessionResult(
@@ -130,7 +129,7 @@ class TestApiErrorChannelInvariant:
             signal
         )
 
-    @pytest.mark.parametrize("signal", API_ERROR_SIGNALS)
+    @pytest.mark.parametrize("signal", REGISTERED_API_ERROR_SIGNALS)
     def test_api_error_in_errors_field(self, signal: str) -> None:
         """Signal in session.errors (via parsed stdout) → correct category."""
         session = ClaudeSessionResult(
@@ -145,7 +144,7 @@ class TestApiErrorChannelInvariant:
             signal
         )
 
-    @pytest.mark.parametrize("signal", API_ERROR_SIGNALS)
+    @pytest.mark.parametrize("signal", REGISTERED_API_ERROR_SIGNALS)
     def test_api_error_in_stderr_fallback(self, signal: str) -> None:
         """Stderr fallback: signal in result.stderr → correct category via classify_infra_exit."""
         session = ClaudeSessionResult(
@@ -165,10 +164,10 @@ class TestApiErrorChannelInvariant:
 # ---------------------------------------------------------------------------
 
 
-class TestApiErrorPtyModeEndToEnd:
-    """PTY-mode subprocess result (empty stderr, API error in stdout) → RESUME or RATE_LIMITED."""
+class TestRegisteredApiErrorPtyModeEndToEnd:
+    """Registered generic patterns route consistently through the Claude PTY path."""
 
-    @pytest.mark.parametrize("signal", API_ERROR_SIGNALS)
+    @pytest.mark.parametrize("signal", REGISTERED_API_ERROR_SIGNALS)
     def test_api_error_pty_mode_routes_correctly(self, signal: str) -> None:
         """Empty stderr + API error in stdout NDJSON → needs_retry=True, correct reason."""
 

@@ -14,6 +14,7 @@ from autoskillit.core import AGENT_BACKEND_CLAUDE_CODE, BackendCapabilities
 from autoskillit.core.types import (
     AgentSessionResult,
     CliSubtype,
+    InfraExitCategory,
     KillReason,
     RetryReason,
     SkillResult,
@@ -36,7 +37,12 @@ from autoskillit.execution.headless._headless_evidence import (
 )
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.session._session_outcome import _compute_outcome
-from tests.execution.conftest import _make_tool_use_line, _sr, _success_session_json
+from tests.execution.conftest import (
+    CODEX_OBSERVED_PROVIDER_FAILURE_CASES,
+    _make_tool_use_line,
+    _sr,
+    _success_session_json,
+)
 from tests.fixtures.codex import (
     HAPPY_PATH_SINGLE_TURN,
     HAPPY_PATH_V0136,
@@ -1180,6 +1186,42 @@ class TestCodexPipelineTurnFailed:
     def test_failure_token_usage_none(self):
         sr = self._build()
         assert sr.token_usage is None
+
+
+class TestCodexModelCapacityFailures:
+    @pytest.mark.parametrize(
+        "event_type,fixture_name,expected_category,expected_retry_reason",
+        CODEX_OBSERVED_PROVIDER_FAILURE_CASES,
+        ids=[case[0] for case in CODEX_OBSERVED_PROVIDER_FAILURE_CASES],
+    )
+    def test_exit_code_one_routes_observed_capacity_failure_to_resume(
+        self,
+        event_type: str,
+        fixture_name: str,
+        expected_category: InfraExitCategory,
+        expected_retry_reason: RetryReason,
+    ) -> None:
+        content = fixture_path(fixture_name).read_text()
+        assert json.loads(content.splitlines()[-1])["type"] == event_type
+        result = _codex_subprocess_result(
+            content,
+            returncode=1,
+            termination=TerminationReason.NATURAL_EXIT,
+            kill_reason=KillReason.NATURAL_EXIT,
+        )
+
+        skill_result = _build_skill_result(
+            result,
+            supports_claude_format_stdout=False,
+            backend=CodexBackend(),
+        )
+
+        assert skill_result.success is False
+        assert skill_result.is_error is True
+        assert skill_result.needs_retry is True
+        assert skill_result.retry_reason == expected_retry_reason
+        assert skill_result.infra.exit_category == expected_category.value
+        assert skill_result.subtype == CliSubtype.ERROR_DURING_EXECUTION.value
 
 
 class TestCodexPipelineTerminationBranches:

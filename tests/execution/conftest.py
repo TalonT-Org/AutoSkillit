@@ -20,12 +20,14 @@ from autoskillit.core import (
     BackendCapabilities,
     CmdSpec,
     ExecutionIdentity,
+    InfraExitCategory,
     LaunchPreparation,
     LaunchResolutionRequest,
     LaunchSurface,
     LaunchValueSource,
     LaunchValueSourceKind,
     ResolvedLaunchContract,
+    RetryReason,
     SemanticLaunchPlan,
 )
 from autoskillit.core.types import SubprocessResult, TerminationReason
@@ -33,10 +35,28 @@ from autoskillit.execution.launch_resolution import DefaultLaunchResolver
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.session._exit_classification import _CODEX_API_ERROR_PATTERNS
 from tests._helpers import make_tracing_config
+from tests.fixtures.codex import FLAT_ERROR_MODEL_CAPACITY, TURN_FAILED_MODEL_CAPACITY
 
 # Strip regex metacharacters (e.g. \b word boundaries) to yield plain test signal strings.
 CODEX_API_ERROR_SIGNAL_STRINGS: tuple[str, ...] = tuple(
     p.pattern.replace(r"\b", "") for p in _CODEX_API_ERROR_PATTERNS
+)
+
+CODEX_OBSERVED_PROVIDER_FAILURE_CASES: tuple[
+    tuple[str, str, InfraExitCategory, RetryReason], ...
+] = (
+    (
+        "turn.failed",
+        TURN_FAILED_MODEL_CAPACITY,
+        InfraExitCategory.API_ERROR,
+        RetryReason.RESUME,
+    ),
+    (
+        "error",
+        FLAT_ERROR_MODEL_CAPACITY,
+        InfraExitCategory.API_ERROR,
+        RetryReason.RESUME,
+    ),
 )
 
 

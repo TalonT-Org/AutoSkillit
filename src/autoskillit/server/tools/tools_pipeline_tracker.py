@@ -21,7 +21,7 @@ from autoskillit.server._misc import (
 )
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.server.tools._overlay_state import OverlayStateError, read_overlay
+from autoskillit.server.tools._overlay_state import read_overlay
 from autoskillit.server.tools._types import deny_envelope
 
 logger = get_logger(__name__)
@@ -104,7 +104,7 @@ def _resolve_skipped_steps(project_dir: Path, pipeline_id: str) -> set[str]:
         overlay = read_overlay(project_dir)
         pid_locks = overlay.get("locked_steps", {}).get(pipeline_id, {})
         return {s for s, v in pid_locks.items() if v is False}
-    except (OSError, OverlayStateError):
+    except OSError:
         return set()
 
 

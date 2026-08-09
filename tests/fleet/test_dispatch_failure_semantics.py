@@ -468,6 +468,67 @@ class TestSidecarBasedResultSynthesis:
 
 class TestTrackerBridgeIntegration:
     @pytest.mark.anyio
+    async def test_pre_lineage_rejection_never_acquires_dispatch_lease(
+        self, tool_ctx, monkeypatch
+    ):
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        def unexpected_acquire(*_args, **_kwargs):
+            raise AssertionError("pre-lineage rejection acquired tracker authority")
+
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.retain_dispatch_tracker_authority",
+            unexpected_acquire,
+        )
+
+        result = await _run(tool_ctx, ingredients={"unknown": "value"})
+
+        assert result["success"] is False
+
+    @pytest.mark.anyio
+    async def test_dispatch_release_preserves_same_target_manual_participant(
+        self, tool_ctx, monkeypatch
+    ):
+        from autoskillit.core import (
+            DispatchIdentity,
+            TrackerAuthorityTarget,
+            TrackerParticipantKey,
+            release_tracker_lease,
+            retain_tracker_lease,
+        )
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        dispatch_id = "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
+        fixed_identity = DispatchIdentity.from_dispatch_id(dispatch_id)
+
+        class FixedDispatchIdentity:
+            @classmethod
+            def fresh(cls):
+                return fixed_identity
+
+        monkeypatch.setattr("autoskillit.fleet.state.DispatchIdentity", FixedDispatchIdentity)
+        target = TrackerAuthorityTarget.for_project(
+            tool_ctx.project_dir, dispatch_id, expected=True
+        )
+        peer_key = TrackerParticipantKey(
+            target=target,
+            owner_kind="manual",
+            owner_id=dispatch_id,
+            pid=1,
+            create_time=1.0,
+            project_path=str(tool_ctx.project_dir),
+        )
+        with tool_ctx.tracker_leases_lock:
+            peer_lease = retain_tracker_lease(tool_ctx.tracker_leases, peer_key)
+        try:
+            await _run(tool_ctx)
+            assert tool_ctx.tracker_leases[peer_key] is peer_lease
+            assert not peer_lease.closed
+        finally:
+            with tool_ctx.tracker_leases_lock:
+                release_tracker_lease(tool_ctx.tracker_leases, peer_key)
+
+    @pytest.mark.anyio
     async def test_missing_tracker_overrides_clean_result_and_persisted_status(
         self, tool_ctx, monkeypatch
     ):

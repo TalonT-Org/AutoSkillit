@@ -68,3 +68,26 @@ def test_req_id_format_consistent_across_skills():
     for skill_name in generation_skills:
         text = _read(skill_name)
         assert "REQ-" in text, f"{skill_name}/SKILL.md must reference REQ- identifier format"
+
+
+def test_pr_skills_bind_exact_body_bytes_to_source_issue_identity():
+    prepare = _read("prepare-pr")
+    compose = _read("compose-pr")
+    integration = _read("open-integration-pr")
+
+    assert "source_issue_url" in prepare
+    assert "https://github.com/{owner}/{repo}/issues/{closing_issue}" in prepare
+    assert '"schema_version": 1' in compose
+    assert '"body_sha256"' in compose
+    assert '"closing_issue"' in compose
+    assert '"source_issue_url"' in compose
+    assert 'with_suffix(".metadata.json")' in compose
+    assert '"source_issue_urls"' in integration
+    assert 'with_suffix(".metadata.json")' in integration
+
+
+def test_issue_4293_delivery_url_is_retained_in_both_pr_paths():
+    required_url = "https://github.com/TalonT-Org/AutoSkillit/issues/4293"
+
+    assert required_url in _read("compose-pr")
+    assert required_url in _read("open-integration-pr")

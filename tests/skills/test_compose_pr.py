@@ -16,15 +16,15 @@ SKILL_PATH = (
 )
 
 
-def test_closes_issue_outside_architecture_impact_block():
-    """Closes #{closing_issue} must appear AFTER {## End Architecture Impact conditional}.
+def test_closes_issue_url_outside_architecture_impact_block():
+    """The exact closing URL must follow the Architecture Impact conditional.
 
     If Closes # is inside the Architecture Impact conditional block, it gets
     omitted when no validated diagrams exist (the entire block is skipped).
     """
     SKILL_TEXT = SKILL_PATH.read_text()
     end_marker = "{## End Architecture Impact conditional}"
-    closes_pattern = "Closes #{closing_issue}"
+    closes_pattern = "Closes {source_issue_url}"
     marker_positions = [i for i in range(len(SKILL_TEXT)) if SKILL_TEXT[i:].startswith(end_marker)]
     assert marker_positions, (
         "compose-pr/SKILL.md must contain '{## End Architecture Impact conditional}' marker"
@@ -33,7 +33,7 @@ def test_closes_issue_outside_architecture_impact_block():
         i for i in range(len(SKILL_TEXT)) if SKILL_TEXT[i:].startswith(closes_pattern)
     ]
     assert closes_positions, (
-        "compose-pr/SKILL.md must contain 'Closes #{closing_issue}' template variable"
+        "compose-pr/SKILL.md must contain the canonical source_issue_url template"
     )
     for closes_pos in closes_positions:
         nearest_marker = max(

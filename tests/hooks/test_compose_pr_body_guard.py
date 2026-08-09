@@ -1,12 +1,8 @@
-"""Tests for compose_pr_body_guard PreToolUse hook.
-
-Validates that gh pr create --body-file is intercepted and denied when the
-body file lacks a Closes #N reference and the prep file specifies a
-closing_issue.
-"""
+"""Tests for exact PR-body provenance enforcement."""
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 from contextlib import redirect_stdout
@@ -18,837 +14,271 @@ from autoskillit.hook_registry import HOOK_REGISTRY, NEW_SUBDIR_BASENAMES
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+ISSUE_URL = "https://github.com/TalonT-Org/AutoSkillit/issues/4293"
+OTHER_ISSUE_URL = "https://github.com/TalonT-Org/AutoSkillit/issues/4294"
 
 
-def _setup_prep_file(tmp_path: Path, closing_issue: str) -> Path:
-    """Create a prep file at tmp_path/.autoskillit/temp/prepare-pr/pr_prep_test.md.
-
-    When closing_issue is empty, the line reads ``- closing_issue: `` (trailing
-    space, no value).
-    """
-    prep_path = tmp_path / ".autoskillit" / "temp" / "prepare-pr" / "pr_prep_test.md"
-    prep_path.parent.mkdir(parents=True, exist_ok=True)
-    content = f"""# PR Prep: Test
-
-## Metadata
-
-- feature_branch: test-branch
-- base_branch: main
-- closing_issue: {closing_issue}
-- plan_paths: test_plan.md
-
-## Title
-
-Test PR
-"""
-    prep_path.write_text(content, encoding="utf-8")
-    return prep_path
+def _body_file(tmp_path: Path, content: str, *, name: str = "pr_body_test.md") -> Path:
+    path = tmp_path / ".autoskillit" / "temp" / "compose-pr" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return path
 
 
-def _setup_body_file(tmp_path: Path, content: str) -> Path:
-    """Create a body file at tmp_path/.autoskillit/temp/compose-pr/pr_body_test.md."""
-    body_path = tmp_path / ".autoskillit" / "temp" / "compose-pr" / "pr_body_test.md"
-    body_path.parent.mkdir(parents=True, exist_ok=True)
-    body_path.write_text(content, encoding="utf-8")
-    return body_path
+def _metadata_path(body_path: Path) -> Path:
+    return body_path.with_suffix(".metadata.json")
 
 
-def _build_event(command: str, tool_name: str = "Bash") -> dict:
-    """Build the stdin JSON dict. Uses 'command' key for Bash, 'cmd' for run_cmd."""
-    if tool_name.startswith("mcp__") and tool_name.endswith("__run_cmd"):
-        return {"tool_name": tool_name, "tool_input": {"cmd": command}}
-    return {"tool_name": tool_name, "tool_input": {"command": command}}
+def _ordinary_metadata(
+    body_path: Path,
+    *,
+    closing_issue: int | None = 4293,
+    source_issue_url: str | None = ISSUE_URL,
+    **overrides: object,
+) -> Path:
+    metadata: dict[str, object] = {
+        "schema_version": 1,
+        "body_sha256": hashlib.sha256(body_path.read_bytes()).hexdigest(),
+        "closing_issue": closing_issue,
+        "source_issue_url": source_issue_url,
+    }
+    metadata.update(overrides)
+    path = _metadata_path(body_path)
+    path.write_text(json.dumps(metadata), encoding="utf-8")
+    return path
+
+
+def _integration_metadata(
+    body_path: Path,
+    *,
+    source_issue_urls: list[str] | None = None,
+    **overrides: object,
+) -> Path:
+    metadata: dict[str, object] = {
+        "schema_version": 1,
+        "body_sha256": hashlib.sha256(body_path.read_bytes()).hexdigest(),
+        "source_issue_urls": source_issue_urls or [ISSUE_URL, OTHER_ISSUE_URL],
+    }
+    metadata.update(overrides)
+    path = _metadata_path(body_path)
+    path.write_text(json.dumps(metadata), encoding="utf-8")
+    return path
+
+
+def _event(command: str, tool_name: str = "Bash") -> dict[str, object]:
+    command_key = "cmd" if tool_name.startswith("mcp__") else "command"
+    return {"tool_name": tool_name, "tool_input": {command_key: command}}
 
 
 def _run_hook(
-    event: dict,
-    monkeypatch,
+    event: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
     *,
+    skill_name: str = "compose-pr",
     headless: bool = True,
 ) -> str:
-    """Import main(), patch sys.stdin, capture stdout. Returns stdout string."""
     from autoskillit.hooks.guards.compose_pr_body_guard import main  # noqa: PLC0415
 
+    monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", skill_name)
     if headless:
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     else:
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-
-    stdin_text = json.dumps(event)
-    monkeypatch.setattr("sys.stdin", io.StringIO(stdin_text))
-    buf = io.StringIO()
-    try:
-        with redirect_stdout(buf):
-            main()
-    except SystemExit:
-        pass
-    return buf.getvalue()
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
+    output = io.StringIO()
+    with redirect_stdout(output), pytest.raises(SystemExit):
+        main()
+    return output.getvalue()
 
 
 def _is_denied(output: str) -> bool:
     if not output:
         return False
-    data = json.loads(output)
-    return data.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
+    return json.loads(output)["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-# ---------------------------------------------------------------------------
-# T1: TestScopingGates
-# ---------------------------------------------------------------------------
+def _ordinary_pair(tmp_path: Path, *, issue_backed: bool = True) -> Path:
+    body = _body_file(
+        tmp_path,
+        f"Summary\n\nCloses {ISSUE_URL}" if issue_backed else "Summary without an issue",
+    )
+    if issue_backed:
+        _ordinary_metadata(body)
+    else:
+        _ordinary_metadata(body, closing_issue=None, source_issue_url=None)
+    return body
 
 
-class TestScopingGates:
-    def test_allows_non_compose_pr_skill(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "implement-wp")
-        monkeypatch.chdir(tmp_path)
-        body = _setup_body_file(tmp_path, "Closes #123")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
+def test_scopes_to_headless_pr_skills(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    body = _ordinary_pair(tmp_path)
+    command = f"gh pr create --body-file {body}"
 
-    def test_allows_no_skill_name_set(self, monkeypatch, tmp_path):
-        monkeypatch.delenv("AUTOSKILLIT_SKILL_NAME", raising=False)
-        monkeypatch.chdir(tmp_path)
-        body = _setup_body_file(tmp_path, "Closes #123")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_allows_non_gh_pr_create_command(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        event = _build_event("git push origin main")
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_allows_gh_pr_create_without_body_file(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        event = _build_event("gh pr create --fill")
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
+    assert _run_hook(_event(command), monkeypatch, skill_name="implement-worktree") == ""
+    assert _run_hook(_event(command), monkeypatch, headless=False) == ""
+    assert _run_hook(_event("git status"), monkeypatch) == ""
 
 
-# ---------------------------------------------------------------------------
-# T2: TestFailOpen
-# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("skill_name", ["compose-pr", "open-integration-pr"])
+def test_missing_or_unresolvable_body_file_denies(monkeypatch, tmp_path, skill_name):
+    monkeypatch.chdir(tmp_path)
+
+    for command in (
+        "gh pr create --fill",
+        "gh pr create --body-file -",
+        "gh pr create --body-file /does/not/exist.md",
+        'gh pr create --body-file "$UNRESOLVED_BODY"',
+    ):
+        assert _is_denied(_run_hook(_event(command), monkeypatch, skill_name=skill_name))
 
 
-class TestFailOpen:
-    def test_malformed_json_stdin(self, monkeypatch, tmp_path):
-        from autoskillit.hooks.guards.compose_pr_body_guard import main  # noqa: PLC0415
+def test_ordinary_issue_pair_requires_exact_digest_number_and_url(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    body = _ordinary_pair(tmp_path)
+    command = f"gh pr create --body-file {body}"
+    assert _run_hook(_event(command), monkeypatch) == ""
 
-        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.setattr("sys.stdin", io.StringIO("not valid json {{{"))
-        buf = io.StringIO()
-        try:
-            with redirect_stdout(buf):
-                main()
-        except SystemExit:
-            pass
-        assert buf.getvalue() == ""
-
-    def test_missing_tool_input_key(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        event = {"tool_name": "Bash"}
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_body_file_does_not_exist(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        event = _build_event("gh pr create --body-file /nonexistent/path --base main")
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_no_prep_files_exist(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        body = _setup_body_file(tmp_path, "Some content with no closing ref")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_shlex_split_failure(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        event = _build_event('gh pr create --body-file "unclosed --base main')
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
+    invalid_cases = [
+        {"body_sha256": "0" * 64},
+        {"closing_issue": 4294},
+        {"source_issue_url": OTHER_ISSUE_URL},
+        {"schema_version": 2},
+        {"extra": "forbidden"},
+    ]
+    for overrides in invalid_cases:
+        _ordinary_metadata(body, **overrides)
+        assert _is_denied(_run_hook(_event(command), monkeypatch))
 
 
-# ---------------------------------------------------------------------------
-# T3: TestAllow
-# ---------------------------------------------------------------------------
+def test_ordinary_supported_no_issue_pair_allows(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    body = _ordinary_pair(tmp_path, issue_backed=False)
+    assert _run_hook(_event(f"gh pr create --body-file={body}"), monkeypatch) == ""
 
 
-class TestAllow:
-    def test_allows_body_with_closes_ref(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Some description\n\nCloses #123")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
+@pytest.mark.parametrize(
+    "metadata_content",
+    [None, "not json", "[]", json.dumps({"schema_version": 1})],
+)
+def test_missing_or_malformed_sibling_metadata_denies(monkeypatch, tmp_path, metadata_content):
+    monkeypatch.chdir(tmp_path)
+    body = _body_file(tmp_path, f"Closes {ISSUE_URL}")
+    if metadata_content is not None:
+        _metadata_path(body).write_text(metadata_content, encoding="utf-8")
 
-    def test_allows_when_closing_issue_empty(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "")
-        body = _setup_body_file(tmp_path, "Some content with no closing ref")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_allows_alternative_closing_keywords(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Fixes #123")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_allows_resolves_keyword(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Resolves #123")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_allows_case_insensitive_keyword(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "closes #123")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_allows_colon_form(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Closes: #123")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_allows_any_closing_ref_regardless_of_number(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Closes #999")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
+    assert _is_denied(_run_hook(_event(f"gh pr create --body-file {body}"), monkeypatch))
 
 
-# ---------------------------------------------------------------------------
-# T4: TestDeny
-# ---------------------------------------------------------------------------
+def test_unrelated_prep_and_sibling_files_cannot_rescue_body(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    body = _body_file(tmp_path, f"Closes {ISSUE_URL}")
+    stale = _body_file(tmp_path, f"Closes {ISSUE_URL}", name="stale.md")
+    _ordinary_metadata(stale)
+    prep = tmp_path / ".autoskillit" / "temp" / "prepare-pr" / "pr_prep_newest.md"
+    prep.parent.mkdir(parents=True)
+    prep.write_text("- closing_issue: 4293", encoding="utf-8")
+
+    assert _is_denied(_run_hook(_event(f"gh pr create --body-file {body}"), monkeypatch))
 
 
-class TestDeny:
-    def test_denies_missing_closes_reference(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Some description with no closing ref")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert _is_denied(output)
+def test_ordinary_body_must_contain_exact_closing_url(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    for content in ("Closes #4293", f"Reference: {ISSUE_URL}", f"Closes {OTHER_ISSUE_URL}"):
+        body = _body_file(tmp_path, content)
+        _ordinary_metadata(body)
+        assert _is_denied(_run_hook(_event(f"gh pr create --body-file {body}"), monkeypatch))
 
-    def test_deny_reason_contains_issue_number(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Some description with no closing ref")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        data = json.loads(output)
-        reason = data["hookSpecificOutput"]["permissionDecisionReason"]
-        assert "123" in reason
 
-    def test_deny_reason_contains_trigger(self, monkeypatch, tmp_path):
-        from autoskillit.hooks.guards.compose_pr_body_guard import (  # noqa: PLC0415
-            COMPOSE_PR_BODY_DENY_TRIGGER,
+def test_integration_pair_requires_every_sorted_unique_source_url(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    body = _body_file(tmp_path, f"Closes {ISSUE_URL}\nCloses {OTHER_ISSUE_URL}")
+    _integration_metadata(body)
+    command = f"gh pr create --body-file {body}"
+    assert _run_hook(_event(command), monkeypatch, skill_name="open-integration-pr") == ""
+
+    for urls in (
+        [ISSUE_URL],
+        [OTHER_ISSUE_URL, ISSUE_URL],
+        [ISSUE_URL, ISSUE_URL],
+        ["https://example.com/issues/4293"],
+    ):
+        _integration_metadata(body, source_issue_urls=urls)
+        assert _is_denied(
+            _run_hook(_event(command), monkeypatch, skill_name="open-integration-pr")
         )
 
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Some description with no closing ref")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        data = json.loads(output)
-        reason = data["hookSpecificOutput"]["permissionDecisionReason"]
-        assert COMPOSE_PR_BODY_DENY_TRIGGER in reason
 
-    def test_deny_reason_is_corrective(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Some description with no closing ref")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        data = json.loads(output)
-        reason = data["hookSpecificOutput"]["permissionDecisionReason"]
-        assert "Closes #123" in reason
-
-
-# ---------------------------------------------------------------------------
-# T5: TestBodyFileExtraction
-# ---------------------------------------------------------------------------
-
-
-class TestBodyFileExtraction:
-    def test_extracts_two_token_body_file(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Closes #123")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_extracts_fused_body_file(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Closes #123")
-        cmd = f"gh pr create --body-file={body}"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_extracts_from_chained_command(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Closes #123")
-        cmd = f"echo ok && gh pr create --body-file {body}"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_relative_body_path_resolved(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Closes #123")
-        rel = body.relative_to(tmp_path)
-        cmd = f"gh pr create --body-file {rel}"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_stops_at_shell_operator(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        # The --body-file here belongs to curl, not gh pr create. Guard should allow.
-        event = _build_event('gh pr create --title "x" && curl --body-file /unrelated')
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_finds_second_gh_pr_create_with_body_file(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Closes #123")
-        cmd = f"gh pr create --fill && gh pr create --body-file {body}"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-
-# ---------------------------------------------------------------------------
-# T6: TestPrepFileParsing
-# ---------------------------------------------------------------------------
-
-
-class TestPrepFileParsing:
-    def test_parses_issue_from_metadata(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "456")
-        body = _setup_body_file(tmp_path, "No closing reference here")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        data = json.loads(output)
-        reason = data["hookSpecificOutput"]["permissionDecisionReason"]
-        assert "456" in reason
-
-    def test_uses_most_recent_prep_file(self, monkeypatch, tmp_path):
-        import os
-
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        # Create two prep files with explicit mtimes — older one has 1000, newer has 2000
-        prep_dir = tmp_path / ".autoskillit" / "temp" / "prepare-pr"
-        prep_dir.mkdir(parents=True, exist_ok=True)
-        old = prep_dir / "pr_prep_old.md"
-        new = prep_dir / "pr_prep_new.md"
-        old.write_text(
-            "# PR Prep: Old\n\n## Metadata\n\n- closing_issue: 111\n\n## Title\n\nOld\n",
-            encoding="utf-8",
+def test_integration_body_omitting_one_source_url_denies(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    body = _body_file(tmp_path, f"Closes {ISSUE_URL}")
+    _integration_metadata(body)
+    assert _is_denied(
+        _run_hook(
+            _event(f"gh pr create --body-file {body}"),
+            monkeypatch,
+            skill_name="open-integration-pr",
         )
-        new.write_text(
-            "# PR Prep: New\n\n## Metadata\n\n- closing_issue: 222\n\n## Title\n\nNew\n",
-            encoding="utf-8",
-        )
-        os.utime(old, (1000, 1000))
-        os.utime(new, (2000, 2000))
-        body = _setup_body_file(tmp_path, "No closing reference here")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        data = json.loads(output)
-        reason = data["hookSpecificOutput"]["permissionDecisionReason"]
-        assert "222" in reason
-        assert "111" not in reason
-
-    def test_handles_missing_metadata_section(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        prep_dir = tmp_path / ".autoskillit" / "temp" / "prepare-pr"
-        prep_dir.mkdir(parents=True, exist_ok=True)
-        (prep_dir / "pr_prep_test.md").write_text(
-            "# PR Prep: No metadata\n\n## Title\n\nSomething\n",
-            encoding="utf-8",
-        )
-        body = _setup_body_file(tmp_path, "No closing reference here")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
+    )
 
 
-# ---------------------------------------------------------------------------
-# T7: TestRegistration
-# ---------------------------------------------------------------------------
+def test_any_invalid_create_segment_denies_compound_command(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    valid = _ordinary_pair(tmp_path)
+    command = f"gh pr create --title invalid; gh pr create --body-file {valid} --title valid"
+    assert _is_denied(_run_hook(_event(command), monkeypatch))
 
 
-class TestRegistration:
-    def test_hook_registered_in_registry(self):
-        """compose_pr_body_guard.py is registered in HOOK_REGISTRY with correct shape."""
-        all_scripts = {s for h in HOOK_REGISTRY for s in h.scripts}
-        assert "guards/compose_pr_body_guard.py" in all_scripts
-
-        # Find the HookDef containing this script
-        matching = [h for h in HOOK_REGISTRY if "guards/compose_pr_body_guard.py" in h.scripts]
-        assert matching, "No HookDef found for compose_pr_body_guard.py"
-        hookdef = matching[0]
-        assert hookdef.event_type == "PreToolUse"
-        assert hookdef.matcher == r"Bash|mcp__.*autoskillit.*__run_cmd"
-
-    def test_in_new_subdir_basenames(self):
-        """compose_pr_body_guard.py is in NEW_SUBDIR_BASENAMES."""
-        assert "compose_pr_body_guard.py" in NEW_SUBDIR_BASENAMES
+def test_all_valid_create_segments_allow(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    first = _ordinary_pair(tmp_path)
+    second = _body_file(tmp_path, f"Closes {ISSUE_URL}", name="second.md")
+    _ordinary_metadata(second)
+    command = f"gh pr create --body-file {first}; gh pr create --body-file={second}"
+    assert _run_hook(_event(command), monkeypatch) == ""
 
 
-# ---------------------------------------------------------------------------
-# T8: TestRunCmdVariant
-# ---------------------------------------------------------------------------
+def test_variable_loop_and_run_cmd_shape(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    body = _ordinary_pair(tmp_path)
+    command = (
+        f"PR_CREATE_BODY={body}\n"
+        "while true; do\n"
+        '  gh pr create --body-file "$PR_CREATE_BODY"\n'
+        "  break\n"
+        "done"
+    )
+    event = _event(command, "mcp__autoskillit__local__autoskillit__run_cmd")
+    assert _run_hook(event, monkeypatch) == ""
 
 
-class TestRunCmdVariant:
-    def test_run_cmd_tool_name_detected(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Some description with no closing ref")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd, tool_name="mcp__autoskillit__local__autoskillit__run_cmd")
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert _is_denied(output)
+def test_relative_body_path_resolves_from_payload_cwd(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    body = _ordinary_pair(tmp_path)
+    relative = body.relative_to(tmp_path)
+    assert _run_hook(_event(f"gh pr create --body-file {relative}"), monkeypatch) == ""
 
 
-# ---------------------------------------------------------------------------
-# T9: TestSessionScope
-# ---------------------------------------------------------------------------
+def test_echo_only_reference_is_not_a_create(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    assert _run_hook(_event("echo 'gh pr create --body-file /missing.md'"), monkeypatch) == ""
 
 
-class TestSessionScope:
-    def test_allows_when_not_headless(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Some description with no closing ref")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=False)
-        assert output == ""
+def test_malformed_hook_json_fails_open(monkeypatch):
+    from autoskillit.hooks.guards.compose_pr_body_guard import main  # noqa: PLC0415
 
-    def test_denies_when_headless(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Some description with no closing ref")
-        cmd = f"gh pr create --body-file {body} --base main"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert _is_denied(output)
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+    monkeypatch.setattr("sys.stdin", io.StringIO("{"))
+    with redirect_stdout(io.StringIO()) as output, pytest.raises(SystemExit):
+        main()
+    assert output.getvalue() == ""
 
 
-# ---------------------------------------------------------------------------
-# T10: TestRetryShape — guard compatibility with retry-block command shape
-# ---------------------------------------------------------------------------
-
-
-class TestRetryShape:
-    """Step 5 of compose-pr wraps `gh pr create` in a bounded retry loop.
-
-    The guard must still extract the --body-file path when `gh pr create`
-    appears inside `while ... do ... done`, `if ... then ... fi`, or
-    `for ... do ... done` constructs — and still deny when the body file
-    omits the required closing reference. Existing echo/print false-positive
-    protections must remain intact.
-    """
-
-    def test_denies_when_inside_while_loop(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Some description with no closing ref")
-        cmd = (
-            f'while [ "$ATTEMPT" -le 3 ]; do\n'
-            f"  gh pr create --body-file {body} --base main\n"
-            f"  ATTEMPT=$((ATTEMPT + 1))\n"
-            f"done"
-        )
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert _is_denied(output)
-
-    def test_denies_when_inside_for_loop(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Some description with no closing ref")
-        cmd = f"for ATTEMPT in 1 2 3; do\n  gh pr create --body-file {body} --base main\ndone"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert _is_denied(output)
-
-    def test_denies_when_after_then_keyword(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Some description with no closing ref")
-        cmd = (
-            f'if [ "$PRECONDITION" = "ok" ]; then\n'
-            f"  gh pr create --body-file {body} --base main\n"
-            f"fi"
-        )
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert _is_denied(output)
-
-    def test_denies_when_after_else_keyword(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Some description with no closing ref")
-        cmd = (
-            f'if [ "$PRECONDITION" = "skip" ]; then\n'
-            f"  :\n"
-            f"else\n"
-            f"  gh pr create --body-file {body} --base main\n"
-            f"fi"
-        )
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert _is_denied(output)
-
-    def test_denies_when_after_elif_keyword(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Some description with no closing ref")
-        cmd = (
-            f'if [ "$A" = "x" ]; then\n'
-            f"  :\n"
-            f'elif [ "$B" = "y" ]; then\n'
-            f"  gh pr create --body-file {body} --base main\n"
-            f"fi"
-        )
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert _is_denied(output)
-
-    def test_allows_when_body_has_closing_ref_inside_loop(self, monkeypatch, tmp_path):
-        """The guard approves loop-wrapped gh pr create when the body contains a closing ref."""
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Summary\n\nCloses #123")
-        cmd = (
-            f"for ATTEMPT in 1 2 3; do\n"
-            f"  gh pr create --body-file {body} --base main\n"
-            f"  ATTEMPT=$((ATTEMPT + 1))\n"
-            f"done"
-        )
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_allows_echo_only_command_mentioning_gh_pr_create(self, monkeypatch, tmp_path):
-        """echo/print of gh pr create text must remain a benign false-positive."""
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        cmd = "echo 'About to run: gh pr create --body-file /tmp/whatever.md --base main'"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_allows_print_only_command_mentioning_gh_pr_create(self, monkeypatch, tmp_path):
-        """printf of gh pr create text must remain a benign false-positive."""
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        cmd = "printf 'Will run: gh pr create --body-file /tmp/whatever.md --base main\\n'"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_denies_fused_body_file_inside_loop(self, monkeypatch, tmp_path):
-        """The --body-file=<path> fused form must still be extracted from inside a loop."""
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body = _setup_body_file(tmp_path, "Some description with no closing ref")
-        cmd = f"for ATTEMPT in 1 2 3; do\n  gh pr create --body-file={body}\ndone"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert _is_denied(output)
-
-    def test_stops_extraction_at_loop_do_keyword(self, monkeypatch, tmp_path):
-        """A --body-file that appears AFTER a `do` keyword on a chained line
-        must not be attributed to a later `gh pr create` invocation.
-
-        With the new boundary set, `do` terminates the previous segment
-        and the next command starts fresh. This test verifies the parser
-        still stops cleanly at the keyword.
-        """
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        # gh pr create has no --body-file, and the curl --body-file that
-        # follows after `do` should not be picked up.
-        cmd = (
-            "while true; do\n"
-            '  gh pr create --title "x" --base main\n'
-            "  curl --body-file /unrelated.md\n"
-            "done"
-        )
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        # gh pr create has no body-file, so nothing to deny → empty output.
-        assert output == ""
-
-
-# ---------------------------------------------------------------------------
-# T11: TestVariableBodyPath — guard resolves $VAR form used by compose-pr Step 5
-# ---------------------------------------------------------------------------
-
-
-class TestVariableBodyPath:
-    """compose-pr Step 5 uses --body-file "$PR_CREATE_BODY" (a variable form).
-
-    The guard must resolve PR_CREATE_BODY from safe depth-0 assignments
-    that appear before the matched gh pr create, handle nested $ts variables
-    in the value, and reject assignments from out-of-scope positions (post-gh
-    or inside alternate control branches).
-    """
-
-    def _make_body_path(self, tmp_path, content: str) -> str:
-        """Create the body file at the compose-pr standard location and return its path."""
-        body_path = tmp_path / ".autoskillit" / "temp" / "compose-pr" / "pr_body_testts.md"
-        body_path.parent.mkdir(parents=True, exist_ok=True)
-        body_path.write_text(content, encoding="utf-8")
-        return str(body_path)
-
-    def test_denies_variable_body_path_after_esac_boundary(self, monkeypatch, tmp_path):
-        """PR_CREATE_BODY variable resolved from preamble; gh pr create after esac → deny."""
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body_path = self._make_body_path(tmp_path, "Some description with no closing ref")
-
-        cmd = (
-            f"PR_CREATE_BODY={body_path}\n"
-            f"while true; do\n"
-            f'  case "$PR_CREATE_ATTEMPT" in\n'
-            f"    2) sleep 1 ;;\n"
-            f"  esac\n"
-            f'  gh pr create --base main --body-file "$PR_CREATE_BODY"\n'
-            f"  break\n"
-            f"done"
-        )
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert _is_denied(output)
-
-    def test_allows_variable_body_path_with_closing_ref(self, monkeypatch, tmp_path):
-        """PR_CREATE_BODY resolved and body contains Closes #N → guard allows."""
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body_path = self._make_body_path(tmp_path, "Summary\n\nCloses #123")
-
-        cmd = (
-            f"PR_CREATE_BODY={body_path}\n"
-            f"while true; do\n"
-            f'  case "$PR_CREATE_ATTEMPT" in\n'
-            f"    2) sleep 1 ;;\n"
-            f"  esac\n"
-            f'  gh pr create --base main --body-file "$PR_CREATE_BODY"\n'
-            f"  break\n"
-            f"done"
-        )
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_resolves_nested_ts_variable_in_body_path(self, monkeypatch, tmp_path):
-        """PR_CREATE_BODY contains $ts; both assigned before loop → deny."""
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-
-        compose_dir = tmp_path / ".autoskillit" / "temp" / "compose-pr"
-        compose_dir.mkdir(parents=True, exist_ok=True)
-        body_path = compose_dir / "pr_body_testts.md"
-        body_path.write_text("Some description with no closing ref", encoding="utf-8")
-
-        compose_dir_str = str(compose_dir)
-        cmd = (
-            f"ts=testts\n"
-            f"PR_CREATE_BODY={compose_dir_str}/pr_body_$ts.md\n"
-            f"while true; do\n"
-            f'  case "$PR_CREATE_ATTEMPT" in\n'
-            f"    2) sleep 1 ;;\n"
-            f"  esac\n"
-            f'  gh pr create --base main --body-file "$PR_CREATE_BODY"\n'
-            f"  break\n"
-            f"done"
-        )
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert _is_denied(output)
-
-    def test_denies_variable_body_path_after_fi_boundary(self, monkeypatch, tmp_path):
-        """Guard recognizes gh pr create immediately after fi command boundary."""
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body_path = self._make_body_path(tmp_path, "No closing ref here")
-
-        cmd = (
-            f"PR_CREATE_BODY={body_path}\n"
-            f'if [ "$PRECONDITION" = "ok" ]; then\n'
-            f"  : # setup\n"
-            f"fi\n"
-            f'gh pr create --base main --body-file "$PR_CREATE_BODY"'
-        )
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert _is_denied(output)
-
-    def test_denies_variable_body_path_after_done_boundary(self, monkeypatch, tmp_path):
-        """Guard recognizes gh pr create immediately after done command boundary."""
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body_path = self._make_body_path(tmp_path, "No closing ref here")
-
-        cmd = (
-            f"PR_CREATE_BODY={body_path}\n"
-            f"for i in 1; do\n"
-            f"  : # setup\n"
-            f"done\n"
-            f'gh pr create --base main --body-file "$PR_CREATE_BODY"'
-        )
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert _is_denied(output)
-
-    def test_post_gh_assignment_is_not_used(self, monkeypatch, tmp_path):
-        """An assignment appearing after gh pr create must not be used for resolution."""
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body_path = self._make_body_path(tmp_path, "No closing ref here")
-
-        # PR_CREATE_BODY only assigned AFTER gh pr create — resolution must fail-open.
-        cmd = (
-            f"while true; do\n"
-            f'  gh pr create --base main --body-file "$PR_CREATE_BODY"\n'
-            f"  PR_CREATE_BODY={body_path}\n"
-            f"  break\n"
-            f"done"
-        )
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_alternate_branch_assignment_is_not_used(self, monkeypatch, tmp_path):
-        """Assignment inside an if-then branch cannot be proven to reach the else branch."""
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        body_path = self._make_body_path(tmp_path, "No closing ref here")
-
-        # PR_CREATE_BODY is assigned in the `then` branch; gh pr create is in `else`.
-        # Since the assignment is at depth 1, it must not be collected → fail-open.
-        cmd = (
-            f'if [ "$PRECONDITION" = "ok" ]; then\n'
-            f"  PR_CREATE_BODY={body_path}\n"
-            f"else\n"
-            f'  gh pr create --base main --body-file "$PR_CREATE_BODY"\n'
-            f"fi"
-        )
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
-
-    def test_allows_echo_mentioning_variable_form(self, monkeypatch, tmp_path):
-        """Echo of gh pr create with $PR_CREATE_BODY must remain a benign false-positive."""
-        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
-        monkeypatch.chdir(tmp_path)
-        _setup_prep_file(tmp_path, "123")
-        cmd = "echo 'About to run: gh pr create --body-file $PR_CREATE_BODY'"
-        event = _build_event(cmd)
-        output = _run_hook(event, monkeypatch, headless=True)
-        assert output == ""
+def test_hook_registration_shape():
+    matching = [
+        hook for hook in HOOK_REGISTRY if "guards/compose_pr_body_guard.py" in hook.scripts
+    ]
+    assert len(matching) == 1
+    assert matching[0].event_type == "PreToolUse"
+    assert matching[0].matcher == r"Bash|mcp__.*autoskillit.*__run_cmd"
+    assert "compose_pr_body_guard.py" in NEW_SUBDIR_BASENAMES

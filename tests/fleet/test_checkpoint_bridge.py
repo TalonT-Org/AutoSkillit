@@ -199,6 +199,37 @@ class TestLoadDispatchProgress:
         assert authority_error is not None
         assert dispatch_id in authority_error
 
+    @pytest.mark.parametrize(
+        "tracker_content",
+        ["{", '{"steps": [], "dependencies": {}}'],
+        ids=["corrupt", "wrong-shape"],
+    )
+    def test_invalid_expected_tracker_returns_authority_error(
+        self, tool_ctx, tmp_path, tracker_content
+    ) -> None:
+        tool_ctx.project_dir = tmp_path
+        dispatch_id = "dispatch-invalid"
+        target = TrackerAuthorityTarget.for_project(tmp_path, dispatch_id, expected=True)
+        target.path.parent.mkdir(parents=True)
+        target.path.write_text(tracker_content, encoding="utf-8")
+        lease = ArtifactLease.acquire_shared(tracker_lease_path(target))
+        try:
+            _path, entries, checkpoint, authority_error = load_dispatch_progress(
+                tool_ctx=tool_ctx,
+                dispatch_sidecar_path=str(sidecar_path(dispatch_id, tmp_path)),
+                dispatch_id=dispatch_id,
+                backend_name="codex",
+                recipe="implementation",
+                tracker_lease=lease,
+            )
+        finally:
+            lease.close_preserving()
+
+        assert entries == []
+        assert checkpoint is None
+        assert authority_error is not None
+        assert dispatch_id in authority_error
+
     def test_authoritative_sidecar_suppresses_tracker_authority_error(
         self, tool_ctx, tmp_path
     ) -> None:

@@ -680,6 +680,11 @@ skills:
       - "issue title"
       - "issue body"
       - "closing_issue"
+    - field: source_issue_url
+      required_source: "current repository identity plus closing_issue"
+      prohibited_sources:
+      - "ambient prep artifacts"
+      - "unrelated issue metadata"
 
   compose-pr:
     inputs:
@@ -716,6 +721,11 @@ skills:
       - "issue metadata"
       - "branch names"
       - "ambient context"
+    - field: source_issue_url
+      required_source: "the explicit prep_path ## Metadata section"
+      prohibited_sources:
+      - "newest prep discovery"
+      - "ambient issue metadata"
 
   open-integration-pr:
     inputs:
@@ -744,6 +754,12 @@ skills:
     - "https://github\\.com/.*/pull/\\d+"
     pattern_examples:
     - "https://github.com/owner/repo/pull/42\n%%ORDER_UP%%"
+    source_pin_fields:
+    - field: source_issue_urls
+      required_source: "canonical closing URLs in the constituent PR bodies"
+      prohibited_sources:
+      - "bare issue numbers"
+      - "ambient issue metadata"
 
   triage-issues:
     inputs: []

@@ -46,6 +46,7 @@ _FORBIDDEN_TOOL_FRAGMENTS = (
     "spawn_agent",
     "write_stdin",
 )
+_NESTED_TOOL_CALL = re.compile(r"\btools\.([A-Za-z0-9_]+)\s*\(")
 
 
 def _assistant_text(events: list[dict]) -> str:
@@ -77,9 +78,62 @@ def _observed_tool_names(events: list[dict]) -> set[str]:
             continue
         payload_type = str(payload.get("type", ""))
         name = str(payload.get("name", ""))
-        if "call" in payload_type:
+        if "call" not in payload_type or payload_type.endswith("_output"):
+            continue
+        if payload_type == "custom_tool_call" and name == "exec":
+            source = str(payload.get("input") or payload.get("arguments") or "")
+            names.update(_NESTED_TOOL_CALL.findall(source))
+        else:
             names.add(name or payload_type)
     return names
+
+
+def _forbidden_called_tools(tool_names: set[str]) -> set[str]:
+    return {
+        name
+        for name in tool_names
+        if any(fragment in name.lower() for fragment in _FORBIDDEN_TOOL_FRAGMENTS)
+    }
+
+
+def _nested_exec_call(source: str) -> dict:
+    return {
+        "type": "response_item",
+        "payload": {"type": "custom_tool_call", "name": "exec", "input": source},
+    }
+
+
+def test_observed_tool_names_records_nested_calls_not_gateway_or_catalog() -> None:
+    events = [
+        _nested_exec_call(
+            "const result = await tools.web__run({search_query: [{q: 'Python'}]}); "
+            "text(JSON.stringify(result));"
+        ),
+        {
+            "type": "response_item",
+            "payload": {"type": "custom_tool_call_output", "output": "search results"},
+        },
+        {
+            "type": "tool_catalog",
+            "payload": {"tools": ["exec_command", "spawn_agent", "computer_use"]},
+        },
+    ]
+
+    assert _observed_tool_names(events) == {"web__run"}
+
+
+def test_view_image_is_an_allowed_nested_call() -> None:
+    tool_names = _observed_tool_names(
+        [_nested_exec_call("await tools.view_image({path: '/tmp/chart.png'});")]
+    )
+    assert tool_names == {"view_image"}
+    assert not _forbidden_called_tools(tool_names)
+
+
+@pytest.mark.parametrize("tool_name", ["exec_command", "browser_control", "spawn_agent"])
+def test_forbidden_nested_calls_are_rejected(tool_name: str) -> None:
+    event = _nested_exec_call(f"await tools.{tool_name}({{}});")
+    assert _forbidden_called_tools(_observed_tool_names([event])) == {tool_name}
 
 
 @pytest.mark.smoke
@@ -135,7 +189,9 @@ def test_live_web_agent_is_luna_xhigh_read_only_leaf(
 Spawn exactly one child with agent_type={WEB_EVIDENCE_RESEARCHER_ROLE!r},
 fork_turns='none', and task_name='live_web_evidence'. Do not pass model or
 reasoning_effort. Ask it to use live web search to identify the current stable
-Python release from an official Python source and return at least one exact
+Python release from an official Python source. Require it to make at least one
+shared functions.exec gateway call whose cell directly awaits tools.web__run
+with a search_query, and return at least one exact
 https://docs.python.org/ URL through its terminal verdict envelope. Wait for the
 child, then return its URL and the marker WEB_AGENT_GATE_COMPLETE. Do not search
 the web in the parent.
@@ -168,12 +224,8 @@ the web in the parent.
         expected_definition_digest=digest,
     )
     tool_names = _observed_tool_names(rollout.child_events)
-    assert any("web_search" in name.lower() for name in tool_names), tool_names
-    assert not {
-        name
-        for name in tool_names
-        if any(fragment in name.lower() for fragment in _FORBIDDEN_TOOL_FRAGMENTS)
-    }
+    assert "web__run" in tool_names, tool_names
+    assert not _forbidden_called_tools(tool_names)
     child_text = _assistant_text(rollout.child_events)
     returned_urls = sorted(set(re.findall(r"https://docs\.python\.org/[^\s)>\]]+", child_text)))
     assert returned_urls, child_text[-4000:]

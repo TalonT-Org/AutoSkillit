@@ -83,10 +83,18 @@ def test_web_evidence_researcher_is_a_terminal_live_web_leaf() -> None:
         "SOURCE_UNREACHABLE",
         "explicit source conflicts",
         "Verdict: answered | partial | blocked",
-        "CONTRACT VIOLATION",
         "stop only further search/fetch calls",
+        "view_image",
+        "Never actually call a shell or terminal tool",
+        "mutate repository or other files",
+        "control a browser or computer",
+        "spawn another agent",
     ):
         assert contract in definition.body
+    assert "First verify" not in definition.body
+    assert "effective surface includes" not in definition.body
+    assert "inventory or inspect advertised tools" not in definition.body
+    assert "unrelated tools are visible" not in definition.body
 
 
 def test_bundled_agent_catalog_loads_with_unique_digests() -> None:

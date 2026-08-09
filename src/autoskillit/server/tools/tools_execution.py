@@ -500,7 +500,7 @@ def _has_active_locks(order_id: str) -> bool:
     ctx = _get_ctx()
     try:
         overlay = read_overlay(ctx.project_dir)
-    except (OSError, OverlayStateError):
+    except OSError:
         return False
     locked_steps = overlay.get("locked_steps", {})
     if not locked_steps:

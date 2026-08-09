@@ -35,6 +35,19 @@ def test_invalid_persisted_lock_state_returns_controlled_deny(
     assert "Invalid persisted lock state" in result["error"]
 
 
+def test_unresolved_lock_check_propagates_invalid_overlay(tool_ctx_kitchen_open, tmp_path) -> None:
+    from autoskillit.server.tools._overlay_state import OverlayStateError
+    from autoskillit.server.tools.tools_execution import _has_active_locks
+
+    temp_dir = tmp_path / ".autoskillit" / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    (temp_dir / ".hook_config_overlay.json").write_text("{ malformed")
+    tool_ctx_kitchen_open.project_dir = tmp_path
+
+    with pytest.raises(OverlayStateError):
+        _has_active_locks("pipeline-1")
+
+
 class TestRunSkillDeniesLockedStep:
     """Test 6: run_skill denies locked step."""
 

@@ -24,6 +24,7 @@ from autoskillit.cli._install_contract import (
     InstallProcessStatus,
     InstallRequest,
     InstallResult,
+    MaintenanceInstallArgv,
     result_from_process_status,
 )
 from autoskillit.cli._install_info import (
@@ -499,15 +500,10 @@ def run_update_transaction(
             require_registered_plugin=request.require_registered_plugin,
             expected_version=expected_version,
         )
-        install_command = [
-            "autoskillit",
-            "install",
-            "--maintenance-update",
-            "--expected-version",
-            expected_version,
-        ]
-        if require_registered_plugin:
-            install_command.append("--require-registered-plugin")
+        install_command = MaintenanceInstallArgv(
+            entrypoint=Path("autoskillit"),
+            expected_version=expected_version,
+        ).to_argv(require_registered_plugin=require_registered_plugin)
         progress.enter(UpdateTransactionPhase.INSTALL_CHILD_INVOCATION)
         try:
             install_process = runner(

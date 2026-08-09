@@ -1,4 +1,4 @@
-"""CLI repair and verified clearing of pending publication obligations."""
+"""Repair and verify pending publication obligations."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from typing import Any
 
 from packaging.version import InvalidVersion, Version
 
+from autoskillit.cli._install_contract import MaintenanceInstallArgv
 from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
     get_logger,
@@ -51,10 +52,24 @@ def _valid_version_or_unknown(value: str | None) -> str | None:
 
 
 class ObligationRepairOutcome(StrEnum):
-    """Closed outcomes for one publication-obligation repair attempt."""
+    """Closed outcomes for one publication-obligation repair attempt.
+
+    Members:
+    - NO_OBLIGATION: no on-disk obligation journal; nothing to repair.
+    - DEFERRED: deferral condition (e.g., CLAUDECODE); repair not attempted.
+    - MISSING_EXPECTED_VERSION: pre-launch probe failed (no version from
+      ``--version``) or the persisted obligation's expected_version is
+      stale relative to the live distribution version; the install subprocess
+      was never spawned. Callers must treat this as a repairable obligation
+      that warrants a warning emission.
+    - FAILED: an explicit failure (subprocess non-zero exit, OSError on
+      spawn, broken-hook detection, identity mismatch, etc.).
+    - CLEARED: obligation verified and cleared.
+    """
 
     NO_OBLIGATION = "no_obligation"
     DEFERRED = "deferred"
+    MISSING_EXPECTED_VERSION = "missing_expected_version"
     FAILED = "failed"
     CLEARED = "cleared"
 
@@ -75,7 +90,11 @@ def attempt_obligation_repair(
     process_runner: _ProcessRunner | None = None,
     entrypoint: Path | None = None,
 ) -> ObligationRepairResult:
-    """Repair and verify a pending publication obligation before clearing it."""
+    """Repair an obligation and clear it only after installed-state verification.
+
+    The live version is probed before child launch and must match any valid
+    persisted expectation. The maintenance install uses the typed argv contract.
+    """
     env = environment if environment is not None else os.environ
     obligation = read_obligation(home)
     if obligation is None:
@@ -100,9 +119,54 @@ def attempt_obligation_repair(
         )
     child_env = dict(env)
     child_env["HOME"] = str(home)
+
+    # A maintenance install does not change the distribution version, so probe once.
+    try:
+        version_check = runner(
+            [str(repair_entrypoint), "--version"],
+            check=False,
+            env=child_env,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:
+        return ObligationRepairResult(
+            outcome=ObligationRepairOutcome.FAILED,
+            findings=(f"obligation_repair_probe_failed: {exc}",),
+        )
+    if version_check.returncode != 0:
+        return ObligationRepairResult(
+            outcome=ObligationRepairOutcome.FAILED,
+            findings=(
+                "obligation_repair_probe_failed: --version returned "
+                f"{version_check.returncode}: {version_check.stderr.strip()}",
+            ),
+        )
+    probed_version = (version_check.stdout or "").strip()
+    if not probed_version or _valid_version_or_unknown(probed_version) is None:
+        return ObligationRepairResult(
+            outcome=ObligationRepairOutcome.MISSING_EXPECTED_VERSION,
+            findings=(f"obligation_repair_probe_unparseable: {probed_version!r}",),
+        )
+
+    # A stale persisted version would be rejected by the install child.
+    persisted_version = _valid_version_or_unknown(obligation.expected_version)
+    if persisted_version is not None and persisted_version != probed_version:
+        return ObligationRepairResult(
+            outcome=ObligationRepairOutcome.MISSING_EXPECTED_VERSION,
+            findings=(
+                f"obligation_stale: expected {persisted_version}, observed {probed_version}",
+            ),
+        )
+
+    install_argv = MaintenanceInstallArgv(
+        entrypoint=repair_entrypoint,
+        expected_version=probed_version,
+    ).to_argv()
+
     try:
         install_result = runner(
-            [str(repair_entrypoint), "install", "--maintenance-update"],
+            install_argv,
             check=False,
             env=child_env,
         )
@@ -135,36 +199,7 @@ def attempt_obligation_repair(
             findings=(f"{len(broken)} broken hook command(s) remain after repair install",),
         )
 
-    expected_version = _valid_version_or_unknown(obligation.expected_version)
-    if expected_version is None:
-        try:
-            version_check = runner(
-                [str(repair_entrypoint), "--version"],
-                check=False,
-                capture_output=True,
-                env=child_env,
-                text=True,
-            )
-        except OSError as exc:
-            return ObligationRepairResult(
-                outcome=ObligationRepairOutcome.FAILED,
-                findings=(f"Could not launch autoskillit --version after repair: {exc}",),
-            )
-        if version_check.returncode != 0:
-            return ObligationRepairResult(
-                outcome=ObligationRepairOutcome.FAILED,
-                findings=(
-                    "autoskillit --version failed after repair install "
-                    "(expected version unknown — probe never succeeded pre-repair)",
-                ),
-            )
-        expected_version = (version_check.stdout or "").strip()
-        if not expected_version or _valid_version_or_unknown(expected_version) is None:
-            return ObligationRepairResult(
-                outcome=ObligationRepairOutcome.FAILED,
-                findings=("autoskillit --version produced no valid version after repair install",),
-            )
-
+    expected_version = probed_version
     try:
         from autoskillit.core import (
             installed_plugin_artifact_manifest_path,

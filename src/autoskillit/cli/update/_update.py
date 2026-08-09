@@ -18,6 +18,7 @@ def run_update_command(home: Path | None = None) -> None:
     """Upgrade autoskillit to the latest version on the install's branch.
 
     Only a fully completed update clears prompt state or restarts the process.
+    Incomplete updates attempt to repair any pending publication obligation.
     """
     from autoskillit.cli.update._update_checks import (
         _read_dismiss_state,

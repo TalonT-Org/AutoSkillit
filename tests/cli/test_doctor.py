@@ -1496,6 +1496,30 @@ def test_check_publication_obligation_warns_when_state_is_unreadable(
     assert "denied" in result.message
 
 
+def test_check_publication_obligation_message_recommends_functional_repair(
+    tmp_path: Path,
+) -> None:
+    """A pending publication obligation recommends automatic maintenance repair."""
+    from autoskillit.cli.doctor import _check_publication_obligation
+    from autoskillit.core import Severity
+    from autoskillit.workspace import update_obligation_expected_version, write_obligation
+
+    obligation = write_obligation(
+        tmp_path, previous_version="1.0.0", originating_phase="upgrade-subprocess-gate"
+    )
+    update_obligation_expected_version(tmp_path, expected=obligation, expected_version="1.1.0")
+
+    result = _check_publication_obligation(home=tmp_path)
+
+    assert result.severity == Severity.WARNING
+    assert result.message == (
+        f"Publication owed since {obligation.written_at} "
+        "(previous_version=1.0.0, expected_version=1.1.0). "
+        "Run `autoskillit install` from an external terminal, or run a "
+        "healthy non-server CLI command to trigger automatic repair."
+    )
+
+
 # T-CACHE-INTEGRITY-1: doctor detects plugin cache hooks.json with broken paths
 def test_doctor_plugin_cache_integrity(tmp_path: Path) -> None:
     """_check_plugin_cache_integrity must return ERROR when cached hooks.json has broken paths.

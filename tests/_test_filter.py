@@ -223,6 +223,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_skill_semantics": frozenset(
         {"cli", "core", "execution", "fleet", "migration", "pipeline", "server", "workspace"}
     ),
+    "_type_install": frozenset({"cli", "core", "integration", "smoke_utils"}),
     "_type_inspector": frozenset({"core", "execution"}),
     "_type_intake_policy": frozenset({"core", "execution"}),
     "_type_invariant_registry": frozenset({"core"}),

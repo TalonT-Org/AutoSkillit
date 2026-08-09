@@ -255,7 +255,11 @@ def install(
     require_registered_plugin: Annotated[bool, Parameter(show=False)] = False,
     expected_version: Annotated[str | None, Parameter(show=False)] = None,
 ) -> None:
-    """Install the plugin for Claude Code and refresh the cache."""
+    """Install the plugin for Claude Code and refresh the cache.
+
+    Maintenance updates require the caller to supply the expected version;
+    direct installs use the running distribution version.
+    """
     from autoskillit import __version__
     from autoskillit.cli._init_helpers import _print_next_steps
     from autoskillit.cli._install_contract import (

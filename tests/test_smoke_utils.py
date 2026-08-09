@@ -6430,3 +6430,73 @@ def test_extract_investigation_accepts_report_without_recommendations(
         output_dir=str(tmp_path / "unused"),
     )
     assert result["investigation_report"] == str(report)
+
+
+@pytest.mark.parametrize(
+    ("version_returncode", "version_stdout", "error_match"),
+    [
+        (0, "1.1.0\n", None),
+        (1, "1.1.0\n", "version probe failed"),
+        (0, "not-a-version\n", "invalid post-upgrade version"),
+    ],
+)
+def test_cross_interpreter_upgrade_smoke_validates_version_before_republish(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    version_returncode: int,
+    version_stdout: str,
+    error_match: str | None,
+) -> None:
+    """The real smoke path must validate the probe before constructing republish argv."""
+    from autoskillit import core
+    from autoskillit.smoke_utils import _cross_interpreter_upgrade as smoke
+
+    entrypoint = tmp_path / "bin" / "autoskillit"
+    cache_root = tmp_path / "cache"
+    run_calls: list[list[str]] = []
+
+    def fake_subprocess_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if cmd[:3] == ["uv", "python", "find"]:
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+        assert cmd == [str(entrypoint), "--version"]
+        return subprocess.CompletedProcess(
+            cmd,
+            version_returncode,
+            stdout=version_stdout,
+            stderr="probe error",
+        )
+
+    def fake_run(cmd: list[str], *, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        del env
+        run_calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    incarnations = iter([{"current"}, {"current", "retained"}])
+    monkeypatch.setattr(smoke.subprocess, "run", fake_subprocess_run)
+    monkeypatch.setattr(smoke, "_run", fake_run)
+    monkeypatch.setattr(smoke, "_find_source_root", lambda: tmp_path / "source")
+    monkeypatch.setattr(smoke.shutil, "which", lambda _name, path: str(entrypoint))
+    monkeypatch.setattr(core, "installed_plugin_cache_dir", lambda _home, _name: cache_root)
+    monkeypatch.setattr(smoke, "_cache_incarnations", lambda _root: next(incarnations))
+    monkeypatch.setattr(
+        smoke,
+        "_preserve_pre_upgrade_incarnation",
+        lambda _root, _source, _minor: "retained",
+    )
+    monkeypatch.setattr(smoke, "_assert_incarnation_hooks_execute", lambda _path: None)
+
+    if error_match is not None:
+        with pytest.raises(RuntimeError, match=error_match):
+            smoke.run_cross_interpreter_upgrade_smoke(work_dir=str(tmp_path))
+        assert not any("--maintenance-update" in cmd for cmd in run_calls)
+        return
+
+    assert smoke.run_cross_interpreter_upgrade_smoke(work_dir=str(tmp_path)) is True
+    republish = next(cmd for cmd in run_calls if "--maintenance-update" in cmd)
+    assert republish == [
+        str(entrypoint),
+        "install",
+        "--maintenance-update",
+        "--expected-version",
+        "1.1.0",
+    ]

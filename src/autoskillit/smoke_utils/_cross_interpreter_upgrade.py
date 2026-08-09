@@ -14,6 +14,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from packaging.version import InvalidVersion, Version
+
 # Declared precondition, not a default to silently fall back on: the runner
 # must offer both minors, or this step fails loudly (no silent caps).
 _REQUIRED_PYTHON_MINORS = ("3.11", "3.13")
@@ -145,7 +147,39 @@ def run_cross_interpreter_upgrade_smoke(*, work_dir: str) -> bool:
     if upgrade.returncode != 0:
         raise RuntimeError(f"upgrade install (python {minor_b}) failed: {upgrade.stderr}")
 
-    republish = _run([entrypoint, "install", "--maintenance-update"], env=env)
+    # Resolve the post-upgrade version from the resolved entrypoint's
+    # interpreter via subprocess — the smoke has no Python in-process handle
+    # on the upgraded interpreter's distribution version. Without this, the
+    # maintenance-install child rejects the call at the strict
+    # --expected-version boundary.
+    from autoskillit.core import MaintenanceInstallArgv
+
+    version_check = subprocess.run(
+        [entrypoint, "--version"], env=env, capture_output=True, text=True, timeout=60
+    )
+    if version_check.returncode != 0:
+        raise RuntimeError(
+            "cross-interpreter smoke post-upgrade version probe failed "
+            f"(exit {version_check.returncode}): {version_check.stderr.strip()}"
+        )
+    resolved_version = (version_check.stdout or "").strip()
+    if not resolved_version:
+        raise RuntimeError(
+            f"cross-interpreter smoke could not resolve post-upgrade version: {version_check}"
+        )
+    try:
+        Version(resolved_version)
+    except InvalidVersion as exc:
+        raise RuntimeError(
+            f"cross-interpreter smoke received invalid post-upgrade version: {resolved_version!r}"
+        ) from exc
+    republish = _run(
+        MaintenanceInstallArgv(
+            entrypoint=Path(entrypoint),
+            expected_version=resolved_version,
+        ).to_argv(),
+        env=env,
+    )
     if republish.returncode != 0:
         raise RuntimeError(f"post-upgrade republication failed: {republish.stderr}")
 

@@ -1,13 +1,16 @@
 """Typed install boundary shared by CLI callers and install implementations.
 
-This module is intentionally a dependency leaf: it performs no I/O and imports
-only from the standard library.
+This module is intentionally a dependency leaf: it performs no I/O and builds
+on the IL-0 typed maintenance-install boundary. Call sites that spawn the child
+subprocess must use ``MaintenanceInstallArgv.to_argv()`` to construct their argv.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
+
+from autoskillit.core import InstallMode, MaintenanceInstallArgv
 
 __all__ = [
     "InstallFailureKind",
@@ -16,16 +19,10 @@ __all__ = [
     "InstallProcessStatus",
     "InstallRequest",
     "InstallResult",
+    "MaintenanceInstallArgv",
     "process_status_for_result",
     "result_from_process_status",
 ]
-
-
-class InstallMode(StrEnum):
-    """The reason an install transaction was requested."""
-
-    DIRECT = "direct"
-    MAINTENANCE_UPDATE = "maintenance-update"
 
 
 class InstallOutcome(StrEnum):

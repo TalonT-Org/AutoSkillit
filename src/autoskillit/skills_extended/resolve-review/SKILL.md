@@ -491,6 +491,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | Anyio migration | `test_anyio_migration.py` | `asyncio.sleep`, `asyncio.Event`, `asyncio.to_thread` in `execution/process.py` |
 | Protocol types on ToolContext | `test_subpackage_isolation.py` | Concrete class types instead of Protocol types for ToolContext service fields |
 | Capability-based dispatch | `test_no_backend_name_bypass.py` | `if backend.name == "..."` — must use capability fields |
+| Canonical maintenance argv | `test_maintenance_install_argv_contract.py` | Hand-built list or tuple argv containing `--maintenance-update` outside `MaintenanceInstallArgv.to_argv()` |
 | step_name in run_cmd | `test_anti_pattern_guards.py` | Missing `step_name` in `run_cmd` `with:` blocks in recipe YAML |
 | No hardcoded temp paths | `test_python_no_hardcoded_temp.py` | Literal `{{AUTOSKILLIT_TEMP}}` path string in Python outside whitelist |
 | run_python path resolution | `test_run_python_path_resolution.py` | smoke_utils callable with relative-path fallback or path-like param not in `_PATH_LIKE_ARGS` |

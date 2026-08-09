@@ -38,6 +38,7 @@ class TestCoreSubpackages:
             "_type_capture",
             "_type_helpers",
             "_type_inspector",
+            "_type_install",
             "_type_intake_policy",
             "_type_invariant_registry",
             "_type_launch",

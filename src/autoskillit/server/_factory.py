@@ -73,6 +73,7 @@ from autoskillit.pipeline import (
     DefaultContextAdmissionLedger,
     DefaultGateState,
     DefaultGitHubApiLog,
+    DefaultRunSkillCompletionAuthority,
     DefaultTimingLog,
     DefaultTokenLog,
     OwnerBoundExplorationContextStore,
@@ -434,6 +435,7 @@ def make_context(
         audit_admission_ledger=audit_admission_ledger,
         audit_authority_materializer=audit_authority_materializer,
         committed_disposition_resolver=committed_disposition_resolver,
+        run_skill_completion=DefaultRunSkillCompletionAuthority(),
         exploration_context_store=OwnerBoundExplorationContextStore(
             trusted_root=exploration_trusted_root,
             service=DefaultExplorationService(),

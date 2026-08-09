@@ -43,10 +43,66 @@ __all__ = [
     "HeadlessExecutor",
     "SkillProjectionPreparation",
     "OutputPatternResolver",
+    "RunSkillCompletionAuthority",
     "SkillContractView",
     "SkillSessionContractStore",
     "WriteExpectedResolver",
 ]
+
+
+@runtime_checkable
+class RunSkillCompletionAuthority(Protocol):
+    """Server-owned lifecycle for launched ``run_skill`` invocations."""
+
+    def admission(self, tool_name: str) -> tuple[bool, str]: ...
+
+    def begin(
+        self,
+        *,
+        kitchen_id: str,
+        request_session_id: str,
+        tracker_order_id: str,
+        tracker_path: str,
+        tracker_kitchen_id: str,
+        tracker_incarnation_id: str,
+        step_name: str,
+    ) -> str: ...
+
+    def abort(self, invocation_id: str) -> None: ...
+
+    def draft(
+        self,
+        invocation_id: str,
+        *,
+        classification: str,
+        success: bool,
+        result_digest: str,
+        child_session_id: str = "",
+    ) -> Any: ...
+
+    def publish(self, receipt_id: str) -> Any: ...
+
+    def acknowledge(
+        self,
+        receipt_id: str,
+        *,
+        kitchen_id: str,
+        request_session_id: str,
+    ) -> Any: ...
+
+    def apply_tracker_credit(
+        self,
+        *,
+        tracker_order_id: str,
+        tracker_path: str,
+        tracker_kitchen_id: str,
+        tracker_incarnation_id: str,
+        step_name: str,
+        effect: Callable[[], Mapping[str, Any]],
+        receipt_id: str = "",
+    ) -> Mapping[str, Any]: ...
+
+    def clear_if_idle(self) -> bool: ...
 
 
 @runtime_checkable

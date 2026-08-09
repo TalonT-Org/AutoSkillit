@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -245,6 +246,7 @@ def _handle_init(
         "pipeline_id": effective_pipeline_id,
         "kitchen_id": ctx.kitchen_id,  # type: ignore[attr-defined]
         "initialized_at": datetime.now(UTC).isoformat(),
+        "tracker_incarnation_id": uuid.uuid4().hex,
         "steps": steps,
         "dependencies": dependencies or {},
     }

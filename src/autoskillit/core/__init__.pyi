@@ -893,6 +893,7 @@ from .types import RecipeExecutionCredential as RecipeExecutionCredential
 from .types import RecipeExecutionFactory as RecipeExecutionFactory
 from .types import RecipeExecutionId as RecipeExecutionId
 from .types import RecipeExecutionLock as RecipeExecutionLock
+from .types import RunSkillCompletionAuthority as RunSkillCompletionAuthority
 from .types import RecipeExecutionSnapshot as RecipeExecutionSnapshot
 from .types import RecipeFlowEdge as RecipeFlowEdge
 from .types import RecipeFlowGeneration as RecipeFlowGeneration

@@ -97,6 +97,10 @@ from autoskillit.pipeline.recipe_initialization import (
     start_recipe_initialization,
     transition_recipe_ready,
 )
+from autoskillit.pipeline.run_skill_completion import (
+    DefaultRunSkillCompletionAuthority,
+    RunSkillCompletionReceipt,
+)
 from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
 from autoskillit.pipeline.timings import DefaultTimingLog, TimingEntry
 from autoskillit.pipeline.tokens import DefaultTokenLog, TokenEntry, canonical_step_name
@@ -197,4 +201,7 @@ __all__ = [
     "replace_ready_execution",
     "start_recipe_initialization",
     "transition_recipe_ready",
+    # run_skill completion
+    "DefaultRunSkillCompletionAuthority",
+    "RunSkillCompletionReceipt",
 ]

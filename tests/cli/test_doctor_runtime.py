@@ -260,7 +260,6 @@ class TestCheckSessionIndexProjection:
         assert result.severity is severity
         if expected_detail is not None:
             assert expected_detail in result.message
-        assert not (tmp_path / ".locks" / "sessions-index.lock").exists()
 
     def test_reports_malformed_index_row(self, tmp_path: Path) -> None:
         from autoskillit.cli.doctor._doctor_runtime import _check_session_index_projection

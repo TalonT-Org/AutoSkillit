@@ -1691,8 +1691,8 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/fleet/test_fleet_e2e_codex.py": frozenset(
         {"autoskillit.execution", "autoskillit.workspace"}
     ),
-    # session_log retention tests verify callback injection into
-    # _enforce_retention — needs fleet.state
+    # session_log retention tests verify campaign protection in the writer
+    # transaction — needs fleet.state
     "tests/execution/test_session_log_retention.py": frozenset({"autoskillit.fleet"}),
     # provider forwarding test verifies budget guard preserves provider_used — needs DefaultAuditLog
     "tests/execution/test_headless_provider_forwarding.py": frozenset({"autoskillit.pipeline"}),

@@ -78,7 +78,7 @@ sessions/
     proc_trace.jsonl    # ProcSnapshot stream
     anomalies.jsonl     # detected anomalies
     raw_stdout.jsonl    # captured headless stdout
-sessions.jsonl          # one summary line per session
+sessions.jsonl          # retained row per committed summary
 ```
 
 Session directory names are **hyphen-separated**, never underscored — see the
@@ -231,11 +231,15 @@ find "$TRACE_ROOT" -name '*.jsonl' -type f -print0 |
 On macOS, substitute `~/Library/Application Support/autoskillit/logs` for the
 Linux default log directory.
 
-## 500-directory retention
+## Retained session projection
 
-`execution/session_log.py` keeps the most recent 500 session directories and
-prunes older ones at every new session start. `sessions.jsonl` is also rewritten
-on each prune to remove entries for deleted session directories.
+`execution/session_log.py` targets the most recent 2,000 committed session
+directories. Active-campaign protection can keep the survivor count above that
+target. Under one exclusive lease, retention ranks only directories containing
+`summary.json`, deletes expired unprotected sessions, and rewrites
+`sessions.jsonl` to exactly the retained committed projection. `summary.json` is
+the final per-session artifact and completion witness; the index `timestamp` is
+still the session start time.
 
 ## Recording and replay
 

@@ -67,10 +67,10 @@ projects need.
 
     autoskillit doctor
 
-Doctor runs 41 ungated checks: 22 numbered base checks (1–23, excluding 5),
-7 lettered sub-checks (`2b`, `2c`, `2d`, `2e`, `4b`, `7b`, `7c`), and
-12 backend/runtime checks (30–40, including `31b`). Enabling the fleet feature
-adds checks 24–29, for 47 total.
+Doctor runs 45 ungated checks: 36 numbered checks (1–23, excluding 5,
+and 30–43) plus 9 lettered sub-checks (`2b`, `2c`, `2d`, `2e`, `4b`,
+`7b`, `7c`, `17b`, `31b`). Enabling the fleet feature adds checks 24–29,
+for 51 total: 42 numbered and 9 lettered checks.
 Enumerated by `run_doctor` in `src/autoskillit/cli/doctor/__init__.py`:
 
 | # | Check | What it verifies |
@@ -98,6 +98,7 @@ Enumerated by `run_doctor` in `src/autoskillit/cli/doctor/__init__.py`:
 | 15 | Claude process state | Reports D-state and CPU breakdown of running `claude` processes via `ps` |
 | 16 | Install classification | `direct_url.json` classifies the install type and requested revision |
 | 17 | Update dismissal state | Active update-prompt dismissal window and conditions, if any |
+| 17b | Publication obligation | Pending local publication obligations are reported without mutation |
 | 18 | Ambient SESSION_TYPE=leaf | No stray `SESSION_TYPE=leaf` env var in interactive shell |
 | 19 | Ambient SESSION_TYPE=orchestrator | No stray `SESSION_TYPE=orchestrator` env var |
 | 20 | Ambient SESSION_TYPE=fleet | No stray `SESSION_TYPE=fleet` env var |
@@ -118,6 +119,9 @@ Enumerated by `run_doctor` in `src/autoskillit/cli/doctor/__init__.py`:
 | 38 | Local recipe validity | Local recipes satisfy the current recipe contract |
 | 39 | Codex limits pin | Codex limits version pin is current |
 | 40 | Skill capability authenticity | Bundled skill capabilities match authentic source evidence |
+| 41 | Capture-store statistics | Capture ledger and retained-directory statistics are readable |
+| 42 | Project-local skill contracts | Excluded or shadowed project-local skill copies are reported |
+| 43 | Session index projection | Retained committed summary parents match index-row multiplicity |
 
 See **[Hooks](safety/hooks.md)** for what each PreToolUse / PostToolUse /
 SessionStart hook actually enforces.

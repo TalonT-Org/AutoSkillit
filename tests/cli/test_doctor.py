@@ -390,6 +390,7 @@ class TestCLIDoctor:
             "stale_fleet_state",
             "campaign_onboarding_hint",
             "campaign_manifest_clone_dests",
+            "session_index_projection",
         }
         assert expected <= check_names
 

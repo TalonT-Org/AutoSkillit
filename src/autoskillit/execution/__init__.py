@@ -167,6 +167,7 @@ from autoskillit.execution.session_log import (
     flush_session_log,
     read_telemetry_clear_marker,
     resolve_log_dir,
+    session_index_lock_path,
     write_telemetry_clear_marker,
 )
 from autoskillit.execution.testing import (
@@ -322,6 +323,7 @@ __all__ = [
     "read_telemetry_clear_marker",
     "recover_crashed_sessions",
     "resolve_log_dir",
+    "session_index_lock_path",
     "write_telemetry_clear_marker",
     # pr_analysis
     "DOMAIN_PATHS",

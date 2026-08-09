@@ -50,6 +50,11 @@ DESTINATION_RESOLVE_ALLOWLIST: dict[str, str] = {
 }
 
 PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
+    ("execution/session_log.py", "flush_session_log", "shutil.rmtree"): (
+        2,
+        "The exclusive session-index transaction removes only abandoned summary-less "
+        "session directories and expired committed directories selected by retention.",
+    ),
     ("cli/_install_snapshot/_snapshot.py", "_remove", "path.unlink"): (
         1,
         "Transaction restoration removes the failed replacement before restoring its staged copy.",

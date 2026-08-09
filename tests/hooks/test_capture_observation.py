@@ -286,10 +286,14 @@ def test_invalid_observation_authority_does_not_change_command_output(
     assert not _observation_root(anchor).exists()
 
 
-def test_command_cwd_remains_separate_from_exact_lineage_anchor(tmp_path: Path) -> None:
+def test_command_cwd_remains_separate_from_exact_lineage_anchor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     lineage_anchor, store, lineage, reference = _lineage(tmp_path)
     command_cwd = tmp_path / "command-cwd"
     command_cwd.mkdir()
+    monkeypatch.chdir(command_cwd)
 
     assert (
         run_capture(

@@ -111,8 +111,10 @@ async def test_open_kitchen_runs_reaper(monkeypatch, tmp_path):
         assert list(call_args.args[0]) == [fake_state_path]
 
 
-async def test_close_kitchen_removes_tracker_dir(monkeypatch, tmp_path):
-    """Tracker directory is removed by close_kitchen handler."""
+async def test_close_kitchen_preserves_peer_tracker_and_lease_sidecar(monkeypatch, tmp_path):
+    """Close retires only its exact tracker and never removes peer authority."""
+    from autoskillit.core import ArtifactLease
+
     monkeypatch.chdir(tmp_path)
 
     ctx = make_context(
@@ -126,17 +128,30 @@ async def test_close_kitchen_removes_tracker_dir(monkeypatch, tmp_path):
 
     tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
     tracker_dir.mkdir(parents=True)
-    (tracker_dir / "AB.json").write_text('{"pipeline_id": "AB", "steps": {}}')
+    peer_tracker = tracker_dir / "AB.json"
+    peer_tracker.write_text(
+        '{"pipeline_id": "AB", "kitchen_id": "AB", "steps": {}, "dependencies": {}}'
+    )
+    peer_lease = tracker_dir / "AB.lease.lock"
+    peer_lease.write_text("")
 
-    with (
-        patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new_callable=AsyncMock),
-        patch("autoskillit.core.register_active_kitchen"),
-        patch("autoskillit.core.unregister_active_kitchen"),
-    ):
-        await _open_kitchen_handler()
-        _close_kitchen_handler()
+    lease = ArtifactLease.acquire_shared(peer_lease)
+    try:
+        with (
+            patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+                new_callable=AsyncMock,
+            ),
+            patch("autoskillit.core.register_active_kitchen"),
+            patch("autoskillit.core.unregister_active_kitchen"),
+        ):
+            await _open_kitchen_handler()
+            _close_kitchen_handler()
 
-    assert not tracker_dir.exists()
+        assert peer_tracker.exists()
+        assert peer_lease.exists()
+    finally:
+        lease.close_preserving()
 
 
 async def test_back_to_back_open_close_open_resets_infrastructure(monkeypatch, tmp_path):
@@ -236,15 +251,15 @@ def test_open_preserves_live_foreign_kitchen_tracker(monkeypatch, tmp_path):
     assert (tracker_dir / "K1.json").exists()
 
 
-def test_open_preserves_young_orphan_tracker(monkeypatch, tmp_path):
-    """A tracker with no registry entry at all, but within the grace window, survives."""
+def test_open_retires_unleased_orphan_without_age_inference(monkeypatch, tmp_path):
+    """Fresh absence of live registry ownership is sufficient retirement evidence."""
     tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
     _write_tracker(tracker_dir, "K1", initialized_at=datetime.now(UTC))
     _write_registry(monkeypatch, tmp_path, [])
 
     prune_stale_kitchen_state(tmp_path, "K2")
 
-    assert (tracker_dir / "K1.json").exists()
+    assert not (tracker_dir / "K1.json").exists()
 
 
 def test_open_reaps_aged_orphan_tracker(monkeypatch, tmp_path):

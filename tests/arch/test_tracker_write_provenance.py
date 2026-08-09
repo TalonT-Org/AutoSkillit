@@ -1,4 +1,4 @@
-"""AST guard: hook scripts must never write pipeline tracker files.
+"""AST guard: hook scripts must never mutate pipeline tracker files.
 
 Step completion is server-authoritative — only server/tools/ code may mutate
 tracker state. Any hook-side write reintroduces the split-brain bug (#4293).
@@ -25,14 +25,22 @@ def _has_tracker_reference(tree: ast.Module) -> bool:
     return False
 
 
-def _has_file_write(tree: ast.Module) -> list[int]:
-    """Find lines with file-write operations."""
+def _has_file_mutation(tree: ast.Module) -> list[int]:
+    """Find lines with file-write or destructive operations."""
     violations = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             # Check method calls like path.write_text(), open(..., "w"), os.replace()
             if isinstance(node.func, ast.Attribute):
-                if node.func.attr in ("write_text", "replace"):
+                if node.func.attr in (
+                    "write_text",
+                    "write_bytes",
+                    "replace",
+                    "unlink",
+                    "rmdir",
+                    "remove",
+                    "rmtree",
+                ):
                     violations.append(node.lineno)
             # Check calls to open() with write mode
             if isinstance(node.func, ast.Name) and node.func.id == "open":
@@ -68,11 +76,11 @@ def test_hooks_never_write_pipeline_tracker_files():
         except SyntaxError:
             continue
         if _has_tracker_reference(tree):
-            write_lines = _has_file_write(tree)
-            if write_lines:
-                violating_files.append((py_file.relative_to(HOOKS_DIR), write_lines))
+            mutation_lines = _has_file_mutation(tree)
+            if mutation_lines:
+                violating_files.append((py_file.relative_to(HOOKS_DIR), mutation_lines))
 
     assert violating_files == [], (
-        f"Hook scripts must not write pipeline_tracker files (server-authoritative). "
+        f"Hook scripts must not mutate pipeline_tracker files (server-authoritative). "
         f"Violations: {violating_files}"
     )

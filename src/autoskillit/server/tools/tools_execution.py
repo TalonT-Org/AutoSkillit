@@ -527,6 +527,8 @@ def _has_active_deps() -> bool:
 def _completion_tracker_binding(tool_ctx: ToolContext, order_id: str) -> tuple[str, str, str, str]:
     """Resolve immutable tracker identity for a new completion receipt."""
     from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
+        _release_context_tracker,
+        _retain_context_tracker,
         read_tracker_identity,
         select_tracker_target,
     )
@@ -534,11 +536,15 @@ def _completion_tracker_binding(tool_ctx: ToolContext, order_id: str) -> tuple[s
     target = select_tracker_target(tool_ctx, order_id, expected=bool(order_id))
     if target is None or not target.path.exists():
         return "", "", "", ""
-    try:
-        tracker_identity = read_tracker_identity(target)
-    except (json.JSONDecodeError, OSError):
-        return "", "", "", ""
+    key, lease = _retain_context_tracker(
+        tool_ctx,
+        target,
+        owner_kind="manual",
+        owner_id=target.target_order_id,
+    )
+    tracker_identity = read_tracker_identity(target, lease)
     if tracker_identity is None:
+        _release_context_tracker(tool_ctx, key)
         return "", "", "", ""
     kitchen_id, incarnation_id = tracker_identity
     return target.target_order_id, str(target.path.resolve()), kitchen_id, incarnation_id

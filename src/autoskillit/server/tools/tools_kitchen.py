@@ -35,6 +35,8 @@ from autoskillit.core import (
     ProcessStaleError,
     RecipeDeliveryRequest,
     RecipeLoadError,
+    TrackerAuthorityTarget,
+    TrackerParticipantKey,
     _collect_disabled_feature_tags,
     atomic_write,
     detect_autoskillit_mcp_prefix,
@@ -42,16 +44,17 @@ from autoskillit.core import (
     find_latest_session_id,
     get_logger,
     get_state_dir,
+    initialize_kitchen_tracker,
     is_marker_fresh,
-    kitchen_entry_alive,
     pipeline_tracker_directory,
-    pipeline_tracker_path,
-    read_active_kitchens_registry,
     read_marker,
     register_active_kitchen,
+    release_tracker_lease,
     resolve_kitchen_id,
+    retain_tracker_lease,
     sample_kitchen_process_identity,
     sweep_stale_markers,
+    try_retire_tracker,
     unregister_active_kitchen,
 )
 from autoskillit.fleet import (
@@ -601,78 +604,86 @@ def _update_hook_config_with_git_ops_policy() -> None:
         logger.warning("hook_config_git_ops_policy_update_write_failed", path=str(hook_cfg_path))
 
 
-_ORPHAN_GRACE_SECONDS = 600
+def _retain_kitchen_tracker_authority(tool_ctx: ToolContext) -> Any:
+    """Retain this process incarnation's kitchen tracker lease."""
+    identity = tool_ctx.kitchen_process_identity
+    if identity is None:
+        identity = sample_kitchen_process_identity(
+            tool_ctx.kitchen_id,
+            os.getpid(),
+            tool_ctx.project_dir,
+        )
+        tool_ctx.kitchen_process_identity = identity
+    target = TrackerAuthorityTarget.for_project(
+        tool_ctx.project_dir,
+        tool_ctx.kitchen_id,
+        expected=False,
+    )
+    key = TrackerParticipantKey(
+        target=target,
+        owner_kind="kitchen",
+        owner_id=identity.kitchen_id,
+        pid=identity.pid,
+        create_time=identity.create_time,
+        project_path=identity.project_path,
+    )
+    with tool_ctx.tracker_leases_lock:
+        lease = retain_tracker_lease(tool_ctx.tracker_leases, key)
+        tool_ctx.kitchen_tracker_key = key
+    return lease
+
+
+def _release_kitchen_tracker_authority(
+    tool_ctx: ToolContext,
+    *,
+    unregister: bool,
+    retire: bool,
+) -> None:
+    """Release exact ToolContext ownership and optionally retire its tracker."""
+    key = tool_ctx.kitchen_tracker_key
+    identity = tool_ctx.kitchen_process_identity
+    with tool_ctx.tracker_leases_lock:
+        if key is not None:
+            release_tracker_lease(tool_ctx.tracker_leases, key)
+        tool_ctx.kitchen_tracker_key = None
+        for remaining in list(tool_ctx.tracker_leases):
+            release_tracker_lease(tool_ctx.tracker_leases, remaining)
+    if unregister and identity is not None:
+        try:
+            unregister_active_kitchen(identity)
+        finally:
+            tool_ctx.kitchen_process_identity = None
+    if retire and key is not None:
+        try_retire_tracker(key.target)
 
 
 def prune_stale_kitchen_state(project_dir: Path, current_kitchen_id: str) -> None:
-    """Remove tracker files belonging to dead kitchens.
-
-    Per tracker file in ``pipeline_tracker/``: parse → read internal
-    ``kitchen_id`` (never the filename); if it equals *current_kitchen_id*
-    → keep; else check **all** ``active_kitchens.json`` entries sharing that
-    ``kitchen_id`` — keep the tracker iff any matching entry is alive. Reap
-    only when all matching entries are dead. No matching entry at all → reap
-    only if ``initialized_at`` exceeds the grace window.
-    """
-    logger = get_logger(__name__)
+    """Offer each foreign tracker to the core retirement authority."""
     tracker_dir = pipeline_tracker_directory(project_dir)
     if not tracker_dir.is_dir():
         return
 
-    try:
-        entries = read_active_kitchens_registry()
-    except Exception:
-        logger.warning("prune_kitchen_state_registry_read_failed", exc_info=True)
-        return
-
-    for tracker_file in list(tracker_dir.glob("*.json")):
-        if tracker_file.name.startswith("."):
+    for tracker_file in tracker_dir.glob("*.json"):
+        if tracker_file.name.startswith(".") or tracker_file.stem == current_kitchen_id:
             continue
         try:
-            tracker_data = json.loads(tracker_file.read_text())
-        except (json.JSONDecodeError, OSError):
-            try:
-                tracker_file.unlink()
-            except OSError:
-                pass
+            target = TrackerAuthorityTarget(
+                target_order_id=tracker_file.stem,
+                path=tracker_file,
+                expected=False,
+            )
+        except ValueError:
             continue
-
-        tracker_kid = tracker_data.get("kitchen_id", "")
-        if tracker_kid == current_kitchen_id:
-            continue
-
-        matching = [e for e in entries if e.get("kitchen_id") == tracker_kid]
-        if matching:
-            if any(kitchen_entry_alive(e) for e in matching):
-                continue
-            try:
-                tracker_file.unlink()
-            except OSError:
-                pass
-        else:
-            init_at_str = tracker_data.get("initialized_at", "")
-            try:
-                init_at = datetime.fromisoformat(init_at_str)
-                age = (datetime.now(UTC) - init_at).total_seconds()
-            except (ValueError, TypeError):
-                age = float("inf")
-            if age > _ORPHAN_GRACE_SECONDS:
-                try:
-                    tracker_file.unlink()
-                except OSError:
-                    pass
+        try_retire_tracker(target)
 
 
-def _auto_init_pipeline_tracker(tool_ctx: ToolContext) -> None:
+def _auto_init_pipeline_tracker(tool_ctx: ToolContext) -> str | None:
     """Auto-derive and initialize the kitchen-scoped pipeline dependency tracker.
 
     Self-arming, server-internal counterpart to ``record_pipeline_step(op="init")``
     — runs at ``open_kitchen`` time from ``ctx.active_recipe_steps``, requiring
-    no LLM action, mirroring how ingredient locks are primed. Writes directly
-    via ``atomic_write`` rather than calling the MCP tool: ``record_pipeline_step``
-    resolves its own pipeline_id from ``pipeline_id | AUTOSKILLIT_DISPATCH_ID``
-    with no kitchen_id tier, and this stays independent of that resolution so
-    fleet callers are unaffected.
+    no LLM action, mirroring how ingredient locks are primed. The core authority
+    seam performs the locked merge while this caller retains the kitchen lease.
 
     Idempotent across the deferred-override re-call pattern: an existing
     tracker's step statuses and previously-tracked dependency keys are
@@ -680,29 +691,21 @@ def _auto_init_pipeline_tracker(tool_ctx: ToolContext) -> None:
     """
     active_steps = tool_ctx.active_recipe_steps
     if not active_steps:
-        return
+        return None
     try:
         deps = _derive_phase_a_deps(active_steps)
     except Exception:
         logger.warning("pipeline_tracker_auto_init_deps_failed", exc_info=True)
-        return
+        return None
     if not deps:
-        return
+        return None
 
-    tracker_path = pipeline_tracker_path(tool_ctx.project_dir, tool_ctx.kitchen_id)
+    lease = _retain_kitchen_tracker_authority(tool_ctx)
+    key = tool_ctx.kitchen_tracker_key
+    if key is None:
+        raise RuntimeError("kitchen tracker lease retained without an ownership key")
     steps: dict[str, dict[str, str]] = {name: {"status": "pending"} for name in active_steps}
     dependencies: dict[str, list[str]] = dict(deps)
-
-    if tracker_path.exists():
-        try:
-            existing = json.loads(tracker_path.read_text())
-        except (OSError, json.JSONDecodeError):
-            existing = {}
-        for name, state in existing.get("steps", {}).items():
-            if name in steps:
-                steps[name] = state
-        for key, value in existing.get("dependencies", {}).items():
-            dependencies.setdefault(key, value)
 
     tracker_data = {
         "kitchen_id": tool_ctx.kitchen_id,
@@ -711,10 +714,8 @@ def _auto_init_pipeline_tracker(tool_ctx: ToolContext) -> None:
         "dependencies": dependencies,
         "initialized_at": datetime.now(UTC).isoformat(),
     }
-    try:
-        atomic_write(tracker_path, fast_dumps(tracker_data))
-    except OSError:
-        logger.warning("pipeline_tracker_auto_init_write_failed", exc_info=True)
+    result = initialize_kitchen_tracker(key.target, lease, tracker_data)
+    return result.error
 
 
 async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str | None:
@@ -789,6 +790,7 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
 
     if _transition_start(ctx, "registry_update"):
         try:
+            _retain_kitchen_tracker_authority(ctx)
             _register_active_recipe_kitchen(ctx)
         except Exception as exc:
             transition_degraded(ctx, "registry_update", exc)
@@ -906,11 +908,9 @@ def _close_kitchen_handler() -> None:
         ctx.config = baseline_config
         ctx.fleet_lock = baseline_lock
     try:
-        if ctx.kitchen_process_identity is not None:
-            unregister_active_kitchen(ctx.kitchen_process_identity)
-            ctx.kitchen_process_identity = None
+        _release_kitchen_tracker_authority(ctx, unregister=True, retire=True)
     except Exception:
-        logger.warning("close_kitchen_registry_failed", exc_info=True)
+        logger.warning("close_kitchen_tracker_authority_release_failed", exc_info=True)
     if isinstance(ctx.kitchen_id, str) and ctx.kitchen_id:
         if isinstance(ctx.temp_dir, Path) and not retire_recipe_artifacts(
             ctx.temp_dir,
@@ -943,14 +943,6 @@ def _close_kitchen_handler() -> None:
                 atomic_write(orphan_path, fast_dumps(orphan_usage))
             except Exception:
                 logger.warning("close_kitchen_orphan_drain_failed", exc_info=True)
-    tracker_dir = pipeline_tracker_directory(ctx.project_dir)
-    try:
-        if tracker_dir.is_dir():
-            import shutil
-
-            shutil.rmtree(tracker_dir, ignore_errors=True)
-    except OSError:
-        logger.warning("pipeline_tracker_remove_failed", path=str(tracker_dir))
     review_gate_path = ctx.project_dir / ".autoskillit" / "temp" / "review_gate_state.json"
     try:
         try:
@@ -1482,7 +1474,16 @@ async def open_kitchen(
                 # Dispatch-feasibility preflight: verify the backend can enforce
                 # all fix-required hooks for the recipe's run_skill steps.
                 if tool_ctx.active_recipe_steps is not None:
-                    _auto_init_pipeline_tracker(tool_ctx)
+                    _tracker_error = _auto_init_pipeline_tracker(tool_ctx)
+                    if _tracker_error is not None:
+                        transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
+                        tool_ctx.gate.disable()
+                        tool_ctx.gate_infrastructure_ready = False
+                        return _kitchen_failure_envelope(
+                            RuntimeError(_tracker_error),
+                            stage="pipeline_tracker_auto_init",
+                            user_hint=_tracker_error,
+                        )
                     _preflight_err = _check_dispatch_feasibility(
                         post_prune_step_names=result.get("post_prune_step_names", []),
                         active_recipe_steps=tool_ctx.active_recipe_steps,
@@ -1646,7 +1647,16 @@ async def open_kitchen(
                     prune_stale_kitchen_state(tool_ctx.project_dir, tool_ctx.kitchen_id)
                 except Exception:
                     logger.warning("open_kitchen_deferred_prune_failed", exc_info=True)
-                _auto_init_pipeline_tracker(tool_ctx)
+                _tracker_error = _auto_init_pipeline_tracker(tool_ctx)
+                if _tracker_error is not None:
+                    transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
+                    tool_ctx.gate.disable()
+                    tool_ctx.gate_infrastructure_ready = False
+                    return _kitchen_failure_envelope(
+                        RuntimeError(_tracker_error),
+                        stage="pipeline_tracker_auto_init",
+                        user_hint=_tracker_error,
+                    )
                 _preflight_err = _check_dispatch_feasibility(
                     post_prune_step_names=result.get("post_prune_step_names", []),
                     active_recipe_steps=tool_ctx.active_recipe_steps,

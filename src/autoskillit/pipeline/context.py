@@ -15,6 +15,7 @@ from typing import Any
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
+    ArtifactLease,
     AuditAdmissionLedger,
     AuditAuthorityMaterializer,
     AuditLog,
@@ -62,6 +63,7 @@ from autoskillit.core import (
     TimingLog,
     TokenFactory,
     TokenLog,
+    TrackerParticipantKey,
     WorkspaceManager,
     WriteExpectedResolver,
     current_order_id,
@@ -254,6 +256,15 @@ class ToolContext:
     gate_infrastructure_ready: bool = field(default=False)
     kitchen_id: str = field(default="")
     kitchen_process_identity: KitchenProcessIdentity | None = field(default_factory=lambda: None)
+    kitchen_tracker_key: TrackerParticipantKey | None = field(default_factory=lambda: None)
+    tracker_leases: dict[TrackerParticipantKey, ArtifactLease] = field(
+        default_factory=dict,
+        repr=False,
+    )
+    tracker_leases_lock: threading.RLock = field(
+        default_factory=threading.RLock,
+        repr=False,
+    )
     kitchen_open_state: KitchenOpenState = field(default_factory=closed_kitchen_open_state)
     kitchen_transition_lock: KitchenTransitionLock = field(
         default_factory=threading.RLock,

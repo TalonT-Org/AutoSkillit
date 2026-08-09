@@ -446,6 +446,11 @@ def minimal_ctx(tmp_path):
     try:
         yield ctx
     finally:
+        from autoskillit.core import release_tracker_lease
+
+        with ctx.tracker_leases_lock:
+            for key in list(ctx.tracker_leases):
+                release_tracker_lease(ctx.tracker_leases, key)
         plugin_authority.close()
 
 
@@ -474,6 +479,7 @@ def make_tool_ctx(monkeypatch, tmp_path):
     from tests.fakes import FakePluginArtifactAuthority, MockSubprocessRunner
 
     created_authorities: list[FakePluginArtifactAuthority] = []
+    created_contexts = []
 
     def _factory(config: AutomationConfig | None = None):
         mock_runner = MockSubprocessRunner()
@@ -514,11 +520,18 @@ def make_tool_ctx(monkeypatch, tmp_path):
             )
         monkeypatch.setattr(_state, "_ctx", ctx)
         monkeypatch.setattr(_state, "_startup_ready", None)
+        created_contexts.append(ctx)
         return ctx
 
     try:
         yield _factory
     finally:
+        from autoskillit.core import release_tracker_lease
+
+        for ctx in created_contexts:
+            with ctx.tracker_leases_lock:
+                for key in list(ctx.tracker_leases):
+                    release_tracker_lease(ctx.tracker_leases, key)
         for plugin_authority in created_authorities:
             plugin_authority.close()
 

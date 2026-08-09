@@ -13,8 +13,8 @@ from tests.server._helpers import _write_registry
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
-def test_malformed_tracker_json_reaped(monkeypatch, tmp_path):
-    """A tracker file containing invalid JSON must be deleted, not raise."""
+def test_malformed_tracker_json_is_preserved(monkeypatch, tmp_path):
+    """Unreadable authority cannot be retired as though it were stale."""
     tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
     tracker_dir.mkdir(parents=True)
     bad_file = tracker_dir / "K1.json"
@@ -24,11 +24,11 @@ def test_malformed_tracker_json_reaped(monkeypatch, tmp_path):
 
     prune_stale_kitchen_state(tmp_path, "K2")
 
-    assert not bad_file.exists()
+    assert bad_file.read_text() == "{not valid json"
 
 
-def test_tracker_missing_kitchen_id_treated_as_orphan(monkeypatch, tmp_path):
-    """A tracker with no kitchen_id field is an orphan; past grace window it is reaped."""
+def test_wrong_shape_tracker_is_preserved(monkeypatch, tmp_path):
+    """Wrong-shape authority remains available for explicit repair."""
     tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
     tracker_dir.mkdir(parents=True)
     tracker_data = {
@@ -42,7 +42,7 @@ def test_tracker_missing_kitchen_id_treated_as_orphan(monkeypatch, tmp_path):
 
     prune_stale_kitchen_state(tmp_path, "K2")
 
-    assert not tracker_file.exists()
+    assert json.loads(tracker_file.read_text()) == tracker_data
 
 
 def test_pruner_does_not_raise(monkeypatch, tmp_path):
@@ -65,3 +65,5 @@ def test_pruner_does_not_raise(monkeypatch, tmp_path):
     monkeypatch.setattr("autoskillit.core._plugin_cache._active_kitchens_path", _raise)
 
     prune_stale_kitchen_state(tmp_path, "K2")
+
+    assert (tracker_dir / "K1.json").exists()

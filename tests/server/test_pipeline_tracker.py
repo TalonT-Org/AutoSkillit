@@ -98,6 +98,33 @@ class TestRecordPipelineStepInit:
         assert result["success"] is False
         assert "pipeline_id is required" in result["error"]
 
+    @pytest.mark.anyio
+    async def test_terminal_completion_releases_manual_tracker_lease(self):
+        self.ctx.active_recipe_steps = {"review": {}}
+        initialized = json.loads(await record_pipeline_step(pipeline_id="AB", op="init"))
+        assert initialized["success"] is True
+        assert len(self.ctx.tracker_leases) == 1
+
+        completed = json.loads(
+            await record_pipeline_step(pipeline_id="AB", op="complete", step_name="review")
+        )
+
+        assert completed["success"] is True
+        assert completed["done"] == completed["total"] == 1
+        assert self.ctx.tracker_leases == {}
+
+    @pytest.mark.anyio
+    async def test_manual_init_preserves_existing_corrupt_bytes_and_releases_lease(self):
+        tracker_path = self.tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "AB.json"
+        tracker_path.parent.mkdir(parents=True)
+        tracker_path.write_bytes(b"{not-json")
+
+        result = json.loads(await record_pipeline_step(pipeline_id="AB", op="init"))
+
+        assert result["success"] is False
+        assert tracker_path.read_bytes() == b"{not-json"
+        assert self.ctx.tracker_leases == {}
+
 
 class TestRecordPipelineStepGateClosed:
     @pytest.mark.anyio
@@ -210,6 +237,37 @@ def _configure_open_kitchen_mock(ctx, steps, tmp_path):
 
 
 class TestOpenKitchenAutoInitTracker:
+    def test_auto_init_preserves_corrupt_authority(self, tmp_path):
+        from autoskillit.recipe.schema import RecipeStep
+        from autoskillit.server.tools.tools_kitchen import (
+            _auto_init_pipeline_tracker,
+            _release_kitchen_tracker_authority,
+            _retain_kitchen_tracker_authority,
+        )
+        from tests.server.conftest import _make_mock_ctx
+
+        ctx = _make_mock_ctx()
+        ctx.project_dir = tmp_path
+        ctx.kitchen_id = "kitchen-corrupt"
+        ctx.active_recipe_steps = {
+            "rectify": RecipeStep(name="rectify", on_success="review_approach"),
+            "review_approach": RecipeStep(name="review_approach"),
+        }
+        tracker_path = (
+            tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "kitchen-corrupt.json"
+        )
+        tracker_path.parent.mkdir(parents=True)
+        tracker_path.write_bytes(b"{not-json")
+        _retain_kitchen_tracker_authority(ctx)
+        try:
+            error = _auto_init_pipeline_tracker(ctx)
+        finally:
+            _release_kitchen_tracker_authority(ctx, unregister=False, retire=False)
+
+        assert error is not None
+        assert "invalid" in error
+        assert tracker_path.read_bytes() == b"{not-json"
+
     @pytest.mark.anyio
     async def test_open_kitchen_auto_inits_tracker(self, tmp_path):
         from unittest.mock import patch

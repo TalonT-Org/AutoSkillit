@@ -40,7 +40,6 @@ from autoskillit.core import (
     register_active_kitchen,
     resolve_kitchen_id,
     sample_kitchen_process_identity,
-    unregister_active_kitchen,
     write_readiness_sentinel,
 )
 from autoskillit.core import (
@@ -97,6 +96,14 @@ def _context_kitchen_identity(ctx: Any) -> Any:
         )
         ctx.kitchen_process_identity = identity
     return identity
+
+
+def _retain_context_tracker_authority(ctx: Any) -> None:
+    from autoskillit.server.tools.tools_kitchen import (  # circular-break
+        _retain_kitchen_tracker_authority,
+    )
+
+    _retain_kitchen_tracker_authority(ctx)
 
 
 def run_startup_drift_check() -> None:
@@ -439,6 +446,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
         logger.warning("fleet_auto_gate_boot_quota_refresh_failed", exc_info=True)
 
     try:
+        _retain_context_tracker_authority(ctx)
         register_active_kitchen(_context_kitchen_identity(ctx))
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
@@ -505,6 +513,7 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
         _mcp.disable(tags={subset})
     for tag in _collect_disabled_feature_tags(ctx.config.features, experimental_enabled=False):
         _mcp.disable(tags={tag})
+    _retain_context_tracker_authority(ctx)
     register_active_kitchen(_context_kitchen_identity(ctx))
     _activate_recipe_kitchen(ctx.kitchen_id)
     _write_hook_config()
@@ -595,6 +604,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
         logger.warning("food_truck_auto_gate_boot_refresh_loop_failed", exc_info=True)
 
     try:
+        _retain_context_tracker_authority(ctx)
         register_active_kitchen(_context_kitchen_identity(ctx))
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
@@ -697,6 +707,7 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
         logger.warning("skill_auto_gate_boot_quota_cache_failed", exc_info=True)
 
     try:
+        _retain_context_tracker_authority(ctx)
         register_active_kitchen(_context_kitchen_identity(ctx))
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
@@ -820,11 +831,18 @@ async def _autoskillit_lifespan(server: Any) -> Any:
         except Exception:
             logger.exception("lifespan sentinel cleanup error")
         try:
-            if _boot_ctx is not None and _boot_ctx.kitchen_process_identity is not None:
-                unregister_active_kitchen(_boot_ctx.kitchen_process_identity)
-                _boot_ctx.kitchen_process_identity = None
+            if _boot_ctx is not None:
+                from autoskillit.server.tools.tools_kitchen import (  # circular-break
+                    _release_kitchen_tracker_authority,
+                )
+
+                _release_kitchen_tracker_authority(
+                    _boot_ctx,
+                    unregister=True,
+                    retire=True,
+                )
         except Exception:
-            logger.exception("lifespan kitchen registry cleanup error")
+            logger.exception("lifespan kitchen tracker authority cleanup error")
         try:
             _finalize_recorder()
         except Exception:

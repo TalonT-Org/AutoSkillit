@@ -68,8 +68,6 @@ class RunSkillCompletionAuthority(Protocol):
         step_name: str,
     ) -> str: ...
 
-    def abort(self, invocation_id: str) -> None: ...
-
     def draft(
         self,
         invocation_id: str,

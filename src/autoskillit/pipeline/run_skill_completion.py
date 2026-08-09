@@ -95,12 +95,6 @@ class DefaultRunSkillCompletionAuthority:
             )
             return invocation_id
 
-    def abort(self, invocation_id: str) -> None:
-        """Remove an invocation that did not publish a terminal result."""
-        with self._lock:
-            if self._in_flight.pop(invocation_id, None) is None:
-                raise ValueError("unknown run_skill invocation")
-
     def draft(
         self,
         invocation_id: str,

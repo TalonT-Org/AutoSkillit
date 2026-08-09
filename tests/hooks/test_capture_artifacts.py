@@ -2895,10 +2895,14 @@ def test_artifact_write_failure_emits_failure_marker(
     captured = capfd.readouterr()
     assert sentinel.read_text() == "ran"
     raw_failure = next(
-        line
-        for line in captured.err.splitlines()
-        if line.startswith("[AutoSkillit shell capture failure v3:")
+        (
+            line
+            for line in captured.err.splitlines()
+            if line.startswith("[AutoSkillit shell capture failure v3:")
+        ),
+        None,
     )
+    assert raw_failure is not None
     payload = json.loads(
         raw_failure.removeprefix("[AutoSkillit shell capture failure v3:").removesuffix("]")
     )

@@ -50,6 +50,11 @@ DESTINATION_RESOLVE_ALLOWLIST: dict[str, str] = {
 }
 
 PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
+    ("server/tools/tools_execution.py", "run_skill", "shutil.rmtree"): (
+        2,
+        "Best-effort finalization removes only the exact per-session directory under "
+        "the configured ephemeral or Codex session root after skill execution.",
+    ),
     ("execution/session_log.py", "flush_session_log", "shutil.rmtree"): (
         2,
         "The exclusive session-index transaction removes only abandoned summary-less "

@@ -13,6 +13,7 @@ import dataclasses
 import errno
 import json
 import re
+from unittest.mock import Mock
 
 import pytest
 
@@ -753,11 +754,15 @@ class TestDeclaredArtifactAdjudication:
         self, monkeypatch, tmp_path, error_number: int
     ) -> None:
         sr = _base_skill_result(result_text="artifact = report.md")
+        warning = Mock()
 
         def _raise(_path):
             raise OSError(error_number, "unavailable")
 
         monkeypatch.setattr("pathlib.Path.stat", _raise)
+        monkeypatch.setattr(
+            "autoskillit.execution.headless._headless_result.logger.warning", warning
+        )
         result = _apply_post_session_adjudication(
             sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)
         )
@@ -765,3 +770,9 @@ class TestDeclaredArtifactAdjudication:
         assert result.success is False
         assert result.subtype == "artifact_adjudication_error"
         assert result.outcome_fields is None
+        warning.assert_called_once_with(
+            "artifact_adjudication_error",
+            field_name="artifact",
+            artifact_name="report.md",
+            exc_info=True,
+        )

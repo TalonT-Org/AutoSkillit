@@ -289,6 +289,12 @@ def _validate_declared_artifact(cwd: str, field_name: str, value: str) -> tuple[
     except OSError as exc:
         if exc.errno in {errno.ENOENT, errno.ENOTDIR, errno.ELOOP}:
             return "artifact_contract_violation", producer_detail
+        logger.warning(
+            "artifact_adjudication_error",
+            field_name=field_name,
+            artifact_name=safe_name,
+            exc_info=True,
+        )
         return "artifact_adjudication_error", infrastructure_detail
     return None
 

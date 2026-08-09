@@ -50,7 +50,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ${{ fromJSON(needs.preflight.outputs.os-matrix) }}
-        shard: [execution, general]
+        shard: [execution, recipe, general]
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -112,23 +112,41 @@ jobs:
       - name: Compute test paths
         id: test-paths
         run: |
-          SHARD_A_DIRS="tests/execution tests/contracts tests/core tests/exploration tests/planner tests/pipeline tests/migration tests/integration"
+          # Each declared shard owns its explicit set; ``general`` is the
+          # complement. The exhaustive ``case`` below is the single source of
+          # truth — adding a new shard requires a new arm here.
+          SHARD_EXECUTION_DIRS="tests/execution tests/contracts tests/core tests/exploration tests/planner tests/pipeline tests/migration tests/integration"
+          SHARD_RECIPE_DIRS="tests/recipe tests/docs tests/server"
           if find tests/ -maxdepth 1 -name 'test_*.py' -print0 | grep -qz ' '; then
             echo "::error::Test filenames with spaces are not supported by the shard path splitter"
             exit 1
           fi
-          if [[ "${{ matrix.shard }}" == "execution" ]]; then
-            ROOT_FILES=$(find tests/ -maxdepth 1 -name 'test_*.py' | sort | tr '\n' ' ')
-            echo "PYTEST_TEST_PATHS=${SHARD_A_DIRS} ${ROOT_FILES}" >> "$GITHUB_ENV"
-          else
-            IGNORES=""
-            for d in $SHARD_A_DIRS; do
-              IGNORES="$IGNORES --ignore=$d"
-            done
-            ROOT_IGNORES=$(find tests/ -maxdepth 1 -name 'test_*.py' | sort | sed 's|^|--ignore=|' | tr '\n' ' ')
-            echo "PYTEST_TEST_PATHS=tests/" >> "$GITHUB_ENV"
-            echo "PYTEST_IGNORE_PATHS=${IGNORES} ${ROOT_IGNORES}" >> "$GITHUB_ENV"
-          fi
+          ROOT_FILES=$(find tests/ -maxdepth 1 -name 'test_*.py' | sort | tr '\n' ' ')
+          ROOT_IGNORES=$(find tests/ -maxdepth 1 -name 'test_*.py' | sort | sed 's|^|--ignore=|' | tr '\n' ' ')
+          case "${{ matrix.shard }}" in
+            execution)
+              echo "PYTEST_TEST_PATHS=${SHARD_EXECUTION_DIRS} ${ROOT_FILES}" >> "$GITHUB_ENV"
+              ;;
+            recipe)
+              echo "PYTEST_TEST_PATHS=${SHARD_RECIPE_DIRS}" >> "$GITHUB_ENV"
+              ;;
+            general)
+              EXEC_IGNORES=""
+              for d in $SHARD_EXECUTION_DIRS; do
+                EXEC_IGNORES="$EXEC_IGNORES --ignore=$d"
+              done
+              RECIPE_IGNORES=""
+              for d in $SHARD_RECIPE_DIRS; do
+                RECIPE_IGNORES="$RECIPE_IGNORES --ignore=$d"
+              done
+              echo "PYTEST_TEST_PATHS=tests/" >> "$GITHUB_ENV"
+              echo "PYTEST_IGNORE_PATHS=${EXEC_IGNORES} ${RECIPE_IGNORES} ${ROOT_IGNORES}" >> "$GITHUB_ENV"
+              ;;
+            *)
+              echo "::error::Unknown test shard: ${{ matrix.shard }}"
+              exit 1
+              ;;
+          esac
 
       - name: Lint imports
         if: matrix.shard == 'execution'

@@ -89,9 +89,7 @@ class TestCorridorCompositionExplorerAdvertisement:
 
         backend.setup_session_dir.assert_called_once()
         setup_kwargs = backend.setup_session_dir.call_args
-        assert "explorer_binding_env" in setup_kwargs.kwargs or (len(setup_kwargs.args) > 1), (
-            "factory result must reach setup_session_dir"
-        )
+        assert setup_kwargs.kwargs["explorer_binding_env"] == fake_binding
 
     def test_no_factory_no_explorer_binding(self, tmp_path: Path) -> None:
         """T6b/c: direct-dispatch and permissive cook — no factory means no binding."""

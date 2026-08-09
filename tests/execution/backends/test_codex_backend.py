@@ -53,6 +53,7 @@ from autoskillit.execution.backends.codex import (
     clear_explorer_binding_env,
     refresh_explorer_binding_env,
 )
+from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
 from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -1684,14 +1685,6 @@ class TestCodexBackendSetupSessionDir:
     def _materialize_pre_change_explorer_roles(
         session_dir: Path, definitions: tuple[AgentDef, ...]
     ) -> None:
-        stale_features = (
-            "apps_mcp_path_override",
-            "js_repl",
-            "js_repl_tools_only",
-            "tool_search_always_defer_mcp_tools",
-            "web_search_cached",
-            "web_search_request",
-        )
         for definition in definitions:
             path = session_dir / "agents" / f"{definition.name}.toml"
             text = path.read_text(encoding="utf-8")
@@ -1701,7 +1694,7 @@ class TestCodexBackendSetupSessionDir:
             text = text.replace(
                 "[features]\n",
                 "[features]\n"
-                + "\n".join(f"{feature} = false" for feature in stale_features)
+                + "\n".join(f"{feature} = false" for feature in RETIRED_CODEX_FEATURES)
                 + "\n",
                 1,
             )
@@ -2069,14 +2062,7 @@ class TestCodexBackendSetupSessionDir:
             parsed = tomllib.loads(role_text)
             assert parsed["web_search"] == "disabled"
             assert agent_definition_digest(definition) in role_text
-            assert not {
-                "apps_mcp_path_override",
-                "js_repl",
-                "js_repl_tools_only",
-                "tool_search_always_defer_mcp_tools",
-                "web_search_cached",
-                "web_search_request",
-            } & set(parsed["features"])
+            assert not set(RETIRED_CODEX_FEATURES) & set(parsed["features"])
             assert parsed["mcp_servers"]["autoskillit"]["env"] == next(iter(second.values()))
 
         refresh_explorer_binding_env(self.session_dir, second)
@@ -2348,14 +2334,7 @@ class TestCodexBackendSetupSessionDir:
             assert parsed["web_search"] == "disabled"
             assert agent_definition_digest(definition) in role_text
             assert "env" not in parsed["mcp_servers"]["autoskillit"]
-            assert not {
-                "apps_mcp_path_override",
-                "js_repl",
-                "js_repl_tools_only",
-                "tool_search_always_defer_mcp_tools",
-                "web_search_cached",
-                "web_search_request",
-            } & set(parsed["features"])
+            assert not set(RETIRED_CODEX_FEATURES) & set(parsed["features"])
 
     def test_clear_explorer_binding_env_is_idempotent_after_scrubbing(self) -> None:
         definitions = self._explorer_definitions()

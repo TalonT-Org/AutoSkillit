@@ -430,7 +430,6 @@
       "on_failure": "release_issue_failure"
     },
     "close_issue_no_changes": {
-      "description": "Release issue after zero-change detection — stages on non-default branch, closes on promotion target",
       "tool": "release_issue",
       "optional": true,
       "skip_when_false": "inputs.issue_url",
@@ -772,7 +771,6 @@
       "on_failure": "release_issue_failure"
     },
     "close_issue_already_done": {
-      "description": "Close issue as already-implemented when branch has zero commits ahead of base",
       "tool": "run_python",
       "optional": true,
       "skip_when_false": "inputs.issue_url",
@@ -1887,7 +1885,6 @@
       "note": "Safety net before terminal escalation: re-polls CI with a short timeout to detect if CI has already passed or failed despite the watcher failing to observe it. Uses wait_for_ci as the authoritative signal (30s timeout for immediate state detection). success → merge gate, failure → conflict remediation, timed_out (still pending) → ci_watch for re-poll, no_runs → terminal escalation path.\n"
     },
     "mark_issue_failed_no_ci": {
-      "description": "Swap in-progress → fail label before CI failure escalation",
       "tool": "release_issue",
       "optional": true,
       "skip_when_false": "inputs.issue_url",
@@ -1899,7 +1896,6 @@
       "on_failure": "register_clone_no_ci"
     },
     "register_clone_no_ci": {
-      "description": "Register clone as preserved (no-CI error pipeline)",
       "tool": "register_clone_status",
       "with": {
         "clone_path": "${{ context.work_dir }}",
@@ -1910,7 +1906,6 @@
       "on_failure": "analyze_pipeline_health_no_ci"
     },
     "analyze_pipeline_health_no_ci": {
-      "description": "Run post-pipeline diagnostic analysis on session logs (no-CI path)",
       "tool": "run_skill",
       "model": "",
       "stale_threshold": 2400,
@@ -1994,7 +1989,6 @@
       "note": "Submits the PR to the merge queue via the unified enqueue_pr tool. The tool resolves the enrollment strategy internally based on auto_merge_available. On failure, probes the queue via verify_queue_enrollment to distinguish a transient enqueue error from a PR that is already merged or still in queue.\n"
     },
     "verify_queue_enrollment": {
-      "description": "Probe merge queue after enqueue command failure to determine actual state",
       "tool": "wait_for_merge_queue",
       "with": {
         "pr_number": "${{ context.pr_number }}",
@@ -2893,7 +2887,6 @@
       "note": "Resolves a stale-base CI failure by rebasing the feature branch onto the latest integration HEAD. Mirrors queue_ejected_fix: on clean rebase or goal-aware conflict resolution, routes to re_push to re-trigger CI on the rebased branch. On escalation (LOW confidence conflicts), tool failure, context limit, or retry exhaustion, routes to diagnose_ci for CI log capture before release_issue_failure. diagnose_ci runs before resolve_ci. If diagnosis fails, resolve_ci proceeds without diagnosis context. retries: 1 bounds the loop; after 2 total attempts, escalates.\n"
     },
     "release_issue_success": {
-      "description": "Transition issue from in-progress to staged after successful pipeline completion",
       "tool": "release_issue",
       "optional": true,
       "skip_when_false": "inputs.issue_url",
@@ -2906,7 +2899,6 @@
       "note": "Called on the success path after PR merge is confirmed. Passes target_branch so release_issue can determine whether to apply the staged label (non-default target) or just remove in-progress (default target). Pipeline routes to register_clone_success on both success and failure.\n"
     },
     "patch_token_summary": {
-      "description": "Collect all pipeline token data and patch the PR body with complete summary",
       "tool": "run_python",
       "optional": true,
       "skip_when_false": "inputs.open_pr",
@@ -2921,7 +2913,6 @@
       "note": "Patches PR body with complete token summary; failures are logged but do not alter pipeline routing.\n"
     },
     "register_clone_unconfirmed": {
-      "description": "Register clone as preserved — merge unconfirmed, in-progress label retained",
       "tool": "register_clone_status",
       "with": {
         "clone_path": "${{ context.work_dir }}",
@@ -2933,7 +2924,6 @@
       "note": "Called when a merge-wait step times out before merge is confirmed. Does NOT call release_issue — the in-progress label stays on the issue so operators can see the PR is still actively queued. The clone is preserved (status: unconfirmed) for human inspection.\n"
     },
     "analyze_pipeline_health_unconfirmed": {
-      "description": "Run post-pipeline diagnostic analysis on session logs (unconfirmed path)",
       "tool": "run_skill",
       "model": "",
       "stale_threshold": 2400,
@@ -2960,7 +2950,6 @@
       "message": "Implementation pipeline finished but merge was not confirmed within the timeout window. The PR is still open and the clone has been preserved for inspection. The in-progress label remains on the issue. Human operator should verify merge status. Emit the L3 result sentinel JSON block now with success=true and reason=\"merge_unconfirmed\". Example sentinel: {\"success\": true, \"reason\": \"merge_unconfirmed\"}"
     },
     "release_issue_failure": {
-      "description": "Release the in-progress claim after pipeline failure",
       "tool": "release_issue",
       "optional": true,
       "skip_when_false": "inputs.issue_url",
@@ -2972,7 +2961,6 @@
       "on_failure": "register_clone_failure"
     },
     "register_clone_success": {
-      "description": "Register clone as cleanup candidate for batch deletion",
       "tool": "register_clone_status",
       "with": {
         "clone_path": "${{ context.work_dir }}",
@@ -2983,7 +2971,6 @@
       "on_failure": "analyze_pipeline_health"
     },
     "register_clone_failure": {
-      "description": "Register clone as preserved (error pipeline)",
       "tool": "register_clone_status",
       "with": {
         "clone_path": "${{ context.work_dir }}",
@@ -2994,7 +2981,6 @@
       "on_failure": "analyze_pipeline_health_error"
     },
     "analyze_pipeline_health": {
-      "description": "Run post-pipeline diagnostic analysis on session logs",
       "tool": "run_skill",
       "model": "",
       "stale_threshold": 2400,
@@ -3017,7 +3003,6 @@
       "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing. Both on_failure and on_context_limit route to the same terminal as on_success.\n"
     },
     "analyze_pipeline_health_error": {
-      "description": "Run post-pipeline diagnostic analysis on session logs (error path)",
       "tool": "run_skill",
       "model": "",
       "stale_threshold": 2400,
@@ -3040,7 +3025,6 @@
       "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing.\n"
     },
     "register_clone_no_changes": {
-      "description": "Register clone as cleanup candidate (zero-change path)",
       "tool": "register_clone_status",
       "with": {
         "clone_path": "${{ context.work_dir }}",
@@ -3051,7 +3035,6 @@
       "on_failure": "analyze_pipeline_health_no_changes"
     },
     "analyze_pipeline_health_no_changes": {
-      "description": "Run post-pipeline diagnostic analysis (zero-change path)",
       "tool": "run_skill",
       "model": "",
       "stale_threshold": 2400,
@@ -3074,7 +3057,6 @@
       "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing.\n"
     },
     "register_clone_already_done": {
-      "description": "Register clone as cleanup candidate (already-done path)",
       "tool": "register_clone_status",
       "with": {
         "clone_path": "${{ context.work_dir }}",
@@ -3085,7 +3067,6 @@
       "on_failure": "analyze_pipeline_health_already_done"
     },
     "analyze_pipeline_health_already_done": {
-      "description": "Run post-pipeline diagnostic analysis (already-done path)",
       "tool": "run_skill",
       "model": "",
       "stale_threshold": 2400,

@@ -631,7 +631,6 @@
       "note": "Iteration guard for the ci_watch_post_queue_fix timed_out self-loop. Caps at 2 iterations. On budget exhaustion, routes to register_clone_failure.\n"
     },
     "verify_queue_enrollment": {
-      "description": "Probe merge queue after enqueue command failure",
       "tool": "wait_for_merge_queue",
       "with": {
         "pr_number": "${{ context.current_pr_number }}",
@@ -2025,7 +2024,6 @@
       "note": "Runs when ci_watch_pr reports CI failure on the integration branch. Fetches logs and writes a diagnosis to {{AUTOSKILLIT_TEMP}}/diagnose-ci/ for human inspection. diagnosis_path is captured for observability — no automated remediation for integration CI, so always routes to register_clone_failure.\n"
     },
     "patch_token_summary": {
-      "description": "Collect all pipeline token data and patch the PR body with complete summary",
       "tool": "run_python",
       "with": {
         "callable": "autoskillit.smoke_utils.patch_pr_token_summary",
@@ -2038,7 +2036,6 @@
       "note": "Patches PR body with complete token summary; failure never blocks pipeline completion.\n"
     },
     "register_clone_success": {
-      "description": "Register clone as cleanup candidate for batch deletion",
       "tool": "register_clone_status",
       "with": {
         "clone_path": "${{ context.work_dir }}",
@@ -2049,7 +2046,6 @@
       "on_failure": "analyze_pipeline_health"
     },
     "register_clone_failure": {
-      "description": "Register clone as preserved (error pipeline)",
       "tool": "register_clone_status",
       "with": {
         "clone_path": "${{ context.work_dir }}",
@@ -2060,7 +2056,6 @@
       "on_failure": "analyze_pipeline_health_error"
     },
     "analyze_pipeline_health": {
-      "description": "Run post-pipeline diagnostic analysis on session logs",
       "tool": "run_skill",
       "model": "",
       "stale_threshold": 2400,
@@ -2083,7 +2078,6 @@
       "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing. Both on_failure and on_context_limit route to the same terminal as on_success.\n"
     },
     "analyze_pipeline_health_error": {
-      "description": "Run post-pipeline diagnostic analysis on session logs (error path)",
       "tool": "run_skill",
       "model": "",
       "stale_threshold": 2400,

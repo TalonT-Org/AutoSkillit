@@ -1845,7 +1845,6 @@
       "note": "Closes the original experiment PR with a structured comment linking to the artifact PR (where research/ was merged) and the archive tag (where the full experiment branch is preserved). Both success and failure route to patch_token_summary — closing the PR is best-effort.\n"
     },
     "patch_token_summary": {
-      "description": "Collect all pipeline token data and patch the PR body with complete summary",
       "tool": "run_python",
       "with": {
         "callable": "autoskillit.smoke_utils.patch_pr_token_summary",

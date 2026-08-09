@@ -32,7 +32,6 @@
   "steps": {
     "checkout": {
       "tool": "run_cmd",
-      "description": "Check out the target branch",
       "with": {
         "cmd": "git checkout ${{ inputs.branch }}",
         "cwd": "${{ inputs.workspace }}",
@@ -46,7 +45,6 @@
     },
     "init_audit_run": {
       "tool": "run_python",
-      "description": "Create a unique per-run directory for this audit pipeline",
       "with": {
         "callable": "autoskillit.recipe._cmd_rpc.create_audit_run_dir",
         "temp_dir": "{{AUTOSKILLIT_TEMP}}"
@@ -62,7 +60,6 @@
     "run_audits": {
       "tool": "run_skill",
       "model": "",
-      "description": "Run six audit skills in parallel",
       "with": {
         "skill_command": "/autoskillit:audit-tests",
         "cwd": "${{ inputs.workspace }}",
@@ -81,7 +78,6 @@
     "validate_audits": {
       "tool": "run_skill",
       "model": "",
-      "description": "Validate each audit report in parallel",
       "with": {
         "skill_command": "/autoskillit:validate-audit --audit-run-dir ${{ context.audit_run_dir }}",
         "cwd": "${{ inputs.workspace }}",
@@ -99,7 +95,6 @@
     },
     "create_issues": {
       "tool": "run_skill",
-      "description": "File GitHub issues from validated audit ticket body files",
       "model": "",
       "with": {
         "skill_command": "/autoskillit:file-audit-issues ${{ context.audit_run_dir }}",

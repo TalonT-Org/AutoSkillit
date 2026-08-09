@@ -1566,7 +1566,6 @@ steps:
       \ remediation, timed_out (still pending) \u2192 ci_watch for re-poll, no_runs\
       \ \u2192 terminal escalation path.\n"
   mark_issue_failed_no_ci:
-    description: "Swap in-progress \u2192 fail label before CI failure escalation"
     tool: release_issue
     optional: true
     skip_when_false: inputs.issue_url
@@ -1576,7 +1575,6 @@ steps:
     on_success: register_clone_no_ci
     on_failure: register_clone_no_ci
   register_clone_no_ci:
-    description: Register clone as preserved (no-CI error pipeline)
     tool: register_clone_status
     with:
       clone_path: ${{ context.work_dir }}
@@ -1585,7 +1583,6 @@ steps:
     on_success: analyze_pipeline_health_no_ci
     on_failure: analyze_pipeline_health_no_ci
   analyze_pipeline_health_no_ci:
-    description: Run post-pipeline diagnostic analysis on session logs (no-CI path)
     tool: run_skill
     model: ''
     stale_threshold: 2400
@@ -1835,8 +1832,6 @@ steps:
 
       '
   verify_queue_enrollment:
-    description: Probe merge queue after enqueue command failure to determine actual
-      state
     tool: wait_for_merge_queue
     with:
       pr_number: ${{ context.pr_number }}
@@ -2373,8 +2368,6 @@ steps:
 
       '
   register_clone_unconfirmed:
-    description: "Register clone as preserved \u2014 merge unconfirmed, in-progress\
-      \ label retained"
     tool: register_clone_status
     with:
       clone_path: ${{ context.work_dir }}
@@ -2387,7 +2380,6 @@ steps:
       \ operators can see the PR is still actively queued. The clone is preserved\
       \ (status: unconfirmed) for human inspection.\n"
   analyze_pipeline_health_unconfirmed:
-    description: Run post-pipeline diagnostic analysis (unconfirmed path)
     tool: run_skill
     model: ''
     stale_threshold: 2400
@@ -2473,8 +2465,6 @@ steps:
 
       '
   release_issue_success:
-    description: Transition issue from in-progress to staged after successful pipeline
-      completion
     tool: release_issue
     optional: true
     skip_when_false: inputs.issue_url
@@ -2490,8 +2480,6 @@ steps:
 
       '
   patch_token_summary:
-    description: Collect all pipeline token data and patch the PR body with complete
-      summary
     tool: run_python
     optional: true
     skip_when_false: inputs.open_pr
@@ -2507,7 +2495,6 @@ steps:
 
       '
   release_issue_failure:
-    description: Release the in-progress claim after pipeline failure
     tool: release_issue
     optional: true
     skip_when_false: inputs.issue_url
@@ -2517,7 +2504,6 @@ steps:
     on_success: register_clone_failure
     on_failure: register_clone_failure
   register_clone_success:
-    description: Register clone as cleanup candidate for batch deletion
     tool: register_clone_status
     with:
       clone_path: ${{ context.work_dir }}
@@ -2526,7 +2512,6 @@ steps:
     on_success: analyze_pipeline_health
     on_failure: analyze_pipeline_health
   analyze_pipeline_health:
-    description: Run post-pipeline diagnostic analysis on session logs
     tool: run_skill
     model: ''
     stale_threshold: 2400
@@ -2550,7 +2535,6 @@ steps:
 
       '
   register_clone_failure:
-    description: Register clone as preserved (error pipeline)
     tool: register_clone_status
     with:
       clone_path: ${{ context.work_dir }}
@@ -2559,7 +2543,6 @@ steps:
     on_success: analyze_pipeline_health_error
     on_failure: analyze_pipeline_health_error
   analyze_pipeline_health_error:
-    description: Run post-pipeline diagnostic analysis on session logs (error path)
     tool: run_skill
     model: ''
     stale_threshold: 2400

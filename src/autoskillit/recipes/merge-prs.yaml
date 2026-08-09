@@ -567,7 +567,6 @@ steps:
 
       '
   verify_queue_enrollment:
-    description: Probe merge queue after enqueue command failure
     tool: wait_for_merge_queue
     with:
       pr_number: ${{ context.current_pr_number }}
@@ -1781,7 +1780,6 @@ steps:
 
       '
   patch_token_summary:
-    description: Collect all pipeline token data and patch the PR body with complete summary
     tool: run_python
     with:
       callable: autoskillit.smoke_utils.patch_pr_token_summary
@@ -1794,7 +1792,6 @@ steps:
 
       '
   register_clone_success:
-    description: Register clone as cleanup candidate for batch deletion
     tool: register_clone_status
     with:
       clone_path: ${{ context.work_dir }}
@@ -1803,7 +1800,6 @@ steps:
     on_success: analyze_pipeline_health
     on_failure: analyze_pipeline_health
   register_clone_failure:
-    description: Register clone as preserved (error pipeline)
     tool: register_clone_status
     with:
       clone_path: ${{ context.work_dir }}
@@ -1812,7 +1808,6 @@ steps:
     on_success: analyze_pipeline_health_error
     on_failure: analyze_pipeline_health_error
   analyze_pipeline_health:
-    description: Run post-pipeline diagnostic analysis on session logs
     tool: run_skill
     model: ''
     stale_threshold: 2400
@@ -1835,7 +1830,6 @@ steps:
 
       '
   analyze_pipeline_health_error:
-    description: Run post-pipeline diagnostic analysis on session logs (error path)
     tool: run_skill
     model: ''
     stale_threshold: 2400

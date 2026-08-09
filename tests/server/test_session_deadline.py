@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import inspect
 import json
+import os
 import time
 from unittest.mock import AsyncMock, patch
 
@@ -50,7 +51,7 @@ async def test_reconfiguration_recomputes_order_deadline_without_environment_cac
     assert first_start + 175 <= first <= first_start + 185
     assert second_start + 355 <= second <= second_start + 365
     assert second > first
-    assert "AUTOSKILLIT_SESSION_DEADLINE" not in __import__("os").environ
+    assert "AUTOSKILLIT_SESSION_DEADLINE" not in os.environ
 
 
 @pytest.mark.anyio
@@ -74,7 +75,7 @@ async def test_valid_inherited_deadline_wins_without_server_environment_mutation
     await run_skill("/test skill", str(tmp_path))
 
     assert executor.calls[0].provider_extras["AUTOSKILLIT_SESSION_DEADLINE"] == inherited
-    assert __import__("os").environ["AUTOSKILLIT_SESSION_DEADLINE"] == inherited
+    assert os.environ["AUTOSKILLIT_SESSION_DEADLINE"] == inherited
 
 
 @pytest.mark.anyio
@@ -99,7 +100,7 @@ async def test_invalid_inherited_deadline_falls_back_to_effective_timeout(
 
     deadline = float(executor.calls[0].provider_extras["AUTOSKILLIT_SESSION_DEADLINE"])
     assert started + 235 <= deadline <= started + 245
-    assert __import__("os").environ["AUTOSKILLIT_SESSION_DEADLINE"] == "invalid"
+    assert os.environ["AUTOSKILLIT_SESSION_DEADLINE"] == "invalid"
 
 
 @pytest.mark.anyio
@@ -142,7 +143,7 @@ async def test_close_reopen_rebuilds_deadline_from_new_configuration(
     second = float(executor.calls[1].provider_extras["AUTOSKILLIT_SESSION_DEADLINE"])
     assert first_start + 175 <= first <= first_start + 185
     assert second_start + 355 <= second <= second_start + 365
-    assert "AUTOSKILLIT_SESSION_DEADLINE" not in __import__("os").environ
+    assert "AUTOSKILLIT_SESSION_DEADLINE" not in os.environ
 
 
 def test_deadline_helper_never_assigns_to_process_environment() -> None:

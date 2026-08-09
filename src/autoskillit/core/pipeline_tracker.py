@@ -351,5 +351,7 @@ def try_retire_tracker(target: TrackerAuthorityTarget) -> bool:
             finally:
                 registry_lock.close()
         return True
+    except (OSError, RuntimeError):
+        return False
     finally:
         exclusive.close_preserving()

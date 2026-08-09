@@ -468,7 +468,7 @@ def _read_session_index_projection(
             continue
         try:
             row = json.loads(line)
-        except (json.JSONDecodeError, ValueError):
+        except ValueError:
             malformed += 1
             continue
         dir_name = row.get("dir_name") if isinstance(row, dict) else None

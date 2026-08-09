@@ -1190,7 +1190,7 @@ class TestCodexPipelineTurnFailed:
 
 class TestCodexModelCapacityFailures:
     @pytest.mark.parametrize(
-        "event_type,fixture_name,expected_category,expected_retry_reason",
+        "_event_type,fixture_name,expected_category,expected_retry_reason",
         CODEX_OBSERVED_PROVIDER_FAILURE_CASES,
         ids=[case[0] for case in CODEX_OBSERVED_PROVIDER_FAILURE_CASES],
     )

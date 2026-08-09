@@ -406,7 +406,11 @@ async def enable_exploration(
             repository_root=repository_root,
             source_identity=f"interactive:{session_id}",
         )
-        mcp.enable(tags={"exploration"}, components={"tool"})
+        try:
+            mcp.enable(tags={"exploration"}, components={"tool"})
+        except Exception:
+            store.cleanup_session(session_id)
+            raise
         return json.dumps(
             {"status": "ok", "exploration_enabled": True},
             separators=(",", ":"),

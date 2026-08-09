@@ -78,3 +78,38 @@ async def test_enable_exploration_succeeds_for_skill_session(
     result = json.loads(await enable_exploration())
     assert result["status"] == "ok"
     assert result["exploration_enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_enable_exploration_revokes_authority_when_visibility_enable_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    exploration_snapshot_service: MagicMock,
+) -> None:
+    from autoskillit.server import mcp
+    from autoskillit.server.tools.tools_exploration import enable_exploration
+
+    store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+        trusted_root=tmp_path,
+        service=exploration_snapshot_service,
+    )
+    ctx = SimpleNamespace(
+        exploration_context_store=store,
+        session_id="test-session",
+        gate=MagicMock(),
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_exploration._resolve_session_type",
+        lambda: SessionType.SKILL,
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_exploration._get_ctx",
+        lambda: ctx,
+    )
+    monkeypatch.setattr(mcp, "enable", MagicMock(side_effect=RuntimeError("enable failed")))
+    monkeypatch.chdir(tmp_path)
+
+    result = json.loads(await enable_exploration())
+
+    assert result == {"status": "error", "code": "exploration_provisioning_failed"}
+    assert store.session_scoped_capability("test-session") is None

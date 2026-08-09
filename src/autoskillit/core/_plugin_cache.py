@@ -906,7 +906,8 @@ def any_kitchen_open(project_path: str | None = None) -> bool:
             return True
         survivors = [entry for entry in entries if kitchen_entry_alive(entry)]
         if project_path is not None:
-            return any(entry.get("project_path") == project_path for entry in survivors)
+            canonical_project = str(Path(project_path).resolve(strict=False))
+            return any(entry.get("project_path") == canonical_project for entry in survivors)
         return len(survivors) > 0
     finally:
         fh.close()

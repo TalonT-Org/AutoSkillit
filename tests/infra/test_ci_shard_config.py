@@ -1,38 +1,5 @@
 # tests/infra/test_ci_shard_config.py
-"""Shard ownership validation for the CI test workflow.
-
-The GitHub Actions test matrix defines exactly three shards: ``execution``,
-``recipe``, and ``general``. The workflow declares the explicit shard sets as
-``SHARD_<NAME>_DIRS="..."`` shell variables inside ``Compute test paths``;
-``general`` is the complement. This module parses the production workflow and
-asserts that:
-
-* every ``SHARD_<NAME>_DIRS`` assignment declares exactly the ``execution`` and
-  ``recipe`` explicit sets with the issue's exact path membership;
-* duplicate or missing explicit-set definitions fail the guard rather than
-  skipping the module;
-* each declared directory exists and recursively contains at least one
-  supported ``test_*.py`` file;
-* the explicit sets are pairwise disjoint;
-* root ``tests/test_*.py`` files are owned only by ``execution``, files under
-  an explicit directory are owned by that shard, and every remaining supported
-  test file is owned by ``general``;
-* the three ownership sets are pairwise disjoint and their union equals the
-  complete supported test-file set;
-* a synthetic file in a brand-new unassigned top-level test directory
-  resolves to ``general`` without any registry edit;
-* the workflow's ``Compute test paths`` step is an exhaustive shell ``case``
-  over ``${{ matrix.shard }}`` with explicit arms for ``execution``,
-  ``recipe``, and ``general`` plus a default arm that emits an unknown-shard
-  error and exits nonzero; and
-* the case arms emit the modeled ownership: ``execution`` uses
-  ``SHARD_EXECUTION_DIRS`` plus sorted root files, ``recipe`` uses only
-  ``SHARD_RECIPE_DIRS``, and ``general`` uses ``tests/`` while ignoring both
-  explicit sets plus the sorted root files.
-
-The helpers take workflow text and filesystem paths as inputs so they remain
-pure and xdist workers cannot share state.
-"""
+"""Validate shard ownership and routing in the CI test workflow."""
 
 from __future__ import annotations
 
@@ -48,9 +15,6 @@ pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "tests.yml"
 
-# Exactly two explicit shard sets are owned by the workflow. ``general`` is
-# the complement of these sets plus the root test files (which are owned by
-# ``execution``), so it is not declared here.
 EXPECTED_EXPLICIT_SHARDS: dict[str, tuple[str, ...]] = {
     "EXECUTION": (
         "tests/execution",
@@ -79,15 +43,7 @@ def _read_workflow_text() -> str:
 
 
 def _parse_shard_assignments(text: str) -> dict[str, tuple[str, ...]]:
-    """Parse every ``SHARD_<NAME>_DIRS="..."`` assignment from ``text``.
-
-    Returns a dict keyed by upper-case shard name. A duplicated name (the same
-    identifier declared twice in the workflow) raises :class:`ValueError` so
-    the guard fails closed rather than silently picking one definition.
-    Missing required identifiers are not detected here — that check lives in
-    :func:`_assert_expected_assignments_present` so the two failure modes can
-    be asserted independently.
-    """
+    """Return the workflow's explicit directory assignments by shard name."""
     assignments: dict[str, tuple[str, ...]] = {}
     for match in _SHARD_ASSIGNMENT_RE.finditer(text):
         name = match.group(1)
@@ -203,17 +159,7 @@ def _assign_files_to_shards(
     explicit_sets: dict[str, tuple[str, ...]],
     root_files: set[str],
 ) -> dict[str, set[str]]:
-    """Assign each supported test file to exactly one shard.
-
-    Ownership rules:
-    - every root-level ``tests/test_*.py`` file is owned by ``execution``;
-    - every file under an explicit directory is owned by that shard's name
-      (lower-cased from the upper-case key);
-    - every remaining file is owned by ``general``.
-
-    The returned dict is keyed by lower-case shard names and always contains
-    ``"execution"``, ``"recipe"`` (if declared), and ``"general"``.
-    """
+    """Assign each supported test file to its lower-case shard name."""
     names = sorted({name.lower() for name in explicit_sets} | {"general"})
     ownership: dict[str, set[str]] = {name: set() for name in names}
     ownership["execution"].update(root_files)
@@ -232,13 +178,7 @@ def _assign_files_to_shards(
 
 
 def _expand_scope_to_files(scope: set[Path], tests_root: Path) -> set[str]:
-    """Expand a ``build_test_scope`` result into concrete file paths.
-
-    Each entry in ``scope`` is either a directory (walked for ``test_*.py``
-    descendants) or a direct file. The returned paths are relative to
-    ``tests_root.parent`` so they match the format produced by
-    :func:`_supported_test_files`.
-    """
+    """Expand a filter scope into repo-relative test-file paths."""
     result: set[str] = set()
     for entry in scope:
         if entry.is_dir():
@@ -396,7 +336,6 @@ class TestCIShardConfig:
         assert "tests/docs/test_docs.py" in ownership["recipe"]
         assert "tests/server/test_server.py" in ownership["recipe"]
         assert "tests/brand_new_unassigned/test_brand_new.py" in ownership["general"]
-        # No new registry edit was required to route the brand-new directory.
 
     def test_case_arms_include_execution_recipe_general_and_default_error(self) -> None:
         text = _read_workflow_text()
@@ -425,8 +364,6 @@ class TestCIShardConfig:
         body = _compute_test_paths_body(text)
         arms = _parse_case_arms(body)
 
-        # ROOT_FILES / ROOT_IGNORES are computed once before the case and
-        # referenced by the arms; their definitions live in the script body.
         assert "ROOT_FILES=$(find tests/ -maxdepth 1 -name 'test_*.py' | sort" in body
         assert "ROOT_IGNORES=$(find tests/ -maxdepth 1 -name 'test_*.py' | sort" in body
 
@@ -467,14 +404,7 @@ class TestCIShardConfig:
 
 
 class TestConservativeFilterShardIntersection:
-    """Cross-shard conservative-filter intersection tests.
-
-    These prove that conservative filter selections remain shard-bounded
-    even when source-file changes cascade through cross-layer consumers in
-    multiple shards. Each test builds only the synthetic files it needs
-    under ``tmp_path`` and asserts the expanded filter scope intersects the
-    production ownership sets in the expected shards.
-    """
+    """Cross-check conservative filter selections against shard ownership."""
 
     def _workflow_text(self) -> str:
         return _read_workflow_text()

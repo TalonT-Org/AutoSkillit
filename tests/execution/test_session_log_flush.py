@@ -120,6 +120,35 @@ def _index_session_counter(log_root: Path) -> Counter[str]:
     )
 
 
+def test_next_writer_removes_abandoned_session_before_retention(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Summary-less directories are removed before committed sessions are ranked."""
+    import autoskillit.execution.session_log as session_log
+
+    _flush(tmp_path, session_id="committed-old", max_sessions=2)
+    committed_old = tmp_path / "sessions" / "committed-old"
+    os.utime(committed_old, (1, 1))
+
+    abandoned = tmp_path / "sessions" / "abandoned"
+    abandoned.mkdir()
+    (abandoned / "proc_trace.jsonl").write_text("incomplete\n")
+
+    removed: list[Path] = []
+    original_rmtree = session_log.shutil.rmtree
+
+    def recording_rmtree(path: Path, *, ignore_errors: bool = False) -> None:
+        removed.append(path)
+        original_rmtree(path, ignore_errors=ignore_errors)
+
+    monkeypatch.setattr(session_log.shutil, "rmtree", recording_rmtree)
+    _flush(tmp_path, session_id="committed-new", max_sessions=1)
+
+    assert removed == [abandoned, committed_old]
+    assert not abandoned.exists()
+    assert _index_session_counter(tmp_path) == Counter({"committed-new": 1})
+
+
 def test_concurrent_retention_preserves_committed_index_projection(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

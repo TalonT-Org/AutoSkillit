@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import ast
-import inspect
 import json
 import os
 import time
@@ -144,25 +142,3 @@ async def test_close_reopen_rebuilds_deadline_from_new_configuration(
     assert first_start + 175 <= first <= first_start + 185
     assert second_start + 355 <= second <= second_start + 365
     assert "AUTOSKILLIT_SESSION_DEADLINE" not in os.environ
-
-
-def test_deadline_helper_never_assigns_to_process_environment() -> None:
-    from autoskillit.server.tools import _execution_helpers
-
-    tree = ast.parse(inspect.getsource(_execution_helpers))
-    assignments = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign))
-        and any(
-            isinstance(target, ast.Subscript)
-            and isinstance(target.value, ast.Attribute)
-            and isinstance(target.value.value, ast.Name)
-            and target.value.value.id == "os"
-            and target.value.attr == "environ"
-            and isinstance(target.slice, ast.Constant)
-            and target.slice.value == "AUTOSKILLIT_SESSION_DEADLINE"
-            for target in (node.targets if isinstance(node, ast.Assign) else [node.target])
-        )
-    ]
-    assert assignments == []

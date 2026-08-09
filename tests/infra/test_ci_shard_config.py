@@ -41,6 +41,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._test_filter import FilterMode, FullRunReason, build_test_scope
+
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -338,16 +340,6 @@ class TestCIShardConfig:
                         f"File {f} under explicit directory {d} not owned by {key}"
                     )
 
-    def test_remaining_files_default_to_general(self) -> None:
-        text = _read_workflow_text()
-        assignments = _parse_shard_assignments(text)
-        tests_root = REPO_ROOT / "tests"
-        ownership = _assign_files_to_shards(
-            _supported_test_files(tests_root), assignments, _root_test_files(tests_root)
-        )
-        unowned = set().union(*ownership.values()) ^ _supported_test_files(tests_root)
-        assert not unowned, f"Files not assigned to any shard: {sorted(unowned)}"
-
     def test_three_ownership_sets_disjoint_and_exhaustive(self) -> None:
         text = _read_workflow_text()
         assignments = _parse_shard_assignments(text)
@@ -496,8 +488,6 @@ class TestConservativeFilterShardIntersection:
         )
 
     def test_headless_execute_intersects_execution_and_recipe(self, tmp_path: Path) -> None:
-        from tests._test_filter import FilterMode, FullRunReason, build_test_scope
-
         tests_root = tmp_path / "tests"
         (tests_root / "execution").mkdir(parents=True)
         (tests_root / "server").mkdir()
@@ -522,8 +512,6 @@ class TestConservativeFilterShardIntersection:
         assert server_file in expanded
 
     def test_recipe_schema_intersects_recipe_execution_and_general(self, tmp_path: Path) -> None:
-        from tests._test_filter import FilterMode, FullRunReason, build_test_scope
-
         tests_root = tmp_path / "tests"
         for d in ("recipe", "server", "execution", "cli"):
             (tests_root / d).mkdir(parents=True)
@@ -554,8 +542,6 @@ class TestConservativeFilterShardIntersection:
         }
 
     def test_server_state_intersects_recipe_and_execution(self, tmp_path: Path) -> None:
-        from tests._test_filter import FilterMode, FullRunReason, build_test_scope
-
         tests_root = tmp_path / "tests"
         for d in ("server", "pipeline"):
             (tests_root / d).mkdir(parents=True)
@@ -579,8 +565,6 @@ class TestConservativeFilterShardIntersection:
         assert _intersected_shards(expanded, ownership) == {"execution", "recipe"}
 
     def test_unrelated_cli_change_intersects_all_three_shards(self, tmp_path: Path) -> None:
-        from tests._test_filter import FilterMode, FullRunReason, build_test_scope
-
         tests_root = tmp_path / "tests"
         for d in ("contracts", "docs", "infra"):
             (tests_root / d).mkdir(parents=True)

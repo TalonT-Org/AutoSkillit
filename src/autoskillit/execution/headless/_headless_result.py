@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, assert_never
+from typing import TYPE_CHECKING
 
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
@@ -50,7 +50,6 @@ from autoskillit.execution.headless._headless_path_tokens import (
     _validate_output_paths,
 )
 from autoskillit.execution.headless._headless_recovery import (
-    _CHANNEL_B_RECOVERABLE_SUBTYPES,
     _infer_enum_token_from_write_contract,
     _recover_block_from_assistant_messages,
     _recover_from_separate_marker,
@@ -495,60 +494,6 @@ def _build_skill_result(
         )
         evidence = dataclasses.replace(evidence, write_call_count=1)
         _has_write_evidence = True
-
-    # Channel B drain-race: recover from assistant_messages if type=result was not flushed.
-    match result.channel_confirmation:
-        case ChannelConfirmation.CHANNEL_B if (
-            session.subtype in _CHANNEL_B_RECOVERABLE_SUBTYPES and completion_marker
-        ):
-            cb_recovered = _recover_from_separate_marker(session, completion_marker)
-            if cb_recovered is not None:
-                original_subtype = session.subtype
-                session = dataclasses.replace(
-                    cb_recovered,
-                    subtype=CliSubtype.SUCCESS,
-                    is_error=False,
-                )
-                logger.warning(
-                    "channel_b_drain_race_recovery",
-                    original_subtype=str(original_subtype),
-                    assistant_message_count=len(session.assistant_messages),
-                )
-        case ChannelConfirmation.DIR_MISSING if (
-            session.subtype in _CHANNEL_B_RECOVERABLE_SUBTYPES and completion_marker
-        ):
-            # Late-bind recovery: the directory may have been created by
-            # Claude Code during the run even though it was absent at
-            # monitor start.  Attempt the same marker-based recovery as
-            # the CHANNEL_B arm.
-            cb_recovered = _recover_from_separate_marker(session, completion_marker)
-            if cb_recovered is not None:
-                original_subtype = session.subtype
-                session = dataclasses.replace(
-                    cb_recovered,
-                    subtype=CliSubtype.SUCCESS,
-                    is_error=False,
-                )
-                logger.warning(
-                    "dir_missing_late_bind_recovery",
-                    original_subtype=str(original_subtype),
-                    assistant_message_count=len(session.assistant_messages),
-                )
-            else:
-                logger.warning(
-                    "dir_missing_late_bind_recovery_failed",
-                    subtype=str(session.subtype),
-                    assistant_message_count=len(session.assistant_messages),
-                )
-        case (
-            ChannelConfirmation.CHANNEL_B
-            | ChannelConfirmation.CHANNEL_A
-            | ChannelConfirmation.UNMONITORED
-            | ChannelConfirmation.DIR_MISSING
-        ):
-            pass  # no drain-race recovery applicable
-        case _ as _unreachable_cc:
-            assert_never(_unreachable_cc)
 
     # Recovery is only valid for sessions that completed normally.
     # For incomplete sessions (UNPARSEABLE, TIMEOUT, etc.), any Write calls were

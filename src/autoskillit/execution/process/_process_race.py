@@ -447,9 +447,8 @@ async def _watch_session_log(
 ) -> None:
     """Monitor the session JSONL log and deposit the Channel B signal.
 
-    When the session reports completion (not stale), a drain-wait window
-    is opened via anyio.move_on_after so Channel A can fire first if it
-    is about to confirm. The trigger is set after the B signal is deposited.
+    A completion marker is corroboration and session discovery only. It must
+    not wake the termination race while the child process is still alive.
 
     If ``stdout_session_id_ready`` is provided, waits briefly for session ID
     extraction before starting Phase 1 to enable identity-based JSONL selection.
@@ -479,12 +478,6 @@ async def _watch_session_log(
         session_record_types,
         **_monitor_kwargs,  # type: ignore[arg-type]
     )
-    if monitor_result.status == ChannelBStatus.COMPLETION:
-        # Drain-wait: give Channel A a window to confirm before Channel B wins.
-        # move_on_after absorbs timeout; trigger may already be set if A fired.
-        with anyio.move_on_after(completion_drain_timeout):
-            await trigger.wait()
-        logger.debug("channel_b_drain_complete", trigger_was_set=trigger.is_set())
     logger.debug(
         "channel_b_result",
         status=monitor_result.status,
@@ -499,7 +492,8 @@ async def _watch_session_log(
     if on_session_id_resolved is not None and monitor_result.session_id:
         on_session_id_resolved(monitor_result.session_id)
     channel_b_ready.set()
-    trigger.set()
+    if monitor_result.status != ChannelBStatus.COMPLETION:
+        trigger.set()
 
 
 def resolve_termination(
@@ -556,7 +550,7 @@ def resolve_termination(
                 # ChannelConfirmation level for recovery-gate decisions.
                 termination = TerminationReason.STALE
             case ChannelBStatus.COMPLETION:
-                termination = TerminationReason.COMPLETED
+                termination = TerminationReason.NATURAL_EXIT
             case None:
                 if signals.channel_a_confirmed:
                     termination = TerminationReason.COMPLETED

@@ -15,7 +15,6 @@ from autoskillit.core import (
 )
 from autoskillit.execution.session._retry_fsm import _compute_retry
 from autoskillit.execution.session._session_content import (
-    _check_expected_patterns,
     _check_session_content,
     _evaluate_content_state,
 )
@@ -41,39 +40,9 @@ def _compute_success(
     Exhaustive match dispatch over TerminationReason ensures mypy flags any
     unhandled value when the enum is extended (ARCH-007).
 
-    Gate 0.5 (provenance bypass): when ``channel_confirmation=CHANNEL_B``,
-    Channel B's session-JSONL marker is the authoritative signal that the
-    session completed successfully. Stdout content is not required.
+    Channel B may corroborate a backend-terminal result but cannot replace
+    terminal or content evidence.
     """
-    # Gate 0.5: Channel B provenance bypass — session JSONL is authoritative.
-    match channel_confirmation:
-        case ChannelConfirmation.CHANNEL_B:
-            if expected_output_patterns and not session.session_complete:
-                logger.debug(
-                    "channel_b_bypass_skipped_incomplete_session",
-                    subtype=str(session.subtype),
-                    is_error=session.is_error,
-                    pattern_count=len(expected_output_patterns),
-                )
-            else:
-                if not _check_expected_patterns(session.result.strip(), expected_output_patterns):
-                    logger.debug(
-                        "channel_b_content_check_failed",
-                        result_len=len(session.result),
-                        pattern_count=len(expected_output_patterns),
-                    )
-                    return False
-                logger.debug("compute_success_bypass", channel="CHANNEL_B", result=True)
-                return True
-        case (
-            ChannelConfirmation.CHANNEL_A
-            | ChannelConfirmation.UNMONITORED
-            | ChannelConfirmation.DIR_MISSING
-        ):
-            pass  # fall through to termination dispatch
-        case _ as _unreachable_cc:
-            assert_never(_unreachable_cc)
-
     match termination:
         case TerminationReason.TIMED_OUT:
             return False

@@ -68,11 +68,6 @@ def _compute_retry(
     Phase 2: Exhaustive match dispatch over TerminationReason ensures mypy
              flags any unhandled value when the enum is extended.
 
-    When ``channel_confirmation=CHANNEL_B`` and ``termination=COMPLETED``,
-    the provenance bypass applies: Channel B's session-JSONL signal is
-    authoritative, so kill-anomaly appearance is a drain-race artifact.
-    No retry is needed.
-
     When ``exit_code_is_terminal=True`` and ``returncode > 0`` in the
     NATURAL_EXIT arm, the positive returncode is treated as authoritative
     terminal failure — kill-anomaly and early-stop checks are bypassed.
@@ -89,10 +84,7 @@ def _compute_retry(
             return True, RetryReason.RESUME
 
         case TerminationReason.NATURAL_EXIT:
-            if channel_confirmation in (
-                ChannelConfirmation.CHANNEL_A,
-                ChannelConfirmation.CHANNEL_B,
-            ):
+            if channel_confirmation == ChannelConfirmation.CHANNEL_A:
                 logger.debug(
                     "compute_retry_result",
                     termination="NATURAL_EXIT",
@@ -169,36 +161,17 @@ def _compute_retry(
         case TerminationReason.COMPLETED:
             # Infrastructure killed the process. SIGTERM/SIGKILL produce nonzero
             # returncode by design — do not gate on returncode here.
-            # Exhaustive ChannelConfirmation dispatch (ARCH-007 extension):
-            match channel_confirmation:
-                case ChannelConfirmation.CHANNEL_B:
-                    # Channel B is authoritative — kill-anomaly appearance is
-                    # a drain-race artifact, not a real incomplete flush.
-                    logger.debug(
-                        "compute_retry_result",
-                        termination="COMPLETED",
-                        channel="CHANNEL_B",
-                        needs_retry=False,
-                    )
-                    return False, RetryReason.NONE
-                case (
-                    ChannelConfirmation.CHANNEL_A
-                    | ChannelConfirmation.UNMONITORED
-                    | ChannelConfirmation.DIR_MISSING
-                ):
-                    is_anomaly = _is_kill_anomaly(session)
-                    logger.debug(
-                        "compute_retry_result",
-                        termination="COMPLETED",
-                        channel=str(channel_confirmation),
-                        needs_retry=is_anomaly,
-                        kill_anomaly=is_anomaly,
-                    )
-                    if is_anomaly:
-                        return True, RetryReason.RESUME
-                    return False, RetryReason.NONE
-                case _ as _unreachable_cc:
-                    assert_never(_unreachable_cc)
+            is_anomaly = _is_kill_anomaly(session)
+            logger.debug(
+                "compute_retry_result",
+                termination="COMPLETED",
+                channel=str(channel_confirmation),
+                needs_retry=is_anomaly,
+                kill_anomaly=is_anomaly,
+            )
+            if is_anomaly:
+                return True, RetryReason.RESUME
+            return False, RetryReason.NONE
 
         case TerminationReason.STALE | TerminationReason.IDLE_STALL:
             logger.debug("compute_retry_result", termination=termination.value, needs_retry=False)

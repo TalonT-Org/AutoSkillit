@@ -151,8 +151,8 @@ class TestComputeRetry:
         assert needs is False
         assert reason == RetryReason.NONE
 
-    def test_channel_b_completed_no_retry(self):
-        """CHANNEL_B is authoritative on COMPLETED — no retry."""
+    def test_channel_b_completed_empty_result_retries(self):
+        """Channel B cannot suppress retry for an incomplete killed result."""
         session = ClaudeSessionResult(
             subtype="success", is_error=False, result="", session_id="s1"
         )
@@ -162,8 +162,8 @@ class TestComputeRetry:
             termination=TerminationReason.COMPLETED,
             channel_confirmation=ChannelConfirmation.CHANNEL_B,
         )
-        assert needs is False
-        assert reason == RetryReason.NONE
+        assert needs is True
+        assert reason == RetryReason.RESUME
 
     def test_channel_a_completed_kill_anomaly_retries(self):
         """CHANNEL_A + empty result → retry RESUME (kill anomaly suspected)."""
@@ -179,8 +179,8 @@ class TestComputeRetry:
         assert needs is True
         assert reason == RetryReason.RESUME
 
-    def test_natural_exit_channel_b_no_retry(self):
-        """CHANNEL_B confirmation skips kill-anomaly check on NATURAL_EXIT."""
+    def test_natural_exit_channel_b_empty_result_retries(self):
+        """Channel B cannot suppress the natural-exit anomaly check."""
         session = ClaudeSessionResult(
             subtype="success", is_error=False, result="", session_id="s1"
         )
@@ -190,8 +190,8 @@ class TestComputeRetry:
             termination=TerminationReason.NATURAL_EXIT,
             channel_confirmation=ChannelConfirmation.CHANNEL_B,
         )
-        assert needs is False
-        assert reason == RetryReason.NONE
+        assert needs is True
+        assert reason == RetryReason.EMPTY_OUTPUT
 
     def test_natural_exit_channel_a_no_retry(self):
         """CHANNEL_A confirmation skips kill-anomaly check on NATURAL_EXIT."""

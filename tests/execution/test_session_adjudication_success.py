@@ -75,8 +75,8 @@ class TestComputeSuccess:
             is False
         )
 
-    def test_channel_b_bypasses_content_check(self):
-        """CHANNEL_B + COMPLETED + empty result → True (provenance bypass)."""
+    def test_channel_b_cannot_bypass_content_check(self):
+        """An assistant-record marker cannot replace terminal content."""
         session = ClaudeSessionResult(
             subtype="success", is_error=False, result="", session_id="s1"
         )
@@ -87,7 +87,7 @@ class TestComputeSuccess:
                 termination=TerminationReason.COMPLETED,
                 channel_confirmation=ChannelConfirmation.CHANNEL_B,
             )
-            is True
+            is False
         )
 
     def test_channel_a_falls_through_to_content_check(self):
@@ -120,8 +120,8 @@ class TestComputeSuccess:
             is False
         )
 
-    def test_natural_exit_channel_b_empty_result_true(self):
-        """NATURAL_EXIT + CHANNEL_B bypass fires before termination dispatch."""
+    def test_natural_exit_channel_b_empty_result_false(self):
+        """Channel B corroboration does not make an empty result successful."""
         session = ClaudeSessionResult(
             subtype="success", is_error=False, result="", session_id="s1"
         )
@@ -132,7 +132,7 @@ class TestComputeSuccess:
                 termination=TerminationReason.NATURAL_EXIT,
                 channel_confirmation=ChannelConfirmation.CHANNEL_B,
             )
-            is True
+            is False
         )
 
     def test_natural_exit_channel_a_valid_result_true(self):
@@ -409,8 +409,8 @@ class TestMinus9ReturncodeCoverage:
         )
         assert result is True
 
-    def test_compute_success_completed_minus_9_channel_b_is_success(self) -> None:
-        """COMPLETED + CHANNEL_B + returncode=-9 → success=True (bypass)."""
+    def test_compute_success_completed_minus_9_channel_b_requires_content(self) -> None:
+        """Channel B cannot turn an empty killed session into success."""
         session = ClaudeSessionResult(
             subtype="success",
             result="",
@@ -423,7 +423,7 @@ class TestMinus9ReturncodeCoverage:
             termination=TerminationReason.COMPLETED,
             channel_confirmation=ChannelConfirmation.CHANNEL_B,
         )
-        assert result is True
+        assert result is False
 
     @pytest.mark.parametrize("returncode", [0, -15, -9])
     @pytest.mark.parametrize("termination", list(TerminationReason))

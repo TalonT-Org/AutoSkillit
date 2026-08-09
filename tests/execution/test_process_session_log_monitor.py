@@ -492,6 +492,39 @@ class TestWatchSessionLogSessionId:
 
         assert acc.channel_b_session_id == session_uuid
 
+    @pytest.mark.anyio
+    async def test_channel_b_completion_does_not_trigger_termination(self, monkeypatch, tmp_path):
+        async def _completion(*_args, **_kwargs):
+            return SessionMonitorResult(ChannelBStatus.COMPLETION, "child-session")
+
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_race._session_log_monitor",
+            _completion,
+        )
+        acc = RaceAccumulator()
+        trigger = anyio.Event()
+        channel_b_ready = anyio.Event()
+
+        await _watch_session_log(
+            tmp_path,
+            "MARKER",
+            10.0,
+            time.time(),
+            frozenset({"assistant"}),
+            12345,
+            5.0,
+            acc,
+            trigger,
+            channel_b_ready,
+            0.1,
+            0.1,
+            30.0,
+        )
+
+        assert channel_b_ready.is_set()
+        assert acc.channel_b_status == ChannelBStatus.COMPLETION
+        assert not trigger.is_set()
+
 
 class TestSessionIdBasedSelection:
     """Phase 1 identity-based JSONL file selection."""

@@ -1067,26 +1067,24 @@ def _validate_existing_explorer_role_toml(
     require_binding_env: bool,
     explorer_mcp_transport: Mapping[str, object],
 ) -> dict[str, str] | None:
-    """Ensure a resumed role artifact still has the canonical non-secret projection."""
+    """Validate persisted role identity and recover its binding environment."""
     try:
         current = tomllib.loads(toml_path.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise ValueError(f"invalid materialized explorer role {toml_path}: {exc}") from exc
-    expected = tomllib.loads(
-        _render_agent_toml(
-            definition,
-            explorer_mcp_transport=explorer_mcp_transport,
-            project_explorer_mcp=True,
-        )
-    )
-    current_server = current.get("mcp_servers", {}).get("autoskillit")
-    expected_server = expected["mcp_servers"]["autoskillit"]
+    servers = current.get("mcp_servers")
+    if not isinstance(servers, dict) or set(servers) != {"autoskillit"}:
+        raise ValueError(f"materialized explorer role missing MCP projection: {toml_path}")
+    current_server = servers.get("autoskillit")
     if not isinstance(current_server, dict):
         raise ValueError(f"materialized explorer role missing MCP projection: {toml_path}")
+    current_server = dict(current_server)
     current_env = current_server.pop("env", None)
-    expected_server.pop("env", None)
-    if current != expected:
-        raise ValueError(f"materialized explorer role does not match its AgentDef: {toml_path}")
+    expected_server = _explorer_mcp_projection(explorer_mcp_transport, None)
+    if current_server != expected_server:
+        raise ValueError(f"materialized explorer role has a divergent MCP projection: {toml_path}")
+    if current.get("name") != definition.name:
+        raise ValueError(f"materialized explorer role identity mismatch: {toml_path}")
     if current_env is None and not require_binding_env:
         return None
     if not isinstance(current_env, dict):

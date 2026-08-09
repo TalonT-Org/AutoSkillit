@@ -498,8 +498,6 @@ def mark_step_complete(
             outcome["incarnation_matches"] = False
             return tracker
         steps = tracker["steps"]
-        if not isinstance(steps, dict):
-            raise ValueError("tracker steps must be a JSON object")
         if canonical not in steps:
             raise KeyError(
                 f"step '{canonical}' not found in tracker; known steps: {sorted(steps)}"
@@ -519,9 +517,7 @@ def mark_step_complete(
         total = len(steps)
         pipeline_id = tracker.get("pipeline_id", target.target_order_id)
 
-        dependencies = tracker.get("dependencies", {})
-        if not isinstance(dependencies, dict):
-            raise ValueError("tracker dependencies must be a JSON object")
+        dependencies = tracker["dependencies"]
         dependents_with_unmet = sorted(
             dependent
             for dependent, prereqs in dependencies.items()

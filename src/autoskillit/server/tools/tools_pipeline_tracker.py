@@ -48,6 +48,16 @@ class ResolvedTracker:
     path: Path
 
 
+def read_tracker_identity(resolved: ResolvedTracker) -> tuple[str, str] | None:
+    """Read the kitchen and incarnation identities from a resolved tracker."""
+    tracker = json.loads(resolved.path.read_text())
+    kitchen_id = tracker.get("kitchen_id")
+    incarnation_id = tracker.get("tracker_incarnation_id")
+    if not isinstance(kitchen_id, str) or not isinstance(incarnation_id, str):
+        return None
+    return kitchen_id, incarnation_id
+
+
 @dataclass(frozen=True, slots=True)
 class ResolutionRefusal:
     """Tracker resolution failed — carry a reason for the caller to wrap."""
@@ -337,7 +347,7 @@ def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: st
         )
 
     try:
-        tracker = json.loads(resolved.path.read_text())
+        tracker_identity = read_tracker_identity(resolved)
     except (json.JSONDecodeError, OSError) as exc:
         return json.dumps(
             deny_envelope(
@@ -346,9 +356,7 @@ def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: st
                 retriable=True,
             )
         )
-    tracker_kitchen_id = tracker.get("kitchen_id")
-    tracker_incarnation_id = tracker.get("tracker_incarnation_id")
-    if not isinstance(tracker_kitchen_id, str) or not isinstance(tracker_incarnation_id, str):
+    if tracker_identity is None:
         return json.dumps(
             deny_envelope(
                 "record_pipeline_step: tracker incarnation identity is missing.",
@@ -356,6 +364,7 @@ def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: st
                 retriable=False,
             )
         )
+    tracker_kitchen_id, tracker_incarnation_id = tracker_identity
     authority = ctx.run_skill_completion
     if authority is None:
         return json.dumps(

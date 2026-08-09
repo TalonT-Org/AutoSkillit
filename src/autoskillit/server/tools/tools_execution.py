@@ -595,6 +595,7 @@ def _completion_tracker_binding(tool_ctx: ToolContext, order_id: str) -> tuple[s
     """Resolve immutable tracker identity for a new completion receipt."""
     from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
         ResolvedTracker,
+        read_tracker_identity,
         resolve_tracker_order_id,
     )
 
@@ -602,13 +603,12 @@ def _completion_tracker_binding(tool_ctx: ToolContext, order_id: str) -> tuple[s
     if not isinstance(resolved, ResolvedTracker) or not resolved.path.exists():
         return "", "", "", ""
     try:
-        tracker = json.loads(resolved.path.read_text())
+        tracker_identity = read_tracker_identity(resolved)
     except (json.JSONDecodeError, OSError):
         return "", "", "", ""
-    kitchen_id = tracker.get("kitchen_id")
-    incarnation_id = tracker.get("tracker_incarnation_id")
-    if not isinstance(kitchen_id, str) or not isinstance(incarnation_id, str):
+    if tracker_identity is None:
         return "", "", "", ""
+    kitchen_id, incarnation_id = tracker_identity
     return resolved.order_id, str(resolved.path.resolve()), kitchen_id, incarnation_id
 
 

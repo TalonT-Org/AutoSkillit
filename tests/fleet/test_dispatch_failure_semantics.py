@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core.types import CliSubtype
+from autoskillit.core.types import CliSubtype, FleetErrorCode
 from autoskillit.recipe.schema import RecipeIngredient
 from tests.fakes import InMemoryHeadlessExecutor
 from tests.fleet._helpers import (
@@ -472,8 +472,11 @@ class TestTrackerBridgeIntegration:
         self, tool_ctx, monkeypatch
     ):
         _setup_dispatch(tool_ctx, monkeypatch)
+        acquire_called = False
 
         def unexpected_acquire(*_args, **_kwargs):
+            nonlocal acquire_called
+            acquire_called = True
             raise AssertionError("pre-lineage rejection acquired tracker authority")
 
         monkeypatch.setattr(
@@ -483,7 +486,9 @@ class TestTrackerBridgeIntegration:
 
         result = await _run(tool_ctx, ingredients={"unknown": "value"})
 
+        assert not acquire_called
         assert result["success"] is False
+        assert result["reason"] == FleetErrorCode.FLEET_UNKNOWN_INGREDIENT.value
 
     @pytest.mark.anyio
     async def test_dispatch_release_preserves_same_target_manual_participant(
@@ -496,6 +501,7 @@ class TestTrackerBridgeIntegration:
             release_tracker_lease,
             retain_tracker_lease,
         )
+        from autoskillit.fleet._checkpoint_bridge import retain_dispatch_tracker_authority
 
         _setup_dispatch(tool_ctx, monkeypatch)
         dispatch_id = "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
@@ -520,8 +526,21 @@ class TestTrackerBridgeIntegration:
         )
         with tool_ctx.tracker_leases_lock:
             peer_lease = retain_tracker_lease(tool_ctx.tracker_leases, peer_key)
+        dispatch_key = None
+
+        def recording_retain(tool_ctx, dispatch_id):
+            nonlocal dispatch_key
+            dispatch_key, lease = retain_dispatch_tracker_authority(tool_ctx, dispatch_id)
+            return dispatch_key, lease
+
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.retain_dispatch_tracker_authority",
+            recording_retain,
+        )
         try:
             await _run(tool_ctx)
+            assert dispatch_key is not None
+            assert dispatch_key.target == target
             assert tool_ctx.tracker_leases[peer_key] is peer_lease
             assert not peer_lease.closed
         finally:

@@ -929,6 +929,8 @@ def _render_agent_toml(
         lines.append(
             f"model_reasoning_effort = {_format_toml_value(definition.codex.reasoning_effort)}"
         )
+    if definition.codex.web_search is not None:
+        lines.append(f"web_search = {_format_toml_value(definition.codex.web_search)}")
     body = (
         f"{definition.body}\n\n"
         f"AutoSkillit agent definition digest: {digest}\n\n"

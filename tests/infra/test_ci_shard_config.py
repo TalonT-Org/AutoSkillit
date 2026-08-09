@@ -175,6 +175,11 @@ def _parse_case_arms(body: str) -> dict[str, str]:
     return arms
 
 
+def _exit_status(body: str) -> int | None:
+    match = re.search(r"\bexit\s+(\d+)\b", body)
+    return int(match.group(1)) if match else None
+
+
 def _supported_test_files(tests_root: Path) -> set[str]:
     """Return repo-relative paths of every supported test file under ``tests_root``."""
     return {
@@ -401,13 +406,23 @@ class TestCIShardConfig:
         text = _read_workflow_text()
         body = _compute_test_paths_body(text)
         arms = _parse_case_arms(body)
-        assert set(arms) >= {"execution", "recipe", "general", "*_default"}
+        matrix_match = re.search(r"(?m)^\s*shard:\s*\[([^]]+)]\s*$", text)
+        assert matrix_match, "Workflow test matrix has no inline shard declaration"
+        matrix_shards = {name.strip() for name in matrix_match.group(1).split(",")}
+        assert set(arms) == matrix_shards | {"*_default"}
         default_body = arms["*_default"]
         assert "::error::" in default_body
         assert "Unknown test shard" in default_body or "unknown shard" in default_body
-        assert re.search(r"\bexit\s+[^0]\b", default_body), (
+        exit_status = _exit_status(default_body)
+        assert exit_status is not None and exit_status != 0, (
             f"Default arm does not exit with a nonzero status: {default_body!r}"
         )
+
+    @pytest.mark.parametrize(("body", "expected"), [("exit 10", 10), ("exit 01", 1)])
+    def test_exit_status_parses_multidigit_and_zero_padded_values(
+        self, body: str, expected: int
+    ) -> None:
+        assert _exit_status(body) == expected
 
     def test_case_arm_wiring_matches_ownership_model(self) -> None:
         text = _read_workflow_text()

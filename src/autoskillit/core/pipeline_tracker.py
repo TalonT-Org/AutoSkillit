@@ -15,13 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from ._plugin_cache import (
-    _active_kitchens_lock,
-    _active_kitchens_path,
-    _open_lock,
-    _read_active_kitchens_unlocked,
-    kitchen_entry_alive,
-)
+from ._plugin_cache import kitchen_entry_alive, read_active_kitchens_registry
 from .io import atomic_write
 from .runtime.artifact_lease import ArtifactLease
 
@@ -335,10 +329,8 @@ def try_retire_tracker(target: TrackerAuthorityTarget) -> bool:
             current = _read_tracker_unlocked(target)
             if current.data is None:
                 return False
-            registry_path = _active_kitchens_path()
-            registry_lock = _open_lock(_active_kitchens_lock())
             try:
-                entries = _read_active_kitchens_unlocked(registry_path)
+                entries = read_active_kitchens_registry()
                 kitchen_id = current.data.get("kitchen_id")
                 if not isinstance(kitchen_id, str) or not kitchen_id:
                     kitchen_id = target.target_order_id
@@ -348,8 +340,6 @@ def try_retire_tracker(target: TrackerAuthorityTarget) -> bool:
                 target.path.unlink()
             except (OSError, ValueError, json.JSONDecodeError):
                 return False
-            finally:
-                registry_lock.close()
         return True
     except (OSError, RuntimeError):
         return False

@@ -32,14 +32,18 @@ def _target(tmp_path, order_id: str = "order-1", *, expected: bool = True):
     return TrackerAuthorityTarget.for_project(tmp_path, order_id, expected=expected)
 
 
-def _key(target, kind: Literal["kitchen", "dispatch", "manual"] = "kitchen"):
+def _key(
+    target,
+    project_path,
+    kind: Literal["kitchen", "dispatch", "manual"] = "kitchen",
+):
     return TrackerParticipantKey(
         target=target,
         owner_kind=kind,
         owner_id="same-owner",
         pid=os.getpid(),
         create_time=psutil.Process(os.getpid()).create_time(),
-        project_path=str(target.path.parents[3]),
+        project_path=str(project_path),
     )
 
 
@@ -59,11 +63,9 @@ def _registry(monkeypatch, tmp_path, payload: object | None) -> None:
         registry_path.parent.mkdir(parents=True)
         registry_path.write_text(json.dumps(payload))
     monkeypatch.setattr(
-        "autoskillit.core.pipeline_tracker._active_kitchens_path", lambda: registry_path
+        "autoskillit.core._plugin_cache._active_kitchens_path", lambda: registry_path
     )
-    monkeypatch.setattr(
-        "autoskillit.core.pipeline_tracker._active_kitchens_lock", lambda: lock_path
-    )
+    monkeypatch.setattr("autoskillit.core._plugin_cache._active_kitchens_lock", lambda: lock_path)
 
 
 @pytest.mark.parametrize("order_id", ["", ".", "..", "../escape", "a/b", "a\\b"])
@@ -87,8 +89,8 @@ def test_read_result_enforces_expected_authority_invariants(tmp_path):
 def test_complete_participant_key_prevents_owner_kind_collision(tmp_path):
     target = _target(tmp_path)
     leases = {}
-    kitchen_key = _key(target, "kitchen")
-    dispatch_key = _key(target, "dispatch")
+    kitchen_key = _key(target, tmp_path, "kitchen")
+    dispatch_key = _key(target, tmp_path, "dispatch")
     kitchen = retain_tracker_lease(leases, kitchen_key)
     dispatch = retain_tracker_lease(leases, dispatch_key)
     try:
@@ -109,7 +111,7 @@ def test_access_takes_shared_lease_before_tracker_lock(monkeypatch, tmp_path):
 
     target = _target(tmp_path)
     leases = {}
-    lease = retain_tracker_lease(leases, _key(target))
+    lease = retain_tracker_lease(leases, _key(target, tmp_path))
     target.path.parent.mkdir(parents=True, exist_ok=True)
     target.path.write_text(json.dumps(_tracker()))
     real_enter = tracker_module._TrackerLock.__enter__
@@ -133,7 +135,7 @@ def test_access_takes_shared_lease_before_tracker_lock(monkeypatch, tmp_path):
 def test_locked_initialization_and_mutation_preserve_invalid_existing_bytes(tmp_path):
     target = _target(tmp_path)
     leases = {}
-    lease = retain_tracker_lease(leases, _key(target))
+    lease = retain_tracker_lease(leases, _key(target, tmp_path))
     target.path.parent.mkdir(parents=True, exist_ok=True)
     target.path.write_bytes(b"{broken")
     try:
@@ -155,7 +157,7 @@ def test_locked_initialization_and_mutation_preserve_invalid_existing_bytes(tmp_
 def test_kitchen_merge_preserves_progress_and_manual_init_is_create_only(tmp_path):
     target = _target(tmp_path, expected=False)
     leases = {}
-    lease = retain_tracker_lease(leases, _key(target, "manual"))
+    lease = retain_tracker_lease(leases, _key(target, tmp_path, "manual"))
     try:
         initial = _tracker()
         assert initialize_manual_tracker(target, lease, initial).data == initial
@@ -182,7 +184,7 @@ def test_exact_retirement_skips_contention_and_never_unlinks_sidecar(monkeypatch
     target.path.write_text(json.dumps(_tracker()))
     _registry(monkeypatch, tmp_path, None)
     leases = {}
-    key = _key(target)
+    key = _key(target, tmp_path)
     retain_tracker_lease(leases, key)
 
     assert try_retire_tracker(target) is False

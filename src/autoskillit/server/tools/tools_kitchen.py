@@ -646,8 +646,6 @@ def _release_kitchen_tracker_authority(
         if key is not None:
             release_tracker_lease(tool_ctx.tracker_leases, key)
         tool_ctx.kitchen_tracker_key = None
-        for remaining in list(tool_ctx.tracker_leases):
-            release_tracker_lease(tool_ctx.tracker_leases, remaining)
     if unregister and identity is not None:
         try:
             unregister_active_kitchen(identity)

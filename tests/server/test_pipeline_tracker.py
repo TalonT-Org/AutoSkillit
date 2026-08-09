@@ -114,6 +114,44 @@ class TestRecordPipelineStepInit:
         assert self.ctx.tracker_leases == {}
 
     @pytest.mark.anyio
+    async def test_kitchen_release_preserves_manual_tracker_lease(self):
+        from autoskillit.server.tools.tools_kitchen import (
+            _release_kitchen_tracker_authority,
+            _retain_kitchen_tracker_authority,
+        )
+        from autoskillit.server.tools.tools_pipeline_tracker import _release_context_tracker
+
+        _retain_kitchen_tracker_authority(self.ctx)
+        initialized = json.loads(await record_pipeline_step(pipeline_id="AB", op="init"))
+        assert initialized["success"] is True
+        manual_key = next(key for key in self.ctx.tracker_leases if key.owner_kind == "manual")
+
+        _release_kitchen_tracker_authority(self.ctx, unregister=False, retire=False)
+
+        assert list(self.ctx.tracker_leases) == [manual_key]
+        assert not self.ctx.tracker_leases[manual_key].closed
+        _release_context_tracker(self.ctx, manual_key)
+
+    @pytest.mark.anyio
+    async def test_completion_exception_releases_manual_tracker_lease(self, monkeypatch):
+        from autoskillit.server.tools import tools_pipeline_tracker
+
+        self.ctx.active_recipe_steps = {"review": {}}
+        initialized = json.loads(await record_pipeline_step(pipeline_id="AB", op="init"))
+        assert initialized["success"] is True
+
+        def raise_from_marker(*_args, **_kwargs):
+            raise OSError("marker failed")
+
+        monkeypatch.setattr(tools_pipeline_tracker, "mark_step_complete", raise_from_marker)
+        completed = json.loads(
+            await record_pipeline_step(pipeline_id="AB", op="complete", step_name="review")
+        )
+
+        assert completed["success"] is False
+        assert self.ctx.tracker_leases == {}
+
+    @pytest.mark.anyio
     async def test_manual_init_preserves_existing_corrupt_bytes_and_releases_lease(self):
         tracker_path = self.tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "AB.json"
         tracker_path.parent.mkdir(parents=True)

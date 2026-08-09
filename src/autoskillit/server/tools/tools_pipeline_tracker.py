@@ -466,6 +466,9 @@ def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: st
             stage="preflight:pipeline_tracker_credit",
             retriable=False,
         )
+    except Exception:
+        _release_context_tracker(ctx, key)
+        raise
     if not result.get("success") or result.get("done") == result.get("total"):
         _release_context_tracker(ctx, key)
     return json.dumps(result)

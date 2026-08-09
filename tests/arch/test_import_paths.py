@@ -353,6 +353,7 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
         Path("cli/session/_session_cook.py"),  # REQ-IMP-011
         Path("cli/_workspace.py"),  # REQ-IMP-012
         Path("cli/_hooks_codex.py"),  # Re-export shim for execution/backends/_codex_hooks
+        Path("cli/doctor/_doctor_runtime.py"),  # shared private session-index lease path
     }
     forbidden_pkgs = {"execution", "workspace", "recipe", "migration"}
     violations: list[str] = []

@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -104,6 +106,133 @@ def test_flush_session_log_appends_to_index(tmp_path):
     b = json.loads(lines[1])
     assert a["session_id"] == "session-a"
     assert b["session_id"] == "session-b"
+
+
+def _committed_session_counter(log_root: Path) -> Counter[str]:
+    return Counter(path.parent.name for path in (log_root / "sessions").glob("*/summary.json"))
+
+
+def _index_session_counter(log_root: Path) -> Counter[str]:
+    return Counter(
+        json.loads(line)["dir_name"]
+        for line in (log_root / "sessions.jsonl").read_text().splitlines()
+        if line.strip()
+    )
+
+
+def test_concurrent_retention_preserves_committed_index_projection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rollover transaction cannot overwrite a concurrently committed row."""
+    import autoskillit.execution.session_log as session_log
+
+    _flush(tmp_path, session_id="seed-0", max_sessions=2)
+    _flush(tmp_path, session_id="seed-1", max_sessions=2)
+
+    writer_a_at_index_replace = threading.Event()
+    release_writer_a = threading.Event()
+    original_atomic_write = session_log.atomic_write
+
+    def pausing_atomic_write(path: Path, content: str) -> None:
+        if path == tmp_path / "sessions.jsonl" and threading.current_thread().name == "writer-a":
+            writer_a_at_index_replace.set()
+            assert release_writer_a.wait(timeout=10), "writer A was not released"
+        original_atomic_write(path, content)
+
+    monkeypatch.setattr(session_log, "atomic_write", pausing_atomic_write)
+    errors: list[BaseException] = []
+
+    def flush(session_id: str) -> None:
+        try:
+            _flush(tmp_path, session_id=session_id, max_sessions=2)
+        except BaseException as exc:
+            errors.append(exc)
+
+    writer_a = threading.Thread(target=flush, args=("writer-a",), name="writer-a")
+    writer_b = threading.Thread(target=flush, args=("writer-b",), name="writer-b")
+    try:
+        writer_a.start()
+        assert writer_a_at_index_replace.wait(timeout=5), "writer A never reached index replace"
+        writer_b.start()
+        writer_b.join(timeout=0.2)
+    finally:
+        release_writer_a.set()
+        writer_a.join(timeout=5)
+        writer_b.join(timeout=5)
+
+    assert not writer_a.is_alive()
+    assert not writer_b.is_alive()
+    assert not errors
+    assert _index_session_counter(tmp_path) == _committed_session_counter(tmp_path)
+    assert _index_session_counter(tmp_path) == Counter({"writer-a": 1, "writer-b": 1})
+
+
+def test_retention_cannot_delete_an_in_progress_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Retention waits while another writer has not yet published its summary."""
+    import autoskillit.execution.session_log as session_log
+
+    _flush(tmp_path, session_id="seed", max_sessions=2)
+    os.utime(tmp_path / "sessions" / "seed", (2, 2))
+
+    writer_a_before_summary = threading.Event()
+    release_writer_a = threading.Event()
+    original_atomic_write = session_log.atomic_write
+
+    def pausing_atomic_write(path: Path, content: str) -> None:
+        if path == tmp_path / "sessions" / "writer-a" / "summary.json":
+            os.utime(path.parent, (1, 1))
+            writer_a_before_summary.set()
+            assert release_writer_a.wait(timeout=5), "writer A was not released"
+        original_atomic_write(path, content)
+
+    monkeypatch.setattr(session_log, "atomic_write", pausing_atomic_write)
+    errors: list[BaseException] = []
+
+    def flush(session_id: str) -> None:
+        try:
+            _flush(tmp_path, session_id=session_id, max_sessions=2)
+        except BaseException as exc:
+            errors.append(exc)
+
+    writer_a = threading.Thread(target=flush, args=("writer-a",), name="writer-a")
+    writer_b = threading.Thread(target=flush, args=("writer-b",), name="writer-b")
+    try:
+        writer_a.start()
+        assert writer_a_before_summary.wait(timeout=5), "writer A never reached summary publish"
+        writer_b.start()
+        writer_b.join(timeout=1)
+    finally:
+        release_writer_a.set()
+        writer_a.join(timeout=5)
+        writer_b.join(timeout=5)
+
+    assert not writer_a.is_alive()
+    assert not writer_b.is_alive()
+    assert not errors
+    assert (tmp_path / "sessions" / "writer-a" / "summary.json").is_file()
+    assert _index_session_counter(tmp_path) == _committed_session_counter(tmp_path)
+
+
+def test_summary_is_last_per_session_artifact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.execution.session_log as session_log
+
+    writes: list[Path] = []
+    original_atomic_write = session_log.atomic_write
+
+    def recording_atomic_write(path: Path, content: str) -> None:
+        writes.append(path)
+        original_atomic_write(path, content)
+
+    monkeypatch.setattr(session_log, "atomic_write", recording_atomic_write)
+    _flush(tmp_path, session_id="summary-last", campaign_id="campaign", raw_stdout="raw")
+
+    session_dir = tmp_path / "sessions" / "summary-last"
+    session_writes = [path for path in writes if path.parent == session_dir]
+    assert session_writes[-1].name == "summary.json"
 
 
 def test_flush_session_log_fallback_dirname_when_no_session_id(tmp_path):

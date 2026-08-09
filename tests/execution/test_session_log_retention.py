@@ -19,7 +19,7 @@ from autoskillit.core.types._type_results_execution import (
 from autoskillit.execution._session_log_recovery import recover_crashed_sessions
 from autoskillit.execution.linux_tracing import read_boot_id, read_starttime_ticks
 from autoskillit.execution.session_log import flush_session_log
-from autoskillit.fleet import build_protected_campaign_ids
+from autoskillit.fleet import FLEET_STATE_SCHEMA_VERSION, build_protected_campaign_ids
 from tests.execution.conftest import _flush, _snap
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -110,6 +110,96 @@ def test_recover_crashed_sessions_finalizes_orphaned_file(tmp_path):
     summary = json.loads((sessions[0] / "summary.json").read_text())
     assert summary["termination_reason"] == "CRASHED"
     assert summary["success"] is False
+
+
+def test_recovery_replay_upserts_without_rewriting_committed_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    trace = _write_old_trace(
+        tmpfs,
+        "autoskillit_trace_99998.jsonl",
+        json.dumps({"vm_rss_kb": 300, "captured_at": "2026-03-03T10:00:00+00:00"}) + "\n",
+    )
+    original_unlink = Path.unlink
+
+    def interrupt_trace_ack(path: Path, *args, **kwargs) -> None:
+        if path == trace:
+            raise OSError("simulated interruption before trace acknowledgement")
+        original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", interrupt_trace_ack)
+    with pytest.raises(OSError, match="simulated interruption"):
+        recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs"))
+    monkeypatch.setattr(Path, "unlink", original_unlink)
+
+    session_dir = next((tmp_path / "logs" / "sessions").iterdir())
+    committed_mtime = session_dir.stat().st_mtime_ns
+    assert recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs")) == 1
+
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "logs" / "sessions.jsonl").read_text().splitlines()
+    ]
+    assert [row["dir_name"] for row in rows].count(session_dir.name) == 1
+    assert session_dir.stat().st_mtime_ns == committed_mtime
+
+
+def test_recovery_uses_configured_retention_and_campaign_protection(tmp_path: Path) -> None:
+    log_root = tmp_path / "logs"
+    sessions_dir = log_root / "sessions"
+    sessions_dir.mkdir(parents=True)
+    index_path = log_root / "sessions.jsonl"
+    for index, (dir_name, campaign_id) in enumerate(
+        (("protected", "active-campaign"), ("unprotected", ""))
+    ):
+        session_dir = sessions_dir / dir_name
+        session_dir.mkdir()
+        if campaign_id:
+            (session_dir / "meta.json").write_text(
+                json.dumps({"campaign_id": campaign_id, "dispatch_id": "dispatch"})
+            )
+        (session_dir / "summary.json").write_text(json.dumps({"dir_name": dir_name}))
+        os.utime(session_dir, (1_000_000_000 + index, 1_000_000_000 + index))
+        with index_path.open("a") as index_file:
+            index_file.write(json.dumps({"dir_name": dir_name, "campaign_id": campaign_id}) + "\n")
+
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    _write_old_trace(
+        tmpfs,
+        "autoskillit_trace_99997.jsonl",
+        json.dumps({"vm_rss_kb": 200, "captured_at": "2026-03-03T10:00:00+00:00"}) + "\n",
+    )
+    project_dir = tmp_path / "project"
+    observed: list[Path] = []
+
+    def protector(path: Path) -> frozenset[str]:
+        observed.append(path)
+        return frozenset({"active-campaign"})
+
+    assert (
+        recover_crashed_sessions(
+            tmpfs_path=str(tmpfs),
+            log_dir=str(log_root),
+            project_dir=str(project_dir),
+            max_sessions=1,
+            build_protected_campaign_ids=protector,
+        )
+        == 1
+    )
+
+    assert observed == [project_dir]
+    assert (sessions_dir / "protected").is_dir()
+    assert not (sessions_dir / "unprotected").exists()
+    committed = {summary.parent.name for summary in sessions_dir.glob("*/summary.json")}
+    indexed = {
+        json.loads(line)["dir_name"]
+        for line in index_path.read_text().splitlines()
+        if line.strip()
+    }
+    assert indexed == committed
 
 
 def test_recover_crashed_sessions_deletes_tmpfs_file(tmp_path):
@@ -372,12 +462,12 @@ def test_flush_defaults_campaign_dispatch_empty(tmp_path):
 # --- Group M: retention protection tests ---
 
 
-def _make_sessions(tmp_path, count, start_mtime=1_000_000_000, campaign_id=""):
-    """Create `count` session directories with staggered mtimes.
+def _commit_seeded_session(session_dir: Path, dir_name: str) -> None:
+    (session_dir / "summary.json").write_text(json.dumps({"dir_name": dir_name}))
 
-    Returns list of dir_names in mtime order (oldest first).
-    Seeds meta.json with campaign_id if provided.
-    """
+
+def _make_sessions(tmp_path, count, start_mtime=1_000_000_000, campaign_id=""):
+    """Create committed session directories with staggered mtimes."""
     sessions_dir = tmp_path / "sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True)
     index_path = tmp_path / "sessions.jsonl"
@@ -386,12 +476,13 @@ def _make_sessions(tmp_path, count, start_mtime=1_000_000_000, campaign_id=""):
         dir_name = f"session-{i:04d}"
         d = sessions_dir / dir_name
         d.mkdir(exist_ok=True)
-        mtime = start_mtime + i
-        os.utime(d, (mtime, mtime))
         if campaign_id:
             (d / "meta.json").write_text(
                 json.dumps({"campaign_id": campaign_id, "dispatch_id": f"d-{i}"})
             )
+        _commit_seeded_session(d, dir_name)
+        mtime = start_mtime + i
+        os.utime(d, (mtime, mtime))
         with index_path.open("a") as f:
             f.write(
                 json.dumps(
@@ -411,6 +502,7 @@ def _make_state_file(project_dir, campaign_id, status):
     state_path.write_text(
         json.dumps(
             {
+                "schema_version": FLEET_STATE_SCHEMA_VERSION,
                 "campaign_id": campaign_id,
                 "dispatches": [{"name": "truck-1", "status": status}],
             }
@@ -442,6 +534,8 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
         (d / "meta.json").write_text(
             json.dumps({"campaign_id": "active-campaign", "dispatch_id": f"d{i}"})
         )
+        _commit_seeded_session(d, dir_name)
+        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         with index_path.open("a") as f:
             f.write(
                 json.dumps(
@@ -454,11 +548,13 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
                 + "\n"
             )
 
-    # Next 4 dirs: non-campaign sessions
-    for i in range(2, 6):
+    # Next 6 dirs: enough non-campaign sessions to enter the expired slice
+    for i in range(2, 8):
         dir_name = f"session-{i:04d}"
         d = sessions_dir / dir_name
         d.mkdir()
+        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
+        _commit_seeded_session(d, dir_name)
         os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         with index_path.open("a") as f:
             f.write(
@@ -468,13 +564,13 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
 
     _make_state_file(project_dir, "active-campaign", "running")
 
-    # Flush a 7th session to trigger retention (5 max, so 2 should expire)
+    # Flush a 9th session: four are expired, including two unprotected sessions
     flush_session_log(
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
         build_protected_campaign_ids=build_protected_campaign_ids,
-        session_id="session-0006",
+        session_id="session-0008",
         pid=12345,
         skill_command="/autoskillit:implement",
         success=True,
@@ -487,8 +583,7 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
         recipe_identity=RecipeIdentity.empty(),
     )
 
-    # Protected sessions survive — campaign meta.json writes update their mtime so they
-    # end up in the "surviving" window; even if they landed in expired, protection saves them.
+    # Protected sessions are in the expired slice and survive even above the target.
     assert (sessions_dir / "session-0000").exists(), "active campaign session must survive"
     assert (sessions_dir / "session-0001").exists(), "active campaign session must survive"
     # The 2 non-campaign sessions with oldest mtimes (0002, 0003) are deleted.
@@ -504,7 +599,7 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
     assert (sessions_dir / "session-0004").exists(), "session-0004 must survive"
     assert (sessions_dir / "session-0005").exists(), "session-0005 must survive"
     # Newly flushed session must be present
-    assert (sessions_dir / "session-0006").exists()
+    assert (sessions_dir / "session-0008").exists()
 
 
 def test_retention_deletes_released_campaign_sessions(tmp_path, monkeypatch):
@@ -528,6 +623,8 @@ def test_retention_deletes_released_campaign_sessions(tmp_path, monkeypatch):
             (d / "meta.json").write_text(
                 json.dumps({"campaign_id": "done-campaign", "dispatch_id": f"d{i}"})
             )
+        _commit_seeded_session(d, dir_name)
+        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         with index_path.open("a") as f:
             cid = "done-campaign" if i < 2 else ""
             f.write(
@@ -588,6 +685,8 @@ def test_retention_preserves_index_for_protected(tmp_path, monkeypatch):
                 json.dumps({"campaign_id": "live-campaign", "dispatch_id": f"d{i}"})
             )
         cid = "live-campaign" if i < 2 else ""
+        _commit_seeded_session(d, dir_name)
+        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         with index_path.open("a") as f:
             f.write(
                 json.dumps({"session_id": dir_name, "dir_name": dir_name, "campaign_id": cid})
@@ -640,6 +739,8 @@ def test_retention_handles_missing_meta_json(tmp_path, monkeypatch):
         d.mkdir()
         os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         # No meta.json written — sessions are not linked to any campaign
+        _commit_seeded_session(d, dir_name)
+        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         with index_path.open("a") as f:
             f.write(json.dumps({"session_id": dir_name, "dir_name": dir_name}) + "\n")
 
@@ -686,6 +787,8 @@ def test_retention_handles_missing_franchise_state_dir(tmp_path, monkeypatch):
         (d / "meta.json").write_text(
             json.dumps({"campaign_id": "some-campaign", "dispatch_id": f"d{i}"})
         )
+        _commit_seeded_session(d, dir_name)
+        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         with index_path.open("a") as f:
             f.write(json.dumps({"session_id": dir_name, "dir_name": dir_name}) + "\n")
         # Set mtime AFTER all writes inside the dir to get the intended ordering
@@ -735,6 +838,8 @@ def test_retention_handles_corrupt_meta_json(tmp_path, monkeypatch):
         if i < 2:
             # Write corrupt JSON so meta.json is unreadable
             (d / "meta.json").write_text("not valid json {{{{")
+        _commit_seeded_session(d, dir_name)
+        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         with index_path.open("a") as f:
             f.write(json.dumps({"session_id": dir_name, "dir_name": dir_name}) + "\n")
         # Set mtime AFTER all writes inside the dir to get the intended ordering
@@ -802,6 +907,8 @@ def test_retention_no_protection_when_callback_is_none(tmp_path: Path, monkeypat
             )
             # Reset mtime after meta.json write (writing a file bumps directory mtime)
             os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
+        _commit_seeded_session(d, dir_name)
+        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         with index_path.open("a") as f:
             f.write(json.dumps({"session_id": dir_name, "dir_name": dir_name}) + "\n")
 
@@ -828,43 +935,25 @@ def test_retention_no_protection_when_callback_is_none(tmp_path: Path, monkeypat
     assert not (sessions_dir / "session-0001").exists()
 
 
-def test_flush_session_log_passes_callback_to_enforce_retention(
-    tmp_path: Path, monkeypatch
-) -> None:
-    """SL_CB_7: flush_session_log forwards build_protected_campaign_ids to _enforce_retention."""
-    import autoskillit.execution.session_log as sl_module
+def test_flush_uses_campaign_protector_during_transaction(tmp_path: Path) -> None:
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    _make_sessions(tmp_path, count=1)
+    observed: list[Path] = []
 
-    captured: list = []
+    def protector(path: Path) -> frozenset[str]:
+        observed.append(path)
+        return frozenset()
 
-    def fake_enforce_retention(
-        log_root, project_dir="", build_protected_campaign_ids=None, **kwargs
-    ) -> None:
-        captured.append(build_protected_campaign_ids)
-
-    monkeypatch.setattr(sl_module, "_enforce_retention", fake_enforce_retention)
-
-    sentinel = build_protected_campaign_ids
-    flush_session_log(
-        log_dir=str(tmp_path),
-        cwd="/some/project",
-        project_dir=str(tmp_path),
-        build_protected_campaign_ids=sentinel,
-        session_id="session-cb7",
-        pid=12345,
-        skill_command="/autoskillit:implement",
-        success=True,
-        subtype="completed",
-        exit_code=0,
-        start_ts="2026-04-20T10:00:00+00:00",
-        proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
+    _flush(
+        tmp_path,
+        session_id="new-session",
+        project_dir=str(project_dir),
+        build_protected_campaign_ids=protector,
+        max_sessions=1,
     )
 
-    assert (tmp_path / "sessions.jsonl").exists()
-    assert len(captured) == 1
-    assert captured[0] is sentinel
+    assert observed == [project_dir]
 
 
 # --- max_sessions configurability tests ---
@@ -877,31 +966,20 @@ def test_max_sessions_constant_is_2000():
     assert _MAX_SESSIONS == 2000
 
 
-def test_enforce_retention_respects_max_sessions_param(tmp_path):
-    """T3: Passing max_sessions overrides the module-level _MAX_SESSIONS."""
-    import autoskillit.execution.session_log as sl_module
-
+def test_flush_respects_max_sessions_param(tmp_path: Path) -> None:
     _make_sessions(tmp_path, count=10)
-    sl_module._enforce_retention(tmp_path, max_sessions=7)
+
+    _flush(tmp_path, session_id="new-session", max_sessions=7)
+
     remaining = list((tmp_path / "sessions").iterdir())
     assert len(remaining) == 7
+    assert (tmp_path / "sessions" / "new-session").is_dir()
 
 
-def test_flush_threads_max_sessions_to_enforce_retention(tmp_path, monkeypatch):
-    """T4: flush_session_log passes max_sessions through to _enforce_retention."""
-    import autoskillit.execution.session_log as sl_module
+def test_flush_applies_small_max_sessions_at_rollover(tmp_path: Path) -> None:
+    _make_sessions(tmp_path, count=3)
 
-    captured: dict = {}
+    _flush(tmp_path, session_id="new-session", max_sessions=2)
 
-    def fake_enforce(
-        log_root,
-        project_dir="",
-        build_protected_campaign_ids=None,
-        *,
-        max_sessions=sl_module._MAX_SESSIONS,
-    ) -> None:
-        captured["max_sessions"] = max_sessions
-
-    monkeypatch.setattr(sl_module, "_enforce_retention", fake_enforce)
-    _flush(tmp_path, max_sessions=999)
-    assert captured["max_sessions"] == 999
+    remaining = {path.name for path in (tmp_path / "sessions").iterdir()}
+    assert remaining == {"session-0002", "new-session"}

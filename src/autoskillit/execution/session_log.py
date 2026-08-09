@@ -419,7 +419,6 @@ def flush_session_log(
                     configured_model=model_identity.configured_model,
                 )
 
-        # Write anomalies.jsonl (only if anomalies exist)
         if anomalies and publish_artifacts:
             anomalies_path = session_dir / "anomalies.jsonl"
             with anomalies_path.open("w") as f:

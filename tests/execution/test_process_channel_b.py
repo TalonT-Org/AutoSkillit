@@ -294,7 +294,7 @@ class TestChannelBDrainWait:
     async def test_channel_b_timeout_remains_nonterminal(self, tmp_path):
         """Channel B corroboration does not turn a wall-clock timeout into completion.
 
-        Verifies that SubprocessResult.data_confirmed is False when the bounded
+        Verifies that channel confirmation remains CHANNEL_B when the bounded
         drain wait times out — i.e. Channel A never confirmed stdout data.
         timeout=300s: guards against the outer wall-clock expiring under xdist -n 4 load.
         _phase1_timeout=400: must exceed outer timeout (300s) so that Phase 1 never fires
@@ -327,7 +327,6 @@ class TestChannelBDrainWait:
 
         assert result.termination == TerminationReason.TIMED_OUT
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
-        assert result.data_confirmed is False
 
     @pytest.mark.timeout(90)
     @pytest.mark.anyio

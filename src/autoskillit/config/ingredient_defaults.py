@@ -51,6 +51,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "Repository Exploration",
         (
+            "enable_exploration",
             "submit_exploration_query",
             "get_exploration_page",
             "resume_exploration_context",

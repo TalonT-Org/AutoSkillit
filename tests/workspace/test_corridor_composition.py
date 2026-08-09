@@ -8,9 +8,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from autoskillit.core import (
+    BackendConventions,
     SkillExecutionRole,
     SkillSource,
 )
+from tests.fakes import adapt_test_skill_semantics
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
@@ -26,18 +28,15 @@ def _build_manager(tmp_path: Path) -> object:
 
 
 def _build_mock_backend(*, terminal: bool = False, session_scoped: bool = False) -> MagicMock:
-    from autoskillit.execution.backends.codex import CodexBackend
-
-    real = CodexBackend(source_codex_home=Path("/tmp/fake-codex-home"))
     backend = MagicMock()
     backend.name = "codex"
     backend.capabilities.mcp_config_capable = False
     backend.capabilities.terminal_explorer_capable = terminal
     backend.capabilities.session_scoped_explorer_capable = session_scoped
     backend.capabilities.session_dir_persistent = False
-    backend.conventions = real.conventions
-    backend.adapt_skill_semantics.side_effect = real.adapt_skill_semantics
-    backend.exploration_dispatch_renderer = real.exploration_dispatch_renderer
+    backend.conventions = BackendConventions()
+    backend.adapt_skill_semantics.side_effect = adapt_test_skill_semantics
+    backend.exploration_dispatch_renderer = MagicMock()
     backend.setup_session_dir = MagicMock()
     backend.ensure_pre_launch = MagicMock(return_value=[])
     return backend
@@ -51,26 +50,25 @@ class TestCorridorCompositionExplorerAdvertisement:
         from autoskillit.workspace import SkillProjectionContext
         from autoskillit.workspace.skills import (
             DefaultSkillResolver,
-            EffectiveSkillCatalog,
-            SkillCatalogEntry,
         )
 
         manager = _build_manager(tmp_path)
         backend = _build_mock_backend(terminal=True)
 
+        resolver = DefaultSkillResolver()
         source_infos = tuple(
             s
-            for s in DefaultSkillResolver().list_all()
+            for s in resolver.list_all()
             if s.source is SkillSource.BUNDLED and not s.exploration_vectors
         )[:1]
         if not source_infos:
             pytest.skip("need at least one bundled skill without exploration vectors")
 
-        catalog = EffectiveSkillCatalog(
-            skills=tuple(SkillCatalogEntry.from_skill_info(s) for s in source_infos),
-            execution_role=SkillExecutionRole.SESSION,
+        invocation = resolver.resolve_invocation(
+            source_infos[0].name,
+            tmp_path,
+            SkillExecutionRole.SESSION,
         )
-        invocation = catalog.effective_invocation(source_infos[0].name)
         context = SkillProjectionContext(
             cwd=tmp_path,
             invocation=invocation,
@@ -96,26 +94,25 @@ class TestCorridorCompositionExplorerAdvertisement:
         from autoskillit.workspace import SkillProjectionContext
         from autoskillit.workspace.skills import (
             DefaultSkillResolver,
-            EffectiveSkillCatalog,
-            SkillCatalogEntry,
         )
 
         manager = _build_manager(tmp_path)
         backend = _build_mock_backend()
 
+        resolver = DefaultSkillResolver()
         source_infos = tuple(
             s
-            for s in DefaultSkillResolver().list_all()
+            for s in resolver.list_all()
             if s.source is SkillSource.BUNDLED and not s.exploration_vectors
         )[:1]
         if not source_infos:
             pytest.skip("need at least one bundled skill without exploration vectors")
 
-        catalog = EffectiveSkillCatalog(
-            skills=tuple(SkillCatalogEntry.from_skill_info(s) for s in source_infos),
-            execution_role=SkillExecutionRole.SESSION,
+        invocation = resolver.resolve_invocation(
+            source_infos[0].name,
+            tmp_path,
+            SkillExecutionRole.SESSION,
         )
-        invocation = catalog.effective_invocation(source_infos[0].name)
         context = SkillProjectionContext(
             cwd=tmp_path,
             invocation=invocation,

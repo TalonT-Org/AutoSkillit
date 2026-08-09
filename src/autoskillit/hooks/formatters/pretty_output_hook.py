@@ -188,6 +188,7 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "get_quota_events",  # list of quota events, generic renders correctly
         "close_kitchen",  # simple ack
         "disable_quota_guard",  # simple success/error result
+        "enable_exploration",  # simple success/error result
         "register_clone_status",  # simple registered/error result
         "batch_cleanup_clones",  # bulk delete summary dict
         "reload_session",  # simple status dict, generic renders correctly

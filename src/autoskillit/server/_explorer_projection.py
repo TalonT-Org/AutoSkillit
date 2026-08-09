@@ -33,7 +33,7 @@ from autoskillit.core import (
     session_type as _resolve_session_type,
 )
 from autoskillit.exploration import resolve_repository_profile
-from autoskillit.pipeline.exploration_context import is_explorer_binding_eligible
+from autoskillit.pipeline import is_explorer_binding_eligible
 from autoskillit.server._misc import SkillProjectionContext
 
 if TYPE_CHECKING:

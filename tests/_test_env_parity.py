@@ -57,4 +57,13 @@ TEST_HARNESS_ENV_OVERRIDES: dict[str, HarnessEnvOverride] = {
         ),
         parity_fixture=None,
     ),
+    "AUTOSKILLIT_CLAUDE_EXPLORER_LIVE_GATE": HarnessEnvOverride(
+        var="AUTOSKILLIT_CLAUDE_EXPLORER_LIVE_GATE",
+        value="1",
+        justification=(
+            "Enables the explicitly selected Claude explorer live conformance gate; "
+            "ordinary test tasks do not set this override."
+        ),
+        parity_fixture=None,
+    ),
 }

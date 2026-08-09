@@ -5,8 +5,9 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core import CLAUDE_CODE_CAPABILITIES
+from autoskillit.execution.backends.codex import CodexBackend
 
-pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 def test_claude_uses_session_scoped_explorer_model() -> None:
@@ -25,8 +26,6 @@ def test_session_scoped_and_terminal_are_exclusive_for_claude() -> None:
 
 def test_codex_uses_terminal_explorer_model() -> None:
     """Codex supports the terminal per-child model, not session-scoped."""
-    from autoskillit.execution.backends.codex import CodexBackend
-
     codex_capabilities = CodexBackend().capabilities
     assert codex_capabilities.terminal_explorer_capable is True
     assert codex_capabilities.session_scoped_explorer_capable is False

@@ -93,6 +93,7 @@ class TestToolRegistration:
             "open_kitchen",
             "close_kitchen",
             "disable_quota_guard",
+            "enable_exploration",
             "create_unique_branch",
             "check_pr_mergeable",
             "write_telemetry_files",

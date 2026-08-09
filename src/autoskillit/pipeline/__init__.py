@@ -32,6 +32,7 @@ from autoskillit.pipeline.exploration_context import (
     EXPLORATION_PRINCIPAL_ROLE,
     EXPLORATION_ROLE_ENV,
     EXPLORATION_SESSION_ENV,
+    EXPLORER_INELIGIBLE_SESSION_TYPES,
     EXPLORER_ROLE_NAMES,
     CapabilityResolution,
     CapabilityResolutionStatus,
@@ -39,6 +40,7 @@ from autoskillit.pipeline.exploration_context import (
     ExplorationContextStoreProtocol,
     ExplorationLaunchBinding,
     OwnerBoundExplorationContextStore,
+    is_explorer_binding_eligible,
 )
 from autoskillit.pipeline.gate import (
     DefaultGateState,
@@ -134,6 +136,7 @@ __all__ = [
     "ToolContext",
     "CapabilityResolution",
     "CapabilityResolutionStatus",
+    "EXPLORER_INELIGIBLE_SESSION_TYPES",
     "EXPLORER_ROLE_NAMES",
     "EXPLORATION_AUTHORITY_PATH_ENV",
     "EXPLORATION_CAPABILITY_ENV",
@@ -144,6 +147,7 @@ __all__ = [
     "ExplorationContextStoreProtocol",
     "ExplorationLaunchBinding",
     "OwnerBoundExplorationContextStore",
+    "is_explorer_binding_eligible",
     "DefaultAuditAdmissionLedger",
     "DefaultContextAdmissionLedger",
     # kitchen transition

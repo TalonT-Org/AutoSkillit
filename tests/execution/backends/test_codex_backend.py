@@ -2295,7 +2295,7 @@ class TestCodexBackendSetupSessionDir:
             "config_file": "/profile/wp-elaborator.toml",
         }
         assert not (self.session_dir / "agents" / "wp-elaborator.toml").exists()
-        assert (self.session_dir / "agents" / "semantic-code-navigator.toml").is_file()
+        assert not (self.session_dir / "agents" / "semantic-code-navigator.toml").exists()
 
     def test_unrelated_ambient_agent_is_preserved_with_bundled_projection(self) -> None:
         (self.session_dir / "config.toml").write_text(

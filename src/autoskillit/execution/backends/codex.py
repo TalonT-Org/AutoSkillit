@@ -1449,6 +1449,7 @@ class CodexBackend(BackendCmdBuilderBase):
             cook_startup_observer_capable=True,
             supports_model_invocation_gating=False,
             terminal_explorer_capable=True,
+            session_scoped_explorer_capable=False,
             unnegotiated_tool_result_token_limit=(
                 CODEX_RECIPE_DELIVERY_BUDGET.ordinary_omitted_result_token_limit
             ),

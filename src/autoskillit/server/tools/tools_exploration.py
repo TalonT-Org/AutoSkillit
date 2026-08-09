@@ -15,7 +15,14 @@ from autoskillit.core import (
     NodeKey,
     get_logger,
 )
-from autoskillit.pipeline import CapabilityResolutionStatus
+from autoskillit.core import (
+    session_type as _resolve_session_type,
+)
+from autoskillit.pipeline import (
+    EXPLORER_INELIGIBLE_SESSION_TYPES,
+    CapabilityResolutionStatus,
+    OwnerBoundExplorationContextStore,
+)
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
@@ -98,8 +105,6 @@ def _try_session_scoped_submit(
     request: ExplorationQuerySpec,
 ) -> EvidencePage | None:
     """Try session-scoped authority when launch-environment is unavailable."""
-    from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
-
     if not isinstance(store, OwnerBoundExplorationContextStore):
         return None
     session_id = _get_session_id()
@@ -126,8 +131,6 @@ def _try_session_scoped_page(
     cursor: ContinuationCursor | None = None,
 ) -> EvidencePage | None:
     """Try session-scoped authority for page retrieval."""
-    from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
-
     if not isinstance(store, OwnerBoundExplorationContextStore):
         return None
     session_id = _get_session_id()
@@ -371,13 +374,6 @@ async def enable_exploration(
     Never raises.
     """
     try:
-        from autoskillit.core import session_type as _resolve_session_type
-        from autoskillit.pipeline.exploration_context import (
-            EXPLORER_INELIGIBLE_SESSION_TYPES,
-            OwnerBoundExplorationContextStore,
-        )
-        from autoskillit.server import _get_ctx
-
         session_type = _resolve_session_type()
         if session_type in EXPLORER_INELIGIBLE_SESSION_TYPES:
             return json.dumps(
@@ -385,7 +381,7 @@ async def enable_exploration(
                 separators=(",", ":"),
             )
 
-        store = _get_ctx().exploration_context_store
+        store = _get_store()
         if not isinstance(store, OwnerBoundExplorationContextStore):
             return json.dumps(
                 {"status": "error", "code": "exploration_store_unavailable"},

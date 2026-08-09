@@ -70,7 +70,7 @@ async def test_enable_exploration_succeeds_for_skill_session(
         lambda: SessionType.SKILL,
     )
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_exploration._get_ctx",
+        "autoskillit.server._get_ctx",
         lambda: ctx,
     )
     monkeypatch.chdir(tmp_path)

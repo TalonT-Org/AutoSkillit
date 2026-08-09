@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Protocol
 
 from autoskillit.core import (
+    CALLER_SOVEREIGN_INGREDIENTS,
     CONFIG_AUTHORITY_KEYS,
     DISPATCH_ID_ENV_VAR,
     FLEET_MENU_TOOLS,
@@ -139,9 +140,10 @@ def iter_display_categories(
 _REMOTE_PRECEDENCE = ("upstream", "origin")
 
 # Keys from resolve_ingredient_defaults() that the server must inject as authoritative
-# overrides, preventing LLM-supplied values from winning. source_dir is excluded because
-# it is project-identity (the clone URL) and is legitimately caller-supplied in fleet dispatch.
-SERVER_AUTHORITATIVE_INGREDIENTS: frozenset[str] = CONFIG_AUTHORITY_KEYS - {"source_dir"}
+# overrides, preventing LLM-supplied values from winning.
+SERVER_AUTHORITATIVE_INGREDIENTS: frozenset[str] = (
+    CONFIG_AUTHORITY_KEYS - CALLER_SOVEREIGN_INGREDIENTS
+)
 
 SERVER_AUTHORITATIVE_CONFIG_PATHS: dict[str, str] = {
     "base_branch": "branching.default_base_branch",

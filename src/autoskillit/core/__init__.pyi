@@ -270,6 +270,7 @@ from .tool_registry import TOOL_REGISTRY as TOOL_REGISTRY
 from .tool_registry import all_tool_names as all_tool_names
 from .tool_registry import compute_tool_contract_identity as compute_tool_contract_identity
 from .tool_registry import get_tool_def as get_tool_def
+from .tool_registry import runtime_exempt_param_names as runtime_exempt_param_names
 from .tool_registry import unsupported_tool_params as unsupported_tool_params
 from .tool_sequence_analysis import DFG as DFG
 from .tool_sequence_analysis import AnalysisResult as AnalysisResult
@@ -320,6 +321,7 @@ from .types import AUTOSKILLIT_PRIVATE_ENV_VARS as AUTOSKILLIT_PRIVATE_ENV_VARS
 from .types import AUTOSKILLIT_SKILL_PREFIX as AUTOSKILLIT_SKILL_PREFIX
 from .types import AUTOSKILLIT_STATE_ROOT_ENV_VAR as AUTOSKILLIT_STATE_ROOT_ENV_VAR
 from .types import AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES as AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES
+from .types import CALLER_SOVEREIGN_INGREDIENTS as CALLER_SOVEREIGN_INGREDIENTS
 from .types import CAMPAIGN_ID_ENV_VAR as CAMPAIGN_ID_ENV_VAR
 from .types import CANONICAL_LAUNCH_DIGEST_FIELDS as CANONICAL_LAUNCH_DIGEST_FIELDS
 from .types import CAPTURE_VALID_VALUE_TYPES as CAPTURE_VALID_VALUE_TYPES
@@ -492,6 +494,7 @@ from .types import RETIRED_FEATURES as RETIRED_FEATURES
 from .types import (
     RETIRED_INSTALL_ARTIFACT_SHAPES as RETIRED_INSTALL_ARTIFACT_SHAPES,
 )
+from .types import RETIRED_INTAKE_RULE_IDS as RETIRED_INTAKE_RULE_IDS
 from .types import RETIRED_READINESS_TOKENS as RETIRED_READINESS_TOKENS
 from .types import RETIRED_SKILL_NAMES as RETIRED_SKILL_NAMES
 from .types import REVIEW_APPROACH_MARKER as REVIEW_APPROACH_MARKER
@@ -1012,6 +1015,7 @@ from .types import ToolCallId as ToolCallId
 from .types import ToolDef as ToolDef
 from .types import ToolInitializationOperation as ToolInitializationOperation
 from .types import ToolParamDef as ToolParamDef
+from .types import ToolParamRole as ToolParamRole
 from .types import ToolWireType as ToolWireType
 from .types import TraditionManifest as TraditionManifest
 from .types import TurnId as TurnId

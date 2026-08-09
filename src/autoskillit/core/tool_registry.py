@@ -16,6 +16,7 @@ from .types._type_recipe_binding import (
     ToolDef,
     ToolInitializationOperation,
     ToolParamDef,
+    ToolParamRole,
     ToolWireType,
 )
 
@@ -24,6 +25,7 @@ __all__ = [
     "all_tool_names",
     "compute_tool_contract_identity",
     "get_tool_def",
+    "runtime_exempt_param_names",
     "unsupported_tool_params",
 ]
 
@@ -122,9 +124,16 @@ def _tool(
     *,
     required: tuple[str, ...] = (),
     wire_types: Mapping[str, ToolWireType] | None = None,
+    roles: Mapping[str, ToolParamRole] | None = None,
 ) -> ToolDef:
     required_set = frozenset(required)
     declared_wire_types = wire_types or {}
+    declared_roles = roles or {}
+    unknown_role_params = set(declared_roles) - set(params)
+    if unknown_role_params:
+        raise ValueError(
+            f"Tool {name!r} declares roles for unknown parameter(s): {sorted(unknown_role_params)}"
+        )
     return ToolDef(
         name=name,
         params=tuple(
@@ -132,11 +141,45 @@ def _tool(
                 param,
                 wire_type=declared_wire_types.get(param, ToolWireType.SCALAR),
                 required=param in required_set,
+                role=declared_roles.get(param, ToolParamRole.CHILD_INPUT),
             )
             for param in params
         ),
         initialization_operation=_initialization_operation(name),
     )
+
+
+# The single classification authority for what each run_skill parameter is
+# for. Every attestation-relevant surface (the runtime gate's always-admit
+# set, the actual-kwargs assembly, the execution-tuning fallback table, and
+# the frozen ledger in tests/contracts/test_run_skill_kwarg_ledger.py) is
+# derived from this mapping — see ToolParamRole for what each role means.
+_RUN_SKILL_PARAM_ROLES: Mapping[str, ToolParamRole] = MappingProxyType(
+    {
+        "skill_command": ToolParamRole.CHILD_INPUT,
+        "cwd": ToolParamRole.CHILD_INPUT,
+        "model": ToolParamRole.EXECUTION_TUNING,
+        "step_name": ToolParamRole.PROTOCOL,
+        "recipe_execution_id": ToolParamRole.PROTOCOL,
+        "invocation_template_digest": ToolParamRole.PROTOCOL,
+        "step_provider": ToolParamRole.EXECUTION_TUNING,
+        "order_id": ToolParamRole.ORCHESTRATOR_SCOPING,
+        "stale_threshold": ToolParamRole.EXECUTION_TUNING,
+        "idle_output_timeout": ToolParamRole.EXECUTION_TUNING,
+        "output_dir": ToolParamRole.CHILD_INPUT,
+        "resume_session_id": ToolParamRole.SESSION_FLOW,
+        "retry_after_audit_attempt_id": ToolParamRole.SESSION_FLOW,
+        "native_shell_capture_mode": ToolParamRole.SESSION_FLOW,
+        "closure_authority_path": ToolParamRole.SESSION_FLOW,
+        "closure_authority_hash": ToolParamRole.SESSION_FLOW,
+        "closure_plan_paths": ToolParamRole.SESSION_FLOW,
+        "closure_base_sha": ToolParamRole.SESSION_FLOW,
+        "closure_diff_sha": ToolParamRole.SESSION_FLOW,
+        "closure_target_sha": ToolParamRole.SESSION_FLOW,
+        "dispatch_items": ToolParamRole.SESSION_FLOW,
+        "skill_inputs": ToolParamRole.CHILD_INPUT,
+    }
+)
 
 
 def _run_skill() -> ToolDef:
@@ -165,18 +208,28 @@ def _run_skill() -> ToolDef:
             name,
             wire_type=ToolWireType.STRING,
             required=name in {"skill_command", "cwd"},
+            role=_RUN_SKILL_PARAM_ROLES[name],
         )
         for name in string_params
     ]
     params[8:8] = [
-        ToolParamDef("stale_threshold", ToolWireType.INTEGER),
-        ToolParamDef("idle_output_timeout", ToolWireType.INTEGER),
+        ToolParamDef(
+            "stale_threshold",
+            ToolWireType.INTEGER,
+            role=_RUN_SKILL_PARAM_ROLES["stale_threshold"],
+        ),
+        ToolParamDef(
+            "idle_output_timeout",
+            ToolWireType.INTEGER,
+            role=_RUN_SKILL_PARAM_ROLES["idle_output_timeout"],
+        ),
     ]
     params.append(
         ToolParamDef(
             "dispatch_items",
             ToolWireType.STRING,
             handler_parameter=False,
+            role=_RUN_SKILL_PARAM_ROLES["dispatch_items"],
         )
     )
     params.append(
@@ -185,6 +238,7 @@ def _run_skill() -> ToolDef:
             ToolWireType.OBJECT,
             structured_skill_inputs=True,
             handler_parameter=True,
+            role=_RUN_SKILL_PARAM_ROLES["skill_inputs"],
         )
     )
     return ToolDef(
@@ -379,6 +433,10 @@ _TOOL_DEFS = (
             "resume_checkpoint": ToolWireType.OBJECT,
             "native_shell_capture_mode": ToolWireType.STRING,
         },
+        # Must match run_skill's native_shell_capture_mode role exactly:
+        # test_tool_registry_parity.py::test_managed_launch_tools_share_native_shell_capture_schema
+        # asserts full dataclass equality between the two ToolParamDef instances.
+        roles={"native_shell_capture_mode": ToolParamRole.SESSION_FLOW},
     ),
     _tool(
         "record_gate_dispatch",
@@ -661,12 +719,27 @@ def get_tool_def(tool_name: str) -> ToolDef | None:
     return TOOL_REGISTRY.get(tool_name)
 
 
+def runtime_exempt_param_names(tool_def: ToolDef) -> frozenset[str]:
+    """Names always admitted by the runtime attestation gate, regardless of with:.
+
+    PROTOCOL params are the attestation identity triple; ORCHESTRATOR_SCOPING
+    params are runtime scoping that is never recipe-authorable. Every other
+    role must be compiled into the template's with: block to be admitted.
+    """
+    return frozenset(
+        param.name
+        for param in tool_def.params
+        if param.role in (ToolParamRole.PROTOCOL, ToolParamRole.ORCHESTRATOR_SCOPING)
+    )
+
+
 def compute_tool_contract_identity(tool_def: ToolDef) -> str:
     """Hash every canonical parameter property that defines a tool contract."""
     return compute_canonical_hash(
         {
             "name": tool_def.name,
             "initialization_operation": tool_def.initialization_operation.value,
+            # Parameter roles are server-side gate policy, not client-visible wire shape.
             "params": [
                 {
                     "handler_parameter": param.handler_parameter,

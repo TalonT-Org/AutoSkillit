@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Generator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -15,6 +17,7 @@ import structlog.contextvars
 import structlog.testing
 
 if TYPE_CHECKING:
+    from autoskillit.pipeline import ToolContext
     from autoskillit.pipeline.timings import DefaultTimingLog
 
 
@@ -340,6 +343,107 @@ def build_ctx_open(build_ctx):
         return ctx
 
     return _factory
+
+
+@pytest.fixture()
+def forbid_artifact_reads(monkeypatch: pytest.MonkeyPatch):
+    """Return an arming callable that fails any persisted-artifact read.
+
+    Shared by attested-path tests that must prove a value came from a tool
+    response, never from re-reading the recipe artifact off disk.
+    """
+    import autoskillit.server.tools.tools_recipe as tools_recipe
+
+    def _forbidden(*_args, **_kwargs):
+        raise AssertionError("credential must come from responses, not payload.json")
+
+    return lambda: monkeypatch.setattr(tools_recipe, "load_recipe_artifact", _forbidden)
+
+
+_READY_RECIPE_ENVELOPE = "remediation"
+_READY_RECIPE_ATTESTED_STEP = "investigate"
+_READY_RECIPE_OVERRIDES = {
+    "issue_url": "https://github.com/TalonT-Org/AutoSkillit/issues/4411",
+    "task_description": "test task",
+}
+
+
+@dataclass(frozen=True)
+class ReadyRecipeContext:
+    """A real attested ToolContext plus the delivered credential and step body.
+
+    ``tool_ctx.recipe_initialization_state`` is a genuine ``ReadyRecipe`` —
+    built via the production ``open_kitchen`` -> ``complete_recipe_initialization``
+    flow, not the low-level ``bind_recipe`` -> ``build_recipe_execution_snapshot``
+    -> ``install_recipe_execution`` chain (those functions precondition on
+    ``InitializingRecipe`` -> ``ReadyRecipe`` staging that only the production
+    flow performs).
+    """
+
+    tool_ctx: ToolContext
+    receipt: dict[str, Any]
+    step_body: dict[str, Any]
+    step_name: str = _READY_RECIPE_ATTESTED_STEP
+
+    @property
+    def credential(self) -> dict[str, Any]:
+        from autoskillit.core import RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY
+
+        return self.receipt[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY]
+
+    @property
+    def template_digest(self) -> str:
+        return self.credential["invocation_template_digests"][self.step_name]
+
+    @property
+    def with_args(self) -> dict[str, Any]:
+        return self.step_body["with"]
+
+
+@pytest.fixture
+async def tool_ctx_ready_recipe(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    tool_ctx_kitchen_open,
+    forbid_artifact_reads,
+) -> ReadyRecipeContext:
+    """A ToolContext driven through real production initialization into ReadyRecipe.
+
+    Required entry point for attested-path server tests: ``tool_ctx_kitchen_open``
+    alone leaves ``recipe_initialization_state = NoActiveRecipe()`` and cannot
+    reach the attested ``run_skill`` branch. This fixture drives the same
+    ``open_kitchen`` -> credit sections -> pull step -> ``complete_recipe_initialization``
+    flow test_attestation_delivery_reachability.py exercises, promoted to a
+    shared fixture, so tests use a genuinely attested context rather than a
+    mock of one. The credential-artifact-read poison is armed after the step
+    pull completes (get_recipe_section legitimately reads the artifact to
+    serve pages) and stays armed for the returned context's remaining calls.
+    """
+    from autoskillit.recipe import _api_cache
+    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.server.tools.tools_recipe import complete_recipe_initialization
+    from tests.server._helpers import (
+        _credit_initialization_sections,
+        _open_kitchen_patched,
+        _pull_step_section,
+    )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
+
+    envelope = await _open_kitchen_patched(
+        _READY_RECIPE_ENVELOPE, _READY_RECIPE_OVERRIDES, monkeypatch
+    )
+    assert envelope["success"] is True
+    assert envelope["delivery_bound_spill"] is True
+
+    await _credit_initialization_sections(envelope)
+    step_body = await _pull_step_section(envelope, _READY_RECIPE_ATTESTED_STEP)
+    forbid_artifact_reads()
+    receipt = json.loads(await complete_recipe_initialization(envelope["initialization_id"]))
+    assert receipt["success"] is True
+
+    return ReadyRecipeContext(tool_ctx=tool_ctx_kitchen_open, receipt=receipt, step_body=step_body)
 
 
 @contextmanager

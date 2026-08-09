@@ -34,6 +34,15 @@ if TYPE_CHECKING:
     )
 
 
+_COOK_PRE_REVEALED_KITCHEN_PROMPT = (
+    "This interactive cook session's AutoSkillit kitchen tools are already active and "
+    "pre-revealed. Do not call open_kitchen() with no arguments solely to gain tool "
+    "access. open_kitchen remains valid when the user explicitly requests activation "
+    "or promotion, to load a named recipe with open_kitchen(name=...), or to reopen "
+    "the kitchen after close_kitchen()."
+)
+
+
 def _build_cook_projection_context(
     skills_provider: SkillsDirectoryProvider,
     session_catalog: EffectiveSkillCatalog,
@@ -130,6 +139,11 @@ def cook(
         from autoskillit.cli.session._session_backend import resolve_global_backend
 
         backend = resolve_global_backend(config.agent_backend.backend)
+    cook_system_prompt = (
+        _COOK_PRE_REVEALED_KITCHEN_PROMPT
+        if not backend.capabilities.supports_tool_list_changed
+        else None
+    )
 
     if shutil.which(backend.binary_name()) is None:
         print(
@@ -369,6 +383,7 @@ def cook(
                     generated_home=managed_home.generated_home,
                     initial_prompt=current_initial_prompt,
                     resume_spec=current_resume_spec,
+                    system_prompt=cook_system_prompt,
                     env_extras=cook_env_extras,
                 )
                 final_cmd = built_spec.cmd

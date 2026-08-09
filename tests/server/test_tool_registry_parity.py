@@ -8,11 +8,13 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.core.tool_registry as tool_registry
 from autoskillit.core import (
     EXPLORATION_TOOLS,
     TOOL_REGISTRY,
     ToolInitializationOperation,
     ToolParamDef,
+    ToolParamRole,
     ToolWireType,
     compute_tool_contract_identity,
 )
@@ -67,6 +69,15 @@ def test_handler_collection_rejects_duplicate_registrations(tmp_path: Path) -> N
 
 def test_registry_matches_handler_names_bidirectionally() -> None:
     assert set(TOOL_REGISTRY) == set(_handler_signatures())
+
+
+def test_tool_builder_rejects_roles_for_unknown_parameters() -> None:
+    with pytest.raises(ValueError, match="unknown parameter.*typo"):
+        tool_registry._tool(
+            "run_cmd",
+            ("cmd",),
+            roles={"typo": ToolParamRole.PROTOCOL},
+        )
 
 
 def test_registry_matches_handler_order_and_requiredness() -> None:
@@ -149,12 +160,12 @@ def test_run_skill_has_one_compiler_owned_structured_input_channel() -> None:
 
 
 def test_tool_def_freezes_caller_owned_parameter_sequences() -> None:
-    params = [ToolParamDef("first")]
+    params = [ToolParamDef("first", role=ToolParamRole.CHILD_INPUT)]
 
     tool = replace(TOOL_REGISTRY["close_kitchen"], params=params)
-    params.append(ToolParamDef("later"))
+    params.append(ToolParamDef("later", role=ToolParamRole.CHILD_INPUT))
 
-    assert tool.params == (ToolParamDef("first"),)
+    assert tool.params == (ToolParamDef("first", role=ToolParamRole.CHILD_INPUT),)
 
 
 def test_tool_def_rejects_non_parameter_definitions() -> None:
@@ -166,7 +177,10 @@ def test_tool_contract_identity_tracks_registry_parameter_shape() -> None:
     run_skill = TOOL_REGISTRY["run_skill"]
     changed = replace(
         run_skill,
-        params=(*run_skill.params, ToolParamDef("future_parameter")),
+        params=(
+            *run_skill.params,
+            ToolParamDef("future_parameter", role=ToolParamRole.CHILD_INPUT),
+        ),
     )
 
     assert compute_tool_contract_identity(changed) != compute_tool_contract_identity(run_skill)

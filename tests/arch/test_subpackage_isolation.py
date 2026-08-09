@@ -1071,6 +1071,11 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "REQ-CNST-010-E1: canonical type registry — wide surface required to prevent "
         "circular imports; all enums/protocols/constants consolidated here",
     ),
+    "recipe/_binding.py": (
+        1050,
+        "REQ-CNST-010-E24: #4402 keeps runtime attestation admission and its "
+        "parameter-role denial remedies beside the compile-time binding pipeline",
+    ),
     "hooks/_capture_artifacts.py": (
         1200,
         "REQ-CNST-010-E22: descriptor-anchored capture authority and isolated runner — "

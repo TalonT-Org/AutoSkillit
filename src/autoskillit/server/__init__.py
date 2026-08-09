@@ -5,8 +5,8 @@ Architecture" section for the full matrix.
 
 Tag-Visibility (FastMCP): kitchen-tagged tools are hidden at startup via
 mcp.disable(tags={'kitchen'}). Session-type dispatch (_apply_session_type_visibility)
-selectively reveals tags per session type. open_kitchen reveals all kitchen-tagged
-tools for interactive sessions.
+selectively reveals tags per session type and backend capability. open_kitchen reveals
+all kitchen-tagged tools when explicit activation or reopening is required.
 
 Application-Gate (Python): most tools call _require_enabled() internally, which
 checks ctx.gate.enabled and returns a gate_error envelope if the kitchen is closed.
@@ -17,7 +17,11 @@ Startup tag visibility is determined by AUTOSKILLIT_SESSION_TYPE (3-branch dispa
   ORCHESTRATOR + HEADLESS=1 — all kitchen-tagged tools pre-revealed
   SKILL + HEADLESS=1 — headless-tagged tools (test_check) pre-revealed;
   with AUTO_GATE=1, kitchen-core also revealed
-  ORCHESTRATOR/SKILL (interactive) — no pre-reveal; open_kitchen unlocks
+  ORCHESTRATOR/SKILL (interactive, non-notification backend) — lifespan boot
+  runs _pre_reveal_kitchen()
+  ORCHESTRATOR/SKILL (interactive, notification-capable backend) — no pre-reveal;
+  open_kitchen unlocks
+  Direct sessions without either registered interactive handler — no implicit pre-reveal
 
 Transport: stdio (default for FastMCP).
 """

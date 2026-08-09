@@ -22,8 +22,7 @@
     "source_dir": {
       "description": "Source repository path",
       "required": false,
-      "default": "",
-      "authority": "config"
+      "default": ""
     },
     "execution_map": {
       "description": "Path to pre-computed BEM execution map JSON. When provided (campaign mode), skips internal BEM computation. When empty (standalone mode), runs /autoskillit:build-execution-map internally.",

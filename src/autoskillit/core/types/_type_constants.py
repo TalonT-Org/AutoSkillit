@@ -22,6 +22,7 @@ __all__ = [
     "OUTPUT_DISCIPLINE_REQUIRED_SKILLS",
     "RETIRED_SKILL_NAMES",
     "RETIRED_AGENT_NAMES",
+    "RETIRED_INTAKE_RULE_IDS",
     "RETIRED_INSTALL_ARTIFACT_SHAPES",
     "RetiredArtifactShape",
     "SkillContractRemediationDef",
@@ -46,6 +47,7 @@ __all__ = [
     "QUOTA_POST_WARNING_TRIGGER",
     "QUOTA_POST_BUDGET_EXCEEDED_TRIGGER",
     "CONFIG_AUTHORITY_KEYS",
+    "CALLER_SOVEREIGN_INGREDIENTS",
     "RUN_PYTHON_PATH_LIKE_ARGS",
     "RUN_PYTHON_SENTINEL_KEYS",
     "SCOPE_DIRECTION_SOURCE_TYPES",
@@ -199,6 +201,22 @@ if any(n != n.lower() for n in RETIRED_AGENT_NAMES):
     raise AssertionError(
         "RETIRED_AGENT_NAMES entries must be lowercase. "
         f"Offending: {sorted(n for n in RETIRED_AGENT_NAMES if n != n.lower())}"
+    )
+
+RETIRED_INTAKE_RULE_IDS: frozenset[str] = frozenset(
+    {
+        # Intake-rule ids that have been removed from CODEX_INTAKE_RULES.
+        # Append retired ids here atomically with the removal commit.
+        # DO NOT REMOVE entries — this registry is append-only.
+        # Removed #4487; harness injection made the re-read redundant.
+        "instruction-file-completeness",
+    }
+)
+
+if any(n != n.lower() for n in RETIRED_INTAKE_RULE_IDS):
+    raise AssertionError(
+        "RETIRED_INTAKE_RULE_IDS entries must be lowercase. "
+        f"Offending: {sorted(n for n in RETIRED_INTAKE_RULE_IDS if n != n.lower())}"
     )
 
 
@@ -582,6 +600,17 @@ CONFIG_AUTHORITY_KEYS: frozenset[str] = frozenset(
         "adversarial_review_level",
         "is_fleet_dispatch",
         "dispatch_id",
+    }
+)
+
+# Config-authority keys that are legitimately caller-supplied rather than
+# server-resolved (e.g. source_dir is project-identity — the clone URL — supplied
+# by the dispatching caller, not injected from local project config). The named
+# registry replaces the implicit CONFIG_AUTHORITY_KEYS - {"source_dir"} set-difference
+# that was previously scattered across ingredient_defaults.py and test assertions.
+CALLER_SOVEREIGN_INGREDIENTS: frozenset[str] = frozenset(
+    {
+        "source_dir",
     }
 )
 

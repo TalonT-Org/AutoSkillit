@@ -1150,6 +1150,12 @@ async def open_kitchen(
 ) -> str:
     """Open the AutoSkillit kitchen for service.
 
+    A no-argument call made solely to gain access is unnecessary when authoritative
+    session guidance says the kitchen was pre-revealed. Valid uses remain
+    human-requested activation when access is not active, human-requested promotion
+    including from a pre-revealed session, named recipe loading with ``name=...``, and
+    restoration after close_kitchen.
+
     When ``name`` is provided, the kitchen is opened AND the named recipe is
     loaded in a single call, reducing terminal noise from two tool calls to one.
 

@@ -10,7 +10,6 @@ No test here reads ``payload.json`` or any file under ``recipe-delivery/``.
 from __future__ import annotations
 
 import json
-from typing import Any
 
 import pytest
 
@@ -22,11 +21,6 @@ from autoskillit.core import (
 )
 from autoskillit.pipeline import ReadyRecipe
 from tests.conftest import _make_result
-from tests.server._helpers import (
-    _credit_initialization_sections,
-    _open_kitchen_patched,
-    _pull_step_section,
-)
 from tests.server.test_tools_recipe_pull import (
     _NOW,
     _attestation,
@@ -50,60 +44,14 @@ _OVERRIDES = {
 }
 
 
-@pytest.fixture()
-def forbid_artifact_reads(monkeypatch: pytest.MonkeyPatch):
-    """Return an arming callable that fails any persisted-artifact read."""
-    import autoskillit.server.tools.tools_recipe as tools_recipe
-
-    def _forbidden(*_args, **_kwargs):
-        raise AssertionError("credential must come from responses, not payload.json")
-
-    return lambda: monkeypatch.setattr(tools_recipe, "load_recipe_artifact", _forbidden)
-
-
-async def _drive_bounded_initialization(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
-    arm,
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Drive the bounded envelope flow through real tools, returning (receipt, step_body).
-
-    The poison is armed AFTER the pull is complete so that ``get_recipe_section`` (which
-    legitimately reads the artifact to serve pages) continues to work; only
-    ``complete_recipe_initialization`` and ``run_skill`` are poisoned thereafter.
-    """
-    monkeypatch.chdir(tmp_path)
-    from autoskillit.recipe import _api_cache
-    from autoskillit.recipe._api_cache import LoadCache
-    from autoskillit.server.tools.tools_recipe import complete_recipe_initialization
-
-    monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
-    envelope = await _open_kitchen_patched(_RECIPE_ENVELOPE, _OVERRIDES, monkeypatch)
-    assert envelope["success"] is True
-    assert envelope["delivery_bound_spill"] is True
-    assert envelope["recipe_pull"]["pull_tool"] == "get_recipe_section"
-    assert RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY not in envelope
-    assert isinstance(envelope["initialization_id"], str) and envelope["initialization_id"]
-
-    await _credit_initialization_sections(envelope)
-    step_body = await _pull_step_section(envelope, _ATTESTED_STEP)
-    arm()
-    receipt = json.loads(await complete_recipe_initialization(envelope["initialization_id"]))
-    return receipt, step_body
-
-
 async def test_bounded_initialization_delivers_attestation_credential(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
-    forbid_artifact_reads,
-    tool_ctx_kitchen_open,
+    tool_ctx_ready_recipe,
 ) -> None:
     """REQ-031: the bounded envelope path puts the credential on the completion receipt."""
-    arm = forbid_artifact_reads
-    receipt, _step_body = await _drive_bounded_initialization(monkeypatch, tmp_path, arm)
+    ready = tool_ctx_ready_recipe
 
-    assert receipt["success"] is True
-    credential = receipt[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY]
+    assert ready.receipt["success"] is True
+    credential = ready.credential
     assert set(credential) == RECIPE_EXECUTION_CREDENTIAL_WIRE_FIELDS
     digests = credential["invocation_template_digests"]
     assert digests, "invocation_template_digests is empty"
@@ -114,27 +62,22 @@ async def test_bounded_initialization_delivers_attestation_credential(
         assert value.removeprefix("sha256:").islower()
     assert _ATTESTED_STEP in digests
     assert credential["execution_id"]
-    assert isinstance(tool_ctx_kitchen_open.recipe_initialization_state, ReadyRecipe)
+    assert isinstance(ready.tool_ctx.recipe_initialization_state, ReadyRecipe)
 
 
 async def test_attested_run_skill_succeeds_using_only_delivered_values(
-    monkeypatch: pytest.MonkeyPatch,
     tmp_path,
-    forbid_artifact_reads,
-    tool_ctx_kitchen_open,
+    tool_ctx_ready_recipe,
 ) -> None:
     """REQ-032: the attested ``run_skill`` must be drivable from received values alone."""
     from autoskillit.server.tools.tools_execution import run_skill
 
-    arm = forbid_artifact_reads
-    receipt, step_body = await _drive_bounded_initialization(monkeypatch, tmp_path, arm)
-
-    credential = receipt[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY]
-    with_args = step_body["with"]
+    ready = tool_ctx_ready_recipe
+    with_args = ready.with_args
     work_dir = tmp_path / "work"
     work_dir.mkdir()
-    tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))
-    tool_ctx_kitchen_open.runner.push(
+    ready.tool_ctx.runner.push(_make_result(returncode=1))
+    ready.tool_ctx.runner.push(
         _make_result(
             0,
             json.dumps(
@@ -149,7 +92,7 @@ async def test_attested_run_skill_succeeds_using_only_delivered_values(
             "",
         )
     )
-    calls_before = len(tool_ctx_kitchen_open.runner.call_args_list)
+    calls_before = len(ready.tool_ctx.runner.call_args_list)
 
     result = json.loads(
         await run_skill(
@@ -157,8 +100,8 @@ async def test_attested_run_skill_succeeds_using_only_delivered_values(
             str(work_dir),
             step_name=with_args["step_name"],
             output_dir=with_args["output_dir"],
-            recipe_execution_id=credential["execution_id"],
-            invocation_template_digest=credential["invocation_template_digests"][_ATTESTED_STEP],
+            recipe_execution_id=ready.credential["execution_id"],
+            invocation_template_digest=ready.template_digest,
             skill_inputs={name: "probe value" for name in with_args["skill_inputs"]},
         )
     )
@@ -167,7 +110,198 @@ async def test_attested_run_skill_succeeds_using_only_delivered_values(
     assert "recipe_execution_attestation_missing" not in serialized
     assert "RECIPE EXECUTION REJECTED" not in serialized
     assert result.get("stage") != "preflight:recipe_execution"
-    assert len(tool_ctx_kitchen_open.runner.call_args_list) > calls_before
+    assert len(ready.tool_ctx.runner.call_args_list) > calls_before
+
+
+async def test_attested_run_skill_admits_explicit_order_id(
+    tmp_path,
+    tool_ctx_ready_recipe,
+) -> None:
+    """#4402/T3.a — order_id is ORCHESTRATOR_SCOPING: an attested call may pass
+    it explicitly alongside the delivered protocol values without denial (the
+    #4296 escape hatch), and the passed value reaches the executor ahead of
+    the AUTOSKILLIT_DISPATCH_ID env fallback (effective_order_id = order_id or
+    env, tools_execution.py). Unreachable for attested calls before #4402 —
+    order_id had no with:-declared template entry, so any non-empty value was
+    an "undeclared effective name" and the gate denied it outright.
+
+    model/stale_threshold RecipeStep-fallback e2e coverage (T3.b/T3.c) lives
+    in test_run_skill_execution_tuning_fallbacks.py instead of here: that
+    fallback block runs whenever step_name and tool_ctx.active_recipe_steps
+    are set, independent of attestation status, and the real "remediation"
+    recipe's investigate step declares only a templated model: field (bare
+    aliases, #4412 — out of scope here) and no stale_threshold: field at all,
+    so it cannot pin a literal fallback value without a bespoke fixture
+    recipe this plan does not add.
+    """
+    from autoskillit.server.tools.tools_execution import run_skill
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    ready = tool_ctx_ready_recipe
+    executor = InMemoryHeadlessExecutor()
+    ready.tool_ctx.executor = executor
+    with_args = ready.with_args
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+
+    result = json.loads(
+        await run_skill(
+            with_args["skill_command"],
+            str(work_dir),
+            step_name=with_args["step_name"],
+            output_dir=with_args["output_dir"],
+            recipe_execution_id=ready.credential["execution_id"],
+            invocation_template_digest=ready.template_digest,
+            skill_inputs={name: "probe value" for name in with_args["skill_inputs"]},
+            order_id="AB",
+        )
+    )
+
+    serialized = json.dumps(result)
+    assert "recipe_execution_attestation_missing" not in serialized
+    assert "RECIPE EXECUTION REJECTED" not in serialized
+    assert result.get("stage") != "preflight:recipe_execution"
+    assert len(executor.calls) == 1
+    assert executor.calls[0].order_id == "AB"
+
+
+async def test_attested_run_skill_never_forwards_an_unresolved_model_template(
+    tmp_path,
+    tool_ctx_ready_recipe,
+) -> None:
+    """#4402 remediation — restores T3.b's original intent against the real
+    recipe, catching the defect the synthetic-literal-model unit tests in
+    test_run_skill_execution_tuning_fallbacks.py structurally could not see.
+
+    The real remediation.yaml investigate step declares
+    ``model: ${{ 'opus[1m]' if inputs.depth == 'deep' else 'sonnet' }}`` — a
+    template load_recipe() never interpolates (it's a thin YAML parse; see
+    the output_dir fallback's identical "${{" guard). Since sous-chef now
+    mandates omitting model from attested calls, every real invocation of
+    this step reaches the RecipeStep.model fallback. Before the fix, the
+    fallback had no template guard (unlike its output_dir sibling) and would
+    forward the raw, broken template string straight to --model.
+    """
+    from autoskillit.server.tools.tools_execution import run_skill
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    ready = tool_ctx_ready_recipe
+    executor = InMemoryHeadlessExecutor()
+    ready.tool_ctx.executor = executor
+    with_args = ready.with_args
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+
+    result = json.loads(
+        await run_skill(
+            with_args["skill_command"],
+            str(work_dir),
+            step_name=with_args["step_name"],
+            output_dir=with_args["output_dir"],
+            recipe_execution_id=ready.credential["execution_id"],
+            invocation_template_digest=ready.template_digest,
+            skill_inputs={name: "probe value" for name in with_args["skill_inputs"]},
+        )
+    )
+
+    assert result.get("stage") != "preflight:recipe_execution", result
+    assert len(executor.calls) == 1
+    assert executor.calls[0].model == "", (
+        "unresolved recipe model must preserve the executor's vacancy sentinel, got "
+        f"{executor.calls[0].model!r}"
+    )
+
+
+async def test_attested_run_skill_reports_missing_canonical_tool_def(
+    tmp_path,
+    tool_ctx_ready_recipe,
+    monkeypatch,
+) -> None:
+    """A missing canonical run_skill definition remains a loud runtime invariant."""
+    from autoskillit.server.tools import tools_execution
+
+    ready = tool_ctx_ready_recipe
+    with_args = ready.with_args
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    monkeypatch.setattr(tools_execution, "get_tool_def", lambda _name: None)
+
+    result = json.loads(
+        await tools_execution.run_skill(
+            with_args["skill_command"],
+            str(work_dir),
+            step_name=with_args["step_name"],
+            output_dir=with_args["output_dir"],
+            recipe_execution_id=ready.credential["execution_id"],
+            invocation_template_digest=ready.template_digest,
+            skill_inputs={name: "probe value" for name in with_args["skill_inputs"]},
+        )
+    )
+
+    assert result["success"] is False
+    assert result["subtype"] == "crashed"
+    assert "RuntimeError: run_skill must be a registered ToolDef" in result["result"]
+
+
+async def test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation(
+    tmp_path,
+    tool_ctx_ready_recipe,
+) -> None:
+    """#4402/T8 — tool_ctx_ready_recipe must yield a genuinely attested context,
+    not a mock of one: its installed snapshot's template digest round-trips
+    through a real ``run_skill`` admission — the genuine digest succeeds, a
+    fabricated one is denied at ``preflight:recipe_execution``. A mock that
+    accepted any digest would pass the first half and fail to distinguish
+    the second.
+    """
+    from autoskillit.server.tools.tools_execution import run_skill
+
+    ready = tool_ctx_ready_recipe
+    with_args = ready.with_args
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    ready.tool_ctx.runner.push(_make_result(returncode=1))
+    ready.tool_ctx.runner.push(
+        _make_result(
+            0,
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": "done",
+                    "session_id": "session-1",
+                }
+            ),
+            "",
+        )
+    )
+
+    genuine = json.loads(
+        await run_skill(
+            with_args["skill_command"],
+            str(work_dir),
+            step_name=with_args["step_name"],
+            output_dir=with_args["output_dir"],
+            recipe_execution_id=ready.credential["execution_id"],
+            invocation_template_digest=ready.template_digest,
+            skill_inputs={name: "probe value" for name in with_args["skill_inputs"]},
+        )
+    )
+    assert genuine.get("stage") != "preflight:recipe_execution", genuine
+
+    fabricated = json.loads(
+        await run_skill(
+            with_args["skill_command"],
+            str(work_dir),
+            step_name=with_args["step_name"],
+            output_dir=with_args["output_dir"],
+            recipe_execution_id=ready.credential["execution_id"],
+            invocation_template_digest="sha256:" + "0" * 64,
+            skill_inputs={name: "probe value" for name in with_args["skill_inputs"]},
+        )
+    )
+    assert fabricated.get("stage") == "preflight:recipe_execution", fabricated
 
 
 @pytest.mark.parametrize("mode", list(RecipeDeliveryMode), ids=lambda m: m.value)

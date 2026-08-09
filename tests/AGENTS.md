@@ -242,6 +242,11 @@ registered entity must update its retirement registry in the SAME commit:
   `tmp_path` — a shape change with no registry entry strands every pre-existing
   install and no test notices. `test_no_retired_artifact_shape_is_unhandled` and
   `test_reconciler_handles_every_retired_artifact_shape` fail otherwise.
+- **Intake rule ids** (`src/autoskillit/core/types/_type_intake_policy.py`): removing a
+  rule id from `CODEX_INTAKE_RULES` must add it to `RETIRED_INTAKE_RULE_IDS` in
+  `src/autoskillit/core/types/_type_constants.py`. `test_no_retired_intake_rule_id_is_live`
+  and `test_retired_intake_rule_ids_are_lowercase_and_kebab_case` in
+  `tests/arch/test_intake_rule_registry.py` fail otherwise.
 - **Skill contract validations**: adding or tightening an `invalid_reason`-producing
   skill validation must mint a `SkillInvalidityKind` member AND register a
   `SkillContractRemediationDef` in `SKILL_CONTRACT_REMEDIATIONS`
@@ -251,3 +256,43 @@ registered entity must update its retirement registry in the SAME commit:
   repos with no way to see a tightened contract coming; the registry forces every new
   validation to declare a `DETERMINISTIC` migration or `ADVISORY` hint before it can
   ship. `tests/contracts/test_skill_contract_remediations.py` fails otherwise.
+
+## run_skill Parameter-Role Ledgers (#4402)
+
+Two frozen ledgers guard the junctions where the run_skill parameter-role
+authority mechanism can silently drift. Same discipline as the config-key
+ledger (#4303, `test_config_key_ledger.py`), applied to `ToolParamRole` and
+`RecipeStep` field classification — inline Python dict literals rather than
+external `.txt` files, since these are name→classification mappings whose
+values carry structure (`inert-tracked:#NNNN` is itself validated), not flat
+name lists:
+
+- **`tests/contracts/test_run_skill_kwarg_ledger.py`** — a frozen
+  `(param_name, role)` table diffed bidirectionally against the live
+  `get_tool_def("run_skill").params` registry. A parameter added, removed, or
+  re-roled without a matching ledger edit fails CI, naming the drifted entry.
+  Ledger edits ship in the SAME commit as the registry change they witness —
+  a role change alters gate admission behavior, so the diff must be visible
+  at review time, not discovered later.
+- **`tests/contracts/test_recipe_step_field_ledger.py`** — a frozen
+  `RecipeStep` field-name → classification table
+  (`execution` / `composition` / `validation-only` / `inert-tracked:#NNNN`),
+  diffed bidirectionally against `dataclasses.fields(RecipeStep)`. A new field
+  without a conscious classification fails; an `inert-tracked` entry without a
+  live issue reference fails. Same same-commit rule: classify a new field
+  when you add it, and file a tracking issue immediately if it has no runtime
+  consumer yet rather than leaving a silently-inert field for someone else to
+  rediscover.
+
+**`tool_ctx_ready_recipe`** (`tests/server/conftest.py`) is the required
+fixture entry point for attested-path server tests. `tool_ctx_kitchen_open`
+alone leaves `recipe_initialization_state = NoActiveRecipe()` and cannot
+reach the attested `run_skill` branch — the fixture drives the real
+production `open_kitchen` → credit sections → pull step →
+`complete_recipe_initialization` flow so tests exercise a genuinely attested
+context (proven by `test_tool_ctx_ready_recipe_fixture_yields_genuine_attestation`
+round-tripping the installed snapshot's template digest), never the
+low-level `bind_recipe`/`build_recipe_execution_snapshot`/
+`install_recipe_execution` chain directly — those functions precondition on
+`InitializingRecipe` → `ReadyRecipe` staging that only the production flow
+performs, so bypassing it would test a context no real session ever has.

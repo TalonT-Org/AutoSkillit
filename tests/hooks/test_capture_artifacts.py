@@ -1365,12 +1365,8 @@ def test_dispatch_uses_only_request_mode_and_keeps_lineage_anchor_distinct_from_
 
 
 def test_spawn_scrubs_all_protected_controls_from_user_bash_environment(
-    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    project = tmp_path / "project"
-    project.mkdir()
-    anchor = open_project_anchor(str(project))
     observed: dict[str, object] = {}
 
     def record_popen(*_args, **kwargs):
@@ -1381,15 +1377,11 @@ def test_spawn_scrubs_all_protected_controls_from_user_bash_environment(
         monkeypatch.setenv(name, f"hostile-{name}")
     monkeypatch.setenv("PHASE4_UNRELATED_ENV", "preserved")
     monkeypatch.setattr(capture_artifacts.subprocess, "Popen", record_popen)
-    try:
-        capture_artifacts._spawn_bash(
-            anchor,
-            capture_artifacts._resolve_bash(),
-            "printf safe",
-            capture_output=False,
-        )
-    finally:
-        anchor.close()
+    capture_artifacts._spawn_bash(
+        capture_artifacts._resolve_bash(),
+        "printf safe",
+        capture_output=False,
+    )
 
     child_environment = observed["env"]
     assert isinstance(child_environment, dict)
@@ -1397,6 +1389,128 @@ def test_spawn_scrubs_all_protected_controls_from_user_bash_environment(
     assert child_environment["PHASE4_UNRELATED_ENV"] == "preserved"
     for name in PROTECTED_CAPTURE_ENV_VARS:
         assert os.environ[name] == f"hostile-{name}"
+
+
+@pytest.mark.parametrize(
+    "spawn_errno",
+    [None, errno.EPERM, errno.E2BIG],
+    ids=("success", "spawn-failure", "e2big"),
+)
+def test_spawn_bash_anchors_and_closes_inherited_cwd_fd(
+    monkeypatch: pytest.MonkeyPatch,
+    spawn_errno: int | None,
+) -> None:
+    inherited_cwd_fds: list[int] = []
+    closed_fds: list[int] = []
+    fchdir_fds: list[int] = []
+    popen_kwargs: list[dict[str, object]] = []
+    real_open = capture_artifacts.os.open
+    real_close = capture_artifacts.os.close
+    real_fchdir = capture_artifacts.os.fchdir
+
+    def record_open(path, flags, mode=0o777, *, dir_fd=None):
+        fd = real_open(path, flags, mode, dir_fd=dir_fd)
+        if path == "." and dir_fd is None:
+            inherited_cwd_fds.append(fd)
+        return fd
+
+    def record_close(fd):
+        if fd in inherited_cwd_fds:
+            closed_fds.append(fd)
+        real_close(fd)
+
+    def record_fchdir(fd):
+        fchdir_fds.append(fd)
+        real_fchdir(fd)
+
+    process = SimpleNamespace()
+
+    def record_popen(*_args, **kwargs):
+        popen_kwargs.append(kwargs)
+        if spawn_errno is not None:
+            raise OSError(spawn_errno, "fault injection")
+        return process
+
+    monkeypatch.setattr(capture_artifacts.os, "open", record_open)
+    monkeypatch.setattr(capture_artifacts.os, "close", record_close)
+    monkeypatch.setattr(capture_artifacts.os, "fchdir", record_fchdir)
+    monkeypatch.setattr(capture_artifacts.subprocess, "Popen", record_popen)
+
+    if spawn_errno is None:
+        assert (
+            capture_artifacts._spawn_bash(
+                "/bin/bash",
+                "printf safe",
+                capture_output=False,
+            )
+            is process
+        )
+    else:
+        message = (
+            "argument/environment exceeds system limit"
+            if spawn_errno == errno.E2BIG
+            else "cannot spawn capture shell"
+        )
+        with pytest.raises(CaptureSetupError, match=message):
+            capture_artifacts._spawn_bash(
+                "/bin/bash",
+                "printf safe",
+                capture_output=False,
+            )
+
+    assert len(inherited_cwd_fds) == 1
+    inherited_cwd_fd = inherited_cwd_fds[0]
+    assert fchdir_fds == [inherited_cwd_fd, inherited_cwd_fd]
+    assert closed_fds == [inherited_cwd_fd]
+    with pytest.raises(OSError):
+        os.fstat(inherited_cwd_fd)
+    assert len(popen_kwargs) == 1
+    assert popen_kwargs[0]["close_fds"] is True
+
+
+@pytest.mark.skipif(
+    not Path("/proc/self/fd").is_dir(),
+    reason="descriptor target probe requires procfs",
+)
+@pytest.mark.parametrize("capture_output", [False, True], ids=("direct", "capture"))
+def test_spawn_bash_does_not_leak_inherited_cwd_fd_to_child(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capture_output: bool,
+) -> None:
+    execution_dir = tmp_path / "execution"
+    execution_dir.mkdir()
+    monkeypatch.chdir(execution_dir)
+    result_path = execution_dir / "fd-result"
+    script = "\n".join(
+        [
+            "import os",
+            "target = os.stat('.')",
+            "leaked = []",
+            "for name in os.listdir('/proc/self/fd'):",
+            "    try:",
+            "        value = os.stat('/proc/self/fd/' + name)",
+            "    except FileNotFoundError:",
+            "        continue",
+            "    if (value.st_dev, value.st_ino) == (target.st_dev, target.st_ino):",
+            "        leaked.append(name)",
+            (
+                "print(','.join(leaked))"
+                if capture_output
+                else "open('fd-result', 'w').write(','.join(leaked))"
+            ),
+        ]
+    )
+    process = capture_artifacts._spawn_bash(
+        "/bin/bash",
+        shlex.join([sys.executable, "-c", script]),
+        capture_output=capture_output,
+    )
+    stdout, _stderr = process.communicate(timeout=10)
+
+    assert process.returncode == 0
+    result = stdout.decode().strip() if capture_output else result_path.read_text()
+    assert result == ""
 
 
 def test_e2big_spawn_failure_is_explicit_bounded_and_fail_closed(
@@ -1553,25 +1667,31 @@ def test_post_duplication_failure_closes_all_fds_and_prevents_command(
             os.fstat(fd)
 
 
-def test_restore_failure_closes_pipe_and_original_cwd_fd(
-    tmp_path: Path,
+@pytest.mark.parametrize("capture_output", [False, True], ids=("direct", "capture"))
+def test_restore_failure_closes_pipe_and_inherited_cwd_fd(
     monkeypatch: pytest.MonkeyPatch,
+    capture_output: bool,
 ) -> None:
-    project = tmp_path / "project"
-    project.mkdir()
-    anchor = open_project_anchor(str(project))
     process = _FakeCaptureProcess(b"")
     runner_cwd_fd = os.open(".", os.O_RDONLY | os.O_DIRECTORY)
-    original_cwd_fds: list[int] = []
+    inherited_cwd_fds: list[int] = []
+    closed_fds: list[int] = []
+    popen_kwargs: list[dict[str, object]] = []
     real_open = capture_artifacts.os.open
+    real_close = capture_artifacts.os.close
     real_fchdir = capture_artifacts.os.fchdir
     fchdir_calls = 0
 
     def record_open(path, flags, mode=0o777, *, dir_fd=None):
         fd = real_open(path, flags, mode, dir_fd=dir_fd)
         if path == "." and dir_fd is None:
-            original_cwd_fds.append(fd)
+            inherited_cwd_fds.append(fd)
         return fd
+
+    def record_close(fd):
+        if fd in inherited_cwd_fds:
+            closed_fds.append(fd)
+        real_close(fd)
 
     def fail_restore(fd):
         nonlocal fchdir_calls
@@ -1580,28 +1700,33 @@ def test_restore_failure_closes_pipe_and_original_cwd_fd(
             raise OSError("fault injection")
         real_fchdir(fd)
 
+    def record_popen(*_args, **kwargs):
+        popen_kwargs.append(kwargs)
+        return process
+
     monkeypatch.setattr(capture_artifacts.os, "open", record_open)
+    monkeypatch.setattr(capture_artifacts.os, "close", record_close)
     monkeypatch.setattr(capture_artifacts.os, "fchdir", fail_restore)
-    monkeypatch.setattr(capture_artifacts.subprocess, "Popen", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_artifacts.subprocess, "Popen", record_popen)
 
     try:
         with pytest.raises(CaptureSetupError, match="cannot restore runner cwd"):
             capture_artifacts._spawn_bash(
-                anchor,
                 "/bin/bash",
                 "printf never",
-                capture_output=True,
+                capture_output=capture_output,
             )
         assert process.stdout.closed
         assert process.terminated
         assert process.wait_calls == 1
-        assert len(original_cwd_fds) == 1
+        assert len(inherited_cwd_fds) == 1
+        assert closed_fds == inherited_cwd_fds
+        assert popen_kwargs[0]["close_fds"] is True
         with pytest.raises(OSError):
-            os.fstat(original_cwd_fds[0])
+            os.fstat(inherited_cwd_fds[0])
     finally:
         real_fchdir(runner_cwd_fd)
         os.close(runner_cwd_fd)
-        anchor.close()
 
 
 def test_post_creation_identity_failure_closes_artifact_and_emits_failure(
@@ -2758,16 +2883,31 @@ def test_artifact_write_failure_emits_failure_marker(
 ) -> None:
     project = tmp_path / "project"
     project.mkdir()
+    sentinel = tmp_path / "command-ran"
 
     def fail_write(fd, data):
         raise OSError("fault injection")
 
     monkeypatch.setattr(capture_artifacts, "_write_all", fail_write)
 
-    assert run_capture("printf ran > command_ran; printf output", str(project), _CAPTURE_ID) == 1
+    command = f"printf ran > {shlex.quote(str(sentinel))}; printf output"
+    assert run_capture(command, str(project), _CAPTURE_ID) == 1
     captured = capfd.readouterr()
-    assert (project / "command_ran").read_text() == "ran"
-    assert '"status":"capture_failed"' in captured.err
+    assert sentinel.read_text() == "ran"
+    raw_failure = next(
+        (
+            line
+            for line in captured.err.splitlines()
+            if line.startswith("[AutoSkillit shell capture failure v3:")
+        ),
+        None,
+    )
+    assert raw_failure is not None
+    payload = json.loads(
+        raw_failure.removeprefix("[AutoSkillit shell capture failure v3:").removesuffix("]")
+    )
+    assert payload["status"] == "capture_failed"
+    assert _single_failure_marker(captured.err).stage == "artifact_write"
     assert "shell capture v2:" not in captured.out + captured.err
 
 

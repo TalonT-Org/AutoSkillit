@@ -40,7 +40,6 @@ import re
 from pathlib import Path
 
 import pytest
-from _pytest.outcomes import Failed as PytestFailed
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
@@ -256,7 +255,7 @@ class TestCIShardConfig:
     def test_duplicate_or_missing_explicit_set_fails(self) -> None:
         text_missing = 'SHARD_EXECUTION_DIRS="tests/execution"\n'
         assignments = _parse_shard_assignments(text_missing)
-        with pytest.raises(PytestFailed, match="RECIPE"):
+        with pytest.raises(pytest.fail.Exception, match="RECIPE"):
             _assert_expected_assignments_present(assignments)
         text_duplicate = (
             'SHARD_EXECUTION_DIRS="tests/execution"\n'
@@ -267,12 +266,12 @@ class TestCIShardConfig:
             _parse_shard_assignments(text_duplicate)
 
     def test_compute_paths_rejects_missing_run_block(self) -> None:
-        with pytest.raises(PytestFailed, match="missing its `run: \\|` block"):
+        with pytest.raises(pytest.fail.Exception, match="missing its `run: \\|` block"):
             _compute_test_paths_body("- name: Compute test paths\n  id: test-paths\n")
 
     def test_case_parser_rejects_malformed_arm(self) -> None:
         body = 'case "$SHARD" in\nexecution echo "missing delimiter";;\nesac'
-        with pytest.raises(PytestFailed, match="Malformed case arm"):
+        with pytest.raises(pytest.fail.Exception, match="Malformed case arm"):
             _parse_case_arms(body)
 
     def test_explicit_directories_exist_and_contain_tests(self) -> None:

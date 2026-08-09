@@ -96,6 +96,9 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 - `tests/contracts/` — tests that verify SKILL.md contract content: required sections,
   output patterns, schema validity
 
+Shared recipe-delivery budgets used by contract matrices live in
+`tests/contracts/_delivery_constants.py`.
+
 ## Environment Parity
 
 The test harness sets env vars (via Taskfile `env:` blocks) that diverge from

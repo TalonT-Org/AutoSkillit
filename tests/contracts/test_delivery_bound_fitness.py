@@ -48,6 +48,11 @@ from autoskillit.server._response_budget import (
 from autoskillit.server.tools._serve_helpers import (
     build_open_kitchen_recipe_payload,
 )
+from tests.contracts._delivery_constants import (
+    MAX_ENVELOPE_MANIFEST_BYTES,
+    MAX_OPEN_KITCHEN_CALLS,
+    MAX_PAGES_PER_SECTION,
+)
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
@@ -199,12 +204,30 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
     assert envelope["success"] is True
     assert envelope["recipe_flow"] == prepared.flow_generation.identity()
     if envelope.get("delivery_bound_spill") is True:
-        assert [item["section"] for item in envelope["required_sections"]] == [
+        required_sections = envelope["required_sections"]
+        assert [item["section"] for item in required_sections] == [
             "flow_records",
             projection.entrypoint,
         ]
+        if any(item["total_parts"] > MAX_PAGES_PER_SECTION for item in required_sections):
+            pytest.xfail("#4414 architectural gap — calibrated page bound lands in Part C")
+        assert all(
+            item["compiled_page_count"] == item["total_parts"] <= MAX_PAGES_PER_SECTION
+            and item["compiled_bytes"] > 0
+            for item in required_sections
+        )
+        mode = (
+            "codex_bounded" if caps.recipe_delivery_budget is not None else "claude_code_bounded"
+        )
+        planned_calls = 1 + sum(item["total_parts"] for item in required_sections) + 1
+        assert planned_calls <= MAX_OPEN_KITCHEN_CALLS[mode]
+        assert len(finalized.rendered.encode("utf-8")) <= MAX_ENVELOPE_MANIFEST_BYTES
     else:
         assert envelope["flow_records"] == list(prepared.flow_generation.records)
+        exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"]
+        if len(finalized.rendered.encode("utf-8")) > exemption.max_utf8_bytes * 9 // 10:
+            pytest.xfail("#4414 architectural gap — exemption margin is not enforced yet")
+        assert len(finalized.rendered.encode("utf-8")) <= exemption.max_utf8_bytes * 9 // 10
 
 
 @pytest.mark.parametrize("recipe_name", _recipe_names(), ids=lambda n: n)

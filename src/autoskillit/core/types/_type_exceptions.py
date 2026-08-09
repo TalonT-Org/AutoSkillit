@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 __all__ = [
+    "BoundedDeliveryRoundTripBudgetExceededError",
     "CapabilityNotSupportedError",
     "PluginArtifactContentionError",
     "PluginArtifactPublicationError",
@@ -11,6 +12,8 @@ __all__ = [
     "SkillContractError",
     "RecipeLoadError",
     "ProcessStaleError",
+    "RecipeDeliveryBudgetError",
+    "RecipeExemptionFitnessError",
     "RecipeNotFoundError",
 ]
 
@@ -25,6 +28,54 @@ class ProcessStaleError(RecipeLoadError):
 
 class RecipeNotFoundError(RecipeLoadError):
     """Named recipe could not be found in any scan directory."""
+
+
+class RecipeDeliveryBudgetError(RuntimeError):
+    """A compiled recipe delivery cannot satisfy its declared byte/call budget."""
+
+
+class RecipeExemptionFitnessError(RecipeDeliveryBudgetError):
+    """An inline recipe has drifted too close to its registered exemption ceiling."""
+
+    def __init__(
+        self,
+        *,
+        recipe: str,
+        surface: str,
+        rendered_bytes: int,
+        ceiling_bytes: int,
+        margin_bytes: int,
+    ) -> None:
+        self.recipe = recipe
+        self.surface = surface
+        self.rendered_bytes = rendered_bytes
+        self.ceiling_bytes = ceiling_bytes
+        self.margin_bytes = margin_bytes
+        super().__init__(
+            f"{recipe}/{surface}: rendered delivery is {rendered_bytes} bytes; "
+            f"the {ceiling_bytes}-byte exemption requires {margin_bytes} bytes of margin"
+        )
+
+
+class BoundedDeliveryRoundTripBudgetExceededError(RecipeDeliveryBudgetError):
+    """A compiled bounded delivery needs more MCP calls than its fixed budget."""
+
+    def __init__(
+        self,
+        *,
+        recipe: str,
+        backend: str,
+        planned_calls: int,
+        budget: int,
+    ) -> None:
+        self.recipe = recipe
+        self.backend = backend
+        self.planned_calls = planned_calls
+        self.budget = budget
+        super().__init__(
+            f"{recipe}/{backend}: compiled bounded delivery needs {planned_calls} calls; "
+            f"budget is {budget}"
+        )
 
 
 class CapabilityNotSupportedError(Exception):

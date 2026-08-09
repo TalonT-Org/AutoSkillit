@@ -636,6 +636,9 @@ from .types import BareResume as BareResume
 from .types import BindingFailure as BindingFailure
 from .types import BindingFailureCode as BindingFailureCode
 from .types import BindingMode as BindingMode
+from .types import (
+    BoundedDeliveryRoundTripBudgetExceededError as BoundedDeliveryRoundTripBudgetExceededError,
+)
 from .types import BoundScalar as BoundScalar
 from .types import BoundStepInvocation as BoundStepInvocation
 from .types import BoundValue as BoundValue
@@ -884,6 +887,7 @@ from .types import RecipeArtifactGeneration as RecipeArtifactGeneration
 from .types import RecipeBindingProjection as RecipeBindingProjection
 from .types import RecipeDeliveryAttestation as RecipeDeliveryAttestation
 from .types import RecipeDeliveryBudgetDef as RecipeDeliveryBudgetDef
+from .types import RecipeDeliveryBudgetError as RecipeDeliveryBudgetError
 from .types import RecipeDeliveryDecision as RecipeDeliveryDecision
 from .types import RecipeDeliveryEvidenceDef as RecipeDeliveryEvidenceDef
 from .types import RecipeDeliveryMode as RecipeDeliveryMode
@@ -894,6 +898,7 @@ from .types import RecipeExecutionFactory as RecipeExecutionFactory
 from .types import RecipeExecutionId as RecipeExecutionId
 from .types import RecipeExecutionLock as RecipeExecutionLock
 from .types import RecipeExecutionSnapshot as RecipeExecutionSnapshot
+from .types import RecipeExemptionFitnessError as RecipeExemptionFitnessError
 from .types import RecipeFlowEdge as RecipeFlowEdge
 from .types import RecipeFlowGeneration as RecipeFlowGeneration
 from .types import RecipeIdentity as RecipeIdentity

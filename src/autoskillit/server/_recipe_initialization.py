@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
+    RECIPE_SECTION_PAGINATION_VERSION,
+    RECIPE_SECTION_REGISTRY_DIGEST,
     RecipeArtifactGeneration,
     RecipeExecutionCredential,
     RecipeExecutionId,
@@ -44,12 +46,74 @@ __all__ = [
     "FinalizedRecipeInitializationResponse",
     "FinalizedRecipeSectionResponse",
     "admit_registered_tool_during_initialization",
+    "build_recipe_envelope",
     "build_completion_response",
     "complete_initialization_response",
     "complete_section_response",
     "matches_recipe_initialization_requirement",
     "stage_recipe_initialization",
 ]
+
+
+def build_recipe_envelope(
+    payload: dict[str, Any],
+    *,
+    recipe_name: str,
+    generation: RecipeArtifactGeneration,
+    flow_generation: RecipeFlowGeneration,
+    entrypoint: str,
+    bound_bytes: int,
+    initialization_id: str | None = None,
+    initialization_requirements: tuple[RecipeInitializationRequirement, ...] = (),
+    completion_required: bool = False,
+) -> dict[str, Any]:
+    """Build the bounded pull envelope used by every recipe delivery surface."""
+    del payload, recipe_name, entrypoint
+    manifest = {
+        "success": True,
+        "delivery_bound_spill": True,
+        "recipe_pull": generation.pull_identity(),
+        "recipe_flow": flow_generation.identity(),
+        "required_sections": [
+            {
+                "page_plan_sha256": requirement.page_plan_sha256,
+                "section": requirement.section,
+                "total_parts": requirement.total_parts,
+                "compiled_page_count": requirement.total_parts,
+                "compiled_bytes": requirement.compiled_bytes,
+            }
+            for requirement in initialization_requirements
+        ],
+        "recovery": {
+            "completion_required": completion_required,
+            "ordered_sections": [
+                requirement.section for requirement in initialization_requirements
+            ],
+            "pagination_version": RECIPE_SECTION_PAGINATION_VERSION,
+            "section_registry_sha256": RECIPE_SECTION_REGISTRY_DIGEST,
+            "pull_tool": "get_recipe_section",
+        },
+    }
+    if initialization_id is not None:
+        manifest["initialization_id"] = initialization_id
+    if (
+        len(json.dumps(manifest, ensure_ascii=False, separators=(",", ":")).encode())
+        <= bound_bytes
+    ):
+        return manifest
+    fallback_candidates: tuple[dict[str, Any], ...] = (
+        {
+            "success": False,
+            "error": "recipe_envelope_exceeds_delivery_bound",
+            "recipe_pull": generation.pull_identity(),
+        },
+        {"success": False, "error": "recipe_envelope_exceeds_delivery_bound"},
+        {},
+    )
+    for fallback in fallback_candidates:
+        if len(json.dumps(fallback, separators=(",", ":")).encode()) <= bound_bytes:
+            return fallback
+    raise ValueError("delivery bound is too small for a JSON object")
 
 
 def _receipt(initialization_id: str, artifact: RecipeArtifactGeneration) -> str:

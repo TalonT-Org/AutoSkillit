@@ -37,12 +37,15 @@ class RecipeInitializationRequirement:
     section: str
     page_plan_sha256: str
     total_parts: int
+    compiled_bytes: int = 0
 
     def __post_init__(self) -> None:
         if not self.section or not self.page_plan_sha256:
             raise ValueError("recipe initialization requirement identity is incomplete")
         if type(self.total_parts) is not int or self.total_parts <= 0:
             raise ValueError("recipe initialization requirement must have positive parts")
+        if type(self.compiled_bytes) is not int or self.compiled_bytes < 0:
+            raise ValueError("recipe initialization compiled bytes must be non-negative")
 
 
 @dataclass(frozen=True, slots=True)

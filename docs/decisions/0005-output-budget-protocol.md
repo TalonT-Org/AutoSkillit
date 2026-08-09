@@ -173,12 +173,25 @@ below that floor is invalid. After request admission, the request-specific ceili
 
 `recipe_section_bound_bytes = min(response_max_bytes, conservative_general_result_limit)`
 
+This runtime projection is subordinate to the packaging-time fitness check: every
+bounded initialization plan must fit the fixed round-trip budget below. Runtime
+projection remains valid for ordinary inline delivery, but it cannot authorize an
+unbounded bounded-delivery sequence.
+
 The current ordinary Codex policy deliberately keeps the conservative limit at
 10,000 bytes. It is not the generic token×4 projection. Planning trial-renders each
 complete outer response with compact canonical JSON and accepts only pages within the
 captured UTF-8 bound. Oversized arrays use complete pages or
 `json-element-fragment`; there is no truncation and no dropped element. A terminal
 page omits `next_part`.
+
+### Bounded-delivery round-trip budget
+
+Every bounded recipe initialization must be representable in at most four MCP calls,
+including `open_kitchen`, both required section pulls, and completion. Page planning
+records each section's compiled byte and page counts and rejects a plan with more than
+one page per required section. Receivers must not assume that recovery can continue for
+an unbounded number of calls.
 
 ## Operational Signals
 

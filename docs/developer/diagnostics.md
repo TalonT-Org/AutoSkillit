@@ -24,7 +24,7 @@ Logs are stored in a **global** directory (not per-project), so they persist acr
 
 ```
 ~/.local/share/autoskillit/logs/
-├── sessions.jsonl                    # Append-only index (one JSON line per session)
+├── sessions.jsonl                    # Retained derived index (one row per committed session)
 └── sessions/
     └── {session_id}/                 # or pid_{pid}_{timestamp} if session_id unavailable
         ├── proc_trace.jsonl          # Full ProcSnapshot series
@@ -70,10 +70,18 @@ Logs are stored in a **global** directory (not per-project), so they persist acr
 ## How It Works
 
 1. **Accumulate**: During a headless session, `LinuxTracingHandle` collects `ProcSnapshot` objects in memory at the configured interval (default 5s)
-2. **Flush**: After the session completes, `flush_session_log()` writes all data to disk
-3. **Detect**: Anomaly detection runs over the complete snapshot series at flush time
-4. **Index**: Each session appends one line to `sessions.jsonl` for quick scanning
-5. **Retain**: Automatic cleanup keeps at most 500 session directories
+2. **Flush**: After the session completes, `flush_session_log()` writes all per-session artifacts
+3. **Commit**: `summary.json` is published last and commits an eligible diagnostic session
+4. **Index**: One exclusive transaction upserts the committed session into the retained `sessions.jsonl` projection
+5. **Retain**: Automatic cleanup targets at most 2,000 committed directories; active-campaign protection may keep more
+
+`sessions.jsonl` is a bounded derived index, not an append-only ledger. Its
+`timestamp` field remains the session `start_ts`, not completion or index-write
+time. Starting from an exact summary/index projection, a successful transaction
+preserves that projection, while deterministic crash-recovery replay heals its
+current key. Historical inconsistencies for other keys remain doctor-visible.
+Publication is atomic for concurrent writers and process crashes, but does not
+promise strict power-loss durability or snapshot isolation for unlocked readers.
 
 ## Configuration
 

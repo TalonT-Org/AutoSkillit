@@ -7,6 +7,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+from collections import Counter
 from datetime import date
 from pathlib import Path
 from typing import NamedTuple
@@ -16,6 +17,7 @@ import regex as re
 from autoskillit.core import (
     CODEX_MODEL_ALIASES,
     CODEX_MODEL_ALIASES_LAST_VERIFIED,
+    ArtifactLease,
     CodingAgentBackend,
     Severity,
     atomic_write,
@@ -28,6 +30,7 @@ from autoskillit.execution import (
     QUOTA_CACHE_SCHEMA_VERSION,
     CodexBackend,
 )
+from autoskillit.execution.session_log import _session_index_lock_path, resolve_log_dir
 
 from ._doctor_types import DoctorResult
 
@@ -445,6 +448,73 @@ def _check_codex_ndjson_drift(
             " — parser vocabulary may be stale",
         )
     return DoctorResult(Severity.OK, check_name, "No NDJSON vocabulary drift detected")
+
+
+def _read_session_index_projection(
+    log_root: Path,
+) -> tuple[Counter[str], Counter[str], int]:
+    summaries = Counter(
+        summary.parent.name for summary in (log_root / "sessions").glob("*/summary.json")
+    )
+    rows: Counter[str] = Counter()
+    malformed = 0
+    try:
+        lines = (log_root / "sessions.jsonl").read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        lines = []
+    except OSError:
+        return summaries, rows, 1
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            malformed += 1
+            continue
+        dir_name = row.get("dir_name") if isinstance(row, dict) else None
+        if isinstance(dir_name, str) and dir_name:
+            rows[dir_name] += 1
+        else:
+            malformed += 1
+    return summaries, rows, malformed
+
+
+def _check_session_index_projection(*, log_dir: str = "") -> DoctorResult:
+    check_name = "session_index_projection"
+    log_root = resolve_log_dir(log_dir)
+    lock_path = _session_index_lock_path(log_root)
+
+    if lock_path.is_file():
+        with ArtifactLease.acquire_existing_shared(lock_path):
+            summaries, rows, malformed = _read_session_index_projection(log_root)
+    else:
+        summaries, rows, malformed = _read_session_index_projection(log_root)
+        if lock_path.is_file():
+            with ArtifactLease.acquire_existing_shared(lock_path):
+                summaries, rows, malformed = _read_session_index_projection(log_root)
+
+    if summaries == rows and malformed == 0:
+        return DoctorResult(
+            Severity.OK,
+            check_name,
+            f"{sum(summaries.values())} committed session(s) exactly match the retained index",
+        )
+
+    missing = summaries - rows
+    duplicate_names = {name for name, count in rows.items() if count > 1}
+    dangling = set(rows) - set(summaries)
+    details = [
+        f"missing={sum(missing.values())}",
+        f"duplicate={len(duplicate_names)}",
+        f"dangling={len(dangling)}",
+        f"malformed={malformed}",
+    ]
+    return DoctorResult(
+        Severity.WARNING,
+        check_name,
+        "Committed summary/index projection mismatch (" + ", ".join(details) + ")",
+    )
 
 
 def _check_codex_model_alias_staleness() -> DoctorResult:

@@ -149,6 +149,9 @@ async def deferred_initialize(ctx: ToolContext, *, ready_event: asyncio.Event) -
             n = recover_crashed_sessions(
                 tmpfs_path=cfg.tmpfs_path,
                 log_dir=cfg.log_dir,
+                project_dir=str(ctx.project_dir),
+                max_sessions=cfg.max_sessions,
+                build_protected_campaign_ids=ctx.build_protected_campaign_ids,
             )
             if n > 0:
                 logger.info("Recovered %d crashed session trace(s) from tmpfs", n)

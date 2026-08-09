@@ -278,6 +278,12 @@ See **[Hooks](../safety/hooks.md)** for the complete safety system: protected br
 
 Pipeline sessions are logged to `~/.local/share/autoskillit/logs/` (Linux) or `~/Library/Application Support/autoskillit/logs/` (macOS). Each session records token usage, timing, and process traces.
 
+`summary.json` is the committed completion witness and is published last among
+per-session artifacts. A shared exclusive-lease transaction upserts the session
+row, applies committed-directory retention, and atomically replaces the bounded
+`sessions.jsonl` derived index. Doctor compares retained summary parents with
+physical index-row multiplicity under the corresponding shared lease.
+
 Query the index: `jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl`
 
 See **[Session Diagnostics](../developer/diagnostics.md)** for details.

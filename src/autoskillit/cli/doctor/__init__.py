@@ -72,6 +72,7 @@ from ._doctor_runtime import (
     _check_codex_ndjson_drift,
     _check_quota_cache_schema,
     _check_script_binary,
+    _check_session_index_projection,
 )
 from ._doctor_skills import (
     _check_project_local_skill_contracts,
@@ -239,6 +240,8 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.append(_check_capture_store_stats())
     # Check 42: Project-local skill contracts (excluded/shadowed stale copies)
     results.extend(_check_project_local_skill_contracts())
+    # Check 43: Retained committed summaries exactly match physical index rows
+    results.append(_check_session_index_projection(log_dir=cfg.linux_tracing.log_dir))
     # Output
     for line in _format_results(results, output_json=output_json):
         print(line)

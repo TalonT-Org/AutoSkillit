@@ -9,14 +9,20 @@ from pathlib import Path
 
 import psutil
 
-from autoskillit.core import get_logger
+from autoskillit.core import CampaignProtector, get_logger
 from autoskillit.execution.linux_tracing import read_boot_id, read_enrollment, read_starttime_ticks
 from autoskillit.execution.session_log import flush_session_log
 
 logger = get_logger(__name__)
 
 
-def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") -> int:
+def recover_crashed_sessions(
+    tmpfs_path: str = "/dev/shm",
+    log_dir: str = "",
+    project_dir: str = "",
+    max_sessions: int | None = None,
+    build_protected_campaign_ids: CampaignProtector | None = None,
+) -> int:
     """Scan tmpfs for orphaned trace files from SIGKILL'd sessions and finalize them.
 
     Returns the number of sessions recovered.
@@ -121,6 +127,10 @@ def recover_crashed_sessions(tmpfs_path: str = "/dev/shm", log_dir: str = "") ->
                 provider_outcome=ProviderOutcome.none_used(),
                 recipe_identity=RecipeIdentity.empty(),
                 telemetry=SessionTelemetry.empty(),
+                project_dir=project_dir,
+                max_sessions=max_sessions,
+                build_protected_campaign_ids=build_protected_campaign_ids,
+                is_crash_recovery=True,
             )
         except Exception:
             logger.debug(

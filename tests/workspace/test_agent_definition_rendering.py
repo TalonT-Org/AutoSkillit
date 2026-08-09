@@ -416,4 +416,4 @@ class TestRenderCoherence:
 
         assert mat_calls, "materialize_sanitized_plugin_root must call _render_agent_definitions"
         assert auth_calls, "_stage_projected_plugin_artifact must call _render_agent_definitions"
-        assert mat_calls == auth_calls, "both pipelines must use the same render function name"
+        assert authority._render_agent_definitions is materialization._render_agent_definitions

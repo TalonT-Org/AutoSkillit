@@ -4,6 +4,7 @@ import functools
 import os
 from pathlib import Path as _Path
 from typing import TYPE_CHECKING, cast
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -15,6 +16,8 @@ from autoskillit.core import (
     InspectorCallback,
     InspectorEvidence,
     InspectorVerdict,
+    RepositoryIdentity,
+    RepositorySnapshot,
 )
 from autoskillit.core.types import (
     ChannelConfirmation,
@@ -94,6 +97,17 @@ class TimeoutTier:
 
 
 _structlog_proxies: list[object] = []
+
+
+@pytest.fixture
+def exploration_snapshot_service() -> MagicMock:
+    service = MagicMock()
+    service.capture_snapshot.side_effect = lambda root: RepositorySnapshot(
+        RepositoryIdentity("test-repo", "test-rev", worktree_path=str(root.resolve())),
+        tree_digest="test-tree",
+        collector_manifest_digest="test-manifest",
+    )
+    return service
 
 
 @pytest.fixture(autouse=True, scope="session")

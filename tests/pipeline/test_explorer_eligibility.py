@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.core import RepositoryIdentity, RepositorySnapshot, SessionType
+from autoskillit.core import SessionType
 from autoskillit.pipeline.exploration_context import (
     OwnerBoundExplorationContextStore,
     is_explorer_binding_eligible,
@@ -95,23 +95,15 @@ class TestExplorerBindingEligibility:
         )
 
 
-def _snapshot_service() -> MagicMock:
-    service = MagicMock()
-    service.capture_snapshot.side_effect = lambda root: RepositorySnapshot(
-        RepositoryIdentity("test-repo", "test-rev", worktree_path=str(root.resolve())),
-        tree_digest="test-tree",
-        collector_manifest_digest="test-manifest",
-    )
-    return service
-
-
 class TestSessionScopedAuthority:
     """T10: bind_session_scoped creates a capability, session_scoped_capability finds it."""
 
-    def test_bind_session_scoped_returns_capability(self, tmp_path: Path) -> None:
+    def test_bind_session_scoped_returns_capability(
+        self, tmp_path: Path, exploration_snapshot_service: MagicMock
+    ) -> None:
         store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
             trusted_root=tmp_path,
-            service=_snapshot_service(),
+            service=exploration_snapshot_service,
         )
         capability = store.bind_session_scoped(
             owner_id="uid:1000",
@@ -122,10 +114,12 @@ class TestSessionScopedAuthority:
         )
         assert capability.startswith("explore_")
 
-    def test_session_scoped_capability_finds_active(self, tmp_path: Path) -> None:
+    def test_session_scoped_capability_finds_active(
+        self, tmp_path: Path, exploration_snapshot_service: MagicMock
+    ) -> None:
         store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
             trusted_root=tmp_path,
-            service=_snapshot_service(),
+            service=exploration_snapshot_service,
         )
         capability = store.bind_session_scoped(
             owner_id="uid:1000",
@@ -137,17 +131,21 @@ class TestSessionScopedAuthority:
         found = store.session_scoped_capability("test-session")
         assert found == capability
 
-    def test_session_scoped_capability_returns_none_without_bind(self, tmp_path: Path) -> None:
+    def test_session_scoped_capability_returns_none_without_bind(
+        self, tmp_path: Path, exploration_snapshot_service: MagicMock
+    ) -> None:
         store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
             trusted_root=tmp_path,
-            service=_snapshot_service(),
+            service=exploration_snapshot_service,
         )
         assert store.session_scoped_capability("nonexistent-session") is None
 
-    def test_session_scoped_capability_returns_none_after_close(self, tmp_path: Path) -> None:
+    def test_session_scoped_capability_returns_none_after_close(
+        self, tmp_path: Path, exploration_snapshot_service: MagicMock
+    ) -> None:
         store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
             trusted_root=tmp_path,
-            service=_snapshot_service(),
+            service=exploration_snapshot_service,
         )
         store.bind_session_scoped(
             owner_id="uid:1000",
@@ -159,10 +157,12 @@ class TestSessionScopedAuthority:
         store.close()
         assert store.session_scoped_capability("test-session") is None
 
-    def test_wrong_repository_root_raises(self, tmp_path: Path) -> None:
+    def test_wrong_repository_root_raises(
+        self, tmp_path: Path, exploration_snapshot_service: MagicMock
+    ) -> None:
         store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
             trusted_root=tmp_path / "real-root",
-            service=_snapshot_service(),
+            service=exploration_snapshot_service,
         )
         (tmp_path / "real-root").mkdir()
         with pytest.raises(ValueError, match="does not match the trusted project root"):

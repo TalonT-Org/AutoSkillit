@@ -9,22 +9,10 @@ import pytest
 
 from autoskillit.core import (
     EXPLORATION_TOOLS,
-    RepositoryIdentity,
-    RepositorySnapshot,
 )
 from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
-
-
-def _snapshot_service() -> MagicMock:
-    service = MagicMock()
-    service.capture_snapshot.side_effect = lambda root: RepositorySnapshot(
-        RepositoryIdentity("test-repo", "test-rev", worktree_path=str(root.resolve())),
-        tree_digest="test-tree",
-        collector_manifest_digest="test-manifest",
-    )
-    return service
 
 
 class TestSessionScopedVisibility:
@@ -58,14 +46,14 @@ class TestSessionScopedVisibility:
 
     @pytest.mark.asyncio
     async def test_session_scoped_authority_reveals_exploration_tools(
-        self, tmp_path: Path
+        self, tmp_path: Path, exploration_snapshot_service: MagicMock
     ) -> None:
         """After bind_session_scoped + tag enable, exploration tools are visible."""
         from autoskillit.server import mcp
 
         store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
             trusted_root=tmp_path,
-            service=_snapshot_service(),
+            service=exploration_snapshot_service,
         )
         store.bind_session_scoped(
             owner_id="uid:1000",

@@ -9,20 +9,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.core import RepositoryIdentity, RepositorySnapshot, SessionType
+from autoskillit.core import SessionType
 from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
-
-
-def _snapshot_service() -> MagicMock:
-    service = MagicMock()
-    service.capture_snapshot.side_effect = lambda root: RepositorySnapshot(
-        RepositoryIdentity("test-repo", "test-rev", worktree_path=str(root.resolve())),
-        tree_digest="test-tree",
-        collector_manifest_digest="test-manifest",
-    )
-    return service
 
 
 @pytest.mark.asyncio
@@ -61,13 +51,14 @@ async def test_enable_exploration_rejects_fleet(
 async def test_enable_exploration_succeeds_for_skill_session(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    exploration_snapshot_service: MagicMock,
 ) -> None:
     """SKILL session with a valid store can establish exploration authority."""
     from autoskillit.server.tools.tools_exploration import enable_exploration
 
     store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
         trusted_root=tmp_path,
-        service=_snapshot_service(),
+        service=exploration_snapshot_service,
     )
     ctx = SimpleNamespace(
         exploration_context_store=store,

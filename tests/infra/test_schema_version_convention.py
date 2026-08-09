@@ -127,7 +127,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/server/tools/tools_kitchen.py", 565),
     ("src/autoskillit/server/tools/tools_kitchen.py", 597),
     # _overlay_state.py — session-scoped hook config overlay (not schema-versioned)
-    ("src/autoskillit/server/tools/_overlay_state.py", 126),
+    ("src/autoskillit/server/tools/_overlay_state.py", 114),
     # tools_pipeline_tracker.py — tracker_data dict (init) and mark_step_complete write
     # (same tracker file schema as init — not a new format, grandfathered alongside it)
     ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 253),

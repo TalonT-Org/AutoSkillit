@@ -13,23 +13,29 @@ from autoskillit.core.types import (
     ChannelConfirmation,
     CliSubtype,
     InfraExitCategory,
+    RetryReason,
     SubprocessResult,
     TerminationReason,
 )
 from autoskillit.execution.backends._codex_parse import CodexResultParser
+from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.headless._headless_evidence import _adapt_agent_result
 from autoskillit.execution.session._exit_classification import (
-    _CODEX_API_ERROR_PATTERNS,
     _RATE_LIMIT_PATTERNS,
     classify_infra_exit,
     is_signal_death_code,
 )
 from autoskillit.execution.session._session_model import ClaudeSessionResult
-from tests.execution.conftest import CODEX_API_ERROR_SIGNAL_STRINGS
+from tests.execution.conftest import (
+    CODEX_API_ERROR_SIGNAL_STRINGS,
+    CODEX_OBSERVED_PROVIDER_FAILURE_CASES,
+)
+from tests.fixtures.codex import fixture_path
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 _CAPS = CLAUDE_CODE_CAPABILITIES
+_MODEL_CAPACITY_MESSAGE = "Selected model is at capacity. Please try a different model."
 
 # CODEX signals that do NOT match rate-limit patterns (must still classify as API_ERROR).
 _NON_RATE_LIMIT_CODEX_SIGNALS: tuple[str, ...] = tuple(
@@ -395,6 +401,140 @@ class TestContextExhaustionCapabilityGate:
             == InfraExitCategory.CONTEXT_EXHAUSTED
         )
 
+
+class TestModelCapacityClassification:
+    @pytest.mark.parametrize(
+        "message",
+        [_MODEL_CAPACITY_MESSAGE, _MODEL_CAPACITY_MESSAGE.swapcase()],
+        ids=["exact", "case-insensitive"],
+    )
+    def test_enabled_capability_matches_exact_error(self, message: str) -> None:
+        session = ClaudeSessionResult(
+            subtype=CliSubtype.EMPTY_OUTPUT,
+            is_error=True,
+            result="",
+            session_id="s1",
+            errors=[message],
+        )
+        caps = BackendCapabilities(supports_model_capacity_error_detection=True)
+
+        assert (
+            classify_infra_exit(session, _sr(returncode=1), capabilities=caps)
+            == InfraExitCategory.API_ERROR
+        )
+
+    def test_enabled_capability_matches_individual_stderr_line(self) -> None:
+        session = ClaudeSessionResult(
+            subtype=CliSubtype.EMPTY_OUTPUT,
+            is_error=True,
+            result="",
+            session_id="s1",
+        )
+        result = _sr(returncode=1, stderr=f"diagnostic\n  {_MODEL_CAPACITY_MESSAGE}  \nfooter")
+        caps = BackendCapabilities(supports_model_capacity_error_detection=True)
+
+        assert (
+            classify_infra_exit(session, result, capabilities=caps) == InfraExitCategory.API_ERROR
+        )
+
+    @pytest.mark.parametrize(
+        "assistant_messages,result_text",
+        [([_MODEL_CAPACITY_MESSAGE], ""), ([], _MODEL_CAPACITY_MESSAGE)],
+        ids=["assistant-messages", "result"],
+    )
+    def test_non_error_prose_does_not_supply_capacity_evidence(
+        self,
+        assistant_messages: list[str],
+        result_text: str,
+    ) -> None:
+        session = ClaudeSessionResult(
+            subtype=CliSubtype.EMPTY_OUTPUT,
+            is_error=True,
+            result=result_text,
+            session_id="s1",
+            assistant_messages=assistant_messages,
+        )
+        caps = BackendCapabilities(supports_model_capacity_error_detection=True)
+
+        assert (
+            classify_infra_exit(session, _sr(returncode=1), capabilities=caps)
+            == InfraExitCategory.COMPLETED
+        )
+
+    def test_disabled_capability_ignores_error_and_stderr_evidence(self) -> None:
+        session = ClaudeSessionResult(
+            subtype=CliSubtype.EMPTY_OUTPUT,
+            is_error=True,
+            result="",
+            session_id="s1",
+            errors=[_MODEL_CAPACITY_MESSAGE],
+        )
+        result = _sr(returncode=1, stderr=_MODEL_CAPACITY_MESSAGE)
+
+        assert (
+            classify_infra_exit(session, result, capabilities=BackendCapabilities())
+            == InfraExitCategory.COMPLETED
+        )
+
+    @pytest.mark.parametrize(
+        "message",
+        [f"prefix {_MODEL_CAPACITY_MESSAGE}", "worker pool is at capacity"],
+    )
+    def test_surrounding_or_benign_capacity_text_does_not_match(self, message: str) -> None:
+        session = ClaudeSessionResult(
+            subtype=CliSubtype.EMPTY_OUTPUT,
+            is_error=True,
+            result="",
+            session_id="s1",
+            errors=[message],
+        )
+        caps = BackendCapabilities(supports_model_capacity_error_detection=True)
+
+        assert (
+            classify_infra_exit(session, _sr(returncode=1), capabilities=caps)
+            == InfraExitCategory.COMPLETED
+        )
+
+    @pytest.mark.parametrize(
+        "event_type,fixture_name,expected_category,_expected_retry_reason",
+        CODEX_OBSERVED_PROVIDER_FAILURE_CASES,
+        ids=[case[0] for case in CODEX_OBSERVED_PROVIDER_FAILURE_CASES],
+    )
+    def test_observed_provider_fixture_classifies_from_parser_evidence(
+        self,
+        event_type: str,
+        fixture_name: str,
+        expected_category: InfraExitCategory,
+        _expected_retry_reason: RetryReason,
+    ) -> None:
+        payload = fixture_path(fixture_name).read_text()
+        assert json.loads(payload.splitlines()[-1])["type"] == event_type
+        session = _adapt_agent_result(CodexResultParser().parse_stdout(payload, exit_code=1))
+
+        assert (
+            classify_infra_exit(
+                session,
+                _sr(returncode=1),
+                capabilities=CodexBackend().capabilities,
+            )
+            == expected_category
+        )
+
+    def test_unrelated_flat_error_remains_terminal(self) -> None:
+        payload = json.dumps({"type": "error", "message": "permission denied"})
+        session = _adapt_agent_result(CodexResultParser().parse_stdout(payload, exit_code=1))
+
+        assert (
+            classify_infra_exit(
+                session,
+                _sr(returncode=1),
+                capabilities=CodexBackend().capabilities,
+            )
+            == InfraExitCategory.COMPLETED
+        )
+
+
+class TestContextExhaustionCapabilityStderrGate:
     def test_capability_false_suppresses_context_exhausted_via_stderr(self):
         """capability=False + Codex stderr pattern → NOT CONTEXT_EXHAUSTED."""
         caps = BackendCapabilities(supports_context_exhaustion_detection=False)
@@ -671,8 +811,3 @@ def test_positive_signal_death_codes_classified_as_process_killed(returncode: in
 def test_is_signal_death_code_boundary_cases(returncode: int, expected: bool) -> None:
     """is_signal_death_code boundary cases (Test 1B)."""
     assert is_signal_death_code(returncode) is expected
-
-
-def test_codex_api_error_patterns_count() -> None:
-    """Structural test: _CODEX_API_ERROR_PATTERNS has exactly 4 entries."""
-    assert len(_CODEX_API_ERROR_PATTERNS) == 4

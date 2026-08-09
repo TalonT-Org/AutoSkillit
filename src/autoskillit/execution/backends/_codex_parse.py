@@ -305,6 +305,12 @@ def _scan_codex_ndjson(stdout: str) -> _CodexParseAccumulator:
                 acc.last_usage = usage
             if not acc.saw_failure:
                 acc.success = True
+        elif event_type == CodexEventType.ERROR:
+            error_message = obj.get("message")
+            if isinstance(error_message, str):
+                acc.error_message = error_message
+                acc.saw_failure = True
+                acc.success = False
         elif event_type == CodexEventType.TURN_FAILED:
             error = obj.get("error", {})
             if isinstance(error, dict):

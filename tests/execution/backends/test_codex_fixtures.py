@@ -13,6 +13,7 @@ from autoskillit.execution.process import _marker_is_standalone
 from tests.fixtures.codex import (
     CODEX_FIXTURE_MIN_VERSION,
     CODEX_SCHEMA_VERSION,
+    FLAT_ERROR_MODEL_CAPACITY,
     HAPPY_PATH_SINGLE_TURN,
     HAPPY_PATH_V0136,
     LARGE_EMBEDDED_PAYLOAD_V1,
@@ -21,6 +22,7 @@ from tests.fixtures.codex import (
     SESSION_WITH_MCP_TOOL_CALL,
     SESSION_WITH_REASONING,
     TURN_FAILED_ERROR,
+    TURN_FAILED_MODEL_CAPACITY,
     fixture_path,
 )
 from tests.fixtures.codex import (
@@ -30,11 +32,13 @@ from tests.fixtures.codex import (
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 ALL_FIXTURE_NAMES = [
+    FLAT_ERROR_MODEL_CAPACITY,
     HAPPY_PATH_SINGLE_TURN,
     HAPPY_PATH_V0136,
     MARKER_DETECTION_V0136,
     MULTI_TURN_WITH_COMPACTION,
     TURN_FAILED_ERROR,
+    TURN_FAILED_MODEL_CAPACITY,
     SESSION_WITH_REASONING,
     SESSION_WITH_MCP_TOOL_CALL,
 ]
@@ -59,7 +63,7 @@ class TestCodexFixturePackage:
             assert fixture_path(name).is_file()
 
     def test_all_exports_count(self) -> None:
-        assert len(CODEX_ALL) == 11
+        assert len(CODEX_ALL) == 13
 
     def test_large_embedded_payload_is_realistic_jsonl_data(self) -> None:
         path = fixture_path(LARGE_EMBEDDED_PAYLOAD_V1)

@@ -1,0 +1,3 @@
+{"type":"thread.started","thread_id":"thread_capacity_flat_error"}
+{"type":"turn.started"}
+{"type":"error","message":"Selected model is at capacity. Please try a different model."}

@@ -35,6 +35,10 @@ def _turn_failed_code_line(code: str, message: str) -> str:
     return json.dumps({"type": "turn.failed", "error": {"message": message, "code": code}})
 
 
+def _flat_error_line(message: object) -> str:
+    return json.dumps({"type": "error", "message": message})
+
+
 def _item_completed_message_line(text: str) -> str:
     return json.dumps(
         {
@@ -217,6 +221,19 @@ class TestCodexResultParserStdout:
         result = parser.parse_stdout(ndjson)
         assert result.raw["subtype"] == "error_during_execution"
         assert result.success is False
+
+    def test_parse_stdout_flat_error_preserves_message(self) -> None:
+        result = CodexResultParser().parse_stdout(_flat_error_line("something broke"))
+
+        assert result.success is False
+        assert result.raw["subtype"] == "error_during_execution"
+        assert result.error == "something broke"
+
+    def test_parse_stdout_flat_error_non_string_message_is_unparseable(self) -> None:
+        result = CodexResultParser().parse_stdout(_flat_error_line({"detail": "bad"}))
+
+        assert result.success is False
+        assert result.raw["subtype"] == "unparseable"
 
     def test_parse_stdout_unparseable_returns_unparseable(self) -> None:
         parser = CodexResultParser()

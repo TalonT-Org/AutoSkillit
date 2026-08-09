@@ -96,6 +96,7 @@ def test_backend_capabilities_field_count():
         "food_truck_capable",
         "triage_capable",
         "supports_context_exhaustion_detection",
+        "supports_model_capacity_error_detection",
         "supports_tool_list_changed",
         "replay_capable",
         "record_capable",
@@ -157,6 +158,7 @@ def test_backend_capabilities_field_names_locked():
         "session_record_types",
         "triage_capable",
         "supports_context_exhaustion_detection",
+        "supports_model_capacity_error_detection",
         "required_skill_fields",
         "required_session_files",
         "session_dir_symlinks",
@@ -213,6 +215,7 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.session_record_types == frozenset({"assistant"})
     assert CLAUDE_CODE_CAPABILITIES.triage_capable is True
     assert CLAUDE_CODE_CAPABILITIES.supports_context_exhaustion_detection is True
+    assert CLAUDE_CODE_CAPABILITIES.supports_model_capacity_error_detection is False
     assert CLAUDE_CODE_CAPABILITIES.required_skill_fields == frozenset({"name", "description"})
     assert CLAUDE_CODE_CAPABILITIES.required_session_files == frozenset()
     assert CLAUDE_CODE_CAPABILITIES.session_dir_symlinks == frozenset()

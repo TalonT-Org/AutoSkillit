@@ -397,20 +397,14 @@ def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
     ctx = _get_ctx()
     try:
         overlay = read_overlay(ctx.project_dir)
-    except OverlayStateError as exc:
+    except (OSError, OverlayStateError) as exc:
+        storage_error = isinstance(exc, OSError)
+        error_kind = "Unable to read" if storage_error else "Invalid"
         return json.dumps(
             deny_envelope(
-                f"{INGREDIENT_LOCK_DENY_PREFIX}: Invalid persisted lock state: {exc}",
+                f"{INGREDIENT_LOCK_DENY_PREFIX}: {error_kind} persisted lock state: {exc}",
                 stage="preflight:ingredient_locks",
-                retriable=False,
-            )
-        )
-    except OSError as exc:
-        return json.dumps(
-            deny_envelope(
-                f"{INGREDIENT_LOCK_DENY_PREFIX}: Unable to read persisted lock state: {exc}",
-                stage="preflight:ingredient_locks",
-                retriable=True,
+                retriable=storage_error,
             )
         )
 

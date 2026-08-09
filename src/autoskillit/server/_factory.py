@@ -416,7 +416,7 @@ def make_context(
         temp_dir=temp_dir,
         project_dir=project_dir,
         plugin_retirement_coordinator=plugin_retirement_coordinator,
-        tester=DefaultTestRunner(config=config, runner=runner) if runner is not None else None,
+        tester=None,
         recipes=DefaultRecipeRepository(),
         db_reader=DefaultDatabaseReader(),
         workspace_mgr=DefaultWorkspaceManager(),
@@ -450,6 +450,8 @@ def make_context(
             )
         ),
     )
+    if runner is not None:
+        ctx.tester = DefaultTestRunner(config=ctx.config, runner=runner)
 
     def _resolve_output_patterns(skill_command: str) -> list[str]:
         name = resolve_skill_name(skill_command)

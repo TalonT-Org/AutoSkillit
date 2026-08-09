@@ -18,6 +18,23 @@ def _make_step_mock(skip_when_false: str | None = None) -> MagicMock:
     return step
 
 
+def test_invalid_persisted_lock_state_returns_controlled_deny(
+    tool_ctx_kitchen_open, tmp_path
+) -> None:
+    from autoskillit.server.tools.tools_execution import _check_ingredient_locks
+
+    temp_dir = tmp_path / ".autoskillit" / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    (temp_dir / ".hook_config_overlay.json").write_text("{ malformed")
+    tool_ctx_kitchen_open.project_dir = tmp_path
+
+    result = json.loads(_check_ingredient_locks("investigate", "pipeline-1") or "{}")
+
+    assert result["success"] is False
+    assert result["stage"] == "preflight:ingredient_locks"
+    assert "Invalid persisted lock state" in result["error"]
+
+
 class TestRunSkillDeniesLockedStep:
     """Test 6: run_skill denies locked step."""
 

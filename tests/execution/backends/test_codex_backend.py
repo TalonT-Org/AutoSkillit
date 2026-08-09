@@ -1097,6 +1097,15 @@ class TestCodexBuildFoodTruckCmd:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
         assert spec.env["CODEX_HOME"] == "/pkg"
 
+    def test_food_truck_forwards_explicit_inspector_model(self) -> None:
+        from autoskillit.core import FLEET_INSPECTOR_MODEL_ENV_VAR
+
+        spec = CodexBackend().build_food_truck_cmd(
+            **self.BASE,
+            env_extras={FLEET_INSPECTOR_MODEL_ENV_VAR: "configured-inspector"},
+        )
+        assert spec.env[FLEET_INSPECTOR_MODEL_ENV_VAR] == "configured-inspector"
+
     def test_mcp_tools_only_prompt_reinforcement(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
         assert "ORCHESTRATION DIRECTIVE" in spec.cmd[-1]

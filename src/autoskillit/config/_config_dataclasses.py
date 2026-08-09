@@ -114,6 +114,16 @@ class RunSkillConfig:
     _EXIT_GRACE_BUFFER_MS: ClassVar[int] = 500
 
     def __post_init__(self) -> None:
+        if self.timeout <= 0:
+            raise ValueError(f"timeout={self.timeout} must be > 0.")
+        if self.stale_threshold < 0:
+            raise ValueError(f"stale_threshold={self.stale_threshold} must be >= 0.")
+        if self.idle_output_timeout < 0:
+            raise ValueError(f"idle_output_timeout={self.idle_output_timeout} must be >= 0.")
+        if self.max_suppression_seconds < 0:
+            raise ValueError(
+                f"max_suppression_seconds={self.max_suppression_seconds} must be >= 0."
+            )
         if self.mcp_tool_timeout_sec <= 0:
             raise ValueError(f"mcp_tool_timeout_sec={self.mcp_tool_timeout_sec} must be > 0.")
         if self.stream_idle_timeout_ms < 0:

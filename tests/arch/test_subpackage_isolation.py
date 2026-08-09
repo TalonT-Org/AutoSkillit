@@ -995,12 +995,13 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +kitchen transition authority
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
         "recipe/rules": 57,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing +rules_note_shape_contradiction  # noqa: E501
-        "server/tools": 34,  # noqa: E501 # +tools_exploration read-only broker endpoints; +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
+        "server/tools": 35,  # noqa: E501 # +tools_exploration read-only broker endpoints; +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
         # auto-init dependency tracker + REVIEW_BEFORE_PLAN ordering telemetry)
         # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate
         # for direct headless executor callers — report_bug, prepare_issue, enrich_issues)
         # +tools_audit_artifacts.py (typed audit semantic/disposition producers, #4419;
         # replaces the retired generic audit-cycle writer)
+        # +_overlay_state.py (single locked, validated session-overlay boundary)
         "hooks/guards": 33,  # +github_mutation_guard (#4432)
         # Three private Codex ownership modules keep lock, prelaunch transaction,
         # and per-attempt storage concerns out of the public backend gateway:
@@ -1260,7 +1261,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "run_skill launch denial paths before command construction (+139 net lines)",
     ),
     "execution/backends/codex.py": (
-        2383,
+        2388,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1281,6 +1282,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "materialization into Codex session directories"
         "; debug-level symlink failure log in _materialize_profile_skills (+5 net lines)"
         "; env-assembly consolidation via _assemble_shared_env_extras (T5-P4-A1-WP2)"
+        "; fleet inspector child-boundary defaults across Codex command builders (+5 net lines)"
         "; explicit parameter dispositions for "
         "plugin_source/output_format/exit_after_stop_delay_ms "
         "replacing noqa:F841 silent discards (+18 net lines) for T5-P4-A2-WP1"
@@ -1669,6 +1671,8 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "temp_dir",
         "project_dir",
         "ephemeral_root",
+        "_baseline_config",
+        "_session_config_overrides",
     }
     violations: list[str] = []
 

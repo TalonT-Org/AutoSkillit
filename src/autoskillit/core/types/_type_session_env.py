@@ -4,7 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__all__ = ["FleetSessionEnv"]
+__all__ = ["FleetSessionEnv", "select_child_session_deadline"]
+
+
+def select_child_session_deadline(local_deadline: float, inherited_deadline: str) -> str:
+    """Select an inherited positive deadline or the caller's local deadline."""
+    try:
+        if inherited_deadline and float(inherited_deadline) > 0:
+            return inherited_deadline
+    except ValueError:
+        pass
+    return str(int(local_deadline))
 
 
 @dataclass(frozen=True, slots=True)

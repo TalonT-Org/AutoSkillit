@@ -7,7 +7,6 @@ import dataclasses
 import hashlib
 import json
 import os
-import time
 import types
 import typing
 import uuid
@@ -45,6 +44,7 @@ from autoskillit.core import (
     is_git_worktree,
     resolve_general_output_token_limit,
     resolve_temp_dir,
+    select_child_session_deadline,
     spill_output,
 )
 from autoskillit.execution import CaptureReadError, SkillSessionContract, summarize_capture
@@ -60,7 +60,7 @@ from autoskillit.recipe import (
     SuccessQualifierEntry,
     select_audit_output_contract,
 )
-from autoskillit.server._misc import SkillProjectionContext, _hook_config_overlay_path
+from autoskillit.server._misc import SkillProjectionContext
 from autoskillit.server._response_budget import shape_json_response
 from autoskillit.server.tools._types import deny_envelope
 from autoskillit.workspace import (
@@ -1031,38 +1031,13 @@ def server_injected_run_python_args(
 
 
 def propagate_session_deadline(
-    project_dir: Path, provider_extras: dict[str, str] | None
-) -> dict[str, str] | None:
-    """Propagate AUTOSKILLIT_SESSION_DEADLINE from the order overlay to L1 sessions.
-
-    Fleet/food-truck sessions inherit the deadline via env_extras from fleet/_api.py;
-    interactive "order" sessions must compute it here. The overlay is read directly
-    (mirrors `_check_ingredient_locks`) — do NOT use `_build_config_snapshot`, which
-    collapses explicit timeouts to the RunSkillConfig default of 7200.
-
-    Mutates `provider_extras` in place (creating it if None) and returns it.
-    Failures are swallowed silently (malformed overlay -> skip).
-    """
-    try:
-        overlay_path = _hook_config_overlay_path(project_dir)
-        if not overlay_path.exists():
-            return provider_extras
-        overlay = json.loads(overlay_path.read_text())
-        order_section = overlay.get("order", {})
-        if "timeout" not in order_section:
-            return provider_extras
-        existing_deadline = os.environ.get("AUTOSKILLIT_SESSION_DEADLINE")
-        if existing_deadline:
-            # Fleet session: preserve inherited deadline unchanged.
-            deadline_str = existing_deadline
-        else:
-            # Order session: compute and cache deadline in process env.
-            deadline = time.time() + int(order_section["timeout"])
-            deadline_str = str(int(deadline))
-            os.environ["AUTOSKILLIT_SESSION_DEADLINE"] = deadline_str
-        if provider_extras is None:
-            provider_extras = {}
-        provider_extras["AUTOSKILLIT_SESSION_DEADLINE"] = deadline_str
-    except (json.JSONDecodeError, OSError, ValueError, TypeError):
-        pass  # malformed overlay — skip silently
-    return provider_extras
+    local_deadline: float,
+    provider_extras: dict[str, str] | None,
+) -> dict[str, str]:
+    """Select a child-only deadline without mutating the server environment."""
+    extras = provider_extras if provider_extras is not None else {}
+    extras["AUTOSKILLIT_SESSION_DEADLINE"] = select_child_session_deadline(
+        local_deadline,
+        os.environ.get("AUTOSKILLIT_SESSION_DEADLINE", ""),
+    )
+    return extras

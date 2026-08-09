@@ -38,6 +38,17 @@ def _write_hook_config(tmp_path: Path, quota_guard: dict) -> None:
     hook_cfg.write_text(json.dumps({"quota_guard": quota_guard}))
 
 
+@pytest.mark.parametrize("overlay", ([], {"order": []}, {"quota_guard": []}))
+def test_hook_bridge_rejects_invalid_overlay_shapes(tmp_path: Path, overlay: object) -> None:
+    from autoskillit.hooks._hook_settings import read_merged_hook_config
+
+    _write_hook_config(tmp_path, {"disabled": False})
+    overlay_path = tmp_path / ".autoskillit" / "temp" / ".hook_config_overlay.json"
+    overlay_path.write_text(json.dumps(overlay))
+
+    assert read_merged_hook_config(tmp_path) == {}
+
+
 def _write_blocking_cache(cache_path: Path, *, fetched_at: str | None = None) -> None:
     """Write a quota cache with should_block=True. No resets_at → sleep = buffer_seconds."""
     payload = {

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core import FleetSessionEnv
+from autoskillit.core import FleetSessionEnv, select_child_session_deadline
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
@@ -71,3 +71,11 @@ def test_fleet_session_env_rejects_cli_display_label() -> None:
             fleet_mode="dispatch",
             project_dir="/tmp/test",
         )
+
+
+@pytest.mark.parametrize(
+    ("inherited", "expected"),
+    (("1700000000", "1700000000"), ("", "1234"), ("invalid", "1234"), ("0", "1234")),
+)
+def test_select_child_session_deadline(inherited: str, expected: str) -> None:
+    assert select_child_session_deadline(1234.9, inherited) == expected

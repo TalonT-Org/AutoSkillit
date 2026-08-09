@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from pathlib import Path
 
 import anyio
@@ -380,7 +381,7 @@ async def _noop_quota_refresher(config, **kwargs) -> None:
     pass
 
 
-async def _run(tool_ctx, recipe="test-recipe", ingredients=None):
+async def _run(tool_ctx, recipe="test-recipe", ingredients=None, timeout_sec=None):
     from autoskillit.fleet._api import execute_dispatch
 
     result = await execute_dispatch(
@@ -389,7 +390,7 @@ async def _run(tool_ctx, recipe="test-recipe", ingredients=None):
         task="t",
         ingredients=ingredients,
         dispatch_name=None,
-        timeout_sec=None,
+        timeout_sec=timeout_sec,
         prompt_builder=lambda **kwargs: f"prompt-for-{kwargs.get('recipe', 'unknown')}",
         quota_checker=_no_sleep_quota_checker,
         quota_refresher=_noop_quota_refresher,
@@ -724,6 +725,101 @@ class TestResolveDispatchTimeout:
 
         result = resolve_dispatch_timeout(0, default_timeout_sec=3600)
         assert result == 0.0
+
+
+class TestEffectiveDispatchConfig:
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(("timeout_sec", "expected_timeout"), ((None, 17.0), (9, 9.0)))
+    async def test_configured_child_values_and_explicit_timeout_precedence(
+        self,
+        tool_ctx,
+        monkeypatch,
+        timeout_sec,
+        expected_timeout,
+    ) -> None:
+        from autoskillit.core import FLEET_INSPECTOR_MODEL_ENV_VAR
+        from autoskillit.server import _state
+        from autoskillit.server.tools.tools_config import configure_fleet
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        tool_ctx.gate.enabled = True
+        hook_path = tool_ctx.project_dir / ".autoskillit" / "temp" / ".hook_config.json"
+        hook_path.parent.mkdir(parents=True, exist_ok=True)
+        hook_path.write_text("{}")
+        monkeypatch.setattr(_state, "_ctx", tool_ctx)
+
+        configured = json.loads(
+            await configure_fleet(
+                default_timeout_sec=17,
+                inspector_model="configured-inspector",
+            )
+        )
+        assert configured["success"] is True
+
+        started = time.time()
+        await _run(tool_ctx, timeout_sec=timeout_sec)
+
+        call = tool_ctx.executor.dispatch_calls[0]
+        assert call.timeout == expected_timeout
+        assert call.env_extras is not None
+        assert call.env_extras[FLEET_INSPECTOR_MODEL_ENV_VAR] == "configured-inspector"
+        deadline = float(call.env_extras["AUTOSKILLIT_SESSION_DEADLINE"])
+        assert started + expected_timeout - 2 <= deadline <= started + expected_timeout + 2
+
+    @pytest.mark.anyio
+    async def test_configured_inspector_reaches_child_executor(
+        self,
+        tool_ctx,
+        tool_ctx_kitchen_open,
+        monkeypatch,
+    ) -> None:
+        from autoskillit.core import DISPATCH_ID_ENV_VAR, FLEET_INSPECTOR_MODEL_ENV_VAR
+        from autoskillit.server import _state
+        from autoskillit.server.tools.tools_config import configure_fleet
+        from autoskillit.server.tools.tools_execution import run_skill
+        from tests.fakes import InMemoryHeadlessExecutor
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+        tool_ctx.gate.enabled = True
+        hook_path = tool_ctx.project_dir / ".autoskillit" / "temp" / ".hook_config.json"
+        hook_path.parent.mkdir(parents=True, exist_ok=True)
+        hook_path.write_text("{}")
+        monkeypatch.setattr(_state, "_ctx", tool_ctx)
+        configured = json.loads(await configure_fleet(inspector_model="configured-inspector"))
+        assert configured["success"] is True
+
+        await _run(tool_ctx)
+        parent_extras = tool_ctx.executor.dispatch_calls[0].env_extras
+        assert parent_extras is not None
+        monkeypatch.setenv(DISPATCH_ID_ENV_VAR, parent_extras[DISPATCH_ID_ENV_VAR])
+        monkeypatch.setenv(
+            FLEET_INSPECTOR_MODEL_ENV_VAR,
+            parent_extras[FLEET_INSPECTOR_MODEL_ENV_VAR],
+        )
+
+        child_executor = InMemoryHeadlessExecutor()
+        tool_ctx_kitchen_open.executor = child_executor
+        monkeypatch.setattr(_state, "_ctx", tool_ctx_kitchen_open)
+        await run_skill("/test skill", str(tool_ctx_kitchen_open.project_dir))
+
+        assert child_executor.calls[0].inspector_eligible is True
+        assert child_executor.calls[0].inspector_model == "configured-inspector"
+
+    @pytest.mark.anyio
+    async def test_inherited_deadline_wins_for_fleet_child(
+        self,
+        tool_ctx,
+        monkeypatch,
+    ) -> None:
+        inherited = "1700000000"
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_DEADLINE", inherited)
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        await _run(tool_ctx, timeout_sec=9)
+
+        call = tool_ctx.executor.dispatch_calls[0]
+        assert call.env_extras is not None
+        assert call.env_extras["AUTOSKILLIT_SESSION_DEADLINE"] == inherited
 
 
 class TestCancelledErrorRecordsInterruptedState:

@@ -122,15 +122,16 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # primitive instead of startup drift detection (co-owned with Claude plugin system;
     # same rationale and format as the _lifespan.py site above)
     ("src/autoskillit/workspace/_projected_artifact/_hook_repair.py", 178),
-    # tools_kitchen.py — hook config, quota guard, git_ops_policy, ingredient locks overlay
-    ("src/autoskillit/server/tools/tools_kitchen.py", 540),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 559),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 593),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 1929),
+    # tools_kitchen.py — hook config, quota guard, and git_ops_policy
+    ("src/autoskillit/server/tools/tools_kitchen.py", 546),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 565),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 597),
+    # _overlay_state.py — session-scoped hook config overlay (not schema-versioned)
+    ("src/autoskillit/server/tools/_overlay_state.py", 127),
     # tools_pipeline_tracker.py — tracker_data dict (init) and mark_step_complete write
     # (same tracker file schema as init — not a new format, grandfathered alongside it)
-    ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 256),
-    ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 402),
+    ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 253),
+    ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 399),
     # tools_status.py — mcp_data dict
     ("src/autoskillit/server/tools/tools_status.py", 536),
     # tools_github.py — bug report dict (non-blocking report-bug status file)
@@ -139,8 +140,6 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/cli/_hooks.py", 26),
     # _installed_plugins.py — installed_plugins.json (co-owned with Claude plugin system)
     ("src/autoskillit/cli/_installed_plugins.py", 81),
-    # tools_config.py — hook config overlay dict (session-scoped, not schema-versioned)
-    ("src/autoskillit/server/tools/tools_config.py", 50),
     # _update_checks.py — dismissal state file
     ("src/autoskillit/cli/update/_update_checks.py", 82),
     # _update_checks_fetch.py — fetch cache (extracted from _update_checks.py)

@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 from autoskillit.core import (
     CODEX_SESSIONS_SUBDIR,
     DISPATCH_ID_ENV_VAR,
+    FLEET_INSPECTOR_MODEL_ENV_VAR,
     RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE,
     RECIPE_EXECUTION_INACTIVE_MESSAGE,
     SKILL_COMMAND_DISPLAY_MAX,
@@ -110,7 +111,6 @@ from autoskillit.server._guards import (
 from autoskillit.server._misc import (
     SCENARIO_STEP_NAME_ENV,
     SkillProjectionContext,
-    _hook_config_overlay_path,
     resolve_closure_write_dirs,
 )
 from autoskillit.server._notify import _notify, track_response_size
@@ -192,6 +192,7 @@ from autoskillit.server.tools._native_shell_capture import (
     prepare_skill_native_shell_lineage,
     rebind_verified_final_session,
 )
+from autoskillit.server.tools._overlay_state import OverlayStateError, read_overlay
 from autoskillit.server.tools._types import ToolFailureEnvelope, deny_envelope
 
 logger = get_logger(__name__)
@@ -394,13 +395,16 @@ def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
     from autoskillit.server import _get_ctx  # circular-break
 
     ctx = _get_ctx()
-    overlay_path = _hook_config_overlay_path(ctx.project_dir)
-    if not overlay_path.exists():
-        return None
     try:
-        overlay = json.loads(overlay_path.read_text())
-    except (json.JSONDecodeError, OSError):
-        return None
+        overlay = read_overlay(ctx.project_dir)
+    except (OSError, OverlayStateError) as exc:
+        return json.dumps(
+            deny_envelope(
+                f"{INGREDIENT_LOCK_DENY_PREFIX}: Invalid persisted lock state: {exc}",
+                stage="preflight:ingredient_locks",
+                retriable=False,
+            )
+        )
 
     locked_steps = overlay.get("locked_steps", {})
     effective_oid = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
@@ -494,12 +498,9 @@ def _has_active_locks(order_id: str) -> bool:
     from autoskillit.server import _get_ctx  # circular-break
 
     ctx = _get_ctx()
-    overlay_path = _hook_config_overlay_path(ctx.project_dir)
-    if not overlay_path.exists():
-        return False
     try:
-        overlay = json.loads(overlay_path.read_text())
-    except (json.JSONDecodeError, OSError):
+        overlay = read_overlay(ctx.project_dir)
+    except (OSError, OverlayStateError):
         return False
     locked_steps = overlay.get("locked_steps", {})
     if not locked_steps:
@@ -1524,7 +1525,11 @@ async def run_skill(
 
             _cfg = _get_config()
             _in_fleet_dispatch = bool(os.environ.get(DISPATCH_ID_ENV_VAR))
-            _inspector_model = _cfg.fleet.inspector_model if _in_fleet_dispatch else ""
+            _inspector_model = (
+                os.environ.get(FLEET_INSPECTOR_MODEL_ENV_VAR) or _cfg.fleet.inspector_model
+                if _in_fleet_dispatch
+                else ""
+            )
 
             # step_provider's execution-tuning fallback lives here (pre-gate,
             # profile-interplay semantics) rather than in the post-gate
@@ -2129,7 +2134,10 @@ async def run_skill(
             _orchestrator_sid = find_caller_session_id(project_dir=tool_ctx.project_dir)
 
             # Propagate AUTOSKILLIT_SESSION_DEADLINE to L1 sessions.
-            provider_extras = propagate_session_deadline(tool_ctx.project_dir, provider_extras)
+            provider_extras = propagate_session_deadline(
+                time.time() + _cfg.run_skill.timeout,
+                provider_extras,
+            )
 
             def _observe_contract_session_id(candidate_session_id: str) -> None:
                 contract_lifecycle.observe_candidate(candidate_session_id)

@@ -9,6 +9,14 @@ from autoskillit.server.tools.tools_execution import run_skill
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
+def _provider_specific_extras(captured: dict) -> dict[str, str] | None:
+    extras = captured.get("provider_extras") or {}
+    provider_extras = {
+        key: value for key, value in extras.items() if key != "AUTOSKILLIT_SESSION_DEADLINE"
+    }
+    return provider_extras or None
+
+
 @pytest.mark.anyio
 async def test_run_skill_provider_extras_none_when_feature_disabled(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
@@ -32,7 +40,7 @@ async def test_run_skill_provider_extras_none_when_feature_disabled(
 
     await run_skill("/autoskillit:probe", str(tmp_path))
 
-    assert captured.get("provider_extras") is None
+    assert _provider_specific_extras(captured) is None
     assert captured.get("profile_name") == ""
 
 
@@ -63,7 +71,7 @@ async def test_run_skill_provider_extras_none_for_anthropic_sentinel(
 
     await run_skill("/autoskillit:probe", str(tmp_path))
 
-    assert captured.get("provider_extras") is None
+    assert _provider_specific_extras(captured) is None
     assert captured.get("profile_name") == ""
 
 
@@ -94,7 +102,7 @@ async def test_run_skill_provider_extras_forwarded_for_non_anthropic(
 
     await run_skill("/autoskillit:probe", str(tmp_path))
 
-    assert captured.get("provider_extras") == {"AWS_REGION": "us-east-1"}
+    assert _provider_specific_extras(captured) == {"AWS_REGION": "us-east-1"}
     assert captured.get("profile_name") == "bedrock"
     assert captured.get("provider_name") == "bedrock"
 
@@ -131,7 +139,7 @@ async def test_run_skill_model_as_profile_resolves_provider(
     await run_skill("/autoskillit:probe", str(tmp_path))
 
     assert captured.get("model") == "M2.7"
-    assert captured.get("provider_extras") == {"BASE_URL": "https://api.minimax.chat/v1"}
+    assert _provider_specific_extras(captured) == {"BASE_URL": "https://api.minimax.chat/v1"}
     assert captured.get("profile_name") == "minimax"
     assert captured.get("provider_name") == "minimax"
 
@@ -168,7 +176,7 @@ async def test_run_skill_step_overrides_win_over_model_as_profile(
 
     await run_skill("/autoskillit:probe", str(tmp_path), model="minimax")
 
-    assert captured.get("provider_extras") == {"AWS_REGION": "us-east-1"}
+    assert _provider_specific_extras(captured) == {"AWS_REGION": "us-east-1"}
     assert captured.get("profile_name") == "bedrock"
     assert not map_called
 
@@ -197,7 +205,7 @@ async def test_run_skill_model_as_profile_disabled_when_feature_off(
     await run_skill("/autoskillit:probe", str(tmp_path), model="minimax")
 
     assert captured.get("model") == "minimax"
-    assert captured.get("provider_extras") is None
+    assert _provider_specific_extras(captured) is None
 
 
 @pytest.mark.anyio
@@ -232,7 +240,7 @@ async def test_run_skill_model_as_profile_no_anthropic_model_falls_through(
     await run_skill("/autoskillit:probe", str(tmp_path))
 
     assert captured.get("model") == ""
-    assert captured.get("provider_extras") is None
+    assert _provider_specific_extras(captured) is None
 
 
 @pytest.mark.anyio
@@ -447,7 +455,7 @@ async def test_run_skill_no_provider_profile_injected_for_default_step(
 
     await run_skill("/autoskillit:probe", str(tmp_path), step_name="plan")
 
-    assert captured.get("provider_extras") is None
+    assert _provider_specific_extras(captured) is None
     assert captured.get("profile_name") == ""
 
 

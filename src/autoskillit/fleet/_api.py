@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
@@ -13,6 +14,7 @@ import anyio
 import psutil
 
 from autoskillit.core import (
+    FLEET_INSPECTOR_MODEL_ENV_VAR,
     BackendAuthority,
     BackendAuthorityKind,
     BackendAuthorityTier,
@@ -26,6 +28,7 @@ from autoskillit.core import (
     SkillResult,
     atomic_write,
     get_logger,
+    select_child_session_deadline,
 )
 from autoskillit.fleet._capture import _extract_captures, _normalize_capture_spec
 from autoskillit.fleet._checkpoint_bridge import (
@@ -1145,7 +1148,19 @@ async def _run_dispatch(
                         "AUTOSKILLIT_PROJECT_DIR": str(tool_ctx.project_dir),
                         "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
                         "AUTOSKILLIT_DISPATCH_ID": dispatch_id,
-                        "AUTOSKILLIT_SESSION_DEADLINE": str(started_at + resolved_timeout),
+                        "AUTOSKILLIT_SESSION_DEADLINE": select_child_session_deadline(
+                            started_at + resolved_timeout,
+                            os.environ.get("AUTOSKILLIT_SESSION_DEADLINE", ""),
+                        ),
+                        **(
+                            {
+                                FLEET_INSPECTOR_MODEL_ENV_VAR: (
+                                    tool_ctx.config.fleet.inspector_model
+                                )
+                            }
+                            if tool_ctx.config.fleet.inspector_model
+                            else {}
+                        ),
                     },
                     requires_packs=list(full_recipe.requires_packs) or ["kitchen-core"],
                     on_spawn=_on_spawn,

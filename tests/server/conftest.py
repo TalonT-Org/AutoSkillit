@@ -139,11 +139,12 @@ def _set_mock_kitchen_transition(ctx: MagicMock, *, kitchen_id: str = "") -> Non
     )
 
 
-def _make_mock_ctx() -> MagicMock:
+def _make_mock_ctx(config=None) -> MagicMock:
     """Return a minimal mock ToolContext with a gate."""
+    from copy import deepcopy
     from threading import RLock
 
-    from autoskillit.config import OutputBudgetConfig, QuotaGuardConfig
+    from autoskillit.config import AutomationConfig, OutputBudgetConfig, QuotaGuardConfig
     from autoskillit.core import InstallationVersion
     from autoskillit.pipeline import NoActiveRecipe
     from autoskillit.server._factory import make_recipe_execution
@@ -152,10 +153,16 @@ def _make_mock_ctx() -> MagicMock:
     gate.enabled = False
     ctx = MagicMock()
     ctx.gate = gate
-    ctx.project_dir = Path("/fake/project")
+    ctx.config = (
+        deepcopy(config) if config is not None else AutomationConfig(features={"fleet": True})
+    )
+    ctx._baseline_config = deepcopy(ctx.config)
+    ctx._session_config_overrides = {}
     ctx.temp_dir = (
         Path(__file__).resolve().parents[2] / ".autoskillit" / "temp" / "tests" / uuid4().hex
     )
+    ctx.project_dir = ctx.temp_dir / "project"
+    ctx.project_dir.mkdir(parents=True, exist_ok=True)
     ctx.kitchen_id = f"test-{uuid4().hex}"
     ctx.config.output_budget = OutputBudgetConfig()
     ctx.config.quota_guard = QuotaGuardConfig()

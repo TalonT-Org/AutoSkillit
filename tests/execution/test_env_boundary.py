@@ -182,6 +182,13 @@ def test_codex_mcp_env_forward_vars_parity_with_config_toml(tmp_path) -> None:
     )
 
 
+def test_fleet_inspector_model_is_scrubbed_then_explicitly_forwarded() -> None:
+    from autoskillit.core import FLEET_INSPECTOR_MODEL_ENV_VAR
+    from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+
+    assert FLEET_INSPECTOR_MODEL_ENV_VAR in _HEADLESS_EXCLUSIVE_VARS
+
+
 def test_ensure_codex_mcp_registered_includes_mcp_client_backend(tmp_path) -> None:
     """ensure_codex_mcp_registered must write MCP_CLIENT_BACKEND_ENV_VAR to env_vars."""
     import tomllib

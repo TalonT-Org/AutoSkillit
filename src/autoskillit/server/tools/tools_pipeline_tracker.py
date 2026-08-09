@@ -16,12 +16,12 @@ from autoskillit.core import DISPATCH_ID_ENV_VAR, atomic_write, get_logger
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import (
-    _hook_config_overlay_path,
     _pipeline_tracker_dir,
     _pipeline_tracker_path,
 )
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
+from autoskillit.server.tools._overlay_state import OverlayStateError, read_overlay
 from autoskillit.server.tools._types import deny_envelope
 
 logger = get_logger(__name__)
@@ -99,14 +99,12 @@ def resolve_tracker_order_id(
     return ResolvedTracker(order_id=effective_oid, path=tracker_path)
 
 
-def _resolve_skipped_steps(overlay_path: Path, pipeline_id: str) -> set[str]:
-    if not overlay_path.exists():
-        return set()
+def _resolve_skipped_steps(project_dir: Path, pipeline_id: str) -> set[str]:
     try:
-        overlay = json.loads(overlay_path.read_text())
+        overlay = read_overlay(project_dir)
         pid_locks = overlay.get("locked_steps", {}).get(pipeline_id, {})
         return {s for s, v in pid_locks.items() if v is False}
-    except (json.JSONDecodeError, OSError):
+    except (OSError, OverlayStateError):
         return set()
 
 
@@ -240,8 +238,7 @@ def _handle_init(
             }
         )
 
-    overlay_path = _hook_config_overlay_path(ctx.project_dir)  # type: ignore[attr-defined]
-    skipped = _resolve_skipped_steps(overlay_path, effective_pipeline_id)
+    skipped = _resolve_skipped_steps(ctx.project_dir, effective_pipeline_id)  # type: ignore[attr-defined]
     steps = _build_tracker_steps(active_steps, skipped)
 
     tracker_data = {

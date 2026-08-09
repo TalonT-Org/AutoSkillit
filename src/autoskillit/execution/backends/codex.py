@@ -40,6 +40,7 @@ from autoskillit.core import (
     CODEX_MODEL_ALIASES,
     CODEX_SESSIONS_SUBDIR,
     CODEX_STARTUP_TRACE_ENV_VAR,
+    FLEET_INSPECTOR_MODEL_ENV_VAR,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     MCP_CLIENT_BACKEND_ENV_VAR,
     NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
@@ -402,6 +403,7 @@ def _codex_exec_extras(
             "AUTOSKILLIT_SESSION_TYPE": session_type,
             AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CODEX,
             MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
+            FLEET_INSPECTOR_MODEL_ENV_VAR: "",
             FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
         }
     )
@@ -1673,6 +1675,7 @@ class CodexBackend(BackendCmdBuilderBase):
         extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CODEX
         extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
         extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
+        extras[FLEET_INSPECTOR_MODEL_ENV_VAR] = ""
         extras[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] = ""
         extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
         _merge_caller_env_extras(
@@ -1802,6 +1805,7 @@ class CodexBackend(BackendCmdBuilderBase):
         extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CODEX
         extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
         extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
+        extras[FLEET_INSPECTOR_MODEL_ENV_VAR] = ""
         extras[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] = ""
         if completion_marker:
             extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
@@ -1944,6 +1948,7 @@ class CodexBackend(BackendCmdBuilderBase):
                 AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
                 AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CODEX,
                 MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
+                FLEET_INSPECTOR_MODEL_ENV_VAR: "",
                 FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
             }
         )

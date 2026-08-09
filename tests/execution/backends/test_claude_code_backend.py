@@ -194,6 +194,15 @@ class TestClaudeCodeDynaconfBackendEnv:
         spec = ClaudeCodeBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
         assert spec.env["AUTOSKILLIT_AGENT_BACKEND__BACKEND"] == "claude-code"
 
+    def test_food_truck_forwards_explicit_inspector_model(self) -> None:
+        from autoskillit.core import FLEET_INSPECTOR_MODEL_ENV_VAR
+
+        spec = ClaudeCodeBackend().build_food_truck_cmd(
+            **self.FOOD_TRUCK_BASE,
+            env_extras={FLEET_INSPECTOR_MODEL_ENV_VAR: "configured-inspector"},
+        )
+        assert spec.env[FLEET_INSPECTOR_MODEL_ENV_VAR] == "configured-inspector"
+
 
 def test_headless_env_hardening_constant_exists() -> None:
     from autoskillit.execution.backends._claude_prompt import _HEADLESS_ENV_HARDENING

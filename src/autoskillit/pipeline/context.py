@@ -8,6 +8,7 @@ Replaces two mutable module-level singletons in server.py:
 from __future__ import annotations
 
 import threading
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -258,8 +259,16 @@ class ToolContext:
         repr=False,
     )
     exploration_context_store: ExplorationContextStoreProtocol[object] | None = field(default=None)
+    _baseline_config: AutomationConfig = field(init=False, repr=False)
+    _session_config_overrides: dict[str, dict[str, Any]] = field(
+        init=False,
+        default_factory=dict,
+        repr=False,
+    )
 
     def __post_init__(self) -> None:
+        self._baseline_config = deepcopy(self.config)
+        self.config = deepcopy(self.config)
         if self.launch_resolver is _MISSING:
             raise TypeError(
                 "launch_resolver must be supplied explicitly. "

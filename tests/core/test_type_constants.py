@@ -231,6 +231,18 @@ def test_session_deadline_in_private_env_vars() -> None:
     assert "AUTOSKILLIT_SESSION_DEADLINE" in AUTOSKILLIT_PRIVATE_ENV_VARS
 
 
+def test_fleet_inspector_model_crosses_only_declared_child_boundaries() -> None:
+    from autoskillit.core import (
+        AUTOSKILLIT_PRIVATE_ENV_VARS,
+        CODEX_MCP_ENV_FORWARD_VARS,
+        FLEET_INSPECTOR_MODEL_ENV_VAR,
+    )
+
+    assert FLEET_INSPECTOR_MODEL_ENV_VAR == "AUTOSKILLIT_FLEET_INSPECTOR_MODEL"
+    assert FLEET_INSPECTOR_MODEL_ENV_VAR in AUTOSKILLIT_PRIVATE_ENV_VARS
+    assert FLEET_INSPECTOR_MODEL_ENV_VAR in CODEX_MCP_ENV_FORWARD_VARS
+
+
 def test_campaign_id_env_var_and_kitchen_session_id_env_var_exported_from_core() -> None:
     """CAMPAIGN_ID_ENV_VAR and KITCHEN_SESSION_ID_ENV_VAR are re-exported from autoskillit.core."""
     from autoskillit.core import CAMPAIGN_ID_ENV_VAR, KITCHEN_SESSION_ID_ENV_VAR

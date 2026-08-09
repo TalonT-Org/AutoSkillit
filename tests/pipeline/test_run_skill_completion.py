@@ -26,23 +26,30 @@ def _begin(authority: DefaultRunSkillCompletionAuthority, *, session: str = "ses
 
 def test_parallel_invocations_publish_distinct_receipts() -> None:
     authority = DefaultRunSkillCompletionAuthority()
-    first = _begin(authority)
-    second = _begin(authority)
+    invocations_started = Barrier(2)
 
-    first_receipt = authority.draft(
-        first, classification="success", success=True, result_digest="one"
-    )
-    second_receipt = authority.draft(
-        second, classification="timeout", success=False, result_digest="two"
-    )
+    def publish(classification: str, success: bool, digest: str):
+        invocation = _begin(authority)
+        invocations_started.wait()
+        receipt = authority.draft(
+            invocation,
+            classification=classification,
+            success=success,
+            result_digest=digest,
+        )
+        return authority.publish(receipt.receipt_id)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first_future = pool.submit(publish, "success", True, "one")
+        second_future = pool.submit(publish, "timeout", False, "two")
+        first_receipt = first_future.result()
+        second_receipt = second_future.result()
 
     assert first_receipt.receipt_id != second_receipt.receipt_id
     assert authority.admission("run_skill") == (
         False,
         "result awaiting acknowledgement",
     )
-    authority.publish(second_receipt.receipt_id)
-    authority.publish(first_receipt.receipt_id)
     authority.acknowledge(
         second_receipt.receipt_id,
         kitchen_id="kitchen",

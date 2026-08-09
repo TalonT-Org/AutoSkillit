@@ -208,10 +208,10 @@ def test_retirement_preserves_tracker_on_unsafe_registry(monkeypatch, tmp_path, 
     registry_path.parent.mkdir(parents=True)
     registry_path.write_bytes(registry_payload)
     monkeypatch.setattr(
-        "autoskillit.core.pipeline_tracker._active_kitchens_path", lambda: registry_path
+        "autoskillit.core._plugin_cache._active_kitchens_path", lambda: registry_path
     )
     monkeypatch.setattr(
-        "autoskillit.core.pipeline_tracker._active_kitchens_lock",
+        "autoskillit.core._plugin_cache._active_kitchens_lock",
         lambda: registry_path.with_suffix(".lock"),
     )
 

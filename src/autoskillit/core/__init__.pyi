@@ -93,6 +93,9 @@ from ._terminal_table import _render_terminal_table as _render_terminal_table
 from ._version_snapshot import collect_version_snapshot as collect_version_snapshot
 from .agent_definition import AGENT_DEFINITION_DIGEST_DOMAIN as AGENT_DEFINITION_DIGEST_DOMAIN
 from .agent_definition import BUNDLED_EXPLORER_ROLES as BUNDLED_EXPLORER_ROLES
+from .agent_definition import (
+    CODEX_DISABLED_WEB_SEARCH_POLICY as CODEX_DISABLED_WEB_SEARCH_POLICY,
+)
 from .agent_definition import CODEX_EXPLORER_IDENTITY as CODEX_EXPLORER_IDENTITY
 from .agent_definition import (
     REPOSITORY_IMPACT_PROFILER_ROLE as REPOSITORY_IMPACT_PROFILER_ROLE,

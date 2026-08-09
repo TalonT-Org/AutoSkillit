@@ -7,9 +7,10 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from autoskillit.core import (
+    CODEX_DISABLED_WEB_SEARCH_POLICY,
     CODEX_EXPLORER_IDENTITY,
     SEMANTIC_CODE_NAVIGATOR_ROLE,
     AgentDef,
@@ -31,7 +32,6 @@ EXPLORER_ATTESTATION_FUTURE_SKEW_SECONDS = 5 * 60
 EXPLORER_PARENT_MODEL = "gpt-5.6-sol"
 EXPLORER_MODEL, EXPLORER_REASONING_EFFORT = CODEX_EXPLORER_IDENTITY
 EXPLORER_SANDBOX_MODE = "read-only"
-_EXPLORER_WEB_SEARCH_POLICY: Literal["disabled"] = "disabled"
 EXPLORER_PROBE_ROLE = SEMANTIC_CODE_NAVIGATOR_ROLE
 EXPLORER_PROBE_TASK_NAME = "capability_probe"
 _LUNA_BUNDLED_TOOL_MODE = "code_mode_only"
@@ -100,7 +100,7 @@ _EXPLORER_TOOL_SURFACE = {
     "request_user_input_enabled": False,
     "repository_direct_mount": False,
     "session_thread_cap": EXPLORER_MAX_SESSION_THREADS,
-    "web_search": _EXPLORER_WEB_SEARCH_POLICY,
+    "web_search": CODEX_DISABLED_WEB_SEARCH_POLICY,
 }
 EXPLORER_TOOL_SURFACE_DIGEST = (
     "sha256:"
@@ -172,7 +172,7 @@ def explorer_probe_agent_definition() -> AgentDef:
             sandbox_mode=EXPLORER_SANDBOX_MODE,
             disabled_features=EXPLORER_DISABLED_FEATURES,
             agents_enabled=False,
-            web_search=_EXPLORER_WEB_SEARCH_POLICY,
+            web_search=CODEX_DISABLED_WEB_SEARCH_POLICY,
         ),
     )
 

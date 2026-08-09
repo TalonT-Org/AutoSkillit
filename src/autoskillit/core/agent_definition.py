@@ -22,6 +22,7 @@ from .types import (
 __all__ = [
     "AGENT_DEFINITION_DIGEST_DOMAIN",
     "BUNDLED_EXPLORER_ROLES",
+    "CODEX_DISABLED_WEB_SEARCH_POLICY",
     "CODEX_EXPLORER_IDENTITY",
     "REPOSITORY_IMPACT_PROFILER_ROLE",
     "SEMANTIC_CODE_NAVIGATOR_ROLE",
@@ -37,6 +38,7 @@ __all__ = [
 
 
 AGENT_DEFINITION_DIGEST_DOMAIN = "autoskillit.agent-definition.v1"
+CODEX_DISABLED_WEB_SEARCH_POLICY: Literal["disabled"] = "disabled"
 CODEX_EXPLORER_IDENTITY: tuple[str, str] = ("gpt-5.6-luna", "max")
 SEMANTIC_CODE_NAVIGATOR_ROLE: str = "semantic-code-navigator"
 REPOSITORY_IMPACT_PROFILER_ROLE: str = "repository-impact-profiler"
@@ -131,8 +133,10 @@ class CodexAgentProjectionDef:
             raise AgentDefinitionError("Codex disabled_features must use canonical order")
         if type(self.agents_enabled) is not bool:
             raise AgentDefinitionError("Codex agents_enabled must be a boolean")
-        if self.web_search is not None and self.web_search != "disabled":
-            raise AgentDefinitionError("Codex web_search must be 'disabled'")
+        if self.web_search is not None and self.web_search != CODEX_DISABLED_WEB_SEARCH_POLICY:
+            raise AgentDefinitionError(
+                f"Codex web_search must be {CODEX_DISABLED_WEB_SEARCH_POLICY!r}"
+            )
 
 
 @dataclass(frozen=True, slots=True)

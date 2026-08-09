@@ -27,7 +27,6 @@ if TYPE_CHECKING:
         _READ_FLAGS,
         _UNTRUSTED_WRITE_BITS,
         CaptureSetupError,
-        ProjectAnchor,
     )
     from autoskillit.hooks._capture._snapshot import CaptureMeasurement
     from autoskillit.hooks._capture_contract import PROTECTED_CAPTURE_ENV_VARS
@@ -38,7 +37,6 @@ elif __package__:
         _READ_FLAGS,
         _UNTRUSTED_WRITE_BITS,
         CaptureSetupError,
-        ProjectAnchor,
     )
     from ._capture._snapshot import CaptureMeasurement
     from ._capture_contract import PROTECTED_CAPTURE_ENV_VARS
@@ -49,7 +47,6 @@ else:
         _READ_FLAGS,
         _UNTRUSTED_WRITE_BITS,
         CaptureSetupError,
-        ProjectAnchor,
     )
     from _capture._snapshot import CaptureMeasurement
     from _capture_contract import PROTECTED_CAPTURE_ENV_VARS
@@ -379,14 +376,13 @@ def _scrubbed_user_environment() -> dict[str, str]:
 
 
 def _spawn_bash(
-    anchor: ProjectAnchor,
     bash_path: str,
     command: str,
     *,
     capture_output: bool,
 ) -> subprocess.Popen[bytes]:
     try:
-        original_cwd_fd = os.open(
+        inherited_cwd_fd = os.open(
             ".",
             _DIRECTORY_FLAGS & ~getattr(os, "O_NOFOLLOW", 0),
         )
@@ -396,7 +392,7 @@ def _spawn_bash(
     process: subprocess.Popen[bytes] | None = None
     restore_error: OSError | None = None
     try:
-        os.fchdir(anchor.fd)
+        os.fchdir(inherited_cwd_fd)
         process = subprocess.Popen(
             [bash_path, "-c", _wrap_user_command(command)],
             stdout=subprocess.PIPE if capture_output else None,
@@ -415,10 +411,10 @@ def _spawn_bash(
         raise CaptureSetupError.from_os_error(exc, "cannot spawn capture shell") from exc
     finally:
         try:
-            os.fchdir(original_cwd_fd)
+            os.fchdir(inherited_cwd_fd)
         except OSError as exc:
             restore_error = exc
-        os.close(original_cwd_fd)
+        os.close(inherited_cwd_fd)
 
     if restore_error is not None:
         if process is not None:

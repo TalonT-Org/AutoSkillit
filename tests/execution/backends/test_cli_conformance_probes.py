@@ -81,13 +81,18 @@ from autoskillit.execution.backends._probe_cache import (
 )
 from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.hook_registry import generate_hooks_json
-from autoskillit.hooks._capture_artifacts import run_capture
+from autoskillit.hooks._capture_artifacts import (
+    CAPTURE_PATH_COMPONENTS,
+    open_capture_lifecycle,
+    run_capture,
+)
 from autoskillit.hooks._capture_contract import (
     CAPTURE_REQUEST_PROTOCOL_VERSION,
     CaptureRequest,
     decode_capture_request,
     encode_capture_request,
 )
+from autoskillit.hooks._capture_lifecycle import CaptureState
 from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
 from tests.execution.backends._conformance_assertions import (
     assert_boundary_spill_behavior,
@@ -1665,7 +1670,7 @@ def _run_shell_capture_probe(backend: str, tmp_path: Path) -> _DenyRoundTripOutp
     )
 
 
-def _parse_capture_runner(command: str) -> tuple[str, str] | None:
+def _parse_capture_runner(command: str) -> CaptureRequest | None:
     try:
         argv = shlex.split(command.splitlines()[-1])
         runner_index = next(
@@ -1676,7 +1681,7 @@ def _parse_capture_runner(command: str) -> tuple[str, str] | None:
         request = decode_capture_request(argv[runner_index + 1])
         if request.action != "run" or request.command is None:
             return None
-        return request.command, request.capture_id
+        return request
     except (
         StopIteration,
         IndexError,
@@ -1685,14 +1690,9 @@ def _parse_capture_runner(command: str) -> tuple[str, str] | None:
         return None
 
 
-def _assert_shell_capture_round_trip(output: _DenyRoundTripOutput) -> None:
-    denial_reason = _policy_denial_reason(output.transcript)
-    assert denial_reason is None, (
-        "Policy denial detected in shell-capture transcript. "
-        f"The generated harness was rejected by Codex's exec-policy engine: {denial_reason}"
-    )
+def _completed_command_execution_items(transcript: str) -> list[dict[str, object]]:
     completed_items: list[dict[str, object]] = []
-    for line in output.transcript.splitlines():
+    for line in transcript.splitlines():
         try:
             event = json.loads(line)
         except (json.JSONDecodeError, TypeError):
@@ -1704,7 +1704,16 @@ def _assert_shell_capture_round_trip(output: _DenyRoundTripOutput) -> None:
             continue
         if item.get("status") == "completed":
             completed_items.append(item)
+    return completed_items
 
+
+def _assert_shell_capture_round_trip(output: _DenyRoundTripOutput) -> None:
+    denial_reason = _policy_denial_reason(output.transcript)
+    assert denial_reason is None, (
+        "Policy denial detected in shell-capture transcript. "
+        f"The generated harness was rejected by Codex's exec-policy engine: {denial_reason}"
+    )
+    completed_items = _completed_command_execution_items(output.transcript)
     assert completed_items, (
         "No completed command_execution event found — the rewritten command did not execute"
     )
@@ -1717,9 +1726,9 @@ def _assert_shell_capture_round_trip(output: _DenyRoundTripOutput) -> None:
     ]
     assert parsed, "No completed rewritten command invoked the isolated shell-capture runner"
     matching = [
-        (capture_id, item)
-        for (command, capture_id), item in parsed
-        if command == _OUTPUT_BUDGET_CANARY_COMMAND
+        (request.capture_id, item)
+        for request, item in parsed
+        if request.command == _OUTPUT_BUDGET_CANARY_COMMAND
     ]
     assert len(matching) == 1, (
         "The completed runner invocation did not transport the canary command"
@@ -1940,6 +1949,97 @@ def _exercise_shell_capture_probe(backend: str, tmp_path: Path) -> None:
 class TestCodexShellCaptureRoundTrip:
     def test_hook_fires_and_command_is_rewritten(self, tmp_path: Path) -> None:
         _exercise_shell_capture_probe("codex", tmp_path)
+
+
+@_skip_unless_codex_output_budget_smoke
+@pytest.mark.timeout(1200)
+def test_codex_shell_capture_preserves_divergent_execution_workdir(
+    tmp_path: Path,
+) -> None:
+    probe_root = tmp_path / "divergent-workdir"
+    workspace = probe_root / "workspace"
+    execution_dir = workspace / "execution"
+    execution_dir.mkdir(parents=True)
+    env, codex_home, _claude_config = _isolated_cli_env(probe_root, workspace)
+    env["AUTOSKILLIT_AGENT_BACKEND"] = "codex"
+    sync_hooks_to_codex_config(config_path=codex_home / "config.toml")
+    init_result = subprocess.run(  # noqa: S603
+        ["git", "init", "-q"],
+        cwd=workspace,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if init_result.returncode != 0:
+        raise OSError(f"isolated git init failed: {init_result.stderr}")
+
+    probe_command = (
+        "printf 'pwd=%s\\n' \"$PWD\"; "
+        "printf execution > execution-sentinel; "
+        'python3 -c "import os; '
+        "os.write(1, b'execution_authority_probe ' * 1000)\""
+    )
+    prompt = (
+        "This is a hook conformance probe. Use the shell tool exactly once with "
+        f"workdir set to the absolute path {str(execution_dir)!r}. Run exactly "
+        f"`{probe_command}` without adding cd or changing the command. After the tool "
+        "completes, stop without running any other tool."
+    )
+    timeout = int(os.environ.get("OUTPUT_BUDGET_HOOK_SMOKE_TIMEOUT", "120"))
+    result = subprocess.run(  # noqa: S603
+        ["codex", "exec", "--json", "--sandbox", "workspace-write", prompt],
+        cwd=workspace,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    transcript = result.stdout + "\n" + result.stderr
+    if result.returncode != 0 and _policy_denial_reason(transcript) is None:
+        raise OSError(
+            "codex divergent-workdir shell-capture probe failed "
+            f"with rc={result.returncode}: {transcript}"
+        )
+
+    matching: list[tuple[CaptureRequest, dict[str, object]]] = []
+    for item in _completed_command_execution_items(transcript):
+        command = item.get("command")
+        if not isinstance(command, str) or "autoskillit-shell-capture" not in command:
+            continue
+        request = _parse_capture_runner(command)
+        if request is not None and request.command == probe_command:
+            matching.append((request, item))
+    assert len(matching) == 1
+    request, completed_item = matching[0]
+    assert completed_item.get("workdir") == str(execution_dir.resolve())
+    assert request.command == probe_command
+    assert request.cwd == str(workspace)
+
+    sentinel = execution_dir / "execution-sentinel"
+    assert sentinel.read_text() == "execution"
+    assert os.path.samefile(sentinel.parent, execution_dir)
+    assert not (workspace / "execution-sentinel").exists()
+
+    completed_output = completed_item.get("aggregated_output")
+    assert isinstance(completed_output, str)
+    authority = assert_shell_capture_marker_authority(
+        completed_output,
+        workspace,
+        request.capture_id,
+        sentinels=(b"execution_authority_probe",),
+    )
+    assert f"pwd={execution_dir.resolve()}\n".encode() in authority.capture_bytes
+    capture_root = workspace.joinpath(*CAPTURE_PATH_COMPONENTS)
+    assert (capture_root / f"shell_{request.capture_id}.log").is_file()
+    assert (capture_root / ".capture-lifecycle.ledger").is_file()
+    assert (capture_root / ".capture-lifecycle.lock").is_file()
+    assert not list(capture_root.glob(f".capture-staging-{request.capture_id}-*"))
+    with open_capture_lifecycle(str(workspace), create=False) as lifecycle:
+        record = lifecycle.get_record(request.capture_id)
+    assert record is not None
+    assert record.state is CaptureState.FINALIZED
+    assert not execution_dir.joinpath(*CAPTURE_PATH_COMPONENTS).exists()
 
 
 _SOURCE_SPILL_THRESHOLD = OutputBudgetConfig().inline_max_chars

@@ -301,7 +301,12 @@ def _run_runner(
     project: Path,
     *,
     mode: str,
+    execution_dir: Path | None = None,
 ) -> subprocess.CompletedProcess[bytes]:
+    if execution_dir is None:
+        execution_dir = project
+    else:
+        assert not execution_dir.samefile(project)
     lineage_ref = _direct_lineage_reference(project) if mode == "direct" else None
     request = CaptureRequest(
         protocol_version=CAPTURE_REQUEST_PROTOCOL_VERSION,
@@ -321,7 +326,7 @@ def _run_runner(
             encode_capture_request(request),
         ],
         capture_output=True,
-        cwd=project,
+        cwd=execution_dir,
         timeout=_TIMEOUT,
         check=False,
     )
@@ -358,6 +363,77 @@ def test_capture_direct_runner_matrix_preserves_shell_semantics(
     assert captured.stdout == raw.stdout + raw.stderr, label
     assert captured.stderr == b"", label
     assert len(_artifact_files(project)) == 1, label
+
+
+@pytest.mark.parametrize(
+    (
+        "requested_mode",
+        "project_policy_disabled",
+        "execution_policy_disabled",
+        "expect_capture",
+    ),
+    [
+        ("capture", False, True, True),
+        ("direct", False, True, False),
+        ("capture", True, False, False),
+    ],
+    ids=("capture", "lineage-direct", "project-policy-disabled"),
+)
+def test_runner_keeps_project_and_execution_authorities_distinct(
+    tmp_path: Path,
+    requested_mode: str,
+    project_policy_disabled: bool,
+    execution_policy_disabled: bool,
+    expect_capture: bool,
+) -> None:
+    project = tmp_path / "project"
+    execution_dir = tmp_path / "execution"
+    project.mkdir()
+    execution_dir.mkdir()
+    for authority, disabled in (
+        (project, project_policy_disabled),
+        (execution_dir, execution_policy_disabled),
+    ):
+        config = authority / ".autoskillit" / "temp" / ".hook_config.json"
+        config.parent.mkdir(parents=True)
+        config.write_text(json.dumps({"output_budget_policy": {"disabled": disabled}}))
+
+    completed = _run_runner(
+        "printf 'pwd=%s\\n' \"$PWD\"; printf ran > execution-sentinel",
+        project,
+        mode=requested_mode,
+        execution_dir=execution_dir,
+    )
+
+    assert completed.returncode == 0
+    assert f"pwd={execution_dir.resolve()}\n".encode() in completed.stdout
+    assert (execution_dir / "execution-sentinel").read_text() == "ran"
+    assert not (project / "execution-sentinel").exists()
+    assert not _artifact_files(execution_dir)
+
+    project_artifacts = _artifact_files(project)
+    assert bool(project_artifacts) is expect_capture
+    if expect_capture:
+        assert len(project_artifacts) == 1
+        capture_id = project_artifacts[0].stem.removeprefix("shell_")
+        with open_capture_lifecycle(str(project), create=False) as lifecycle:
+            record = lifecycle.get_record(capture_id)
+        assert record is not None
+        assert record.state is CaptureState.FINALIZED
+        assert (_capture_dir(project) / ".capture-lifecycle.ledger").is_file()
+        assert not _capture_dir(execution_dir).exists()
+    else:
+        assert not _capture_dir(project).exists()
+
+    if requested_mode == "direct":
+        store = DefaultManagedHeadlessSessionLineageStore()
+        lineage = store.load(lineage_anchor=project, launch_id=_DIRECT_LAUNCH_ID)
+        collected = store.collect_runner_observations(lineage.reference)
+        assert len(collected.observations) == 1
+        observation = collected.observations[0]
+        assert observation.effective_mode is NativeShellCaptureMode.DIRECT
+        assert observation.reason.value == "launch_authorized_direct"
+        assert not observation.project_policy_disabled
 
 
 @pytest.mark.parametrize("label,command", _CORPUS, ids=[row[0] for row in _CORPUS])

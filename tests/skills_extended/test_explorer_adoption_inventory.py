@@ -2011,7 +2011,7 @@ def test_phase_d_inventory_and_architecture_recipe_step_pins_are_explicit() -> N
 def test_migration_completeness_census_total_vector_count() -> None:
     """No skill carries the retired `exploration_vectors` frontmatter key, and
     every `exploration.yaml` sidecar under `skills/` and `skills_extended/`
-    sums to the reviewed migration census: 264 migrated + 37 retained = 301."""
+    sums to the reviewed migration census: 274 migrated + 37 retained = 311."""
     skill_roots = (pkg_root() / "skills", pkg_root() / "skills_extended")
     skill_md_paths = tuple(
         sorted(path for root in skill_roots for path in root.glob("*/SKILL.md"))
@@ -2047,6 +2047,6 @@ def test_migration_completeness_census_total_vector_count() -> None:
                 pytest.fail(f"unexpected disposition {vector.disposition} in {skill_md_path}")
 
     assert sidecar_count > 0
-    assert migrated_count == 264
+    assert migrated_count == 274
     assert retained_count == 37
-    assert migrated_count + retained_count == 301
+    assert migrated_count + retained_count == 311

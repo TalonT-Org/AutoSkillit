@@ -31,10 +31,13 @@ class TestExplorerRegistrationDerivesFromBindings:
             f"but found: {toml_names & BUNDLED_EXPLORER_ROLES}"
         )
         all_defs = load_bundled_agent_definitions()
+        definitions = {definition.name: definition for definition in all_defs}
         non_explorer_count = sum(1 for d in all_defs if d.name not in BUNDLED_EXPLORER_ROLES)
         assert count == non_explorer_count
         for path in (tmp_path / "agents").glob("*.toml"):
-            assert "web_search" not in tomllib.loads(path.read_text(encoding="utf-8"))
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+            expected = definitions[path.stem].codex.web_search
+            assert data.get("web_search") == expected
 
     def test_bound_includes_explorer_roles(self, tmp_path: Path) -> None:
         from autoskillit.execution.backends._codex.explorer_projection import (

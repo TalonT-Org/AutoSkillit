@@ -19,7 +19,7 @@ SKILL_PATH = (
 def test_closes_issue_url_outside_architecture_impact_block():
     """The exact closing URL must follow the Architecture Impact conditional.
 
-    If Closes # is inside the Architecture Impact conditional block, it gets
+    If the URL-form Closes reference is inside the Architecture Impact conditional, it gets
     omitted when no validated diagrams exist (the entire block is skipped).
     """
     SKILL_TEXT = SKILL_PATH.read_text()

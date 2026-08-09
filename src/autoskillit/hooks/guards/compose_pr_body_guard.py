@@ -241,8 +241,8 @@ def _valid_ordinary_pair(body: str, metadata: dict[str, object]) -> bool:
         return False
     closing_issue = metadata.get("closing_issue")
     issue_url = metadata.get("source_issue_url")
-    if closing_issue is None or issue_url is None:
-        return closing_issue is None and issue_url is None
+    if closing_issue is None:
+        return issue_url is None
     if isinstance(closing_issue, bool) or not isinstance(closing_issue, int):
         return False
     if not isinstance(issue_url, str):

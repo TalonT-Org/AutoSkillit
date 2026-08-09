@@ -94,7 +94,14 @@ def _run_hook(
 def _is_denied(output: str) -> bool:
     if not output:
         return False
-    return json.loads(output)["hookSpecificOutput"]["permissionDecision"] == "deny"
+    from autoskillit.hooks.guards.compose_pr_body_guard import (  # noqa: PLC0415
+        COMPOSE_PR_BODY_DENY_TRIGGER,
+    )
+
+    hook_output = json.loads(output)["hookSpecificOutput"]
+    return hook_output["permissionDecision"] == "deny" and hook_output[
+        "permissionDecisionReason"
+    ].startswith(f"{COMPOSE_PR_BODY_DENY_TRIGGER}: ")
 
 
 def _ordinary_pair(tmp_path: Path, *, issue_backed: bool = True) -> Path:
@@ -111,9 +118,10 @@ def _ordinary_pair(tmp_path: Path, *, issue_backed: bool = True) -> Path:
 
 def test_scopes_to_headless_pr_skills(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    body = _ordinary_pair(tmp_path)
+    body = _ordinary_pair(tmp_path, issue_backed=False)
     command = f"gh pr create --body-file {body}"
 
+    assert _is_denied(_run_hook(_event(command), monkeypatch))
     assert _run_hook(_event(command), monkeypatch, skill_name="implement-worktree") == ""
     assert _run_hook(_event(command), monkeypatch, headless=False) == ""
     assert _run_hook(_event("git status"), monkeypatch) == ""

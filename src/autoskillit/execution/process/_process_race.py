@@ -538,6 +538,10 @@ def resolve_termination(
             termination = TerminationReason.HEALTH_INSPECTOR
         else:
             termination = TerminationReason.IDLE_STALL
+    elif signals.channel_b_status in {ChannelBStatus.STALE, ChannelBStatus.DIR_MISSING}:
+        termination = TerminationReason.STALE
+    elif signals.channel_a_confirmed:
+        termination = TerminationReason.COMPLETED
     else:
         match signals.channel_b_status:
             case ChannelBStatus.STALE | ChannelBStatus.DIR_MISSING:
@@ -552,10 +556,7 @@ def resolve_termination(
             case ChannelBStatus.COMPLETION:
                 termination = TerminationReason.NATURAL_EXIT
             case None:
-                if signals.channel_a_confirmed:
-                    termination = TerminationReason.COMPLETED
-                else:
-                    termination = TerminationReason.NATURAL_EXIT  # fallback
+                termination = TerminationReason.NATURAL_EXIT  # fallback
             case _ as unreachable:
                 assert_never(unreachable)
 

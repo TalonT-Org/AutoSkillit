@@ -25,7 +25,8 @@ HEADLESS_SIZE_BUDGETS = {
     "headless/_headless_launch.py": 500,
     "headless/_headless_recovery.py": 540,
     "headless/_headless_path_tokens.py": 190,
-    "headless/_headless_result.py": 945,
+    # #4457 validates contract-declared artifacts at the final adjudication seam.
+    "headless/_headless_result.py": 970,
     "headless/_headless_evidence.py": 310,
 }
 

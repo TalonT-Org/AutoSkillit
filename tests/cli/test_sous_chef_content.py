@@ -56,3 +56,14 @@ def test_sous_chef_documents_exhaustive_recipe_section_reconstruction() -> None:
     assert "unknown content_format" in content
     assert content.index("flow_records") < content.index("entrypoint named-step")
     assert content.index("entrypoint named-step") < content.index("complete_recipe_initialization")
+
+
+def test_sous_chef_requires_real_result_receipt_acknowledgement() -> None:
+    content = _read_full_sous_chef()
+
+    assert "## RUN_SKILL COMPLETION HANDSHAKE — MANDATORY" in content
+    assert "actual tool/task notification" in content
+    assert "NEVER synthesize" in content
+    assert "<bg_result>" in content
+    assert "complete_run_skill_result" in content
+    assert 'receipt_id="<exact delivered receipt_id>"' in content

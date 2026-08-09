@@ -893,7 +893,6 @@ from .types import RecipeExecutionCredential as RecipeExecutionCredential
 from .types import RecipeExecutionFactory as RecipeExecutionFactory
 from .types import RecipeExecutionId as RecipeExecutionId
 from .types import RecipeExecutionLock as RecipeExecutionLock
-from .types import RunSkillCompletionAuthority as RunSkillCompletionAuthority
 from .types import RecipeExecutionSnapshot as RecipeExecutionSnapshot
 from .types import RecipeFlowEdge as RecipeFlowEdge
 from .types import RecipeFlowGeneration as RecipeFlowGeneration
@@ -953,6 +952,7 @@ from .types import ReviewReconciliationResult as ReviewReconciliationResult
 from .types import ReviewResponseClass as ReviewResponseClass
 from .types import RollbackAdmissionEvent as RollbackAdmissionEvent
 from .types import RolloverEpochEvent as RolloverEpochEvent
+from .types import RunSkillCompletionAuthority as RunSkillCompletionAuthority
 from .types import SecretEnvironmentBinding as SecretEnvironmentBinding
 from .types import SemanticLaunchPlan as SemanticLaunchPlan
 from .types import ServeOverridesSnapshot as ServeOverridesSnapshot

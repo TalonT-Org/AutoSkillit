@@ -61,6 +61,7 @@ def test_gated_tools_contains_expected_names():
         "reset_dispatch",
         "get_recipe_section",
         "complete_recipe_initialization",
+        "complete_run_skill_result",
         "submit_exploration_query",
         "get_exploration_page",
         "resume_exploration_context",

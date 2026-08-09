@@ -78,6 +78,7 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     ndjson_unknown_item_count: int
     execution_identity: ExecutionIdentityDict
     pipeline_tracker: dict[str, str]
+    receipt_id: str
     error: str
     stage: str
     retriable: bool

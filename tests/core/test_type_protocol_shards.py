@@ -29,6 +29,7 @@ def test_execution_shard_all():
         "LaunchAdapter",
         "LaunchResolver",
         "OutputPatternResolver",
+        "RunSkillCompletionAuthority",
         "SkillContractView",
         "SkillSessionContractStore",
         "WriteExpectedResolver",

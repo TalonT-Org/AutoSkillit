@@ -887,6 +887,9 @@ def _close_kitchen_handler() -> None:
     from autoskillit.server import _get_ctx, logger  # circular-break
 
     ctx = _get_ctx()
+    authority = ctx.run_skill_completion
+    if authority is not None and not authority.clear_if_idle():
+        raise RuntimeError("run_skill completion is still active")
     if ctx.quota_refresh_task is not None:
         ctx.quota_refresh_task.cancel()
         ctx.quota_refresh_task = None

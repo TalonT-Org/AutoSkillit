@@ -63,8 +63,7 @@ class TestAdjudicationConsistency:
                 False,
                 "",
             ),
-            # NATURAL_EXIT + CHANNEL_B: contradiction
-            # (known bug, corrected by guard in _build_skill_result)
+            # Channel-B evidence cannot override a terminal session error.
             (
                 TerminationReason.NATURAL_EXIT,
                 ChannelConfirmation.CHANNEL_B,
@@ -72,11 +71,11 @@ class TestAdjudicationConsistency:
                 0,
                 "error_max_turns",
                 True,
-                True,
+                False,
                 True,
                 "",
             ),
-            # NATURAL_EXIT + CHANNEL_B: valid success
+            # Channel-B evidence cannot supply missing result content.
             (
                 TerminationReason.NATURAL_EXIT,
                 ChannelConfirmation.CHANNEL_B,
@@ -84,8 +83,8 @@ class TestAdjudicationConsistency:
                 0,
                 "success",
                 False,
-                True,
                 False,
+                True,
                 "",
             ),
             (
@@ -111,7 +110,7 @@ class TestAdjudicationConsistency:
                 True,
                 "",
             ),
-            # COMPLETED + CHANNEL_B: valid success
+            # COMPLETED + CHANNEL_B still requires terminal result content.
             (
                 TerminationReason.COMPLETED,
                 ChannelConfirmation.CHANNEL_B,
@@ -119,12 +118,11 @@ class TestAdjudicationConsistency:
                 -15,
                 "success",
                 False,
-                True,
                 False,
+                True,
                 "",
             ),
-            # COMPLETED + CHANNEL_B: contradiction
-            # (known bug, corrected by guard in _build_skill_result)
+            # Channel-B evidence cannot override a terminal session error.
             (
                 TerminationReason.COMPLETED,
                 ChannelConfirmation.CHANNEL_B,
@@ -132,7 +130,7 @@ class TestAdjudicationConsistency:
                 -15,
                 "error_max_turns",
                 True,
-                True,
+                False,
                 True,
                 "",
             ),
@@ -687,12 +685,11 @@ class TestDeadEndGuardContentState:
         assert outcome == SessionOutcome.FAILED
         assert retry_reason == RetryReason.NONE
 
-    def test_compute_outcome_channel_b_empty_result_is_still_retriable(
+    def test_compute_outcome_channel_b_empty_result_uses_content_retry_reason(
         self,
         make_session: Callable[..., ClaudeSessionResult],
     ) -> None:
-        """Regression test: drain-race rescue (empty result) must still be promoted to RETRIABLE.
-        The ContentState fix must NOT break the existing drain-race handling."""
+        """Assistant provenance cannot replace normal empty-output classification."""
         session = make_session(
             subtype="success",
             is_error=False,
@@ -710,13 +707,13 @@ class TestDeadEndGuardContentState:
         assert outcome == SessionOutcome.RETRIABLE, (
             "Empty result with channel confirmation must remain RETRIABLE (drain-race rescue)."
         )
-        assert retry_reason == RetryReason.DRAIN_RACE
+        assert retry_reason == RetryReason.EMPTY_OUTPUT
 
-    def test_compute_outcome_channel_b_missing_marker_is_still_retriable(
+    def test_compute_outcome_channel_b_missing_marker_uses_early_stop(
         self,
         make_session: Callable[..., ClaudeSessionResult],
     ) -> None:
-        """Regression: result present but marker absent is still RETRIABLE (partial drain)."""
+        """Assistant provenance cannot replace the required completion marker."""
         session = make_session(
             subtype="success",
             is_error=False,
@@ -734,7 +731,7 @@ class TestDeadEndGuardContentState:
         assert outcome == SessionOutcome.RETRIABLE, (
             "Missing completion marker with channel confirmation must remain RETRIABLE."
         )
-        assert retry_reason == RetryReason.DRAIN_RACE
+        assert retry_reason == RetryReason.EARLY_STOP
 
     def test_dead_end_guard_channel_confirmed_absent_emits_drain_race(
         self,

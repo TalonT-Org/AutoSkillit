@@ -187,6 +187,16 @@ class DefaultRunSkillCompletionAuthority:
         )
         with self._lock:
             credits = self._credits.get(key)
+            if not credits:
+                stale_keys = [
+                    candidate
+                    for candidate in self._credits
+                    if candidate[0] == tracker_order_id
+                    and candidate[1] == tracker_path
+                    and candidate[4] == canonical_step_name(step_name)
+                ]
+                for stale_key in stale_keys:
+                    del self._credits[stale_key]
             selected = receipt_id or (min(credits) if credits else "")
             if not credits or selected not in credits:
                 raise ValueError("no acknowledged success credit matches this tracker step")

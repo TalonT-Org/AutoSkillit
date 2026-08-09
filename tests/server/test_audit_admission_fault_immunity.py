@@ -358,6 +358,9 @@ async def test_staged_fault_retry_preserves_one_durable_audit_lifecycle(
     }
 
     first = json.loads(await run_skill(**invocation))
+    from tests.server._pipeline_test_helpers import _ack_direct_run_skill_result
+
+    _ack_direct_run_skill_result(tool_ctx_kitchen_open, first)
 
     assert fault_hits == [stage]
     assert first["success"] is False
@@ -419,6 +422,7 @@ async def test_staged_fault_retry_preserves_one_durable_audit_lifecycle(
     assert retried["audit_verdict"] == "GO"
     assert retried["audit_attempt_id"] == attempt_id
     assert Path(retried["audit_cycle_path"]) == reservation.authority_path
+    _ack_direct_run_skill_result(tool_ctx_kitchen_open, retried)
     expected_dispatches = 2 if stage in _REDISPATCH_STAGES else 1
     assert len(dispatches) == expected_dispatches
     if stage in _REDISPATCH_STAGES:
@@ -432,11 +436,16 @@ async def test_staged_fault_retry_preserves_one_durable_audit_lifecycle(
 
     replayed = json.loads(await run_skill(**invocation))
 
-    assert replayed == {**retried, "audit_status": "EXACT_REPLAY"}
+    assert replayed["receipt_id"] != retried["receipt_id"]
+    assert replayed == {
+        **retried,
+        "audit_status": "EXACT_REPLAY",
+        "receipt_id": replayed["receipt_id"],
+    }
     assert len(dispatches) == expected_dispatches
     assert success_calls == [invocation["skill_command"]]
     assert clear_calls == [tool_ctx_kitchen_open.project_dir]
-    assert mark_calls == [_STEP]
+    assert mark_calls == []
 
     committed = _attempt_state(database_path, attempt_id)
     assert committed["lifecycle"] == AuditAttemptLifecycle.RESPONSE_COMMITTED.value
@@ -451,7 +460,6 @@ async def test_staged_fault_retry_preserves_one_durable_audit_lifecycle(
     )
     assert committed["finalization_effects"] == (
         "audit_success_recorded",
-        "pipeline_step_completed",
         "run_skill_state_cleared",
     )
 

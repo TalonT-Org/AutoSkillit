@@ -11,9 +11,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
-import regex as re
-
-from autoskillit.core import DISPATCH_ID_ENV_VAR, atomic_write, get_logger
+from autoskillit.core import (
+    DISPATCH_ID_ENV_VAR,
+    RunSkillCompletionAuthority,
+    atomic_write,
+    get_logger,
+)
+from autoskillit.pipeline import canonical_step_name
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import (
@@ -27,14 +31,13 @@ from autoskillit.server.tools._types import deny_envelope
 
 logger = get_logger(__name__)
 
-_STEP_SUFFIX_RE = re.compile(r"-\d+$")
-
 
 class _TrackerCtx(Protocol):
     """Minimal ToolContext duck-type — avoids circular import with tools_execution.py."""
 
     kitchen_id: str
     project_dir: Path
+    run_skill_completion: RunSkillCompletionAuthority | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -333,7 +336,56 @@ def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: st
             )
         )
 
-    result = mark_step_complete(resolved.path, step_name, resolved.order_id)
+    try:
+        tracker = json.loads(resolved.path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        return json.dumps(
+            deny_envelope(
+                f"record_pipeline_step: failed to read tracker identity: {exc}",
+                stage="preflight:pipeline_tracker",
+                retriable=True,
+            )
+        )
+    tracker_kitchen_id = tracker.get("kitchen_id")
+    tracker_incarnation_id = tracker.get("tracker_incarnation_id")
+    if not isinstance(tracker_kitchen_id, str) or not isinstance(tracker_incarnation_id, str):
+        return json.dumps(
+            deny_envelope(
+                "record_pipeline_step: tracker incarnation identity is missing.",
+                stage="preflight:pipeline_tracker",
+                retriable=False,
+            )
+        )
+    authority = ctx.run_skill_completion
+    if authority is None:
+        return json.dumps(
+            deny_envelope(
+                "record_pipeline_step: completion authority is unavailable.",
+                stage="preflight:pipeline_tracker",
+                retriable=True,
+            )
+        )
+    try:
+        result = authority.apply_tracker_credit(
+            tracker_order_id=resolved.order_id,
+            tracker_path=str(resolved.path.resolve()),
+            tracker_kitchen_id=tracker_kitchen_id,
+            tracker_incarnation_id=tracker_incarnation_id,
+            step_name=step_name,
+            effect=lambda: mark_step_complete(
+                resolved.path,
+                step_name,
+                resolved.order_id,
+                expected_tracker_kitchen_id=tracker_kitchen_id,
+                expected_tracker_incarnation_id=tracker_incarnation_id,
+            ),
+        )
+    except ValueError as exc:
+        result = deny_envelope(
+            f"record_pipeline_step: {exc}",
+            stage="preflight:pipeline_tracker_credit",
+            retriable=False,
+        )
     return json.dumps(result)
 
 
@@ -341,13 +393,16 @@ def mark_step_complete(
     tracker_path: Path,
     step_name: str,
     order_id: str,
+    *,
+    expected_tracker_kitchen_id: str = "",
+    expected_tracker_incarnation_id: str = "",
 ) -> dict:
     """Mark a single step as complete in the tracker file.
 
     Used by both ``op="complete"`` (operator repair) and the adjudication-point
     marker in ``run_skill``. Returns a result dict (always includes ``success``).
     """
-    canonical = _STEP_SUFFIX_RE.sub("", step_name)
+    canonical = canonical_step_name(step_name)
     lock_path = tracker_path.parent / ".pipeline_tracker.lock"
 
     try:
@@ -386,6 +441,19 @@ def mark_step_complete(
                 retriable=False,
             )
 
+        if expected_tracker_kitchen_id and (
+            tracker.get("kitchen_id") != expected_tracker_kitchen_id
+            or tracker.get("tracker_incarnation_id") != expected_tracker_incarnation_id
+        ):
+            return {
+                **deny_envelope(
+                    "mark_step_complete: tracker incarnation changed.",
+                    stage="mark_step_complete",
+                    retriable=False,
+                ),
+                "incarnation_matches": False,
+            }
+
         steps = tracker.get("steps", {})
         if canonical not in steps:
             return deny_envelope(
@@ -417,6 +485,7 @@ def mark_step_complete(
 
         result = {
             "success": True,
+            "incarnation_matches": True,
             "step": canonical,
             "order_id": order_id,
             "status": "complete",

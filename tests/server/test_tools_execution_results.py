@@ -991,7 +991,7 @@ class TestRunSkillPostSerializationValidation:
     async def test_valid_to_json_passes_through_unchanged(
         self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ) -> None:
-        """When to_json() emits both required keys, run_skill returns that JSON unchanged."""
+        """A valid result keeps its fields and gains an opaque receipt."""
         from autoskillit.core import SkillResult
         from autoskillit.core.types import RetryReason
 
@@ -1021,7 +1021,8 @@ class TestRunSkillPostSerializationValidation:
         assert data["exit_code"] == 0
         assert "retriable" not in data  # No envelope wrapping
         assert data["subtype"] == "success"
-        assert result_json == valid.to_json()
+        assert isinstance(data["receipt_id"], str)
+        assert data["receipt_id"]
 
 
 class TestCwdExistenceValidation:

@@ -137,3 +137,71 @@ def test_success_credit_is_retained_until_tracker_completes() -> None:
             **binding,
             effect=lambda: {"success": True, "status": "complete"},
         )
+
+
+def test_reinitialized_tracker_invalidates_retained_credit() -> None:
+    authority = DefaultRunSkillCompletionAuthority()
+    receipt = authority.draft(
+        _begin(authority),
+        classification="success",
+        success=True,
+        result_digest="digest",
+    )
+    authority.publish(receipt.receipt_id)
+    authority.acknowledge(
+        receipt.receipt_id,
+        kitchen_id="kitchen",
+        request_session_id="session",
+    )
+
+    replacement = {
+        "tracker_order_id": "order",
+        "tracker_path": "/tracker.json",
+        "tracker_kitchen_id": "kitchen",
+        "tracker_incarnation_id": "replacement-incarnation",
+        "step_name": "investigate",
+    }
+    with pytest.raises(ValueError, match="no acknowledged success credit"):
+        authority.apply_tracker_credit(
+            **replacement,
+            effect=lambda: {"success": True, "status": "complete"},
+        )
+    with pytest.raises(ValueError, match="no acknowledged success credit"):
+        authority.apply_tracker_credit(
+            tracker_order_id="order",
+            tracker_path="/tracker.json",
+            tracker_kitchen_id="kitchen",
+            tracker_incarnation_id="incarnation",
+            step_name="investigate",
+            effect=lambda: {"success": True, "status": "complete"},
+        )
+
+
+def test_clear_is_denied_while_active_and_removes_idle_credit() -> None:
+    authority = DefaultRunSkillCompletionAuthority()
+    invocation = _begin(authority)
+
+    assert authority.clear_if_idle() is False
+    receipt = authority.draft(
+        invocation,
+        classification="success",
+        success=True,
+        result_digest="digest",
+    )
+    authority.publish(receipt.receipt_id)
+    authority.acknowledge(
+        receipt.receipt_id,
+        kitchen_id="kitchen",
+        request_session_id="session",
+    )
+    assert authority.clear_if_idle() is True
+
+    with pytest.raises(ValueError, match="no acknowledged success credit"):
+        authority.apply_tracker_credit(
+            tracker_order_id="order",
+            tracker_path="/tracker.json",
+            tracker_kitchen_id="kitchen",
+            tracker_incarnation_id="incarnation",
+            step_name="investigate",
+            effect=lambda: {"success": True, "status": "complete"},
+        )

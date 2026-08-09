@@ -65,6 +65,7 @@ __all__ = [
     # Wire-format compatibility middleware
     "ClaudeCodeCompatMiddleware",
     "ResponseConformanceMiddleware",
+    "RunSkillCompletionMiddleware",
     # Session-type visibility dispatcher (callable by tests)
     "_apply_session_type_visibility",
 ]
@@ -162,6 +163,12 @@ for tag in sorted(ALL_VISIBILITY_TAGS):
 
 # Wire-format sanitization: strip fields that trigger Claude Code #25081
 # (silent full-tool-list rejection when outputSchema/annotations are present).
+from autoskillit.server._run_skill_completion import (  # noqa: E402
+    RunSkillCompletionMiddleware,
+)
+
+mcp.add_middleware(RunSkillCompletionMiddleware(mcp))
+
 from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware  # noqa: E402
 
 mcp.add_middleware(ClaudeCodeCompatMiddleware())

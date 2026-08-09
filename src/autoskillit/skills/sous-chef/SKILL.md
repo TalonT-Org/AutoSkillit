@@ -976,12 +976,29 @@ When `run_skill` returns with `DEPENDENCY UNMET` in the error text:
 
 ---
 
+## RUN_SKILL COMPLETION HANDSHAKE — MANDATORY
+
+A background `run_skill` result is authoritative only when it is delivered by the
+actual tool/task notification. NEVER synthesize, anticipate, quote, or emit a
+`<bg_result>` or task-notification completion on behalf of a running call.
+
+Every delivered `run_skill` response includes an opaque `receipt_id`. Before routing
+the result, retrying the step, repairing its tracker marker, launching another batch,
+or calling any other recipe tool, call
+`complete_run_skill_result(receipt_id="<exact delivered receipt_id>")`. Use the exact
+receipt from that response; never reuse a prior receipt or substitute a session ID,
+order ID, execution marker, or narrated result. Only the acknowledgement response may
+confirm that a successful result advanced the tracker or retained repair credit.
+
+---
+
 ## RECORD PIPELINE STEP COMPLETE — OPERATOR REPAIR ONLY
 
 `record_pipeline_step(op="complete", pipeline_id="...", step_name="...")` marks
 a tracked step as complete. This is an **operator repair tool** — use it ONLY when:
 
-- A step completed successfully but the server-side marker failed (infrastructure error)
+- A successful result was acknowledged but its server-side marker failed
+  (infrastructure error), leaving explicit repair credit
 - An operator explicitly instructs you to mark a step complete for recovery purposes
 
 **NEVER** use `op="complete"` to bypass running a prerequisite skill. The dependency

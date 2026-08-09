@@ -157,6 +157,7 @@ _FORMATTERS: dict[str, Callable[..., str]] = {
 _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
     {
         "run_python",  # structured result dict, generic renders correctly
+        "complete_run_skill_result",  # structured acknowledgement result
         "read_db",  # tabular rows, generic renders correctly
         "reset_test_dir",  # simple ack
         "classify_fix",  # simple classification result

@@ -2056,8 +2056,8 @@ class TestBuildSkillResultCompleted:
         )
         assert sr2.cli_subtype == "success"
 
-    def test_build_skill_result_channel_b_empty_stdout_subtype_is_success(self, tool_ctx):
-        """Test C: CHANNEL_B + empty stdout normalizes subtype up to 'success'."""
+    def test_build_skill_result_channel_b_empty_stdout_is_retriable(self, tool_ctx):
+        """Channel-B assistant evidence cannot replace a terminal result."""
         result = _make_result(
             returncode=0,
             stdout="",
@@ -2067,8 +2067,8 @@ class TestBuildSkillResultCompleted:
         sr = _build_skill_result(
             result, completion_marker="", skill_command="/test", backend=ClaudeCodeBackend()
         )
-        assert sr.success is True
-        assert sr.subtype == "success"
+        assert sr.success is False
+        assert sr.needs_retry is True
         assert sr.cli_subtype == "empty_output"
 
 
@@ -2614,8 +2614,8 @@ class TestBuildSkillResultDataConfirmedPropagation:
         assert skill_result.success is False
         assert skill_result.subtype == "stale"
 
-    def test_completed_empty_result_data_confirmed_false_produces_success(self):
-        """COMPLETED with empty stdout and data_confirmed=False uses provenance bypass."""
+    def test_completed_empty_result_channel_b_is_retriable(self):
+        """Channel-B provenance cannot promote an empty terminal result."""
         result = _make_result(
             stdout='{"type":"result","subtype":"success","result":"","is_error":false,'
             '"session_id":"s1"}',
@@ -2630,8 +2630,8 @@ class TestBuildSkillResultDataConfirmedPropagation:
             audit=None,
             backend=ClaudeCodeBackend(),
         )
-        assert skill_result.success is True  # FAILS before fix: False
-        assert skill_result.needs_retry is False  # FAILS before fix: True
+        assert skill_result.success is False
+        assert skill_result.needs_retry is True
 
     def test_completed_empty_result_data_confirmed_true_is_still_retriable(self):
         """COMPLETED with empty result and data_confirmed=True remains a retriable anomaly."""

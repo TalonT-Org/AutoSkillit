@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -276,7 +277,10 @@ class TestRunSkillPerInvocationMarker:
         )  # clone guard snapshot call 2
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=0, stdout=success_json))
 
-        await run_skill("/investigate a", cwd="/tmp")
+        from tests.server._pipeline_test_helpers import _ack_direct_run_skill_result
+
+        first = json.loads(await run_skill("/investigate a", cwd="/tmp"))
+        _ack_direct_run_skill_result(tool_ctx_kitchen_open, first)
         await run_skill("/investigate b", cwd="/tmp")
 
         calls = tool_ctx_kitchen_open.runner.call_args_list

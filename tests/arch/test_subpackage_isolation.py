@@ -97,6 +97,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_type_backend",  # core/types/_type_backend.py: CLAUDE_CODE_CAPABILITIES constant
         "_prompts",  # cli/_prompts.py: immutable startup recovery spec and rendering
         "tools_fleet_dispatch",  # request-scoped fleet provenance ContextVars
+        "_run_skill_completion",  # request-scoped #4457 receipt delivery bindings
         # Released reducer definitions are immutable registry values keyed by their own
         # protocol version so the selector cannot drift from the registered definition.
         "context_admission",
@@ -965,7 +966,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
     """
     EXEMPTIONS: dict[str, int] = {
         # +generation-bound replay store and post-enforcement initialization commits.
-        "server": 22,  # +_exploration_service collector and +_explorer_projection authority
+        "server": 23,  # +_run_skill_completion exact receipt delivery boundary (#4457)
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         # +_github_http review boundary and +launch_resolution authority.
         "execution": 19,
@@ -991,7 +992,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "hooks": 22,  # +_capture_process owned shell process-group boundary;
         # +_hook_payload shared payload parser for guards  # noqa: E501
         # +context/audit admission ledgers, recipe initialization, and exploration lifecycle
-        "pipeline": 17,
+        "pipeline": 18,  # +run_skill_completion server-owned receipt authority (#4457)
         # +kitchen transition authority
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
         "recipe/rules": 57,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing +rules_note_shape_contradiction  # noqa: E501
@@ -1002,7 +1003,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +tools_audit_artifacts.py (typed audit semantic/disposition producers, #4419;
         # replaces the retired generic audit-cycle writer)
         # +_overlay_state.py (single locked, validated session-overlay boundary)
-        "hooks/guards": 33,  # +github_mutation_guard (#4432)
+        "hooks/guards": 34,  # +github_mutation_guard (#4432);
+        # +fabricated_completion_guard (#4457)
         # Three private Codex ownership modules keep lock, prelaunch transaction,
         # and per-attempt storage concerns out of the public backend gateway:
         # +_codex_config_lock, +_codex_prelaunch, +_codex_session_storage.
@@ -1430,14 +1432,16 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "and fail-closed health invariants.",
     ),
     "server/tools/tools_execution.py": (
-        2500,
+        2800,
         "REQ-CNST-010-E18: #4419 keeps the attested reservation, dispatch, exhaustive "
         "materialization outcome routing, and durable response finalization at the existing "
         "run_skill transaction boundary. Splitting that control flow would separate success "
         "bookkeeping from the ledger state it must atomically finalize. Managed native-shell "
         "lineage preparation remains at that same attested launch boundary so runtime "
         "binding and child construction cannot select different modes; specialized explorer "
-        "projection and execution-identity persistence remain at the same admission boundary.",
+        "projection and execution-identity persistence remain at the same admission boundary. "
+        "#4457 keeps receipt drafting beside exhaustive run_skill terminal projection so "
+        "every post-launch classification passes through one finalization path.",
     ),
     "server/tools/_execution_helpers.py": (
         1075,

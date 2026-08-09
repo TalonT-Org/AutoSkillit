@@ -53,7 +53,7 @@ CHANNEL_B_THEN_A_CONFIRM_SCRIPT = textwrap.dedent("""\
     # Callers pass this delay as sys.argv[2]; default 4.0 matches production poll defaults.
     time.sleep(float(sys.argv[2]) if len(sys.argv) > 2 else 4.0)
     result = {"type": "result", "subtype": "success", "is_error": False,
-              "result": "done", "session_id": "s1"}
+              "result": "done\\n%%ORDER_UP%%", "session_id": "s1"}
     sys.stdout.write(json.dumps(result, separators=(",", ":")) + "\\n")
     sys.stdout.flush()
     time.sleep(3600)
@@ -213,13 +213,13 @@ class TestChannelBDrainWait:
         )
 
         assert result.termination == TerminationReason.COMPLETED
-        # Drain wait confirmed Channel A fired: stdout is non-empty
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_A
         assert result.stdout.strip()
 
     @pytest.mark.timeout(360)
     @pytest.mark.anyio
-    async def test_channel_b_wins_drain_timeout_still_kills(self, tmp_path):
-        """Channel B fires; Channel A never fires; drain times out and process is killed.
+    async def test_channel_b_does_not_end_live_process(self, tmp_path):
+        """Channel B fires, but only the wall-clock timeout ends the live process.
 
         Sequence (fast poll params):
           t=0.10s  script creates session JSONL with initial content
@@ -250,7 +250,7 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=300,
+            timeout=60,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.5,
@@ -258,11 +258,11 @@ class TestChannelBDrainWait:
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _session_id_timeout=0.01,
-            _phase1_timeout=400,
+            _phase1_timeout=120,
         )
 
-        assert result.termination == TerminationReason.COMPLETED
-        # Drain timed out: CLI hung and never flushed its result record
+        assert result.termination == TerminationReason.TIMED_OUT
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
         assert not result.stdout.strip()
 
     @pytest.mark.timeout(90)
@@ -291,8 +291,8 @@ class TestChannelBDrainWait:
 
     @pytest.mark.timeout(360)
     @pytest.mark.anyio
-    async def test_data_confirmed_false_set_on_drain_timeout(self, tmp_path):
-        """Channel B wins the race; drain timeout expires without Channel A confirming.
+    async def test_channel_b_timeout_remains_nonterminal(self, tmp_path):
+        """Channel B corroboration does not turn a wall-clock timeout into completion.
 
         Verifies that SubprocessResult.data_confirmed is False when the bounded
         drain wait times out — i.e. Channel A never confirmed stdout data.
@@ -314,7 +314,7 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=300,
+            timeout=60,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=2.0,
@@ -322,10 +322,10 @@ class TestChannelBDrainWait:
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _session_id_timeout=0.01,
-            _phase1_timeout=400,
+            _phase1_timeout=120,
         )
 
-        assert result.termination == TerminationReason.COMPLETED
+        assert result.termination == TerminationReason.TIMED_OUT
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
 
     @pytest.mark.timeout(90)
@@ -352,12 +352,12 @@ class TestChannelBDrainWait:
 
     @pytest.mark.timeout(360)
     @pytest.mark.anyio
-    async def test_channel_b_then_a_empty_result_data_confirmed_is_false(
+    async def test_channel_b_then_empty_result_remains_nonterminal(
         self,
         tmp_path,
         monkeypatch,
     ):
-        """Channel B fires (%%ORDER_UP%% in JSONL).
+        """Channel B plus an empty result remains nonterminal.
 
         Within the drain window, Claude CLI writes a type=result record with
         result="". Channel A must NOT confirm on this — data_confirmed must
@@ -393,7 +393,7 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=300,
+            timeout=60,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=2.0,
@@ -402,20 +402,18 @@ class TestChannelBDrainWait:
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
             _session_id_timeout=0.01,
-            _phase1_timeout=400,
+            _phase1_timeout=120,
         )
-        assert result.termination == TerminationReason.COMPLETED
-        assert (
-            result.channel_confirmation == ChannelConfirmation.CHANNEL_B
-        )  # FAILS before fix: True
+        assert result.termination == TerminationReason.TIMED_OUT
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
 
 
 @pytest.mark.timeout(360)
 class TestChannelBFullPipelineAdjudication:
-    """Full end-to-end adjudication for Channel B drain-race scenarios."""
+    """Channel-B assistant evidence remains nonterminal end to end."""
 
     @pytest.mark.anyio
-    async def test_channel_b_then_a_empty_result_produces_success(
+    async def test_channel_b_then_empty_result_produces_terminal_timeout(
         self,
         tmp_path,
         monkeypatch,
@@ -446,12 +444,12 @@ class TestChannelBFullPipelineAdjudication:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=300,
+            timeout=60,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=2.0,
             natural_exit_grace_seconds=0.1,
-            _phase1_timeout=400,
+            _phase1_timeout=120,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
@@ -464,12 +462,14 @@ class TestChannelBFullPipelineAdjudication:
             audit=None,
             backend=ClaudeCodeBackend(),
         )
-        assert skill_result.success is True  # FAILS before fix: False
-        assert skill_result.needs_retry is False  # FAILS before fix: True
+        assert result.termination == TerminationReason.TIMED_OUT
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
+        assert skill_result.success is False
+        assert skill_result.needs_retry is False
 
 
-class TestChannelBDrainRacePipelineAdjudication:
-    """Integration: COMPLETED (Channel B drain timeout) flows through _build_skill_result.
+class TestChannelBTimeoutPipelineAdjudication:
+    """Integration: Channel-B evidence cannot promote a timed-out child.
 
     Session monitor fires, drain expires, process is killed with empty stdout.
     _build_skill_result must apply the Channel B provenance bypass
@@ -478,7 +478,7 @@ class TestChannelBDrainRacePipelineAdjudication:
 
     @pytest.mark.timeout(360)
     @pytest.mark.anyio
-    async def test_channel_b_drain_timeout_produces_success_skill_result(self, tmp_path):
+    async def test_channel_b_timeout_produces_terminal_timeout_result(self, tmp_path):
         """COMPLETED + data_confirmed=False + empty stdout → success=True, needs_retry=False.
 
         Channel B provenance bypass: when session monitor wins and drain expires,
@@ -500,18 +500,18 @@ class TestChannelBDrainRacePipelineAdjudication:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=300,
+            timeout=60,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.5,
             natural_exit_grace_seconds=0.1,
-            _phase1_timeout=400,
+            _phase1_timeout=120,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _session_id_timeout=0.01,
         )
 
-        assert result.termination == TerminationReason.COMPLETED
+        assert result.termination == TerminationReason.TIMED_OUT
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
 
         skill_result = _build_skill_result(
@@ -522,7 +522,7 @@ class TestChannelBDrainRacePipelineAdjudication:
             backend=ClaudeCodeBackend(),
         )
 
-        assert skill_result.success is True
+        assert skill_result.success is False
         assert skill_result.needs_retry is False
 
 
@@ -534,8 +534,8 @@ class TestNaturalExitWithChannelConfirmation:
     both complete in the same event loop tick.
     """
 
-    def test_natural_exit_channel_b_empty_stdout_is_success(self):
-        """NATURAL_EXIT + CHANNEL_B + empty stdout → success=True, no retry.
+    def test_natural_exit_channel_b_empty_stdout_is_retriable(self):
+        """Channel-B evidence cannot supply a missing terminal result.
 
         _compute_success: CHANNEL_B provenance bypass fires → True.
         _compute_retry: NATURAL_EXIT + CHANNEL_B channel guard fires → (False, NONE).
@@ -557,8 +557,8 @@ class TestNaturalExitWithChannelConfirmation:
             audit=None,
             backend=ClaudeCodeBackend(),
         )
-        assert skill_result.success is True
-        assert skill_result.needs_retry is False
+        assert skill_result.success is False
+        assert skill_result.needs_retry is True
 
 
 class TestPostExitDrainWindow:
@@ -675,7 +675,7 @@ CHANNEL_B_SUB_SKILL_COLLISION_SCRIPT = textwrap.dedent("""\
         f.flush()
     time.sleep(0.15)
     result = {"type": "result", "subtype": "success", "is_error": False,
-              "result": "done", "session_id": "s1"}
+              "result": "done\\n" + unique_marker, "session_id": "s1"}
     sys.stdout.write(json.dumps(result, separators=(",", ":")) + "\\n")
     sys.stdout.flush()
     time.sleep(3600)
@@ -721,4 +721,4 @@ class TestChannelBSubSkillCollision:
         )
 
         assert result.termination == TerminationReason.COMPLETED
-        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
+        assert result.channel_confirmation == ChannelConfirmation.CHANNEL_A

@@ -1,13 +1,13 @@
 # Hooks
 
-AutoSkillit registers 44 Claude Code hook scripts: 33 PreToolUse, 9 PostToolUse,
+AutoSkillit registers 45 Claude Code hook scripts: 34 PreToolUse, 9 PostToolUse,
 and 2 SessionStart. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry.py` via the
 `HOOK_REGISTRY` list of `HookDef` entries; `generate_hooks_json()` then
 materializes the canonical `hooks.json` that Claude Code reads.
 
-## PreToolUse hooks (33)
+## PreToolUse hooks (34)
 
 ### `branch_protection_guard.py`
 **Guarded tools:** `merge_worktree`, `push_to_remote`
@@ -377,6 +377,16 @@ Non-blocking advisory: emits `additionalContext` warning when a step has unmet
 dependencies. Permission is always `allow` — the server-side `_check_pipeline_deps`
 in `run_skill` is the primary enforcer. Fails open on missing tracker or
 malformed input.
+
+### `fabricated_completion_guard.py`
+**Guarded tools:** all tools in headless orchestrator sessions
+Denies the next tool call only when the newest role-attributed parent-assistant
+record is a standalone `<bg_result>` or completed task-notification shape and a
+fresh `run-skill-in-progress` marker binds it to the same hook session. Transcript
+paths come only from the trusted hook payload; missing, malformed, older, quoted,
+code-fenced, subagent, synthetic, wrong-session, or stale provenance fails open.
+This hook is defense in depth: the server's one-shot `run_skill` receipt and
+`complete_run_skill_result` acknowledgement are the completion authority.
 
 ## PostToolUse hooks (9)
 

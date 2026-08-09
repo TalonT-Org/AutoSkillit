@@ -402,6 +402,7 @@ def _plain_spill_envelope(
 
 _DELIVERY_BOUND_PRIORITY_KEYS: tuple[str, ...] = (
     "success",
+    "receipt_id",
     "kitchen",
     "version",
     "orchestration_rules",

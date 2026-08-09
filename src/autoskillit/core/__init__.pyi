@@ -764,9 +764,9 @@ from .types import InputSpecType as InputSpecType
 from .types import InspectorCallback as InspectorCallback
 from .types import InspectorEvidence as InspectorEvidence
 from .types import InspectorVerdict as InspectorVerdict
-from .types import InstallMode as InstallMode
 from .types import InstallationVersion as InstallationVersion
 from .types import InstalledRecipeExecution as InstalledRecipeExecution
+from .types import InstallMode as InstallMode
 from .types import IntakeRuleDef as IntakeRuleDef
 from .types import InvariantDef as InvariantDef
 from .types import InventoryAdmissionDecision as InventoryAdmissionDecision

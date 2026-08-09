@@ -969,6 +969,21 @@ def _render_agent_toml(
     return rendered
 
 
+def _eligible_agent_definitions(
+    definitions: tuple[AgentDef, ...],
+    bindings: Mapping[str, Mapping[str, str]],
+    *,
+    exact: bool,
+) -> tuple[AgentDef, ...]:
+    if exact:
+        return definitions
+    return tuple(
+        definition
+        for definition in definitions
+        if definition.name not in BUNDLED_EXPLORER_ROLES or definition.name in bindings
+    )
+
+
 def _generate_agent_tomls(
     session_dir: Path,
     agent_defs: tuple[AgentDef, ...] | None = None,
@@ -978,12 +993,11 @@ def _generate_agent_tomls(
 ) -> int:
     definitions = _bundled_agent_definitions() if agent_defs is None else agent_defs
     bindings = explorer_binding_envs or {}
-    if agent_defs is not None:
-        eligible = definitions
-    else:
-        eligible = tuple(
-            d for d in definitions if d.name not in BUNDLED_EXPLORER_ROLES or d.name in bindings
-        )
+    eligible = _eligible_agent_definitions(
+        definitions,
+        bindings,
+        exact=agent_defs is not None,
+    )
     rendered = {
         definition.name: _render_agent_toml(
             definition,
@@ -1016,12 +1030,11 @@ def _register_agent_tomls(
     registrations: list[str] = []
     definitions = _bundled_agent_definitions() if agent_defs is None else agent_defs
     bindings = explorer_binding_envs or {}
-    if agent_defs is not None:
-        eligible = definitions
-    else:
-        eligible = tuple(
-            d for d in definitions if d.name not in BUNDLED_EXPLORER_ROLES or d.name in bindings
-        )
+    eligible = _eligible_agent_definitions(
+        definitions,
+        bindings,
+        exact=agent_defs is not None,
+    )
     for definition in eligible:
         agent_path = session_dir / "agents" / f"{definition.name}.toml"
         agent = tomllib.loads(agent_path.read_text(encoding="utf-8"))

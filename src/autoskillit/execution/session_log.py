@@ -707,7 +707,11 @@ def flush_session_log(
                 if meta.get("campaign_id") in protected_ids:
                     surviving_names.add(candidate.name)
                     continue
-            shutil.rmtree(candidate, ignore_errors=True)
+            try:
+                shutil.rmtree(candidate)
+            except OSError:
+                logger.warning("session_retention_delete_failed", path=candidate, exc_info=True)
+                surviving_names.add(candidate.name)
 
         retained_rows = [row for row in index_rows if row.get("dir_name") in surviving_names]
         atomic_write(

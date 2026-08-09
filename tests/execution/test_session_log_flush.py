@@ -149,6 +149,29 @@ def test_next_writer_removes_abandoned_session_before_retention(
     assert _index_session_counter(tmp_path) == Counter({"committed-new": 1})
 
 
+def test_retention_delete_failure_preserves_index_projection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.execution.session_log as session_log
+
+    _flush(tmp_path, session_id="committed-old", max_sessions=2)
+    committed_old = tmp_path / "sessions" / "committed-old"
+    os.utime(committed_old, (1, 1))
+    original_rmtree = session_log.shutil.rmtree
+
+    def fail_old_delete(path: Path, *, ignore_errors: bool = False) -> None:
+        if path == committed_old:
+            raise PermissionError("denied")
+        original_rmtree(path, ignore_errors=ignore_errors)
+
+    monkeypatch.setattr(session_log.shutil, "rmtree", fail_old_delete)
+
+    _flush(tmp_path, session_id="committed-new", max_sessions=1)
+
+    assert committed_old.is_dir()
+    assert _index_session_counter(tmp_path) == _committed_session_counter(tmp_path)
+
+
 def test_concurrent_retention_preserves_committed_index_projection(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -244,8 +244,9 @@ def test_retention_cannot_delete_an_in_progress_writer(
     assert _index_session_counter(tmp_path) == _committed_session_counter(tmp_path)
 
 
+@pytest.mark.parametrize("success", [True, False])
 def test_summary_is_last_per_session_artifact(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, success: bool
 ) -> None:
     import autoskillit.execution.session_log as session_log
 
@@ -257,10 +258,18 @@ def test_summary_is_last_per_session_artifact(
         original_atomic_write(path, content)
 
     monkeypatch.setattr(session_log, "atomic_write", recording_atomic_write)
-    _flush(tmp_path, session_id="summary-last", campaign_id="campaign", raw_stdout="raw")
+    _flush(
+        tmp_path,
+        session_id="summary-last",
+        campaign_id="campaign",
+        raw_stdout="raw",
+        success=success,
+    )
 
     session_dir = tmp_path / "sessions" / "summary-last"
     session_writes = [path for path in writes if path.parent == session_dir]
+    if not success:
+        assert [path.name for path in session_writes[-2:]] == ["raw_stdout.jsonl", "summary.json"]
     assert session_writes[-1].name == "summary.json"
 
 

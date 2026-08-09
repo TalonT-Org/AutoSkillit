@@ -103,7 +103,7 @@ async def test_enable_exploration_revokes_authority_when_visibility_enable_fails
         lambda: SessionType.SKILL,
     )
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_exploration._get_ctx",
+        "autoskillit.server._get_ctx",
         lambda: ctx,
     )
     monkeypatch.setattr(mcp, "enable", MagicMock(side_effect=RuntimeError("enable failed")))

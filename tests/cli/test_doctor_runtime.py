@@ -315,6 +315,7 @@ class TestCheckSessionIndexProjection:
 
         assert completed.is_set()
         assert result[0].severity is Severity.OK
+        assert result[0].message.startswith("1 committed session(s)")
 
     def test_absent_lock_race_retries_under_existing_shared_lease(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

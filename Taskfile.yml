@@ -299,7 +299,7 @@ tasks:
           echo "Explorer gate did not produce one non-skipped pass"
           PYTEST_EXIT=1
         fi
-        if [[ $PYTEST_EXIT -eq 0 ]] && { [[ ! -s "$ATTESTATION_DIR/codex-explorer-conformance-v6.json" ]] || [[ ! -s "$ATTESTATION_DIR/codex-explorer-conformance-v6.json.sha256" ]]; }; then
+        if [[ $PYTEST_EXIT -eq 0 ]] && { [[ ! -s "$ATTESTATION_DIR/codex-explorer-conformance-v7.json" ]] || [[ ! -s "$ATTESTATION_DIR/codex-explorer-conformance-v7.json.sha256" ]]; }; then
           echo "Explorer gate did not publish its attestation and digest sidecar"
           PYTEST_EXIT=1
         fi
@@ -323,7 +323,7 @@ tasks:
         ).stdout
         if attestation.model_catalog_digest != project_codex_luna_catalog(catalog).projected_sha256:
             raise ValueError("published explorer attestation catalog does not match Codex")
-        ' "$ATTESTATION_DIR/codex-explorer-conformance-v6.json" || PYTEST_EXIT=1
+        ' "$ATTESTATION_DIR/codex-explorer-conformance-v7.json" || PYTEST_EXIT=1
         fi
         echo "Codex explorer gate output saved to: $TEST_OUTPUT"
         exit $PYTEST_EXIT

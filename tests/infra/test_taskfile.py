@@ -174,6 +174,13 @@ class TestTaskfile:
         assert "CODEX_SMOKE_TEST" in preconditions
         assert "CLAUDE_CODE_SMOKE_TEST" in preconditions
 
+    def test_explorer_gate_consumes_current_attestation_version(self) -> None:
+        data = self._load()
+        task = data["tasks"]["test-smoke-codex-explorer-gate"]
+        commands = "\n".join(str(command) for command in task.get("cmds", []))
+        assert "codex-explorer-conformance-v7.json" in commands
+        assert "codex-explorer-conformance-v6.json" not in commands
+
     def test_claude_startup_target_selects_exact_interactive_probe(self) -> None:
         data = self._load()
         task = data["tasks"]["test-smoke-claude-startup"]

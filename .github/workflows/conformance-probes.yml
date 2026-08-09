@@ -57,18 +57,40 @@ jobs:
           mkdir -p .autoskillit/temp
           uv sync --locked --extra dev
 
+      - name: Install pinned Codex CLI
+        run: npm install --global @openai/codex@0.147.0
+
       - name: Resolve Codex CLI version
         id: resolve-version
         run: |
           CLI_VERSION=$(codex --version 2>/dev/null || echo 'unknown')
-          if [ "$CLI_VERSION" = "unknown" ]; then
-            echo "::error::Codex CLI is not installed — cannot run conformance probes"
+          if [ "$CLI_VERSION" != "codex-cli 0.147.0" ]; then
+            echo "::error::Expected codex-cli 0.147.0, got $CLI_VERSION"
             exit 1
           fi
           echo "cli_version=${CLI_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Validate installed Codex config parsing
         run: task test-codex-config-parse
+
+      - name: Run authenticated live-web agent gate
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "::error::OPENAI_API_KEY secret is not configured — cannot run live-web agent gate"
+            exit 1
+          fi
+          task test-smoke-codex-web-agent-live-gate
+
+      - name: Upload live-web agent gate evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: codex-live-web-agent-gate-0.147.0
+          path: .autoskillit/temp/conformance/live-web-agent-gate/live-web-agent-gate.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Run non-cached Luna explorer capability gate
         env:

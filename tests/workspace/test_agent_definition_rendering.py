@@ -210,9 +210,7 @@ class TestRenderAgentDefinitionsByteIdentity:
             if not any(tool.startswith("mcp__") for tool in defn.tools):
                 originals[f"{defn.name}.md"] = (agents_dir / f"{defn.name}.md").read_bytes()
 
-        assert len(originals) >= 13, (
-            f"Expected at least 13 built-in-only agents, got {len(originals)}"
-        )
+        assert len(originals) == 14, f"Expected 14 built-in-only agents, got {len(originals)}"
 
         _render_agent_definitions(agents_dir, MARKETPLACE_PREFIX)
 

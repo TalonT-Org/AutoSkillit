@@ -40,6 +40,32 @@ def test_every_topic_has_one_terminal_ledger_entry(skill_text: str) -> None:
     assert "must never be described as active" in skill_text
 
 
+def test_named_web_role_receives_one_bounded_packet_per_topic(skill_text: str) -> None:
+    frontmatter = skill_text.split("---", maxsplit=2)[1]
+    assert "name: autoskillit:web-evidence-researcher" in frontmatter
+    assert "role: autoskillit:web-evidence-researcher" in frontmatter
+    assert "for_each: research_topics" in frontmatter
+    assert "child_model_policies" not in frontmatter
+    assert "why that topic matters to the reviewed plan" in skill_text
+    assert "two or three suggested search angles" in skill_text
+    assert "common `Verdict: answered | partial | blocked` return format" in skill_text
+    assert "do not research adjacent topics" in skill_text
+
+
+def test_parent_keeps_synthesis_and_validates_terminal_verdict(skill_text: str) -> None:
+    for responsibility in (
+        "Topic selection",
+        "cross-topic comparison",
+        "project-level recommendations",
+        "synthesis",
+        "report writing",
+        "`review_path`",
+    ):
+        assert responsibility in skill_text
+    assert "missing or malformed terminal `Verdict:` as `blocked`" in skill_text
+    assert "source URLs, freshness, coverage, conflicts" in skill_text
+
+
 @pytest.mark.parametrize(
     ("outcome", "required_contract"),
     [

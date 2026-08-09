@@ -1009,7 +1009,11 @@ def parse_skill_semantic_plan(
             for item in _mapping_list(raw_requirements.get("logical_roles", []), "logical_roles")
         )
         child_spawns = tuple(
-            ChildSpawnSpec(role=str(item.get("role", "")), count=int(item.get("count", 1)))
+            ChildSpawnSpec(
+                role=str(item.get("role", "")),
+                count=int(item.get("count", 1)),
+                for_each=(str(item["for_each"]) if item.get("for_each") is not None else None),
+            )
             for item in _mapping_list(raw_requirements.get("child_spawns", []), "child_spawns")
         )
         child_model_policies = tuple(

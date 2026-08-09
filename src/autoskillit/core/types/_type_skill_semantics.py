@@ -80,11 +80,19 @@ class ChildSpawnSpec:
 
     role: str
     count: int = 1
+    for_each: str | None = None
 
     def __post_init__(self) -> None:
         _require_nonempty(self.role, "child spawn role")
         if self.count < 1:
             raise SkillContractError("child spawn count must be positive")
+        if self.for_each is not None:
+            if not isinstance(self.for_each, str) or not self.for_each.strip():
+                raise SkillContractError("child spawn for_each must be non-empty")
+            if self.count != 1:
+                raise SkillContractError(
+                    "child spawn for_each cannot be combined with a non-default count"
+                )
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,7 +241,12 @@ class SkillSemanticPlan:
         payload: dict[str, object] = {
             "schema_version": self.schema_version,
             "child_spawns": tuple(
-                {"role": item.role, "count": item.count} for item in self.child_spawns
+                {
+                    "role": item.role,
+                    "count": item.count,
+                    **({"for_each": item.for_each} if item.for_each is not None else {}),
+                }
+                for item in self.child_spawns
             ),
             "concurrency": (
                 {"required": self.concurrency.required} if self.concurrency is not None else None

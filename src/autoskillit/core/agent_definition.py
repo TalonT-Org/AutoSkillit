@@ -26,6 +26,7 @@ __all__ = [
     "CODEX_EXPLORER_IDENTITY",
     "REPOSITORY_IMPACT_PROFILER_ROLE",
     "SEMANTIC_CODE_NAVIGATOR_ROLE",
+    "WEB_EVIDENCE_RESEARCHER_ROLE",
     "AgentDef",
     "AgentDefinitionError",
     "CodexAgentProjectionDef",
@@ -42,6 +43,7 @@ CODEX_DISABLED_WEB_SEARCH_POLICY: Literal["disabled"] = "disabled"
 CODEX_EXPLORER_IDENTITY: tuple[str, str] = ("gpt-5.6-luna", "max")
 SEMANTIC_CODE_NAVIGATOR_ROLE: str = "semantic-code-navigator"
 REPOSITORY_IMPACT_PROFILER_ROLE: str = "repository-impact-profiler"
+WEB_EVIDENCE_RESEARCHER_ROLE: str = "web-evidence-researcher"
 BUNDLED_EXPLORER_ROLES: frozenset[str] = frozenset(
     {SEMANTIC_CODE_NAVIGATOR_ROLE, REPOSITORY_IMPACT_PROFILER_ROLE}
 )
@@ -75,6 +77,7 @@ _CODEX_DISABLEABLE_FEATURES = (
     "unified_exec_zsh_fork",
 )
 _CODEX_DISABLEABLE_FEATURE_SET = frozenset(_CODEX_DISABLEABLE_FEATURES)
+_CODEX_WEB_SEARCH_MODES = frozenset({"disabled", "cached", "indexed", "live"})
 
 
 class AgentDefinitionError(ValueError):
@@ -102,7 +105,7 @@ class CodexAgentProjectionDef:
     sandbox_mode: str
     disabled_features: tuple[str, ...] = ()
     agents_enabled: bool = True
-    web_search: Literal["disabled"] | None = None
+    web_search: Literal["disabled", "cached", "indexed", "live"] | None = None
 
     def __post_init__(self) -> None:
         if self.model is not None and self.model not in CODEX_VALID_MODEL_IDS:
@@ -133,9 +136,9 @@ class CodexAgentProjectionDef:
             raise AgentDefinitionError("Codex disabled_features must use canonical order")
         if type(self.agents_enabled) is not bool:
             raise AgentDefinitionError("Codex agents_enabled must be a boolean")
-        if self.web_search is not None and self.web_search != CODEX_DISABLED_WEB_SEARCH_POLICY:
+        if self.web_search is not None and self.web_search not in _CODEX_WEB_SEARCH_MODES:
             raise AgentDefinitionError(
-                f"Codex web_search must be {CODEX_DISABLED_WEB_SEARCH_POLICY!r}"
+                "Codex web_search must be one of 'cached', 'disabled', 'indexed', or 'live'"
             )
 
 

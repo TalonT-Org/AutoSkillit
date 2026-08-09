@@ -74,6 +74,26 @@ def test_all_skill_sources_parse_the_same_semantic_plan(
     assert info.semantic_plan.operations == frozenset(SkillSemanticOperation)
 
 
+def test_for_each_child_spawn_parses_without_a_fixed_count(tmp_path: Path) -> None:
+    skill_md = tmp_path / "dynamic" / "SKILL.md"
+    declarations = """semantic_version: 1
+semantic_requirements:
+  logical_roles:
+    - name: researcher
+      purpose: research one topic
+  child_spawns:
+    - role: researcher
+      for_each: research_topics
+"""
+    _write_skill(skill_md, declarations=declarations)
+
+    info = _skill_info_from_frontmatter("dynamic", SkillSource.PROJECT_LOCAL, skill_md)
+
+    assert not info.invalidities
+    assert info.semantic_plan is not None
+    assert info.semantic_plan.child_spawns[0].for_each == "research_topics"
+
+
 def test_child_model_policy_rejects_unregistered_logical_class(tmp_path: Path) -> None:
     skill_md = tmp_path / "unknown-model-class" / "SKILL.md"
     declarations = """semantic_version: 1

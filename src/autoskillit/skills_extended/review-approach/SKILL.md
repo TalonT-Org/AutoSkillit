@@ -13,10 +13,11 @@ hooks:
 semantic_version: 1
 semantic_requirements:
   logical_roles:
-  - name: delegated-worker
-    purpose: perform the named independent responsibility and return bounded evidence
+  - name: autoskillit:web-evidence-researcher
+    purpose: collect bounded external web evidence for one runtime research topic
   child_spawns:
-  - role: delegated-worker
+  - role: autoskillit:web-evidence-researcher
+    for_each: research_topics
   concurrency:
     required: true
   join:
@@ -24,9 +25,6 @@ semantic_requirements:
   evidence:
     required: true
     independent: true
-  child_model_policies:
-  - role: delegated-worker
-    model_class: sonnet
 ---
 
 # Review Approach Skill
@@ -64,7 +62,7 @@ failure, not something to work around.
 
 **ALWAYS:**
 - Use subagents with web search for parallel research
-- Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
+- Spawn every topic child as `autoskillit:web-evidence-researcher`; do not pass a model or reasoning-effort override
 - Track every selected topic and exact child ID to a terminal result
 - Keep findings concise and actionable
 - Present options with trade-offs
@@ -94,30 +92,17 @@ Create one ledger row for every selected topic before dispatch. Each row records
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn all topic children concurrently, then join every child before synthesis. Spawn one general-purpose subagent (with web search) for each selected research topic. Each self-contained task packet must include the topic, its relevance to the reviewed plan, suggested search angles, the eight-search limit, and this instruction: the child must not launch Agent or Skill children.
+Spawn all topic children concurrently through `autoskillit:web-evidence-researcher`, then join every child before synthesis. The source skill must not pass a Claude or Codex model override.
 
-Each child should investigate:
+Each self-contained task packet contains:
 
-- What modern solutions exist for this problem class
-- How mature projects and frameworks approach it
-- Recent developments, libraries, or patterns worth considering
-- Known pitfalls and trade-offs of common approaches
+- the selected topic;
+- why that topic matters to the reviewed plan;
+- two or three suggested search angles tailored to the project's technologies and constraints;
+- a pointer to the named role's common `Verdict: answered | partial | blocked` return format; and
+- the explicit boundary `do not research adjacent topics`.
 
-Tailor the search queries to the specific technologies and constraints of the project.
-
-Every child returns this terminal envelope, including on an early stop or contract violation:
-
-```text
-Topic: {selected topic}
-Verdict: answered | partial | blocked
-Coverage: {what was and was not established}
-Citations: {source URLs associated with supported findings}
-Unknowns: {named unresolved questions}
-Web searches used: {0..8}
-Failure: {none, or a concise retryable/terminal failure reason}
-```
-
-Nested delegation is a contract violation: stop that child's research and return `Verdict: blocked` through the same envelope. After joining, accept only the three exact verdict values, treat a missing or malformed envelope as `blocked`, and update each row exactly once to its terminal result. Joined, failed, and completed work must never be described as active.
+The named role owns only bounded evidence collection for its packet and must not launch Agent or Skill children. Topic selection, cross-topic comparison, project-level recommendations, synthesis, report writing, and `review_path` remain parent responsibilities. Nested delegation is a contract violation handled by the role's common blocked envelope. After joining, accept only the three exact verdict values, treat a missing or malformed terminal `Verdict:` as `blocked`, preserve each child's source URLs, freshness, coverage, conflicts, unusable sources, and unknowns, and update each row exactly once to its terminal result. Joined, failed, and completed work must never be described as active.
 
 ### Step 3: Synthesize
 

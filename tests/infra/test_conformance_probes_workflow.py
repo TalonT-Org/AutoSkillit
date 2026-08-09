@@ -149,8 +149,55 @@ class TestVersionResolution:
         resolve = next(step for step in steps if step.get("id") == "resolve-version")
         assert '"$CLAUDE_CODE_EXECPATH" --version' in resolve["run"]
 
+    def test_codex_probe_installs_and_verifies_exact_pinned_cli(self, workflow: dict) -> None:
+        steps = workflow["jobs"]["codex-probe"]["steps"]
+        install_index, install = next(
+            (index, step)
+            for index, step in enumerate(steps)
+            if step.get("name") == "Install pinned Codex CLI"
+        )
+        resolve_index, resolve = next(
+            (index, step)
+            for index, step in enumerate(steps)
+            if step.get("id") == "resolve-version"
+        )
+
+        assert install["run"] == "npm install --global @openai/codex@0.147.0"
+        assert '"codex-cli 0.147.0"' in resolve["run"]
+        assert install_index < resolve_index
+
 
 class TestCacheGate:
+    def test_live_web_agent_gate_is_required_uncached_and_uploads_evidence(
+        self, workflow: dict
+    ) -> None:
+        steps = workflow["jobs"]["codex-probe"]["steps"]
+        gate_index, gate = next(
+            (index, step)
+            for index, step in enumerate(steps)
+            if step.get("name") == "Run authenticated live-web agent gate"
+        )
+        upload_index, upload = next(
+            (index, step)
+            for index, step in enumerate(steps)
+            if step.get("name") == "Upload live-web agent gate evidence"
+        )
+        restore_index = next(
+            index
+            for index, step in enumerate(steps)
+            if "cache/restore" in (step.get("uses") or "")
+        )
+
+        assert "if" not in gate
+        assert gate.get("continue-on-error") is not True
+        assert "task test-smoke-codex-web-agent-live-gate" in gate["run"]
+        assert gate_index < upload_index < restore_index
+        assert upload["if"] == "always()"
+        assert upload["with"]["name"] == "codex-live-web-agent-gate-0.147.0"
+        assert upload["with"]["path"].endswith("/live-web-agent-gate.json")
+        assert upload["with"]["if-no-files-found"] == "error"
+        assert upload["with"]["retention-days"] == 7
+
     def test_live_explorer_mcp_gate_is_required_before_attestation_upload(
         self, workflow: dict
     ) -> None:

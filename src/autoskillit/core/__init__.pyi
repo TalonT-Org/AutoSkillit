@@ -101,6 +101,7 @@ from .agent_definition import (
     REPOSITORY_IMPACT_PROFILER_ROLE as REPOSITORY_IMPACT_PROFILER_ROLE,
 )
 from .agent_definition import SEMANTIC_CODE_NAVIGATOR_ROLE as SEMANTIC_CODE_NAVIGATOR_ROLE
+from .agent_definition import WEB_EVIDENCE_RESEARCHER_ROLE as WEB_EVIDENCE_RESEARCHER_ROLE
 from .agent_definition import AgentDef as AgentDef
 from .agent_definition import AgentDefinitionError as AgentDefinitionError
 from .agent_definition import CodexAgentProjectionDef as CodexAgentProjectionDef

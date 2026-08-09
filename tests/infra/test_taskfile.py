@@ -181,6 +181,24 @@ class TestTaskfile:
         assert "codex-explorer-conformance-v7.json" in commands
         assert "codex-explorer-conformance-v6.json" not in commands
 
+    def test_live_web_agent_gate_is_pinned_non_skippable_and_fresh(self) -> None:
+        data = self._load()
+        task = data["tasks"]["test-smoke-codex-web-agent-live-gate"]
+        commands = "\n".join(str(command) for command in task.get("cmds", []))
+        preconditions = "\n".join(
+            str(precondition) for precondition in task.get("preconditions", [])
+        )
+
+        assert "tests/execution/backends/test_web_agent_live_gate.py" in commands
+        assert "test_explorer_live_gate.py" not in commands
+        assert "codex-cli 0.147.0" in preconditions
+        assert task["env"]["AUTOSKILLIT_WEB_AGENT_LIVE_GATE"] == "1"
+        assert 'rm -f "$EVIDENCE"' in commands
+        assert "requires exactly one non-skipped test" in commands
+        assert "live-web-agent-gate.json" in commands
+        assert '"child_web_search":"live"' in commands
+        assert '"parent_web_search":"disabled"' in commands
+
     def test_claude_startup_target_selects_exact_interactive_probe(self) -> None:
         data = self._load()
         task = data["tasks"]["test-smoke-claude-startup"]

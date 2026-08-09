@@ -112,9 +112,6 @@ jobs:
       - name: Compute test paths
         id: test-paths
         run: |
-          # Each declared shard owns its explicit set; ``general`` is the
-          # complement. The exhaustive ``case`` below is the single source of
-          # truth — adding a new shard requires a new arm here.
           SHARD_EXECUTION_DIRS="tests/execution tests/contracts tests/core tests/exploration tests/planner tests/pipeline tests/migration tests/integration"
           SHARD_RECIPE_DIRS="tests/recipe tests/docs tests/server"
           if find tests/ -maxdepth 1 -name 'test_*.py' -print0 | grep -qz ' '; then

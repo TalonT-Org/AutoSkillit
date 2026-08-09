@@ -94,6 +94,28 @@ semantic_requirements:
     assert info.semantic_plan.child_spawns[0].for_each == "research_topics"
 
 
+@pytest.mark.parametrize("for_each", ["false", "0", "[topic_a, topic_b]"])
+def test_for_each_child_spawn_rejects_non_string_yaml_values(
+    tmp_path: Path, for_each: str
+) -> None:
+    skill_md = tmp_path / "malformed-dynamic" / "SKILL.md"
+    declarations = f"""semantic_version: 1
+semantic_requirements:
+  logical_roles:
+    - name: researcher
+      purpose: research one topic
+  child_spawns:
+    - role: researcher
+      for_each: {for_each}
+"""
+    _write_skill(skill_md, declarations=declarations)
+
+    info = _skill_info_from_frontmatter("malformed-dynamic", SkillSource.PROJECT_LOCAL, skill_md)
+
+    assert info.semantic_plan is None
+    assert "child spawn for_each must be a string" in render_skill_invalidities(info.invalidities)
+
+
 def test_child_model_policy_rejects_unregistered_logical_class(tmp_path: Path) -> None:
     skill_md = tmp_path / "unknown-model-class" / "SKILL.md"
     declarations = """semantic_version: 1

@@ -1008,14 +1008,19 @@ def parse_skill_semantic_plan(
             )
             for item in _mapping_list(raw_requirements.get("logical_roles", []), "logical_roles")
         )
-        child_spawns = tuple(
-            ChildSpawnSpec(
-                role=str(item.get("role", "")),
-                count=int(item.get("count", 1)),
-                for_each=(str(item["for_each"]) if item.get("for_each") is not None else None),
+        child_spawns_list: list[ChildSpawnSpec] = []
+        for item in _mapping_list(raw_requirements.get("child_spawns", []), "child_spawns"):
+            for_each = item.get("for_each")
+            if for_each is not None and not isinstance(for_each, str):
+                raise SkillContractError("child spawn for_each must be a string")
+            child_spawns_list.append(
+                ChildSpawnSpec(
+                    role=str(item.get("role", "")),
+                    count=int(item.get("count", 1)),
+                    for_each=for_each,
+                )
             )
-            for item in _mapping_list(raw_requirements.get("child_spawns", []), "child_spawns")
-        )
+        child_spawns = tuple(child_spawns_list)
         child_model_policies = tuple(
             ChildModelPolicySpec(
                 role=str(item.get("role", "")),

@@ -46,6 +46,7 @@ __all__ = [
     "FinalizedRecipeInitializationResponse",
     "FinalizedRecipeSectionResponse",
     "admit_registered_tool_during_initialization",
+    "build_embedded_completion_response",
     "build_recipe_envelope",
     "build_completion_response",
     "complete_initialization_response",
@@ -74,6 +75,9 @@ def build_recipe_envelope(
         "delivery_bound_spill": True,
         "recipe_pull": generation.pull_identity(),
         "recipe_flow": flow_generation.identity(),
+        "completed_parts": 0,
+        "total_parts": sum(item.total_parts for item in initialization_requirements),
+        "calls_remaining": sum(item.total_parts for item in initialization_requirements),
         "required_sections": [
             {
                 "page_plan_sha256": requirement.page_plan_sha256,
@@ -143,6 +147,7 @@ class FinalizedRecipeSectionResponse:
     section: str
     page_plan_sha256: str
     part: int
+    completion_receipt: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,9 +264,13 @@ def matches_recipe_initialization_requirement(
     page_plan_sha256: str,
 ) -> bool:
     """Return whether a page belongs to the active immutable initialization."""
-    return (
-        isinstance(state, InitializingRecipe)
-        and state.initialization_id == initialization_id
+    if isinstance(state, ReadyRecipe):
+        return (
+            state.initialization_id == initialization_id
+            and state.artifact_generation == artifact_generation
+        )
+    return isinstance(state, InitializingRecipe) and (
+        state.initialization_id == initialization_id
         and state.artifact_generation == artifact_generation
         and any(
             requirement.section == section and requirement.page_plan_sha256 == page_plan_sha256
@@ -290,16 +299,48 @@ def complete_section_response(
                 separators=(",", ":"),
             )
         try:
-            tool_ctx.recipe_initialization_state = record_initialization_page(
+            updated = record_initialization_page(
                 state,
                 initialization_id=finalized.initialization_id,
                 section=finalized.section,
                 page_plan_sha256=finalized.page_plan_sha256,
                 part=finalized.part,
             )
+            assert isinstance(updated, InitializingRecipe)
+            tool_ctx.recipe_initialization_state = updated
         except ValueError:
             return json.dumps(
                 {"success": False, "error": "recipe_initialization_page_rejected"},
+                separators=(",", ":"),
+            )
+        terminal = finalized.completion_receipt is not None and initialization_is_complete(updated)
+        staged_snapshot = updated.staged_snapshot
+    if not terminal:
+        return enforced
+    try:
+        prepared = prepare_recipe_execution(tool_ctx, snapshot=staged_snapshot)
+    except Exception:
+        logger.error("terminal recipe execution preparation failed", exc_info=True)
+        return json.dumps(
+            {"success": False, "error": "recipe_execution_install_failed"},
+            separators=(",", ":"),
+        )
+    with tool_ctx.recipe_execution_lock:
+        state = tool_ctx.recipe_initialization_state
+        if not isinstance(state, InitializingRecipe) or not initialization_is_complete(state):
+            return json.dumps(
+                {"success": False, "error": "recipe_initialization_stale"},
+                separators=(",", ":"),
+            )
+        try:
+            install_recipe_execution(
+                tool_ctx,
+                prepared_execution=prepared,
+                completion_receipt=finalized.completion_receipt,
+            )
+        except RecipeExecutionAdmissionError:
+            return json.dumps(
+                {"success": False, "error": "recipe_execution_install_failed"},
                 separators=(",", ":"),
             )
     return enforced
@@ -401,6 +442,28 @@ def _render_completion_receipt(
         separators=(",", ":"),
         sort_keys=True,
     )
+
+
+def build_embedded_completion_response(
+    *,
+    initialization_id: str,
+    recipe_name: str,
+    artifact_generation: RecipeArtifactGeneration,
+    flow_generation: RecipeFlowGeneration,
+    snapshot: RecipeExecutionSnapshot,
+) -> dict[str, object]:
+    """Build the deterministic READY receipt fields carried by a terminal page."""
+    rendered = _render_completion_receipt(
+        initialization_id=initialization_id,
+        completion_receipt=_receipt(initialization_id, artifact_generation),
+        recipe_name=recipe_name,
+        artifact_generation=artifact_generation,
+        flow_generation=flow_generation,
+        credential=build_recipe_execution_credential(snapshot),
+    )
+    parsed = json.loads(rendered)
+    assert isinstance(parsed, dict)
+    return parsed
 
 
 def build_completion_response(

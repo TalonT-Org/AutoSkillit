@@ -26,9 +26,12 @@ from autoskillit.server._factory import make_recipe_execution
 from autoskillit.server._recipe_execution import build_recipe_execution_snapshot
 from autoskillit.server._recipe_initialization import (
     FinalizedRecipeInitializationResponse,
+    FinalizedRecipeSectionResponse,
+    _receipt,
     admit_registered_tool_during_initialization,
     build_completion_response,
     complete_initialization_response,
+    complete_section_response,
     stage_recipe_initialization,
 )
 
@@ -147,6 +150,27 @@ def test_completion_is_server_owned_and_commits_ready_only_after_enforcement(
         "snapshot_digest",
     }
     assert parsed_initial["recipe_execution"] == parsed_replay["recipe_execution"]
+
+
+def test_terminal_page_credit_atomically_installs_ready_recipe(minimal_ctx, tmp_path) -> None:
+    state = _stage(minimal_ctx, tmp_path)
+    receipt = _receipt("initialization", state.artifact_generation)
+    rendered = json.dumps({"success": True, "completion_receipt": receipt})
+    finalized = FinalizedRecipeSectionResponse(
+        rendered=rendered,
+        tool_ctx=minimal_ctx,
+        initialization_id="initialization",
+        artifact_generation=state.artifact_generation,
+        section="flow_records",
+        page_plan_sha256=_hash("flow-plan"),
+        part=0,
+        completion_receipt=receipt,
+    )
+
+    assert complete_section_response(finalized, rendered) == rendered
+    ready = minimal_ctx.recipe_initialization_state
+    assert isinstance(ready, ReadyRecipe)
+    assert ready.completion_receipt == receipt
 
 
 def test_completion_rejects_stale_or_altered_initialization_id(

@@ -361,6 +361,10 @@ def _render_candidate(
     body.pop("pull_tool")
     if selected.initialization_id is not None:
         body["initialization_id"] = selected.initialization_id
+        body["completed_parts"] = part + 1
+        body["calls_remaining"] = total_parts - part - 1
+    if terminal and selected.completion_response is not None:
+        body.update(selected.completion_response)
     if not terminal:
         body["next_part"] = part + 1
         body["continuation"] = recipe_section_continuation_binding(
@@ -372,12 +376,7 @@ def _render_candidate(
             next_part=part + 1,
         )
     body.update(page.descriptor.wire_ranges())
-    return json.dumps(
-        body,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    )
+    return json.dumps(body, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
 
 def recipe_section_continuation_binding(

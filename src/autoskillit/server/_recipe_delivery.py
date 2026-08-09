@@ -76,6 +76,7 @@ from autoskillit.server._recipe_generation import (
     get_recipe_generation_store,
 )
 from autoskillit.server._recipe_initialization import (
+    build_embedded_completion_response,
     build_recipe_envelope,
     stage_recipe_initialization,
 )
@@ -701,6 +702,8 @@ def _initialization_requirements(
     initialization_id: str | None,
     backend_name: str,
     completion_required: bool,
+    flow_generation: RecipeFlowGeneration,
+    execution_snapshot: RecipeExecutionSnapshot,
 ) -> tuple[RecipeInitializationRequirement, ...]:
     """Build the exact flow and entrypoint page plans advertised by a manifest."""
 
@@ -720,7 +723,22 @@ def _initialization_requirements(
             section,
             dynamic_content_loader=_entrypoint_content,
         )
-        selected = replace(selected, initialization_id=initialization_id)
+        completion_response = (
+            build_embedded_completion_response(
+                initialization_id=initialization_id,
+                recipe_name=generation.recipe_name,
+                artifact_generation=generation,
+                flow_generation=flow_generation,
+                snapshot=execution_snapshot,
+            )
+            if completion_required and initialization_id is not None and section == entrypoint
+            else None
+        )
+        selected = replace(
+            selected,
+            initialization_id=initialization_id,
+            completion_response=completion_response,
+        )
         if not selected.present:
             raise RecipeArtifactSchemaError(
                 f"required recipe initialization section is absent: {section}"
@@ -1090,6 +1108,8 @@ def finalize_recipe_delivery(
                     or "unknown"
                 ),
                 completion_required=surface_definition.initialization_activating,
+                flow_generation=flow_generation,
+                execution_snapshot=execution_snapshot,
             )
             rendered = json.dumps(
                 build_recipe_envelope(

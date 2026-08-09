@@ -1040,10 +1040,12 @@ Reconstruct `raw-text` from contiguous ranges. For `json-array-page`, use `json.
 to decode every page and extend in order. For `json-scalar-page`, decode and concatenate
 strings. For `json-element-fragment`, decode each string fragment, concatenate and
 verify the canonical element, then parse it once. Verify the complete flow digest, byte size,
-and record count plus the entrypoint section digest. Then call
+and record count plus the entrypoint section digest. Track `completed_parts`,
+`total_parts`, and `calls_remaining`. When the terminal page carries a
+`completion_receipt`, use it and skip the separate completion call; otherwise call
 `complete_recipe_initialization(initialization_id=<server-issued ID>)` without
-caller-supplied generation selectors and require its completion receipt before the
-first execution or mutation tool. Random-access pulls without the matching
+caller-supplied generation selectors. Require a completion receipt before the first
+execution or mutation tool. Random-access pulls without the matching
 initialization ID never establish readiness.
 
 **Recipe execution attestation — forwarding rule.** The completion receipt carries a

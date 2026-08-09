@@ -70,6 +70,20 @@ Consumers reject an unknown pagination version or unknown content format, mixed
 identities, gaps, overlaps, duplicates, a page after the terminal page, or a terminal
 page carrying `next_part`. They must not guess or repair a malformed continuation.
 
+### Terminal pages and embedded completion receipts
+
+The last required `get_recipe_section` page may carry the deterministic completion
+receipt and recipe-execution credential. The page credit and transition to READY occur
+only after the universal response boundary preserves the exact page bytes. When the
+receipt is present, consumers skip `complete_recipe_initialization`; otherwise the
+separate completion call remains the fallback.
+
+Receipt derivation uses only server-owned initialization and generation state, so exact
+terminal-page replay is byte-identical. The receipt is bound to the immutable artifact,
+and the page already carries the content digest and page-plan identity. The installed
+READY state includes the complete staged execution snapshot and audit authority rather
+than a standalone done flag.
+
 ## Consequences
 
 - `recipe_read_guard.py` error messages direct the agent to call `load_recipe` (and,

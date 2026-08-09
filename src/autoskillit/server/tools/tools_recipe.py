@@ -34,6 +34,7 @@ from autoskillit.pipeline import (  # noqa: F401
     GATED_TOOLS,
     UNGATED_TOOLS,
     InitializingRecipe,
+    ReadyRecipe,
 )
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
@@ -678,7 +679,7 @@ async def get_recipe_section(
                 )
             if page_plan_sha256 is not None and (page_plan_sha256 != page_plan.page_plan_sha256):
                 return _recipe_section_failure("invalid_recipe_page_plan_identity")
-            active_initialization: InitializingRecipe | None = None
+            active_initialization: InitializingRecipe | ReadyRecipe | None = None
             if initialization_id is not None:
                 with tool_ctx.recipe_execution_lock:
                     state = tool_ctx.recipe_initialization_state
@@ -690,7 +691,7 @@ async def get_recipe_section(
                     page_plan_sha256=page_plan.page_plan_sha256,
                 ):
                     return _recipe_section_failure("invalid_recipe_initialization_identity")
-                assert isinstance(state, InitializingRecipe)
+                assert isinstance(state, (InitializingRecipe, ReadyRecipe))
                 active_initialization = state
                 if page_plan_sha256 != page_plan.page_plan_sha256:
                     return _recipe_section_failure("invalid_recipe_page_plan_identity")
@@ -709,8 +710,10 @@ async def get_recipe_section(
             if continuation != expected_continuation:
                 return _recipe_section_failure("invalid_recipe_section_continuation")
             rendered = render_recipe_section_page(page_plan, part)
-            if active_initialization is None:
+            if active_initialization is None or isinstance(active_initialization, ReadyRecipe):
                 return rendered
+            rendered_payload = json.loads(rendered)
+            completion_receipt = rendered_payload.get("completion_receipt")
             return cast(
                 str,
                 FinalizedRecipeSectionResponse(
@@ -721,6 +724,9 @@ async def get_recipe_section(
                     section=section,
                     page_plan_sha256=page_plan.page_plan_sha256,
                     part=part,
+                    completion_receipt=(
+                        completion_receipt if isinstance(completion_receipt, str) else None
+                    ),
                 ),
             )
     except Exception:

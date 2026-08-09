@@ -88,6 +88,7 @@ class SelectedRecipeSection:
     value: object
     present: bool
     initialization_id: str | None = None
+    completion_response: dict[str, object] | None = None
 
 
 @dataclass(frozen=True, slots=True)

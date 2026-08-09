@@ -32,6 +32,7 @@ from autoskillit.config import (
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     PIPELINE_FORBIDDEN_TOOLS,
+    ArtifactLease,
     ProcessStaleError,
     RecipeDeliveryRequest,
     RecipeLoadError,
@@ -604,33 +605,35 @@ def _update_hook_config_with_git_ops_policy() -> None:
         logger.warning("hook_config_git_ops_policy_update_write_failed", path=str(hook_cfg_path))
 
 
-def _retain_kitchen_tracker_authority(tool_ctx: ToolContext) -> Any:
+def _retain_kitchen_tracker_authority(
+    tool_ctx: ToolContext,
+) -> tuple[TrackerParticipantKey, ArtifactLease]:
     """Retain this process incarnation's kitchen tracker lease."""
-    identity = tool_ctx.kitchen_process_identity
-    if identity is None:
-        identity = sample_kitchen_process_identity(
-            tool_ctx.kitchen_id,
-            os.getpid(),
-            tool_ctx.project_dir,
-        )
-        tool_ctx.kitchen_process_identity = identity
     target = TrackerAuthorityTarget.for_project(
         tool_ctx.project_dir,
         tool_ctx.kitchen_id,
         expected=False,
     )
-    key = TrackerParticipantKey(
-        target=target,
-        owner_kind="kitchen",
-        owner_id=identity.kitchen_id,
-        pid=identity.pid,
-        create_time=identity.create_time,
-        project_path=identity.project_path,
-    )
     with tool_ctx.tracker_leases_lock:
+        identity = tool_ctx.kitchen_process_identity
+        if identity is None:
+            identity = sample_kitchen_process_identity(
+                tool_ctx.kitchen_id,
+                os.getpid(),
+                tool_ctx.project_dir,
+            )
+            tool_ctx.kitchen_process_identity = identity
+        key = TrackerParticipantKey(
+            target=target,
+            owner_kind="kitchen",
+            owner_id=identity.kitchen_id,
+            pid=identity.pid,
+            create_time=identity.create_time,
+            project_path=identity.project_path,
+        )
         lease = retain_tracker_lease(tool_ctx.tracker_leases, key)
         tool_ctx.kitchen_tracker_key = key
-    return lease
+    return key, lease
 
 
 def _release_kitchen_tracker_authority(
@@ -640,19 +643,20 @@ def _release_kitchen_tracker_authority(
     retire: bool,
 ) -> None:
     """Release exact ToolContext ownership and optionally retire its tracker."""
-    key = tool_ctx.kitchen_tracker_key
-    identity = tool_ctx.kitchen_process_identity
     with tool_ctx.tracker_leases_lock:
+        key = tool_ctx.kitchen_tracker_key
+        identity = tool_ctx.kitchen_process_identity
         if key is not None:
             release_tracker_lease(tool_ctx.tracker_leases, key)
         tool_ctx.kitchen_tracker_key = None
-    if unregister and identity is not None:
         try:
-            unregister_active_kitchen(identity)
+            if unregister and identity is not None:
+                unregister_active_kitchen(identity)
         finally:
-            tool_ctx.kitchen_process_identity = None
-    if retire and key is not None:
-        try_retire_tracker(key.target)
+            if unregister:
+                tool_ctx.kitchen_process_identity = None
+            if retire and key is not None:
+                try_retire_tracker(key.target)
 
 
 def prune_stale_kitchen_state(project_dir: Path, current_kitchen_id: str) -> None:
@@ -698,8 +702,7 @@ def _auto_init_pipeline_tracker(tool_ctx: ToolContext) -> str | None:
     if not deps:
         return None
 
-    lease = _retain_kitchen_tracker_authority(tool_ctx)
-    key = cast(TrackerParticipantKey, tool_ctx.kitchen_tracker_key)
+    key, lease = _retain_kitchen_tracker_authority(tool_ctx)
     steps: dict[str, dict[str, str]] = {name: {"status": "pending"} for name in active_steps}
     dependencies: dict[str, list[str]] = dict(deps)
 
@@ -711,6 +714,8 @@ def _auto_init_pipeline_tracker(tool_ctx: ToolContext) -> str | None:
         "initialized_at": datetime.now(UTC).isoformat(),
     }
     result = initialize_kitchen_tracker(key.target, lease, tracker_data)
+    if result.error is not None:
+        _release_kitchen_tracker_authority(tool_ctx, unregister=False, retire=False)
     return result.error
 
 
@@ -2126,13 +2131,12 @@ async def reload_session() -> str:
         return json.dumps({"status": "error", "error": f"{type(exc).__name__}: {exc}"})
 
 
-def _register_active_recipe_kitchen(ctx: Any) -> None:
+def _register_active_recipe_kitchen(ctx: ToolContext) -> None:
     """Publish one kitchen to both process and recipe-generation lifecycles."""
     from autoskillit.server._recipe_generation import activate_kitchen  # circular-break
 
     identity = ctx.kitchen_process_identity
     if identity is None:
-        identity = sample_kitchen_process_identity(ctx.kitchen_id, os.getpid(), ctx.project_dir)
-        ctx.kitchen_process_identity = identity
+        raise RuntimeError("kitchen process identity must be retained before registration")
     register_active_kitchen(identity)
     activate_kitchen(identity.kitchen_id)

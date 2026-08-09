@@ -279,8 +279,6 @@ class TestOpenKitchenAutoInitTracker:
         from autoskillit.recipe.schema import RecipeStep
         from autoskillit.server.tools.tools_kitchen import (
             _auto_init_pipeline_tracker,
-            _release_kitchen_tracker_authority,
-            _retain_kitchen_tracker_authority,
         )
         from tests.server.conftest import _make_mock_ctx
 
@@ -296,15 +294,13 @@ class TestOpenKitchenAutoInitTracker:
         )
         tracker_path.parent.mkdir(parents=True)
         tracker_path.write_bytes(b"{not-json")
-        _retain_kitchen_tracker_authority(ctx)
-        try:
-            error = _auto_init_pipeline_tracker(ctx)
-        finally:
-            _release_kitchen_tracker_authority(ctx, unregister=False, retire=False)
+        error = _auto_init_pipeline_tracker(ctx)
 
         assert error is not None
         assert "invalid" in error
         assert tracker_path.read_bytes() == b"{not-json"
+        assert ctx.tracker_leases == {}
+        assert ctx.kitchen_tracker_key is None
 
     @pytest.mark.anyio
     async def test_open_kitchen_auto_inits_tracker(self, tmp_path):

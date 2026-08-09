@@ -97,23 +97,23 @@ def _retain_context_tracker(
     owner_kind: Literal["kitchen", "dispatch", "manual"],
     owner_id: str,
 ) -> tuple[TrackerParticipantKey, ArtifactLease]:
-    identity = tool_ctx.kitchen_process_identity
-    if identity is None:
-        identity = sample_kitchen_process_identity(
-            tool_ctx.kitchen_id or owner_id,
-            os.getpid(),
-            tool_ctx.project_dir,
-        )
-        tool_ctx.kitchen_process_identity = identity
-    key = TrackerParticipantKey(
-        target=target,
-        owner_kind=owner_kind,
-        owner_id=owner_id,
-        pid=identity.pid,
-        create_time=identity.create_time,
-        project_path=identity.project_path,
-    )
     with tool_ctx.tracker_leases_lock:
+        identity = tool_ctx.kitchen_process_identity
+        if identity is None:
+            identity = sample_kitchen_process_identity(
+                tool_ctx.kitchen_id or owner_id,
+                os.getpid(),
+                tool_ctx.project_dir,
+            )
+            tool_ctx.kitchen_process_identity = identity
+        key = TrackerParticipantKey(
+            target=target,
+            owner_kind=owner_kind,
+            owner_id=owner_id,
+            pid=identity.pid,
+            create_time=identity.create_time,
+            project_path=identity.project_path,
+        )
         lease = retain_tracker_lease(tool_ctx.tracker_leases, key)
     return key, lease
 

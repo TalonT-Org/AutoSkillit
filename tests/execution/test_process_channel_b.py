@@ -327,6 +327,7 @@ class TestChannelBDrainWait:
 
         assert result.termination == TerminationReason.TIMED_OUT
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
+        assert result.data_confirmed is False
 
     @pytest.mark.timeout(90)
     @pytest.mark.anyio

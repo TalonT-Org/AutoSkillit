@@ -62,8 +62,6 @@ RECIPE_STEP_FIELD_CLASSIFICATION: dict[str, str] = {
     # directly; the real dispatch call site (server/_recipe_execution.py)
     # sets it explicitly on synthetic bound steps.
     "declared_with_args": "execution",
-    # #4498 — zero consumer outside schema/parse code.
-    "description": "inert-tracked:#4498",
     # Decides sub-recipe merge vs. drop in _recipe_composition.py.
     "gate": "composition",
     # Server-side RecipeStep fallback (tools_execution.py) — the #2969/#3377

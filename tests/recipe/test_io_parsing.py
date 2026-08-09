@@ -517,36 +517,6 @@ def test_parse_step_with_args_key_is_not_read() -> None:
     assert step.with_args == {}, "with_args YAML key must not be read — use 'with:' instead"
 
 
-def test_parse_step_maps_description_field() -> None:
-    """_parse_step maps 'description' YAML key to RecipeStep.description."""
-    step = _parse_step({"tool": "run_cmd", "description": "Run the build"})
-    assert step.description == "Run the build"
-
-
-def test_parse_step_description_defaults_to_empty_string() -> None:
-    """_parse_step sets description to '' when YAML key absent."""
-    step = _parse_step({"tool": "run_cmd"})
-    assert step.description == ""
-
-
-def test_load_recipe_preserves_step_description(tmp_path: Path) -> None:
-    """End-to-end: load_recipe preserves description: on a step."""
-    yaml_content = textwrap.dedent("""\
-        name: desc-test
-        kitchen_rules: [rule1]
-        steps:
-          build:
-            tool: run_cmd
-            description: Run the full build suite
-            with:
-              cmd: make all
-    """)
-    recipe_file = tmp_path / "desc-test.yaml"
-    recipe_file.write_text(yaml_content)
-    recipe = load_recipe(recipe_file)
-    assert recipe.steps["build"].description == "Run the full build suite"
-
-
 @pytest.mark.parametrize(
     "bad_val",
     ["not-a-list", {"rule": "val"}, 42],

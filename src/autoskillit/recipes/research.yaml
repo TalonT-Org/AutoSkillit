@@ -1624,7 +1624,6 @@ steps:
 
       '
   patch_token_summary:
-    description: Collect all pipeline token data and patch the PR body with complete summary
     tool: run_python
     with:
       callable: autoskillit.smoke_utils.patch_pr_token_summary

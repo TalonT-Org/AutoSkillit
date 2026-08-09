@@ -597,7 +597,6 @@ def flush_session_log(
         if publish_artifacts:
             atomic_write(summary_path, _fast_dumps(summary, sort_keys=True, indent=True) + "\n")
 
-        # Project the committed session into the retained index.
         index_entry = {
             "session_id": session_id,
             "dir_name": dir_name,

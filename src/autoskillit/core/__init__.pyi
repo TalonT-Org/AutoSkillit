@@ -235,6 +235,7 @@ from .runtime.executable_binding import (
     resolve_executable_launch_binding as resolve_executable_launch_binding,
 )
 from .runtime.kitchen_state import KitchenMarker as KitchenMarker
+from .runtime.kitchen_state import OVERLAY_MAPPING_DOMAINS as OVERLAY_MAPPING_DOMAINS
 from .runtime.kitchen_state import find_caller_session_id as find_caller_session_id
 from .runtime.kitchen_state import get_state_dir as get_state_dir
 from .runtime.kitchen_state import is_marker_fresh as is_marker_fresh

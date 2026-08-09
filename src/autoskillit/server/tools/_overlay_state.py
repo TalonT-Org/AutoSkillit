@@ -13,20 +13,8 @@ from pathlib import Path
 from typing import Any, get_args, get_origin, get_type_hints
 
 from autoskillit.config import CoreRunConfig, FleetConfig, RunSkillConfig
-from autoskillit.core import atomic_write
+from autoskillit.core import OVERLAY_MAPPING_DOMAINS, atomic_write
 from autoskillit.server._misc import _hook_config_overlay_path
-
-_MAPPING_DOMAINS = frozenset(
-    {
-        "order",
-        "fleet",
-        "core",
-        "locked_ingredients",
-        "locked_steps",
-        "git_ops_policy",
-        "quota_guard",
-    }
-)
 
 
 class OverlayStateError(ValueError):
@@ -82,7 +70,7 @@ def validate_overlay_document(value: object) -> dict[str, Any]:
             f"Session overlay root must be a mapping, got {type(value).__name__}"
         )
     overlay = deepcopy(dict(value))
-    for name in _MAPPING_DOMAINS:
+    for name in OVERLAY_MAPPING_DOMAINS:
         if name in overlay and not isinstance(overlay[name], Mapping):
             raise OverlayStateError(
                 f"Session overlay domain {name!r} must be a mapping, "

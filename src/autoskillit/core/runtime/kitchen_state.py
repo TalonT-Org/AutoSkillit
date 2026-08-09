@@ -15,6 +15,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+OVERLAY_MAPPING_DOMAINS: frozenset[str] = frozenset(
+    {
+        "order",
+        "fleet",
+        "core",
+        "locked_ingredients",
+        "locked_steps",
+        "git_ops_policy",
+        "quota_guard",
+    }
+)
+
 
 @dataclass(frozen=True, slots=True)
 class KitchenMarker:
@@ -178,17 +190,9 @@ def read_kitchen_id_from_marker(base: Path | None = None) -> str:
             overlay = json.loads(overlay_path.read_text(encoding="utf-8"))
             if not isinstance(overlay, dict):
                 return ""
-            mapping_domains = {
-                "order",
-                "fleet",
-                "core",
-                "locked_ingredients",
-                "locked_steps",
-                "git_ops_policy",
-                "quota_guard",
-            }
             if any(
-                key in overlay and not isinstance(overlay[key], dict) for key in mapping_domains
+                key in overlay and not isinstance(overlay[key], dict)
+                for key in OVERLAY_MAPPING_DOMAINS
             ):
                 return ""
             for k, v in overlay.items():

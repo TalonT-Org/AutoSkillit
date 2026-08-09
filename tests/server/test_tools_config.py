@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import inspect
 import json
 from concurrent.futures import ThreadPoolExecutor
@@ -306,6 +307,27 @@ def test_config_and_ingredient_writers_preserve_each_others_keys(tmp_path) -> No
     overlay = json.loads(tmp_path.joinpath(*_OVERLAY_RELPATH).read_text())
     assert overlay["order"]["timeout"] == 600
     assert overlay["locked_ingredients"]["pipeline-1"]["flag"] == "false"
+
+
+def test_locked_overlay_excludes_concurrent_nonblocking_caller(tmp_path) -> None:
+    from autoskillit.server.tools._overlay_state import locked_overlay
+
+    lock_path = tmp_path.joinpath(*_OVERLAY_RELPATH).with_suffix(".lock")
+
+    def concurrent_lock_succeeds() -> bool:
+        with lock_path.open("a+b") as handle:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return False
+            fcntl.flock(handle, fcntl.LOCK_UN)
+            return True
+
+    with locked_overlay(tmp_path):
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            acquired = pool.submit(concurrent_lock_succeeds).result(timeout=1)
+
+    assert acquired is False
 
 
 def test_concurrent_configuration_calls_keep_disk_and_live_state(

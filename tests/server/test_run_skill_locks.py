@@ -33,6 +33,29 @@ def test_invalid_persisted_lock_state_returns_controlled_deny(
     assert result["success"] is False
     assert result["stage"] == "preflight:ingredient_locks"
     assert "Invalid persisted lock state" in result["error"]
+    assert result["retriable"] is False
+
+
+def test_lock_storage_failure_returns_retriable_deny(
+    tool_ctx_kitchen_open,
+    monkeypatch,
+) -> None:
+    from autoskillit.server.tools import tools_execution
+
+    monkeypatch.setattr(
+        tools_execution,
+        "read_overlay",
+        MagicMock(side_effect=OSError("lock storage unavailable")),
+    )
+
+    result = json.loads(
+        tools_execution._check_ingredient_locks("investigate", "pipeline-1") or "{}"
+    )
+
+    assert result["success"] is False
+    assert result["stage"] == "preflight:ingredient_locks"
+    assert "Unable to read persisted lock state" in result["error"]
+    assert result["retriable"] is True
 
 
 def test_unresolved_lock_check_propagates_invalid_overlay(tool_ctx_kitchen_open, tmp_path) -> None:

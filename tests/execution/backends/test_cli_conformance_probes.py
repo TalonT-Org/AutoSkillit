@@ -88,6 +88,7 @@ from autoskillit.hooks._capture_contract import (
     decode_capture_request,
     encode_capture_request,
 )
+from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
 from tests.execution.backends._conformance_assertions import (
     assert_boundary_spill_behavior,
     assert_config_schema,
@@ -117,13 +118,8 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.large, pytest.mark.smo
 # Intentionally independent of production; checked against codex-rs/features/src/lib.rs,
 # codex-rs/features/src/legacy.rs, and the root web_search configuration schema.
 _FORBIDDEN_CHILD_FEATURES = {
-    "apps_mcp_path_override",
-    "js_repl",
-    "js_repl_tools_only",
-    "tool_search_always_defer_mcp_tools",
+    *RETIRED_CODEX_FEATURES,
     "web_search",
-    "web_search_cached",
-    "web_search_request",
 }
 
 _SKIP_REASON = (

@@ -22,18 +22,11 @@ from autoskillit.core import (
     load_bundled_agent_definitions,
     pkg_root,
 )
+from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 _EXPLORATION_BROKER_TOOLS = frozenset(f"{DIRECT_PREFIX}{tool}" for tool in EXPLORATION_TOOLS)
-_RETIRED_CODEX_FEATURES = (
-    "apps_mcp_path_override",
-    "js_repl",
-    "js_repl_tools_only",
-    "tool_search_always_defer_mcp_tools",
-    "web_search_cached",
-    "web_search_request",
-)
 
 
 @pytest.mark.parametrize(
@@ -58,7 +51,7 @@ def test_specialized_explorers_are_terminal_luna_broker_roles(
     ) == CODEX_EXPLORER_IDENTITY
     assert definition.codex.sandbox_mode == "read-only"
     assert definition.codex.web_search == "disabled"
-    assert not (set(_RETIRED_CODEX_FEATURES) & set(definition.codex.disabled_features))
+    assert not (set(RETIRED_CODEX_FEATURES) & set(definition.codex.disabled_features))
     assert not definition.codex.agents_enabled
     assert role_boundary in definition.body
     assert "spawn peers" in definition.body
@@ -193,7 +186,7 @@ def test_web_search_policy_is_optional_and_positional_arguments_remain_stable() 
     assert projection.web_search is None
 
 
-@pytest.mark.parametrize("disabled_feature", (*_RETIRED_CODEX_FEATURES, "web_search"))
+@pytest.mark.parametrize("disabled_feature", (*RETIRED_CODEX_FEATURES, "web_search"))
 def test_retired_codex_features_fail_closed(disabled_feature: str) -> None:
     with pytest.raises(AgentDefinitionError, match="unsupported Codex disabled features"):
         CodexAgentProjectionDef(

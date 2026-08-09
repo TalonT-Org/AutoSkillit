@@ -13,18 +13,11 @@ from autoskillit.core import (
     load_bundled_agent_definitions,
 )
 from autoskillit.execution.backends.codex import _generate_agent_tomls
+from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-_FORBIDDEN_CODEX_FEATURES = (
-    "apps_mcp_path_override",
-    "js_repl",
-    "js_repl_tools_only",
-    "tool_search_always_defer_mcp_tools",
-    "web_search",
-    "web_search_cached",
-    "web_search_request",
-)
+_FORBIDDEN_CODEX_FEATURES = (*RETIRED_CODEX_FEATURES, "web_search")
 
 
 class TestExplorerRegistrationDerivesFromBindings:

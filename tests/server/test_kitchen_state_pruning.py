@@ -55,6 +55,7 @@ def test_pruner_does_not_raise(monkeypatch, tmp_path):
                 "kitchen_id": "K1",
                 "initialized_at": datetime.now(UTC).isoformat(),
                 "steps": {},
+                "dependencies": {},
             }
         )
     )
@@ -62,7 +63,7 @@ def test_pruner_does_not_raise(monkeypatch, tmp_path):
     def _raise():
         raise OSError("boom")
 
-    monkeypatch.setattr("autoskillit.core._plugin_cache._active_kitchens_path", _raise)
+    monkeypatch.setattr("autoskillit.core.pipeline_tracker._active_kitchens_path", _raise)
 
     prune_stale_kitchen_state(tmp_path, "K2")
 

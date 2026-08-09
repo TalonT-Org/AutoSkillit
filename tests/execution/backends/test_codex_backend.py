@@ -4,6 +4,7 @@ import os
 import subprocess
 import tomllib
 from collections.abc import Mapping
+from dataclasses import replace
 from enum import StrEnum
 from pathlib import Path
 from typing import cast
@@ -1928,6 +1929,31 @@ class TestCodexBackendSetupSessionDir:
         original_config = (self.session_dir / "config.toml").read_text(encoding="utf-8")
 
         with pytest.raises(ValueError, match="cover exactly the generated explorer roles"):
+            CodexBackend().setup_session_dir(
+                self.session_dir,
+                parent_sandbox_mode="read-only",
+                agent_defs=definitions,
+                explorer_binding_env=binding_envs,
+            )
+
+        assert (self.session_dir / "config.toml").read_text(encoding="utf-8") == original_config
+        assert not (self.session_dir / "agents").exists()
+
+    @pytest.mark.parametrize("role", sorted(BUNDLED_EXPLORER_ROLES))
+    def test_explorer_projection_rejects_missing_web_search_policy_before_mutation(
+        self, role: str
+    ) -> None:
+        canonical_definitions = self._explorer_definitions()
+        definitions = tuple(
+            replace(definition, codex=replace(definition.codex, web_search=None))
+            if definition.name == role
+            else definition
+            for definition in canonical_definitions
+        )
+        binding_envs = self._explorer_binding_envs(definitions, generation="first")
+        original_config = (self.session_dir / "config.toml").read_text(encoding="utf-8")
+
+        with pytest.raises(ValueError, match="must disable native web search"):
             CodexBackend().setup_session_dir(
                 self.session_dir,
                 parent_sandbox_mode="read-only",

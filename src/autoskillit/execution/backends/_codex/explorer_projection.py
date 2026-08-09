@@ -132,6 +132,8 @@ def _validated_explorer_binding_envs(
             )
         if definition.codex.sandbox_mode != "read-only":
             raise ValueError(f"explorer role {role!r} must be read-only")
+        if definition.codex.web_search != "disabled":
+            raise ValueError(f"explorer role {role!r} must disable native web search")
 
         binding = _validated_explorer_binding_env(role, explorer_binding_env[role])
         if shared_binding is None:

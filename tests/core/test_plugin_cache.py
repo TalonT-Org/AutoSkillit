@@ -61,6 +61,25 @@ def test_repeated_exact_registration_does_not_grow_registry(monkeypatch, tmp_pat
     assert len(registry["kitchens"]) == 1
 
 
+def test_registration_migrates_valid_v1_active_kitchens(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    registry_path = tmp_path / ".autoskillit" / "active_kitchens.json"
+    legacy_entry = {
+        "kitchen_id": "legacy",
+        "pid": 42,
+        "create_time": 123.5,
+        "project_path": str(tmp_path),
+        "opened_at": "2026-08-09T00:00:00+00:00",
+    }
+    _make_kitchen_file(registry_path, schema_version=1, kitchens=[legacy_entry])
+
+    register_active_kitchen(KitchenProcessIdentity("current", 43, 124.5, str(tmp_path)))
+
+    migrated = json.loads(registry_path.read_text(encoding="utf-8"))
+    assert migrated["schema_version"] == 2
+    assert [entry["kitchen_id"] for entry in migrated["kitchens"]] == ["legacy", "current"]
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

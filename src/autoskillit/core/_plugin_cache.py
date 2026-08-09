@@ -780,17 +780,23 @@ def _identity_from_entry(entry: object) -> KitchenProcessIdentity:
 def _read_active_kitchens_unlocked(path: Path) -> list[dict[str, object]]:
     if not path.exists():
         return []
-    raw = json.loads(path.read_text())
+    raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict) or frozenset(raw) != {"schema_version", "kitchens"}:
         raise ValueError("active kitchen registry does not match the exact v2 schema")
-    if raw.get("schema_version") != _ACTIVE_KITCHENS_SCHEMA_VERSION:
+    schema_version = raw.get("schema_version")
+    if schema_version not in {1, _ACTIVE_KITCHENS_SCHEMA_VERSION}:
         raise ValueError("active kitchen registry schema is unsupported")
     kitchens = raw.get("kitchens")
     if not isinstance(kitchens, list):
         raise ValueError("active kitchen registry kitchens must be a list")
     entries: list[dict[str, object]] = []
     for entry in kitchens:
-        _identity_from_entry(entry)
+        try:
+            _identity_from_entry(entry)
+        except ValueError:
+            if schema_version == 1:
+                continue
+            raise
         entries.append(dict(entry))
     return entries
 

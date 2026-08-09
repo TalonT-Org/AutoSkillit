@@ -188,21 +188,10 @@ class TestBuildSkillResultChannelAPatternRecovery:
 
 
 class TestBuildSkillResultDirMissingRecovery:
-    """DIR_MISSING channel confirmation does not silently pass — it attempts
-    late-bind recovery when conditions allow."""
+    """DIR_MISSING assistant records cannot upgrade nonterminal results."""
 
-    def test_dir_missing_with_recoverable_subtype_attempts_recovery(self):
-        """When channel_confirmation is DIR_MISSING and subtype is recoverable,
-        the recovery gate must attempt marker-based recovery.
-
-        Setup: termination=COMPLETED (bypasses stale branch), subtype=empty_output
-        (in _CHANNEL_B_RECOVERABLE_SUBTYPES), marker on a standalone line in the
-        assistant message (required by _marker_is_standalone).
-        """
-        import structlog.testing
-
+    def test_dir_missing_with_assistant_marker_does_not_recover(self):
         marker = "===DONE==="
-        # Marker must appear as a standalone line for _marker_is_standalone to match
         assistant_line = json.dumps(
             {
                 "type": "assistant",
@@ -211,8 +200,6 @@ class TestBuildSkillResultDirMissingRecovery:
                 },
             }
         )
-        # subtype=empty_output places the session in _CHANNEL_B_RECOVERABLE_SUBTYPES,
-        # triggering the DIR_MISSING recovery guard in _build_skill_result
         result_line = json.dumps(
             {
                 "type": "result",
@@ -224,8 +211,6 @@ class TestBuildSkillResultDirMissingRecovery:
             }
         )
         stdout = assistant_line + "\n" + result_line
-        # termination=COMPLETED skips the stale-branch early return so execution
-        # reaches the Channel B / DIR_MISSING recovery gate
         sub_result = SubprocessResult(
             returncode=0,
             stdout=stdout,
@@ -234,14 +219,10 @@ class TestBuildSkillResultDirMissingRecovery:
             pid=12345,
             channel_confirmation=ChannelConfirmation.DIR_MISSING,
         )
-        with structlog.testing.capture_logs() as logs:
-            skill = _build_skill_result(
-                sub_result, completion_marker=marker, backend=ClaudeCodeBackend()
-            )
-        # Recovery should succeed — marker found as standalone line in assistant_messages
-        assert skill.success is True
-        # Verify the recovery code path was taken, not just the outcome
-        assert any(e.get("event") == "dir_missing_late_bind_recovery" for e in logs)
+        skill = _build_skill_result(
+            sub_result, completion_marker=marker, backend=ClaudeCodeBackend()
+        )
+        assert skill.success is False
 
     def test_dir_missing_without_marker_does_not_recover(self):
         """DIR_MISSING with no completion marker must not silently succeed."""

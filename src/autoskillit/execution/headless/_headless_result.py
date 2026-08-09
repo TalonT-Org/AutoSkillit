@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import dataclasses
+import errno
+import stat
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -172,12 +174,17 @@ def _apply_post_session_adjudication(
     evidence: WriteEvidence,
     write_behavior: WriteBehaviorSpec | None,
     skill_contract: SkillContract | None,
+    cwd: str,
 ) -> SkillResult:
-    """Consolidated post-session adjudication: zero-write gate + outcome invariants.
+    """Apply write, invariant, and declared-artifact contract checks.
 
     Invoked as the last adjudication step before each success-finalizing
     return. Makes "a success path that skips adjudication" unrepresentable.
     """
+    fields = parse_outcome_fields(sr.result, skill_contract) if skill_contract else {}
+    if fields:
+        sr = dataclasses.replace(sr, outcome_fields=fields)
+
     if not sr.success:
         return sr
 
@@ -200,7 +207,6 @@ def _apply_post_session_adjudication(
             )
 
     if skill_contract is not None and skill_contract.outcome_invariants:
-        fields = parse_outcome_fields(sr.result, skill_contract)
         violated, detail = evaluate_outcome_invariants(fields, skill_contract.outcome_invariants)
         if violated:
             logger.warning("outcome_invariant_violated", detail=detail)
@@ -210,9 +216,81 @@ def _apply_post_session_adjudication(
                 subtype="outcome_invariant_violation",
                 needs_retry=True,
                 retry_reason=RetryReason.OUTCOME_INVARIANT,
+                outcome_fields=None,
             )
 
+    if skill_contract is not None:
+        for output in skill_contract.outputs:
+            value = fields.get(output.name)
+            if output.type != "file_path" or value is None:
+                continue
+            if not isinstance(value, str):
+                return _artifact_contract_failure(sr, output.name, str(value))
+            failure = _validate_declared_artifact(cwd, output.name, value)
+            if failure is not None:
+                subtype, detail = failure
+                retry_reason = (
+                    RetryReason.CONTRACT_RECOVERY
+                    if subtype == "artifact_contract_violation"
+                    else RetryReason.RESUME
+                )
+                return dataclasses.replace(
+                    sr,
+                    success=False,
+                    is_error=True,
+                    subtype=subtype,
+                    needs_retry=True,
+                    retry_reason=retry_reason,
+                    result=detail,
+                    outcome_fields=None,
+                )
+
     return sr
+
+
+def _artifact_contract_failure(sr: SkillResult, field_name: str, value: str) -> SkillResult:
+    safe_name = Path(value).name or "."
+    return dataclasses.replace(
+        sr,
+        success=False,
+        is_error=True,
+        subtype="artifact_contract_violation",
+        needs_retry=True,
+        retry_reason=RetryReason.CONTRACT_RECOVERY,
+        result=(
+            f"Skill output '{field_name}' did not identify a contained regular file: {safe_name}"
+        ),
+        outcome_fields=None,
+    )
+
+
+def _validate_declared_artifact(cwd: str, field_name: str, value: str) -> tuple[str, str] | None:
+    """Validate one emitted ``file_path`` without exposing unsafe paths."""
+    safe_name = Path(value).name or "."
+    producer_detail = (
+        f"Skill output '{field_name}' did not identify a contained regular file: {safe_name}"
+    )
+    infrastructure_detail = (
+        f"Could not validate skill output '{field_name}' because filesystem access failed."
+    )
+    try:
+        root = Path(cwd).resolve()
+        candidate = Path(value)
+        target = (
+            (root / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
+        )
+        try:
+            target.relative_to(root)
+        except ValueError:
+            return "artifact_contract_violation", producer_detail
+        target_stat = target.stat()
+        if not stat.S_ISREG(target_stat.st_mode):
+            return "artifact_contract_violation", producer_detail
+    except OSError as exc:
+        if exc.errno in {errno.ENOENT, errno.ENOTDIR, errno.ELOOP}:
+            return "artifact_contract_violation", producer_detail
+        return "artifact_adjudication_error", infrastructure_detail
+    return None
 
 
 def _build_skill_result(
@@ -307,7 +385,7 @@ def _build_skill_result(
                     api_retry=stale_api_retry,
                 )
                 _stale_success_sr = _apply_post_session_adjudication(
-                    _stale_success_sr, stale_evidence, write_behavior, skill_contract
+                    _stale_success_sr, stale_evidence, write_behavior, skill_contract, cwd
                 )
                 return _stale_success_sr
         # No valid result in stdout — fall through to original stale response
@@ -397,7 +475,7 @@ def _build_skill_result(
                     api_retry=idle_api_retry,
                 )
                 _idle_success_sr = _apply_post_session_adjudication(
-                    _idle_success_sr, idle_evidence, write_behavior, skill_contract
+                    _idle_success_sr, idle_evidence, write_behavior, skill_contract, cwd
                 )
                 return _idle_success_sr
         _idle_is_rate_limited = has_rate_limit_signal(idle_session, result)
@@ -818,7 +896,7 @@ def _build_skill_result(
         )
         sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 
-    sr = _apply_post_session_adjudication(sr, evidence, write_behavior, skill_contract)
+    sr = _apply_post_session_adjudication(sr, evidence, write_behavior, skill_contract, cwd)
 
     # Closure verification gate: when a ClosureAuthoritySpec is active, independently
     # verify the canonical closure report. On failure, demote to execution error so
@@ -860,7 +938,7 @@ def _build_skill_result(
         sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 
     if skill_contract is not None and skill_contract.outputs:
-        _parsed_fields = parse_outcome_fields(sr.result, skill_contract)
+        _parsed_fields = dict(sr.outcome_fields or {})
         _qualifier: str | None = None
         if sr.success and skill_contract.success_qualifiers:
             from autoskillit.execution.headless._headless_outcome import (
@@ -872,7 +950,6 @@ def _build_skill_result(
             )
         sr = dataclasses.replace(
             sr,
-            outcome_fields=_parsed_fields if _parsed_fields else None,
             outcome_invariant_violated=sr.retry_reason == RetryReason.OUTCOME_INVARIANT,
             outcome_qualifier=_qualifier,
         )

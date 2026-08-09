@@ -10,6 +10,7 @@ reporting fix_failures > 0. Covers RECT-011 through RECT-018.
 from __future__ import annotations
 
 import dataclasses
+import errno
 import json
 import re
 
@@ -635,7 +636,7 @@ class TestApplyPostSessionAdjudicationUnit:
     def test_non_success_passthrough(self) -> None:
         sr = _base_skill_result(success=False)
         result = _apply_post_session_adjudication(
-            sr, WriteEvidence.none_observed(), None, _resolve_review_contract()
+            sr, WriteEvidence.none_observed(), None, _resolve_review_contract(), ""
         )
         assert result is sr
 
@@ -645,7 +646,9 @@ class TestApplyPostSessionAdjudicationUnit:
                 verdict="already_green", accept_count=3, fixes_applied=0, fix_failures=3
             )
         )
-        result = _apply_post_session_adjudication(sr, WriteEvidence.none_observed(), None, None)
+        result = _apply_post_session_adjudication(
+            sr, WriteEvidence.none_observed(), None, None, ""
+        )
         assert result.success is True
         assert result.subtype != "outcome_invariant_violation"
 
@@ -663,7 +666,7 @@ class TestApplyPostSessionAdjudicationUnit:
         )
         result = dataclasses.replace(sr)  # sanity: replace works on SkillResult
         result = _apply_post_session_adjudication(
-            result, evidence, None, _resolve_review_contract()
+            result, evidence, None, _resolve_review_contract(), ""
         )
         assert result.success is False
         assert result.subtype == "outcome_invariant_violation"
@@ -677,7 +680,88 @@ class TestApplyPostSessionAdjudicationUnit:
             )
         )
         result = _apply_post_session_adjudication(
-            sr, WriteEvidence.none_observed(), None, _resolve_review_contract()
+            sr, WriteEvidence.none_observed(), None, _resolve_review_contract(), ""
         )
         assert result.success is True
         assert result.subtype != "outcome_invariant_violation"
+
+
+def _artifact_contract() -> SkillContract:
+    return SkillContract(
+        inputs=(),
+        outputs=[
+            SkillOutput(name="artifact", type="file_path"),
+            SkillOutput(name="note", type="string"),
+        ],
+    )
+
+
+class TestDeclaredArtifactAdjudication:
+    def test_existing_declared_file_is_preserved(self, tmp_path) -> None:
+        (tmp_path / "report.md").write_text("report")
+        sr = _base_skill_result(result_text="artifact = report.md")
+
+        result = _apply_post_session_adjudication(
+            sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)
+        )
+
+        assert result.success is True
+        assert result.outcome_fields == {"artifact": "report.md"}
+
+    @pytest.mark.parametrize("artifact_name", ["missing.md", "directory"])
+    def test_missing_or_non_file_artifact_is_producer_failure(
+        self, tmp_path, artifact_name: str
+    ) -> None:
+        if artifact_name == "directory":
+            (tmp_path / artifact_name).mkdir()
+        sr = _base_skill_result(result_text=f"artifact = {artifact_name}")
+
+        result = _apply_post_session_adjudication(
+            sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)
+        )
+
+        assert result.success is False
+        assert result.subtype == "artifact_contract_violation"
+        assert result.outcome_fields is None
+        assert artifact_name in result.result
+
+    def test_symlink_escape_is_producer_failure(self, tmp_path) -> None:
+        outside = tmp_path.parent / f"{tmp_path.name}-outside.md"
+        outside.write_text("outside")
+        (tmp_path / "report.md").symlink_to(outside)
+        sr = _base_skill_result(result_text="artifact = report.md")
+
+        result = _apply_post_session_adjudication(
+            sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)
+        )
+
+        assert result.subtype == "artifact_contract_violation"
+        assert result.outcome_fields is None
+
+    def test_absent_optional_path_and_non_path_output_are_not_validated(self, tmp_path) -> None:
+        sr = _base_skill_result(result_text="note = missing.md")
+
+        result = _apply_post_session_adjudication(
+            sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)
+        )
+
+        assert result.success is True
+        assert result.outcome_fields == {"note": "missing.md"}
+
+    @pytest.mark.parametrize("error_number", [errno.EACCES, errno.EIO, errno.EAGAIN])
+    def test_filesystem_access_failure_is_infrastructure_error(
+        self, monkeypatch, tmp_path, error_number: int
+    ) -> None:
+        sr = _base_skill_result(result_text="artifact = report.md")
+
+        def _raise(_path):
+            raise OSError(error_number, "unavailable")
+
+        monkeypatch.setattr("pathlib.Path.stat", _raise)
+        result = _apply_post_session_adjudication(
+            sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)
+        )
+
+        assert result.success is False
+        assert result.subtype == "artifact_adjudication_error"
+        assert result.outcome_fields is None

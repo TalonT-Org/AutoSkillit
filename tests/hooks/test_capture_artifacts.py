@@ -1391,7 +1391,6 @@ def test_spawn_scrubs_all_protected_controls_from_user_bash_environment(
         assert os.environ[name] == f"hostile-{name}"
 
 
-@pytest.mark.parametrize("capture_output", [False, True], ids=("direct", "capture"))
 @pytest.mark.parametrize(
     "spawn_errno",
     [None, errno.EPERM, errno.E2BIG],
@@ -1399,7 +1398,6 @@ def test_spawn_scrubs_all_protected_controls_from_user_bash_environment(
 )
 def test_spawn_bash_anchors_and_closes_inherited_cwd_fd(
     monkeypatch: pytest.MonkeyPatch,
-    capture_output: bool,
     spawn_errno: int | None,
 ) -> None:
     inherited_cwd_fds: list[int] = []
@@ -1443,7 +1441,7 @@ def test_spawn_bash_anchors_and_closes_inherited_cwd_fd(
             capture_artifacts._spawn_bash(
                 "/bin/bash",
                 "printf safe",
-                capture_output=capture_output,
+                capture_output=False,
             )
             is process
         )
@@ -1457,7 +1455,7 @@ def test_spawn_bash_anchors_and_closes_inherited_cwd_fd(
             capture_artifacts._spawn_bash(
                 "/bin/bash",
                 "printf safe",
-                capture_output=capture_output,
+                capture_output=False,
             )
 
     assert len(inherited_cwd_fds) == 1

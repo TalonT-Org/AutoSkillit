@@ -1499,14 +1499,7 @@ def test_check_publication_obligation_warns_when_state_is_unreadable(
 def test_check_publication_obligation_message_recommends_functional_repair(
     tmp_path: Path,
 ) -> None:
-    """The doctor WARNING for a pending publication obligation must continue
-    to recommend the now-functional automatic repair path.
-
-    Pins the doctor message text against future regressions: after the
-    fix to issue #4485, ``autoskillit install --maintenance-update`` is
-    invoked with ``--expected-version`` so the automatic repair is now
-    functional and the message must remain accurate.
-    """
+    """A pending publication obligation recommends automatic maintenance repair."""
     from autoskillit.cli.doctor import _check_publication_obligation
     from autoskillit.core import Severity
     from autoskillit.workspace import update_obligation_expected_version, write_obligation

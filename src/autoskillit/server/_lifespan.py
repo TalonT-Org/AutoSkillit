@@ -513,9 +513,12 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
         _mcp.disable(tags={subset})
     for tag in _collect_disabled_feature_tags(ctx.config.features, experimental_enabled=False):
         _mcp.disable(tags={tag})
-    _retain_context_tracker_authority(ctx)
-    register_active_kitchen(_context_kitchen_identity(ctx))
-    _activate_recipe_kitchen(ctx.kitchen_id)
+    try:
+        _retain_context_tracker_authority(ctx)
+        register_active_kitchen(_context_kitchen_identity(ctx))
+        _activate_recipe_kitchen(ctx.kitchen_id)
+    except Exception:
+        logger.warning("pre_reveal_kitchen_registry_failed", exc_info=True)
     _write_hook_config()
     _supports_quota = _backend_supports_quota(ctx)
     await _prime_quota_cache(supports_quota_check=_supports_quota)

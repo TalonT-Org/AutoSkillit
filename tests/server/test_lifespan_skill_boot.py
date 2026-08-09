@@ -361,6 +361,32 @@ class TestSkillAutoGateBoot:
         )
 
     @pytest.mark.anyio
+    async def test_codex_pre_reveal_fails_open_on_registry_error(self, build_ctx, monkeypatch):
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from autoskillit.core import HEADLESS_ENV_VAR, MCP_CLIENT_BACKEND_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _skill_auto_gate_boot
+
+        monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
+        monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "codex")
+        backend = MagicMock()
+        backend.capabilities.supports_tool_list_changed = False
+        ctx = build_ctx(backend=backend)
+        ctx.gate = DefaultGateState(enabled=False)
+
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                with patch(
+                    "autoskillit.server._lifespan.register_active_kitchen",
+                    side_effect=OSError("registry unavailable"),
+                ):
+                    await _skill_auto_gate_boot(ctx)
+
+        assert ctx.gate.enabled is True
+        assert ctx.gate_infrastructure_ready is True
+
+    @pytest.mark.anyio
     async def test_codex_non_headless_pre_reveal_suppresses_disabled_subset(
         self, build_ctx, monkeypatch
     ):

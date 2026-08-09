@@ -82,9 +82,7 @@ from autoskillit.core import (
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
-from autoskillit.execution import (
-    CaptureSetupError,
-)
+from autoskillit.execution import CaptureSetupError
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.pipeline import gate_error_result
 from autoskillit.server import mcp
@@ -1204,7 +1202,6 @@ async def run_skill(
                     )
         if invocation is None or projection_context is None:
             raise SkillContractError("Skill dispatch branches did not produce a bound contract")
-
         _preflight_result = None
         _bound_recipe_inputs: tuple[tuple[str, BoundScalar], ...] = ()
         _invocation_template: InvocationTemplate | None = None

@@ -463,8 +463,6 @@ def _read_session_index_projection(
         lines = (log_root / "sessions.jsonl").read_text(encoding="utf-8").splitlines()
     except FileNotFoundError:
         lines = []
-    except OSError:
-        return summaries, rows, 1
     for line in lines:
         if not line.strip():
             continue
@@ -486,14 +484,21 @@ def _check_session_index_projection(*, log_dir: str = "") -> DoctorResult:
     log_root = resolve_log_dir(log_dir)
     lock_path = session_index_lock_path(log_root)
 
-    if lock_path.is_file():
-        with ArtifactLease.acquire_existing_shared(lock_path):
-            summaries, rows, malformed = _read_session_index_projection(log_root)
-    else:
-        summaries, rows, malformed = _read_session_index_projection(log_root)
+    try:
         if lock_path.is_file():
             with ArtifactLease.acquire_existing_shared(lock_path):
                 summaries, rows, malformed = _read_session_index_projection(log_root)
+        else:
+            summaries, rows, malformed = _read_session_index_projection(log_root)
+            if lock_path.is_file():
+                with ArtifactLease.acquire_existing_shared(lock_path):
+                    summaries, rows, malformed = _read_session_index_projection(log_root)
+    except OSError as exc:
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"Could not inspect retained session index: {exc}",
+        )
 
     if summaries == rows and malformed == 0:
         return DoctorResult(

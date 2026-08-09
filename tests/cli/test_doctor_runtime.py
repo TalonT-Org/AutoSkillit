@@ -271,6 +271,23 @@ class TestCheckSessionIndexProjection:
 
         assert result.severity is Severity.WARNING
 
+    def test_reports_index_read_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import autoskillit.cli.doctor._doctor_runtime as doctor_runtime
+
+        (tmp_path / "sessions.jsonl").write_text("{}\n")
+
+        def deny_read(_path: Path, *args: object, **kwargs: object) -> str:
+            raise PermissionError("denied")
+
+        monkeypatch.setattr(Path, "read_text", deny_read)
+
+        result = doctor_runtime._check_session_index_projection(log_dir=str(tmp_path))
+
+        assert result.severity is Severity.WARNING
+        assert result.message == "Could not inspect retained session index: denied"
+
     def test_waits_for_existing_writer_lease(self, tmp_path: Path) -> None:
         from autoskillit.cli.doctor._doctor_runtime import _check_session_index_projection
         from autoskillit.core import ArtifactLease

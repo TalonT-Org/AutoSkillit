@@ -153,6 +153,8 @@ class AuditReservationRequest:
     allowed_root: Path
     parent_authority_digest: str | None = None
     retry_after_audit_attempt_id: AuditAttemptId | None = None
+    tracker_target_order_id: str | None = None
+    tracker_expected: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.recipe_execution_id, RecipeExecutionId):
@@ -189,6 +191,15 @@ class AuditReservationRequest:
             raise ValueError(
                 "AuditReservationRequest.retry_after_audit_attempt_id has the wrong type"
             )
+        if type(self.tracker_expected) is not bool:
+            raise ValueError("AuditReservationRequest.tracker_expected must be a boolean")
+        if self.tracker_target_order_id is not None:
+            _require_nonempty(
+                "AuditReservationRequest.tracker_target_order_id",
+                self.tracker_target_order_id,
+            )
+        if self.tracker_expected and self.tracker_target_order_id is None:
+            raise ValueError("expected tracker authority requires a target order id")
 
 
 @dataclass(frozen=True, slots=True)

@@ -94,6 +94,20 @@ async def test_attested_run_skill_succeeds_using_only_delivered_values(
     with_args = ready.with_args
     work_dir = tmp_path / "work"
     work_dir.mkdir()
+    tracker_path = (
+        ready.tool_ctx.project_dir / ".autoskillit" / "temp" / "pipeline_tracker" / "AB.json"
+    )
+    tracker_path.parent.mkdir(parents=True, exist_ok=True)
+    tracker_path.write_text(
+        json.dumps(
+            {
+                "pipeline_id": "AB",
+                "kitchen_id": ready.tool_ctx.kitchen_id,
+                "steps": {with_args["step_name"]: {"status": "pending"}},
+                "dependencies": {},
+            }
+        )
+    )
     ready.tool_ctx.runner.push(_make_result(returncode=1))
     ready.tool_ctx.runner.push(
         _make_result(
@@ -161,6 +175,20 @@ async def test_attested_run_skill_admits_explicit_order_id(
     with_args = ready.with_args
     work_dir = tmp_path / "work"
     work_dir.mkdir()
+    tracker_path = (
+        ready.tool_ctx.project_dir / ".autoskillit" / "temp" / "pipeline_tracker" / "AB.json"
+    )
+    tracker_path.parent.mkdir(parents=True, exist_ok=True)
+    tracker_path.write_text(
+        json.dumps(
+            {
+                "pipeline_id": "AB",
+                "kitchen_id": ready.tool_ctx.kitchen_id,
+                "steps": {with_args["step_name"]: {"status": "pending"}},
+                "dependencies": {},
+            }
+        )
+    )
 
     result = json.loads(
         await run_skill(

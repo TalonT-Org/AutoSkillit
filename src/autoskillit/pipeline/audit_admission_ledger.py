@@ -287,6 +287,8 @@ def _reservation_to_dict(reservation: AuditIdentityReservation) -> dict[str, Any
         "expected_head": (
             _head_to_dict(reservation.expected_head) if reservation.expected_head else None
         ),
+        "tracker_target_order_id": reservation.tracker_target_order_id,
+        "tracker_expected": reservation.tracker_expected,
     }
 
 
@@ -311,6 +313,8 @@ def _reservation_from_dict(data: dict[str, Any]) -> AuditIdentityReservation:
         inventory_path=Path(data["inventory_path"]),
         authority_path=Path(data["authority_path"]),
         expected_head=(_head_from_dict(expected_head) if expected_head else None),
+        tracker_target_order_id=data.get("tracker_target_order_id"),
+        tracker_expected=data.get("tracker_expected", False),
     )
 
 
@@ -323,6 +327,8 @@ def _outcome_to_dict(outcome: AuditOutcome) -> dict[str, Any]:
         "error": outcome.error,
         "kill_reason": outcome.kill_reason.value,
         "replay_response_json": outcome.replay_response_json,
+        "tracker_target_order_id": outcome.tracker_target_order_id,
+        "tracker_expected": outcome.tracker_expected,
     }
 
 
@@ -335,6 +341,8 @@ def _outcome_from_dict(data: dict[str, Any]) -> AuditOutcome:
         error=data["error"],
         kill_reason=KillReason(data.get("kill_reason", KillReason.NATURAL_EXIT.value)),
         replay_response_json=data.get("replay_response_json"),
+        tracker_target_order_id=data.get("tracker_target_order_id"),
+        tracker_expected=data.get("tracker_expected", False),
     )
 
 
@@ -985,6 +993,8 @@ class DefaultAuditAdmissionLedger:
             inventory_path=root / "inventory.json",
             authority_path=root / "authority.json",
             expected_head=current_head,
+            tracker_target_order_id=request.tracker_target_order_id,
+            tracker_expected=request.tracker_expected,
         )
 
     def _issue_handle(self, connection: sqlite3.Connection, attempt_id: AuditAttemptId) -> str:

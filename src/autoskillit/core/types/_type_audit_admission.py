@@ -696,6 +696,8 @@ class AuditIdentityReservation:
     inventory_path: Path
     authority_path: Path
     expected_head: AuditCycleHead | None
+    tracker_target_order_id: str | None = None
+    tracker_expected: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.slot_id, AuditSlotId):
@@ -766,6 +768,15 @@ class AuditIdentityReservation:
                 raise ValueError(
                     "AuditIdentityReservation expected head digest does not match parent"
                 )
+        if type(self.tracker_expected) is not bool:
+            raise ValueError("AuditIdentityReservation.tracker_expected must be a boolean")
+        if self.tracker_target_order_id is not None:
+            _require_nonempty(
+                "AuditIdentityReservation.tracker_target_order_id",
+                self.tracker_target_order_id,
+            )
+        if self.tracker_expected and self.tracker_target_order_id is None:
+            raise ValueError("expected tracker authority requires a target order id")
 
 
 @dataclass(frozen=True, slots=True)
@@ -866,6 +877,8 @@ class AuditOutcome:
     error: str | None
     kill_reason: KillReason = KillReason.NATURAL_EXIT
     replay_response_json: str | None = None
+    tracker_target_order_id: str | None = None
+    tracker_expected: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.status, AuditOutcomeStatus):
@@ -879,6 +892,12 @@ class AuditOutcome:
                 "AuditOutcome.replay_response_json",
                 self.replay_response_json,
             )
+        if type(self.tracker_expected) is not bool:
+            raise ValueError("AuditOutcome.tracker_expected must be a boolean")
+        if self.tracker_target_order_id is not None:
+            _require_nonempty("AuditOutcome.tracker_target_order_id", self.tracker_target_order_id)
+        if self.tracker_expected and self.tracker_target_order_id is None:
+            raise ValueError("expected tracker authority requires a target order id")
         if self.status is AuditOutcomeStatus.NON_PUBLISHED_STANDALONE:
             _validate_standalone_payload(
                 owner="AuditOutcome",

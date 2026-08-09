@@ -400,7 +400,16 @@ class TestOpenKitchenAutoInitTracker:
             tracker_path = tracker_dir / "kitchen-multi.json"
             assert tracker_path.exists()
 
-            deny_result = _check_pipeline_deps("review_approach", "")
+            from autoskillit.server.tools.tools_execution import _select_tracker_authority
+
+            _target, authority, key, _lease = _select_tracker_authority(ctx, "")
+            deny_result = _check_pipeline_deps("review_approach", authority)
+            if key is not None:
+                from autoskillit.server.tools.tools_pipeline_tracker import (
+                    _release_context_tracker,
+                )
+
+                _release_context_tracker(ctx, key)
 
         assert deny_result is not None
         parsed = json.loads(deny_result)
@@ -433,7 +442,19 @@ class TestCheckPipelineDepsImmutableTarget:
                 )
             )
 
-        result = _check_pipeline_deps("b", "")
+        from autoskillit.server.tools.tools_execution import _select_tracker_authority
+
+        _target, authority, key, _lease = _select_tracker_authority(
+            tool_ctx_kitchen_open,
+            "",
+        )
+        result = _check_pipeline_deps("b", authority)
+        if key is not None:
+            from autoskillit.server.tools.tools_pipeline_tracker import (
+                _release_context_tracker,
+            )
+
+            _release_context_tracker(tool_ctx_kitchen_open, key)
         assert result is None
 
 

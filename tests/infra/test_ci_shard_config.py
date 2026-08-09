@@ -24,7 +24,6 @@ KNOWN_GENERAL_SHARD_DIRS = {
     "infra",
     "recipe",
     "report",
-    "server",
     "skills",
     "skills_extended",
     "workspace",

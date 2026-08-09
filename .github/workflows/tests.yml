@@ -112,7 +112,7 @@ jobs:
       - name: Compute test paths
         id: test-paths
         run: |
-          SHARD_A_DIRS="tests/execution tests/contracts tests/core tests/exploration tests/planner tests/pipeline tests/migration tests/integration"
+          SHARD_A_DIRS="tests/execution tests/contracts tests/core tests/exploration tests/planner tests/pipeline tests/migration tests/integration tests/server"
           SHARD_B_DIRS="tests/recipe tests/docs"
           if find tests/ -maxdepth 1 -name 'test_*.py' -print0 | grep -qz ' '; then
             echo "::error::Test filenames with spaces are not supported by the shard path splitter"

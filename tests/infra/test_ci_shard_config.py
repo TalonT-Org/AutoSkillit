@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core.io import load_yaml
 from tests._test_filter import FilterMode, FullRunReason, build_test_scope
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
@@ -74,36 +75,22 @@ def _assert_expected_assignments_present(
 def _compute_test_paths_body(text: str) -> str:
     """Return the shell body of the ``Compute test paths`` step.
 
-    The step is identified by ``id: test-paths`` and a following ``run: |``
-    block; its body extends until the first non-empty line at a smaller indent
-    than the body's first non-empty line. Raises ``pytest.fail`` when the step
-    is missing or malformed.
+    Raises ``pytest.fail`` when the step is missing or its run body is malformed.
     """
-    marker = "id: test-paths"
-    if marker not in text:
+    workflow = load_yaml(text)
+    jobs = workflow.get("jobs") if isinstance(workflow, dict) else None
+    test_job = jobs.get("test") if isinstance(jobs, dict) else None
+    steps = test_job.get("steps") if isinstance(test_job, dict) else None
+    if not isinstance(steps, list):
         pytest.fail("Compute test paths step (id: test-paths) not found in workflow")
-    step_start = text.index(marker)
-    run_marker = "run: |"
-    run_start = text.find(run_marker, step_start)
-    if run_start == -1:
-        pytest.fail("Compute test paths step is missing its `run: |` block")
-    body_start = run_start + len(run_marker)
-    lines = text[body_start:].splitlines(keepends=True)
-    indent: int | None = None
-    body_lines: list[str] = []
-    for line in lines:
-        if not line.strip():
-            body_lines.append(line)
+    for step in steps:
+        if not isinstance(step, dict) or step.get("id") != "test-paths":
             continue
-        stripped_indent = len(line) - len(line.lstrip())
-        if indent is None:
-            indent = stripped_indent
-        if stripped_indent < indent:
-            break
-        body_lines.append(line)
-    if indent is None:
-        pytest.fail("Compute test paths step has empty run body")
-    return "".join(body_lines)
+        body = step.get("run")
+        if not isinstance(body, str) or not body.strip():
+            pytest.fail("Compute test paths step is missing its `run` body")
+        return body
+    pytest.fail("Compute test paths step (id: test-paths) not found in workflow")
 
 
 def _parse_case_arms(body: str) -> dict[str, str]:
@@ -217,8 +204,16 @@ class TestCIShardConfig:
             _parse_shard_assignments(text_duplicate)
 
     def test_compute_paths_rejects_missing_run_block(self) -> None:
-        with pytest.raises(pytest.fail.Exception, match="missing its `run: \\|` block"):
-            _compute_test_paths_body("- name: Compute test paths\n  id: test-paths\n")
+        text = "jobs:\n  test:\n    steps:\n      - id: test-paths\n"
+        with pytest.raises(pytest.fail.Exception, match="missing its `run` body"):
+            _compute_test_paths_body(text)
+
+    def test_compute_paths_uses_yaml_structure_not_key_order(self) -> None:
+        text = (
+            "jobs:\n  test:\n    steps:\n"
+            "      - run: |-\n          echo ok\n        id: test-paths\n"
+        )
+        assert _compute_test_paths_body(text) == "echo ok"
 
     def test_case_parser_rejects_malformed_arm(self) -> None:
         body = 'case "$SHARD" in\nexecution echo "missing delimiter";;\nesac'

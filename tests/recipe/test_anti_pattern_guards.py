@@ -133,3 +133,27 @@ def test_no_block_exceeds_run_cmd_budget(recipe_path):
             f"{recipe_path.stem}: block {block.name!r} has "
             f"{block.tool_counts.get('run_cmd', 0)} run_cmd steps (budget {budget})"
         )
+
+
+@pytest.mark.parametrize("recipe_path", _all_bundled_recipes(), ids=lambda p: p.stem)
+def test_no_step_declares_description_key(recipe_path):
+    """AP6: No step mapping in any bundled recipe may declare a `description` key.
+
+    RecipeStep no longer exposes a `description` field; YAML inputs that still
+    carry one are silently ignored by the parser today, so this guard makes the
+    bundled-source cleanup an enforced invariant rather than a one-shot sweep.
+    Recipe-level and ingredient-level `description` keys are untouched by this
+    guard — they are read by Recipe and RecipeIngredient respectively.
+    """
+    raw = load_yaml(recipe_path)
+    steps = raw.get("steps", {})
+    violations = [
+        f"{recipe_path.stem}.{step_name}"
+        for step_name, step_data in steps.items()
+        if isinstance(step_data, dict) and "description" in step_data
+    ]
+    assert not violations, (
+        "bundled recipe steps still declare a `description` key (recipe-level "
+        "and ingredient-level descriptions are unrelated):\n"
+        + "\n".join(f"  - {v}" for v in violations)
+    )

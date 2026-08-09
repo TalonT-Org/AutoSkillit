@@ -87,8 +87,6 @@ class TestServerSideStepCompletionMarking:
     async def test_wire_delivery_is_acknowledged_through_completion_handler(
         self, tool_ctx_kitchen_open, tmp_path, monkeypatch
     ):
-        from autoskillit.server import mcp
-
         monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
         _setup_project(tmp_path, tool_ctx_kitchen_open)
         tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
@@ -100,8 +98,12 @@ class TestServerSideStepCompletionMarking:
         )
         tool_ctx_kitchen_open.executor = AsyncMock()
         tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=_SUCCESS_RESULT)
-        registered = await mcp.get_tool("run_skill")
-        assert isinstance(registered, FunctionTool)
+
+        async def placeholder() -> str:
+            return "unused"
+
+        registered = FunctionTool.from_function(placeholder, name="run_skill")
+        fake_mcp = SimpleNamespace(get_tool=AsyncMock(return_value=registered))
         context = MiddlewareContext(
             message=CallToolRequestParams(name="run_skill", arguments={}),
             fastmcp_context=SimpleNamespace(session_id="request-session"),  # type: ignore[arg-type]
@@ -117,7 +119,9 @@ class TestServerSideStepCompletionMarking:
             )
             return registered.convert_result(rendered)
 
-        delivered = await RunSkillCompletionMiddleware(mcp).on_call_tool(context, call_next)
+        delivered = await RunSkillCompletionMiddleware(fake_mcp).on_call_tool(  # type: ignore[arg-type]
+            context, call_next
+        )
         assert len(delivered.content) == 1
         assert isinstance(delivered.content[0], TextContent)
         receipt_id = json.loads(delivered.content[0].text)["receipt_id"]

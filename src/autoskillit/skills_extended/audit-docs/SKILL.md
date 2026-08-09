@@ -15,20 +15,6 @@ hooks:
     - type: command
       command: 'echo ''[SKILL: audit-docs] Auditing documentation for staleness and drift...'''
       once: true
-semantic_version: 1
-semantic_requirements:
-  logical_roles:
-  - name: delegated-worker
-    purpose: perform the named independent responsibility and return bounded evidence
-  child_spawns:
-  - role: delegated-worker
-  concurrency:
-    required: true
-  join:
-    required: true
-  evidence:
-    required: true
-    independent: true
 ---
 
 # Documentation Audit Skill
@@ -53,7 +39,7 @@ Audit all documentation sources for drift, staleness, and inconsistency against 
 **ALWAYS:**
 - Ground every cross-reference finding in what the code actually does (not what other docs say)
 - Start all independent child delegations before awaiting any result to maximize concurrency
-- Use subagents for parallel exploration
+- Dispatch all ready deterministic exploration vectors in one wave and join every leaf
 - Write report to `{{AUTOSKILLIT_TEMP}}/audit-docs/docs_audit_{YYYY-MM-DD_HHMMSS}.md`
 - Provide file:line references for every finding
 - Categorize findings by severity (CRITICAL, HIGH, MEDIUM, LOW)
@@ -92,37 +78,61 @@ Flag findings in these categories (maps to REQ-SKILL-004):
 
 1. **Pre-flight**: Verify `{{AUTOSKILLIT_TEMP}}/audit-docs/` directory exists; create it if not.
 
-2. **Familiarization wave (SINGLE MESSAGE)** — spawn 6 parallel subagents, one per subsystem group. Each subagent reports: actual module/component names, exported symbols, behavioral summary (2–5 sentences per module). If any subagent fails, record the gap and continue.
+2. **Familiarization wave (SINGLE MESSAGE)** — dispatch the six ready evidence-only vectors below through the deterministic exploration router in one wave. Leaves collect facts only. If any leaf fails, record the gap and continue.
 
    **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
    Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-   | Agent | Subsystems | Focus |
-   |---|---|---|
-   | Agent 1 | `core/`, `config/` | What these modules actually expose and do |
-   | Agent 2 | `execution/`, `workspace/` | Runtime orchestration and workspace lifecycle |
-   | Agent 3 | `recipe/`, `migration/` | Recipe schema, rules, validation, migration engine |
-   | Agent 4 | `server/` | MCP tool surface, gating, lifespan, factory |
-   | Agent 5 | `cli/`, `hooks/` | CLI commands, hook scripts, what each does |
-   | Agent 6 | `skills/`, `skills_extended/` | Bundled skills, categories, tiers |
+<!-- autoskillit:exploration-vector id="familiarize-core-config" -->
+   **Objective:** Establish what `src/autoskillit/core/` and `config/` expose and do. **Entry point:** their package gateways and registries. **Tool/source guidance:** trace definitions, imports, calls, and direct consumers; cite `file:line` evidence. **Scope boundary:** facts only, no documentation judgment or mutation. **Ignore list:** tests, generated files, temp artifacts, and unrelated packages. **Expected typed output:** `Verdict: answered | partial | blocked`, evidence records with symbol, behavior, and `file:line`, plus coverage gaps.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="familiarize-execution-workspace" -->
+   **Objective:** Establish runtime orchestration and workspace lifecycle behavior in `execution/` and `workspace/`. **Entry point:** package gateways and backend/session/worktree entry paths. **Tool/source guidance:** trace imports, calls, references, and affected consumers with `file:line` evidence. **Scope boundary:** facts only; no severity, consolidation, or mutation. **Ignore list:** tests, logs, generated files, and unrelated packages. **Expected typed output:** `Verdict: answered | partial | blocked`, evidence records, and coverage gaps.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="familiarize-recipe-migration" -->
+   **Objective:** Establish recipe schema, validation, rules, and migration behavior. **Entry point:** `recipe/` and `migration/` package gateways. **Tool/source guidance:** trace definitions, imports, calls, and consumers with `file:line` evidence. **Scope boundary:** facts only; no documentation comparison or mutation. **Ignore list:** tests, generated recipe artifacts, temp files, and unrelated packages. **Expected typed output:** `Verdict: answered | partial | blocked`, evidence records, and coverage gaps.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="familiarize-server" -->
+   **Objective:** Establish the MCP tool surface, visibility gates, lifespan, and factory wiring in `server/`. **Entry point:** server factory, state, and tool registration modules. **Tool/source guidance:** trace declarations, definitions, imports, calls, and consumers with `file:line` evidence. **Scope boundary:** facts only; no severity or mutation. **Ignore list:** tests, generated schemas, temp files, and non-server implementation detail. **Expected typed output:** `Verdict: answered | partial | blocked`, evidence records, and coverage gaps.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="familiarize-cli-hooks" -->
+   **Objective:** Establish CLI commands and hook-script behavior. **Entry point:** CLI registration and the hook registry. **Tool/source guidance:** trace definitions, calls, references, and affected consumers with `file:line` evidence. **Scope boundary:** facts only; no documentation judgment or mutation. **Ignore list:** tests, generated files, temp artifacts, and unrelated packages. **Expected typed output:** `Verdict: answered | partial | blocked`, evidence records, and coverage gaps.
+<!-- /autoskillit:exploration-vector -->
+
+<!-- autoskillit:exploration-vector id="familiarize-skills" -->
+   **Objective:** Establish the bundled `skills/` and `skills_extended/` catalog, categories, tiers, and consumers. **Entry point:** skill directories and catalog loaders. **Tool/source guidance:** trace declarations, references, and affected consumers with `file:line` evidence. **Scope boundary:** facts only; no cross-document judgment or mutation. **Ignore list:** tests, temp projections, generated files, and project-local skills. **Expected typed output:** `Verdict: answered | partial | blocked`, evidence records, and coverage gaps.
+<!-- /autoskillit:exploration-vector -->
 
 3. **Doc inventory** — enumerate all documentation sources (list files found under each source category above).
 
-4. **Cross-reference wave** — spawn 4 parallel subagents, each checking one doc domain against the familiarization findings:
+4. **Cross-reference wave** — after the parent assembles the documentation inventory, dispatch the four ready evidence-only vectors below through the deterministic router in one wave. Each leaf checks one domain against code-grounded familiarization evidence:
 
-   | Agent | Domain | What to check |
-   |---|---|---|
-   | Agent A | `AGENTS.md` (and physical `CLAUDE.md` for Claude-only overlay) | Architecture tree accuracy, file path references, tool/skill counts, layer descriptions |
-   | Agent B | `docs/architecture/**` | Component names, module paths, layer assignments |
-   | Agent C | `docs/requirements/**` and `docs/specs/**` | API surface, behavioral contracts |
-   | Agent D | Recipe YAML descriptions + docstrings | Step descriptions, ingredient names, parameter docs |
+<!-- autoskillit:exploration-vector id="crossref-agent-guides" -->
+   **Objective:** Collect code-grounded evidence for claims in `AGENTS.md` and the physical `CLAUDE.md` overlay. **Entry point:** those guide files and the symbols/paths they name. **Tool/source guidance:** trace references and affected consumers; return both claim and actual `file:line` evidence. **Scope boundary:** evidence only; the parent decides absence, severity, and findings. **Ignore list:** tests, generated files, temp artifacts, and stylistic wording differences. **Expected typed output:** `Verdict: answered | partial | blocked`, claim/evidence associations, and coverage gaps.
+<!-- /autoskillit:exploration-vector -->
 
-5. **Consolidate** — merge findings from all 4 agents, deduplicate by file:line, assign severity.
+<!-- autoskillit:exploration-vector id="crossref-architecture" -->
+   **Objective:** Collect code-grounded evidence for component, module-path, and layer claims in `docs/architecture/**`. **Entry point:** architecture documents and named package gateways. **Tool/source guidance:** trace imports, references, and affected consumers with paired `file:line` evidence. **Scope boundary:** evidence only; no consolidation, severity, or mutation. **Ignore list:** tests, generated files, temp artifacts, and prose-only differences. **Expected typed output:** `Verdict: answered | partial | blocked`, claim/evidence associations, and coverage gaps.
+<!-- /autoskillit:exploration-vector -->
 
-6. **Self-validation pass** — for every CRITICAL or HIGH finding, re-read the cited file line to confirm the claim; downgrade or remove if not confirmed.
+<!-- autoskillit:exploration-vector id="crossref-requirements-specs" -->
+   **Objective:** Collect code-grounded evidence for API and behavior claims in `docs/requirements/**` and `docs/specs/**`. **Entry point:** requirement/specification identifiers and their named definitions. **Tool/source guidance:** trace definitions, references, and affected consumers with paired `file:line` evidence. **Scope boundary:** evidence only; the parent decides contradictions and severity. **Ignore list:** tests, generated files, temp artifacts, and requirements without an implemented scope. **Expected typed output:** `Verdict: answered | partial | blocked`, claim/evidence associations, and coverage gaps.
+<!-- /autoskillit:exploration-vector -->
 
-7. **Write report** to `{{AUTOSKILLIT_TEMP}}/audit-docs/docs_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory) using the format below.
+<!-- autoskillit:exploration-vector id="crossref-recipes-docstrings" -->
+   **Objective:** Collect code-grounded evidence for recipe YAML descriptions and Python docstrings. **Entry point:** recipe `description`, `summary`, and `note` fields plus public module/class/function docstrings under `src/`. **Tool/source guidance:** trace declarations, definitions, references, and affected consumers with paired `file:line` evidence. **Scope boundary:** evidence only; no deduplication, severity, report writing, or mutation. **Ignore list:** tests, generated recipe artifacts, temp files, and comments that are not docstrings. **Expected typed output:** `Verdict: answered | partial | blocked`, claim/evidence associations, and coverage gaps.
+<!-- /autoskillit:exploration-vector -->
+
+5. **Consolidate (parent only)** — assemble the doc inventory, run secondary absence checks against collector completeness, merge all leaf evidence, deduplicate by file:line, and assign severity. Preserve conflicts and every `partial` or `blocked` coverage gap.
+
+6. **Self-validation pass (parent only)** — for every CRITICAL or HIGH finding, re-read the cited file line to confirm the claim; downgrade or remove if not confirmed.
+
+7. **Write report (parent only)** to `{{AUTOSKILLIT_TEMP}}/audit-docs/docs_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory) using the format below. Every mutation remains in the parent.
 
 8. **Output summary** — print finding counts by severity to terminal.
 

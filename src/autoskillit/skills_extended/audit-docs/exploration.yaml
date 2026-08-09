@@ -1,0 +1,41 @@
+vectors:
+- id: familiarize-core-config
+  role: semantic-code-navigator
+  relationship_classes: [declares, defines, imports, calls, references]
+  rationale: Symbol and call evidence establishes the public core/config behavior that documentation must match.
+- id: familiarize-execution-workspace
+  role: semantic-code-navigator
+  relationship_classes: [imports, calls, references, affects]
+  rationale: Import, call, and impact evidence establishes runtime orchestration and workspace lifecycle behavior.
+- id: familiarize-recipe-migration
+  role: semantic-code-navigator
+  relationship_classes: [defines, imports, calls, references]
+  rationale: Definition and call evidence establishes recipe validation and migration behavior.
+- id: familiarize-server
+  role: semantic-code-navigator
+  relationship_classes: [declares, defines, imports, calls, references]
+  rationale: Symbol and call evidence establishes the MCP surface, visibility gates, lifespan, and factory wiring.
+- id: familiarize-cli-hooks
+  role: semantic-code-navigator
+  relationship_classes: [defines, imports, calls, references, affects]
+  rationale: Definition, call, and impact evidence establishes CLI commands and hook behavior.
+- id: familiarize-skills
+  role: repository-impact-profiler
+  relationship_classes: [declares, references, affects]
+  rationale: Repository-wide declaration and impact evidence establishes the bundled skill catalog and consumers.
+- id: crossref-agent-guides
+  role: repository-impact-profiler
+  relationship_classes: [references, affects]
+  rationale: Reference and impact evidence connects agent-guide claims to their concrete code consumers.
+- id: crossref-architecture
+  role: repository-impact-profiler
+  relationship_classes: [imports, references, affects]
+  rationale: Import and impact evidence checks architecture claims against package boundaries and consumers.
+- id: crossref-requirements-specs
+  role: repository-impact-profiler
+  relationship_classes: [defines, references, affects]
+  rationale: Definition and impact evidence checks requirement and specification claims against implemented contracts.
+- id: crossref-recipes-docstrings
+  role: repository-impact-profiler
+  relationship_classes: [declares, defines, references, affects]
+  rationale: Declaration and impact evidence checks recipe descriptions and docstrings against their runtime consumers.

@@ -231,13 +231,13 @@ class TestCheckSessionIndexProjection:
         )
 
     @pytest.mark.parametrize(
-        ("summaries", "rows", "severity"),
+        ("summaries", "rows", "severity", "expected_detail"),
         [
-            ((), (), Severity.OK),
-            (("complete",), ("complete",), Severity.OK),
-            (("missing",), (), Severity.WARNING),
-            (("duplicate",), ("duplicate", "duplicate"), Severity.WARNING),
-            ((), ("dangling",), Severity.WARNING),
+            ((), (), Severity.OK, None),
+            (("complete",), ("complete",), Severity.OK, None),
+            (("missing",), (), Severity.WARNING, "missing=1"),
+            (("duplicate",), ("duplicate", "duplicate"), Severity.WARNING, "duplicate=1"),
+            ((), ("dangling",), Severity.WARNING, "dangling=1"),
         ],
     )
     def test_projection_multiplicity(
@@ -246,6 +246,7 @@ class TestCheckSessionIndexProjection:
         summaries: tuple[str, ...],
         rows: tuple[str, ...],
         severity: Severity,
+        expected_detail: str | None,
     ) -> None:
         from autoskillit.cli.doctor._doctor_runtime import _check_session_index_projection
 
@@ -257,6 +258,8 @@ class TestCheckSessionIndexProjection:
         result = _check_session_index_projection(log_dir=str(tmp_path))
 
         assert result.severity is severity
+        if expected_detail is not None:
+            assert expected_detail in result.message
         assert not (tmp_path / ".locks" / "sessions-index.lock").exists()
 
     def test_reports_malformed_index_row(self, tmp_path: Path) -> None:

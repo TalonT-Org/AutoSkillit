@@ -530,7 +530,6 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
         dir_name = f"session-{i:04d}"
         d = sessions_dir / dir_name
         d.mkdir()
-        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         (d / "meta.json").write_text(
             json.dumps({"campaign_id": "active-campaign", "dispatch_id": f"d{i}"})
         )
@@ -553,7 +552,6 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
         dir_name = f"session-{i:04d}"
         d = sessions_dir / dir_name
         d.mkdir()
-        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         _commit_seeded_session(d, dir_name)
         os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         with index_path.open("a") as f:
@@ -679,7 +677,6 @@ def test_retention_preserves_index_for_protected(tmp_path, monkeypatch):
         dir_name = f"session-{i:04d}"
         d = sessions_dir / dir_name
         d.mkdir()
-        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         if i < 2:
             (d / "meta.json").write_text(
                 json.dumps({"campaign_id": "live-campaign", "dispatch_id": f"d{i}"})
@@ -737,7 +734,6 @@ def test_retention_handles_missing_meta_json(tmp_path, monkeypatch):
         dir_name = f"session-{i:04d}"
         d = sessions_dir / dir_name
         d.mkdir()
-        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         # No meta.json written — sessions are not linked to any campaign
         _commit_seeded_session(d, dir_name)
         os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
@@ -900,13 +896,10 @@ def test_retention_no_protection_when_callback_is_none(tmp_path: Path, monkeypat
         dir_name = f"session-{i:04d}"
         d = sessions_dir / dir_name
         d.mkdir()
-        os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         if i < 2:
             (d / "meta.json").write_text(
                 json.dumps({"campaign_id": "active-campaign", "dispatch_id": f"d{i}"})
             )
-            # Reset mtime after meta.json write (writing a file bumps directory mtime)
-            os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         _commit_seeded_session(d, dir_name)
         os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
         with index_path.open("a") as f:

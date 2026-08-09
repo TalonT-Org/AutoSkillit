@@ -4,12 +4,12 @@
 Issue #4485's root cause was three production sites hand-building argv
 literals for ``autoskillit install --maintenance-update`` and bypassing
 the typed contract that would have enforced ``--expected-version``. This
-AST guard makes the structural invariant permanent: any ast.List literal
+AST guard makes the structural invariant permanent: any list or tuple literal
 containing the ``--maintenance-update`` string outside the canonical
 builder module is a violation.
 
 Pattern: ast.walk() over every .py file under src/autoskillit, skipping
-the allowlist. Each ast.List literal is inspected for any constant elt
+the allowlist. Each list or tuple literal is inspected for any constant elt
 equal to ``--maintenance-update``. Found literals are reported as
 violations with file:line:violation-line-number.
 """
@@ -35,15 +35,21 @@ _SRC_ROOT = Path("src/autoskillit")
 
 
 def _scan_for_maintenance_update_literals(tree: ast.AST) -> list[int]:
-    """Return line numbers of ast.List literals containing ``--maintenance-update``."""
+    """Return sequence-literal lines containing ``--maintenance-update``."""
     found: list[int] = []
     for node in ast.walk(tree):
-        if isinstance(node, ast.List):
+        if isinstance(node, (ast.List, ast.Tuple)):
             for elt in node.elts:
                 if isinstance(elt, ast.Constant) and elt.value == "--maintenance-update":
                     found.append(node.lineno)
                     break
     return found
+
+
+def test_scan_detects_tuple_literals() -> None:
+    tree = ast.parse("argv = ('install', '--maintenance-update')")
+
+    assert _scan_for_maintenance_update_literals(tree) == [1]
 
 
 def test_no_hand_built_maintenance_update_argv() -> None:

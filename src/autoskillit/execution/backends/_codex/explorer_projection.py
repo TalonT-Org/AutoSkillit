@@ -9,13 +9,13 @@ from pathlib import Path
 from autoskillit.core import (
     BUNDLED_EXPLORER_ROLES,
     CODEX_EXPLORER_IDENTITY,
+    DIRECT_PREFIX,
     AgentDef,
 )
 from autoskillit.execution.backends._codex_config import _serialize_toml
 
 _EXPLORER_ROLE_NAMES = BUNDLED_EXPLORER_ROLES
 _LUNA_READ_ONLY_PROJECTION = (*CODEX_EXPLORER_IDENTITY, "read-only")
-_EXPLORATION_TOOL_PREFIX = "mcp__autoskillit__"
 _EXPLORER_BROKER_TOOLS = (
     "submit_exploration_query",
     "get_exploration_page",
@@ -120,9 +120,9 @@ def _validated_explorer_binding_envs(
     for role in sorted(binding_roles):
         definition = definitions_by_name[role]
         projected_tools = tuple(
-            tool.removeprefix(_EXPLORATION_TOOL_PREFIX)
+            tool.removeprefix(DIRECT_PREFIX)
             for tool in definition.tools
-            if tool.startswith(_EXPLORATION_TOOL_PREFIX)
+            if tool.startswith(DIRECT_PREFIX)
         )
         if len(projected_tools) != len(definition.tools) or projected_tools != (
             _EXPLORER_BROKER_TOOLS

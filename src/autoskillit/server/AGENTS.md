@@ -66,7 +66,21 @@ Controls whether the tool succeeds when called (independent of visibility):
 | Fleet tool | `fleet`, `kitchen-core` | Yes (via `ALL_VISIBILITY_TAGS` loop) | Yes (`_require_fleet` or `_require_enabled`) | `dispatch_food_truck`, `record_gate_dispatch` |
 | Fleet-dispatch tool | `fleet-dispatch` (± `kitchen-core`) | Yes (via `ALL_VISIBILITY_TAGS` loop) | Yes (`_require_enabled`) | `fetch_github_issue`, `list_recipes` |
 | Headless-exempt | `kitchen`, `headless` | Yes | No | `test_check`, `commit_files`, `unlock_agent_pack`, typed audit artifact producers |
+| Exploration broker | `exploration` | Yes (via `ALL_VISIBILITY_TAGS` loop) | Yes (`_require_enabled`) | `submit_exploration_query`, `get_exploration_page`, `resume_exploration_context` |
 | Free-range | _(none of the above)_ | No | No | `open_kitchen`, `close_kitchen` |
+
+### Exploration Tag Visibility
+
+Tag visibility for the three exploration broker tools is UX defense-in-depth — the per-call
+HMAC capability lease is the authorization boundary. Visibility of the read-only brokers in
+intent-provisioned sessions is deliberate and safe because every call re-verifies the lease.
+
+**Backend asymmetry:** Codex confines the `shared-explorer-session` principal to a dedicated
+read-only child process via per-child env binding. Claude's tag enablement
+(`mcp.enable(tags={"exploration"})`) is process-wide on the shared MCP connection — every
+subagent in an intent-provisioned session can see (though not use without the lease) the
+three brokers. This larger ambient-visibility surface is a deliberate trade-off, acceptable
+because the surface is read-only and the per-call lease is the enforcement point.
 
 ### Registry Constants
 
@@ -77,4 +91,4 @@ The canonical tool sets are in `core/types/_type_constants_registries.py`:
 - `HEADLESS_TOOLS` — the six kitchen-tagged, application-ungated worker tools: testing, commit, legacy audit-cycle, and the three typed audit artifact producers
 - `FLEET_TOOLS` — fleet-session-only tools
 - `FLEET_DISPATCH_TOOLS` — fleet-dispatch-mode tools (hidden at startup, application-gated)
-- `ALL_VISIBILITY_TAGS` — `{"kitchen", "headless", "fleet", "fleet-dispatch", "kitchen-core", "plan-review"}`
+- `ALL_VISIBILITY_TAGS` — `{"kitchen", "headless", "fleet", "fleet-dispatch", "kitchen-core", "plan-review", "exploration"}`

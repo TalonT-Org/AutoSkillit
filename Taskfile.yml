@@ -375,6 +375,29 @@ tasks:
         fi
         $PYTHON_CMD -c 'import json, sys; data=json.load(open(sys.argv[1], encoding="utf-8")); expected={"contract":"live-production-shared-explorer-principal-v2","principal_role":"shared-explorer-session","authenticated_resume":"denied"}; bad=any(data.get(key) != value for key, value in expected.items()); sys.exit(f"invalid live explorer evidence: {data!r}" if bad else 0)' "$EVIDENCE"
 
+  test-smoke-claude-explorer-live-gate:
+    desc: Run the Claude session-scoped explorer conformance gate
+    deps: [_tmpdir-setup]
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      OMP_NUM_THREADS: "1"
+      AUTOSKILLIT_CLAUDE_EXPLORER_LIVE_GATE: "1"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
+    cmds:
+      - |
+        if [[ -d ".venv" ]]; then
+          PYTHON_CMD=".venv/bin/python"
+        else
+          PYTHON_CMD="python"
+        fi
+        set +e
+        $PYTHON_CMD -m pytest tests/server/test_claude_explorer_live_gate.py \
+          -q --tb=short -m smoke -p no:cacheprovider -o "addopts=" \
+          --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1
+        PYTEST_EXIT=$?
+        set -e
+        exit $PYTEST_EXIT
+
   test-smoke-claude-startup:
     desc: Run the exact interactive Claude startup-readiness trace
     deps: [_tmpdir-setup]

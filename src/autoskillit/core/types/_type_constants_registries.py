@@ -187,6 +187,7 @@ FREE_RANGE_TOOLS: frozenset[str] = frozenset(
         "open_kitchen",
         "close_kitchen",
         "disable_quota_guard",
+        "enable_exploration",
         "reload_session",
         "configure_fleet",
         "configure_order",

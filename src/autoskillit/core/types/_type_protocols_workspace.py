@@ -289,6 +289,9 @@ class SkillProjectionContextAuthority(Protocol):
     def parent_sandbox_mode(self) -> str: ...
 
     @property
+    def explorer_provisioning_eligible(self) -> bool | None: ...
+
+    @property
     def projection_version(self) -> int: ...
 
     @property

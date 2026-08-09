@@ -962,6 +962,10 @@ class DefaultSessionSkillManager:
                 projection_context.active_exploration_applicabilities
             ),
             parent_sandbox_mode=projection_context.parent_sandbox_mode,
+            explorer_provisioning_eligible=(
+                explorer_binding_env is not None
+                or projection_context.explorer_provisioning_eligible
+            ),
             projection_version=projection_context.projection_version,
         )
         session_records = (

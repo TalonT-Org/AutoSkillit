@@ -88,6 +88,29 @@ production MCP registration and visibility, result contracts, and production rol
 Optional Tree-sitter and headless-LSP remain non-prerequisites; the Phase A harness reports them
 unsupported rather than launching target-aware analyzers.
 
+### Production provisioning models (#4488/#4489/#4492)
+
+Two backend-specific provisioning models are now first-class:
+
+- **Codex (terminal per-child):** Each explorer child is a separate process with its own
+  server boot. The `shared-explorer-session` principal is confined to a dedicated read-only
+  child process via per-child env binding (`_codex/explorer_projection.py`). Authority is
+  verified by `_explorer_auto_gate_boot` at lifespan time.
+
+- **Claude (session-scoped in-process):** Claude subagents share the parent process — the
+  per-child terminal model structurally cannot apply. Authority is established via
+  `bind_session_scoped` on `OwnerBoundExplorationContextStore` with the same HMAC/TTL
+  discipline. Broker handlers resolve whichever authority mode (launch-environment or
+  session-scoped) is established for the session.
+
+Tag visibility (`mcp.enable(tags={"exploration"})`) is UX defense-in-depth. The per-call
+HMAC capability lease is the authorization boundary. Every broker call re-verifies the
+lease regardless of tag visibility state.
+
+Both explorer role bodies carry a mandatory tool-surface self-check preamble: if the
+effective surface is anything other than exactly the three broker tools, the role emits a
+structured CONTRACT VIOLATION report and stops without performing work.
+
 ## Attestation and stop condition
 
 `task test-smoke-codex-explorer-gate` is credentialed, non-skippable when selected, bypasses the

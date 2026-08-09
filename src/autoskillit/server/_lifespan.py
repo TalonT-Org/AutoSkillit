@@ -667,9 +667,30 @@ async def _explorer_auto_gate_boot(ctx: Any) -> bool:
     return True
 
 
+async def _session_scoped_explorer_boot(ctx: Any) -> bool:
+    """Enable exploration visibility for session-scoped Claude authority."""
+    from autoskillit.server import mcp  # circular-break
+
+    store = ctx.exploration_context_store
+    if not isinstance(store, OwnerBoundExplorationContextStore):
+        return False
+    session_id = getattr(ctx, "session_id", None)
+    if session_id is None:
+        return False
+    capability = store.session_scoped_capability(session_id)
+    if capability is None:
+        return False
+    if ctx.gate is not None:
+        ctx.gate.enable()
+    mcp.enable(tags={"exploration"}, components={"tool"})
+    return True
+
+
 async def _run_lifespan_session_boot(ctx: Any) -> None:
     """Apply exactly one authenticated explorer or ordinary session boot path."""
     if await _explorer_auto_gate_boot(ctx):
+        return
+    if await _session_scoped_explorer_boot(ctx):
         return
     boot_fn = _LIFESPAN_BOOT_REGISTRY.get(_resolve_session_type())
     if boot_fn is not None:

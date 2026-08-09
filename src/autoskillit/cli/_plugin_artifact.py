@@ -220,6 +220,7 @@ class InstalledPluginArtifactAuthority:
             from autoskillit import __version__
             from autoskillit.core import (
                 _AUTOSKILLIT_PLUGIN_KEY,
+                MARKETPLACE_PREFIX,
                 SkillExecutionRole,
                 SkillSource,
                 _InstallLock,
@@ -251,6 +252,9 @@ class InstalledPluginArtifactAuthority:
                     staging_root,
                     catalog,
                     SkillProjectionContext(cwd=source_root, catalog=catalog),
+                    # Self-heal republish for marketplace registration — same
+                    # prefix reasoning as cli/_marketplace.py:install().
+                    mcp_tool_prefix=MARKETPLACE_PREFIX,
                 )
                 hooks_dir = staging_root / "hooks"
                 hooks_dir.mkdir(parents=True, exist_ok=True)

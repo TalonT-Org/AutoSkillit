@@ -129,6 +129,8 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
         capabilities = SimpleNamespace(
             hook_trust_policy=HookTrustPolicy.AUTOMATED,
             session_dir_persistent=False,
+            session_scoped_explorer_capable=True,
+            terminal_explorer_capable=False,
             supports_tool_list_changed=True,
             skill_injection_capable=True,
         )
@@ -352,6 +354,8 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
         capabilities = SimpleNamespace(
             hook_trust_policy=HookTrustPolicy.AUTOMATED,
             session_dir_persistent=False,
+            session_scoped_explorer_capable=True,
+            terminal_explorer_capable=False,
             supports_tool_list_changed=True,
             skill_injection_capable=True,
         )

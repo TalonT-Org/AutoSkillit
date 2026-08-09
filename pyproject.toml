@@ -417,6 +417,15 @@ forbidden_modules = [
     "autoskillit.cli",
 ]
 
+# IL-012 | Lens: module-dependency | DS-001
+# Rationale: server/ must not import cli/ — the eligibility-core for explorer
+# binding lives in IL-1 pipeline/ so both server and CLI consume one authority.
+[[tool.importlinter.contracts]]
+name = "IL-3 server does not import CLI"
+type = "forbidden"
+source_modules = ["autoskillit.server"]
+forbidden_modules = ["autoskillit.cli"]
+
 [tool.uv.sources]
 api-simulator = { git = "https://github.com/TalonT-Org/api-simulator", rev = "8f711f958d4d93a8e53a3c3b51279fb420870f3a", subdirectory = "crates/api-simulator-py" }
 

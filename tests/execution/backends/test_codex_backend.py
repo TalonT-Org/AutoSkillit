@@ -13,8 +13,10 @@ import structlog.testing
 
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
+    BUNDLED_EXPLORER_ROLES,
     CAMPAIGN_ID_ENV_VAR,
     CODEX_MODEL_ALIASES,
+    DIRECT_PREFIX,
     KITCHEN_SESSION_ID_ENV_VAR,
     MCP_CLIENT_BACKEND_ENV_VAR,
     SESSION_TYPE_ORCHESTRATOR,
@@ -1722,9 +1724,11 @@ class TestCodexBackendSetupSessionDir:
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)
         toml_files = list((self.session_dir / "agents").glob("*.toml"))
+        # Unbound setup excludes explorer roles (no bindings = not advertised)
         expected_names = {
             f"{definition.name}.toml"
             for definition in load_agent_definitions(pkg_root() / "agents")
+            if definition.name not in BUNDLED_EXPLORER_ROLES
         }
         actual_names = {path.name for path in toml_files}
         assert actual_names == expected_names, (
@@ -1757,8 +1761,6 @@ class TestCodexBackendSetupSessionDir:
                 in {
                     "pr-review-auditor-reachability",
                     "pr-review-auditor-abstraction-surface",
-                    "semantic-code-navigator",
-                    "repository-impact-profiler",
                 }
                 else "workspace-write"
             )
@@ -1769,11 +1771,12 @@ class TestCodexBackendSetupSessionDir:
     def test_read_only_agent_tools_project_to_read_only_sandbox(self) -> None:
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)
+        # Explorer roles (semantic-code-navigator, repository-impact-profiler)
+        # are excluded from unbound generation — verify only the always-present
+        # read-only roles.
         for name in (
             "pr-review-auditor-reachability",
             "pr-review-auditor-abstraction-surface",
-            "semantic-code-navigator",
-            "repository-impact-profiler",
         ):
             data = tomllib.loads(
                 (self.session_dir / "agents" / f"{name}.toml").read_text(encoding="utf-8")
@@ -2178,7 +2181,7 @@ class TestCodexBackendSetupSessionDir:
             parsed = tomllib.loads(role_text)
             projection = parsed["mcp_servers"]["autoskillit"]
             assert projection["enabled_tools"] == [
-                tool.removeprefix("mcp__autoskillit__") for tool in definition.tools
+                tool.removeprefix(DIRECT_PREFIX) for tool in definition.tools
             ]
             assert "env" not in projection
             for key in binding_envs[definition.name]:
@@ -2292,7 +2295,7 @@ class TestCodexBackendSetupSessionDir:
             "config_file": "/profile/wp-elaborator.toml",
         }
         assert not (self.session_dir / "agents" / "wp-elaborator.toml").exists()
-        assert (self.session_dir / "agents" / "semantic-code-navigator.toml").is_file()
+        assert not (self.session_dir / "agents" / "semantic-code-navigator.toml").exists()
 
     def test_unrelated_ambient_agent_is_preserved_with_bundled_projection(self) -> None:
         (self.session_dir / "config.toml").write_text(

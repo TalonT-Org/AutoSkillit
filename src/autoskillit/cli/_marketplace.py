@@ -25,6 +25,7 @@ from autoskillit.cli._install_contract import (
 )
 from autoskillit.cli._install_snapshot import _fetch_cache_path
 from autoskillit.core import (
+    MARKETPLACE_PREFIX,
     SkillExecutionRole,
     SkillSource,
     atomic_write,
@@ -128,6 +129,10 @@ def _ensure_marketplace(
             cwd=projection_cwd,
             catalog=catalog,
         ),
+        # Marketplace registration — Claude Code resolves these tools under the
+        # marketplace prefix; never detect_autoskillit_mcp_prefix(), which answers
+        # a different question (host-level registry presence, not load mechanism).
+        mcp_tool_prefix=MARKETPLACE_PREFIX,
     )
     atomic_write(
         public_plugin_root / "hooks" / "hooks.json",

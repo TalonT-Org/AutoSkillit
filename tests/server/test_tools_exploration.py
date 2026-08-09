@@ -149,7 +149,9 @@ def test_fresh_launch_injects_only_server_issued_role_bindings(
     tool_ctx = SimpleNamespace(exploration_context_store=store)
     projection_context = SimpleNamespace(
         backend=SimpleNamespace(
-            capabilities=SimpleNamespace(terminal_explorer_capable=True),
+            capabilities=SimpleNamespace(
+                terminal_explorer_capable=True, session_scoped_explorer_capable=False
+            ),
             name="codex",
         ),
         cwd=project_dir / "worktree",
@@ -192,7 +194,9 @@ def test_workspace_write_launch_does_not_issue_explorer_authority(tmp_path: Path
     project_dir = tmp_path / "project"
     projection_context = SimpleNamespace(
         backend=SimpleNamespace(
-            capabilities=SimpleNamespace(terminal_explorer_capable=True),
+            capabilities=SimpleNamespace(
+                terminal_explorer_capable=True, session_scoped_explorer_capable=False
+            ),
             name="codex",
         ),
         cwd=project_dir,

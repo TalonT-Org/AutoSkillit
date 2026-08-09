@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 from typing import TypedDict
 
 from autoskillit.core import (
@@ -13,7 +15,14 @@ from autoskillit.core import (
     NodeKey,
     get_logger,
 )
-from autoskillit.pipeline import CapabilityResolutionStatus
+from autoskillit.core import (
+    session_type as _resolve_session_type,
+)
+from autoskillit.pipeline import (
+    EXPLORER_INELIGIBLE_SESSION_TYPES,
+    CapabilityResolutionStatus,
+    OwnerBoundExplorationContextStore,
+)
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
@@ -82,6 +91,63 @@ def _get_store() -> ExplorationContextStoreProtocol[object] | None:
     from autoskillit.server import _get_ctx  # circular-break: server composition root
 
     return _get_ctx().exploration_context_store
+
+
+def _get_session_id() -> str | None:
+    from autoskillit.server import _get_ctx  # circular-break: server composition root
+
+    ctx = _get_ctx()
+    return ctx.session_id if hasattr(ctx, "session_id") else None
+
+
+def _try_session_scoped_submit(
+    store: ExplorationContextStoreProtocol[object],
+    request: ExplorationQuerySpec,
+) -> EvidencePage | None:
+    """Try session-scoped authority when launch-environment is unavailable."""
+    if not isinstance(store, OwnerBoundExplorationContextStore):
+        return None
+    session_id = _get_session_id()
+    if session_id is None:
+        return None
+    capability = store.session_scoped_capability(session_id)
+    if capability is None:
+        return None
+    try:
+        _replacement, page = store.submit_for_capability(
+            capability=capability,
+            query=request,
+            page_size=min(request.max_results, _MAX_RESPONSE_PAGE_SIZE),
+        )
+        return page
+    except (RuntimeError, ValueError):
+        return None
+
+
+def _try_session_scoped_page(
+    store: ExplorationContextStoreProtocol[object],
+    *,
+    page_size: int,
+    cursor: ContinuationCursor | None = None,
+) -> EvidencePage | None:
+    """Try session-scoped authority for page retrieval."""
+    if not isinstance(store, OwnerBoundExplorationContextStore):
+        return None
+    session_id = _get_session_id()
+    if session_id is None:
+        return None
+    capability = store.session_scoped_capability(session_id)
+    if capability is None:
+        return None
+    try:
+        status, page = store.get_page_for_capability(
+            capability=capability,
+            page_size=page_size,
+            cursor=cursor,
+        )
+        return page if status is CapabilityResolutionStatus.OK else None
+    except (RuntimeError, ValueError):
+        return None
 
 
 def _bounded_terms(values: tuple[str, ...]) -> list[str]:
@@ -208,7 +274,9 @@ async def submit_exploration_query(
             page_size=min(request.max_results, _MAX_RESPONSE_PAGE_SIZE),
         )
         if status is not CapabilityResolutionStatus.OK or page is None:
-            return _failure(_FAILURE_CONTEXT_UNAVAILABLE)
+            page = _try_session_scoped_submit(store, request)
+            if page is None:
+                return _failure(_FAILURE_CONTEXT_UNAVAILABLE)
         return _page_payload(page, status="accepted")
     except Exception:
         logger.warning("exploration query submission failed", exc_info=True)
@@ -234,11 +302,18 @@ async def get_exploration_page(
         if (gate := _require_enabled()) is not None:
             return gate
         cursor = None if continuation is None else ContinuationCursor.decode(continuation)
-        return _fetch_page_from_launch_environment(
+        result = _fetch_page_from_launch_environment(
             page_size=page_size,
             cursor=cursor,
             success_status="ready",
         )
+        if result == _failure(_FAILURE_CONTEXT_UNAVAILABLE):
+            store = _get_store()
+            if store is not None:
+                page = _try_session_scoped_page(store, page_size=page_size, cursor=cursor)
+                if page is not None:
+                    return _page_payload(page, status="ready")
+        return result
     except Exception:
         logger.warning("exploration page retrieval failed", exc_info=True)
         return _failure(_FAILURE_BROKER_UNAVAILABLE)
@@ -262,10 +337,83 @@ async def resume_exploration_context(
     try:
         if (gate := _require_enabled()) is not None:
             return gate
-        return _fetch_page_from_launch_environment(
+        result = _fetch_page_from_launch_environment(
             page_size=page_size,
             success_status="resumed",
         )
+        if result == _failure(_FAILURE_CONTEXT_UNAVAILABLE):
+            store = _get_store()
+            if store is not None:
+                page = _try_session_scoped_page(store, page_size=page_size)
+                if page is not None:
+                    return _page_payload(page, status="resumed")
+        return result
     except Exception:
         logger.warning("exploration context resumption failed", exc_info=True)
         return _failure(_FAILURE_BROKER_UNAVAILABLE)
+
+
+@mcp.tool(
+    tags={"autoskillit"},
+    annotations={"readOnlyHint": True},
+)
+@_cancellation_shield()
+async def enable_exploration(
+    project_dir: str = "",
+) -> str:
+    """Establish session-scoped exploration authority for Claude-native sessions.
+
+    Call this before dispatching explorer subagents (Agent calls with
+    subagent_type ``autoskillit:semantic-code-navigator`` or
+    ``autoskillit:repository-impact-profiler``). The three broker tools
+    become visible after this call succeeds.
+
+    Not required for Codex sessions (per-child terminal binding) or for
+    headless run_skill corridors (factory-based binding).
+
+    Never raises.
+    """
+    try:
+        session_type = _resolve_session_type()
+        if session_type in EXPLORER_INELIGIBLE_SESSION_TYPES:
+            return json.dumps(
+                {"status": "error", "code": "session_type_ineligible"},
+                separators=(",", ":"),
+            )
+
+        store = _get_store()
+        if not isinstance(store, OwnerBoundExplorationContextStore):
+            return json.dumps(
+                {"status": "error", "code": "exploration_store_unavailable"},
+                separators=(",", ":"),
+            )
+        session_id = _get_session_id()
+        if session_id is None:
+            return json.dumps(
+                {"status": "error", "code": "no_session_id"},
+                separators=(",", ":"),
+            )
+        cwd = Path(project_dir) if project_dir else Path.cwd()
+        repository_root = store.trusted_root
+        store.bind_session_scoped(
+            owner_id=f"uid:{os.getuid()}",
+            session_id=session_id,
+            cwd=cwd,
+            repository_root=repository_root,
+            source_identity=f"interactive:{session_id}",
+        )
+        try:
+            mcp.enable(tags={"exploration"}, components={"tool"})
+        except Exception:
+            store.cleanup_session(session_id)
+            raise
+        return json.dumps(
+            {"status": "ok", "exploration_enabled": True},
+            separators=(",", ":"),
+        )
+    except Exception:
+        logger.warning("exploration provisioning failed", exc_info=True)
+        return json.dumps(
+            {"status": "error", "code": "exploration_provisioning_failed"},
+            separators=(",", ":"),
+        )

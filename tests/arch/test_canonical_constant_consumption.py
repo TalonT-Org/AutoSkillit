@@ -74,11 +74,6 @@ def test_env_forward_constants_have_production_consumer() -> None:
 _REGISTRY_CANONICAL_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*(?:_REGISTRY|_TOOLS|_TAGS|_NAMES)$")
 
 _REGISTRY_EXEMPTIONS: dict[str, str] = {
-    "EXPLORATION_TOOLS": (
-        "test-consumed: centralized visibility expected set imported by "
-        "test_session_type_visibility.py and test_tool_registry_parity.py; "
-        "production exploration visibility is intentionally FastMCP tag-driven"
-    ),
     "FREE_RANGE_TOOLS": (
         "alias-derived: backing constant for UNGATED_TOOLS which is imported "
         "in pipeline/gate.py and server/tools/tools_recipe.py; "

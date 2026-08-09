@@ -176,6 +176,10 @@ class BackendCapabilities:
     has_unguarded_filesystem_access: bool = field(default=False)
     # True when a backend can materialize the isolated terminal explorer role surface.
     terminal_explorer_capable: bool = field(default=False)
+    # True when the backend supports session-scoped in-process exploration authority
+    # (Claude subagents share the parent process — the per-child terminal model
+    # structurally cannot apply; this flag routes to the session-scoped model).
+    session_scoped_explorer_capable: bool = field(default=False)
     # True when backend's git metadata directories (.git/worktrees/) are writable
     # True when the backend can make outbound GitHub API write calls without sandbox restriction
     github_api_callable: bool = field(default=False)
@@ -360,6 +364,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     supports_context_window_suffix=True,
     has_unguarded_filesystem_access=False,
     terminal_explorer_capable=False,
+    session_scoped_explorer_capable=True,
     github_api_callable=True,
     skill_sigil="/",
     session_dir_persistent=False,

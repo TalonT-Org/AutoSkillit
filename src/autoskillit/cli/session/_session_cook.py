@@ -50,18 +50,32 @@ def _build_cook_projection_context(
     backend: CodingAgentBackend,
     binding: PluginLaunchBinding | None,
     resolved_exploration_profile: RepositoryProfileId | None,
+    *,
+    explorer_provisioning_eligible: bool | None = None,
 ) -> SkillProjectionContext:
     """Bind scripts to the exact artifact selected for this cook session."""
     if binding is None:
         raise RuntimeError("cook projection requires a retained plugin artifact binding")
 
-    return skills_provider.catalog_projection_context(
+    base = skills_provider.catalog_projection_context(
         session_catalog,
         project_dir,
         backend=backend,
         durable_scripts_root=binding.identity.managed_path,
         resolved_exploration_profile=resolved_exploration_profile,
     )
+    if explorer_provisioning_eligible is not None:
+        return replace(
+            base,
+            explorer_provisioning_eligible=explorer_provisioning_eligible,
+            parent_sandbox_mode=(
+                "read-only"
+                if explorer_provisioning_eligible
+                and backend.capabilities.terminal_explorer_capable
+                else base.parent_sandbox_mode
+            ),
+        )
+    return base
 
 
 def _print_recipes_list() -> None:
@@ -293,6 +307,9 @@ def cook(
                 backend,
                 projection_binding,
                 resolved_exploration_profile,
+                explorer_provisioning_eligible=(
+                    True if backend.capabilities.session_scoped_explorer_capable else None
+                ),
             ),
         ) as managed_home,
     ):

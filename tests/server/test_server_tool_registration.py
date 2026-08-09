@@ -12,7 +12,11 @@ from autoskillit.config import (
     AutomationConfig,
     SafetyConfig,
 )
-from autoskillit.core import EXPLORATION_TOOLS
+from autoskillit.core import (
+    DIRECT_PREFIX,
+    EXPLORATION_TOOLS,
+    load_bundled_agent_definitions,
+)
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_status import (
     get_quota_events,
@@ -89,6 +93,7 @@ class TestToolRegistration:
             "open_kitchen",
             "close_kitchen",
             "disable_quota_guard",
+            "enable_exploration",
             "create_unique_branch",
             "check_pr_mergeable",
             "write_telemetry_files",
@@ -118,6 +123,24 @@ class TestToolRegistration:
             "write_standalone_audit_evidence",
         } | EXPLORATION_TOOLS
         assert expected == tool_names
+
+    @pytest.mark.anyio
+    async def test_agent_mcp_tool_short_names_are_registered_fastmcp_tools(self) -> None:
+        """Agent tool declarations must name real FastMCP-registered tools."""
+        from autoskillit.server import mcp
+
+        mcp.enable(tags={"exploration"}, components={"tool"})
+        registered = {tool.name for tool in await mcp.list_tools()}
+
+        for definition in load_bundled_agent_definitions():
+            for tool in definition.tools:
+                if not tool.startswith("mcp__"):
+                    continue
+                short = tool[len(DIRECT_PREFIX) :]
+                assert short in registered, (
+                    f"Agent {definition.name!r} tool short name {short!r} is not "
+                    f"registered as a FastMCP tool (registered: {sorted(registered)})"
+                )
 
     @pytest.mark.anyio
     async def test_ungated_tools_lack_kitchen_tag(self, kitchen_enabled):

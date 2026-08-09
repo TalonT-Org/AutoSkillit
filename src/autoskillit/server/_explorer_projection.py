@@ -29,7 +29,11 @@ from autoskillit.core import (
     load_bundled_agent_definitions,
     strip_context_window_suffix,
 )
+from autoskillit.core import (
+    session_type as _resolve_session_type,
+)
 from autoskillit.exploration import resolve_repository_profile
+from autoskillit.pipeline import is_explorer_binding_eligible
 from autoskillit.server._misc import SkillProjectionContext
 
 if TYPE_CHECKING:
@@ -146,11 +150,21 @@ def _issue_explorer_binding_env(
     authority_home: Path,
 ) -> dict[str, dict[str, str]] | None:
     """Mint one shared principal replicated to both terminal role projections."""
-    if identity is None or projection_context.backend is None:
+    backend = projection_context.backend
+    if identity is None or backend is None:
         return None
-    if not projection_context.backend.capabilities.terminal_explorer_capable:
+    if not is_explorer_binding_eligible(
+        has_identity=True,
+        has_backend=True,
+        terminal_explorer_capable=backend.capabilities.terminal_explorer_capable,
+        session_scoped_explorer_capable=backend.capabilities.session_scoped_explorer_capable,
+        parent_sandbox_mode=projection_context.parent_sandbox_mode,
+        session_type=_resolve_session_type(),
+    ):
         return None
-    if projection_context.parent_sandbox_mode != "read-only":
+    # Session-scoped backends (Claude) are eligible but use a different authority
+    # model — per-child env bindings structurally cannot apply.
+    if not backend.capabilities.terminal_explorer_capable:
         return None
     store = tool_ctx.exploration_context_store
     if store is None:

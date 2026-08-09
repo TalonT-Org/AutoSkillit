@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    BUNDLED_EXPLORER_ROLES,
     CODEX_INTAKE_DISCIPLINE_DIGEST,
     CODEX_SCOPE_DISCIPLINE_DIGEST,
     SESSION_TYPE_ENV_VAR,
@@ -338,11 +339,13 @@ class TestAgentTomlDelivery:
         from autoskillit.execution.backends._claude_prompt import codex_discipline_suffix
 
         agents_src = pkg_root() / "agents"
-        expected_count = sum(
+        total_agents = sum(
             1
             for md_path in agents_src.glob("*.md")
             if md_path.name not in ("AGENTS.md", "CLAUDE.md")
         )
+        # Unbound call excludes explorer roles (no bindings = not advertised)
+        expected_count = total_agents - len(BUNDLED_EXPLORER_ROLES)
 
         count = _generate_agent_tomls(tmp_path)
 

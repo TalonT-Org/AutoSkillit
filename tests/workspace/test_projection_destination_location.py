@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import SkillContractError, destination_location
+from autoskillit.core import DIRECT_PREFIX, SkillContractError, destination_location
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
@@ -82,7 +82,11 @@ class TestMaterializeSanitizedPluginRoot:
 
         catalog = _catalog()
         materialize_sanitized_plugin_root(
-            pkg_root(), destination, catalog, _context(catalog, tmp_path)
+            pkg_root(),
+            destination,
+            catalog,
+            _context(catalog, tmp_path),
+            mcp_tool_prefix=DIRECT_PREFIX,
         )
 
         assert destination.is_dir()
@@ -108,7 +112,11 @@ class TestMaterializeSanitizedPluginRoot:
         catalog = _catalog()
         with pytest.raises(SkillContractError, match="outside its source root"):
             materialize_sanitized_plugin_root(
-                pkg_root(), destination, catalog, _context(catalog, tmp_path)
+                pkg_root(),
+                destination,
+                catalog,
+                _context(catalog, tmp_path),
+                mcp_tool_prefix=DIRECT_PREFIX,
             )
 
 

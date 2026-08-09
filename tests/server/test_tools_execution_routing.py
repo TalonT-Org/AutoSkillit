@@ -632,6 +632,30 @@ async def test_run_skill_passes_inspector_eligible_when_fleet_dispatch(
 
 
 @pytest.mark.anyio
+async def test_run_skill_falls_back_to_static_inspector_in_fleet_dispatch(
+    tool_ctx_kitchen_open, monkeypatch
+) -> None:
+    from autoskillit.config import AutomationConfig
+    from autoskillit.core import DISPATCH_ID_ENV_VAR, FLEET_INSPECTOR_MODEL_ENV_VAR
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    monkeypatch.setenv(DISPATCH_ID_ENV_VAR, "test-dispatch-id-123")
+    monkeypatch.delenv(FLEET_INSPECTOR_MODEL_ENV_VAR, raising=False)
+    config = AutomationConfig()
+    config.fleet.inspector_model = "static-inspector"
+    tool_ctx_kitchen_open.config = config
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    await run_skill("/test skill", "/tmp")
+
+    assert executor.calls[0].inspector_eligible is True
+    assert executor.calls[0].inspector_model == "static-inspector"
+
+
+@pytest.mark.anyio
 async def test_run_skill_no_inspector_outside_dispatch(tool_ctx_kitchen_open, monkeypatch) -> None:
     """When DISPATCH_ID_ENV_VAR is absent, inspector_eligible=False."""
     from tests.fakes import InMemoryHeadlessExecutor

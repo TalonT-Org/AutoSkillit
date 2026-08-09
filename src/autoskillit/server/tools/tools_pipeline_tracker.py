@@ -7,7 +7,6 @@ import json
 import os
 import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
@@ -18,16 +17,14 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     RunSkillCompletionAuthority,
+    TrackerAuthorityTarget,
     atomic_write,
     get_logger,
+    pipeline_tracker_path,
 )
 from autoskillit.pipeline import canonical_step_name
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_orchestrator_exact
-from autoskillit.server._misc import (
-    _pipeline_tracker_dir,
-    _pipeline_tracker_path,
-)
 from autoskillit.server._notify import track_response_size
 from autoskillit.server._run_skill_completion import _request_session_identity
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
@@ -45,17 +42,9 @@ class _TrackerCtx(Protocol):
     run_skill_completion: RunSkillCompletionAuthority | None
 
 
-@dataclass(frozen=True, slots=True)
-class ResolvedTracker:
-    """Successfully resolved tracker file."""
-
-    order_id: str
-    path: Path
-
-
-def read_tracker_identity(resolved: ResolvedTracker) -> tuple[str, str] | None:
-    """Read the kitchen and incarnation identities from a resolved tracker."""
-    tracker = json.loads(resolved.path.read_text())
+def read_tracker_identity(target: TrackerAuthorityTarget) -> tuple[str, str] | None:
+    """Read the kitchen and incarnation identities from an explicit tracker target."""
+    tracker = json.loads(target.path.read_text())
     kitchen_id = tracker.get("kitchen_id")
     incarnation_id = tracker.get("tracker_incarnation_id")
     if not isinstance(kitchen_id, str) or not isinstance(incarnation_id, str):
@@ -63,59 +52,21 @@ def read_tracker_identity(resolved: ResolvedTracker) -> tuple[str, str] | None:
     return kitchen_id, incarnation_id
 
 
-@dataclass(frozen=True, slots=True)
-class ResolutionRefusal:
-    """Tracker resolution failed — carry a reason for the caller to wrap."""
-
-    reason: str
-    multi_pipeline: bool = False
-
-
-def resolve_tracker_order_id(
-    tool_ctx: _TrackerCtx, order_id: str
-) -> ResolvedTracker | ResolutionRefusal:
-    """Resolve the effective tracker order_id with three-tier precedence.
-
-    1. Explicit ``order_id`` parameter
-    2. ``AUTOSKILLIT_DISPATCH_ID`` environment variable
-    3. Kitchen-scoped fallback via internal ``kitchen_id`` field scan
-
-    Shared by ``_check_pipeline_deps`` (enforcement reader) and the
-    adjudication-point marker (writer) so they can never disagree on
-    which tracker file to target.
-    """
-    effective_oid = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
-    kitchen_id = tool_ctx.kitchen_id
-    project_dir = tool_ctx.project_dir
-
+def select_tracker_target(
+    tool_ctx: _TrackerCtx,
+    order_id: str,
+    *,
+    expected: bool,
+) -> TrackerAuthorityTarget | None:
+    """Select one explicit target without scanning for ambient tracker files."""
+    effective_oid = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "") or tool_ctx.kitchen_id
     if not effective_oid:
-        if not kitchen_id:
-            return ResolutionRefusal(reason="no order_id and no kitchen_id")
-        tracker_dir = _pipeline_tracker_dir(project_dir)
-        if not tracker_dir.is_dir():
-            return ResolutionRefusal(reason="tracker directory does not exist")
-        active: set[str] = set()
-        for path in tracker_dir.glob("*.json"):
-            if path.stem == kitchen_id:
-                continue
-            try:
-                tracker = json.loads(path.read_text())
-            except (OSError, json.JSONDecodeError):
-                continue
-            if tracker.get("kitchen_id") == kitchen_id:
-                active.add(path.stem)
-        if len(active) > 1:
-            return ResolutionRefusal(
-                reason=(
-                    f"multiple pipelines are active under this kitchen "
-                    f"({sorted(active)}). Pass order_id explicitly to scope "
-                    "the dependency check."
-                ),
-                multi_pipeline=True,
-            )
-        effective_oid = next(iter(active)) if active else kitchen_id
-    tracker_path = _pipeline_tracker_path(project_dir, effective_oid)
-    return ResolvedTracker(order_id=effective_oid, path=tracker_path)
+        return None
+    return TrackerAuthorityTarget.for_project(
+        tool_ctx.project_dir,
+        effective_oid,
+        expected=expected,
+    )
 
 
 def _resolve_skipped_steps(project_dir: Path, pipeline_id: str) -> set[str]:
@@ -200,7 +151,7 @@ async def record_pipeline_step(
                 )
             )
 
-        tracker_path = _pipeline_tracker_path(ctx.project_dir, effective_pipeline_id)
+        tracker_path = pipeline_tracker_path(ctx.project_dir, effective_pipeline_id)
 
         if op == "init":
             return _handle_init(ctx, tracker_path, effective_pipeline_id, dependencies)
@@ -332,27 +283,27 @@ def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: st
             )
         )
 
-    resolved = resolve_tracker_order_id(ctx, effective_pipeline_id)
-    if isinstance(resolved, ResolutionRefusal):
+    target = select_tracker_target(ctx, effective_pipeline_id, expected=True)
+    if target is None:
         return json.dumps(
             deny_envelope(
-                f"record_pipeline_step: cannot resolve pipeline tracker: {resolved.reason}",
+                "record_pipeline_step: cannot resolve pipeline tracker: no explicit target",
                 stage="preflight:pipeline_tracker",
                 retriable=False,
             )
         )
-    if not resolved.path.exists():
+    if not target.path.exists():
         return json.dumps(
             deny_envelope(
                 f"record_pipeline_step: no tracker found for pipeline "
-                f"'{resolved.order_id}'. Initialize with op='init' first.",
+                f"'{target.target_order_id}'. Initialize with op='init' first.",
                 stage="preflight:pipeline_tracker",
                 retriable=False,
             )
         )
 
     try:
-        tracker_identity = read_tracker_identity(resolved)
+        tracker_identity = read_tracker_identity(target)
     except json.JSONDecodeError as exc:
         return json.dumps(
             deny_envelope(
@@ -389,15 +340,15 @@ def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: st
         )
     try:
         result = authority.apply_tracker_credit(
-            tracker_order_id=resolved.order_id,
-            tracker_path=str(resolved.path.resolve()),
+            tracker_order_id=target.target_order_id,
+            tracker_path=str(target.path.resolve()),
             tracker_kitchen_id=tracker_kitchen_id,
             tracker_incarnation_id=tracker_incarnation_id,
             step_name=step_name,
             effect=lambda: mark_step_complete(
-                resolved.path,
+                target.path,
                 step_name,
-                resolved.order_id,
+                target.target_order_id,
                 expected_tracker_kitchen_id=tracker_kitchen_id,
                 expected_tracker_incarnation_id=tracker_incarnation_id,
             ),

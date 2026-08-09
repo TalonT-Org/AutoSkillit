@@ -129,10 +129,13 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/server/tools/tools_kitchen.py", 599),
     # _overlay_state.py — session-scoped hook config overlay (not schema-versioned)
     ("src/autoskillit/server/tools/_overlay_state.py", 114),
-    # tools_pipeline_tracker.py — tracker_data dict (init) and mark_step_complete write
-    # (same tracker file schema as init — not a new format, grandfathered alongside it)
-    ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 273),
-    ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 491),
+    # pipeline_tracker.py — locked tracker init/merge/mutation writes centralize the existing
+    # unversioned tracker file schema; tools_pipeline_tracker retains the two routed call sites.
+    ("src/autoskillit/core/pipeline_tracker.py", 285),
+    ("src/autoskillit/core/pipeline_tracker.py", 307),
+    ("src/autoskillit/core/pipeline_tracker.py", 323),
+    ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 224),
+    ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 442),
     # tools_status.py — mcp_data dict
     ("src/autoskillit/server/tools/tools_status.py", 536),
     # tools_github.py — bug report dict (non-blocking report-bug status file)

@@ -347,12 +347,13 @@ class TestOpenKitchenAutoInitTracker:
         assert deny_result is not None
         parsed = json.loads(deny_result)
         assert parsed["success"] is False
-        assert "order_id" in parsed["error"]
+        assert "Pipeline 'kitchen-multi'" in parsed["error"]
+        assert "other-pipeline" not in parsed["error"]
 
 
-class TestCheckPipelineDepsMultiPipelineFallback:
+class TestCheckPipelineDepsImmutableTarget:
     @pytest.mark.anyio
-    async def test_kitchen_scoped_fallback_requires_order_id_with_multiple_pipelines(
+    async def test_kitchen_target_ignores_multiple_ambient_pipelines(
         self, tool_ctx_kitchen_open, tmp_path
     ):
         from autoskillit.server.tools.tools_execution import _check_pipeline_deps
@@ -375,24 +376,16 @@ class TestCheckPipelineDepsMultiPipelineFallback:
             )
 
         result = _check_pipeline_deps("b", "")
-        assert result is not None
-        parsed = json.loads(result)
-        assert parsed["success"] is False
-        assert "order_id" in parsed["error"]
+        assert result is None
 
 
-class TestResolveTrackerOrderIdSingleCandidate:
-    def test_kitchen_scoped_fallback_aliases_to_single_candidate(
+class TestSelectTrackerTarget:
+    def test_kitchen_scoped_fallback_never_scans_ambient_candidates(
         self, tool_ctx_kitchen_open, tmp_path
     ):
-        """When exactly one non-self tracker matches kitchen_id, resolve to its stem.
-
-        Matches _resolve_order_id_from_kitchen in pipeline_step_guard.py, which
-        returns next(iter(active)) in this same single-candidate case.
-        """
+        """The caller-selected kitchen target is immutable despite ambient files."""
         from autoskillit.server.tools.tools_pipeline_tracker import (
-            ResolvedTracker,
-            resolve_tracker_order_id,
+            select_tracker_target,
         )
 
         tool_ctx_kitchen_open.project_dir = tmp_path
@@ -411,7 +404,8 @@ class TestResolveTrackerOrderIdSingleCandidate:
             )
         )
 
-        result = resolve_tracker_order_id(tool_ctx_kitchen_open, "")
+        result = select_tracker_target(tool_ctx_kitchen_open, "", expected=False)
 
-        assert isinstance(result, ResolvedTracker)
-        assert result.order_id == "AB"
+        assert result is not None
+        assert result.target_order_id == "kitchen-xyz"
+        assert result.path == tracker_dir / "kitchen-xyz.json"

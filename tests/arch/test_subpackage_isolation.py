@@ -972,7 +972,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_github_http review boundary and +launch_resolution authority.
         "execution": 19,
         # +agent_definition native-role authority (#4443).
-        "core": 31,
+        "core": 32,  # +pipeline_tracker: shared IL-0 tracker authority and leases (#4293)
         # +GitHub review types, portable launch authority, stable contract,
         # closed skill semantics, non-executable projection binding, explorer contracts,
         # execution-identity value objects/protocols, and the typed maintenance-install
@@ -1265,8 +1265,8 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "multi-pipeline gating, _has_active_deps/_check_review_approach_plan_path gates, "
         "and ambiguous/empty step_name dependency-deny branches (+126 net lines)"
         "; server-authoritative step completion: _mark_step_complete_server_side helper "
-        "called at the run_skill adjudication point, shared resolve_tracker_order_id "
-        "resolver, and deny_envelope conversion of all pre-flight deny sites "
+        "called at the run_skill adjudication point, immutable explicit tracker target "
+        "selection, and deny_envelope conversion of all pre-flight deny sites "
         "(#4293 pipeline tracker split-brain, +65 net lines)"
         "; attested recipe execution identity/template verification, structured skill-input "
         "binding, runtime-binding digest capture, and inventory-admission preflight keep all "

@@ -152,6 +152,7 @@ class TestModuleCascadeCore:
             "_step_context",
             "_execution_marker",
             "git_remote",
+            "pipeline_tracker",
             "bash_write_targets",
             "_type_audit_admission",
             "_type_audit_admission_ledger",

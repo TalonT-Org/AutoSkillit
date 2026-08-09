@@ -44,6 +44,8 @@ from autoskillit.core import (
     get_state_dir,
     is_marker_fresh,
     kitchen_entry_alive,
+    pipeline_tracker_directory,
+    pipeline_tracker_path,
     read_active_kitchens_registry,
     read_marker,
     register_active_kitchen,
@@ -89,8 +91,6 @@ from autoskillit.server._misc import (
     _apply_triage_gate,
     _build_hook_diagnostic_warning,
     _hook_config_path,
-    _pipeline_tracker_dir,
-    _pipeline_tracker_path,
     _prime_quota_cache,
     _quota_refresh_loop,
     resolve_log_dir,
@@ -615,7 +615,7 @@ def prune_stale_kitchen_state(project_dir: Path, current_kitchen_id: str) -> Non
     only if ``initialized_at`` exceeds the grace window.
     """
     logger = get_logger(__name__)
-    tracker_dir = _pipeline_tracker_dir(project_dir)
+    tracker_dir = pipeline_tracker_directory(project_dir)
     if not tracker_dir.is_dir():
         return
 
@@ -689,7 +689,7 @@ def _auto_init_pipeline_tracker(tool_ctx: ToolContext) -> None:
     if not deps:
         return
 
-    tracker_path = _pipeline_tracker_path(tool_ctx.project_dir, tool_ctx.kitchen_id)
+    tracker_path = pipeline_tracker_path(tool_ctx.project_dir, tool_ctx.kitchen_id)
     steps: dict[str, dict[str, str]] = {name: {"status": "pending"} for name in active_steps}
     dependencies: dict[str, list[str]] = dict(deps)
 
@@ -943,7 +943,7 @@ def _close_kitchen_handler() -> None:
                 atomic_write(orphan_path, fast_dumps(orphan_usage))
             except Exception:
                 logger.warning("close_kitchen_orphan_drain_failed", exc_info=True)
-    tracker_dir = _pipeline_tracker_dir(ctx.project_dir)
+    tracker_dir = pipeline_tracker_directory(ctx.project_dir)
     try:
         if tracker_dir.is_dir():
             import shutil

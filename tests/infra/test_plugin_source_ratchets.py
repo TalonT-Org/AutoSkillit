@@ -55,6 +55,11 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "The exclusive session-index transaction removes only abandoned summary-less "
         "session directories and expired committed directories selected by retention.",
     ),
+    ("core/pipeline_tracker.py", "try_retire_tracker", "target.path.unlink"): (
+        1,
+        "Exclusive per-tracker lease, tracker lock, strict registry lock, and fresh "
+        "authority/liveness reads guard deletion of exactly one tracker JSON.",
+    ),
     ("cli/_install_snapshot/_snapshot.py", "_remove", "path.unlink"): (
         1,
         "Transaction restoration removes the failed replacement before restoring its staged copy.",

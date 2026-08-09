@@ -446,26 +446,17 @@ def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
     """Check if step_name's dependencies are satisfied. Returns deny JSON or None."""
     from autoskillit.server import _get_ctx  # circular-break
     from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
-        ResolutionRefusal,
-        resolve_tracker_order_id,
+        select_tracker_target,
     )
 
     ctx = _get_ctx()
-    resolved = resolve_tracker_order_id(ctx, order_id)
-    if isinstance(resolved, ResolutionRefusal):
-        if resolved.multi_pipeline:
-            return json.dumps(
-                deny_envelope(
-                    f"{DEPENDENCY_DENY_PREFIX}: {resolved.reason}",
-                    stage="preflight:pipeline_deps",
-                    retriable=False,
-                )
-            )
+    target = select_tracker_target(ctx, order_id, expected=bool(order_id))
+    if target is None:
         return None
-    if not resolved.path.exists():
+    if not target.path.exists():
         return None
     try:
-        tracker = json.loads(resolved.path.read_text())
+        tracker = json.loads(target.path.read_text())
     except (json.JSONDecodeError, OSError):
         return None
     canonical = _canonical_step_name(step_name)
@@ -481,7 +472,7 @@ def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
         deny_envelope(
             (
                 f"{DEPENDENCY_DENY_PREFIX}: Step '{step_name}' requires {unmet} to complete "
-                f"first. Pipeline '{resolved.order_id}': {dep_status}."
+                f"first. Pipeline '{target.target_order_id}': {dep_status}."
             ),
             stage="preflight:pipeline_deps",
             retriable=True,
@@ -517,18 +508,17 @@ def _has_active_deps() -> bool:
     """Return True if a kitchen-scoped tracker exists with any dependencies defined."""
     from autoskillit.server import _get_ctx  # circular-break
     from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
-        ResolvedTracker,
-        resolve_tracker_order_id,
+        select_tracker_target,
     )
 
     ctx = _get_ctx()
-    resolved = resolve_tracker_order_id(ctx, "")
-    if not isinstance(resolved, ResolvedTracker):
+    target = select_tracker_target(ctx, "", expected=False)
+    if target is None:
         return False
-    if not resolved.path.exists():
+    if not target.path.exists():
         return False
     try:
-        tracker = json.loads(resolved.path.read_text())
+        tracker = json.loads(target.path.read_text())
     except (json.JSONDecodeError, OSError):
         return False
     return bool(tracker.get("dependencies"))
@@ -537,22 +527,21 @@ def _has_active_deps() -> bool:
 def _completion_tracker_binding(tool_ctx: ToolContext, order_id: str) -> tuple[str, str, str, str]:
     """Resolve immutable tracker identity for a new completion receipt."""
     from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
-        ResolvedTracker,
         read_tracker_identity,
-        resolve_tracker_order_id,
+        select_tracker_target,
     )
 
-    resolved = resolve_tracker_order_id(tool_ctx, order_id)
-    if not isinstance(resolved, ResolvedTracker) or not resolved.path.exists():
+    target = select_tracker_target(tool_ctx, order_id, expected=bool(order_id))
+    if target is None or not target.path.exists():
         return "", "", "", ""
     try:
-        tracker_identity = read_tracker_identity(resolved)
+        tracker_identity = read_tracker_identity(target)
     except (json.JSONDecodeError, OSError):
         return "", "", "", ""
     if tracker_identity is None:
         return "", "", "", ""
     kitchen_id, incarnation_id = tracker_identity
-    return resolved.order_id, str(resolved.path.resolve()), kitchen_id, incarnation_id
+    return target.target_order_id, str(target.path.resolve()), kitchen_id, incarnation_id
 
 
 def _begin_run_skill_completion(

@@ -7,7 +7,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from .io import load_yaml
 from .paths import pkg_root
@@ -22,6 +22,7 @@ from .types import (
 __all__ = [
     "AGENT_DEFINITION_DIGEST_DOMAIN",
     "BUNDLED_EXPLORER_ROLES",
+    "CODEX_DISABLED_WEB_SEARCH_POLICY",
     "CODEX_EXPLORER_IDENTITY",
     "REPOSITORY_IMPACT_PROFILER_ROLE",
     "SEMANTIC_CODE_NAVIGATOR_ROLE",
@@ -37,6 +38,7 @@ __all__ = [
 
 
 AGENT_DEFINITION_DIGEST_DOMAIN = "autoskillit.agent-definition.v1"
+CODEX_DISABLED_WEB_SEARCH_POLICY: Literal["disabled"] = "disabled"
 CODEX_EXPLORER_IDENTITY: tuple[str, str] = ("gpt-5.6-luna", "max")
 SEMANTIC_CODE_NAVIGATOR_ROLE: str = "semantic-code-navigator"
 REPOSITORY_IMPACT_PROFILER_ROLE: str = "repository-impact-profiler"
@@ -48,7 +50,6 @@ _CODEX_CLI_VERSION_RE = re.compile(r"(?:codex-cli )?(?P<version>[0-9]+\.[0-9]+\.
 _READ_ONLY_AGENT_TOOLS = frozenset({"Read", "Grep", "Glob", "LSP"})
 _CODEX_DISABLEABLE_FEATURES = (
     "apps",
-    "apps_mcp_path_override",
     "browser_use",
     "browser_use_external",
     "browser_use_full_cdp_access",
@@ -61,8 +62,6 @@ _CODEX_DISABLEABLE_FEATURES = (
     "goals",
     "image_generation",
     "in_app_browser",
-    "js_repl",
-    "js_repl_tools_only",
     "multi_agent",
     "multi_agent_v2",
     "plugin_sharing",
@@ -71,12 +70,9 @@ _CODEX_DISABLEABLE_FEATURES = (
     "request_permissions_tool",
     "shell_tool",
     "standalone_web_search",
-    "tool_search_always_defer_mcp_tools",
     "tool_suggest",
     "unified_exec",
     "unified_exec_zsh_fork",
-    "web_search_cached",
-    "web_search_request",
 )
 _CODEX_DISABLEABLE_FEATURE_SET = frozenset(_CODEX_DISABLEABLE_FEATURES)
 
@@ -106,6 +102,7 @@ class CodexAgentProjectionDef:
     sandbox_mode: str
     disabled_features: tuple[str, ...] = ()
     agents_enabled: bool = True
+    web_search: Literal["disabled"] | None = None
 
     def __post_init__(self) -> None:
         if self.model is not None and self.model not in CODEX_VALID_MODEL_IDS:
@@ -136,6 +133,10 @@ class CodexAgentProjectionDef:
             raise AgentDefinitionError("Codex disabled_features must use canonical order")
         if type(self.agents_enabled) is not bool:
             raise AgentDefinitionError("Codex agents_enabled must be a boolean")
+        if self.web_search is not None and self.web_search != CODEX_DISABLED_WEB_SEARCH_POLICY:
+            raise AgentDefinitionError(
+                f"Codex web_search must be {CODEX_DISABLED_WEB_SEARCH_POLICY!r}"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,6 +195,7 @@ def _derived_codex_projection(
             "sandbox_mode",
             "disabled_features",
             "agents_enabled",
+            "web_search",
         }
         if unexpected:
             raise AgentDefinitionError(
@@ -204,6 +206,7 @@ def _derived_codex_projection(
         sandbox = raw.get("sandbox_mode")
         disabled_features = raw.get("disabled_features", [])
         agents_enabled = raw.get("agents_enabled", True)
+        web_search = raw.get("web_search")
         if (
             not isinstance(model, str)
             or not isinstance(effort, str)
@@ -224,6 +227,7 @@ def _derived_codex_projection(
             sandbox,
             tuple(disabled_features),
             agents_enabled,
+            web_search,
         )
 
     model_key = meta.get("model")
@@ -300,6 +304,7 @@ def agent_definition_digest(definition: AgentDef) -> str:
             "sandbox_mode": definition.codex.sandbox_mode,
             "disabled_features": list(definition.codex.disabled_features),
             "agents_enabled": definition.codex.agents_enabled,
+            "web_search": definition.codex.web_search,
         },
         "description": definition.description,
         "max_turns": definition.max_turns,

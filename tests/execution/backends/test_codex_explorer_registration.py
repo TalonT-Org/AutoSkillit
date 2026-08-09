@@ -9,11 +9,15 @@ import pytest
 
 from autoskillit.core import (
     BUNDLED_EXPLORER_ROLES,
+    EXPLORATION_TOOLS,
     load_bundled_agent_definitions,
 )
 from autoskillit.execution.backends.codex import _generate_agent_tomls
+from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+_FORBIDDEN_CODEX_FEATURES = (*RETIRED_CODEX_FEATURES, "web_search")
 
 
 class TestExplorerRegistrationDerivesFromBindings:
@@ -29,6 +33,8 @@ class TestExplorerRegistrationDerivesFromBindings:
         all_defs = load_bundled_agent_definitions()
         non_explorer_count = sum(1 for d in all_defs if d.name not in BUNDLED_EXPLORER_ROLES)
         assert count == non_explorer_count
+        for path in (tmp_path / "agents").glob("*.toml"):
+            assert "web_search" not in tomllib.loads(path.read_text(encoding="utf-8"))
 
     def test_bound_includes_explorer_roles(self, tmp_path: Path) -> None:
         from autoskillit.execution.backends._codex.explorer_projection import (
@@ -76,4 +82,9 @@ class TestExplorerRegistrationDerivesFromBindings:
             )
             assert data["sandbox_mode"] == "read-only", (
                 f"explorer role {role} must have sandbox_mode=read-only"
+            )
+            assert data["web_search"] == "disabled"
+            assert not (set(_FORBIDDEN_CODEX_FEATURES) & set(data.get("features", {})))
+            assert frozenset(data["mcp_servers"]["autoskillit"]["enabled_tools"]) == frozenset(
+                EXPLORATION_TOOLS
             )

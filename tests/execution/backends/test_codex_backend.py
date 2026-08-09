@@ -4,6 +4,7 @@ import os
 import subprocess
 import tomllib
 from collections.abc import Mapping
+from dataclasses import replace
 from enum import StrEnum
 from pathlib import Path
 from typing import cast
@@ -52,6 +53,7 @@ from autoskillit.execution.backends.codex import (
     clear_explorer_binding_env,
     refresh_explorer_binding_env,
 )
+from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
 from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -1679,6 +1681,26 @@ class TestCodexBackendSetupSessionDir:
         }
         return {definition.name: dict(shared_binding) for definition in definitions}
 
+    @staticmethod
+    def _materialize_pre_change_explorer_roles(
+        session_dir: Path, definitions: tuple[AgentDef, ...]
+    ) -> None:
+        for definition in definitions:
+            path = session_dir / "agents" / f"{definition.name}.toml"
+            text = path.read_text(encoding="utf-8")
+            assert 'web_search = "disabled"\n' in text
+            assert "[features]\n" in text
+            text = text.replace('web_search = "disabled"\n', "", 1)
+            text = text.replace(
+                "[features]\n",
+                "[features]\n"
+                + "\n".join(f"{feature} = false" for feature in RETIRED_CODEX_FEATURES)
+                + "\n",
+                1,
+            )
+            text = text.replace(agent_definition_digest(definition), "sha256:" + ("0" * 64))
+            path.write_text(text, encoding="utf-8")
+
     def test_happy_path_all_files_provisioned(self) -> None:
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)
@@ -1938,6 +1960,31 @@ class TestCodexBackendSetupSessionDir:
         assert (self.session_dir / "config.toml").read_text(encoding="utf-8") == original_config
         assert not (self.session_dir / "agents").exists()
 
+    @pytest.mark.parametrize("role", sorted(BUNDLED_EXPLORER_ROLES))
+    def test_explorer_projection_rejects_missing_web_search_policy_before_mutation(
+        self, role: str
+    ) -> None:
+        canonical_definitions = self._explorer_definitions()
+        definitions = tuple(
+            replace(definition, codex=replace(definition.codex, web_search=None))
+            if definition.name == role
+            else definition
+            for definition in canonical_definitions
+        )
+        binding_envs = self._explorer_binding_envs(definitions, generation="first")
+        original_config = (self.session_dir / "config.toml").read_text(encoding="utf-8")
+
+        with pytest.raises(ValueError, match="must disable native web search"):
+            CodexBackend().setup_session_dir(
+                self.session_dir,
+                parent_sandbox_mode="read-only",
+                agent_defs=definitions,
+                explorer_binding_env=binding_envs,
+            )
+
+        assert (self.session_dir / "config.toml").read_text(encoding="utf-8") == original_config
+        assert not (self.session_dir / "agents").exists()
+
     def test_explorer_projection_rejects_divergent_role_bindings_before_mutation(self) -> None:
         definitions = self._explorer_definitions()
         binding_envs = self._explorer_binding_envs(definitions, generation="first")
@@ -1985,6 +2032,79 @@ class TestCodexBackendSetupSessionDir:
             projected_bindings.append(parsed["mcp_servers"]["autoskillit"]["env"])
         assert projected_bindings == [next(iter(second.values()))] * 3
         assert (self.session_dir / "config.toml").read_text(encoding="utf-8") != before_config
+
+    def test_refresh_replaces_pre_change_policy_and_is_idempotent(self) -> None:
+        definitions = self._explorer_definitions()
+        first = self._explorer_binding_envs(definitions, generation="first")
+        second = self._explorer_binding_envs(definitions, generation="second")
+        CodexBackend().setup_session_dir(
+            self.session_dir,
+            parent_sandbox_mode="read-only",
+            agent_defs=definitions,
+            explorer_binding_env=first,
+        )
+        self._materialize_pre_change_explorer_roles(self.session_dir, definitions)
+
+        refresh_explorer_binding_env(self.session_dir, second)
+
+        paths = [
+            self.session_dir / "config.toml",
+            *(
+                self.session_dir / "agents" / f"{definition.name}.toml"
+                for definition in definitions
+            ),
+        ]
+        first_refresh = {path.relative_to(self.session_dir): path.read_bytes() for path in paths}
+        for definition in definitions:
+            role_text = (self.session_dir / "agents" / f"{definition.name}.toml").read_text(
+                encoding="utf-8"
+            )
+            parsed = tomllib.loads(role_text)
+            assert parsed["web_search"] == "disabled"
+            assert agent_definition_digest(definition) in role_text
+            assert not set(RETIRED_CODEX_FEATURES) & set(parsed["features"])
+            assert parsed["mcp_servers"]["autoskillit"]["env"] == next(iter(second.values()))
+
+        refresh_explorer_binding_env(self.session_dir, second)
+
+        assert {
+            path.relative_to(self.session_dir): path.read_bytes() for path in paths
+        } == first_refresh
+
+    def test_refresh_rejects_wrong_role_name_with_valid_mcp_projection(self) -> None:
+        definitions = self._explorer_definitions()
+        first = self._explorer_binding_envs(definitions, generation="first")
+        second = self._explorer_binding_envs(definitions, generation="second")
+        CodexBackend().setup_session_dir(
+            self.session_dir,
+            parent_sandbox_mode="read-only",
+            agent_defs=definitions,
+            explorer_binding_env=first,
+        )
+        role_path = self.session_dir / "agents" / "repository-impact-profiler.toml"
+        role_path.write_text(
+            role_path.read_text(encoding="utf-8").replace(
+                'name = "repository-impact-profiler"', 'name = "tampered-role"', 1
+            ),
+            encoding="utf-8",
+        )
+        before = {
+            path.relative_to(self.session_dir): path.read_bytes()
+            for path in (
+                self.session_dir / "config.toml",
+                *(
+                    self.session_dir / "agents" / f"{definition.name}.toml"
+                    for definition in definitions
+                ),
+            )
+        }
+
+        with pytest.raises(ValueError, match="identity mismatch"):
+            refresh_explorer_binding_env(self.session_dir, second)
+
+        assert {
+            relative: (self.session_dir / relative).read_bytes() for relative in before
+        } == before
 
     def test_refresh_explorer_binding_env_prevalidation_preserves_old_bindings(self) -> None:
         definitions = self._explorer_definitions()
@@ -2192,6 +2312,29 @@ class TestCodexBackendSetupSessionDir:
         for key, value in next(iter(binding_envs.values())).items():
             assert key not in parent_text
             assert value not in parent_text
+
+    def test_clear_replaces_pre_change_policy_while_scrubbing_bindings(self) -> None:
+        definitions = self._explorer_definitions()
+        binding_envs = self._explorer_binding_envs(definitions, generation="first")
+        CodexBackend().setup_session_dir(
+            self.session_dir,
+            parent_sandbox_mode="read-only",
+            agent_defs=definitions,
+            explorer_binding_env=binding_envs,
+        )
+        self._materialize_pre_change_explorer_roles(self.session_dir, definitions)
+
+        clear_explorer_binding_env(self.session_dir, frozenset(binding_envs))
+
+        for definition in definitions:
+            role_text = (self.session_dir / "agents" / f"{definition.name}.toml").read_text(
+                encoding="utf-8"
+            )
+            parsed = tomllib.loads(role_text)
+            assert parsed["web_search"] == "disabled"
+            assert agent_definition_digest(definition) in role_text
+            assert "env" not in parsed["mcp_servers"]["autoskillit"]
+            assert not set(RETIRED_CODEX_FEATURES) & set(parsed["features"])
 
     def test_clear_explorer_binding_env_is_idempotent_after_scrubbing(self) -> None:
         definitions = self._explorer_definitions()

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from autoskillit.core import (
     BUNDLED_EXPLORER_ROLES,
+    CODEX_DISABLED_WEB_SEARCH_POLICY,
     CODEX_EXPLORER_IDENTITY,
     DIRECT_PREFIX,
     AgentDef,
@@ -132,6 +133,11 @@ def _validated_explorer_binding_envs(
             )
         if definition.codex.sandbox_mode != "read-only":
             raise ValueError(f"explorer role {role!r} must be read-only")
+        if definition.codex.web_search != CODEX_DISABLED_WEB_SEARCH_POLICY:
+            raise ValueError(
+                f"explorer role {role!r} must disable native web search "
+                f"({CODEX_DISABLED_WEB_SEARCH_POLICY!r})"
+            )
 
         binding = _validated_explorer_binding_env(role, explorer_binding_env[role])
         if shared_binding is None:

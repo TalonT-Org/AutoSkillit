@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import (
+    CODEX_DISABLED_WEB_SEARCH_POLICY,
     CODEX_EXPLORER_IDENTITY,
     SEMANTIC_CODE_NAVIGATOR_ROLE,
     AgentDef,
@@ -39,7 +40,6 @@ _LUNA_BUNDLED_APPLY_PATCH_TOOL_TYPE = "freeform"
 _LUNA_EFFECTIVE_APPLY_PATCH_TOOL_TYPE = None
 EXPLORER_DISABLED_FEATURES = (
     "apps",
-    "apps_mcp_path_override",
     "browser_use",
     "browser_use_external",
     "browser_use_full_cdp_access",
@@ -52,8 +52,6 @@ EXPLORER_DISABLED_FEATURES = (
     "goals",
     "image_generation",
     "in_app_browser",
-    "js_repl",
-    "js_repl_tools_only",
     "multi_agent",
     "multi_agent_v2",
     "plugin_sharing",
@@ -62,12 +60,9 @@ EXPLORER_DISABLED_FEATURES = (
     "request_permissions_tool",
     "shell_tool",
     "standalone_web_search",
-    "tool_search_always_defer_mcp_tools",
     "tool_suggest",
     "unified_exec",
     "unified_exec_zsh_fork",
-    "web_search_cached",
-    "web_search_request",
 )
 EXPLORER_PARENT_DISABLED_FEATURES = tuple(
     feature
@@ -105,7 +100,7 @@ _EXPLORER_TOOL_SURFACE = {
     "request_user_input_enabled": False,
     "repository_direct_mount": False,
     "session_thread_cap": EXPLORER_MAX_SESSION_THREADS,
-    "web_search": "disabled",
+    "web_search": CODEX_DISABLED_WEB_SEARCH_POLICY,
 }
 EXPLORER_TOOL_SURFACE_DIGEST = (
     "sha256:"
@@ -177,6 +172,7 @@ def explorer_probe_agent_definition() -> AgentDef:
             sandbox_mode=EXPLORER_SANDBOX_MODE,
             disabled_features=EXPLORER_DISABLED_FEATURES,
             agents_enabled=False,
+            web_search=CODEX_DISABLED_WEB_SEARCH_POLICY,
         ),
     )
 

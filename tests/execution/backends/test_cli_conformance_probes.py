@@ -36,9 +36,12 @@ from autoskillit._probe_canary import (
 )
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
+    BUNDLED_EXPLORER_ROLES,
     CLAUDE_CODE_CAPABILITIES,
     OUTPUT_DISCIPLINE_DIGEST,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+    agent_definition_digest,
+    load_agent_definitions,
     normalize_codex_cli_version,
     pkg_root,
 )
@@ -85,6 +88,7 @@ from autoskillit.hooks._capture_contract import (
     decode_capture_request,
     encode_capture_request,
 )
+from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
 from tests.execution.backends._conformance_assertions import (
     assert_boundary_spill_behavior,
     assert_config_schema,
@@ -110,6 +114,13 @@ from tests.execution.backends._live_codex_parent import (
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.large, pytest.mark.smoke]
+
+# Intentionally independent of production; checked against codex-rs/features/src/lib.rs,
+# codex-rs/features/src/legacy.rs, and the root web_search configuration schema.
+_FORBIDDEN_CHILD_FEATURES = {
+    *RETIRED_CODEX_FEATURES,
+    "web_search",
+}
 
 _SKIP_REASON = (
     "Set CODEX_SMOKE_TEST=1 and one of: CODEX_API_KEY, OPENAI_API_KEY,"
@@ -760,6 +771,8 @@ def _configure_generated_child_session(
     assert agent_definition["model"] == EXPLORER_MODEL
     assert agent_definition["model_reasoning_effort"] == EXPLORER_REASONING_EFFORT
     assert agent_definition["sandbox_mode"] == EXPLORER_SANDBOX_MODE
+    assert agent_definition["web_search"] == "disabled"
+    assert not (_FORBIDDEN_CHILD_FEATURES & set(agent_definition.get("features", {})))
     assert agent_definition["features"] == {
         feature: False for feature in EXPLORER_DISABLED_FEATURES
     }
@@ -1089,6 +1102,17 @@ def _run_generated_child_probe(
     agent_role = EXPLORER_PROBE_ROLE
     definition = explorer_probe_agent_definition()
     definition_digest = explorer_probe_definition_digest()
+    bundled_explorers = tuple(
+        definition
+        for definition in load_agent_definitions(pkg_root() / "agents")
+        if definition.name in BUNDLED_EXPLORER_ROLES
+    )
+    assert definition_digest == agent_definition_digest(definition)
+    assert (
+        {item.codex.web_search for item in bundled_explorers}
+        == {definition.codex.web_search}
+        == {"disabled"}
+    )
     prepared = prepare_live_codex_parent(
         tmp_path=tmp_path,
         monkeypatch=monkeypatch,

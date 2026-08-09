@@ -832,6 +832,12 @@ def test_retention_handles_corrupt_meta_json(tmp_path, monkeypatch):
     import autoskillit.execution.session_log as sl_module
 
     monkeypatch.setattr(sl_module, "_MAX_SESSIONS", 5)
+    warning_events: list[str] = []
+    monkeypatch.setattr(
+        sl_module.logger,
+        "warning",
+        lambda event, **_kwargs: warning_events.append(event),
+    )
 
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -875,6 +881,7 @@ def test_retention_handles_corrupt_meta_json(tmp_path, monkeypatch):
     # Corrupt meta.json → not protected → deleted normally
     assert not (sessions_dir / "session-0000").exists()
     assert not (sessions_dir / "session-0001").exists()
+    assert warning_events.count("session_retention_meta_read_failed") == 2
 
 
 def test_session_log_removed_build_protected_function() -> None:

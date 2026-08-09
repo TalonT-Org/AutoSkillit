@@ -705,7 +705,15 @@ def flush_session_log(
             if protected_ids:
                 try:
                     meta = json.loads((candidate / "meta.json").read_text(encoding="utf-8"))
-                except (json.JSONDecodeError, OSError):
+                except FileNotFoundError:
+                    meta = {}
+                except (json.JSONDecodeError, OSError) as exc:
+                    logger.warning(
+                        "session_retention_meta_read_failed",
+                        path=candidate,
+                        error=str(exc),
+                        exc_info=True,
+                    )
                     meta = {}
                 if meta.get("campaign_id") in protected_ids:
                     surviving_names.add(candidate.name)

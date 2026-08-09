@@ -7,7 +7,7 @@ import inspect
 import json
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from threading import Barrier
+from threading import Barrier, Event
 
 import pytest
 
@@ -286,23 +286,49 @@ async def test_invalid_update_has_no_disk_or_live_partial_commit(
     assert not tmp_path.joinpath(*_OVERLAY_RELPATH).exists()
 
 
-def test_config_and_ingredient_writers_preserve_each_others_keys(tmp_path) -> None:
-    from autoskillit.server.tools.tools_config import _commit_effective_config
-    from autoskillit.server.tools.tools_kitchen import _write_ingredient_locks
+def test_config_and_ingredient_writers_preserve_each_others_keys(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from autoskillit.server.tools import tools_config, tools_kitchen
 
     ctx = _open_context(tmp_path)
-    barrier = Barrier(2)
+    config_holds_lock = Event()
+    ingredient_attempted = Event()
+    real_write_overlay_locked = tools_config.write_overlay_locked
+    real_update_overlay = tools_kitchen.update_overlay
+
+    def wait_for_ingredient(path, value):
+        config_holds_lock.set()
+        assert ingredient_attempted.wait(timeout=1)
+        return real_write_overlay_locked(path, value)
+
+    def observe_ingredient_attempt(project_dir, mutate):
+        assert config_holds_lock.wait(timeout=1)
+        ingredient_attempted.set()
+        return real_update_overlay(project_dir, mutate)
+
+    monkeypatch.setattr(tools_config, "write_overlay_locked", wait_for_ingredient)
+    monkeypatch.setattr(tools_kitchen, "update_overlay", observe_ingredient_attempt)
 
     def configure() -> None:
-        barrier.wait()
-        _commit_effective_config(ctx, "order", {"timeout": 600}, {})
+        tools_config._commit_effective_config(ctx, "order", {"timeout": 600}, {})
 
     def lock_ingredient() -> None:
-        barrier.wait()
-        _write_ingredient_locks(tmp_path, "pipeline-1", {"flag": "false"}, None, {})
+        tools_kitchen._write_ingredient_locks(
+            tmp_path,
+            "pipeline-1",
+            {"flag": "false"},
+            None,
+            {},
+        )
 
     with ThreadPoolExecutor(max_workers=2) as pool:
-        list(pool.map(lambda fn: fn(), (configure, lock_ingredient)))
+        config_future = pool.submit(configure)
+        assert config_holds_lock.wait(timeout=1)
+        ingredient_future = pool.submit(lock_ingredient)
+        config_future.result(timeout=2)
+        ingredient_future.result(timeout=2)
 
     overlay = json.loads(tmp_path.joinpath(*_OVERLAY_RELPATH).read_text())
     assert overlay["order"]["timeout"] == 600

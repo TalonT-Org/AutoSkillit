@@ -7,7 +7,7 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from autoskillit.core import (
     CODEX_EXPLORER_IDENTITY,
@@ -31,6 +31,7 @@ EXPLORER_ATTESTATION_FUTURE_SKEW_SECONDS = 5 * 60
 EXPLORER_PARENT_MODEL = "gpt-5.6-sol"
 EXPLORER_MODEL, EXPLORER_REASONING_EFFORT = CODEX_EXPLORER_IDENTITY
 EXPLORER_SANDBOX_MODE = "read-only"
+_EXPLORER_WEB_SEARCH_POLICY: Literal["disabled"] = "disabled"
 EXPLORER_PROBE_ROLE = SEMANTIC_CODE_NAVIGATOR_ROLE
 EXPLORER_PROBE_TASK_NAME = "capability_probe"
 _LUNA_BUNDLED_TOOL_MODE = "code_mode_only"
@@ -68,14 +69,6 @@ EXPLORER_PARENT_DISABLED_FEATURES = tuple(
     for feature in EXPLORER_DISABLED_FEATURES
     if feature not in {"multi_agent", "multi_agent_v2"}
 )
-_EXPLORER_PROBE_PROJECTION = CodexAgentProjectionDef(
-    model=EXPLORER_MODEL,
-    reasoning_effort=EXPLORER_REASONING_EFFORT,
-    sandbox_mode=EXPLORER_SANDBOX_MODE,
-    disabled_features=EXPLORER_DISABLED_FEATURES,
-    agents_enabled=False,
-    web_search="disabled",
-)
 EXPLORER_MAX_SESSION_THREADS = 2
 EXPLORER_MCP_TOOLS = (
     "bounded_literal_search",
@@ -84,8 +77,8 @@ EXPLORER_MCP_TOOLS = (
     "deny_operations",
 )
 _EXPLORER_TOOL_SURFACE = {
-    "child_agents_enabled": _EXPLORER_PROBE_PROJECTION.agents_enabled,
-    "child_disabled_features": _EXPLORER_PROBE_PROJECTION.disabled_features,
+    "child_agents_enabled": False,
+    "child_disabled_features": EXPLORER_DISABLED_FEATURES,
     "mcp_servers": {
         "explorer_probe": {
             "default_tools_approval_mode": "approve",
@@ -107,7 +100,7 @@ _EXPLORER_TOOL_SURFACE = {
     "request_user_input_enabled": False,
     "repository_direct_mount": False,
     "session_thread_cap": EXPLORER_MAX_SESSION_THREADS,
-    "web_search": _EXPLORER_PROBE_PROJECTION.web_search,
+    "web_search": _EXPLORER_WEB_SEARCH_POLICY,
 }
 EXPLORER_TOOL_SURFACE_DIGEST = (
     "sha256:"
@@ -173,7 +166,14 @@ def explorer_probe_agent_definition() -> AgentDef:
             "listed in the parent message. Do not inspect repository policy or credential "
             "files except for the explicit denial checks. Never synthesize or modify source."
         ),
-        codex=_EXPLORER_PROBE_PROJECTION,
+        codex=CodexAgentProjectionDef(
+            model=EXPLORER_MODEL,
+            reasoning_effort=EXPLORER_REASONING_EFFORT,
+            sandbox_mode=EXPLORER_SANDBOX_MODE,
+            disabled_features=EXPLORER_DISABLED_FEATURES,
+            agents_enabled=False,
+            web_search=_EXPLORER_WEB_SEARCH_POLICY,
+        ),
     )
 
 

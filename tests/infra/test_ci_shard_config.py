@@ -127,7 +127,9 @@ def _compute_test_paths_body(text: str) -> str:
         pytest.fail("Compute test paths step (id: test-paths) not found in workflow")
     step_start = text.index(marker)
     run_marker = "run: |"
-    run_start = text.index(run_marker, step_start)
+    run_start = text.find(run_marker, step_start)
+    if run_start == -1:
+        pytest.fail("Compute test paths step is missing its `run: |` block")
     body_start = run_start + len(run_marker)
     lines = text[body_start:].splitlines(keepends=True)
     indent: int | None = None
@@ -167,7 +169,7 @@ def _parse_case_arms(body: str) -> dict[str, str]:
             continue
         match = re.match(r"^([\w?*.\-${}]+)\)\s*(.*)$", part, re.DOTALL)
         if not match:
-            continue
+            pytest.fail(f"Malformed case arm in Compute test paths body: {part!r}")
         pattern, arm_body = match.group(1), match.group(2).strip()
         key = "*_default" if pattern == "*" else pattern
         arms[key] = arm_body
@@ -263,6 +265,15 @@ class TestCIShardConfig:
         )
         with pytest.raises(ValueError, match="EXECUTION"):
             _parse_shard_assignments(text_duplicate)
+
+    def test_compute_paths_rejects_missing_run_block(self) -> None:
+        with pytest.raises(PytestFailed, match="missing its `run: \\|` block"):
+            _compute_test_paths_body("- name: Compute test paths\n  id: test-paths\n")
+
+    def test_case_parser_rejects_malformed_arm(self) -> None:
+        body = 'case "$SHARD" in\nexecution echo "missing delimiter";;\nesac'
+        with pytest.raises(PytestFailed, match="Malformed case arm"):
+            _parse_case_arms(body)
 
     def test_explicit_directories_exist_and_contain_tests(self) -> None:
         text = _read_workflow_text()

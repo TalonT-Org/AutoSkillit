@@ -57,12 +57,15 @@ failure, not something to work around.
 
 - Modify any source code files
 - Create files outside `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/review-approach}`
+- Launch more than five top-level children or allow a child to launch Agent or Skill children
+- Exceed eight web searches for one child or forty web searches across the review
 - Detach child delegations instead of joining them (joining every child is required)
 - Start independent child delegations sequentially
 
 **ALWAYS:**
 - Use subagents with web search for parallel research
 - Spawn all subagents via `child delegation under the declared `sonnet` model-class policy`
+- Track every selected topic and exact child ID to a terminal result
 - Keep findings concise and actionable
 - Present options with trade-offs
 - Make recommendations based on technical merit and project fit
@@ -81,7 +84,9 @@ failure, not something to work around.
 
 ### Step 1: Extract Research Targets
 
-From the plan file path argument (or, outside pipeline context, the report/conversation context provided), identify the core problems and proposed features that need external research. Break them into distinct research topics.
+From the plan file path argument (or, outside pipeline context, the report/conversation context provided), identify the core problems and proposed features that need external research. Select at most five distinct research topics. The limits below are a total-work budget, not only a concurrency limit: at most five top-level children, zero nested Agent or Skill launches, at most eight web searches per child and forty total.
+
+Create one ledger row for every selected topic before dispatch. Each row records the topic, dispatch state, exact child ID once spawned, terminal verdict, citations, unknowns, and coverage. A row starts as `pending`; after dispatch it may be `running` only until its child is joined.
 
 ### Step 2: Launch Parallel Web Search Subagents (SINGLE MESSAGE)
 
@@ -89,7 +94,9 @@ From the plan file path argument (or, outside pipeline context, the report/conve
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn general-purpose subagents (with web search) for each research topic. Each subagent should investigate:
+Spawn all topic children concurrently, then join every child before synthesis. Spawn one general-purpose subagent (with web search) for each selected research topic. Each self-contained task packet must include the topic, its relevance to the reviewed plan, suggested search angles, the eight-search limit, and this instruction: the child must not launch Agent or Skill children.
+
+Each child should investigate:
 
 - What modern solutions exist for this problem class
 - How mature projects and frameworks approach it
@@ -97,6 +104,20 @@ Spawn general-purpose subagents (with web search) for each research topic. Each 
 - Known pitfalls and trade-offs of common approaches
 
 Tailor the search queries to the specific technologies and constraints of the project.
+
+Every child returns this terminal envelope, including on an early stop or contract violation:
+
+```text
+Topic: {selected topic}
+Verdict: answered | partial | blocked
+Coverage: {what was and was not established}
+Citations: {source URLs associated with supported findings}
+Unknowns: {named unresolved questions}
+Web searches used: {0..8}
+Failure: {none, or a concise retryable/terminal failure reason}
+```
+
+Nested delegation is a contract violation: stop that child's research and return `Verdict: blocked` through the same envelope. After joining, accept only the three exact verdict values, treat a missing or malformed envelope as `blocked`, and update each row exactly once to its terminal result. Joined, failed, and completed work must never be described as active.
 
 ### Step 3: Synthesize
 
@@ -107,6 +128,16 @@ Consolidate subagent findings into a concise review. For each research topic:
 - **Relevance**: How each option relates to the proposed direction
 
 Drop anything that doesn't meaningfully inform the decision.
+
+Apply these deterministic completion rules and include the terminal ledger in the report:
+
+- **all-success:** when every row is `answered`, synthesize normally.
+- **partial-success:** when at least one row has usable cited evidence, synthesize every usable cited result, name every coverage gap and unknown, and do not convert unsupported material into a finding.
+- **all-failed:** when all rows are `blocked`, write an honest bounded review containing the failure evidence and terminal ledger; do not invent a recommendation.
+- **nested-delegation-attempt:** nested delegation is a contract violation; treat the affected row as `blocked` as specified above, then apply the partial-success or all-failed rule.
+- **incomplete-evidence:** when the available evidence cannot support an honest bounded review, return a structured retryable failure naming `insufficient_evidence`, the gaps, and the complete terminal ledger.
+
+Every completion branch, including retryable failure, writes the review report and emits the literal `review_path` output token. No branch returns while a ledger row is non-terminal or silently omits the report.
 
 ### Step 4: Write Review
 

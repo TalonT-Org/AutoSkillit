@@ -345,3 +345,35 @@ class TestCheckSessionIndexProjection:
 
         assert result.severity is Severity.OK
         assert reads == 2
+
+    def test_absent_lock_race_keeps_snapshot_when_lock_disappears(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import autoskillit.cli.doctor._doctor_runtime as doctor_runtime
+        from autoskillit.core import ArtifactLease
+        from autoskillit.execution import session_index_lock_path
+
+        self._write_summary(tmp_path, "complete")
+        self._write_index(tmp_path, "complete")
+        lock_path = session_index_lock_path(tmp_path)
+        original_read = doctor_runtime._read_session_index_projection
+
+        def racing_read(log_root: Path):
+            snapshot = original_read(log_root)
+            with ArtifactLease.acquire_exclusive(lock_path, blocking=True):
+                pass
+            return snapshot
+
+        original_acquire = ArtifactLease.acquire_existing_shared
+
+        def disappearing_acquire(path: Path):
+            path.unlink()
+            return original_acquire(path)
+
+        monkeypatch.setattr(doctor_runtime, "_read_session_index_projection", racing_read)
+        monkeypatch.setattr(ArtifactLease, "acquire_existing_shared", disappearing_acquire)
+
+        result = doctor_runtime._check_session_index_projection(log_dir=str(tmp_path))
+
+        assert result.severity is Severity.OK
+        assert result.message.startswith("1 committed session(s)")

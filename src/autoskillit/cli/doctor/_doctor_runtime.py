@@ -486,13 +486,19 @@ def _check_session_index_projection(*, log_dir: str = "") -> DoctorResult:
 
     try:
         if lock_path.is_file():
-            with ArtifactLease.acquire_existing_shared(lock_path):
+            try:
+                with ArtifactLease.acquire_existing_shared(lock_path):
+                    summaries, rows, malformed = _read_session_index_projection(log_root)
+            except FileNotFoundError:
                 summaries, rows, malformed = _read_session_index_projection(log_root)
         else:
             summaries, rows, malformed = _read_session_index_projection(log_root)
             if lock_path.is_file():
-                with ArtifactLease.acquire_existing_shared(lock_path):
-                    summaries, rows, malformed = _read_session_index_projection(log_root)
+                try:
+                    with ArtifactLease.acquire_existing_shared(lock_path):
+                        summaries, rows, malformed = _read_session_index_projection(log_root)
+                except FileNotFoundError:
+                    pass
     except OSError as exc:
         return DoctorResult(
             Severity.WARNING,

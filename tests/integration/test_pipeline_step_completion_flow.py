@@ -4,13 +4,19 @@ from __future__ import annotations
 
 import dataclasses
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from fastmcp.server.middleware import MiddlewareContext
+from fastmcp.tools.base import ToolResult
+from fastmcp.tools.function_tool import FunctionTool
+from mcp.types import CallToolRequestParams, TextContent
 
 from autoskillit.core.types import RetryReason
 from autoskillit.core.types._type_results import SkillResult
-from autoskillit.server.tools.tools_execution import run_skill
+from autoskillit.server._run_skill_completion import RunSkillCompletionMiddleware
+from autoskillit.server.tools.tools_execution import complete_run_skill_result, run_skill
 from tests.server._pipeline_test_helpers import (
     _ack_direct_run_skill_result,
     _write_tracker,
@@ -76,6 +82,56 @@ class TestServerSideStepCompletionMarking:
 
         tracker = _read_tracker(tmp_path)
         assert tracker["steps"]["rectify"]["status"] == "complete"
+
+    @pytest.mark.anyio
+    async def test_wire_delivery_is_acknowledged_through_completion_handler(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ):
+        from autoskillit.server import mcp
+
+        monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
+        _setup_project(tmp_path, tool_ctx_kitchen_open)
+        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
+        _write_tracker(
+            tmp_path,
+            "test-kitchen",
+            {"rectify": {"status": "pending"}},
+            {},
+        )
+        tool_ctx_kitchen_open.executor = AsyncMock()
+        tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=_SUCCESS_RESULT)
+        registered = await mcp.get_tool("run_skill")
+        assert isinstance(registered, FunctionTool)
+        context = MiddlewareContext(
+            message=CallToolRequestParams(name="run_skill", arguments={}),
+            fastmcp_context=SimpleNamespace(session_id="request-session"),  # type: ignore[arg-type]
+            method="tools/call",
+            type="request",
+        )
+
+        async def call_next(_context) -> ToolResult:
+            rendered = await run_skill(
+                "/autoskillit:rectify task",
+                str(tmp_path),
+                step_name="rectify",
+            )
+            return registered.convert_result(rendered)
+
+        delivered = await RunSkillCompletionMiddleware(mcp).on_call_tool(context, call_next)
+        assert len(delivered.content) == 1
+        assert isinstance(delivered.content[0], TextContent)
+        receipt_id = json.loads(delivered.content[0].text)["receipt_id"]
+
+        completed = json.loads(
+            await complete_run_skill_result(
+                receipt_id,
+                ctx=SimpleNamespace(session_id="request-session"),  # type: ignore[arg-type]
+            )
+        )
+
+        assert completed["success"] is True
+        assert completed["tracker"]["success"] is True
+        assert _read_tracker(tmp_path)["steps"]["rectify"]["status"] == "complete"
 
 
 class TestDependentStepAllowedAfterServerSideMarking:

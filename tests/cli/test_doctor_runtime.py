@@ -270,6 +270,7 @@ class TestCheckSessionIndexProjection:
         result = _check_session_index_projection(log_dir=str(tmp_path))
 
         assert result.severity is Severity.WARNING
+        assert "malformed=1" in result.message
 
     def test_reports_index_read_failure(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

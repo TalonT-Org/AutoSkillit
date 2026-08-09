@@ -118,7 +118,7 @@ def _ordinary_pair(tmp_path: Path, *, issue_backed: bool = True) -> Path:
 
 def test_scopes_to_headless_pr_skills(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    body = _ordinary_pair(tmp_path, issue_backed=False)
+    body = _body_file(tmp_path, "Summary without provenance metadata")
     command = f"gh pr create --body-file {body}"
 
     assert _is_denied(_run_hook(_event(command), monkeypatch))

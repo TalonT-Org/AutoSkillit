@@ -99,7 +99,7 @@ async def kitchen_status() -> str:
                 _select_tracker_authority,
             )
 
-            target, authority, key, _lease = _select_tracker_authority(ctx, "")
+            target, authority, key, _lease = _select_tracker_authority(ctx, ctx.kitchen_id)
             try:
                 if target is None or authority is None:
                     raise RuntimeError("kitchen tracker authority has no target")

@@ -99,7 +99,7 @@ async def test_enable_exploration_revokes_authority_when_visibility_enable_fails
         gate=MagicMock(),
     )
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_exploration._resolve_session_type",
+        "autoskillit.core.session_type",
         lambda: SessionType.SKILL,
     )
     monkeypatch.setattr(

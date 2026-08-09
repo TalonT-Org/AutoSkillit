@@ -973,8 +973,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "core": 31,
         # +GitHub review types, portable launch authority, stable contract,
         # closed skill semantics, non-executable projection binding, explorer contracts,
-        # and execution-identity value objects/protocols.
-        "core/types": 51,
+        # execution-identity value objects/protocols, and the typed maintenance-install
+        # subprocess boundary.
+        "core/types": 52,
         "cli": 24,  # +_install_contract typed install process boundary (#4409);
         # +_capture_store capture-store stats/reclaim command
         "cli/doctor": 12,  # +_doctor_skills capability declaration authenticity checks;

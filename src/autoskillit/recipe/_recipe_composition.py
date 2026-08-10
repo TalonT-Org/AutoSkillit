@@ -135,18 +135,20 @@ def _validate_route_consistency(raw: str, recipe: Recipe) -> list[str]:
     except (TypeError, ValueError, YAMLError) as exc:
         return [f"Repaired raw YAML cannot be parsed: {exc}"]
     errors: list[str] = []
-    if tuple(raw_recipe.steps) != tuple(recipe.steps):
+    step_order_matches = tuple(raw_recipe.steps) == tuple(recipe.steps)
+    if not step_order_matches:
         errors.append(
             "Raw YAML step order differs from the Python model: "
             f"{tuple(raw_recipe.steps)!r} != {tuple(recipe.steps)!r}"
         )
-    raw_signatures = _declared_route_signatures(raw_recipe)
-    model_signatures = _declared_route_signatures(recipe)
-    if raw_signatures != model_signatures:
-        errors.append(
-            "Raw YAML declared routes differ from the Python model: "
-            f"{raw_signatures!r} != {model_signatures!r}"
-        )
+    if step_order_matches:
+        raw_signatures = _declared_route_signatures(raw_recipe)
+        model_signatures = _declared_route_signatures(recipe)
+        if raw_signatures != model_signatures:
+            errors.append(
+                "Raw YAML declared routes differ from the Python model: "
+                f"{raw_signatures!r} != {model_signatures!r}"
+            )
     return errors
 
 

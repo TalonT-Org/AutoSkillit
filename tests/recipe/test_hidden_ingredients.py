@@ -1055,6 +1055,7 @@ steps:
 """
 
     errors = _validate_route_consistency(raw, recipe)
+    assert len(errors) == 1
     assert any("step order" in error for error in errors)
 
 

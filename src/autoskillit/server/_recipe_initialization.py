@@ -79,7 +79,7 @@ def build_recipe_envelope(
         "recipe_flow": flow_generation.identity(),
         "completed_parts": 0,
         "total_parts": sum(item.total_parts for item in initialization_requirements),
-        "calls_remaining": sum(item.total_parts for item in initialization_requirements),
+        "remaining_section_pulls": sum(item.total_parts for item in initialization_requirements),
         "required_sections": [
             {
                 "page_plan_sha256": requirement.page_plan_sha256,

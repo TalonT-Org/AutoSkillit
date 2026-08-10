@@ -149,7 +149,7 @@ _MCP_STARTUP_RECOVERY_SPEC = _McpStartupRecoverySpec(
                 "identity plus initialization_id, page_plan_sha256, part, and "
                 "continuation; reject mismatched versions, digests, sizes, records, "
                 "skipped parts, or changed bindings. Track completed_parts, total_parts, "
-                "and calls_remaining from every recovery response. After exact "
+                "and remaining_section_pulls from every recovery response. After exact "
                 "reconstruction, use a terminal page's completion_receipt and skip the "
                 "separate completion call; otherwise call "
                 "complete_recipe_initialization(initialization_id). Require the receipt "

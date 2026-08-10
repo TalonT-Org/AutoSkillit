@@ -715,7 +715,7 @@ async def get_recipe_section(
             rendered = render_recipe_section_page(page_plan, part)
             rendered_payload = json.loads(rendered)
             if isinstance(active_initialization, InitializingRecipe):
-                completed_parts, total_parts, calls_remaining = (
+                completed_parts, total_parts, remaining_section_pulls = (
                     recipe_initialization_progress_counts(
                         active_initialization,
                         section=section,
@@ -726,7 +726,7 @@ async def get_recipe_section(
                 rendered_payload.update(
                     completed_parts=completed_parts,
                     total_parts=total_parts,
-                    calls_remaining=calls_remaining,
+                    remaining_section_pulls=remaining_section_pulls,
                 )
                 rendered = json.dumps(
                     rendered_payload,

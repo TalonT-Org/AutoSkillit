@@ -366,7 +366,7 @@ def _render_candidate(
     if selected.initialization_id is not None:
         body["initialization_id"] = selected.initialization_id
         body["completed_parts"] = part + 1
-        body["calls_remaining"] = total_parts - part - 1
+        body["remaining_section_pulls"] = total_parts - part - 1
     if terminal and selected.completion_response is not None:
         completion_response = dict(selected.completion_response)
         content_sha256 = page.descriptor.page_content_sha256

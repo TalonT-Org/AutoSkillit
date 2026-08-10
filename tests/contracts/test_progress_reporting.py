@@ -19,7 +19,7 @@ async def test_progress_counters_in_every_recovery_response(
     monkeypatch.setattr(tool_ctx, "backend", BACKEND_REGISTRY["codex"]())
     envelope = await _open_kitchen_patched("implementation", {}, monkeypatch)
     assert envelope["delivery_bound_spill"] is True
-    for key in ("completed_parts", "total_parts", "calls_remaining"):
+    for key in ("completed_parts", "total_parts", "remaining_section_pulls"):
         assert key in envelope
     identity = {key: value for key, value in envelope["recipe_pull"].items() if key != "pull_tool"}
     completed: list[int] = []
@@ -36,11 +36,11 @@ async def test_progress_counters_in_every_recovery_response(
                 **identity,
             )
         )
-        for key in ("completed_parts", "total_parts", "calls_remaining"):
+        for key in ("completed_parts", "total_parts", "remaining_section_pulls"):
             assert key in response
         completed.append(response["completed_parts"])
         totals.append(response["total_parts"])
-        remaining.append(response["calls_remaining"])
+        remaining.append(response["remaining_section_pulls"])
     assert completed == [1, 2]
     assert totals == [2, 2]
     assert remaining == [1, 0]

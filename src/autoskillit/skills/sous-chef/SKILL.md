@@ -1041,7 +1041,7 @@ to decode every page and extend in order. For `json-scalar-page`, decode and con
 strings. For `json-element-fragment`, decode each string fragment, concatenate and
 verify the canonical element, then parse it once. Verify the complete flow digest, byte size,
 and record count plus the entrypoint section digest. Track `completed_parts`,
-`total_parts`, and `calls_remaining`. When the terminal page carries a
+`total_parts`, and `remaining_section_pulls`. When the terminal page carries a
 `completion_receipt`, use it and skip the separate completion call; otherwise call
 `complete_recipe_initialization(initialization_id=<server-issued ID>)` without
 caller-supplied generation selectors. Require a completion receipt before the first

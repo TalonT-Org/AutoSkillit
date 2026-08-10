@@ -293,7 +293,7 @@ def test_terminal_initialization_page_carries_progress_and_completion_receipt() 
 
     page = json.loads(plan.rendered_pages[-1])
     assert page["completed_parts"] == page["total_parts"]
-    assert page["calls_remaining"] == 0
+    assert page["remaining_section_pulls"] == 0
     content_sha256 = page["content_sha256"]
     assert page["completion_receipt"] == recipe_initialization_receipt(
         "initialization",

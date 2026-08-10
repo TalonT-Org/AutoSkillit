@@ -98,14 +98,27 @@ Two backend-specific provisioning models are now first-class:
   verified by `_explorer_auto_gate_boot` at lifespan time.
 
 - **Claude (session-scoped in-process):** Claude subagents share the parent process — the
-  per-child terminal model structurally cannot apply. Authority is established via
-  `bind_session_scoped` on `OwnerBoundExplorationContextStore` with the same HMAC/TTL
-  discipline. Broker handlers resolve whichever authority mode (launch-environment or
-  session-scoped) is established for the session.
+  per-child terminal model structurally cannot apply. The current
+  [PreToolUse event](https://code.claude.com/docs/en/hooks) supplies the native
+  `session_id`; parent and subagent calls use distinct one-shot records but the same
+  session lease key. The hook copies `tool_input`, overwrites only an opaque token, and
+  never persists or authorizes with `agent_id`. The server atomically consumes the
+  short-lived, exact-tool-bound record before resolving the existing HMAC lease.
+
+  The token's entropy, atomic claim, exact-tool binding, and existing lease are the
+  authority boundary. Record mtime is only a conservative cleanup signal. `ToolContext`,
+  FastMCP client-session IDs, and newest kitchen markers are prohibited identity sources.
+  This assumes the supported Linux/macOS native local filesystem and excludes hostile
+  same-UID processes; no network-filesystem atomicity or durability claim is made.
 
 Tag visibility (`mcp.enable(tags={"exploration"})`) is UX defense-in-depth. The per-call
 HMAC capability lease is the authorization boundary. Every broker call re-verifies the
 lease regardless of tag visibility state.
+
+Broker handlers remain terminal-first: successful Codex/headless launch authority never
+requires or consumes a hook token. The [2026-07-28 MCP specification release](https://blog.modelcontextprotocol.io/posts/2026-07-28/)
+and SEP-2567 reinforce avoiding protocol-session identity; no documented FastMCP bridge
+currently correlates a Claude parent with its native subagent.
 
 Both explorer role bodies carry a mandatory tool-surface self-check preamble: if the
 effective surface is anything other than exactly the three broker tools, the role emits a

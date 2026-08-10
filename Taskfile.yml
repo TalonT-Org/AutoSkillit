@@ -432,6 +432,11 @@ tasks:
       OMP_NUM_THREADS: "1"
       AUTOSKILLIT_CLAUDE_EXPLORER_LIVE_GATE: "1"
       TMPDIR: "{{.PYTEST_TMPDIR}}"
+    preconditions:
+      - sh: command -v claude >/dev/null 2>&1
+        msg: "Claude Code CLI must be installed"
+      - sh: test -n "$ANTHROPIC_API_KEY" || test -n "$CLAUDE_CODE_OAUTH_TOKEN" || test -f "$HOME/.claude/.credentials.json"
+        msg: "Isolated Claude authentication is required"
     cmds:
       - |
         if [[ -d ".venv" ]]; then
@@ -439,13 +444,26 @@ tasks:
         else
           PYTHON_CMD="python"
         fi
+        EVIDENCE_DIR="$(pwd)/.autoskillit/temp/claude-explorer-live"
+        EVIDENCE="$EVIDENCE_DIR/evidence.jsonl"
+        TEST_OUTPUT="$EVIDENCE_DIR/test-output.txt"
+        JUNIT_REPORT="$EVIDENCE_DIR/junit.xml"
+        mkdir -p "$EVIDENCE_DIR"
+        rm -f "$EVIDENCE" "$TEST_OUTPUT" "$JUNIT_REPORT"
+        export AUTOSKILLIT_CLAUDE_EXPLORER_EVIDENCE="$EVIDENCE"
         set +e
         $PYTHON_CMD -m pytest tests/server/test_claude_explorer_live_gate.py \
           -q --tb=short -m smoke -p no:cacheprovider -o "addopts=" \
-          --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1
+          --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" \
+          --junitxml="$JUNIT_REPORT" >"$TEST_OUTPUT" 2>&1
         PYTEST_EXIT=$?
         set -e
-        exit $PYTEST_EXIT
+        tail -c 16000 "$TEST_OUTPUT"
+        if [[ $PYTEST_EXIT -ne 0 ]]; then
+          exit $PYTEST_EXIT
+        fi
+        $PYTHON_CMD -c 'import sys, xml.etree.ElementTree as E; cases=list(E.parse(sys.argv[1]).getroot().iter("testcase")); skipped=sum(bool(case.findall("skipped")) for case in cases); sys.exit(f"Claude explorer gate requires exactly one non-skipped test, got tests={len(cases)} skipped={skipped}" if len(cases) != 1 or skipped else 0)' "$JUNIT_REPORT"
+        $PYTHON_CMD -c 'import json, sys; rows=[json.loads(line) for line in open(sys.argv[1], encoding="utf-8") if line.strip()]; values={row.get("tool"): row.get("session_id") for row in rows if isinstance(row.get("tool"), str)}; expected={"enable_exploration", "submit_exploration_query"}; bad=set(values) != expected or not values.get("enable_exploration") or values.get("submit_exploration_query") != values.get("enable_exploration"); sys.exit(f"invalid Claude explorer correlation evidence: {rows!r}" if bad else 0)' "$EVIDENCE"
 
   test-smoke-claude-startup:
     desc: Run the exact interactive Claude startup-readiness trace

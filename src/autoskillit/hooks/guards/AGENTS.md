@@ -53,7 +53,7 @@ Each guard is a standalone Python script executed as a subprocess (not imported 
 All guards fail-**open** for malformed/unparseable input (JSON decode failure = exit 0 = approve).
 This prevents a broken hook from blocking the entire tool chain.
 
-Five guards additionally fail-**closed** for valid input with unrecognized values, as a
+Six guards additionally fail-**closed** for valid input with unrecognized values, as a
 defense-in-depth measure against privilege escalation:
 
 | Guard | Fail-closed condition | Rationale |
@@ -63,6 +63,7 @@ defense-in-depth measure against privilege escalation:
 | `skill_orchestration_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not call orchestration tools (`run_skill`, `run_cmd`, `run_python`) |
 | `background_exec_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not bypass `run_in_background` prohibition |
 | `github_mutation_guard.py` | Ambiguous or unresolved GitHub mutation command | Unknown mutation scope must not bypass the structured review publisher |
+| `exploration_request_identity_guard.py` | A supported exploration event lacks bounded native identity or its one-shot record cannot be written | A Claude exploration call must not execute without request-correlated authority |
 
 **Design principle:** Garbage-in (malformed hook input) = fail-open. Unknown-tier (valid input, unrecognized value) = fail-closed.
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tomllib
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -23,6 +24,7 @@ from autoskillit.core import (
     RepositoryIdentity,
     RepositorySnapshot,
 )
+from autoskillit.hooks._exploration_request_record import write_exploration_request_record
 from autoskillit.pipeline import CapabilityResolutionStatus
 from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
 
@@ -288,6 +290,159 @@ async def test_submit_preserves_default_query_and_page_limits(
     assert store.submitted_query is not None
     assert store.submitted_query.max_results == 100
     assert store.submitted_page_size == 100
+
+
+@pytest.mark.parametrize(
+    "tool_name",
+    [
+        "submit_exploration_query",
+        "get_exploration_page",
+        "resume_exploration_context",
+    ],
+)
+@pytest.mark.asyncio
+async def test_terminal_authority_returns_before_request_identity_consumption(
+    monkeypatch: pytest.MonkeyPatch,
+    tool_name: str,
+) -> None:
+    from autoskillit.server.tools import tools_exploration
+
+    store = _Store()
+    consumer = MagicMock(side_effect=AssertionError("request token must not be consumed"))
+    monkeypatch.setattr(tools_exploration, "_get_store", lambda: store)
+    monkeypatch.setattr(tools_exploration, "_require_enabled", lambda: None)
+    monkeypatch.setattr(tools_exploration, "consume_exploration_request_record", consumer)
+
+    if tool_name == "submit_exploration_query":
+        result = await tools_exploration.submit_exploration_query("needle")
+    elif tool_name == "get_exploration_page":
+        result = await tools_exploration.get_exploration_page()
+    else:
+        result = await tools_exploration.resume_exploration_context()
+
+    assert json.loads(result)["status"] in {"accepted", "ready", "resumed"}
+    consumer.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "tool_name",
+    [
+        "submit_exploration_query",
+        "get_exploration_page",
+        "resume_exploration_context",
+    ],
+)
+@pytest.mark.asyncio
+async def test_session_fallbacks_consume_exact_native_identity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    tool_name: str,
+) -> None:
+    from autoskillit.server.tools import tools_exploration
+
+    (tmp_path / ".autoskillit" / "temp").mkdir(parents=True)
+    store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+        trusted_root=tmp_path,
+        service=_snapshot_service(),
+    )
+    capability = store.bind_session_scoped(
+        owner_id=f"uid:{os.getuid()}",
+        session_id="native-session-a",
+        cwd=tmp_path,
+        repository_root=tmp_path,
+        source_identity="interactive:native-session-a",
+    )
+    page = _Store._page()
+    monkeypatch.setattr(
+        store,
+        "submit_from_launch_environment",
+        MagicMock(return_value=(CapabilityResolutionStatus.INVALID, None)),
+    )
+    monkeypatch.setattr(
+        store,
+        "get_page_from_launch_environment",
+        MagicMock(return_value=(CapabilityResolutionStatus.INVALID, None)),
+    )
+    monkeypatch.setattr(
+        store,
+        "submit_for_capability",
+        MagicMock(return_value=(capability, page)),
+    )
+    monkeypatch.setattr(
+        store,
+        "get_page_for_capability",
+        MagicMock(return_value=(CapabilityResolutionStatus.OK, page)),
+    )
+    lookup = MagicMock(wraps=store.session_scoped_capability)
+    monkeypatch.setattr(store, "session_scoped_capability", lookup)
+    monkeypatch.setattr(tools_exploration, "_get_store", lambda: store)
+    monkeypatch.setattr(tools_exploration, "_require_enabled", lambda: None)
+    monkeypatch.setattr(
+        "autoskillit.server._get_ctx",
+        lambda: SimpleNamespace(project_dir=tmp_path),
+    )
+    token = write_exploration_request_record(tmp_path, tool_name, "native-session-a")
+
+    if tool_name == "submit_exploration_query":
+        result = await tools_exploration.submit_exploration_query(
+            "needle", _autoskillit_exploration_request_token=token
+        )
+    elif tool_name == "get_exploration_page":
+        result = await tools_exploration.get_exploration_page(
+            _autoskillit_exploration_request_token=token
+        )
+    else:
+        result = await tools_exploration.resume_exploration_context(
+            _autoskillit_exploration_request_token=token
+        )
+
+    assert json.loads(result)["status"] in {"accepted", "ready", "resumed"}
+    lookup.assert_called_once_with("native-session-a")
+
+
+@pytest.mark.asyncio
+async def test_second_native_session_cannot_retrieve_first_session_lease(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.server.tools import tools_exploration
+
+    (tmp_path / ".autoskillit" / "temp").mkdir(parents=True)
+    store: OwnerBoundExplorationContextStore[object] = OwnerBoundExplorationContextStore(
+        trusted_root=tmp_path,
+        service=_snapshot_service(),
+    )
+    store.bind_session_scoped(
+        owner_id=f"uid:{os.getuid()}",
+        session_id="native-session-a",
+        cwd=tmp_path,
+        repository_root=tmp_path,
+        source_identity="interactive:native-session-a",
+    )
+    monkeypatch.setattr(
+        store,
+        "get_page_from_launch_environment",
+        MagicMock(return_value=(CapabilityResolutionStatus.INVALID, None)),
+    )
+    lookup = MagicMock(wraps=store.session_scoped_capability)
+    monkeypatch.setattr(store, "session_scoped_capability", lookup)
+    monkeypatch.setattr(tools_exploration, "_get_store", lambda: store)
+    monkeypatch.setattr(tools_exploration, "_require_enabled", lambda: None)
+    monkeypatch.setattr(
+        "autoskillit.server._get_ctx",
+        lambda: SimpleNamespace(project_dir=tmp_path),
+    )
+    token = write_exploration_request_record(tmp_path, "get_exploration_page", "native-session-b")
+
+    result = await tools_exploration.get_exploration_page(
+        _autoskillit_exploration_request_token=token
+    )
+
+    assert json.loads(result) == {
+        "status": "error",
+        "code": "exploration_context_unavailable",
+    }
+    lookup.assert_called_once_with("native-session-b")
 
 
 @pytest.mark.asyncio

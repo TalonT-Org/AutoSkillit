@@ -327,19 +327,22 @@ _TOOL_DEFS = (
     _tool("get_ci_status", ("branch", "run_id", "repo", "workflow", "event", "cwd")),
     _tool(
         "submit_exploration_query",
-        ("query", "max_results"),
+        ("query", "max_results", "_autoskillit_exploration_request_token"),
         required=("query",),
         wire_types={"max_results": ToolWireType.INTEGER},
+        roles={"_autoskillit_exploration_request_token": ToolParamRole.ORCHESTRATOR_SCOPING},
     ),
     _tool(
         "get_exploration_page",
-        ("page_size", "continuation"),
+        ("page_size", "continuation", "_autoskillit_exploration_request_token"),
         wire_types={"page_size": ToolWireType.INTEGER},
+        roles={"_autoskillit_exploration_request_token": ToolParamRole.ORCHESTRATOR_SCOPING},
     ),
     _tool(
         "resume_exploration_context",
-        ("page_size",),
+        ("page_size", "_autoskillit_exploration_request_token"),
         wire_types={"page_size": ToolWireType.INTEGER},
+        roles={"_autoskillit_exploration_request_token": ToolParamRole.ORCHESTRATOR_SCOPING},
     ),
     _tool(
         "clone_repo",
@@ -578,7 +581,11 @@ _TOOL_DEFS = (
     ),
     _tool("close_kitchen"),
     _tool("disable_quota_guard"),
-    _tool("enable_exploration", ("project_dir",)),
+    _tool(
+        "enable_exploration",
+        ("project_dir", "_autoskillit_exploration_request_token"),
+        roles={"_autoskillit_exploration_request_token": ToolParamRole.ORCHESTRATOR_SCOPING},
+    ),
     _tool("lock_ingredients", ("locked", "pipeline_id", "unlock")),
     _tool("reload_session"),
     _tool("record_pipeline_step", ("pipeline_id", "op", "dependencies", "step_name")),

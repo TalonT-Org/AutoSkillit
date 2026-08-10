@@ -7,6 +7,9 @@ import os
 from pathlib import Path
 from typing import TypedDict
 
+from fastmcp import Context
+from fastmcp.dependencies import CurrentContext
+
 from autoskillit.core import (
     ContinuationCursor,
     EvidencePage,
@@ -17,6 +20,9 @@ from autoskillit.core import (
 )
 from autoskillit.core import (
     session_type as _resolve_session_type,
+)
+from autoskillit.hooks._exploration_request_record import (
+    consume_exploration_request_record,
 )
 from autoskillit.pipeline import (
     EXPLORER_INELIGIBLE_SESSION_TYPES,
@@ -93,22 +99,25 @@ def _get_store() -> ExplorationContextStoreProtocol[object] | None:
     return _get_ctx().exploration_context_store
 
 
-def _get_session_id() -> str | None:
+def _resolve_request_session(
+    token: str,
+    expected_tool_name: str,
+    *,
+    project_root: Path | None = None,
+) -> str | None:
     from autoskillit.server import _get_ctx  # circular-break: server composition root
 
-    ctx = _get_ctx()
-    return ctx.session_id if hasattr(ctx, "session_id") else None
+    root = _get_ctx().project_dir if project_root is None else project_root
+    return consume_exploration_request_record(root, expected_tool_name, token)
 
 
 def _try_session_scoped_submit(
     store: ExplorationContextStoreProtocol[object],
     request: ExplorationQuerySpec,
+    session_id: str,
 ) -> EvidencePage | None:
     """Try session-scoped authority when launch-environment is unavailable."""
     if not isinstance(store, OwnerBoundExplorationContextStore):
-        return None
-    session_id = _get_session_id()
-    if session_id is None:
         return None
     capability = store.session_scoped_capability(session_id)
     if capability is None:
@@ -127,14 +136,12 @@ def _try_session_scoped_submit(
 def _try_session_scoped_page(
     store: ExplorationContextStoreProtocol[object],
     *,
+    session_id: str,
     page_size: int,
     cursor: ContinuationCursor | None = None,
 ) -> EvidencePage | None:
     """Try session-scoped authority for page retrieval."""
     if not isinstance(store, OwnerBoundExplorationContextStore):
-        return None
-    session_id = _get_session_id()
-    if session_id is None:
         return None
     capability = store.session_scoped_capability(session_id)
     if capability is None:
@@ -251,12 +258,13 @@ def _fetch_page_from_launch_environment(
 async def submit_exploration_query(
     query: str,
     max_results: int = _MAX_QUERY_RESULTS,
+    _autoskillit_exploration_request_token: str = "",
 ) -> str:
     """Submit one bounded repository query to the server-owned exploration broker.
 
-    The capability, role, session, and reopen authority are read from the
-    server-owned launch environment. The broker never accepts a repository
-    path, command, or caller-supplied identity.
+    Terminal authority is read from the server-owned launch environment. The
+    optional internal parameter accepts only an opaque, server-issued, one-shot
+    request token, never a raw session ID or capability.
 
     Never raises.
     """
@@ -274,7 +282,19 @@ async def submit_exploration_query(
             page_size=min(request.max_results, _MAX_RESPONSE_PAGE_SIZE),
         )
         if status is not CapabilityResolutionStatus.OK or page is None:
-            page = _try_session_scoped_submit(store, request)
+            session_id = (
+                _resolve_request_session(
+                    _autoskillit_exploration_request_token,
+                    "submit_exploration_query",
+                )
+                if isinstance(store, OwnerBoundExplorationContextStore)
+                else None
+            )
+            page = (
+                None
+                if session_id is None
+                else _try_session_scoped_submit(store, request, session_id)
+            )
             if page is None:
                 return _failure(_FAILURE_CONTEXT_UNAVAILABLE)
         return _page_payload(page, status="accepted")
@@ -291,10 +311,12 @@ async def submit_exploration_query(
 async def get_exploration_page(
     page_size: int = _MAX_RESPONSE_PAGE_SIZE,
     continuation: str | None = None,
+    _autoskillit_exploration_request_token: str = "",
 ) -> str:
     """Retrieve bounded state for an active brokered exploration capability.
 
-    The broker never accepts a caller-supplied context, role, or session.
+    The optional internal parameter accepts only an opaque, server-issued,
+    one-shot request token, never a raw session ID or capability.
 
     Never raises.
     """
@@ -309,8 +331,21 @@ async def get_exploration_page(
         )
         if result == _failure(_FAILURE_CONTEXT_UNAVAILABLE):
             store = _get_store()
-            if store is not None:
-                page = _try_session_scoped_page(store, page_size=page_size, cursor=cursor)
+            if isinstance(store, OwnerBoundExplorationContextStore):
+                session_id = _resolve_request_session(
+                    _autoskillit_exploration_request_token,
+                    "get_exploration_page",
+                )
+                page = (
+                    None
+                    if session_id is None
+                    else _try_session_scoped_page(
+                        store,
+                        session_id=session_id,
+                        page_size=page_size,
+                        cursor=cursor,
+                    )
+                )
                 if page is not None:
                     return _page_payload(page, status="ready")
         return result
@@ -326,11 +361,12 @@ async def get_exploration_page(
 @_cancellation_shield()
 async def resume_exploration_context(
     page_size: int = _MAX_RESPONSE_PAGE_SIZE,
+    _autoskillit_exploration_request_token: str = "",
 ) -> str:
-    """Resume an active context without accepting caller-supplied identity.
+    """Resume an active context through server-issued authority.
 
-    Session resume mints a replacement launch capability in the server
-    lifecycle; the tool receives no caller-supplied reopen authority.
+    The optional internal parameter accepts only an opaque, server-issued,
+    one-shot request token, never a raw session ID or capability.
 
     Never raises.
     """
@@ -343,8 +379,20 @@ async def resume_exploration_context(
         )
         if result == _failure(_FAILURE_CONTEXT_UNAVAILABLE):
             store = _get_store()
-            if store is not None:
-                page = _try_session_scoped_page(store, page_size=page_size)
+            if isinstance(store, OwnerBoundExplorationContextStore):
+                session_id = _resolve_request_session(
+                    _autoskillit_exploration_request_token,
+                    "resume_exploration_context",
+                )
+                page = (
+                    None
+                    if session_id is None
+                    else _try_session_scoped_page(
+                        store,
+                        session_id=session_id,
+                        page_size=page_size,
+                    )
+                )
                 if page is not None:
                     return _page_payload(page, status="resumed")
         return result
@@ -360,6 +408,8 @@ async def resume_exploration_context(
 @_cancellation_shield()
 async def enable_exploration(
     project_dir: str = "",
+    _autoskillit_exploration_request_token: str = "",
+    ctx: Context = CurrentContext(),
 ) -> str:
     """Establish session-scoped exploration authority for Claude-native sessions.
 
@@ -370,6 +420,9 @@ async def enable_exploration(
 
     Not required for Codex sessions (per-child terminal binding) or for
     headless run_skill corridors (factory-based binding).
+
+    The optional internal parameter accepts only an opaque, server-issued,
+    one-shot request token, never a raw session ID or capability.
 
     Never raises.
     """
@@ -387,13 +440,19 @@ async def enable_exploration(
                 {"status": "error", "code": "exploration_store_unavailable"},
                 separators=(",", ":"),
             )
-        session_id = _get_session_id()
+        from autoskillit.server import _get_ctx  # circular-break: composition root
+
+        cwd = Path(project_dir) if project_dir else _get_ctx().project_dir
+        session_id = _resolve_request_session(
+            _autoskillit_exploration_request_token,
+            "enable_exploration",
+            project_root=cwd,
+        )
         if session_id is None:
             return json.dumps(
                 {"status": "error", "code": "no_session_id"},
                 separators=(",", ":"),
             )
-        cwd = Path(project_dir) if project_dir else Path.cwd()
         repository_root = store.trusted_root
         store.bind_session_scoped(
             owner_id=f"uid:{os.getuid()}",
@@ -403,7 +462,7 @@ async def enable_exploration(
             source_identity=f"interactive:{session_id}",
         )
         try:
-            mcp.enable(tags={"exploration"}, components={"tool"})
+            await ctx.enable_components(tags={"exploration"})
         except Exception:
             store.cleanup_session(session_id)
             raise

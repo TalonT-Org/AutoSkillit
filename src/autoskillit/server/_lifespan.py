@@ -106,6 +106,13 @@ def _retain_context_tracker_authority(ctx: Any) -> None:
     _retain_kitchen_tracker_authority(ctx)
 
 
+def _register_context_kitchen(ctx: Any) -> None:
+    """Retain tracker authority and register one active kitchen incarnation."""
+    _retain_context_tracker_authority(ctx)
+    register_active_kitchen(_context_kitchen_identity(ctx))
+    _activate_recipe_kitchen(ctx.kitchen_id)
+
+
 def run_startup_drift_check() -> None:
     """Compare on-disk hooks.json bytes vs current render; regenerate if stale.
 
@@ -446,9 +453,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
         logger.warning("fleet_auto_gate_boot_quota_refresh_failed", exc_info=True)
 
     try:
-        _retain_context_tracker_authority(ctx)
-        register_active_kitchen(_context_kitchen_identity(ctx))
-        _activate_recipe_kitchen(ctx.kitchen_id)
+        _register_context_kitchen(ctx)
     except Exception:
         logger.warning("fleet_auto_gate_boot_registry_failed", exc_info=True)
 
@@ -514,9 +519,7 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
     for tag in _collect_disabled_feature_tags(ctx.config.features, experimental_enabled=False):
         _mcp.disable(tags={tag})
     try:
-        _retain_context_tracker_authority(ctx)
-        register_active_kitchen(_context_kitchen_identity(ctx))
-        _activate_recipe_kitchen(ctx.kitchen_id)
+        _register_context_kitchen(ctx)
     except Exception:
         logger.warning("pre_reveal_kitchen_registry_failed", exc_info=True)
     _write_hook_config()
@@ -607,9 +610,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
         logger.warning("food_truck_auto_gate_boot_refresh_loop_failed", exc_info=True)
 
     try:
-        _retain_context_tracker_authority(ctx)
-        register_active_kitchen(_context_kitchen_identity(ctx))
-        _activate_recipe_kitchen(ctx.kitchen_id)
+        _register_context_kitchen(ctx)
     except Exception:
         logger.warning("food_truck_auto_gate_boot_registry_failed", exc_info=True)
 
@@ -710,9 +711,7 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
         logger.warning("skill_auto_gate_boot_quota_cache_failed", exc_info=True)
 
     try:
-        _retain_context_tracker_authority(ctx)
-        register_active_kitchen(_context_kitchen_identity(ctx))
-        _activate_recipe_kitchen(ctx.kitchen_id)
+        _register_context_kitchen(ctx)
     except Exception:
         logger.warning("skill_auto_gate_boot_registry_failed", exc_info=True)
 

@@ -45,7 +45,9 @@ class TestFleetAutoGateBoot:
         mock_write_hook_config.assert_called_once_with()
         mock_prime_quota_cache.assert_awaited_once_with(supports_quota_check=True)
         mock_create_bg_task.assert_called_once()
+        mock_register_kitchen.assert_called_once()
         identity = mock_register_kitchen.call_args.args[0]
+        assert identity.create_time > 0
         assert (identity.kitchen_id, identity.pid, identity.project_path) == (
             tool_ctx.kitchen_id,
             os.getpid(),

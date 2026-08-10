@@ -15,6 +15,7 @@ from typing import Literal
 import psutil
 
 from autoskillit.core import read_starttime_ticks
+from autoskillit.execution.process._process_kill import kill_process_tree
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -152,8 +153,6 @@ def reap_orphaned_codex_processes(
 
     Signal-only — no filesystem mutation anywhere in this module.
     """
-    from ._process_kill import kill_process_tree
-
     results: list[CodexOrphanReapResult] = []
     for o in orphans:
         # Re-verify identity: starttime ticks must match AND fd 0 must still

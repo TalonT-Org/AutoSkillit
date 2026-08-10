@@ -352,7 +352,7 @@ def test_reap_reports_incomplete_on_survivors(_spawn_fake_codex, monkeypatch):
 
     fake = ProcessCleanupResult(root_pid=orphan.pid, survivor_pids=(orphan.pid,))
     monkeypatch.setattr(
-        "autoskillit.execution.process._process_kill.kill_process_tree",
+        "autoskillit.execution.process._codex_orphans.kill_process_tree",
         lambda pid, **kw: fake,
     )
 

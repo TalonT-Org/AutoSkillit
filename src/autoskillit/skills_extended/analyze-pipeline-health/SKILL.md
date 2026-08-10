@@ -3,8 +3,8 @@ name: analyze-pipeline-health
 uses_capabilities: []
 categories:
 - diagnostics
-description: Analyze pipeline session logs for anomalies and regressions. Spawns parallel Haiku scanner subagents per step
-  group, each investigating its batch of sessions and reporting findings with evidence.
+description: Analyze pipeline session logs for anomalies and regressions. Spawns parallel terminal reader agents per step
+  group, then diagnoses and consolidates their bounded cited evidence.
 hooks:
   PreToolUse:
   - matcher: '*'
@@ -15,10 +15,11 @@ hooks:
 semantic_version: 1
 semantic_requirements:
   logical_roles:
-  - name: pipeline-health-scanner
+  - name: autoskillit:session-log-reader
     purpose: perform the named independent responsibility and return bounded evidence
   child_spawns:
-  - role: pipeline-health-scanner
+  - role: autoskillit:session-log-reader
+    for_each: step_batches
   concurrency:
     required: true
   join:
@@ -26,14 +27,12 @@ semantic_requirements:
   evidence:
     required: true
     independent: true
-  child_model_policies:
-  - role: pipeline-health-scanner
-    model_class: haiku
 ---
 
 # Pipeline Health Analysis Skill
 
-Coordinator skill that reads session logs from a pipeline run, groups them by step, spawns parallel scanner subagents, and consolidates findings into a report.
+Coordinator skill that scopes a pipeline run, groups retained session identities by step,
+spawns parallel terminal readers, then diagnoses and consolidates their cited evidence.
 
 ## Arguments
 
@@ -55,9 +54,9 @@ Coordinator skill that reads session logs from a pipeline run, groups them by st
 
 **ALWAYS:**
 - Filter sessions.jsonl by kitchen_id to scope to this pipeline run
-- Spawn scanner subagents in parallel (one per step group)
-- Use the declared `haiku` model-class policy for scanner children
-- Cap each scanner's investigation budget: set `maxTurns` to the limit in the agent definition and include a wall-clock soft-deadline instruction in the scanner prompt (e.g. "complete your analysis within 15 minutes; report partial findings if you reach the limit")
+- Spawn `autoskillit:session-log-reader` subagents in parallel (one per step group)
+- Leave child model, effort, sandbox, feature, and tool policy to the loaded AgentDef
+- Include a wall-clock soft-deadline instruction in each reader packet
 - Report "no issues found" clearly when the pipeline is clean
 - Start all independent child delegations before awaiting any result to maximize concurrency
 
@@ -69,7 +68,7 @@ Resolve the scratch directory for any intermediate files produced during analysi
 
 1. Use `{{AUTOSKILLIT_TEMP}}/analyze-pipeline-health/` as the scratch directory
 2. Create the directory if it does not exist (use Bash: `mkdir -p`)
-3. All intermediate files (partial scanner results, working notes) go here — never in `/tmp` or `/var/tmp`
+3. All intermediate files (partial reader results, working notes) go here — never in `/tmp` or `/var/tmp`
 
 Note: The final JSON report (Step 5) writes to the diagnostics log directory (`health-reports/`), not to this scratch directory.
 
@@ -81,41 +80,49 @@ Read ~/.local/share/autoskillit/logs/sessions.jsonl and filter entries where kit
 
 Group the filtered entries by step_name. Each group represents one phase of the pipeline (e.g., plan, implement, test, merge).
 
-### Step 2b: Identify Codex sessions
+### Step 2b: Build reader packets
 
-Some sessions may use the Codex backend instead of Claude Code. These are identifiable by:
-- `backend` field is `"codex"` in the sessions.jsonl entry
-- `codex_log` is non-null while `claude_code_log` is null
+For each step group, assign a stable batch ID and build one packet containing:
+- kitchen ID, step name, and batch ID
+- ordered session IDs and their count
+- requested anomaly classes: failure subtype, retry pattern, timing outlier, and error signature
+- the exact `Verdict`, `Batch`, `Evidence`, `Searched scope`, `Unsupported classes`,
+  and `Unknowns` return envelope
 
-When passing session entries to scanner subagents in Step 3, include the `codex_log` path and `backend` field in the JSON array. The scanner agent knows how to handle both backend types — it will use grep-based coarse analysis for Codex sessions and full JSONL analysis for Claude Code sessions.
+Do not include `claude_code_log`, `codex_log`, a session directory, a diagnostics
+root, or any other filesystem path. Do not copy numeric tool caps into packets;
+the server is the sole bounds authority.
 
-No special grouping is needed — Codex and Claude Code sessions for the same step can be in the same scanner batch.
-
-### Step 3: Spawn scanner subagents (SINGLE MESSAGE)
+### Step 3: Spawn reader subagents (SINGLE MESSAGE)
 
 **Start ALL independent child delegations before awaiting any result — one per item — and join every child before synthesis.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-For each step group, spawn a scanner subagent via the child delegation with subagent_type: "autoskillit:pipeline-health-scanner".
+For each step batch, spawn a terminal reader via the child delegation with
+subagent_type: `autoskillit:session-log-reader`.
 
-Each scanner receives in its prompt:
-- The sessions.jsonl entries for its batch (JSON array — includes `claude_code_log`, `codex_log`, and `backend` fields)
-- The session directory paths: ~/.local/share/autoskillit/logs/sessions/<dir_name>/
-- Context about what the step does (derive from step_name)
+Each reader receives only its packet and this instruction: complete within 15
+minutes and return `partial` or `blocked` with searched-scope evidence if the
+bounded tool cannot support an anomaly class.
 
 Issue ALL Agent calls in a single message for parallel execution.
 
-### Step 4: Validate scanner completion and consolidate findings
+### Step 4: Validate reader completion, diagnose, and consolidate findings
 
-Collect results from all scanners. For each scanner result:
-1. Check that the result contains a `scan_result:` completion token.
-2. If a scanner result is empty or lacks the `scan_result:` token, record it as an anomaly finding with severity "anomaly" and summary "Scanner for step group '<name>' did not complete — results may be missing."
-3. Only report "Pipeline health check: no issues found" when ALL scanners emitted `status: "complete"` tokens with `findings_count: 0`.
+Collect results from all readers. For each result:
+1. Require exactly one `Verdict: answered | partial | blocked` plus the complete
+   return envelope and the packet's exact batch/session identity.
+2. Reject uncited claims, citations not returned by the tool, missing searched
+   scope, or evidence for an unassigned session.
+3. Treat `partial`, `blocked`, empty, or malformed results as coverage gaps; never
+   silently promote them to complete evidence.
 
-Produce a consolidated report:
-- Group findings by severity (confirmed bugs > regressions > anomalies > informational)
-- Include the scanner's evidence and adversarial validation status for each finding
+After every join, the parent alone interprets the evidence, correlates retry and
+error patterns across batches, determines anomalies, and writes the report. Group
+parent findings by severity and include citations plus coverage limitations. Report
+"Pipeline health check: no issues found" only when every requested class has
+adequate evidence and parent diagnosis finds no issue.
 
 ### Step 5: Write report file (fleet dispatches only)
 
@@ -146,3 +153,13 @@ Present the consolidated report as your final output text. After the report body
 ```
 
 The calling orchestrator session will receive this as the run_skill result.
+
+## Backend-adapted semantic execution contract
+
+- Claude maps the logical role to `autoskillit:session-log-reader`.
+- Codex maps it to `session-log-reader` and dispatches once per runtime item in
+  `step_batches` with `fork_turns="none"`.
+- Do not pass a spawn-time `model` or `reasoning_effort`; the loaded AgentDef is
+  the sole Luna/xhigh policy authority.
+- Start every independent child before joining any child, join every child, and
+  deliver every successful terminal result before parent diagnosis.

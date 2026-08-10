@@ -1718,6 +1718,22 @@ class TestCodexBackendSetupSessionDir:
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)
         assert (self.session_dir / "config.toml").is_file()
+
+    def test_session_log_reader_projects_direct_mcp_only_policy(self) -> None:
+        self._write_all_source_files()
+        CodexBackend().setup_session_dir(self.session_dir)
+
+        reader = tomllib.loads(
+            (self.session_dir / "agents" / "session-log-reader.toml").read_text()
+        )
+        assert reader["model"] == "gpt-5.6-luna"
+        assert reader["model_reasoning_effort"] == "xhigh"
+        assert reader["sandbox_mode"] == "read-only"
+        assert reader["web_search"] == "disabled"
+        assert reader["agents"] == {"enabled": False}
+        assert reader["mcp_servers"]["autoskillit"]["enabled_tools"] == ["inspect_session_logs"]
+        assert reader["features"]["shell_tool"] is False
+        assert reader["features"]["multi_agent"] is False
         assert (self.session_dir / "auth.json").is_symlink()
         assert (self.session_dir / ".env").is_file()
         assert not (self.session_dir / "sessions").exists()

@@ -21,18 +21,17 @@ def test_analyze_pipeline_health_skill_exists():
     )
 
 
-# DIAG_C8: coordinator SKILL.md validates scanner completion and emits output delimiter
-def test_analyze_pipeline_health_coordinator_validates_scanners():
-    """analyze-pipeline-health SKILL.md must instruct scanner validation and emit a delimiter."""
+# DIAG_C8: coordinator validates reader completion and emits output delimiter
+def test_analyze_pipeline_health_coordinator_validates_readers():
+    """The coordinator must validate bounded reader envelopes before diagnosis."""
     from autoskillit.core import pkg_root
 
     skill_path = pkg_root() / "skills_extended" / "analyze-pipeline-health" / "SKILL.md"
     content = skill_path.read_text()
 
-    assert "scan_result:" in content, (
-        "analyze-pipeline-health SKILL.md Step 4 must instruct validation of 'scan_result:' "
-        "completion token from each scanner"
-    )
+    assert "Verdict: answered | partial | blocked" in content
+    assert "Reject uncited claims" in content
+    assert "parent alone interprets the evidence" in content
     assert "---pipeline-health-result---" in content, (
         "analyze-pipeline-health SKILL.md Step 6 must instruct emitting "
         "the '---pipeline-health-result---' delimiter"

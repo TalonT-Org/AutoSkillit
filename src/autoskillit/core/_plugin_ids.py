@@ -108,9 +108,10 @@ def validate_agent_tool_canonical(tool: str) -> str:
     """Assert a tool string is in DIRECT-canonical form and return its short name.
 
     Raises ValueError if the tool does not start with DIRECT_PREFIX or
-    its short name is not a registered exploration tool.
+    its short name is not a registered inspection tool.
     """
-    from .types import EXPLORATION_TOOLS
+    from .tool_registry import get_tool_def
+    from .types import EXPLORATION_TOOLS, ToolInitializationOperation
 
     if not tool.startswith(DIRECT_PREFIX):
         raise ValueError(
@@ -118,7 +119,18 @@ def validate_agent_tool_canonical(tool: str) -> str:
         )
     short = tool[len(DIRECT_PREFIX) :]
     if short not in EXPLORATION_TOOLS:
-        raise ValueError(f"agent tool short name {short!r} is not a registered exploration tool")
+        try:
+            tool_def = get_tool_def(short)
+        except KeyError:
+            tool_def = None
+        if (
+            tool_def is None
+            or tool_def.initialization_operation is not ToolInitializationOperation.INSPECTION
+        ):
+            raise ValueError(
+                f"agent tool short name {short!r} is not a registered exploration tool "
+                "or allowed inspection tool"
+            )
     return short
 
 

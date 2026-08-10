@@ -57,7 +57,9 @@ def _integration_metadata(
     metadata: dict[str, object] = {
         "schema_version": 1,
         "body_sha256": hashlib.sha256(body_path.read_bytes()).hexdigest(),
-        "source_issue_urls": source_issue_urls or [ISSUE_URL, OTHER_ISSUE_URL],
+        "source_issue_urls": (
+            [ISSUE_URL, OTHER_ISSUE_URL] if source_issue_urls is None else source_issue_urls
+        ),
     }
     metadata.update(overrides)
     path = _metadata_path(body_path)
@@ -229,6 +231,20 @@ def test_integration_body_omitting_one_source_url_denies(monkeypatch, tmp_path):
     )
 
 
+def test_integration_metadata_with_explicit_empty_sources_denies(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    body = _body_file(tmp_path, f"Tracks {ISSUE_URL}\nTracks {OTHER_ISSUE_URL}")
+    _integration_metadata(body, source_issue_urls=[])
+
+    assert _is_denied(
+        _run_hook(
+            _event(f"gh pr create --body-file {body}"),
+            monkeypatch,
+            skill_name="open-integration-pr",
+        )
+    )
+
+
 def test_any_invalid_create_segment_denies_compound_command(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     valid = _ordinary_pair(tmp_path)
@@ -257,6 +273,40 @@ def test_variable_loop_and_run_cmd_shape(monkeypatch, tmp_path):
     )
     event = _event(command, "mcp__autoskillit__local__autoskillit__run_cmd")
     assert _run_hook(event, monkeypatch) == ""
+
+
+@pytest.mark.parametrize(
+    "command_template",
+    [
+        "while true; do\n  gh pr create --body-file {body}\n  break\ndone",
+        "for attempt in 1 2 3; do\n  gh pr create --body-file={body}\ndone",
+        "if true; then\n  gh pr create --body-file {body}\nfi",
+    ],
+)
+def test_control_flow_still_enforces_body_provenance(monkeypatch, tmp_path, command_template):
+    monkeypatch.chdir(tmp_path)
+    body = _body_file(tmp_path, "Summary without the required closing URL")
+    _ordinary_metadata(body)
+
+    assert _is_denied(_run_hook(_event(command_template.format(body=body)), monkeypatch))
+
+
+def test_variable_body_path_after_case_boundary_is_enforced(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    body = _body_file(tmp_path, "Summary without the required closing URL")
+    _ordinary_metadata(body)
+    command = (
+        f"PR_CREATE_BODY={body}\n"
+        "while true; do\n"
+        '  case "$ATTEMPT" in\n'
+        "    2) break ;;\n"
+        "  esac\n"
+        '  gh pr create --body-file "$PR_CREATE_BODY"\n'
+        "  break\n"
+        "done"
+    )
+
+    assert _is_denied(_run_hook(_event(command), monkeypatch))
 
 
 def test_relative_body_path_resolves_from_payload_cwd(monkeypatch, tmp_path):

@@ -149,20 +149,6 @@ def recipe_initialization_receipt(
     )
 
 
-def _receipt(
-    initialization_id: str,
-    artifact: RecipeArtifactGeneration,
-    *,
-    content_sha256: str | None = None,
-) -> str:
-    """Compatibility alias for the server-owned receipt derivation."""
-    return recipe_initialization_receipt(
-        initialization_id,
-        artifact,
-        content_sha256=content_sha256,
-    )
-
-
 @dataclass(frozen=True, slots=True)
 class FinalizedRecipeSectionResponse:
     """A rendered page whose lifecycle credit awaits response enforcement."""
@@ -528,7 +514,7 @@ def build_embedded_completion_response(
     """Build the deterministic READY receipt fields carried by a terminal page."""
     rendered = _render_completion_receipt(
         initialization_id=initialization_id,
-        completion_receipt=_receipt(initialization_id, artifact_generation),
+        completion_receipt=recipe_initialization_receipt(initialization_id, artifact_generation),
         recipe_name=recipe_name,
         artifact_generation=artifact_generation,
         flow_generation=flow_generation,
@@ -570,7 +556,10 @@ def build_completion_response(
                 {"success": False, "error": "recipe_initialization_incomplete"},
                 separators=(",", ":"),
             )
-        completion_receipt = _receipt(initialization_id, state.artifact_generation)
+        completion_receipt = recipe_initialization_receipt(
+            initialization_id,
+            state.artifact_generation,
+        )
         rendered = _render_completion_receipt(
             initialization_id=initialization_id,
             completion_receipt=completion_receipt,

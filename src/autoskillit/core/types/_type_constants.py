@@ -455,6 +455,22 @@ class DurableArtifactWriterDef(NamedTuple):
     detection: str | None
 
 
+def _validate_durable_artifact_writer_defs(
+    writers: tuple[DurableArtifactWriterDef, ...],
+) -> None:
+    missing_detection = [
+        writer.writer for writer in writers if writer.machine_local and not writer.detection
+    ]
+    if missing_detection:
+        raise AssertionError(
+            "Every machine_local DurableArtifactWriterDef must have a detection callable. "
+            f"Missing: {missing_detection}"
+        )
+    writer_names = [writer.writer for writer in writers]
+    if len(writer_names) != len(set(writer_names)):
+        raise AssertionError("DURABLE_ARTIFACT_WRITERS contains duplicate writer strings")
+
+
 DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
     DurableArtifactWriterDef(
         writer="autoskillit.workspace._projected_artifact.materialization:write_generated_hooks_json",
@@ -531,17 +547,7 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
     ),
 )
 
-_MACHINE_LOCAL_WITHOUT_DETECTION = [
-    w.writer for w in DURABLE_ARTIFACT_WRITERS if w.machine_local and not w.detection
-]
-if _MACHINE_LOCAL_WITHOUT_DETECTION:
-    raise AssertionError(
-        "Every machine_local DurableArtifactWriterDef must have a detection callable. "
-        f"Missing: {_MACHINE_LOCAL_WITHOUT_DETECTION}"
-    )
-_DURABLE_WRITER_STRINGS = [w.writer for w in DURABLE_ARTIFACT_WRITERS]
-if len(_DURABLE_WRITER_STRINGS) != len(set(_DURABLE_WRITER_STRINGS)):
-    raise AssertionError("DURABLE_ARTIFACT_WRITERS contains duplicate writer strings")
+_validate_durable_artifact_writer_defs(DURABLE_ARTIFACT_WRITERS)
 
 WORKTREE_SKILLS: frozenset[str] = frozenset(
     {

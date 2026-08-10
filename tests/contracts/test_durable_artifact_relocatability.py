@@ -15,6 +15,7 @@ import pytest
 from autoskillit.core.types._type_constants import (
     DURABLE_ARTIFACT_WRITERS,
     DurableArtifactWriterDef,
+    _validate_durable_artifact_writer_defs,
 )
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
@@ -65,21 +66,16 @@ class TestRegistryIntegrity:
     ) -> None:
         """The uncircumventable layer works even under test filtering."""
         with pytest.raises(AssertionError, match="machine_local"):
-            # Simulate what the import-time check does
-            writers = (
-                DurableArtifactWriterDef(
-                    writer="test:func",
-                    artifact="test artifact",
-                    machine_local=True,
-                    detection=None,
-                ),
-            )
-            missing = [w.writer for w in writers if w.machine_local and not w.detection]
-            if missing:
-                raise AssertionError(
-                    "Every machine_local DurableArtifactWriterDef must have a "
-                    f"detection callable. Missing: {missing}"
+            _validate_durable_artifact_writer_defs(
+                (
+                    DurableArtifactWriterDef(
+                        writer="test:func",
+                        artifact="test artifact",
+                        machine_local=True,
+                        detection=None,
+                    ),
                 )
+            )
 
     def test_no_duplicate_writer_strings(self) -> None:
         writers = [w.writer for w in DURABLE_ARTIFACT_WRITERS]

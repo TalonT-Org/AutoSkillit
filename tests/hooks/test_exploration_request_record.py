@@ -77,7 +77,7 @@ def test_expiry_uses_record_time_not_mtime(
     root = _project(tmp_path)
     monkeypatch.setattr(records, "_clock", lambda: 100.0)
     token = write_exploration_request_record(root, "enable_exploration", "native-session")
-    os.utime(_record_path(root, token), (10_000.0, 10_000.0))
+    os.utime(_record_path(root, token), (130.0, 130.0))
     monkeypatch.setattr(records, "_clock", lambda: 131.0)
 
     assert consume_exploration_request_record(root, "enable_exploration", token) is None

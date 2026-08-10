@@ -161,6 +161,44 @@ async def test_deferred_recall_sets_active_recipe_steps_from_recipe():
 
 
 @pytest.mark.anyio
+async def test_deferred_recall_clears_recipe_cache_when_cache_load_fails():
+    """A non-authoritative cache failure does not retain stale recipe data."""
+    from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+    mock_ctx = _make_deferred_recall_ctx("test-recipe")
+    mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
+        {
+            "content": "name: test-recipe\nsteps: {}\n",
+            "valid": True,
+            "errors": [],
+            "requires_packs": [],
+            "requires_features": [],
+            "content_hash": "abc123",
+            "composite_hash": "def456",
+            "recipe_version": "1.0",
+            "suggestions": [],
+            "post_prune_step_names": [],
+        }
+    )
+    _configure_admitted_recipe(mock_ctx, Path("/fake/.autoskillit/recipes/test-recipe.yaml"))
+    admitted_recipe = mock_ctx.recipes.load.return_value
+    mock_ctx.recipes.load.side_effect = [
+        admitted_recipe,
+        RuntimeError("cache load failed"),
+    ]
+    mock_ctx.active_recipe_steps = {"stale": {"cmd": "old"}}
+    mock_ctx.active_recipe_ingredients = frozenset({"stale"})
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        result = await open_kitchen(name="test-recipe", ctx=mock_ctx)
+
+    assert json.loads(result)["success"] is True
+    assert mock_ctx.recipes.load.call_count == 2
+    assert mock_ctx.active_recipe_steps is None
+    assert mock_ctx.active_recipe_ingredients is None
+
+
+@pytest.mark.anyio
 async def test_deferred_recall_fails_closed_when_valid_false_empty_content():
     """Guard fires when load_and_validate returns valid=False with empty content."""
     from autoskillit.server.tools.tools_kitchen import open_kitchen

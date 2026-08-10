@@ -13,6 +13,7 @@ import dataclasses
 import errno
 import json
 import re
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -736,8 +737,24 @@ class TestDeclaredArtifactAdjudication:
             sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)
         )
 
+        assert result.success is False
         assert result.subtype == "artifact_contract_violation"
         assert result.outcome_fields is None
+        assert "report.md" in result.result
+
+    def test_absolute_path_escape_is_producer_failure(self, tmp_path) -> None:
+        outside = tmp_path.parent / f"{tmp_path.name}-outside.md"
+        outside.write_text("outside")
+        sr = _base_skill_result(result_text=f"artifact = {outside}")
+
+        result = _apply_post_session_adjudication(
+            sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)
+        )
+
+        assert result.success is False
+        assert result.subtype == "artifact_contract_violation"
+        assert result.outcome_fields is None
+        assert outside.name in result.result
 
     def test_absent_optional_path_and_non_path_output_are_not_validated(self, tmp_path) -> None:
         sr = _base_skill_result(result_text="note = missing.md")
@@ -755,11 +772,14 @@ class TestDeclaredArtifactAdjudication:
     ) -> None:
         sr = _base_skill_result(result_text="artifact = report.md")
         warning = Mock()
+        original_stat = Path.stat
 
-        def _raise(_path):
-            raise OSError(error_number, "unavailable")
+        def _raise(path: Path, *args, **kwargs):
+            if path.name == "report.md":
+                raise OSError(error_number, "unavailable")
+            return original_stat(path, *args, **kwargs)
 
-        monkeypatch.setattr("pathlib.Path.stat", _raise)
+        monkeypatch.setattr(Path, "stat", _raise)
         monkeypatch.setattr(
             "autoskillit.execution.headless._headless_result.logger.warning", warning
         )
@@ -776,3 +796,25 @@ class TestDeclaredArtifactAdjudication:
             artifact_name="report.md",
             exc_info=True,
         )
+
+    @pytest.mark.parametrize("error_number", [errno.ENOTDIR, errno.ELOOP])
+    def test_invalid_artifact_path_is_producer_failure(
+        self, monkeypatch, tmp_path, error_number: int
+    ) -> None:
+        sr = _base_skill_result(result_text="artifact = report.md")
+        original_stat = Path.stat
+
+        def _raise(path: Path, *args, **kwargs):
+            if path.name == "report.md":
+                raise OSError(error_number, "invalid artifact path")
+            return original_stat(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "stat", _raise)
+        result = _apply_post_session_adjudication(
+            sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)
+        )
+
+        assert result.success is False
+        assert result.subtype == "artifact_contract_violation"
+        assert result.outcome_fields is None
+        assert "report.md" in result.result

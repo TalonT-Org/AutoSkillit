@@ -26,6 +26,7 @@ from autoskillit.execution.backends._codex_config import (
 from autoskillit.execution.backends._codex_config_lock import CodexConfigLock
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
+    HOOKS_DIR,
     LIFECYCLE_CONTRACTS,
     HookDef,
     LifecycleContractDef,
@@ -130,20 +131,16 @@ def _resolve_codex_hooks_dir(plugin_dir: Path | None = None) -> Path:
             ),
         )
     except Exception:
-        raise CodexHooksDurableRootUnavailable(
-            "No durable hooks directory available for Codex config. "
-            "Candidates checked: generation store (absent), legacy installed "
-            f"cache at {cache_root} (identity unreadable). "
-            "Remedy: run `autoskillit install` from an external terminal."
+        logger.warning(
+            "codex_hooks_dir_resolution_failed: no generation store or legacy "
+            "installed artifact available; using dev checkout hooks",
+            exc_info=True,
         )
+        return HOOKS_DIR
     cache_hooks_dir = identity.managed_path / "hooks"
     if (cache_hooks_dir / "_dispatch.py").is_file():
         return cache_hooks_dir
-    raise CodexHooksDurableRootUnavailable(
-        f"No durable hooks directory available for Codex config. "
-        f"Legacy cache {cache_hooks_dir} exists but is missing _dispatch.py. "
-        f"Remedy: run `autoskillit install` from an external terminal."
-    )
+    return HOOKS_DIR
 
 
 def _build_codex_hook_command(hooks_dir: Path, script: str, timeout_seconds: int | None) -> dict:

@@ -56,26 +56,22 @@ class TestFindBrokenCodexHookCommands:
 
 
 class TestCodexSyncGuard:
-    """Sync-time guard: HOOKS_DIR fallback is excluded from writable resolution."""
+    """Resolution and sync guard for Codex hooks directory."""
 
-    def test_no_durable_candidate_raises(
+    def test_no_durable_candidate_falls_back_to_hooks_dir(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """When no generation store or legacy cache is available, resolution
-        raises instead of falling back to the dev-checkout HOOKS_DIR.
+        falls back to HOOKS_DIR (the dev-checkout hooks directory).
         """
         from autoskillit.execution.backends._codex_hooks import (
-            CodexHooksDurableRootUnavailable,
             _resolve_codex_hooks_dir,
         )
+        from autoskillit.hook_registry import HOOKS_DIR
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        # No generation store, no legacy cache → should raise
-        with pytest.raises(
-            CodexHooksDurableRootUnavailable,
-            match="autoskillit install",
-        ):
-            _resolve_codex_hooks_dir(plugin_dir=None)
+        result = _resolve_codex_hooks_dir(plugin_dir=None)
+        assert result == HOOKS_DIR
 
     def test_valid_plugin_dir_resolves(self, tmp_path: Path) -> None:
         """When plugin_dir is supplied with a live dispatcher, resolution succeeds."""

@@ -99,7 +99,7 @@ def find_orphaned_codex_processes(
         pid = int(name)
 
         try:
-            comm = Path(f"/proc/{pid}/comm").read_text().strip()
+            comm = Path(f"/proc/{pid}/comm").read_text(encoding="utf-8", errors="replace").strip()
         except OSError:
             continue
         if comm != process_name:

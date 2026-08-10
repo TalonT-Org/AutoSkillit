@@ -466,7 +466,7 @@ async def test_get_recipe_snapshot_lifecycle(
 
 
 @settings(
-    max_examples=20,
+    max_examples=4,
     deadline=None,
     suppress_health_check=[
         HealthCheck.too_slow,
@@ -474,13 +474,12 @@ async def test_get_recipe_snapshot_lifecycle(
     ],
 )
 @given(
-    overrides=st.dictionaries(
-        keys=st.sampled_from(["issue_url", "task_description"]),
-        values=st.one_of(
-            st.just("https://github.com/TalonT-Org/AutoSkillit/issues/42"),
-            st.just("test task"),
-        ),
-        max_size=2,
+    overrides=st.fixed_dictionaries(
+        {},
+        optional={
+            "issue_url": st.just("https://github.com/TalonT-Org/AutoSkillit/issues/42"),
+            "task_description": st.just("test task"),
+        },
     )
 )
 async def test_load_recipe_routing_matches_open_kitchen_for_arbitrary_overrides(

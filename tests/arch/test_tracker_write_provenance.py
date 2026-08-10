@@ -41,7 +41,13 @@ def _looks_path_like(node: ast.expr) -> bool:
             ("_path", "_file", "_dir", "_directory")
         )
     if isinstance(node, ast.Attribute):
-        return _looks_path_like(ast.Name(id=node.attr))
+        return _looks_path_like(ast.Name(id=node.attr)) or _looks_path_like(node.value)
+    if isinstance(node, ast.Subscript):
+        if _looks_path_like(node.value):
+            return True
+        if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
+            return _looks_path_like(ast.Name(id=node.slice.value))
+        return False
     if isinstance(node, ast.Call):
         func = node.func
         return (isinstance(func, ast.Name) and func.id == "Path") or (
@@ -86,12 +92,24 @@ def _has_file_mutation(tree: ast.Module) -> list[int]:
     ("source", "expected"),
     [
         ('value.replace("old", "new")', []),
+        ('state.value.replace("old", "new")', []),
+        ("state.output_path.replace(target)", [1]),
+        ('artifacts["tracker_path"].unlink()', [1]),
         ('items.remove("value")', []),
         ("tracker_path.unlink()", [1]),
         ("os.replace(source, destination)", [1]),
         ('Path("tracker.json").write_text("{}")', [1]),
     ],
-    ids=["string-replace", "list-remove", "path-unlink", "os-replace", "path-write"],
+    ids=[
+        "string-replace",
+        "nested-string-replace",
+        "attribute-path-replace",
+        "subscript-path-unlink",
+        "list-remove",
+        "path-unlink",
+        "os-replace",
+        "path-write",
+    ],
 )
 def test_file_mutation_detection_qualifies_receivers(source: str, expected: list[int]) -> None:
     assert _has_file_mutation(ast.parse(source)) == expected

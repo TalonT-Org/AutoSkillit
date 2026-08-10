@@ -139,6 +139,7 @@ def test_supported_event_fails_closed_when_record_write_fails(tmp_path: Path) ->
         "EXPLORATION REQUEST IDENTITY UNAVAILABLE: "
         "the correlated one-shot record could not be written"
     )
+    assert "exploration_request_identity_guard: request record write failed:" in result.stderr
 
 
 def test_guard_allows_unparseable_and_unrelated_input(tmp_path: Path) -> None:

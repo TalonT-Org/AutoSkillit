@@ -77,7 +77,10 @@ def main() -> None:
     try:
         root = resolve_state_root(data.get("cwd") if isinstance(data.get("cwd"), str) else "")
         token = write_exploration_request_record(root, tool_name, session_id)
-    except Exception:
+    except Exception as exc:
+        sys.stderr.write(
+            f"exploration_request_identity_guard: request record write failed: {exc}\n"
+        )
         _deny("the correlated one-shot record could not be written")
         return
 

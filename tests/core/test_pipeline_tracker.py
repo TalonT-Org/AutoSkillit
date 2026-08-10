@@ -234,3 +234,54 @@ def test_retirement_preserves_tracker_for_live_exact_kitchen(monkeypatch, tmp_pa
 
     assert try_retire_tracker(target) is False
     assert target.path.exists()
+
+
+def test_retirement_ignores_same_kitchen_id_from_other_project(monkeypatch, tmp_path):
+    project = tmp_path / "project"
+    other_project = tmp_path / "other-project"
+    target = _target(project)
+    target.path.parent.mkdir(parents=True)
+    target.path.write_text(json.dumps(_tracker()))
+    identity = {
+        "kitchen_id": "kitchen-1",
+        "pid": os.getpid(),
+        "create_time": psutil.Process(os.getpid()).create_time(),
+        "project_path": str(other_project),
+        "opened_at": datetime.now(UTC).isoformat(),
+    }
+    _registry(monkeypatch, tmp_path, {"schema_version": 2, "kitchens": [identity]})
+
+    assert try_retire_tracker(target) is True
+    assert not target.path.exists()
+
+
+def test_retirement_preserves_tracker_without_valid_kitchen_id(monkeypatch, tmp_path):
+    target = _target(tmp_path)
+    target.path.parent.mkdir(parents=True)
+    target.path.write_text(json.dumps(_tracker(kitchen_id="")))
+    _registry(monkeypatch, tmp_path, None)
+
+    assert try_retire_tracker(target) is False
+    assert target.path.exists()
+
+
+def test_retirement_preserves_tracker_when_liveness_probe_errors(monkeypatch, tmp_path):
+    target = _target(tmp_path)
+    target.path.parent.mkdir(parents=True)
+    target.path.write_text(json.dumps(_tracker()))
+    identity = {
+        "kitchen_id": "kitchen-1",
+        "pid": os.getpid(),
+        "create_time": psutil.Process(os.getpid()).create_time(),
+        "project_path": str(tmp_path),
+        "opened_at": datetime.now(UTC).isoformat(),
+    }
+    _registry(monkeypatch, tmp_path, {"schema_version": 2, "kitchens": [identity]})
+
+    def _raise(_entry):
+        raise psutil.AccessDenied()
+
+    monkeypatch.setattr("autoskillit.core.pipeline_tracker.kitchen_entry_alive", _raise)
+
+    assert try_retire_tracker(target) is False
+    assert target.path.exists()

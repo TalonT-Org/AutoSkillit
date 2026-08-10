@@ -1040,9 +1040,9 @@ async def run_skill(
         is not None
     ):
         return _plan_path_denial
-    tool_ctx: ToolContext | None = None
-    _completion_invocation_id = ""
     try:
+        tool_ctx: ToolContext | None = None
+        _completion_invocation_id = ""
         contract_lifecycle = _RunSkillContractLifecycle()
         _sn_token = _oid_token = None
         from autoskillit.server import _get_ctx  # circular-break

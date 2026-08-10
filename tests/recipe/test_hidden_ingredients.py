@@ -1259,7 +1259,6 @@ steps:
 
     source_recipe = load_recipe(recipe_path)
     pruned_source, _ = _prune_skipped_steps(source_recipe)
-    pruned_active, _ = _prune_skipped_steps(source_recipe)
     result = load_and_validate(
         "non-next-entry",
         project_dir=tmp_path,
@@ -1269,7 +1268,7 @@ steps:
 
     assert result["errors"] == []
     assert tuple(pruned_source.steps) == ("chosen", "declared_next", "done")
-    assert tuple(pruned_active.steps) == tuple(pruned_source.steps)
+    assert tuple(result["post_prune_step_names"]) == tuple(pruned_source.steps)
     assert tuple(served_steps) == tuple(pruned_source.steps)
     projection = result["_finalized_projection"]
     assert projection.entrypoint == "chosen"

@@ -1146,11 +1146,8 @@ def finalize_recipe_delivery(
             )
             rendered = json.dumps(
                 build_recipe_envelope(
-                    candidate_payload,
-                    recipe_name=recipe_name,
                     generation=generation,
                     flow_generation=flow_generation,
-                    entrypoint=finalized_projection.entrypoint,
                     bound_bytes=envelope_bound_bytes,
                     initialization_id=initialization_id,
                     initialization_requirements=initialization_requirements,

@@ -61,19 +61,15 @@ __all__ = [
 
 
 def build_recipe_envelope(
-    payload: dict[str, Any],
     *,
-    recipe_name: str,
     generation: RecipeArtifactGeneration,
     flow_generation: RecipeFlowGeneration,
-    entrypoint: str,
     bound_bytes: int,
     initialization_id: str | None = None,
     initialization_requirements: tuple[RecipeInitializationRequirement, ...] = (),
     completion_required: bool = False,
 ) -> dict[str, Any]:
     """Build the bounded pull envelope used by every recipe delivery surface."""
-    del payload, recipe_name, entrypoint
     manifest = {
         "success": True,
         "delivery_bound_spill": True,

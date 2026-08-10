@@ -559,11 +559,8 @@ def _build_envelope(
     generation = _persist(tmp_path, payload)
     flow_generation = _test_flow_generation(payload)
     envelope = build_recipe_envelope(
-        payload,
-        recipe_name="remediation",
         generation=generation,
         flow_generation=flow_generation,
-        entrypoint="first",
         bound_bytes=bound_bytes,
     )
     return envelope, generation
@@ -589,11 +586,8 @@ def test_recovery_order_is_derived_from_initialization_requirements(
     )
 
     envelope = build_recipe_envelope(
-        payload,
-        recipe_name="remediation",
         generation=generation,
         flow_generation=flow_generation,
-        entrypoint="first",
         bound_bytes=90_000,
         initialization_requirements=requirements,
     )

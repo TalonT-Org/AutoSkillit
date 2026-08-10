@@ -82,6 +82,7 @@ def test_pr_skills_bind_exact_body_bytes_to_source_issue_identity():
     assert '"closing_issue"' in compose
     assert '"source_issue_url"' in compose
     assert 'with_suffix(".metadata.json")' in compose
+    assert '"body_sha256"' in integration
     assert '"source_issue_urls"' in integration
     assert 'with_suffix(".metadata.json")' in integration
 

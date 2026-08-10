@@ -217,7 +217,15 @@ def _drop_sub_recipe_step(recipe: Any, step_name: str) -> Any:
     """Drop a false-gated placeholder and preserve its attachment point."""
     placeholder = recipe.steps[step_name]
     continuation = placeholder.on_success
-    if continuation is None or continuation not in recipe.steps or continuation == step_name:
+    is_entry = next(iter(recipe.steps), None) == step_name
+    if (
+        continuation is None
+        or continuation == step_name
+        or (
+            continuation not in recipe.steps
+            and (continuation not in _TERMINAL_TARGETS or is_entry)
+        )
+    ):
         raise ValueError(
             f"Sub-recipe placeholder '{step_name}' has no surviving on_success continuation"
         )
@@ -226,7 +234,7 @@ def _drop_sub_recipe_step(recipe: Any, step_name: str) -> Any:
         for name, step in recipe.steps.items()
         if name != step_name
     }
-    if next(iter(recipe.steps), None) == step_name:
+    if is_entry:
         new_steps = {
             continuation: new_steps[continuation],
             **{name: step for name, step in new_steps.items() if name != continuation},

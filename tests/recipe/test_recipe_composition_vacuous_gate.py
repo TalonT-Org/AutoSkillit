@@ -127,6 +127,22 @@ def test_falsy_composition_rebases_incoming_skip_route() -> None:
     assert dropped.steps["skip_router"].on_skip == "done"
 
 
+def test_falsy_non_entry_composition_allows_terminal_continuation() -> None:
+    parent = Recipe(
+        name="parent",
+        description="parent",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="compose"),
+            "compose": RecipeStep(sub_recipe="child", on_success="done", on_failure="escalate"),
+        },
+    )
+
+    dropped = _drop_sub_recipe_step(parent, "compose")
+
+    assert tuple(dropped.steps) == ("entry",)
+    assert dropped.steps["entry"].on_success == "done"
+
+
 def test_semantics_and_projection_observe_the_post_prune_graph(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

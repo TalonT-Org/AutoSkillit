@@ -551,13 +551,7 @@ class TestTrackerBridgeIntegration:
     async def test_missing_optional_tracker_preserves_clean_result_and_persisted_status(
         self, tool_ctx, monkeypatch
     ):
-        from autoskillit.fleet._checkpoint_bridge import load_dispatch_progress
-
         _setup_dispatch(tool_ctx, monkeypatch)
-        monkeypatch.setattr(
-            "autoskillit.fleet._api.load_dispatch_progress",
-            load_dispatch_progress,
-        )
         monkeypatch.setattr(
             "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_: _make_completed_clean(success=True),

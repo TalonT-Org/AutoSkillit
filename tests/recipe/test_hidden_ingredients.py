@@ -1404,6 +1404,11 @@ def test_resolve_skip_guards_strips_optional_true_on_truthy() -> None:
             "  done:\n    action: stop\n",
             "aliases",
         ),
+        (
+            "steps:\n  guarded: &guarded\n    tool: run_cmd\n    nested: *guarded\n"
+            "  done:\n    action: stop\n",
+            "aliases",
+        ),
     ],
 )
 def test_guarded_raw_repair_rejects_unsafe_yaml_shapes(raw: str, message: str) -> None:

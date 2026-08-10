@@ -529,19 +529,23 @@ def _resolve_skip_guards_in_content(
 
     count_nodes(root)
 
-    def descendants(node: Any) -> list[Any]:
+    def descendants(node: Any, visited: set[int]) -> list[Any]:
+        identity = id(node)
+        if identity in visited:
+            return []
+        visited.add(identity)
         found = [node]
         value = getattr(node, "value", None)
         if isinstance(value, list):
             for item in value:
                 if isinstance(item, tuple):
-                    found.extend(descendants(item[0]))
-                    found.extend(descendants(item[1]))
+                    found.extend(descendants(item[0], visited))
+                    found.extend(descendants(item[1], visited))
                 else:
-                    found.extend(descendants(item))
+                    found.extend(descendants(item, visited))
         return found
 
-    if any(counts.get(id(node), 0) > 1 for node in descendants(steps_node)):
+    if any(counts.get(id(node), 0) > 1 for node in descendants(steps_node, set())):
         raise ValueError("Guarded recipe does not support aliases within steps")
 
     def line_start(index: int) -> int:

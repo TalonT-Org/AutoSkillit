@@ -241,13 +241,14 @@ class TestStaleGeneratorRefusal:
     def test_deleted_pkg_root_raises(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import autoskillit.core.paths as _paths
+        import autoskillit.workspace._projected_artifact.authority as _auth
         from autoskillit.workspace._projected_artifact.authority import (
             StaleGeneratorError,
             assert_generator_process_fresh,
         )
 
-        monkeypatch.setattr(_paths, "pkg_root", lambda: tmp_path / "nonexistent")
+        # Monkeypatch pkg_root where assert_generator_process_fresh imports it
+        monkeypatch.setattr(_auth, "pkg_root", lambda: tmp_path / "nonexistent")
         with pytest.raises(StaleGeneratorError, match="no longer exists"):
             assert_generator_process_fresh()
 

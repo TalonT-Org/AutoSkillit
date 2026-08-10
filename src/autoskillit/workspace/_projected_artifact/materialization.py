@@ -571,12 +571,14 @@ def _copy_non_skill_plugin_assets(
 def write_generated_hooks_json(plugin_root: Path) -> None:
     """Write a freshly rendered ``hooks/hooks.json`` into *plugin_root*.
 
-    The hooks directory is created if absent.  This is the single named
-    operation for "publish current hook manifest into a plugin root" — used by
+    Only writes when the hooks directory already exists (meaning hook scripts
+    were copied from the source root).  This is the single named operation
+    for "publish current hook manifest into a plugin root" — used by
     projection staging, marketplace publication, and self-heal republish.
     """
     hooks_dir = plugin_root / "hooks"
-    hooks_dir.mkdir(parents=True, exist_ok=True)
+    if not hooks_dir.is_dir():
+        return
     atomic_write(hooks_dir / "hooks.json", render_hooks_json_text())
 
 

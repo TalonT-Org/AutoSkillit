@@ -58,8 +58,7 @@ from autoskillit.execution.headless._headless_recovery import (
     _scan_jsonl_write_paths,
     _synthesize_from_write_artifacts,
 )
-from autoskillit.execution.process._process_jsonl import fold_event_lines
-from autoskillit.execution.process._process_race import RaceAccumulator
+from autoskillit.execution.process import fold_lifecycle_evidence
 from autoskillit.execution.session._exit_classification import (
     classify_infra_exit,
     has_rate_limit_signal,
@@ -331,15 +330,13 @@ def _build_skill_result(
             except OSError:
                 source = None
         if source is not None:
-            defensive = RaceAccumulator(lifecycle_observation_enabled=True)
-            fold_event_lines(
+            defensive_pending, defensive_wakeup = fold_lifecycle_evidence(
                 source.splitlines(),
                 backend.stream_parser(completion_marker=completion_marker),
-                defensive.observe_event,
             )
             observation_complete = True
-            obligation_pending = tuple(sorted(defensive.pending_task_ids))
-            obligation_wakeup = defensive.schedule_wakeup_violation
+            obligation_pending = defensive_pending
+            obligation_wakeup = defensive_wakeup
 
     obligation_failure = lifecycle_gate_enabled and (
         not observation_complete

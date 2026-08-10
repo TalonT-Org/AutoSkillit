@@ -14,7 +14,7 @@ from __future__ import annotations
 import functools
 import subprocess
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, assert_never, cast
@@ -48,6 +48,7 @@ from autoskillit.execution.process._process_jsonl import (
     _jsonl_last_record_type,
     _marker_is_standalone,
     fold_event_cursor,
+    fold_event_lines,
 )
 from autoskillit.execution.process._process_kill import (
     _wait_process_dead,
@@ -113,6 +114,7 @@ __all__ = [
     "create_temp_io",
     "decide_termination_action",
     "execute_termination_action",
+    "fold_lifecycle_evidence",
     "kill_process_tree",
     "pty_wrap_command",
     "read_temp_output",
@@ -121,6 +123,17 @@ __all__ = [
     "run_managed_sync",
     "summarize_capture",
 ]
+
+
+def fold_lifecycle_evidence(
+    lines: Sequence[str],
+    parser: StreamParser,
+) -> tuple[tuple[str, ...], bool]:
+    """Reduce lifecycle records to pending-task and wakeup evidence."""
+    accumulator = RaceAccumulator(lifecycle_observation_enabled=True)
+    fold_event_lines(list(lines), parser, accumulator.observe_event)
+    signals = accumulator.to_race_signals()
+    return signals.pending_task_ids, signals.schedule_wakeup_violation
 
 
 def _resolve_session_id(

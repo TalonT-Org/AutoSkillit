@@ -307,20 +307,12 @@ class RecordingSubprocessRunner(SubprocessRunner):
             and cassette_stdout is not None
             and cassette_stdout.is_file()
         ):
-            from autoskillit.execution.process._process_jsonl import (
-                EventCursor,
-                fold_event_cursor,
-            )
-            from autoskillit.execution.process._process_race import RaceAccumulator
+            from autoskillit.execution.process import fold_lifecycle_evidence
 
-            accumulator = RaceAccumulator(lifecycle_observation_enabled=True)
-            fold_event_cursor(
-                EventCursor(cassette_stdout), stream_parser, accumulator.observe_event
+            pending_task_ids, schedule_wakeup_violation = fold_lifecycle_evidence(
+                stdout.splitlines(), stream_parser
             )
-            signals = accumulator.to_race_signals()
             lifecycle_observation_complete = True
-            pending_task_ids = signals.pending_task_ids
-            schedule_wakeup_violation = signals.schedule_wakeup_violation
 
         ephemeral_dir = _extract_ephemeral_add_dir(cmd)
         if ephemeral_dir is not None and step_result.cassette_path:

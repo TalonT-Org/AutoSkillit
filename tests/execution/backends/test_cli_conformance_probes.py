@@ -97,6 +97,10 @@ from autoskillit.hooks._capture_contract import (
 )
 from autoskillit.hooks._capture_lifecycle import CaptureState
 from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
+from tests.execution._process_group_helpers import (
+    _cleanup_process_group,
+    _process_group_members,
+)
 from tests.execution.backends._conformance_assertions import (
     assert_boundary_spill_behavior,
     assert_config_schema,
@@ -166,38 +170,6 @@ _skip_unless_claude_startup_smoke = pytest.mark.skipif(
     or (not os.environ.get("ANTHROPIC_API_KEY") and not os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")),
     reason=_CLAUDE_STARTUP_SKIP_REASON,
 )
-
-
-def _process_group_members(process_group_id: int) -> set[int]:
-    import psutil
-
-    members: set[int] = set()
-    for process in psutil.process_iter(["pid"]):
-        try:
-            if process.pid != os.getpid() and os.getpgid(process.pid) == process_group_id:
-                members.add(process.pid)
-        except (OSError, psutil.Error):
-            continue
-    return members
-
-
-def _cleanup_process_group(process_group_id: int) -> set[int]:
-    survivors = _process_group_members(process_group_id)
-    if not survivors:
-        return survivors
-    try:
-        os.killpg(process_group_id, signal.SIGTERM)
-    except ProcessLookupError:
-        return survivors
-    deadline = time.monotonic() + 5
-    while _process_group_members(process_group_id) and time.monotonic() < deadline:
-        time.sleep(0.05)
-    if _process_group_members(process_group_id):
-        try:
-            os.killpg(process_group_id, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-    return survivors
 
 
 _PROBE_BACKEND = "codex"
@@ -2707,7 +2679,7 @@ def test_claude_startup_readiness_multi_agent_foreground_trace(tmp_path: Path) -
     try:
         stdout, stderr = process.communicate(timeout=150)
     finally:
-        survivors = _cleanup_process_group(process.pid)
+        survivors = _cleanup_process_group(process.pid, timeout=5, poll_interval=0.05)
 
     records = []
     for line in stdout.splitlines():
@@ -2940,4 +2912,4 @@ def test_claude_startup_readiness_implement_worktree_no_merge_contract(
             else (spawned_pid[-1] if spawned_pid else 0)
         )
         if process_group_id:
-            _cleanup_process_group(process_group_id)
+            _cleanup_process_group(process_group_id, timeout=5, poll_interval=0.05)

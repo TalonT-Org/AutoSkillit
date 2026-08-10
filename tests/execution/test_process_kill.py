@@ -11,11 +11,9 @@ from __future__ import annotations
 
 import json
 import os
-import signal
 import subprocess
 import sys
 import textwrap
-import time
 
 import anyio
 import psutil
@@ -27,6 +25,7 @@ from autoskillit.execution.process import (
     kill_process_tree,
     run_managed_async,
 )
+from tests.execution._process_group_helpers import _cleanup_process_group
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -93,34 +92,6 @@ NATURAL_EXIT_WITH_OWNED_CHILD_SCRIPT = textwrap.dedent("""\
     print(json.dumps({"type": "task_started", "task_id": "owned-exit"}), flush=True)
     print(json.dumps({"type": "child_pid", "pid": child}), flush=True)
 """)
-
-
-def _process_group_members(process_group_id: int) -> set[int]:
-    members: set[int] = set()
-    for process in psutil.process_iter(["pid"]):
-        try:
-            if process.pid != os.getpid() and os.getpgid(process.pid) == process_group_id:
-                members.add(process.pid)
-        except (OSError, psutil.Error):
-            continue
-    return members
-
-
-def _terminate_process_group(process_group_id: int) -> None:
-    if not process_group_id or not _process_group_members(process_group_id):
-        return
-    try:
-        os.killpg(process_group_id, signal.SIGTERM)
-    except ProcessLookupError:
-        return
-    deadline = time.monotonic() + 1
-    while _process_group_members(process_group_id) and time.monotonic() < deadline:
-        time.sleep(0.02)
-    if _process_group_members(process_group_id):
-        try:
-            os.killpg(process_group_id, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
 
 
 class TestProcessTreeKill:
@@ -190,7 +161,7 @@ class TestProcessTreeKill:
                 if result is not None
                 else (spawned_pid[-1] if spawned_pid else 0)
             )
-            _terminate_process_group(process_group_id)
+            _cleanup_process_group(process_group_id)
 
     @pytest.mark.anyio
     async def test_natural_exit_retains_obligation_and_cleans_owned_group(self, tmp_path):
@@ -226,7 +197,7 @@ class TestProcessTreeKill:
                 if result is not None
                 else (spawned_pid[-1] if spawned_pid else 0)
             )
-            _terminate_process_group(process_group_id)
+            _cleanup_process_group(process_group_id)
 
 
 class TestKillProcessTreeUnit:
@@ -274,7 +245,7 @@ class TestKillProcessTreeUnit:
             assert child_pid in result.terminated_pids
             assert not result.survivor_pids
         finally:
-            _terminate_process_group(proc.pid)
+            _cleanup_process_group(proc.pid)
 
 
 class TestCancellationKillsProcess:

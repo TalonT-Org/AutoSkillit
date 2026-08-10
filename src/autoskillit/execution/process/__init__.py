@@ -599,16 +599,22 @@ async def run_managed_async(
                     if event.has_marker and acc.channel_b_candidate_at is None:
                         acc.channel_b_candidate_at = anyio.current_time()
 
+                final_fold_complete = acc.stdout_cursor is not None
                 if acc.stdout_cursor is not None:
-                    fold_event_cursor(acc.stdout_cursor, lifecycle_parser, _observe_final_stdout)
+                    final_fold_complete = fold_event_cursor(
+                        acc.stdout_cursor, lifecycle_parser, _observe_final_stdout
+                    )
                 if acc.channel_b_cursor is not None:
-                    fold_event_cursor(
-                        acc.channel_b_cursor, lifecycle_parser, _observe_final_channel_b
+                    final_fold_complete = (
+                        fold_event_cursor(
+                            acc.channel_b_cursor, lifecycle_parser, _observe_final_channel_b
+                        )
+                        and final_fold_complete
                     )
                 acc.channel_a_confirmed = acc.channel_a_candidate_at is not None
                 if acc.channel_b_candidate_at is not None:
                     acc.channel_b_status = ChannelBStatus.COMPLETION
-                acc.lifecycle_observation_complete = True
+                acc.lifecycle_observation_complete = final_fold_complete
             signals = acc.to_race_signals()
             termination, _channel_confirmation = resolve_termination(signals)
 

@@ -29,13 +29,14 @@ class EventCursor:
         if self.offset is None:
             self.offset = self.run_boundary
 
-    def read_complete_lines(self) -> tuple[str, ...]:
+    def read_complete_lines(self) -> tuple[str, ...] | None:
         try:
             with self.path.open("rb") as stream:
                 stream.seek(self.offset or 0)
                 chunk = stream.read()
         except OSError:
-            return ()
+            logger.warning("event_cursor_read_failed", path=str(self.path), exc_info=True)
+            return None
         self.offset = (self.offset or 0) + len(chunk)
         buffered = self.trailing + chunk
         records = buffered.split(b"\n")
@@ -47,10 +48,13 @@ def fold_event_cursor(
     cursor: EventCursor,
     parser: StreamParser,
     observer: Callable[[SessionEvent], None],
-) -> None:
+) -> bool:
     """Parse and reduce every newly completed record from ``cursor`` exactly once."""
-
-    fold_event_lines(cursor.read_complete_lines(), parser, observer)
+    lines = cursor.read_complete_lines()
+    if lines is None:
+        return False
+    fold_event_lines(lines, parser, observer)
+    return True
 
 
 def fold_event_lines(

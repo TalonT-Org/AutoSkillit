@@ -50,10 +50,17 @@ def test_event_cursor_starts_at_resume_boundary(tmp_path: Path) -> None:
 def test_event_cursor_observes_file_created_after_spawn(tmp_path: Path) -> None:
     path = tmp_path / "new-session.jsonl"
     cursor = EventCursor(path)
-    assert cursor.read_complete_lines() == ()
+    assert cursor.read_complete_lines() is None
     path.write_text('{"type":"task_started","task_id":"new"}\n')
     assert cursor.read_complete_lines() == ('{"type":"task_started","task_id":"new"}',)
     assert cursor.read_complete_lines() == ()
+
+
+def test_event_cursor_fold_reports_unavailable_source(tmp_path: Path) -> None:
+    cursor = EventCursor(tmp_path / "missing.jsonl")
+    accumulator = RaceAccumulator(lifecycle_observation_enabled=True)
+
+    assert fold_event_cursor(cursor, ClaudeStreamParser(), accumulator.observe_event) is False
 
 
 def test_incremental_and_final_folds_are_idempotent(tmp_path: Path) -> None:

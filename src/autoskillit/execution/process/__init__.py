@@ -643,6 +643,11 @@ async def run_managed_async(
                 channel_confirmation=_channel_confirmation,
                 proc_snapshots=snapshots_data,
                 channel_b_session_id=signals.channel_b_session_id,
+                lifecycle_observation_complete=signals.lifecycle_observation_complete,
+                pending_task_ids=signals.pending_task_ids,
+                schedule_wakeup_violation=signals.schedule_wakeup_violation,
+                completion_ceiling_expired=signals.completion_ceiling_expired,
+                process_group_id=process_group_id,
                 session_id=_resolve_session_id(
                     signals.stdout_session_id, signals.channel_b_session_id
                 ),
@@ -761,6 +766,7 @@ def run_managed_sync(
                 stderr=stderr,
                 termination=termination,
                 pid=process.pid,
+                process_group_id=process.pid,
                 channel_confirmation=ChannelConfirmation.UNMONITORED,
                 stdout_path=_stdout_path,
                 stderr_path=_stderr_path,

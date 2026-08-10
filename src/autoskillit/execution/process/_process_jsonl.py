@@ -50,7 +50,17 @@ def fold_event_cursor(
 ) -> None:
     """Parse and reduce every newly completed record from ``cursor`` exactly once."""
 
-    for line in cursor.read_complete_lines():
+    fold_event_lines(cursor.read_complete_lines(), parser, observer)
+
+
+def fold_event_lines(
+    lines: tuple[str, ...] | list[str],
+    parser: StreamParser,
+    observer: Callable[[SessionEvent], None],
+) -> None:
+    """Parse and reduce an already-owned sequence of JSONL records."""
+
+    for line in lines:
         event = parser.parse_line(line)
         if event is not None:
             observer(event)

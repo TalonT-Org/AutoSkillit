@@ -97,6 +97,59 @@ def _success_result_json(result_text: str = "done", session_id: str = "test-sess
     )
 
 
+def test_pending_lifecycle_obligation_preempts_success() -> None:
+    result = SubprocessResult(
+        returncode=0,
+        stdout=_success_result_json(),
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=1,
+        lifecycle_observation_complete=True,
+        pending_task_ids=("task-1",),
+    )
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/plan",
+        backend=ClaudeCodeBackend(),
+    )
+    assert skill_result.success is False
+    assert skill_result.needs_retry is True
+    assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
+
+
+def test_observed_empty_lifecycle_preserves_success() -> None:
+    result = SubprocessResult(
+        returncode=0,
+        stdout=_success_result_json(),
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=1,
+        lifecycle_observation_complete=True,
+    )
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/plan",
+        backend=ClaudeCodeBackend(),
+    )
+    assert skill_result.retry_reason is not RetryReason.ASYNC_OBLIGATION
+
+
+def test_unobserved_lifecycle_without_foldable_source_fails_safe() -> None:
+    result = SubprocessResult(
+        returncode=0,
+        stdout="",
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=1,
+    )
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/plan",
+        backend=ClaudeCodeBackend(),
+    )
+    assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
+
+
 def _stale_result(
     kill_reason: KillReason = KillReason.NATURAL_EXIT, stdout: str = ""
 ) -> SubprocessResult:

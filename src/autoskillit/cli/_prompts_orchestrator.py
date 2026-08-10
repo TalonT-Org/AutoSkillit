@@ -218,6 +218,10 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
     made before the stall), partial progress likely exists on disk. Follow on_context_limit
     if defined, fall through to on_failure otherwise.
   - If lifespan_started is false, fall through to on_failure — no progress was made.
+- When run_skill returns "needs_retry: true" AND "retry_reason: async_obligation":
+  - The worker reported completion while backend-owned work was still pending, a scheduled
+    wakeup was observed, or lifecycle evidence was unavailable. Start a fresh recovery via
+    on_failure. Do not poll or resume the prior session.
 - When run_skill returns "needs_retry: true" AND "retry_reason: early_stop":
   - Determine the progress signal: if "completion_required" is true in the result, use
     "has_implementation_progress"; otherwise use "has_progress_evidence".

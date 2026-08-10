@@ -85,6 +85,7 @@ class RetryReason(StrEnum):
     OUTCOME_INVARIANT = (
         "outcome_invariant"  # skill-emitted outcome fields violated a contract invariant
     )
+    ASYNC_OBLIGATION = "async_obligation"
 
 
 class InfraExitCategory(StrEnum):

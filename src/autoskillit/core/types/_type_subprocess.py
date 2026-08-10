@@ -123,6 +123,11 @@ class SubprocessResult:
     """
     proc_snapshots: list[dict[str, object]] | None = None
     channel_b_session_id: str = ""
+    lifecycle_observation_complete: bool = False
+    pending_task_ids: tuple[str, ...] = ()
+    schedule_wakeup_violation: bool = False
+    completion_ceiling_expired: bool = False
+    process_group_id: int = 0
     session_id: str = ""
     """Canonically resolved session identity — merge of stdout_session_id and
     channel_b_session_id computed at SubprocessResult construction time in process.py.

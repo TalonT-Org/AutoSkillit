@@ -58,6 +58,8 @@ from autoskillit.execution.headless._headless_recovery import (
     _scan_jsonl_write_paths,
     _synthesize_from_write_artifacts,
 )
+from autoskillit.execution.process._process_jsonl import fold_event_lines
+from autoskillit.execution.process._process_race import RaceAccumulator
 from autoskillit.execution.session._exit_classification import (
     classify_infra_exit,
     has_rate_limit_signal,
@@ -312,6 +314,74 @@ def _build_skill_result(
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     file_changes = _extract_file_changes(result.stdout, backend)
+
+    lifecycle_gate_enabled = bool(skill_command) and (
+        backend.capabilities.supports_task_lifecycle_events
+    )
+    obligation_pending = result.pending_task_ids
+    obligation_wakeup = result.schedule_wakeup_violation
+    observation_complete = result.lifecycle_observation_complete
+    if lifecycle_gate_enabled and not observation_complete:
+        source: str | None = result.stdout or None
+        if source is None and result.stdout_path is not None:
+            try:
+                source = result.stdout_path.read_text(errors="replace")
+            except OSError:
+                source = None
+        if source is not None:
+            defensive = RaceAccumulator(lifecycle_observation_enabled=True)
+            fold_event_lines(
+                source.splitlines(),
+                backend.stream_parser(completion_marker=completion_marker),
+                defensive.observe_event,
+            )
+            observation_complete = True
+            obligation_pending = tuple(sorted(defensive.pending_task_ids))
+            obligation_wakeup = defensive.schedule_wakeup_violation
+
+    obligation_failure = lifecycle_gate_enabled and (
+        not observation_complete
+        or bool(obligation_pending)
+        or obligation_wakeup
+        or result.completion_ceiling_expired
+    )
+    provenance_failure = result.termination in {
+        TerminationReason.STALE,
+        TerminationReason.TIMED_OUT,
+        TerminationReason.IDLE_STALL,
+        TerminationReason.HEALTH_INSPECTOR,
+        TerminationReason.SIGNAL_DEATH,
+    }
+    if obligation_failure and not provenance_failure:
+        obligation_session = _parse_stdout(result.stdout, backend=backend)
+        obligation_evidence = _compute_write_evidence(
+            obligation_session,
+            fs_writes_detected,
+            git_writes_detected,
+            backend,
+            file_changes=file_changes,
+            write_watch_dirs=write_watch_dirs,
+            cwd=cwd,
+            skill_command=skill_command,
+        )
+        diagnostics = [f"pending={','.join(obligation_pending)}"] if obligation_pending else []
+        if obligation_wakeup:
+            diagnostics.append("schedule_wakeup=true")
+        if result.completion_ceiling_expired:
+            diagnostics.append("completion_ceiling_expired=true")
+        if not observation_complete:
+            diagnostics.append("lifecycle_observation=unavailable")
+        return _make_terminated_result(
+            result=result,
+            session=obligation_session,
+            success=False,
+            result_text="Unresolved async obligation: " + "; ".join(diagnostics),
+            subtype="async_obligation",
+            needs_retry=True,
+            retry_reason=RetryReason.ASYNC_OBLIGATION,
+            evidence=obligation_evidence,
+            provider_used=provider_used,
+        )
 
     branch = (
         "idle_stall"

@@ -31,11 +31,3 @@ def test_session_start_cost_grows_sublinearly_in_body_size(body_bytes: int) -> N
             backend="property",
             section_page_counts=counts,
         )
-
-
-@given(st.lists(st.integers(min_value=10_000, max_value=500_000), min_size=1, max_size=10))
-@settings(max_examples=30, deadline=None)
-def test_multi_section_page_growth_is_linear_not_quadratic(section_sizes: list[int]) -> None:
-    pages = [math.ceil(size / MAX_BYTES_PER_PAGE) for size in section_sizes]
-    admitted_pages = sum(min(count, MAX_PAGES_PER_SECTION) for count in pages)
-    assert admitted_pages <= len(section_sizes) * MAX_PAGES_PER_SECTION

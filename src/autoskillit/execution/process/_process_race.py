@@ -431,7 +431,6 @@ async def _watch_session_log(
     spawn_time: float,
     session_record_types: frozenset[str],
     pid: int,
-    completion_drain_timeout: float,
     acc: RaceAccumulator,
     trigger: anyio.Event,
     channel_b_ready: anyio.Event,

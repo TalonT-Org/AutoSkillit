@@ -185,3 +185,33 @@ def test_fails_open_when_headless_false(tmp_path: Path) -> None:
         )
         is None
     )
+
+
+def test_fails_open_without_reading_non_regular_transcript(tmp_path: Path) -> None:
+    transcript = tmp_path / "transcript.jsonl"
+    os.mkfifo(transcript)
+    _write_marker(tmp_path)
+    payload = {
+        "session_id": _SESSION,
+        "transcript_path": str(transcript),
+        "tool_name": "mcp__autoskillit__run_python",
+        "tool_input": {},
+    }
+    env = {
+        **os.environ,
+        "AUTOSKILLIT_HEADLESS": "1",
+        "AUTOSKILLIT_SESSION_TYPE": "orchestrator",
+    }
+
+    completed = subprocess.run(
+        [sys.executable, str(_SCRIPT)],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+        timeout=1,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout == ""

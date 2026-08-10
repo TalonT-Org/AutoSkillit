@@ -37,6 +37,8 @@ _TASK_NOTIFICATION_RE = re.compile(
 
 def _bounded_tail(path: Path) -> str | None:
     try:
+        if not path.is_file():
+            return None
         with path.open("rb") as stream:
             stream.seek(0, os.SEEK_END)
             size = stream.tell()

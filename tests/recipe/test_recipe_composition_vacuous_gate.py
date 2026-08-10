@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.recipe import _api as recipe_api
-from autoskillit.recipe._recipe_composition import _merge_sub_recipe
+from autoskillit.recipe._recipe_composition import _drop_sub_recipe_step, _merge_sub_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -107,6 +107,24 @@ def test_truthy_composition_rebases_incoming_and_child_skip_routes() -> None:
     assert merged.steps["entry"].on_success == "child_guarded"
     assert merged.steps["skip_router"].on_skip == "child_guarded"
     assert merged.steps["child_guarded"].on_skip == "child_survivor"
+
+
+def test_falsy_composition_rebases_incoming_skip_route() -> None:
+    parent = Recipe(
+        name="parent",
+        description="parent",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="done"),
+            "skip_router": RecipeStep(tool="run_cmd", skip_when_false="true", on_skip="compose"),
+            "compose": RecipeStep(sub_recipe="child", on_success="done", on_failure="done"),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+    )
+
+    dropped = _drop_sub_recipe_step(parent, "compose")
+
+    assert "compose" not in dropped.steps
+    assert dropped.steps["skip_router"].on_skip == "done"
 
 
 def test_semantics_and_projection_observe_the_post_prune_graph(

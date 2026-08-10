@@ -206,8 +206,8 @@ from .logging import get_logger as get_logger
 from .logging import log_plugin_artifact_lifecycle as log_plugin_artifact_lifecycle
 from .path_containment import ContainmentError as ContainmentError
 from .path_containment import check_metadata_stable as check_metadata_stable
-from .path_containment import read_stable_contained_range as read_stable_contained_range
 from .path_containment import read_stable_contained_bytes as read_stable_contained_bytes
+from .path_containment import read_stable_contained_range as read_stable_contained_range
 from .path_containment import resolve_contained_path as resolve_contained_path
 from .paths import GENERATED_FILES as GENERATED_FILES
 from .paths import claude_code_log_path as claude_code_log_path

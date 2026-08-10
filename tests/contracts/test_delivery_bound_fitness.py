@@ -167,6 +167,7 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
         Any,
         SimpleNamespace(
             backend=BACKEND_REGISTRY[backend_name](),
+            config=SimpleNamespace(output_budget=OutputBudgetConfig()),
             kitchen_id=f"fitness-{backend_name}-{recipe_name}",
             temp_dir=tmp_path,
         ),

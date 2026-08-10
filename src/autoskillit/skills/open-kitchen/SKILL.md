@@ -34,3 +34,8 @@ Activate the AutoSkillit kitchen when the host has not already made its tools av
 The kitchen state is session-scoped. `open_kitchen(name=...)` remains valid for named
 recipe loading, and a no-argument call remains valid to reopen the kitchen after
 `close_kitchen`.
+
+`$<name>` or `/<name>` denotes an in-session skill invocation. Do not pass a skill name
+to `open_kitchen`, `load_recipe`, `migrate_recipe`, or `recipe://`; those surfaces accept
+recipe identities only. A name defined as both a recipe and a skill is rejected until one
+artifact is renamed.

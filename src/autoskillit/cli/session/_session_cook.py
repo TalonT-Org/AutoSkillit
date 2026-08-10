@@ -39,7 +39,10 @@ _COOK_PRE_REVEALED_KITCHEN_PROMPT = (
     "pre-revealed. Do not call open_kitchen() with no arguments solely to gain tool "
     "access. open_kitchen remains valid when the user explicitly requests activation "
     "or promotion, to load a named recipe with open_kitchen(name=...), or to reopen "
-    "the kitchen after close_kitchen()."
+    "the kitchen after close_kitchen(). $<name> or /<name> denotes an in-session skill "
+    "invocation. Do not pass a skill name to open_kitchen, load_recipe, migrate_recipe, "
+    "or recipe://; those surfaces accept recipe identities only. A name defined as both "
+    "a recipe and a skill is rejected until one artifact is renamed."
 )
 
 

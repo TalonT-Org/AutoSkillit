@@ -73,7 +73,8 @@ async def test_recipe_open_atomically_installs_compiled_execution(
     tool_ctx.kitchen_id = f"test-open-{deferred_recall}"
     tool_ctx.recipe_name = "test-recipe" if deferred_recall else ""
     recipes = MagicMock()
-    recipes.find.return_value = None
+    recipes.find.return_value = MagicMock(path=Path("/fake/test-recipe.yaml"))
+    recipes.load.return_value = MagicMock(steps={}, ingredients={})
     tool_ctx.recipes = recipes
     request_ctx = MagicMock()
     request_ctx.enable_components = AsyncMock()
@@ -158,66 +159,6 @@ async def test_deferred_recall_sets_active_recipe_steps_from_recipe():
         "build": {"cmd": "task build"},
         "test": {"cmd": "task test"},
     }
-
-
-@pytest.mark.anyio
-async def test_deferred_recall_sets_active_recipe_steps_none_when_find_raises():
-    """When recipes.find raises, active_recipe_steps is set to None and the call still succeeds."""
-    from autoskillit.server.tools.tools_kitchen import open_kitchen
-
-    mock_ctx = _make_deferred_recall_ctx("test-recipe")
-    mock_ctx.recipes.load_and_validate.return_value = {
-        "content": "name: test-recipe\nsteps:\n  build:\n    cmd: task build\n",
-        "valid": True,
-        "errors": [],
-        "requires_packs": [],
-        "requires_features": [],
-        "content_hash": "abc",
-        "composite_hash": "def",
-        "recipe_version": "1.0",
-        "suggestions": [],
-    }
-    mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
-        mock_ctx.recipes.load_and_validate.return_value
-    )
-    mock_ctx.recipes.find.side_effect = RuntimeError("disk error")
-
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        result = await open_kitchen(name="test-recipe", ctx=mock_ctx)
-
-    parsed = json.loads(result)
-    assert parsed["success"] is True
-    assert mock_ctx.active_recipe_steps is None
-
-
-@pytest.mark.anyio
-async def test_deferred_recall_sets_active_recipe_steps_none_when_find_returns_none():
-    """When recipes.find returns None (recipe not on disk), active_recipe_steps is None."""
-    from autoskillit.server.tools.tools_kitchen import open_kitchen
-
-    mock_ctx = _make_deferred_recall_ctx("test-recipe")
-    mock_ctx.recipes.load_and_validate.return_value = {
-        "content": "name: test-recipe\nsteps:\n  build:\n    cmd: task build\n",
-        "valid": True,
-        "errors": [],
-        "requires_packs": [],
-        "requires_features": [],
-        "content_hash": "abc",
-        "composite_hash": "def",
-        "recipe_version": "1.0",
-        "suggestions": [],
-    }
-    mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
-        mock_ctx.recipes.load_and_validate.return_value
-    )
-    mock_ctx.recipes.find.return_value = None
-
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        result = await open_kitchen(name="test-recipe", ctx=mock_ctx)
-
-    parsed = json.loads(result)
-    assert parsed["success"] is True
-    assert mock_ctx.active_recipe_steps is None
 
 
 @pytest.mark.anyio

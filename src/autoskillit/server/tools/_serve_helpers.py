@@ -17,6 +17,8 @@ from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
     FinalizedRecipeProjection,
+    RecipeLoadError,
+    RecipeNotFoundError,
     SkillExecutionRole,
 )
 from autoskillit.server._misc import SkillProjectionContext, project_agent_skill_document
@@ -27,6 +29,31 @@ if TYPE_CHECKING:
         CodingAgentBackend,
     )
     from autoskillit.pipeline.context import ToolContext
+    from autoskillit.recipe import RecipeInfo
+
+
+def _admit_recipe_name(tool_ctx: ToolContext, name: str) -> RecipeInfo:
+    """Admit an unambiguous recipe name against the effective skill namespace."""
+    if tool_ctx.recipes is None:
+        raise RuntimeError("recipe repository is not configured")
+    if tool_ctx.skill_resolver is None:
+        raise RuntimeError("skill resolver is not configured")
+
+    recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
+    skill_spec = tool_ctx.skill_resolver.resolve_effective(name, tool_ctx.project_dir)
+    if recipe_info is not None and skill_spec is None:
+        return recipe_info
+    if recipe_info is None and skill_spec is not None:
+        raise RecipeNotFoundError(
+            f"'{name}' is an in-session skill, not a recipe. Follow the current "
+            "session's native skill instructions and do not call recipe tools."
+        )
+    if recipe_info is not None and skill_spec is not None:
+        raise RecipeLoadError(
+            f"Name '{name}' is ambiguous because it is defined as both a recipe and "
+            "a skill; rename one artifact before using recipe tools."
+        )
+    raise RecipeNotFoundError(f"No recipe named '{name}' found")
 
 
 def build_backend_capabilities_map(
@@ -203,6 +230,7 @@ def serve_recipe(
     backend_origin_map: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Unified recipe serve path. Only legal caller of load_and_validate in server/tools/."""
+    _admit_recipe_name(ctx, name)
     ingredient_overrides = _build_serve_override_stack(
         ctx,
         caller_overrides,
@@ -233,7 +261,7 @@ def serve_recipe(
         kwargs["temp_dir"] = temp_dir
     if temp_dir_relpath is not None:
         kwargs["temp_dir_relpath"] = temp_dir_relpath
-    if ctx.recipes is None:
+    if ctx.recipes is None:  # narrowed by _admit_recipe_name
         raise RuntimeError("serve_recipe() called with ctx.recipes=None")
     return ctx.recipes.load_and_validate(
         name,

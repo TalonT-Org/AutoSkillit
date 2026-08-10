@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from autoskillit.config import AutomationConfig
-from autoskillit.core import SkillResult
+from autoskillit.core import SkillResolver, SkillResult
 from autoskillit.core.types import RetryReason
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_recipe import load_recipe
@@ -20,6 +20,44 @@ from tests.server._helpers import (
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+
+@pytest.fixture(autouse=True)
+def _default_recipe_names_do_not_resolve_as_skills(tool_ctx) -> None:
+    tool_ctx.skill_resolver = MagicMock(spec=SkillResolver)
+    tool_ctx.skill_resolver.resolve_effective.return_value = None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("recipe_present", [False, True], ids=["skill-only", "ambiguous"])
+async def test_load_recipe_rejects_skill_names_before_recipe_work(
+    tmp_path, recipe_present: bool
+) -> None:
+    from tests.server.conftest import _make_mock_ctx
+
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.find.return_value = object() if recipe_present else None
+    mock_ctx.skill_resolver.resolve_effective.return_value = object()
+
+    with (
+        patch(
+            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+            return_value=mock_ctx,
+        ),
+        patch(
+            "autoskillit.server.tools.tools_recipe._require_enabled",
+            return_value=None,
+        ),
+    ):
+        result = json.loads(await load_recipe(name="shared-name"))
+
+    assert result["success"] is False
+    assert "skill" in result["error"].lower()
+    if recipe_present:
+        assert "ambiguous" in result["error"].lower()
+    mock_ctx.recipes.load.assert_not_called()
+    mock_ctx.recipes.load_and_validate.assert_not_called()
 
 
 def _write_minimal_script(scripts_dir: Path, name: str = "test-script") -> Path:
@@ -590,7 +628,8 @@ class TestLoadRecipeAuthorityClobber:
                 "ingredients_table": "--- TABLE ---",
             }
         )
-        mock_ctx.recipes.find.return_value = None
+        mock_ctx.recipes.find.return_value = MagicMock(path=tmp_path / "demo.yaml")
+        mock_ctx.recipes.load.return_value = mock_recipe_obj
         mock_ctx.config.migration.suppressed = []
         mock_ctx.kitchen_id = "test-kitchen"
         mock_ctx.config.linux_tracing.log_dir = ""
@@ -689,7 +728,13 @@ class TestLoadRecipeFailClosed:
         _LOAD_CACHE.clear()
         test_result = {"valid": True, "content": "", "dispatch_feasible": True}
         monkeypatch.setattr(self.ctx.recipes, "load_and_validate", lambda *a, **kw: test_result)
-        monkeypatch.setattr(self.ctx.recipes, "find", lambda *a, **kw: None)
+        recipe_info = MagicMock(path=tmp_path / "test-recipe.yaml")
+        monkeypatch.setattr(self.ctx.recipes, "find", lambda *a, **kw: recipe_info)
+        monkeypatch.setattr(
+            self.ctx.recipes,
+            "load",
+            lambda *_a, **_kw: MagicMock(steps={}, ingredients={}),
+        )
         with patch(
             "autoskillit.server.tools.tools_recipe._apply_triage_gate",
             new=AsyncMock(return_value=test_result),
@@ -707,7 +752,13 @@ class TestLoadRecipeFailClosed:
         _LOAD_CACHE.clear()
         test_result = {"valid": True, "dispatch_feasible": True}
         monkeypatch.setattr(self.ctx.recipes, "load_and_validate", lambda *a, **kw: test_result)
-        monkeypatch.setattr(self.ctx.recipes, "find", lambda *a, **kw: None)
+        recipe_info = MagicMock(path=tmp_path / "test-recipe.yaml")
+        monkeypatch.setattr(self.ctx.recipes, "find", lambda *a, **kw: recipe_info)
+        monkeypatch.setattr(
+            self.ctx.recipes,
+            "load",
+            lambda *_a, **_kw: MagicMock(steps={}, ingredients={}),
+        )
         with patch(
             "autoskillit.server.tools.tools_recipe._apply_triage_gate",
             new=AsyncMock(return_value=test_result),
@@ -730,7 +781,13 @@ class TestLoadRecipeFailClosed:
             "dispatch_feasible": True,
         }
         monkeypatch.setattr(self.ctx.recipes, "load_and_validate", lambda *a, **kw: test_result)
-        monkeypatch.setattr(self.ctx.recipes, "find", lambda *a, **kw: None)
+        recipe_info = MagicMock(path=tmp_path / "test-recipe.yaml")
+        monkeypatch.setattr(self.ctx.recipes, "find", lambda *a, **kw: recipe_info)
+        monkeypatch.setattr(
+            self.ctx.recipes,
+            "load",
+            lambda *_a, **_kw: MagicMock(steps={}, ingredients={}),
+        )
         with patch(
             "autoskillit.server.tools.tools_recipe._apply_triage_gate",
             new=AsyncMock(return_value=test_result),

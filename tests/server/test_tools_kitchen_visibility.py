@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from autoskillit.core import KITCHEN_GATED_TOOLS
+from autoskillit.core import KITCHEN_GATED_TOOLS, RecipeNotFoundError
 from autoskillit.core.types._type_constants import SOUS_CHEF_MANDATORY_SECTIONS
 from tests.server._helpers import _with_finalized_projection
 from tests.server.conftest import _make_mock_ctx
@@ -365,7 +365,8 @@ async def test_open_kitchen_with_recipe_returns_combined_response(tmp_path, monk
     mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
         mock_ctx.recipes.load_and_validate.return_value
     )
-    mock_ctx.recipes.find.return_value = None
+    mock_ctx.recipes.find.return_value = MagicMock(path=recipes_dir / "test-recipe.yaml")
+    mock_ctx.recipes.load.return_value = MagicMock(steps={}, ingredients={})
     mock_ctx.config.migration.suppressed = []
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
@@ -395,13 +396,11 @@ async def test_open_kitchen_with_recipe_not_found(tmp_path, monkeypatch):
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.recipes = MagicMock()
-    mock_ctx.recipes.load_and_validate.return_value = {
-        "content": "",
-        "valid": False,
-        "errors": ["No recipe named 'nonexistent' found"],
-        "suggestions": [],
-    }
-    mock_ctx.recipes.find.return_value = None
+    mock_ctx.recipes.find.return_value = MagicMock(path=tmp_path / "nonexistent.yaml")
+    mock_ctx.recipes.load.return_value = MagicMock(steps={}, ingredients={})
+    mock_ctx.recipes.load_and_validate.side_effect = RecipeNotFoundError(
+        "No recipe named 'nonexistent' found"
+    )
     mock_ctx.config.migration.suppressed = []
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
@@ -416,8 +415,43 @@ async def test_open_kitchen_with_recipe_not_found(tmp_path, monkeypatch):
 
     result = json.loads(result_str)
     assert result["success"] is False
-    assert "nonexistent" in result["error"]
+    assert result["stage"] == "load_and_validate"
+    assert result["error"] == "RecipeNotFoundError: No recipe named 'nonexistent' found"
     assert result["kitchen"] == "failed"
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_rejects_skill_before_operational_mutation(tmp_path, monkeypatch):
+    """A skill-only name fails before the kitchen or active recipe is mutated."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.find.return_value = None
+    mock_ctx.skill_resolver.resolve_effective.return_value = object()
+    mock_ctx.recipe_name = "existing-recipe"
+    previous_execution = mock_ctx.recipe_initialization_state
+
+    handler = AsyncMock()
+    with (
+        patch("autoskillit.server._get_ctx", return_value=mock_ctx),
+        patch("autoskillit.server.tools.tools_kitchen._open_kitchen_handler", handler),
+        patch("autoskillit.server.tools.tools_kitchen.clear_recipe_execution") as clear,
+        patch("autoskillit.server.tools.tools_kitchen.mcp") as mock_mcp,
+    ):
+        from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+        result = json.loads(await open_kitchen(name="dry-walkthrough", ctx=mock_ctx))
+
+    assert result["stage"] == "recipe_namespace"
+    assert "skill" in result["user_visible_message"].lower()
+    assert "current session" in result["user_visible_message"].lower()
+    handler.assert_not_awaited()
+    clear.assert_not_called()
+    mock_mcp.enable.assert_not_called()
+    mock_ctx.recipes.load.assert_not_called()
+    mock_ctx.recipes.load_and_validate.assert_not_called()
+    assert mock_ctx.recipe_name == "existing-recipe"
+    assert mock_ctx.recipe_initialization_state is previous_execution
 
 
 @pytest.mark.anyio
@@ -585,7 +619,8 @@ async def test_sous_chef_discipline_not_in_open_kitchen_result(tmp_path, monkeyp
     mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
         mock_ctx.recipes.load_and_validate.return_value
     )
-    mock_ctx.recipes.find.return_value = None
+    mock_ctx.recipes.find.return_value = MagicMock(path=tmp_path / "implementation.yaml")
+    mock_ctx.recipes.load.return_value = MagicMock(steps={}, ingredients={})
     mock_ctx.config.migration.suppressed = []
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
@@ -625,7 +660,8 @@ async def test_open_kitchen_result_keys_match_typed_dict(tmp_path, monkeypatch):
     mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
         mock_ctx.recipes.load_and_validate.return_value
     )
-    mock_ctx.recipes.find.return_value = None
+    mock_ctx.recipes.find.return_value = MagicMock(path=tmp_path / "implementation.yaml")
+    mock_ctx.recipes.load.return_value = MagicMock(steps={}, ingredients={})
     mock_ctx.config.migration.suppressed = []
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):

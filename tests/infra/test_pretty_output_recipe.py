@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -17,6 +18,7 @@ from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
     RecipeFlowGeneration,
+    SkillResolver,
 )
 from autoskillit.execution import CODEX_RECIPE_DELIVERY_BUDGET
 from autoskillit.hooks.formatters.pretty_output_hook import _format_response
@@ -1074,10 +1076,12 @@ def test_canonical_recipe_responses_fit_independent_registry_ceilings(tmp_path, 
             monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
             tool_ctx = SimpleNamespace(
                 recipes=DefaultRecipeRepository(),
+                skill_resolver=MagicMock(spec=SkillResolver),
                 project_dir=project_root,
                 session_serve_overrides=None,
                 session_serve_defer_unresolved=False,
             )
+            tool_ctx.skill_resolver.resolve_effective.return_value = None
             resolved = dict(overrides, source_dir=str(project_root))
             preview = load_and_validate(
                 recipe_name,

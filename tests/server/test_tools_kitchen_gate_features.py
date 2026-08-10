@@ -507,8 +507,27 @@ def test_missing_recipe_resource_preserves_active_execution():
 
         result = json.loads(get_recipe("missing"))
 
-    assert result == {"error": "No recipe named 'missing'."}
+    assert result == {"error": "No recipe named 'missing' found"}
     assert mock_ctx.active_recipe_execution is previous
+
+
+@pytest.mark.parametrize("recipe_present", [False, True], ids=["skill-only", "ambiguous"])
+def test_recipe_resource_preserves_namespace_error_before_composition(recipe_present):
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.find.return_value = object() if recipe_present else None
+    mock_ctx.skill_resolver.resolve_effective.return_value = object()
+
+    with patch("autoskillit.server._state._get_ctx_or_none", return_value=mock_ctx):
+        from autoskillit.server.tools.tools_kitchen import get_recipe
+
+        result = json.loads(get_recipe("shared-name"))
+
+    assert "skill" in result["error"].lower()
+    if recipe_present:
+        assert "ambiguous" in result["error"].lower()
+    mock_ctx.recipes.load.assert_not_called()
+    mock_ctx.recipes.load_and_validate.assert_not_called()
 
 
 # 1h: get_recipe resource returns error for invalid recipe

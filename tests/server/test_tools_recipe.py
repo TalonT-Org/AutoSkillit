@@ -533,7 +533,9 @@ def test_tools_recipe_does_not_import_raw_ctx():
 
 # DIAG_C5
 @pytest.mark.anyio
-async def test_load_recipe_injects_hidden_ingredient_overrides(tool_ctx_kitchen_open, monkeypatch):
+async def test_load_recipe_injects_hidden_ingredient_overrides(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+):
     """load_recipe injects all SERVER_AUTHORITATIVE_INGREDIENTS keys into ingredient_overrides."""
     from unittest.mock import MagicMock, patch
 
@@ -547,7 +549,8 @@ async def test_load_recipe_injects_hidden_ingredient_overrides(tool_ctx_kitchen_
         "diagram": None,
         "ingredients_table": "--- INGREDIENTS TABLE ---\n  task  required\n--- END TABLE ---",
     }
-    tool_ctx_kitchen_open.recipes.find.return_value = None
+    tool_ctx_kitchen_open.recipes.find.return_value = MagicMock(path=tmp_path / "demo.yaml")
+    tool_ctx_kitchen_open.recipes.load.return_value = MagicMock(steps={}, ingredients={})
     tool_ctx_kitchen_open.kitchen_id = "test-kitchen-xyz"
 
     with patch(
@@ -566,7 +569,7 @@ async def test_load_recipe_injects_hidden_ingredient_overrides(tool_ctx_kitchen_
 
 
 @pytest.mark.anyio
-async def test_load_recipe_config_authority_overrides_caller(tool_ctx_kitchen_open):
+async def test_load_recipe_config_authority_overrides_caller(tool_ctx_kitchen_open, tmp_path):
     """load_recipe: _config_layer overrides caller-supplied overrides for
     config-authoritative keys."""
     from unittest.mock import MagicMock, patch
@@ -583,7 +586,8 @@ async def test_load_recipe_config_authority_overrides_caller(tool_ctx_kitchen_op
             "--- INGREDIENTS TABLE ---\n  base_branch  develop\n--- END TABLE ---"
         ),
     }
-    tool_ctx_kitchen_open.recipes.find.return_value = None
+    tool_ctx_kitchen_open.recipes.find.return_value = MagicMock(path=tmp_path / "demo.yaml")
+    tool_ctx_kitchen_open.recipes.load.return_value = MagicMock(steps={}, ingredients={})
     tool_ctx_kitchen_open.kitchen_id = "test-kitchen-xyz"
 
     with patch(
@@ -609,7 +613,7 @@ async def test_load_recipe_config_authority_overrides_caller(tool_ctx_kitchen_op
 
 
 @pytest.mark.anyio
-async def test_load_recipe_with_config_authority_ingredient(tool_ctx_kitchen_open):
+async def test_load_recipe_with_config_authority_ingredient(tool_ctx_kitchen_open, tmp_path):
     """load_recipe integration: config-authority keys override caller values end-to-end."""
     from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -629,7 +633,8 @@ async def test_load_recipe_with_config_authority_ingredient(tool_ctx_kitchen_ope
     )
     tool_ctx_kitchen_open.recipes = MagicMock()
     tool_ctx_kitchen_open.recipes.load_and_validate.return_value = _load_result
-    tool_ctx_kitchen_open.recipes.find.return_value = None
+    tool_ctx_kitchen_open.recipes.find.return_value = MagicMock(path=tmp_path / "demo.yaml")
+    tool_ctx_kitchen_open.recipes.load.return_value = MagicMock(steps={}, ingredients={})
     tool_ctx_kitchen_open.recipes.apply_triage_gate = AsyncMock(return_value=_load_result)
     tool_ctx_kitchen_open.kitchen_id = "test-kitchen-xyz"
 

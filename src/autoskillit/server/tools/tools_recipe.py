@@ -23,6 +23,7 @@ from autoskillit.core import (
     BackendCapabilities,
     RecipeArtifactGeneration,
     RecipeDeliveryRequest,
+    RecipeLoadError,
     fast_dumps,
     get_logger,
     load_yaml,
@@ -81,6 +82,7 @@ from autoskillit.server.tools._auto_overrides import (
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._serve_helpers import (
+    _admit_recipe_name,
     build_backend_capabilities_map,
     pop_finalized_recipe_projection,
     render_served_response,
@@ -332,6 +334,11 @@ async def load_recipe(
     tool, then follow the YAML steps. Recipes live in .autoskillit/recipes/
     as .yaml files (NOT in .autoskillit/skills/ or any other directory).
 
+    ``$<name>`` or ``/<name>`` denotes an in-session skill invocation. Do not
+    pass a skill name to recipe-serving tools; they accept recipe identities only.
+    A name defined as both a recipe and a skill is rejected until one artifact
+    is renamed.
+
     This tool is strictly read-only. It discovers, parses, and validates recipe
     YAML. To run migrations, use migrate_recipe.
 
@@ -351,12 +358,8 @@ async def load_recipe(
                 return json.dumps({"error": "Server not initialized"})
             suppressed = tool_ctx.config.migration.suppressed
             _defaults = resolve_ingredient_defaults(tool_ctx.project_dir)
-            _recipe_info_pre = tool_ctx.recipes.find(name, tool_ctx.project_dir)
-            _raw_recipe_obj = (
-                tool_ctx.recipes.load(_recipe_info_pre.path)
-                if _recipe_info_pre is not None
-                else None
-            )
+            _recipe_info_pre = _admit_recipe_name(tool_ctx, name)
+            _raw_recipe_obj = tool_ctx.recipes.load(_recipe_info_pre.path)
             _session_overrides: dict[str, str] = {
                 "kitchen_id": tool_ctx.kitchen_id,
                 "diagnostics_log_dir": str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
@@ -904,6 +907,11 @@ async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:
     Args:
         name: The recipe name (without .yaml extension) to migrate.
 
+    ``$<name>`` or ``/<name>`` denotes an in-session skill invocation. Do not
+    pass a skill name to recipe-serving tools; they accept recipe identities only.
+    A name defined as both a recipe and a skill is rejected until one artifact
+    is renamed.
+
     Never raises.
     """
     if (gate := _require_enabled()) is not None:
@@ -926,19 +934,18 @@ async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:
 
             tool_ctx = _get_ctx()
 
+            try:
+                recipe_info = _admit_recipe_name(tool_ctx, name)
+            except RecipeLoadError as exc:
+                return json.dumps({"error": str(exc), "name": name})
+
             # Check suppression list before attempting migration
             if name in _get_config().migration.suppressed:
                 return json.dumps({"status": "up_to_date", "name": name})
 
-            if tool_ctx.recipes is None:
-                return json.dumps({"error": "Recipe repository not configured"})
-            recipe = tool_ctx.recipes.find(name, tool_ctx.project_dir)
-            if recipe is None:
-                return json.dumps({"error": f"No recipe named '{name}' found"})
-
             if tool_ctx.migrations is None:
                 return json.dumps({"error": "Migration service not configured", "name": name})
-            result = await tool_ctx.migrations.migrate(recipe.path)
+            result = await tool_ctx.migrations.migrate(recipe_info.path)
             return json.dumps(result)
     except Exception as exc:
         logger.error("migrate_recipe unhandled exception", exc_info=True)

@@ -403,12 +403,11 @@ def complete_section_response(
         ]
         for key in expired:
             del tool_ctx.recipe_terminal_response_cache[key]
-        tool_ctx.recipe_terminal_response_cache[(finalized.initialization_id, finalized.part)] = (
-            TerminalRecipeResponseCacheEntry(
-                expires_at=now + _TERMINAL_RESPONSE_RETENTION_SECONDS,
-                content_sha256=finalized.content_sha256,
-                rendered=enforced,
-            )
+        cache_key = (finalized.initialization_id, finalized.section, finalized.part)
+        tool_ctx.recipe_terminal_response_cache[cache_key] = TerminalRecipeResponseCacheEntry(
+            expires_at=now + _TERMINAL_RESPONSE_RETENTION_SECONDS,
+            content_sha256=finalized.content_sha256,
+            rendered=enforced,
         )
     return enforced
 
@@ -417,16 +416,18 @@ def replay_terminal_section_response(
     tool_ctx: ToolContext,
     *,
     initialization_id: str,
+    section: str,
     part: int,
     content_sha256: str,
 ) -> str | None:
     """Return a non-expired byte-identical terminal response for exact replay."""
     with tool_ctx.recipe_execution_lock:
-        record = tool_ctx.recipe_terminal_response_cache.get((initialization_id, part))
+        cache_key = (initialization_id, section, part)
+        record = tool_ctx.recipe_terminal_response_cache.get(cache_key)
         if record is None:
             return None
         if record.expires_at <= time.monotonic():
-            del tool_ctx.recipe_terminal_response_cache[(initialization_id, part)]
+            del tool_ctx.recipe_terminal_response_cache[cache_key]
             return None
         if record.content_sha256 != content_sha256:
             return json.dumps(

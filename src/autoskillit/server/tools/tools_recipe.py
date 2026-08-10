@@ -748,6 +748,7 @@ async def get_recipe_section(
                     replayed = replay_terminal_section_response(
                         tool_ctx,
                         initialization_id=active_initialization.initialization_id,
+                        section=section,
                         part=part,
                         content_sha256=content_sha256,
                     )

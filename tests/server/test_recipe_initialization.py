@@ -200,6 +200,7 @@ def test_terminal_page_credit_atomically_installs_ready_recipe(minimal_ctx, tmp_
         replay_terminal_section_response(
             minimal_ctx,
             initialization_id="initialization",
+            section="flow_records",
             part=0,
             content_sha256=content_sha256,
         )
@@ -351,11 +352,46 @@ def test_terminal_page_replay_rejects_changed_content_digest(minimal_ctx, tmp_pa
     replay = replay_terminal_section_response(
         minimal_ctx,
         initialization_id="initialization",
+        section="flow_records",
         part=0,
         content_sha256=_hash("tampered"),
     )
     assert replay is not None
     assert json.loads(replay)["error"] == "recipe_initialization_receipt_content_mismatch"
+
+
+def test_terminal_page_replay_is_scoped_to_section(minimal_ctx, tmp_path) -> None:
+    state = _stage(minimal_ctx, tmp_path)
+    content_sha256 = _hash("terminal-content")
+    receipt = recipe_initialization_receipt(
+        state.initialization_id,
+        state.artifact_generation,
+        content_sha256=content_sha256,
+    )
+    rendered = json.dumps({"success": True, "completion_receipt": receipt})
+    finalized = FinalizedRecipeSectionResponse(
+        rendered=rendered,
+        tool_ctx=minimal_ctx,
+        initialization_id=state.initialization_id,
+        artifact_generation=state.artifact_generation,
+        section="flow_records",
+        page_plan_sha256=_hash("flow-plan"),
+        part=0,
+        content_sha256=content_sha256,
+        completion_receipt=receipt,
+    )
+    assert complete_section_response(finalized, rendered) == rendered
+
+    assert (
+        replay_terminal_section_response(
+            minimal_ctx,
+            initialization_id=state.initialization_id,
+            section="step",
+            part=0,
+            content_sha256=content_sha256,
+        )
+        is None
+    )
 
 
 def test_completion_rejects_stale_or_altered_initialization_id(

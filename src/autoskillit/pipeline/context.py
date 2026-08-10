@@ -273,9 +273,9 @@ class ToolContext:
         default_factory=threading.RLock,
         repr=False,
     )
-    recipe_terminal_response_cache: dict[tuple[str, int], TerminalRecipeResponseCacheEntry] = (
-        field(default_factory=dict, repr=False)
-    )
+    recipe_terminal_response_cache: dict[
+        tuple[str, str, int], TerminalRecipeResponseCacheEntry
+    ] = field(default_factory=dict, repr=False)
     exploration_context_store: ExplorationContextStoreProtocol[object] | None = field(default=None)
     _baseline_config: AutomationConfig = field(init=False, repr=False)
     _session_config_overrides: dict[str, dict[str, Any]] = field(

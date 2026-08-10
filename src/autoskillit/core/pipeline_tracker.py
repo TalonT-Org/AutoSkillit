@@ -11,6 +11,7 @@ import fcntl
 import json
 import os
 from collections.abc import Callable, Mapping, MutableMapping
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -306,7 +307,7 @@ def mutate_tracker(
         current = _read_tracker_unlocked(target)
         if current.data is None:
             return current
-        updated = _validate_tracker_data(mutation(dict(current.data)))
+        updated = _validate_tracker_data(mutation(deepcopy(current.data)))
         if updated == current.data:
             return current
         atomic_write(target.path, json.dumps(updated))

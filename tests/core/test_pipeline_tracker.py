@@ -172,6 +172,26 @@ def test_mutation_skips_atomic_replace_when_data_is_unchanged(monkeypatch, tmp_p
     assert writes == []
 
 
+def test_mutation_compares_nested_changes_against_unmodified_snapshot(tmp_path):
+    target = _target(tmp_path, expected=False)
+    lease = retain_tracker_lease({}, _key(target, tmp_path))
+    target.path.parent.mkdir(parents=True, exist_ok=True)
+    target.path.write_text(json.dumps(_tracker()))
+
+    def complete_prepare(data):
+        data["steps"]["prepare"]["status"] = "complete"
+        return data
+
+    try:
+        result = mutate_tracker(target, lease, complete_prepare)
+    finally:
+        lease.close()
+
+    assert result.data is not None
+    assert result.data["steps"]["prepare"]["status"] == "complete"
+    assert json.loads(target.path.read_text())["steps"]["prepare"]["status"] == "complete"
+
+
 def test_kitchen_merge_preserves_progress_and_manual_init_is_create_only(tmp_path):
     target = _target(tmp_path, expected=False)
     leases = {}

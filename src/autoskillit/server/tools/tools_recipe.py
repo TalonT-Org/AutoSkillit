@@ -117,16 +117,10 @@ def _recipe_section_request_state_factory() -> RecipeSectionRequestState:
     conservative_limit = 10_000
     page_max_bytes: int | None = None
     if tool_ctx is not None:
-        configured_response_max = getattr(
-            getattr(tool_ctx.config, "output_budget", None),
-            "response_max_bytes",
-            None,
-        )
+        configured_response_max = tool_ctx.config.output_budget.response_max_bytes
         if isinstance(configured_response_max, int) and configured_response_max > 0:
             response_max_bytes = configured_response_max
-        configured_page_max = getattr(
-            getattr(tool_ctx.config, "output_budget", None), "page_max_bytes", None
-        )
+        configured_page_max = tool_ctx.config.output_budget.page_max_bytes
         if isinstance(configured_page_max, int) and configured_page_max > 0:
             page_max_bytes = configured_page_max
         backend_capabilities = (

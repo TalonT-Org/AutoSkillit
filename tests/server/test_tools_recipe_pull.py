@@ -1004,6 +1004,7 @@ def test_initialization_requirements_use_the_pull_response_bound(
     [
         ("stale_initialization_id", "invalid_recipe_initialization_identity"),
         ("altered_page_plan", "invalid_recipe_page_plan_identity"),
+        ("wrong_continuation", "invalid_recipe_section_continuation"),
     ],
 )
 async def test_initialization_pull_rejections_preserve_progress(
@@ -1046,6 +1047,8 @@ async def test_initialization_pull_rejections_preserve_progress(
         page_plan_sha256 = None
     elif case == "altered_page_plan":
         page_plan_sha256 = "sha256:" + ("0" * 64)
+    elif case == "wrong_continuation":
+        continuation = "invalid-continuation"
 
     before = tool_ctx_kitchen_open.recipe_initialization_state
     assert isinstance(before, InitializingRecipe)

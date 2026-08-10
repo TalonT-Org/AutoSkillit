@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import tempfile
@@ -40,6 +41,7 @@ from autoskillit.core import (
     pkg_root,
     write_versioned_json,
 )
+from autoskillit.hook_registry import render_hooks_json_text
 from autoskillit.workspace._projected_artifact.materialization import (
     SkillProjectionContext,
     _copy_non_skill_plugin_assets,
@@ -51,6 +53,7 @@ from autoskillit.workspace._projected_artifact.materialization import (
     _skill_sequence,
     materialize_agent_skill_tree,
     validate_sanitized_plugin_artifact,
+    write_generated_hooks_json,
 )
 from autoskillit.workspace._projection_cache import (
     PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
@@ -127,6 +130,12 @@ def _stage_projected_plugin_artifact(
     )
     try:
         _copy_non_skill_plugin_assets(plan.source_root, staging_root)
+        # Overwrite the copied hooks.json with a freshly rendered manifest so
+        # projected commands always use the current renderer output (relocatable
+        # ${CLAUDE_PLUGIN_ROOT} tokens), never stale absolute paths from the
+        # source tree.  The copy still supplies hook *scripts* (_dispatch.py,
+        # handlers); only the rendered manifest is replaced.
+        write_generated_hooks_json(staging_root)
         # Projected artifact — consumed exclusively via --plugin-dir, which
         # registers the plugin verbatim; never detect_autoskillit_mcp_prefix(),
         # which answers a different question (host-level registry presence).
@@ -348,6 +357,7 @@ class ProjectedPluginArtifactAuthority:
         namespace_identity = "\n".join(
             f"{name}:{source.value}" for name, source in sorted(catalog.namespace_sources.items())
         )
+        rendered_hooks = render_hooks_json_text()
         semantic_key = ProjectionCacheKey(
             source_root=str(source_root),
             backend_name=backend.name,
@@ -357,6 +367,7 @@ class ProjectedPluginArtifactAuthority:
             adaptation_identity=adaptation_identity,
             namespace_identity=namespace_identity,
             asset_digest=public_plugin_asset_digest(source_root),
+            rendered_hooks_digest=hashlib.sha256(rendered_hooks.encode()).hexdigest(),
         ).digest()
         projections_root = Path.home() / ".autoskillit" / "plugin-projections"
         destination = (projections_root / semantic_key).absolute()

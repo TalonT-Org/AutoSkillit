@@ -31,6 +31,7 @@ from .materialization import (
     materialize_sanitized_plugin_root,
     project_agent_skill_document,
     validate_sanitized_plugin_artifact,
+    write_generated_hooks_json,
 )
 
 __all__ = [
@@ -58,4 +59,5 @@ __all__ = [
     "read_projected_plugin_identity",
     "repair_broken_plugin_cache_hooks",
     "validate_sanitized_plugin_artifact",
+    "write_generated_hooks_json",
 ]

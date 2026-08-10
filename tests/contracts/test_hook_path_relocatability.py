@@ -123,6 +123,57 @@ def test_self_healed_bundled_hooks_json_is_relocatable(
     assert PLUGIN_ROOT_TOKEN in regenerated
 
 
+def test_content_complete_drift_healing_catches_hash_matching_staleness(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T-A2: Drift healing detects stale commands even when the registry hash matches.
+
+    The incident precondition: _autoskillit_registry_hash equals the live
+    HOOK_REGISTRY_HASH but the command strings are absolute-path pinned.
+    The previous hash-only gate was blind to this shape.
+    """
+    import autoskillit.core.paths as _paths
+    from autoskillit.hook_registry import HOOK_REGISTRY_HASH, render_hooks_json_text
+    from autoskillit.server._lifespan import run_startup_drift_check
+
+    fake_pkg_root = tmp_path / "pkg"
+    hooks_dir = fake_pkg_root / "hooks"
+    hooks_dir.mkdir(parents=True)
+    # Plant: correct hash, stale absolute commands
+    stale_json = {
+        "_autoskillit_registry_hash": HOOK_REGISTRY_HASH,
+        "hooks": {
+            "PreToolUse": [
+                {
+                    "matcher": "Read",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": (
+                                "python3 /deleted/uv/tools/autoskillit/"
+                                "lib/python3.11/site-packages/autoskillit/"
+                                "hooks/_dispatch.py guards/tool_guard"
+                            ),
+                        }
+                    ],
+                }
+            ],
+        },
+    }
+    (hooks_dir / "hooks.json").write_text(json.dumps(stale_json, indent=2) + "\n")
+
+    monkeypatch.setattr(_paths, "pkg_root", lambda: fake_pkg_root)
+
+    run_startup_drift_check()
+
+    regenerated = (hooks_dir / "hooks.json").read_text()
+    expected = render_hooks_json_text()
+    assert regenerated == expected, (
+        "content-complete drift check failed to heal a stale file whose "
+        "registry hash matched but whose commands were absolute"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Token-aware validation.
 # ---------------------------------------------------------------------------

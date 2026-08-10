@@ -46,6 +46,7 @@ from autoskillit.workspace._projected_artifact import (
     project_default_plugin_authority,
     project_direct_install_authority,
     validate_sanitized_plugin_artifact,
+    write_generated_hooks_json,
 )
 from autoskillit.workspace._projected_artifact.materialization import _default_base_branch
 
@@ -66,6 +67,7 @@ __all__ = [
     "project_default_plugin_authority",
     "project_direct_install_authority",
     "validate_sanitized_plugin_artifact",
+    "write_generated_hooks_json",
 ]
 
 

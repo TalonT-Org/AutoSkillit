@@ -803,16 +803,6 @@ HOOK_REGISTRY_HASH: str = compute_registry_hash(
 )
 
 
-def load_hooks_json_hash(path: Path) -> str | None:
-    """Read the _autoskillit_registry_hash from a hooks.json file."""
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        val = data.get("_autoskillit_registry_hash")
-        return str(val) if val else None
-    except (OSError, json.JSONDecodeError, AttributeError):
-        return None
-
-
 def _build_hook_entry(hook_def: HookDef, hook_commands: list[dict]) -> dict:
     """Build the per-entry dict for a hook definition.
 
@@ -872,6 +862,23 @@ def render_relocatable_hook_command(logical_name: str) -> str:
     ):
         raise ValueError(f"invalid logical hook name: {logical_name!r}")
     return f'python3 -B "{PLUGIN_ROOT_TOKEN}/hooks/_dispatch.py" {shlex.quote(logical_name)}'
+
+
+def render_hooks_json_text(
+    registry: Sequence[HookDef] = HOOK_REGISTRY,
+    lifecycle_contracts: Sequence[LifecycleContractDef] = LIFECYCLE_CONTRACTS,
+) -> str:
+    """Canonical serialization of :func:`generate_hooks_json`.
+
+    This is the single authority for rendered-manifest bytes — every publisher
+    (marketplace, self-heal, projection staging, startup drift check) must use
+    this function rather than re-deriving the JSON text inline.  Three sites
+    consume the same bytes: :func:`write_generated_hooks_json` writes them,
+    ``run_startup_drift_check`` compares them, and the projection cache key
+    digests them; keeping the serialization in one place prevents the three
+    from drifting apart.
+    """
+    return json.dumps(generate_hooks_json(registry, lifecycle_contracts), indent=2) + "\n"
 
 
 def generate_hooks_json(

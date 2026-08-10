@@ -118,6 +118,7 @@ from autoskillit.workspace.skill_projection import (
     prepare_skill_projection,
     project_agent_skill_document,
     validate_sanitized_plugin_artifact,
+    write_generated_hooks_json,
 )
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
@@ -251,5 +252,6 @@ __all__ = [
     "validate_skill_capability_authenticity",
     "validate_skill_capability_declarations",
     "validate_skill_frontmatter",
+    "write_generated_hooks_json",
     "write_installed_plugin_artifact_manifest_locked",
 ]

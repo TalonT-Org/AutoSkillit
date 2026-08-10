@@ -53,11 +53,9 @@ from autoskillit.fleet import (
 )
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
-    HOOK_REGISTRY_HASH,
     find_broken_hook_scripts,
-    generate_hooks_json,
     iter_all_scope_paths,
-    load_hooks_json_hash,
+    render_hooks_json_text,
     validate_plugin_cache_hooks,
 )
 from autoskillit.pipeline import (
@@ -84,26 +82,35 @@ logger = get_logger(__name__)
 
 
 def run_startup_drift_check() -> None:
-    """Compare on-disk hooks.json hash vs HOOK_REGISTRY_HASH; regenerate if stale.
+    """Compare on-disk hooks.json bytes vs current render; regenerate if stale.
 
-    Called as a background task from the lifespan. Any failure is logged and
-    swallowed — drift must never prevent the server from starting.
+    Unlike the previous hash-based gate, this byte comparison is
+    content-complete: any difference in the rendered manifest — including
+    command-string changes with a structurally identical registry — triggers
+    a rewrite.  The hash comparison was blind to rendered command drift
+    when the registry structure was unchanged (the Aug 2026 incident shape).
+
+    Called as a background task from the lifespan.  Render and file-I/O
+    failures are caught independently so a renderer regression cannot
+    silently disable self-heal.
     """
+    hooks_json_path = _core_paths.pkg_root() / "hooks" / "hooks.json"
     try:
-        import json
-
-        hooks_json_path = _core_paths.pkg_root() / "hooks" / "hooks.json"
-        on_disk_hash = load_hooks_json_hash(hooks_json_path)
-        if on_disk_hash != HOOK_REGISTRY_HASH:
+        expected = render_hooks_json_text()
+    except Exception:
+        logger.exception("startup_drift_check_render_failed")
+        return
+    try:
+        try:
+            on_disk = hooks_json_path.read_text(encoding="utf-8")
+        except OSError:
+            on_disk = None
+        if on_disk != expected:
             logger.info(
                 "startup_drift_detected",
-                on_disk=on_disk_hash,
-                expected=HOOK_REGISTRY_HASH,
+                reason="content_mismatch",
             )
-            atomic_write(
-                hooks_json_path,
-                json.dumps(generate_hooks_json(), indent=2) + "\n",
-            )
+            atomic_write(hooks_json_path, expected)
             logger.info("hooks_json_self_healed", path=str(hooks_json_path))
         else:
             logger.info("startup_drift_check_ok")

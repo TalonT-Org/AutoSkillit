@@ -42,7 +42,14 @@ def _digest(path: Path) -> str:
 
 
 def _assert_projection_is_live(root: Path) -> None:
-    """Every projected asset must byte-match the running package."""
+    """Every projected asset must byte-match the running package.
+
+    ``hooks/hooks.json`` is special: it is *rendered* at staging time (not
+    copied from the source tree), so its projected bytes must match the
+    current ``render_hooks_json_text()`` output rather than the source file.
+    """
+    from autoskillit.hook_registry import render_hooks_json_text
+
     assert root.is_dir()
 
     plugin_json = root / ".claude-plugin" / "plugin.json"
@@ -52,6 +59,7 @@ def _assert_projection_is_live(root: Path) -> None:
         "the projection came from a snapshot"
     )
 
+    rendered_hooks_manifest = "hooks/hooks.json"
     mismatched: list[str] = []
     missing: list[str] = []
     for source_file in iter_public_plugin_asset_files(pkg_root()):
@@ -59,6 +67,11 @@ def _assert_projection_is_live(root: Path) -> None:
         projected_file = root / rel
         if not projected_file.is_file():
             missing.append(str(rel))
+        elif rel.as_posix() == rendered_hooks_manifest:
+            # hooks/hooks.json is rendered at staging, not copied.
+            expected = render_hooks_json_text()
+            if projected_file.read_text(encoding="utf-8") != expected:
+                mismatched.append(f"{rel} (rendered, not source-copied)")
         elif _digest(projected_file) != _digest(source_file):
             mismatched.append(str(rel))
     assert not missing, f"projection is missing live package assets: {missing[:10]}"

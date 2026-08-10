@@ -266,6 +266,15 @@ def iter_public_plugin_asset_files(source_root: Path, *, top_level: bool = True)
             yield entry
 
 
+#: Source-tree file excluded from :func:`public_plugin_asset_digest` because
+#: its projected bytes are determined by the renderer, not by the source file.
+#: Projection staging calls ``write_generated_hooks_json`` which overwrites
+#: the copied ``hooks/hooks.json`` with a fresh render; the source-file bytes
+#: are therefore a non-input.  The rendered content is covered instead by
+#: ``rendered_hooks_digest`` in ``ProjectionCacheKey``.
+_RENDERED_HOOKS_MANIFEST_RELPATH = "hooks/hooks.json"
+
+
 def public_plugin_asset_digest(source_root: Path) -> str:
     """Digest every byte a projection copies out of *source_root*.
 
@@ -279,10 +288,16 @@ def public_plugin_asset_digest(source_root: Path) -> str:
     A bare ``__version__`` would not do: under an editable install the version
     is static while the files change continuously, pinning a stale projection
     for an entire development cycle.
+
+    ``hooks/hooks.json`` is excluded because its projected bytes come from the
+    renderer (``render_hooks_json_text``), not from the source tree.  Its
+    coverage is provided by ``rendered_hooks_digest`` in the cache key.
     """
     digest = hashlib.sha256()
     for path in iter_public_plugin_asset_files(source_root):
         rel = path.relative_to(source_root).as_posix()
+        if rel == _RENDERED_HOOKS_MANIFEST_RELPATH:
+            continue
         digest.update(rel.encode())
         digest.update(b"\0")
         with path.open("rb") as handle:
@@ -310,6 +325,7 @@ class ProjectionCacheKey:
     adaptation_identity: str
     namespace_identity: str
     asset_digest: str
+    rendered_hooks_digest: str
 
     def digest(self) -> str:
         payload = "\0".join(
@@ -322,6 +338,7 @@ class ProjectionCacheKey:
                 self.adaptation_identity,
                 self.namespace_identity,
                 self.asset_digest,
+                self.rendered_hooks_digest,
             )
         )
         return hashlib.sha256(payload.encode()).hexdigest()[:24]

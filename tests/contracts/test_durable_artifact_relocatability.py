@@ -8,6 +8,7 @@ Bidirectional completeness: every writer string resolves.
 from __future__ import annotations
 
 import importlib
+import json
 from pathlib import Path
 
 import pytest
@@ -29,6 +30,13 @@ def _resolve(dotted: str) -> object:
     for attr in qualname.split("."):
         obj = getattr(obj, attr)
     return obj
+
+
+def _assert_relocatable(content: str) -> None:
+    from tests.contracts._relocatability_helpers import environment_pinned_path_segments
+
+    for segment in environment_pinned_path_segments():
+        assert segment not in content, f"durable output contains forbidden segment {segment!r}"
 
 
 class TestRegistryIntegrity:
@@ -91,15 +99,127 @@ class TestNonMachineLocalWritersAreRelocatable:
         from autoskillit.workspace._projected_artifact.materialization import (
             write_generated_hooks_json,
         )
-        from tests.contracts._relocatability_helpers import (
-            environment_pinned_path_segments,
-        )
 
         hooks_dir = tmp_path / "hooks"
         hooks_dir.mkdir()
         write_generated_hooks_json(tmp_path)
-        content = (hooks_dir / "hooks.json").read_text()
-        for segment in environment_pinned_path_segments():
-            assert segment not in content, (
-                f"write_generated_hooks_json output contains forbidden segment {segment!r}"
+        _assert_relocatable((hooks_dir / "hooks.json").read_text())
+
+    def test_startup_drift_check_output_is_relocatable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.server import _lifespan
+
+        hooks_dir = tmp_path / "hooks"
+        hooks_dir.mkdir()
+        monkeypatch.setattr(_lifespan._core_paths, "pkg_root", lambda: tmp_path)
+
+        _lifespan.run_startup_drift_check()
+
+        _assert_relocatable((hooks_dir / "hooks.json").read_text())
+
+    def test_plugin_cache_repair_output_is_relocatable(self, tmp_path: Path) -> None:
+        from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY, installed_plugin_semantic_key
+        from autoskillit.workspace._installed_artifact import (
+            write_installed_plugin_artifact_manifest_locked,
+        )
+        from autoskillit.workspace._projected_artifact._hook_repair import (
+            PluginHookRepairStatus,
+            repair_broken_plugin_cache_hooks,
+        )
+
+        cache_dir = tmp_path / "cache"
+        incarnation = cache_dir / "1.2.3"
+        hooks_dir = incarnation / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "_dispatch.py").write_text("# dispatcher\n")
+        (hooks_dir / "hooks.json").write_text(
+            json.dumps(
+                {
+                    "hooks": {
+                        "PreToolUse": [
+                            {
+                                "matcher": "Read",
+                                "hooks": [
+                                    {
+                                        "type": "command",
+                                        "command": (
+                                            "python3 /deleted/venv/hooks/_dispatch.py "
+                                            "guards/tool_guard"
+                                        ),
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                }
             )
+        )
+        write_installed_plugin_artifact_manifest_locked(
+            incarnation,
+            semantic_key=installed_plugin_semantic_key(_AUTOSKILLIT_PLUGIN_KEY, "1.2.3"),
+            action="test",
+        )
+
+        outcomes = repair_broken_plugin_cache_hooks(cache_dir)
+
+        assert outcomes[0].status is PluginHookRepairStatus.REPAIRED
+        _assert_relocatable((hooks_dir / "hooks.json").read_text())
+
+    def test_projection_repair_outputs_are_relocatable(self, tmp_path: Path) -> None:
+        from autoskillit.workspace._projected_artifact._hook_repair import (
+            PluginHookRepairStatus,
+            repair_broken_projection_hooks,
+        )
+        from autoskillit.workspace._projection_cache import (
+            projected_artifact_manifest_path,
+            projected_plugin_artifact_digest,
+        )
+
+        projections_root = tmp_path / "projections"
+        projection = projections_root / "deadbeefcafe0123"
+        hooks_dir = projection / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "_dispatch.py").write_text("# dispatcher\n")
+        (hooks_dir / "hooks.json").write_text(
+            json.dumps(
+                {
+                    "hooks": {
+                        "PreToolUse": [
+                            {
+                                "matcher": "Read",
+                                "hooks": [
+                                    {
+                                        "type": "command",
+                                        "command": (
+                                            "python3 /deleted/venv/hooks/_dispatch.py "
+                                            "guards/tool_guard"
+                                        ),
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                }
+            )
+        )
+        manifest_path = projected_artifact_manifest_path(projection)
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "artifact_kind": "projection",
+                    "projection_version": 2,
+                    "semantic_key": projection.name,
+                    "incarnation_id": "test-incarnation",
+                    "artifact_digest": projected_plugin_artifact_digest(projection),
+                    "skills": {},
+                }
+            )
+        )
+
+        outcomes = repair_broken_projection_hooks(projections_root)
+
+        assert outcomes[0].status is PluginHookRepairStatus.REPAIRED
+        _assert_relocatable((hooks_dir / "hooks.json").read_text())
+        _assert_relocatable(manifest_path.read_text())

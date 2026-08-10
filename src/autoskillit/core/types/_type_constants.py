@@ -514,8 +514,8 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
             "rollback restoration of original hooks.json/manifest.json bytes after a "
             "failed hook-repair transaction"
         ),
-        machine_local=False,
-        detection=None,
+        machine_local=True,
+        detection="autoskillit.hook_registry:find_broken_hook_scripts",
     ),
     DurableArtifactWriterDef(
         writer="autoskillit.cli._hooks:_write_settings_data",

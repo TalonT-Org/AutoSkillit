@@ -22,6 +22,8 @@ async def test_progress_counters_in_every_recovery_response(
         assert key in envelope
     identity = {key: value for key, value in envelope["recipe_pull"].items() if key != "pull_tool"}
     completed: list[int] = []
+    totals: list[int] = []
+    remaining: list[int] = []
     for requirement in envelope["required_sections"]:
         response = json.loads(
             await get_recipe_section(
@@ -36,4 +38,8 @@ async def test_progress_counters_in_every_recovery_response(
         for key in ("completed_parts", "total_parts", "calls_remaining"):
             assert key in response
         completed.append(response["completed_parts"])
-    assert completed == sorted(completed)
+        totals.append(response["total_parts"])
+        remaining.append(response["calls_remaining"])
+    assert completed == [1, 2]
+    assert totals == [2, 2]
+    assert remaining == [1, 0]

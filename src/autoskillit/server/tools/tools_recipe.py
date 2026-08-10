@@ -719,6 +719,30 @@ async def get_recipe_section(
                 return _recipe_section_failure("invalid_recipe_section_continuation")
             rendered = render_recipe_section_page(page_plan, part)
             rendered_payload = json.loads(rendered)
+            if isinstance(active_initialization, InitializingRecipe):
+                current_progress = next(
+                    item
+                    for item in active_initialization.progress
+                    if item.section == section
+                    and item.page_plan_sha256 == page_plan.page_plan_sha256
+                )
+                total_parts = sum(item.total_parts for item in active_initialization.progress)
+                completed_parts = sum(
+                    item.next_part for item in active_initialization.progress
+                ) + int(part >= current_progress.next_part)
+                rendered_payload.update(
+                    completed_parts=completed_parts,
+                    total_parts=total_parts,
+                    calls_remaining=total_parts - completed_parts,
+                )
+                rendered = json.dumps(
+                    rendered_payload,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+                if len(rendered.encode("utf-8")) > request_state.recipe_section_bound_bytes:
+                    return _recipe_section_failure("recipe_section_bound_too_small")
             content_sha256 = rendered_payload.get("content_sha256")
             if isinstance(active_initialization, ReadyRecipe):
                 if isinstance(content_sha256, str):

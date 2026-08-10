@@ -739,7 +739,7 @@ def _assert_content_integrity(
         if ref is not None and ref.startswith("inputs.") and "skip_when_false" in step_data:
             raise ValueError(
                 f"Content integrity violation: step '{step_name}' retains "
-                f"'skip_when_false' after truthy resolution"
+                f"'skip_when_false' after guard resolution"
             )
         if "on_skip" in step_data:
             raise ValueError(

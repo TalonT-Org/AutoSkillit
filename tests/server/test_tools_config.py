@@ -1,517 +1,394 @@
-"""Tests for configure_fleet and configure_order MCP tools."""
+"""Behavioral tests for session-scoped configuration tools."""
 
 from __future__ import annotations
 
+import fcntl
+import inspect
 import json
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from threading import Barrier, Event
 
 import pytest
 
 from autoskillit.config import AutomationConfig
-from autoskillit.fleet._semaphore import FleetSemaphore
+from autoskillit.core import get_tool_def
+from autoskillit.fleet import FleetSemaphore
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small, pytest.mark.feature("fleet")]
 
-
 _HOOK_CONFIG_RELPATH = (".autoskillit", "temp", ".hook_config.json")
-
-
-@pytest.mark.anyio
-async def test_configure_fleet_writes_overlay(tmp_path, monkeypatch) -> None:
-    """configure_fleet writes fleet params to overlay and returns snapshot."""
-    from autoskillit.server import _state
-    from tests.server._helpers import _HOOK_CONFIG_OVERLAY_RELPATH
-
-    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
-    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(json.dumps({}))
-
-    mock_ctx = _make_mock_ctx()
-    mock_ctx.project_dir = tmp_path
-    mock_ctx.config = AutomationConfig()
-    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3)
-
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(_state, "_ctx", mock_ctx)
-
-    from autoskillit.server.tools.tools_config import configure_fleet
-
-    result = await configure_fleet(max_concurrent_dispatches=5, max_total_issues=20)
-    payload = json.loads(result)
-
-    assert payload["success"] is True
-    overlay_path = tmp_path.joinpath(*_HOOK_CONFIG_OVERLAY_RELPATH)
-    overlay = json.loads(overlay_path.read_text())
-    assert overlay["fleet"]["max_concurrent_dispatches"] == 5
-    assert overlay["fleet"]["max_total_issues"] == 20
-    assert hook_cfg_path.read_text() == "{}"
-    assert "max_concurrent_dispatches" in payload["config"]["fleet"]
-    assert "max_total_issues" in payload["config"]["fleet"]
-
-
-@pytest.mark.anyio
-async def test_configure_fleet_replaces_semaphore(tmp_path, monkeypatch) -> None:
-    """configure_fleet replaces ctx.fleet_lock with resized FleetSemaphore."""
-    from autoskillit.server import _state
-
-    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
-    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(json.dumps({}))
-
-    mock_ctx = _make_mock_ctx()
-    mock_ctx.project_dir = tmp_path
-    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3)
-    mock_ctx.config = AutomationConfig()
-
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(_state, "_ctx", mock_ctx)
-
-    from autoskillit.server.tools.tools_config import configure_fleet
-
-    result = await configure_fleet(max_concurrent_dispatches=6)
-    payload = json.loads(result)
-
-    assert payload["success"] is True
-    assert mock_ctx.fleet_lock.max_concurrent == 6
-
-
-@pytest.mark.anyio
-async def test_configure_fleet_preserves_existing_overlay(tmp_path, monkeypatch) -> None:
-    """configure_fleet merges into existing overlay without clobbering."""
-    from autoskillit.server import _state
-    from tests.server._helpers import _HOOK_CONFIG_OVERLAY_RELPATH
-
-    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
-    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(json.dumps({}))
-
-    overlay_path = tmp_path.joinpath(*_HOOK_CONFIG_OVERLAY_RELPATH)
-    overlay_path.parent.mkdir(parents=True, exist_ok=True)
-    overlay_path.write_text(json.dumps({"quota_guard": {"disabled": True}}))
-
-    mock_ctx = _make_mock_ctx()
-    mock_ctx.project_dir = tmp_path
-    mock_ctx.config = AutomationConfig()
-    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3)
-
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(_state, "_ctx", mock_ctx)
-
-    from autoskillit.server.tools.tools_config import configure_fleet
-
-    result = await configure_fleet(max_total_issues=8)
-    payload = json.loads(result)
-
-    assert payload["success"] is True
-    overlay = json.loads(overlay_path.read_text())
-    assert overlay["quota_guard"]["disabled"] is True
-    assert overlay["fleet"]["max_total_issues"] == 8
-
-
-@pytest.mark.anyio
-async def test_configure_fleet_denies_headless(tmp_path, monkeypatch) -> None:
-    """configure_fleet rejects headless sessions."""
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    from autoskillit.server.tools.tools_config import configure_fleet
-
-    result = await configure_fleet(max_concurrent_dispatches=5)
-    payload = json.loads(result)
-    assert payload["success"] is False
-
-
-@pytest.mark.anyio
-async def test_configure_fleet_returns_error_when_kitchen_not_open(tmp_path, monkeypatch) -> None:
-    """configure_fleet returns error when kitchen is not open."""
-    from autoskillit.server import _state
-
-    mock_ctx = _make_mock_ctx()
-    mock_ctx.project_dir = tmp_path
-
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(_state, "_ctx", mock_ctx)
-
-    from autoskillit.server.tools.tools_config import configure_fleet
-
-    result = await configure_fleet(max_concurrent_dispatches=5)
-    payload = json.loads(result)
-    assert payload["success"] is False
-    assert "not open" in payload["error"]
-
-
-@pytest.mark.anyio
-async def test_configure_order_writes_overlay(tmp_path, monkeypatch) -> None:
-    """configure_order writes order + core params to overlay and returns snapshot."""
-    from autoskillit.server import _state
-    from tests.server._helpers import _HOOK_CONFIG_OVERLAY_RELPATH
-
-    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
-    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(json.dumps({}))
-
-    mock_ctx = _make_mock_ctx()
-    mock_ctx.project_dir = tmp_path
-    mock_ctx.config = AutomationConfig()
-
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(_state, "_ctx", mock_ctx)
-
-    from autoskillit.server.tools.tools_config import configure_order
-
-    result = await configure_order(timeout=3600, default_model="opus")
-    payload = json.loads(result)
-
-    assert payload["success"] is True
-    overlay_path = tmp_path.joinpath(*_HOOK_CONFIG_OVERLAY_RELPATH)
-    overlay = json.loads(overlay_path.read_text())
-    assert overlay["order"]["timeout"] == 3600
-    assert overlay["core"]["default_model"] == "opus"
-    assert "timeout" in payload["config"]["order"]
-
-
-@pytest.mark.anyio
-async def test_configure_order_denies_headless(tmp_path, monkeypatch) -> None:
-    """configure_order rejects headless sessions."""
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    from autoskillit.server.tools.tools_config import configure_order
-
-    result = await configure_order(timeout=3600)
-    payload = json.loads(result)
-    assert payload["success"] is False
-
-
-@pytest.mark.anyio
-async def test_configure_fleet_accumulates_across_calls(tmp_path, monkeypatch) -> None:
-    """configure_fleet accumulates params across multiple calls."""
-    from autoskillit.server import _state
-    from tests.server._helpers import _HOOK_CONFIG_OVERLAY_RELPATH
-
-    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
-    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(json.dumps({}))
-
-    mock_ctx = _make_mock_ctx()
-    mock_ctx.project_dir = tmp_path
-    mock_ctx.config = AutomationConfig()
-
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(_state, "_ctx", mock_ctx)
-
-    from autoskillit.server.tools.tools_config import configure_fleet
-
-    await configure_fleet(max_concurrent_dispatches=5)
-    await configure_fleet(max_total_issues=20)
-
-    overlay_path = tmp_path.joinpath(*_HOOK_CONFIG_OVERLAY_RELPATH)
-    overlay = json.loads(overlay_path.read_text())
-    assert overlay["fleet"]["max_concurrent_dispatches"] == 5
-    assert overlay["fleet"]["max_total_issues"] == 20
-
-
-@pytest.mark.anyio
-async def test_configure_fleet_validates_ceiling(tmp_path, monkeypatch) -> None:
-    """configure_fleet rejects max_concurrent_dispatches above ceiling."""
-    from autoskillit.server import _state
-
-    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
-    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(json.dumps({}))
-
-    mock_ctx = _make_mock_ctx()
-    mock_ctx.project_dir = tmp_path
-
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(_state, "_ctx", mock_ctx)
-
-    from autoskillit.server.tools.tools_config import configure_fleet
-
-    result = await configure_fleet(max_concurrent_dispatches=9)
-    payload = json.loads(result)
-    assert payload["success"] is False
-    assert "must be between" in payload["error"]
-
-
-@pytest.mark.anyio
-async def test_configure_fleet_no_params_returns_defaults(tmp_path, monkeypatch) -> None:
-    """configure_fleet with no params returns full snapshot with defaults."""
-    from autoskillit.server import _state
-
-    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
-    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(json.dumps({}))
-
-    mock_ctx = _make_mock_ctx()
-    mock_ctx.project_dir = tmp_path
-    mock_ctx.config = AutomationConfig()
-    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3)
-
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(_state, "_ctx", mock_ctx)
-
-    from autoskillit.server.tools.tools_config import configure_fleet
-
-    result = await configure_fleet()
-    payload = json.loads(result)
-
-    assert payload["success"] is True
-    assert "max_concurrent_dispatches" in payload["config"]["fleet"]
-    assert "max_total_issues" in payload["config"]["fleet"]
-
-
-@pytest.mark.anyio
-async def test_configure_order_no_params_returns_defaults(tmp_path, monkeypatch) -> None:
-    """configure_order with no params returns full snapshot with defaults."""
-    from autoskillit.server import _state
-
-    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
-    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(json.dumps({}))
-
-    mock_ctx = _make_mock_ctx()
-    mock_ctx.project_dir = tmp_path
-    mock_ctx.config = AutomationConfig()
-
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(_state, "_ctx", mock_ctx)
-
-    from autoskillit.server.tools.tools_config import configure_order
-
-    result = await configure_order()
-    payload = json.loads(result)
-
-    assert payload["success"] is True
-    assert "timeout" in payload["config"]["order"]
-
-
-@pytest.mark.anyio
-async def test_configure_fleet_semaphore_null_fleet_lock(tmp_path, monkeypatch) -> None:
-    """configure_fleet creates new semaphore when fleet_lock is None."""
-    from autoskillit.server import _state
-
-    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
-    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(json.dumps({}))
-
-    mock_ctx = _make_mock_ctx()
-    mock_ctx.project_dir = tmp_path
-    mock_ctx.fleet_lock = None
-    mock_ctx.config = AutomationConfig()
-
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(_state, "_ctx", mock_ctx)
-
-    from autoskillit.server.tools.tools_config import configure_fleet
-
-    result = await configure_fleet(max_concurrent_dispatches=4)
-    payload = json.loads(result)
-
-    assert payload["success"] is True
-    assert mock_ctx.fleet_lock.max_concurrent == 4
-    assert mock_ctx.fleet_lock.timeout is None
-
-
-@pytest.mark.anyio
-async def test_configure_fleet_snapshot_matches_live_semaphore(tmp_path, monkeypatch) -> None:
-    """Snapshot max_concurrent_dispatches must equal ctx.fleet_lock.max_concurrent."""
-    from autoskillit.server import _state
-
-    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
-    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(json.dumps({}))
-
-    mock_ctx = _make_mock_ctx()
-    mock_ctx.project_dir = tmp_path
-    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3)
-    mock_ctx.config = AutomationConfig()
-
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(_state, "_ctx", mock_ctx)
-
-    from autoskillit.server.tools.tools_config import configure_fleet
-
-    result = await configure_fleet(max_concurrent_dispatches=5)
-    payload = json.loads(result)
-
-    assert payload["success"] is True
-    assert mock_ctx.fleet_lock.max_concurrent == 5
-    assert payload["config"]["fleet"]["max_concurrent_dispatches"] == 5
-
-
-@pytest.mark.anyio
-async def test_configure_fleet_acquire_timeout_only_updates_semaphore(
-    tmp_path, monkeypatch
-) -> None:
-    """acquire_timeout_sec-only call must update the live semaphore."""
-    from autoskillit.server import _state
-
-    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
-    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(json.dumps({}))
-
-    mock_ctx = _make_mock_ctx()
-    mock_ctx.project_dir = tmp_path
-    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3)
-    mock_ctx.config = AutomationConfig()
-
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(_state, "_ctx", mock_ctx)
-
-    from autoskillit.server.tools.tools_config import configure_fleet
-
-    result = await configure_fleet(acquire_timeout_sec=30.0)
-    payload = json.loads(result)
-
-    assert payload["success"] is True
-    assert mock_ctx.fleet_lock.timeout == 30.0
-    assert payload["config"]["fleet"]["acquire_timeout_sec"] == 30.0
-
-
-@pytest.mark.anyio
-async def test_configure_fleet_snapshot_reads_semaphore_not_overlay(tmp_path, monkeypatch) -> None:
-    """Snapshot acquire_timeout_sec must reflect the live semaphore's carried-forward timeout."""
-    from autoskillit.server import _state
-
-    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
-    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(json.dumps({}))
-
-    mock_ctx = _make_mock_ctx()
-    mock_ctx.project_dir = tmp_path
-    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3, timeout=60.0)
-    mock_ctx.config = AutomationConfig()
-
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(_state, "_ctx", mock_ctx)
-
-    from autoskillit.server.tools.tools_config import configure_fleet
-
-    result = await configure_fleet(max_concurrent_dispatches=5)
-    payload = json.loads(result)
-
-    assert payload["success"] is True
-    assert mock_ctx.fleet_lock.timeout == 60.0
-    assert payload["config"]["fleet"]["acquire_timeout_sec"] == 60.0
-
-
-@pytest.mark.anyio
-async def test_configure_fleet_close_reopen_resets_semaphore_to_defaults(
-    tmp_path, monkeypatch
-) -> None:
-    """After close/reopen, semaphore must return to config defaults."""
-    from unittest.mock import patch
-
-    from autoskillit.server import _state
-
-    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
-    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(json.dumps({}))
-
-    mock_ctx = _make_mock_ctx()
-    mock_ctx.project_dir = tmp_path
-    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3)
-    mock_ctx.config = AutomationConfig()
-
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(_state, "_ctx", mock_ctx)
-
-    from autoskillit.server.tools.tools_config import configure_fleet
-
-    result = await configure_fleet(max_concurrent_dispatches=6)
-    payload = json.loads(result)
-    assert payload["success"] is True
-    assert mock_ctx.fleet_lock.max_concurrent == 6
-
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server.logger"):
-            from autoskillit.server.tools.tools_kitchen import _close_kitchen_handler
-
-            _close_kitchen_handler()
-
-    assert mock_ctx.fleet_lock.max_concurrent == mock_ctx.config.fleet.max_concurrent_dispatches
-
-    hook_cfg_path.write_text(json.dumps({}))
-    result2 = await configure_fleet()
-    payload2 = json.loads(result2)
-    assert payload2["success"] is True
-    assert (
-        payload2["config"]["fleet"]["max_concurrent_dispatches"]
-        == mock_ctx.config.fleet.max_concurrent_dispatches
+_OVERLAY_RELPATH = (".autoskillit", "temp", ".hook_config_overlay.json")
+
+
+def _open_context(tmp_path, config: AutomationConfig | None = None):
+    baseline = config or AutomationConfig()
+    ctx = _make_mock_ctx(config=baseline)
+    ctx.project_dir = tmp_path
+    ctx.fleet_lock = FleetSemaphore(
+        max_concurrent=baseline.fleet.max_concurrent_dispatches,
+        timeout=baseline.fleet.acquire_timeout_sec,
     )
+    ctx.gate.enabled = True
+    hook_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
+    hook_path.parent.mkdir(parents=True, exist_ok=True)
+    hook_path.write_text("{}")
+    return ctx
+
+
+_BEHAVIOR_CASES = (
+    ("order", "timeout", 321, "order", "timeout"),
+    ("order", "stale_threshold", 11, "order", "stale_threshold"),
+    ("order", "idle_output_timeout", 22, "order", "idle_output_timeout"),
+    ("order", "max_suppression_seconds", 33, "order", "max_suppression_seconds"),
+    ("order", "default_model", "opus", "core", "default_model"),
+    ("fleet", "max_concurrent_dispatches", 4, "fleet", "max_concurrent_dispatches"),
+    ("fleet", "default_timeout_sec", 777, "fleet", "default_timeout_sec"),
+    ("fleet", "max_extension_seconds", 800.0, "fleet", "max_extension_seconds"),
+    ("fleet", "idle_output_timeout", 44.0, "fleet", "idle_output_timeout"),
+    ("fleet", "acquire_timeout_sec", 55.0, "fleet", "acquire_timeout_sec"),
+    ("fleet", "enable_deadline_extension", False, "fleet", "enable_deadline_extension"),
+    ("fleet", "inspector_model", "inspector-x", "fleet", "inspector_model"),
+    ("fleet", "default_model", "haiku", "core", "default_model"),
+)
+
+
+def _observed_value(ctx, section: str, field: str):
+    if field == "max_concurrent_dispatches":
+        return ctx.fleet_lock.max_concurrent
+    if field == "acquire_timeout_sec":
+        return ctx.fleet_lock.timeout
+    target = (
+        ctx.config.model
+        if section == "core"
+        else ctx.config.run_skill
+        if section == "order"
+        else ctx.config.fleet
+    )
+    return getattr(target, field)
+
+
+async def _observe_headless_defaults(ctx, monkeypatch) -> dict[str, object]:
+    import autoskillit.execution.headless as headless
+    from autoskillit.core import SkillResult
+    from autoskillit.execution.headless import DefaultHeadlessExecutor
+
+    observed: dict[str, object] = {}
+
+    async def _capture(_command, _cwd, _ctx, **kwargs):
+        observed.update(kwargs)
+        return SkillResult.crashed(exception=RuntimeError("captured"), skill_command="/test")
+
+    monkeypatch.setattr(headless, "run_headless_core", _capture)
+    await DefaultHeadlessExecutor(ctx).run("/test", str(ctx.project_dir))
+    return observed
 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    "calls",
-    [
-        [{"max_concurrent_dispatches": 4}],
-        [{"acquire_timeout_sec": 15.0}],
-        [{"max_concurrent_dispatches": 4, "acquire_timeout_sec": 15.0}],
-        [{"max_concurrent_dispatches": 4}, {"acquire_timeout_sec": 25.0}],
-    ],
-    ids=["max_only", "timeout_only", "both", "sequential"],
+    ("tool_name", "param", "value", "snapshot_section", "snapshot_field"),
+    _BEHAVIOR_CASES,
 )
-async def test_configure_fleet_snapshot_semaphore_invariant(tmp_path, monkeypatch, calls) -> None:
-    """Snapshot must always match the live semaphore for semaphore-managed fields."""
+async def test_every_public_parameter_changes_its_runtime_observer(
+    tmp_path,
+    monkeypatch,
+    tool_name,
+    param,
+    value,
+    snapshot_section,
+    snapshot_field,
+) -> None:
     from autoskillit.server import _state
+    from autoskillit.server.tools.tools_config import configure_fleet, configure_order
 
-    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
-    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(json.dumps({}))
+    ctx = _open_context(tmp_path)
+    monkeypatch.setattr(_state, "_ctx", ctx)
+    tool = configure_order if tool_name == "order" else configure_fleet
 
-    mock_ctx = _make_mock_ctx()
-    mock_ctx.project_dir = tmp_path
-    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3)
-    mock_ctx.config = AutomationConfig()
+    payload = json.loads(await tool(**{param: value}))
 
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(_state, "_ctx", mock_ctx)
+    assert payload["success"] is True
+    observed = _observed_value(ctx, snapshot_section, snapshot_field)
+    assert observed == value
+    assert payload["config"][snapshot_section][snapshot_field] == observed
 
-    from autoskillit.server.tools.tools_config import configure_fleet
+    overlay = json.loads(tmp_path.joinpath(*_OVERLAY_RELPATH).read_text())
+    overlay_section = "core" if param == "default_model" else tool_name
+    assert overlay[overlay_section][param] == value
 
-    payload = None
-    for call_kwargs in calls:
-        result = await configure_fleet(**call_kwargs)
-        payload = json.loads(result)
-        assert payload["success"] is True
 
-    assert payload is not None
-    assert (
-        payload["config"]["fleet"]["max_concurrent_dispatches"]
-        == mock_ctx.fleet_lock.max_concurrent
-    )
-    if mock_ctx.fleet_lock.timeout is not None:
-        assert payload["config"]["fleet"]["acquire_timeout_sec"] == mock_ctx.fleet_lock.timeout
-    else:
-        assert (
-            payload["config"]["fleet"]["acquire_timeout_sec"]
-            == mock_ctx.config.fleet.acquire_timeout_sec
-        )
+def test_behavior_cases_cover_exact_public_and_registered_parameters() -> None:
+    from autoskillit.server.tools.tools_config import configure_fleet, configure_order
+
+    cases = {(tool_name, param) for tool_name, param, *_ in _BEHAVIOR_CASES}
+    public = {("order", name) for name in inspect.signature(configure_order).parameters} | {
+        ("fleet", name) for name in inspect.signature(configure_fleet).parameters
+    }
+    registered = {("order", param.name) for param in get_tool_def("configure_order").params} | {
+        ("fleet", param.name) for param in get_tool_def("configure_fleet").params
+    }
+
+    assert cases == public == registered
+    assert ("fleet", "max_total_issues") not in registered
+    assert ("fleet", "max_issues_per_food_truck") not in registered
 
 
 @pytest.mark.anyio
-async def test_configure_fleet_passes_inspector_model_through(tmp_path, monkeypatch) -> None:
-    """configure_fleet passes inspector_model to the session config overlay."""
+async def test_partial_updates_accumulate_in_live_config_and_snapshot(
+    tmp_path, monkeypatch
+) -> None:
+    from autoskillit.execution.headless._headless_helpers import resolve_model_identity
     from autoskillit.server import _state
-    from tests.server._helpers import _HOOK_CONFIG_OVERLAY_RELPATH
+    from autoskillit.server.tools.tools_config import configure_order
 
-    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
-    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    hook_cfg_path.write_text(json.dumps({}))
+    ctx = _open_context(tmp_path)
+    monkeypatch.setattr(_state, "_ctx", ctx)
 
-    mock_ctx = _make_mock_ctx()
-    mock_ctx.project_dir = tmp_path
-    mock_ctx.config = AutomationConfig()
-    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3)
+    assert json.loads(await configure_order(timeout=400))["success"] is True
+    payload = json.loads(await configure_order(default_model="opus"))
+    observed = await _observe_headless_defaults(ctx, monkeypatch)
 
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(_state, "_ctx", mock_ctx)
+    assert observed["timeout"] == 400
+    assert resolve_model_identity("", ctx.config).configured_model == "opus"
+    assert payload["config"]["order"]["timeout"] == 400
+    assert payload["config"]["core"]["default_model"] == "opus"
 
+
+@pytest.mark.anyio
+async def test_shared_default_model_is_last_write_wins(tmp_path, monkeypatch) -> None:
+    from autoskillit.execution.headless._headless_helpers import resolve_model_identity
+    from autoskillit.server import _state
+    from autoskillit.server.tools.tools_config import configure_fleet, configure_order
+
+    ctx = _open_context(tmp_path)
+    monkeypatch.setattr(_state, "_ctx", ctx)
+
+    await configure_order(default_model="opus")
+    payload = json.loads(await configure_fleet(default_model="haiku"))
+
+    assert ctx.config.model.default_model == "haiku"
+    assert payload["config"]["core"]["default_model"] == "haiku"
+    assert resolve_model_identity("", ctx.config).configured_model == "haiku"
+    assert resolve_model_identity("explicit", ctx.config).configured_model == "explicit"
+
+
+@pytest.mark.anyio
+async def test_same_worktree_contexts_do_not_import_each_others_overrides(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from autoskillit.execution.headless._headless_helpers import resolve_model_identity
+    from autoskillit.server import _state
+    from autoskillit.server.tools.tools_config import configure_order
+
+    ctx_a = _open_context(tmp_path)
+    ctx_b = _open_context(tmp_path)
+    baseline_model = ctx_a.config.model.default_model
+
+    monkeypatch.setattr(_state, "_ctx", ctx_a)
+    await configure_order(timeout=401)
+    monkeypatch.setattr(_state, "_ctx", ctx_b)
+    await configure_order(default_model="haiku")
+
+    observed_a = await _observe_headless_defaults(ctx_a, monkeypatch)
+    observed_b = await _observe_headless_defaults(ctx_b, monkeypatch)
+    assert observed_a["timeout"] == 401
+    assert resolve_model_identity("", ctx_a.config).configured_model == baseline_model
+    assert observed_b["timeout"] == 7200
+    assert resolve_model_identity("", ctx_b.config).configured_model == "haiku"
+
+
+@pytest.mark.anyio
+async def test_configured_fleet_semaphore_enforces_capacity_and_timeout(
+    tmp_path, monkeypatch
+) -> None:
+    from autoskillit.server import _state
     from autoskillit.server.tools.tools_config import configure_fleet
 
-    result = await configure_fleet(inspector_model="claude-haiku-4-5-20251001")
-    payload = json.loads(result)
+    ctx = _open_context(tmp_path)
+    monkeypatch.setattr(_state, "_ctx", ctx)
 
+    payload = json.loads(
+        await configure_fleet(max_concurrent_dispatches=1, acquire_timeout_sec=0.01)
+    )
     assert payload["success"] is True
-    overlay_path = tmp_path.joinpath(*_HOOK_CONFIG_OVERLAY_RELPATH)
-    overlay = json.loads(overlay_path.read_text())
-    assert overlay["fleet"]["inspector_model"] == "claude-haiku-4-5-20251001"
-    assert payload["config"]["fleet"]["inspector_model"] == "claude-haiku-4-5-20251001"
+
+    await ctx.fleet_lock.acquire()
+    try:
+        assert ctx.fleet_lock.at_capacity() is True
+        with pytest.raises(TimeoutError):
+            await ctx.fleet_lock.acquire()
+    finally:
+        ctx.fleet_lock.release()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "raw_overlay",
+    (
+        "{ malformed",
+        "[]",
+        '{"order": []}',
+        '{"order": {"unknown_setting": 1}}',
+        '{"order": {"timeout": "bad"}}',
+    ),
+)
+async def test_invalid_persisted_overlay_changes_neither_disk_nor_live_state(
+    tmp_path,
+    monkeypatch,
+    raw_overlay,
+) -> None:
+    from autoskillit.server import _state
+    from autoskillit.server.tools.tools_config import configure_order
+
+    ctx = _open_context(tmp_path)
+    overlay_path = tmp_path.joinpath(*_OVERLAY_RELPATH)
+    overlay_path.write_text(raw_overlay)
+    monkeypatch.setattr(_state, "_ctx", ctx)
+
+    payload = json.loads(await configure_order(timeout=500))
+
+    assert payload["success"] is False
+    assert "Invalid session configuration" in payload["error"]
+    assert ctx.config.run_skill.timeout == 7200
+    assert ctx._session_config_overrides == {}
+    assert overlay_path.read_text() == raw_overlay
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "kwargs",
+    (
+        {"timeout": 0},
+        {"stale_threshold": -1},
+        {"idle_output_timeout": -1},
+        {"max_suppression_seconds": -1},
+        {"timeout": True},
+    ),
+)
+async def test_invalid_update_has_no_disk_or_live_partial_commit(
+    tmp_path,
+    monkeypatch,
+    kwargs,
+) -> None:
+    from autoskillit.server import _state
+    from autoskillit.server.tools.tools_config import configure_order
+
+    ctx = _open_context(tmp_path)
+    monkeypatch.setattr(_state, "_ctx", ctx)
+
+    payload = json.loads(await configure_order(**kwargs))
+
+    assert payload["success"] is False
+    assert ctx.config.run_skill.timeout == 7200
+    assert ctx._session_config_overrides == {}
+    assert not tmp_path.joinpath(*_OVERLAY_RELPATH).exists()
+
+
+def test_config_and_ingredient_writers_preserve_each_others_keys(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from autoskillit.server.tools import tools_config, tools_kitchen
+
+    ctx = _open_context(tmp_path)
+    config_holds_lock = Event()
+    ingredient_attempted = Event()
+    real_write_overlay_locked = tools_config.write_overlay_locked
+    real_update_overlay = tools_kitchen.update_overlay
+
+    def wait_for_ingredient(path, value):
+        config_holds_lock.set()
+        assert ingredient_attempted.wait(timeout=1)
+        return real_write_overlay_locked(path, value)
+
+    def observe_ingredient_attempt(project_dir, mutate):
+        assert config_holds_lock.wait(timeout=1)
+        ingredient_attempted.set()
+        return real_update_overlay(project_dir, mutate)
+
+    monkeypatch.setattr(tools_config, "write_overlay_locked", wait_for_ingredient)
+    monkeypatch.setattr(tools_kitchen, "update_overlay", observe_ingredient_attempt)
+
+    def configure() -> None:
+        tools_config._commit_effective_config(ctx, "order", {"timeout": 600}, {})
+
+    def lock_ingredient() -> None:
+        tools_kitchen._write_ingredient_locks(
+            tmp_path,
+            "pipeline-1",
+            {"flag": "false"},
+            None,
+            {},
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        config_future = pool.submit(configure)
+        assert config_holds_lock.wait(timeout=1)
+        ingredient_future = pool.submit(lock_ingredient)
+        config_future.result(timeout=2)
+        ingredient_future.result(timeout=2)
+
+    overlay = json.loads(tmp_path.joinpath(*_OVERLAY_RELPATH).read_text())
+    assert overlay["order"]["timeout"] == 600
+    assert overlay["locked_ingredients"]["pipeline-1"]["flag"] == "false"
+
+
+def test_locked_overlay_excludes_concurrent_nonblocking_caller(tmp_path) -> None:
+    from autoskillit.server.tools._overlay_state import locked_overlay
+
+    lock_path = tmp_path.joinpath(*_OVERLAY_RELPATH).with_suffix(".lock")
+
+    def concurrent_lock_succeeds() -> bool:
+        with lock_path.open("a+b") as handle:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return False
+            fcntl.flock(handle, fcntl.LOCK_UN)
+            return True
+
+    with locked_overlay(tmp_path):
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            acquired = pool.submit(concurrent_lock_succeeds).result(timeout=1)
+
+    assert acquired is False
+
+
+def test_concurrent_configuration_calls_keep_disk_and_live_state(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from autoskillit.server.tools import tools_config
+
+    ctx = _open_context(tmp_path)
+    barrier = Barrier(2)
+    real_locked_overlay = tools_config.locked_overlay
+
+    @contextmanager
+    def synchronized_locked_overlay(project_dir):
+        barrier.wait()
+        with real_locked_overlay(project_dir) as transaction:
+            yield transaction
+
+    monkeypatch.setattr(tools_config, "locked_overlay", synchronized_locked_overlay)
+
+    def configure_timeout() -> None:
+        tools_config._commit_effective_config(ctx, "order", {"timeout": 600}, {})
+
+    def configure_idle() -> None:
+        tools_config._commit_effective_config(
+            ctx,
+            "order",
+            {"idle_output_timeout": 45},
+            {},
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(lambda fn: fn(), (configure_timeout, configure_idle)))
+
+    overlay = json.loads(tmp_path.joinpath(*_OVERLAY_RELPATH).read_text())
+    assert overlay["order"] == {"timeout": 600, "idle_output_timeout": 45}
+    assert ctx.config.run_skill.timeout == 600
+    assert ctx.config.run_skill.idle_output_timeout == 45

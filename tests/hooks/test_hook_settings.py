@@ -222,6 +222,13 @@ def test_merged_hook_config_overlay_wins():
     assert merged["kitchen_id"] == "k1"
 
 
+def test_hook_overlay_mapping_domains_match_core_authority() -> None:
+    from autoskillit.core import OVERLAY_MAPPING_DOMAINS
+    from autoskillit.hooks._hook_settings import _MAPPING_OVERLAY_DOMAINS
+
+    assert _MAPPING_OVERLAY_DOMAINS == OVERLAY_MAPPING_DOMAINS
+
+
 # T-HS-10
 def test_read_quota_cache_returns_data_for_fresh_cache(tmp_path):
     """Call read_quota_cache with a fresh cache file and assert it returns the parsed dict."""

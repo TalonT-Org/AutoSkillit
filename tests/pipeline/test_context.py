@@ -339,6 +339,23 @@ def test_toolcontext_github_review_poster_is_injectable_and_protocol_typed(tmp_p
     assert isinstance(ctx.github_review_poster, GitHubReviewPosterProtocol)
 
 
+def test_toolcontext_replace_reinitializes_private_config_authority(tmp_path) -> None:
+    original = _make_ctx(tmp_path)
+    original._session_config_overrides = {"order": {"timeout": 111}}
+    replacement_config = dataclasses.replace(
+        original.config,
+        run_skill=dataclasses.replace(original.config.run_skill, timeout=222),
+    )
+
+    replaced = dataclasses.replace(original, config=replacement_config)
+
+    assert replaced.config.run_skill.timeout == 222
+    assert replaced._baseline_config.run_skill.timeout == 222
+    assert replaced._session_config_overrides == {}
+    assert replaced.config is not replacement_config
+    assert replaced._baseline_config is not replaced.config
+
+
 def test_toolcontext_response_log_annotated_with_mcp_response_store_protocol() -> None:
     """ToolContext.response_log must be annotated with the McpResponseLog protocol.
 

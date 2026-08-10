@@ -415,8 +415,10 @@ def test_deferred_recall_open_still_prunes(monkeypatch, tmp_path):
     assert not (tracker_dir / "dead-kitchen.json").exists()
 
 
-async def test_close_kitchen_removes_overlay_lock_sidecar(monkeypatch, tmp_path):
-    """The overlay lock sidecar file must be removed alongside the overlay file."""
+async def test_close_kitchen_retains_stable_lock_and_restores_config_baseline(
+    monkeypatch, tmp_path
+):
+    """Close resets live configuration while retaining the stable lock inode."""
     monkeypatch.chdir(tmp_path)
 
     ctx = make_context(
@@ -443,6 +445,14 @@ async def test_close_kitchen_removes_overlay_lock_sidecar(monkeypatch, tmp_path)
         overlay_lock_path.write_text("")
         assert overlay_lock_path.exists()
 
+        from autoskillit.server.tools.tools_config import configure_order
+
+        assert json.loads(await configure_order(timeout=123))["success"] is True
+        assert ctx.config.run_skill.timeout == 123
+
         _close_kitchen_handler()
 
-        assert not overlay_lock_path.exists()
+        assert overlay_lock_path.exists()
+        assert not overlay_path.exists()
+        assert ctx.config.run_skill.timeout == 7200
+        assert ctx._session_config_overrides == {}

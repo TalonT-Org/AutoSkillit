@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -16,6 +17,86 @@ def _make_step_mock(skip_when_false: str | None = None) -> MagicMock:
     step = MagicMock()
     step.skip_when_false = skip_when_false
     return step
+
+
+def test_invalid_persisted_lock_state_returns_controlled_deny(
+    tool_ctx_kitchen_open, tmp_path
+) -> None:
+    from autoskillit.server.tools.tools_execution import _check_ingredient_locks
+
+    temp_dir = tmp_path / ".autoskillit" / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    (temp_dir / ".hook_config_overlay.json").write_text("{ malformed")
+    tool_ctx_kitchen_open.project_dir = tmp_path
+
+    result = json.loads(_check_ingredient_locks("investigate", "pipeline-1") or "{}")
+
+    assert result["success"] is False
+    assert result["stage"] == "preflight:ingredient_locks"
+    assert "Invalid persisted lock state" in result["error"]
+    assert result["retriable"] is False
+
+
+def test_lock_storage_failure_returns_retriable_deny(
+    tool_ctx_kitchen_open,
+    monkeypatch,
+) -> None:
+    from autoskillit.server.tools import tools_execution
+
+    monkeypatch.setattr(
+        tools_execution,
+        "read_overlay",
+        MagicMock(side_effect=OSError("lock storage unavailable")),
+    )
+
+    result = json.loads(
+        tools_execution._check_ingredient_locks("investigate", "pipeline-1") or "{}"
+    )
+
+    assert result["success"] is False
+    assert result["stage"] == "preflight:ingredient_locks"
+    assert "Unable to read persisted lock state" in result["error"]
+    assert result["retriable"] is True
+
+
+def test_wrapped_lock_storage_failure_returns_retriable_deny(
+    tool_ctx_kitchen_open,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from autoskillit.server.tools import tools_execution
+
+    temp_dir = tmp_path / ".autoskillit" / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    (temp_dir / ".hook_config_overlay.json").write_text("{}")
+    tool_ctx_kitchen_open.project_dir = tmp_path
+    monkeypatch.setattr(
+        Path,
+        "read_text",
+        MagicMock(side_effect=OSError("lock storage unavailable")),
+    )
+
+    result = json.loads(
+        tools_execution._check_ingredient_locks("investigate", "pipeline-1") or "{}"
+    )
+
+    assert result["success"] is False
+    assert result["stage"] == "preflight:ingredient_locks"
+    assert "Unable to read persisted lock state" in result["error"]
+    assert result["retriable"] is True
+
+
+def test_unresolved_lock_check_propagates_invalid_overlay(tool_ctx_kitchen_open, tmp_path) -> None:
+    from autoskillit.server.tools._overlay_state import OverlayStateError
+    from autoskillit.server.tools.tools_execution import _has_active_locks
+
+    temp_dir = tmp_path / ".autoskillit" / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    (temp_dir / ".hook_config_overlay.json").write_text("{ malformed")
+    tool_ctx_kitchen_open.project_dir = tmp_path
+
+    with pytest.raises(OverlayStateError):
+        _has_active_locks("pipeline-1")
 
 
 class TestRunSkillDeniesLockedStep:

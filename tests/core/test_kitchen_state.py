@@ -286,3 +286,15 @@ def test_find_caller_session_id_project_dir_argument(tmp_path, monkeypatch):
     write_marker("sess-proj", "recipe-1")
     result = find_caller_session_id(project_dir=tmp_path)
     assert result == "sess-proj"
+
+
+@pytest.mark.parametrize("overlay", ([], {"core": []}, {"quota_guard": []}))
+def test_read_kitchen_id_rejects_invalid_overlay_shapes(tmp_path, overlay):
+    from autoskillit.core.runtime.kitchen_state import read_kitchen_id_from_marker
+
+    config_dir = tmp_path / ".autoskillit" / "temp"
+    config_dir.mkdir(parents=True)
+    (config_dir / ".hook_config.json").write_text(json.dumps({"kitchen_id": "kitchen-1"}))
+    (config_dir / ".hook_config_overlay.json").write_text(json.dumps(overlay))
+
+    assert read_kitchen_id_from_marker(tmp_path) == ""

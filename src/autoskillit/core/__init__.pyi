@@ -234,6 +234,7 @@ from .runtime.executable_binding import (
 from .runtime.executable_binding import (
     resolve_executable_launch_binding as resolve_executable_launch_binding,
 )
+from .runtime.kitchen_state import OVERLAY_MAPPING_DOMAINS as OVERLAY_MAPPING_DOMAINS
 from .runtime.kitchen_state import KitchenMarker as KitchenMarker
 from .runtime.kitchen_state import find_caller_session_id as find_caller_session_id
 from .runtime.kitchen_state import get_state_dir as get_state_dir
@@ -388,6 +389,7 @@ from .types import FEATURE_REGISTRY as FEATURE_REGISTRY
 from .types import FLEET_DISPATCH_MODE as FLEET_DISPATCH_MODE
 from .types import FLEET_DISPATCH_TOOLS as FLEET_DISPATCH_TOOLS
 from .types import FLEET_ERROR_CODES as FLEET_ERROR_CODES
+from .types import FLEET_INSPECTOR_MODEL_ENV_VAR as FLEET_INSPECTOR_MODEL_ENV_VAR
 from .types import FLEET_MENU_TOOLS as FLEET_MENU_TOOLS
 from .types import FLEET_MODE_ENV_VAR as FLEET_MODE_ENV_VAR
 from .types import FLEET_SESSION_REQUIRED_ENV as FLEET_SESSION_REQUIRED_ENV
@@ -1111,6 +1113,7 @@ from .types import resolve_skill_name as resolve_skill_name
 from .types import resolve_target_skill as resolve_target_skill
 from .types import resume_spec_from_cli as resume_spec_from_cli
 from .types import review_receipt_validation_error as review_receipt_validation_error
+from .types import select_child_session_deadline as select_child_session_deadline
 from .types import session_type as session_type
 from .types import session_type_for_skill_execution_role as session_type_for_skill_execution_role
 from .types import strip_context_window_suffix as strip_context_window_suffix

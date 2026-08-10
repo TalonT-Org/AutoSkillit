@@ -63,6 +63,18 @@ class TestRecordPipelineStepInit:
         assert tracker["steps"]["review"]["status"] == "pending"
 
     @pytest.mark.anyio
+    async def test_init_rejects_corrupt_overlay_state(self):
+        overlay_path = self.tmp_path / ".autoskillit" / "temp" / ".hook_config_overlay.json"
+        overlay_path.parent.mkdir(parents=True, exist_ok=True)
+        overlay_path.write_text("{ malformed")
+
+        result = json.loads(await record_pipeline_step(pipeline_id="AB", op="init"))
+
+        assert result["success"] is False
+        tracker_path = self.tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "AB.json"
+        assert not tracker_path.exists()
+
+    @pytest.mark.anyio
     async def test_init_pipeline_id_fallback_to_env(self, monkeypatch):
         monkeypatch.setenv("AUTOSKILLIT_DISPATCH_ID", "XY")
         result = json.loads(await record_pipeline_step(pipeline_id="", op="init"))

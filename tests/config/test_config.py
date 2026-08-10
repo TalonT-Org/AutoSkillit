@@ -457,6 +457,19 @@ class TestRunSkillConfigFields:
         cfg = AutomationConfig()
         assert cfg.run_skill.timeout == 7200
 
+    @pytest.mark.parametrize(
+        "kwargs",
+        (
+            {"timeout": 0},
+            {"stale_threshold": -1},
+            {"idle_output_timeout": -1},
+            {"max_suppression_seconds": -1},
+        ),
+    )
+    def test_dynamic_timing_fields_reject_invalid_ranges(self, kwargs):
+        with pytest.raises(ValueError):
+            RunSkillConfig(**kwargs)
+
 
 class TestRunSkillConfigExitAfterStopDelay:
     def test_default_exit_after_stop_delay_is_2000(self):

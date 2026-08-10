@@ -94,12 +94,10 @@ def test_registry_preserves_typed_handler_wire_contracts() -> None:
     expected = {
         "configure_fleet": {
             "max_concurrent_dispatches": ToolWireType.INTEGER,
-            "max_total_issues": ToolWireType.INTEGER,
             "default_timeout_sec": ToolWireType.INTEGER,
             "max_extension_seconds": ToolWireType.INTEGER,
             "idle_output_timeout": ToolWireType.INTEGER,
             "acquire_timeout_sec": ToolWireType.INTEGER,
-            "max_issues_per_food_truck": ToolWireType.INTEGER,
             "enable_deadline_extension": ToolWireType.BOOLEAN,
         },
         "configure_order": {

@@ -393,7 +393,11 @@ async def test_run_skill_injects_provider_extras_when_feature_enabled(
 
     await run_skill("/autoskillit:probe", str(tmp_path))
 
-    assert executor.calls[0].provider_extras == {"ANTHROPIC_API_KEY": "test-key-xyz"}
+    assert {
+        key: value
+        for key, value in (executor.calls[0].provider_extras or {}).items()
+        if key != "AUTOSKILLIT_SESSION_DEADLINE"
+    } == {"ANTHROPIC_API_KEY": "test-key-xyz"}
     assert executor.calls[0].profile_name == "vertex"
     assert executor.calls[0].provider_name == "vertex"
 
@@ -413,7 +417,7 @@ async def test_run_skill_provider_extras_none_when_feature_disabled(
 
     await run_skill("/autoskillit:probe", str(tmp_path))
 
-    assert executor.calls[0].provider_extras is None
+    assert set(executor.calls[0].provider_extras or {}) == {"AUTOSKILLIT_SESSION_DEADLINE"}
     assert executor.calls[0].profile_name == ""
     assert executor.calls[0].provider_name == ""
 
@@ -437,7 +441,7 @@ async def test_run_skill_provider_extras_none_when_default_profile(
 
     await run_skill("/autoskillit:probe", str(tmp_path))
 
-    assert executor.calls[0].provider_extras is None
+    assert set(executor.calls[0].provider_extras or {}) == {"AUTOSKILLIT_SESSION_DEADLINE"}
     assert executor.calls[0].profile_name == ""
     assert executor.calls[0].provider_name == ""
 
@@ -604,10 +608,11 @@ async def test_run_skill_passes_inspector_eligible_when_fleet_dispatch(
 ) -> None:
     """When DISPATCH_ID_ENV_VAR is set and fleet has inspector_model, run_skill passes params."""
 
-    from autoskillit.core import DISPATCH_ID_ENV_VAR
+    from autoskillit.core import DISPATCH_ID_ENV_VAR, FLEET_INSPECTOR_MODEL_ENV_VAR
     from tests.fakes import InMemoryHeadlessExecutor
 
     monkeypatch.setenv(DISPATCH_ID_ENV_VAR, "test-dispatch-id-123")
+    monkeypatch.setenv(FLEET_INSPECTOR_MODEL_ENV_VAR, "configured-inspector")
 
     from autoskillit.config import AutomationConfig
 
@@ -623,7 +628,31 @@ async def test_run_skill_passes_inspector_eligible_when_fleet_dispatch(
 
     assert len(executor.calls) == 1
     assert executor.calls[0].inspector_eligible is True
-    assert executor.calls[0].inspector_model == "claude-haiku-4-5-20251001"
+    assert executor.calls[0].inspector_model == "configured-inspector"
+
+
+@pytest.mark.anyio
+async def test_run_skill_falls_back_to_static_inspector_in_fleet_dispatch(
+    tool_ctx_kitchen_open, monkeypatch
+) -> None:
+    from autoskillit.config import AutomationConfig
+    from autoskillit.core import DISPATCH_ID_ENV_VAR, FLEET_INSPECTOR_MODEL_ENV_VAR
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    monkeypatch.setenv(DISPATCH_ID_ENV_VAR, "test-dispatch-id-123")
+    monkeypatch.delenv(FLEET_INSPECTOR_MODEL_ENV_VAR, raising=False)
+    config = AutomationConfig()
+    config.fleet.inspector_model = "static-inspector"
+    tool_ctx_kitchen_open.config = config
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    await run_skill("/test skill", "/tmp")
+
+    assert executor.calls[0].inspector_eligible is True
+    assert executor.calls[0].inspector_model == "static-inspector"
 
 
 @pytest.mark.anyio

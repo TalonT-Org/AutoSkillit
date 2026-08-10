@@ -89,6 +89,18 @@ _V1_TOKEN_FIELD_ALIASES: dict[str, str] = {
     "cache_read_input_tokens": "cache_read_tokens",
 }
 
+_MAPPING_OVERLAY_DOMAINS: frozenset[str] = frozenset(
+    {
+        "order",
+        "fleet",
+        "core",
+        "locked_ingredients",
+        "locked_steps",
+        "git_ops_policy",
+        "quota_guard",
+    }
+)
+
 
 @dataclass(frozen=True, slots=True)
 class QuotaHookSettings:
@@ -102,6 +114,12 @@ class QuotaHookSettings:
 
 def merge_hook_configs(base: dict, overlay: dict) -> dict:
     """Merge base and overlay hook config dicts (overlay wins, shallow dict merge)."""
+    if not isinstance(base, dict) or not isinstance(overlay, dict):
+        raise TypeError("hook configuration roots must be mappings")
+    for source in (base, overlay):
+        for domain in _MAPPING_OVERLAY_DOMAINS:
+            if domain in source and not isinstance(source[domain], dict):
+                raise TypeError(f"hook configuration domain {domain!r} must be a mapping")
     merged = dict(base)
     for k, v in overlay.items():
         if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):

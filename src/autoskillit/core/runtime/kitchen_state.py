@@ -15,6 +15,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+OVERLAY_MAPPING_DOMAINS: frozenset[str] = frozenset(
+    {
+        "order",
+        "fleet",
+        "core",
+        "locked_ingredients",
+        "locked_steps",
+        "git_ops_policy",
+        "quota_guard",
+    }
+)
+
 
 @dataclass(frozen=True, slots=True)
 class KitchenMarker:
@@ -171,16 +183,23 @@ def read_kitchen_id_from_marker(base: Path | None = None) -> str:
         merged: dict = {}
         if base_path.exists():
             loaded = json.loads(base_path.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                merged = dict(loaded)
+            if not isinstance(loaded, dict):
+                return ""
+            merged = dict(loaded)
         if overlay_path.exists():
             overlay = json.loads(overlay_path.read_text(encoding="utf-8"))
-            if isinstance(overlay, dict):
-                for k, v in overlay.items():
-                    if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):
-                        merged[k] = {**merged[k], **v}
-                    else:
-                        merged[k] = v
+            if not isinstance(overlay, dict):
+                return ""
+            if any(
+                key in overlay and not isinstance(overlay[key], dict)
+                for key in OVERLAY_MAPPING_DOMAINS
+            ):
+                return ""
+            for k, v in overlay.items():
+                if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):
+                    merged[k] = {**merged[k], **v}
+                else:
+                    merged[k] = v
         return str(merged.get("kitchen_id") or merged.get("pipeline_id", ""))
     except (OSError, json.JSONDecodeError, AttributeError, TypeError):
         return ""

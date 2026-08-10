@@ -9,6 +9,7 @@ import json
 import os
 from collections.abc import Awaitable, Callable, Mapping
 from contextvars import ContextVar
+from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NotRequired, TypedDict, cast
@@ -86,7 +87,6 @@ from autoskillit.server._guards import _backend_supports_quota, _require_orchest
 from autoskillit.server._misc import (
     _apply_triage_gate,
     _build_hook_diagnostic_warning,
-    _hook_config_overlay_path,
     _hook_config_path,
     _pipeline_tracker_dir,
     _pipeline_tracker_path,
@@ -115,6 +115,12 @@ from autoskillit.server.tools._auto_overrides import (
     _compute_effective_backend_map,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
+from autoskillit.server.tools._overlay_state import (
+    OverlayStateError,
+    locked_overlay,
+    read_overlay,
+    update_overlay,
+)
 from autoskillit.server.tools._pipeline_deps import _derive_phase_a_deps
 from autoskillit.server.tools._preflight import (
     _check_dispatch_feasibility,
@@ -573,21 +579,19 @@ def _update_hook_config_with_git_ops_policy() -> None:
 
     ctx = _get_ctx()
     hook_cfg_path = _hook_config_path(ctx.project_dir)
-    overlay_path = _hook_config_overlay_path(ctx.project_dir)
     try:
         payload = json.loads(hook_cfg_path.read_text())
     except (OSError, json.JSONDecodeError):
         logger.warning("hook_config_git_ops_policy_update_read_failed", path=str(hook_cfg_path))
         return
     git_ops_policy: dict = payload.get("git_ops_policy", {})
-    if overlay_path.exists():
-        try:
-            overlay = json.loads(overlay_path.read_text())
-            overlay_policy = overlay.get("git_ops_policy", {})
-            if overlay_policy:
-                git_ops_policy = {**git_ops_policy, **overlay_policy}
-        except (OSError, json.JSONDecodeError):
-            pass
+    try:
+        overlay_policy = read_overlay(ctx.project_dir).get("git_ops_policy", {})
+    except (OSError, OverlayStateError):
+        logger.warning("hook_config_git_ops_policy_overlay_invalid", exc_info=True)
+        return
+    if overlay_policy:
+        git_ops_policy = {**git_ops_policy, **overlay_policy}
     payload["git_ops_policy"] = git_ops_policy
     try:
         atomic_write(hook_cfg_path, json.dumps(payload))
@@ -886,7 +890,25 @@ def _close_kitchen_handler() -> None:
     if ctx.quota_refresh_task is not None:
         ctx.quota_refresh_task.cancel()
         ctx.quota_refresh_task = None
-    ctx.gate.disable()
+    baseline_config = deepcopy(ctx._baseline_config)
+    baseline_lock = FleetSemaphore(
+        max_concurrent=baseline_config.fleet.max_concurrent_dispatches,
+        timeout=baseline_config.fleet.acquire_timeout_sec,
+    )
+    hook_cfg_path = _hook_config_path(ctx.project_dir)
+    with locked_overlay(ctx.project_dir) as (overlay_path, _):
+        ctx.gate.disable()
+        try:
+            hook_cfg_path.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("hook_config_remove_failed", path=str(hook_cfg_path))
+        try:
+            overlay_path.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("hook_config_overlay_remove_failed", path=str(overlay_path))
+        ctx._session_config_overrides.clear()
+        ctx.config = baseline_config
+        ctx.fleet_lock = baseline_lock
     try:
         unregister_active_kitchen(ctx.kitchen_id)
     except Exception:
@@ -923,29 +945,6 @@ def _close_kitchen_handler() -> None:
                 atomic_write(orphan_path, fast_dumps(orphan_usage))
             except Exception:
                 logger.warning("close_kitchen_orphan_drain_failed", exc_info=True)
-    hook_cfg_path = _hook_config_path(ctx.project_dir)
-    try:
-        hook_cfg_path.unlink(missing_ok=True)
-    except OSError:
-        logger.warning("hook_config_remove_failed", path=str(hook_cfg_path))
-    overlay_path = _hook_config_overlay_path(ctx.project_dir)
-    try:
-        overlay_path.unlink(missing_ok=True)
-    except OSError:
-        logger.warning("hook_config_overlay_remove_failed", path=str(overlay_path))
-    overlay_lock_path = overlay_path.with_suffix(".lock")
-    try:
-        overlay_lock_path.unlink(missing_ok=True)
-    except OSError:
-        logger.warning("hook_config_overlay_lock_remove_failed", path=str(overlay_lock_path))
-    ctx.fleet_lock = None
-    try:
-        ctx.fleet_lock = FleetSemaphore(
-            max_concurrent=ctx.config.fleet.max_concurrent_dispatches,
-            timeout=ctx.config.fleet.acquire_timeout_sec,
-        )
-    except (TypeError, ValueError):
-        logger.warning("fleet_lock_reset_skipped", exc_info=True)
     tracker_dir = _pipeline_tracker_dir(ctx.project_dir)
     try:
         if tracker_dir.is_dir():
@@ -1887,49 +1886,24 @@ def _write_ingredient_locks(
     new_locked: dict[str, str] | None,
     unlock_keys: list[str] | None,
     active_steps: dict,
-) -> tuple[bool, dict]:
-    """Atomically read-modify-write ingredient locks under flock.
+) -> dict:
+    """Atomically read-modify-write ingredient locks under the session lock."""
 
-    All state reads and merges happen inside the flock to prevent concurrent
-    callers from overwriting each other's updates.
-    """
-    overlay_path = _hook_config_overlay_path(project_dir)
-    lock_path = overlay_path.with_suffix(".lock")
-    overlay_path.parent.mkdir(parents=True, exist_ok=True)
+    def _mutate(existing: dict) -> None:
+        locked_ingredients = existing.setdefault("locked_ingredients", {})
+        current = dict(locked_ingredients.get(pipeline_id, {}))
+        if unlock_keys:
+            _apply_unlock_keys(current, unlock_keys)
+        if new_locked:
+            current.update(new_locked)
+        if new_locked or unlock_keys:
+            locked_ingredients[pipeline_id] = current
+            existing.setdefault("locked_steps", {})[pipeline_id] = _compute_unlocked_steps(
+                active_steps,
+                current,
+            )
 
-    import fcntl
-
-    with open(lock_path, "wb") as fh:
-        fcntl.flock(fh, fcntl.LOCK_EX)
-        try:
-            existing = {}
-            if overlay_path.exists():
-                try:
-                    existing = json.loads(overlay_path.read_text())
-                except (json.JSONDecodeError, OSError):
-                    pass
-
-            li = existing.setdefault("locked_ingredients", {})
-            current_pipeline_li = dict(li.get(pipeline_id, {}))
-
-            if unlock_keys:
-                _apply_unlock_keys(current_pipeline_li, unlock_keys)
-
-            if new_locked:
-                current_pipeline_li.update(new_locked)
-
-            if new_locked or unlock_keys:
-                li[pipeline_id] = current_pipeline_li
-
-            unlocked_steps = _compute_unlocked_steps(active_steps, current_pipeline_li)
-            ls = existing.setdefault("locked_steps", {})
-            if new_locked or unlock_keys:
-                ls[pipeline_id] = unlocked_steps
-
-            atomic_write(overlay_path, json.dumps(existing))
-            return True, existing
-        finally:
-            pass
+    return update_overlay(project_dir, _mutate)
 
 
 def _compute_unlocked_steps(
@@ -2053,7 +2027,7 @@ async def lock_ingredients(
                     }
                 )
 
-        success, updated = _write_ingredient_locks(
+        updated = _write_ingredient_locks(
             ctx.project_dir,
             effective_pipeline_id,
             locked,
@@ -2063,7 +2037,7 @@ async def lock_ingredients(
 
         return json.dumps(
             {
-                "success": success,
+                "success": True,
                 "locked": updated.get("locked_ingredients", {}).get(effective_pipeline_id, {}),
                 "locked_steps": updated.get("locked_steps", {}).get(effective_pipeline_id, {}),
             }

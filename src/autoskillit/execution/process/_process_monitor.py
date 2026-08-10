@@ -244,7 +244,7 @@ async def _session_log_monitor(
                 for f in session_log_dir.iterdir()
                 if f.suffix == ".jsonl" and f.stat().st_ctime > spawn_time
             ]
-            if expected_session_id:
+            if expected_session_id and resume_cursor is not None:
                 expected_file = session_log_dir / f"{expected_session_id}.jsonl"
                 if expected_file.is_file() and expected_file not in candidates:
                     candidates.append(expected_file)
@@ -308,7 +308,11 @@ async def _session_log_monitor(
     # prior session. Starting at the current file boundary ensures Phase 2 only
     # scans content written AFTER monitoring began.
     try:
-        scan_pos = lifecycle_cursor.run_boundary
+        scan_pos = (
+            lifecycle_cursor.run_boundary
+            if resume_cursor is not None
+            else session_file.stat().st_size
+        )
         last_size = session_file.stat().st_size
     except OSError:
         logger.warning(

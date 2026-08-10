@@ -123,6 +123,7 @@ class SubprocessResult:
     """
     proc_snapshots: list[dict[str, object]] | None = None
     channel_b_session_id: str = ""
+    lifecycle_observation_enabled: bool = False
     lifecycle_observation_complete: bool = False
     pending_task_ids: tuple[str, ...] = ()
     schedule_wakeup_violation: bool = False

@@ -118,6 +118,10 @@ When `run_skill` returns `needs_retry=true` for **any step**:
   but prior tool calls suggest partial progress on disk.
 - **If `retry_reason: idle_stall` AND `lifespan_started` is false** → fall through to `on_failure`.
   No progress was made.
+- **If `retry_reason: async_obligation`** → fall through to `on_failure`. Backend-owned
+  work or a scheduled wakeup remained unresolved, the bounded completion drain expired,
+  or authoritative lifecycle evidence was unavailable. Start fresh; do not poll or resume
+  the prior session.
 - **If `retry_reason: rate_limited` AND the step defines `on_rate_limit`** → follow `on_rate_limit`.
   HTTP 429 or text-based rate-limit signal detected. Route to the designated recovery step
   (typically `test`) to continue after the rate limit window resets. Partial progress may

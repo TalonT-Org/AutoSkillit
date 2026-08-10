@@ -83,6 +83,7 @@ def test_backend_capabilities_field_count():
     }
     assert bool_fields == {
         "channel_b_capable",
+        "supports_task_lifecycle_events",
         "has_unguarded_filesystem_access",
         "terminal_explorer_capable",
         "session_scoped_explorer_capable",
@@ -143,6 +144,7 @@ def test_backend_capabilities_field_names_locked():
 
     expected = {
         "channel_b_capable",
+        "supports_task_lifecycle_events",
         "has_unguarded_filesystem_access",
         "terminal_explorer_capable",
         "session_scoped_explorer_capable",
@@ -202,6 +204,7 @@ def test_claude_code_capabilities_field_values():
     from autoskillit.core import CLAUDE_CODE_CAPABILITIES, HookTrustPolicy
 
     assert CLAUDE_CODE_CAPABILITIES.channel_b_capable is True
+    assert CLAUDE_CODE_CAPABILITIES.supports_task_lifecycle_events is True
     assert CLAUDE_CODE_CAPABILITIES.pty_required is True
     assert CLAUDE_CODE_CAPABILITIES.session_resume_capable is True
     assert CLAUDE_CODE_CAPABILITIES.skill_injection_capable is True

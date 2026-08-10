@@ -20,13 +20,13 @@ NEW_HEADLESS_MODULES = [
 HEADLESS_SIZE_BUDGETS = {
     "headless/__init__.py": 550,
     "headless/_headless_helpers.py": 220,
-    # +1: canonical full-name effective execution-identity binding required by review #4464.
-    "headless/_headless_execute.py": 636,
+    # #4233 threads backend resume identity and the skill-only lifecycle enable flag.
+    "headless/_headless_execute.py": 642,
     "headless/_headless_launch.py": 500,
     "headless/_headless_recovery.py": 540,
     "headless/_headless_path_tokens.py": 190,
-    # #4457 validates contract-declared artifacts at the final adjudication seam.
-    "headless/_headless_result.py": 970,
+    # #4233 and #4457 keep lifecycle and artifact gates at the final adjudication seam.
+    "headless/_headless_result.py": 1015,
     "headless/_headless_evidence.py": 310,
 }
 

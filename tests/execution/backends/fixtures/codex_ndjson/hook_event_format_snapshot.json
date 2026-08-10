@@ -1,5 +1,5 @@
 {
-  "_registry_hash": "b5d7646c1545be063cdfb5fc1bde32616943c8427667f31d805d8fd0a6da05e5",
+  "_registry_hash": "f4414316609cc8e05f20d7defe65ddf487f31e26ccb7d0ad2aaebc13361d7cda",
   "hooks": {
     "PostToolUse": [
       {
@@ -264,7 +264,7 @@
             "type": "command"
           }
         ],
-        "matcher": "Bash|Agent"
+        "matcher": "Bash|Agent|ScheduleWakeup"
       },
       {
         "hooks": [

@@ -666,7 +666,7 @@ class TestGroupDApiContractPreservation:
     # ------------------------------------------------------------------
 
     def test_req_api_005_subprocess_result_field_names(self):
-        """SubprocessResult must have exactly the 23 canonical fields."""
+        """SubprocessResult must have exactly the 24 canonical fields."""
         from autoskillit.core.types import SubprocessResult
 
         fields = {f.name for f in dataclasses.fields(SubprocessResult)}
@@ -679,6 +679,7 @@ class TestGroupDApiContractPreservation:
             "channel_confirmation",
             "proc_snapshots",
             "channel_b_session_id",
+            "lifecycle_observation_enabled",
             "lifecycle_observation_complete",
             "pending_task_ids",
             "schedule_wakeup_violation",
@@ -708,6 +709,7 @@ class TestGroupDApiContractPreservation:
         field_map = {f.name: f for f in dataclasses.fields(SubprocessResult)}
         assert field_map["channel_confirmation"].default == ChannelConfirmation.UNMONITORED
         assert field_map["lifecycle_observation_complete"].default is False
+        assert field_map["lifecycle_observation_enabled"].default is False
         assert field_map["pending_task_ids"].default == ()
         assert field_map["process_group_id"].default == 0
 

@@ -500,6 +500,7 @@ async def _watch_session_log(
     session_id: str | None = None,
     on_session_id_resolved: Callable[[str], None] | None = None,
     backend_resume_session_id: str = "",
+    channel_b_selected: anyio.Event | None = None,
 ) -> None:
     """Monitor the session JSONL log and deposit the Channel B signal.
 
@@ -527,7 +528,8 @@ async def _watch_session_log(
 
     def _selected(_path: Path, cursor: EventCursor) -> None:
         acc.channel_b_cursor = cursor
-        channel_b_ready.set()
+        if channel_b_selected is not None:
+            channel_b_selected.set()
 
     _monitor_kwargs["on_session_file_selected"] = _selected
     if max_suppression_seconds is not None:
@@ -579,7 +581,7 @@ async def _watch_session_log(
 async def _watch_completion_eligibility(
     acc: RaceAccumulator,
     trigger: anyio.Event,
-    channel_b_ready: anyio.Event,
+    channel_b_selected: anyio.Event,
     completion_drain_timeout: float,
     child_deferral_ceiling: float,
     stream_parser: StreamParser,
@@ -591,7 +593,7 @@ async def _watch_completion_eligibility(
     await acc.completion_candidate_event.wait()
     if session_log_enabled and acc.channel_b_cursor is None:
         with anyio.move_on_after(completion_drain_timeout):
-            await channel_b_ready.wait()
+            await channel_b_selected.wait()
     started = min(
         timestamp
         for timestamp in (acc.channel_a_candidate_at, acc.channel_b_candidate_at)

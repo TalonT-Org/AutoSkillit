@@ -104,6 +104,7 @@ def test_pending_lifecycle_obligation_preempts_success() -> None:
         stderr="",
         termination=TerminationReason.NATURAL_EXIT,
         pid=1,
+        lifecycle_observation_enabled=True,
         lifecycle_observation_complete=True,
         pending_task_ids=("task-1",),
     )
@@ -124,6 +125,7 @@ def test_observed_empty_lifecycle_preserves_success() -> None:
         stderr="",
         termination=TerminationReason.NATURAL_EXIT,
         pid=1,
+        lifecycle_observation_enabled=True,
         lifecycle_observation_complete=True,
     )
     skill_result = _build_skill_result(
@@ -141,6 +143,7 @@ def test_unobserved_lifecycle_without_foldable_source_fails_safe() -> None:
         stderr="",
         termination=TerminationReason.NATURAL_EXIT,
         pid=1,
+        lifecycle_observation_enabled=True,
     )
     skill_result = _build_skill_result(
         result,

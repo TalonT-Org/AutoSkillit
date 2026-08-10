@@ -436,6 +436,7 @@ async def run_managed_async(
             )
             trigger = anyio.Event()
             channel_b_ready = anyio.Event()
+            channel_b_selected = anyio.Event()
             stdout_session_id_ready = anyio.Event()
             timeout_scope_ref: list[anyio.CancelScope | None] = [None]
 
@@ -485,13 +486,14 @@ async def run_managed_async(
                         session_id,
                         on_session_id_resolved,
                         backend_resume_session_id,
+                        channel_b_selected,
                     )
                 if lifecycle_observation_enabled:
                     tg.start_soon(
                         _watch_completion_eligibility,
                         acc,
                         trigger,
-                        channel_b_ready,
+                        channel_b_selected,
                         completion_drain_timeout,
                         child_deferral_ceiling,
                         lifecycle_parser,
@@ -643,6 +645,7 @@ async def run_managed_async(
                 channel_confirmation=_channel_confirmation,
                 proc_snapshots=snapshots_data,
                 channel_b_session_id=signals.channel_b_session_id,
+                lifecycle_observation_enabled=lifecycle_observation_enabled,
                 lifecycle_observation_complete=signals.lifecycle_observation_complete,
                 pending_task_ids=signals.pending_task_ids,
                 schedule_wakeup_violation=signals.schedule_wakeup_violation,

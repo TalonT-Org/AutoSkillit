@@ -275,6 +275,32 @@ def _configure_open_kitchen_mock(ctx, steps, tmp_path):
 
 
 class TestOpenKitchenAutoInitTracker:
+    def test_auto_init_releases_authority_when_initialization_raises(self, monkeypatch, tmp_path):
+        from autoskillit.recipe.schema import RecipeStep
+        from autoskillit.server.tools.tools_kitchen import _auto_init_pipeline_tracker
+        from tests.server.conftest import _make_mock_ctx
+
+        ctx = _make_mock_ctx()
+        ctx.project_dir = tmp_path
+        ctx.kitchen_id = "kitchen-error"
+        ctx.active_recipe_steps = {
+            "rectify": RecipeStep(name="rectify", on_success="review_approach"),
+            "review_approach": RecipeStep(name="review_approach"),
+        }
+
+        def _raise(*_args):
+            raise RuntimeError("initialization failed")
+
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_kitchen.initialize_kitchen_tracker", _raise
+        )
+
+        with pytest.raises(RuntimeError, match="initialization failed"):
+            _auto_init_pipeline_tracker(ctx)
+
+        assert ctx.tracker_leases == {}
+        assert ctx.kitchen_tracker_key is None
+
     def test_auto_init_preserves_corrupt_authority(self, tmp_path):
         from autoskillit.recipe.schema import RecipeStep
         from autoskillit.server.tools.tools_kitchen import (

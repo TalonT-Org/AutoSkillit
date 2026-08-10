@@ -32,6 +32,7 @@ from autoskillit.config import (
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     PIPELINE_FORBIDDEN_TOOLS,
+    ArtifactLease,
     ProcessStaleError,
     RecipeDeliveryRequest,
     RecipeLoadError,
@@ -606,7 +607,7 @@ def _update_hook_config_with_git_ops_policy() -> None:
 
 def _retain_kitchen_tracker_authority(
     tool_ctx: ToolContext,
-) -> tuple[TrackerParticipantKey, Any]:
+) -> tuple[TrackerParticipantKey, ArtifactLease]:
     """Retain this process incarnation's kitchen tracker lease."""
     target = TrackerAuthorityTarget.for_project(
         tool_ctx.project_dir,
@@ -712,10 +713,26 @@ def _auto_init_pipeline_tracker(tool_ctx: ToolContext) -> str | None:
         "dependencies": dependencies,
         "initialized_at": datetime.now(UTC).isoformat(),
     }
-    result = initialize_kitchen_tracker(key.target, lease, tracker_data)
+    try:
+        result = initialize_kitchen_tracker(key.target, lease, tracker_data)
+    except Exception:
+        _release_kitchen_tracker_authority(tool_ctx, unregister=False, retire=False)
+        raise
     if result.error is not None:
         _release_kitchen_tracker_authority(tool_ctx, unregister=False, retire=False)
     return result.error
+
+
+def _pipeline_tracker_auto_init_failure(tool_ctx: ToolContext, error: str) -> str:
+    """Abort kitchen opening after tracker initialization fails."""
+    transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
+    tool_ctx.gate.disable()
+    tool_ctx.gate_infrastructure_ready = False
+    return _kitchen_failure_envelope(
+        RuntimeError(error),
+        stage="pipeline_tracker_auto_init",
+        user_hint=error,
+    )
 
 
 async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str | None:
@@ -1476,14 +1493,7 @@ async def open_kitchen(
                 if tool_ctx.active_recipe_steps is not None:
                     _tracker_error = _auto_init_pipeline_tracker(tool_ctx)
                     if _tracker_error is not None:
-                        transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
-                        tool_ctx.gate.disable()
-                        tool_ctx.gate_infrastructure_ready = False
-                        return _kitchen_failure_envelope(
-                            RuntimeError(_tracker_error),
-                            stage="pipeline_tracker_auto_init",
-                            user_hint=_tracker_error,
-                        )
+                        return _pipeline_tracker_auto_init_failure(tool_ctx, _tracker_error)
                     _preflight_err = _check_dispatch_feasibility(
                         post_prune_step_names=result.get("post_prune_step_names", []),
                         active_recipe_steps=tool_ctx.active_recipe_steps,
@@ -1649,14 +1659,7 @@ async def open_kitchen(
                     logger.warning("open_kitchen_deferred_prune_failed", exc_info=True)
                 _tracker_error = _auto_init_pipeline_tracker(tool_ctx)
                 if _tracker_error is not None:
-                    transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
-                    tool_ctx.gate.disable()
-                    tool_ctx.gate_infrastructure_ready = False
-                    return _kitchen_failure_envelope(
-                        RuntimeError(_tracker_error),
-                        stage="pipeline_tracker_auto_init",
-                        user_hint=_tracker_error,
-                    )
+                    return _pipeline_tracker_auto_init_failure(tool_ctx, _tracker_error)
                 _preflight_err = _check_dispatch_feasibility(
                     post_prune_step_names=result.get("post_prune_step_names", []),
                     active_recipe_steps=tool_ctx.active_recipe_steps,

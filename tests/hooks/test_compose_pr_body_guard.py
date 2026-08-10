@@ -130,34 +130,43 @@ def test_scopes_to_headless_pr_skills(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("skill_name", ["compose-pr", "open-integration-pr"])
-def test_missing_or_unresolvable_body_file_denies(monkeypatch, tmp_path, skill_name):
-    monkeypatch.chdir(tmp_path)
-
-    for command in (
+@pytest.mark.parametrize(
+    "command",
+    [
         "gh pr create --fill",
         "gh pr create --body-file -",
         "gh pr create --body-file /does/not/exist.md",
         'gh pr create --body-file "$UNRESOLVED_BODY"',
-    ):
-        assert _is_denied(_run_hook(_event(command), monkeypatch, skill_name=skill_name))
-
-
-def test_ordinary_issue_pair_requires_exact_digest_number_and_url(monkeypatch, tmp_path):
+    ],
+    ids=["fill", "stdin", "missing", "unresolved-variable"],
+)
+def test_missing_or_unresolvable_body_file_denies(monkeypatch, tmp_path, skill_name, command):
     monkeypatch.chdir(tmp_path)
-    body = _ordinary_pair(tmp_path)
-    command = f"gh pr create --body-file {body}"
-    assert _run_hook(_event(command), monkeypatch) == ""
 
-    invalid_cases = [
+    assert _is_denied(_run_hook(_event(command), monkeypatch, skill_name=skill_name))
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
         {"body_sha256": "0" * 64},
         {"closing_issue": 4294},
         {"source_issue_url": OTHER_ISSUE_URL},
         {"schema_version": 2},
         {"extra": "forbidden"},
-    ]
-    for overrides in invalid_cases:
-        _ordinary_metadata(body, **overrides)
-        assert _is_denied(_run_hook(_event(command), monkeypatch))
+    ],
+    ids=["digest", "number", "url", "schema", "extra-field"],
+)
+def test_ordinary_issue_pair_requires_exact_digest_number_and_url(
+    monkeypatch, tmp_path, overrides
+):
+    monkeypatch.chdir(tmp_path)
+    body = _ordinary_pair(tmp_path)
+    command = f"gh pr create --body-file {body}"
+    assert _run_hook(_event(command), monkeypatch) == ""
+
+    _ordinary_metadata(body, **overrides)
+    assert _is_denied(_run_hook(_event(command), monkeypatch))
 
 
 def test_ordinary_supported_no_issue_pair_allows(monkeypatch, tmp_path):
@@ -191,31 +200,37 @@ def test_unrelated_prep_and_sibling_files_cannot_rescue_body(monkeypatch, tmp_pa
     assert _is_denied(_run_hook(_event(f"gh pr create --body-file {body}"), monkeypatch))
 
 
-def test_ordinary_body_must_contain_exact_closing_url(monkeypatch, tmp_path):
+@pytest.mark.parametrize(
+    "content",
+    ["Closes #4293", f"Reference: {ISSUE_URL}", f"Closes {OTHER_ISSUE_URL}"],
+    ids=["number-only", "not-closing", "wrong-issue"],
+)
+def test_ordinary_body_must_contain_exact_closing_url(monkeypatch, tmp_path, content):
     monkeypatch.chdir(tmp_path)
-    for content in ("Closes #4293", f"Reference: {ISSUE_URL}", f"Closes {OTHER_ISSUE_URL}"):
-        body = _body_file(tmp_path, content)
-        _ordinary_metadata(body)
-        assert _is_denied(_run_hook(_event(f"gh pr create --body-file {body}"), monkeypatch))
+    body = _body_file(tmp_path, content)
+    _ordinary_metadata(body)
+    assert _is_denied(_run_hook(_event(f"gh pr create --body-file {body}"), monkeypatch))
 
 
-def test_integration_pair_requires_every_sorted_unique_source_url(monkeypatch, tmp_path):
+@pytest.mark.parametrize(
+    "urls",
+    [
+        [ISSUE_URL],
+        [OTHER_ISSUE_URL, ISSUE_URL],
+        [ISSUE_URL, ISSUE_URL],
+        ["https://example.com/issues/4293"],
+    ],
+    ids=["missing-url", "unsorted", "duplicate", "foreign-host"],
+)
+def test_integration_pair_requires_every_sorted_unique_source_url(monkeypatch, tmp_path, urls):
     monkeypatch.chdir(tmp_path)
     body = _body_file(tmp_path, f"Closes {ISSUE_URL}\nCloses {OTHER_ISSUE_URL}")
     _integration_metadata(body)
     command = f"gh pr create --body-file {body}"
     assert _run_hook(_event(command), monkeypatch, skill_name="open-integration-pr") == ""
 
-    for urls in (
-        [ISSUE_URL],
-        [OTHER_ISSUE_URL, ISSUE_URL],
-        [ISSUE_URL, ISSUE_URL],
-        ["https://example.com/issues/4293"],
-    ):
-        _integration_metadata(body, source_issue_urls=urls)
-        assert _is_denied(
-            _run_hook(_event(command), monkeypatch, skill_name="open-integration-pr")
-        )
+    _integration_metadata(body, source_issue_urls=urls)
+    assert _is_denied(_run_hook(_event(command), monkeypatch, skill_name="open-integration-pr"))
 
 
 def test_integration_body_omitting_one_source_url_denies(monkeypatch, tmp_path):
@@ -231,11 +246,19 @@ def test_integration_body_omitting_one_source_url_denies(monkeypatch, tmp_path):
     )
 
 
-def test_integration_metadata_preserves_explicit_empty_sources(tmp_path):
+def test_integration_metadata_preserves_explicit_empty_sources(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
     body = _body_file(tmp_path, f"Tracks {ISSUE_URL}\nTracks {OTHER_ISSUE_URL}")
-    metadata_path = _integration_metadata(body, source_issue_urls=[])
+    _integration_metadata(body, source_issue_urls=[])
 
-    assert json.loads(metadata_path.read_text(encoding="utf-8"))["source_issue_urls"] == []
+    assert (
+        _run_hook(
+            _event(f"gh pr create --body-file {body}"),
+            monkeypatch,
+            skill_name="open-integration-pr",
+        )
+        == ""
+    )
 
 
 def test_any_invalid_create_segment_denies_compound_command(monkeypatch, tmp_path):

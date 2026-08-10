@@ -272,7 +272,7 @@ def _validate_declared_artifact(cwd: str, field_name: str, value: str) -> tuple[
         target_stat = target.stat()
         if not stat.S_ISREG(target_stat.st_mode):
             return "artifact_contract_violation", producer_detail
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, RuntimeError):
         return "artifact_contract_violation", producer_detail
     except OSError as exc:
         if exc.errno in {errno.ENOENT, errno.ENOTDIR, errno.ELOOP}:

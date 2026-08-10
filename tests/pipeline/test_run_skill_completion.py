@@ -244,13 +244,15 @@ def test_success_credit_is_retained_until_tracker_completes() -> None:
 
 def test_omitted_receipt_id_consumes_oldest_matching_credit() -> None:
     authority = DefaultRunSkillCompletionAuthority()
-    receipts = [_publish(authority), _publish(authority)]
-    for receipt in receipts:
+    receipts = []
+    for _ in range(2):
+        receipt = _publish(authority)
         authority.acknowledge(
             receipt.receipt_id,
             kitchen_id="kitchen",
             request_session_id="session",
         )
+        receipts.append(receipt)
     oldest, remaining = sorted(receipt.receipt_id for receipt in receipts)
     binding = {
         "tracker_order_id": "order",

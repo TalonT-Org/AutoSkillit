@@ -310,8 +310,8 @@ def test_docs_state_71_mcp_tools(doc_path: Path) -> None:
         DOCS_DIR / "execution" / "tool-access.md",
     ],
 )
-def test_docs_state_45_kitchen_tools(doc_path: Path) -> None:
-    _assert_doc_states_number(doc_path, "kitchen tools", 45)
+def test_docs_state_50_kitchen_tools(doc_path: Path) -> None:
+    _assert_doc_states_number(doc_path, "kitchen tools", 50)
 
 
 def test_skill_visibility_states_142_skills() -> None:

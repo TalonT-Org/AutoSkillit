@@ -200,7 +200,7 @@ class TestServerSideStepCompletionMarking:
 
         assert recovered["success"] is True
         assert refused["success"] is False
-        assert "another request session" in refused["user_visible_message"]
+        assert "another request session" in refused["error"]
         assert completed["success"] is True
         assert completed["tracker"]["success"] is True
         assert _read_tracker(tmp_path)["steps"]["rectify"]["status"] == "complete"

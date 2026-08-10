@@ -103,7 +103,6 @@ class TestOnSessionIdResolvedCallback:
             0.0,
             frozenset({"result"}),
             1,
-            0.0,
             acc,
             anyio.Event(),
             anyio.Event(),

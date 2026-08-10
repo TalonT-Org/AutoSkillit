@@ -324,6 +324,11 @@ def _build_skill_result(
             try:
                 source = result.stdout_path.read_text(errors="replace")
             except OSError:
+                logger.warning(
+                    "lifecycle_stdout_read_failed",
+                    path=str(result.stdout_path),
+                    exc_info=True,
+                )
                 source = None
         if source is not None:
             defensive_pending, defensive_wakeup = fold_lifecycle_evidence(

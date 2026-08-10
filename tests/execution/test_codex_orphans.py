@@ -294,7 +294,26 @@ def test_reap_touches_no_filesystem_paths():
     src = Path("src/autoskillit/execution/process/_codex_orphans.py")
     tree = ast.parse(src.read_text())
 
-    forbidden = {"unlink", "rmtree", "remove", "rmdir", "write"}
+    forbidden = {
+        "chmod",
+        "chown",
+        "copy",
+        "copy2",
+        "copyfile",
+        "mkdir",
+        "move",
+        "remove",
+        "rename",
+        "replace",
+        "rmdir",
+        "rmtree",
+        "symlink_to",
+        "touch",
+        "unlink",
+        "write",
+        "write_bytes",
+        "write_text",
+    }
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue

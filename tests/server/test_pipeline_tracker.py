@@ -549,6 +549,84 @@ class TestSelectTrackerAuthority:
         assert tool_ctx_kitchen_open.tracker_leases == {}
 
 
+class TestRestoreReservedTrackerAuthority:
+    def test_same_participant_keeps_existing_lease(self, tool_ctx_kitchen_open, tmp_path):
+        from types import SimpleNamespace
+        from typing import cast
+
+        from autoskillit.core import AuditIdentityReservation, TrackerAuthorityTarget
+        from autoskillit.server.tools.tools_pipeline_tracker import (
+            _release_context_tracker,
+            _restore_reserved_tracker_authority,
+            _retain_context_tracker,
+        )
+
+        tool_ctx_kitchen_open.project_dir = tmp_path
+        tool_ctx_kitchen_open.kitchen_id = "kitchen-xyz"
+        target = TrackerAuthorityTarget.for_project(tmp_path, "AB", expected=True)
+        key, lease = _retain_context_tracker(
+            tool_ctx_kitchen_open,
+            target,
+            owner_kind="kitchen",
+            owner_id="kitchen-xyz",
+        )
+        reservation = cast(
+            AuditIdentityReservation,
+            SimpleNamespace(tracker_target_order_id="AB", tracker_expected=True),
+        )
+
+        _target, _authority, restored_key, restored_lease = _restore_reserved_tracker_authority(
+            tool_ctx_kitchen_open,
+            reservation,
+            key,
+        )
+
+        assert restored_key == key
+        assert restored_lease is lease
+        assert not lease.closed
+        assert list(tool_ctx_kitchen_open.tracker_leases) == [key]
+        _release_context_tracker(tool_ctx_kitchen_open, key)
+
+    def test_replacement_read_failure_preserves_current_lease(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ):
+        from types import SimpleNamespace
+        from typing import cast
+
+        from autoskillit.core import AuditIdentityReservation, TrackerAuthorityTarget
+        from autoskillit.server.tools import tools_pipeline_tracker
+
+        tool_ctx_kitchen_open.project_dir = tmp_path
+        tool_ctx_kitchen_open.kitchen_id = "kitchen-xyz"
+        current_target = TrackerAuthorityTarget.for_project(tmp_path, "AB", expected=True)
+        current_key, current_lease = tools_pipeline_tracker._retain_context_tracker(
+            tool_ctx_kitchen_open,
+            current_target,
+            owner_kind="kitchen",
+            owner_id="kitchen-xyz",
+        )
+        reservation = cast(
+            AuditIdentityReservation,
+            SimpleNamespace(tracker_target_order_id="CD", tracker_expected=True),
+        )
+
+        def fail_read(_target, _lease):
+            raise OSError("read failed")
+
+        monkeypatch.setattr(tools_pipeline_tracker, "read_tracker_authority", fail_read)
+
+        with pytest.raises(OSError, match="read failed"):
+            tools_pipeline_tracker._restore_reserved_tracker_authority(
+                tool_ctx_kitchen_open,
+                reservation,
+                current_key,
+            )
+
+        assert not current_lease.closed
+        assert tool_ctx_kitchen_open.tracker_leases == {current_key: current_lease}
+        tools_pipeline_tracker._release_context_tracker(tool_ctx_kitchen_open, current_key)
+
+
 class TestSelectTrackerTarget:
     def test_kitchen_scoped_fallback_never_scans_ambient_candidates(
         self, tool_ctx_kitchen_open, tmp_path

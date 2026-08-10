@@ -164,10 +164,10 @@ def _restore_reserved_tracker_authority(
     TrackerParticipantKey | None,
     ArtifactLease | None,
 ]:
-    if current_key is not None:
-        _release_context_tracker(tool_ctx, current_key)
     target_order_id = reservation.tracker_target_order_id
     if target_order_id is None:
+        if current_key is not None:
+            _release_context_tracker(tool_ctx, current_key)
         return None, None, None, None
     target = TrackerAuthorityTarget.for_project(
         tool_ctx.project_dir,
@@ -180,7 +180,15 @@ def _restore_reserved_tracker_authority(
         owner_kind="kitchen",
         owner_id=tool_ctx.kitchen_id or target_order_id,
     )
-    return target, read_tracker_authority(target, lease), key, lease
+    try:
+        authority = read_tracker_authority(target, lease)
+    except Exception:
+        if key != current_key:
+            _release_context_tracker(tool_ctx, key)
+        raise
+    if current_key is not None and current_key != key:
+        _release_context_tracker(tool_ctx, current_key)
+    return target, authority, key, lease
 
 
 def _authority_blocks_dependency_check(authority: TrackerAuthorityReadResult | None) -> bool:

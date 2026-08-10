@@ -541,6 +541,7 @@ def _check_orphaned_codex_processes() -> list[DoctorResult]:
     try:
         orphans = find_orphaned_codex_processes()
     except Exception as exc:
+        logger.warning("Codex orphan scan failed", exc_info=True)
         return [
             DoctorResult(
                 Severity.WARNING,

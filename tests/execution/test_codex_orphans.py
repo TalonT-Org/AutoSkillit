@@ -119,7 +119,7 @@ def test_detects_orphan_after_pty_master_close(_spawn_fake_codex):
     assert re.match(r"^/dev/pts/\d+ \(deleted\)$", orphan.fd0_target)
     assert orphan.exe_target is not None
     assert orphan.starttime_ticks is not None
-    assert orphan.started_at > 0
+    assert orphan.started_at == pytest.approx(psutil.Process(child.pid).create_time(), abs=1)
 
 
 def test_ignores_live_pty(_spawn_fake_codex):

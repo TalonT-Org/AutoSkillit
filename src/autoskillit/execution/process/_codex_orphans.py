@@ -89,6 +89,8 @@ def find_orphaned_codex_processes(
     except OSError:
         return []
 
+    boot_time = psutil.boot_time()
+    clock_ticks_per_second = os.sysconf("SC_CLK_TCK")
     my_uid = os.geteuid()
     orphans: list[OrphanedCodexProcess] = []
 
@@ -125,18 +127,13 @@ def find_orphaned_codex_processes(
         except OSError:
             exe_target = None
 
-        try:
-            started_at = psutil.Process(pid).create_time()
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
-
         orphans.append(
             OrphanedCodexProcess(
                 pid=pid,
                 fd0_target=target,
                 exe_target=exe_target,
                 starttime_ticks=ticks,
-                started_at=started_at,
+                started_at=boot_time + ticks / clock_ticks_per_second,
             )
         )
 

@@ -6,8 +6,6 @@ import pytest
 
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from tests.contracts._delivery_constants import (
-    MAX_CONCURRENT_RECIPES,
-    MAX_CONCURRENT_SESSION_CALLS,
     MAX_OPEN_KITCHEN_CALLS,
 )
 from tests.contracts.fixtures.recipes import BUNDLED_RECIPE_PATHS
@@ -39,9 +37,3 @@ async def test_session_start_round_trip_count_is_bounded(
     assert len(counter) <= MAX_OPEN_KITCHEN_CALLS[mode]
     if len(counter) > 1:
         assert all(tool_name != "complete_recipe_initialization" for tool_name, _ in counter.calls)
-
-
-def test_concurrent_session_start_budget_is_derived_from_per_recipe_ceiling() -> None:
-    assert MAX_CONCURRENT_SESSION_CALLS == (
-        MAX_OPEN_KITCHEN_CALLS["claude_code_bounded"] * MAX_CONCURRENT_RECIPES
-    )

@@ -145,7 +145,7 @@ def test_completion_eligibility_and_final_fold_consume_both_cursors() -> None:
     managed_async = _function(_PROCESS_INIT, "run_managed_async")
 
     assert _called_cursor_names(eligibility) == {"stdout_cursor", "channel_b_cursor"}
-    final_fold = next(
+    next(
         node
         for node in ast.walk(managed_async)
         if isinstance(node, ast.If)
@@ -162,7 +162,6 @@ def test_completion_eligibility_and_final_fold_consume_both_cursors() -> None:
             for child in ast.walk(node)
         )
     )
-    assert final_fold
 
 
 @pytest.mark.parametrize(

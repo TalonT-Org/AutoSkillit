@@ -380,11 +380,7 @@ class TestCheckSessionIndexProjection:
 
 
 def test_orphaned_codex_check_warns_per_orphan(monkeypatch: pytest.MonkeyPatch) -> None:
-    # ``_check_orphaned_codex_processes`` resolves ``find_orphaned_codex_processes``
-    # via a local import inside its own body, so the patch target is the
-    # resolution site (``autoskillit.execution``), not ``_doctor_runtime`` itself.
-    import autoskillit.execution as execution_mod
-    from autoskillit.cli.doctor._doctor_runtime import _check_orphaned_codex_processes
+    import autoskillit.cli.doctor._doctor_runtime as doctor_runtime
     from autoskillit.execution.process._codex_orphans import OrphanedCodexProcess
 
     orphans = [
@@ -403,9 +399,9 @@ def test_orphaned_codex_check_warns_per_orphan(monkeypatch: pytest.MonkeyPatch) 
             started_at=1000001.0,
         ),
     ]
-    monkeypatch.setattr(execution_mod, "find_orphaned_codex_processes", lambda: orphans)
+    monkeypatch.setattr(doctor_runtime, "find_orphaned_codex_processes", lambda: orphans)
 
-    results = _check_orphaned_codex_processes()
+    results = doctor_runtime._check_orphaned_codex_processes()
 
     assert len(results) == 2
     for result, orphan in zip(results, orphans, strict=True):
@@ -416,12 +412,11 @@ def test_orphaned_codex_check_warns_per_orphan(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_orphaned_codex_check_ok_when_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    import autoskillit.execution as execution_mod
-    from autoskillit.cli.doctor._doctor_runtime import _check_orphaned_codex_processes
+    import autoskillit.cli.doctor._doctor_runtime as doctor_runtime
 
-    monkeypatch.setattr(execution_mod, "find_orphaned_codex_processes", lambda: [])
+    monkeypatch.setattr(doctor_runtime, "find_orphaned_codex_processes", lambda: [])
 
-    results = _check_orphaned_codex_processes()
+    results = doctor_runtime._check_orphaned_codex_processes()
 
     assert len(results) == 1
     assert results[0].check == "orphaned_codex_processes"
@@ -442,15 +437,14 @@ def test_orphaned_codex_check_skips_non_linux(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_orphaned_codex_check_reports_scan_exception(monkeypatch: pytest.MonkeyPatch) -> None:
-    import autoskillit.execution as execution_mod
-    from autoskillit.cli.doctor._doctor_runtime import _check_orphaned_codex_processes
+    import autoskillit.cli.doctor._doctor_runtime as doctor_runtime
 
     def fail_scan() -> None:
         raise PermissionError("denied")
 
-    monkeypatch.setattr(execution_mod, "find_orphaned_codex_processes", fail_scan)
+    monkeypatch.setattr(doctor_runtime, "find_orphaned_codex_processes", fail_scan)
 
-    results = _check_orphaned_codex_processes()
+    results = doctor_runtime._check_orphaned_codex_processes()
 
     assert len(results) == 1
     assert results[0].severity is Severity.WARNING

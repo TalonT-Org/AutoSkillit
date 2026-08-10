@@ -30,6 +30,7 @@ from autoskillit.execution import (
     CODEX_LIMITS_LAST_VERIFIED_VERSION,
     QUOTA_CACHE_SCHEMA_VERSION,
     CodexBackend,
+    find_orphaned_codex_processes,
     resolve_log_dir,
     session_index_lock_path,
 )
@@ -535,8 +536,6 @@ def _check_orphaned_codex_processes() -> list[DoctorResult]:
     check_name = "orphaned_codex_processes"
     if sys.platform != "linux":
         return [DoctorResult(Severity.OK, check_name, "Skipped (Linux only)")]
-
-    from autoskillit.execution import find_orphaned_codex_processes
 
     try:
         orphans = find_orphaned_codex_processes()

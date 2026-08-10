@@ -131,3 +131,23 @@ class TestRecordPipelineStepComplete:
         )
         assert result["success"] is False
         assert "cannot resolve pipeline tracker" in result["error"]
+
+    @pytest.mark.anyio
+    async def test_malformed_tracker_is_not_retriable(self, tool_ctx_kitchen_open, tmp_path):
+        tool_ctx_kitchen_open.project_dir = tmp_path
+        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
+        _write_tracker(tmp_path, "test-kitchen", {"rectify": {"status": "pending"}}, {})
+        tracker_path = (
+            tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "test-kitchen.json"
+        )
+        tracker_path.write_text("{")
+
+        result = json.loads(
+            await record_pipeline_step(
+                pipeline_id="test-kitchen", op="complete", step_name="rectify"
+            )
+        )
+
+        assert result["success"] is False
+        assert result["retriable"] is False
+        assert "failed to read tracker identity" in result["error"]

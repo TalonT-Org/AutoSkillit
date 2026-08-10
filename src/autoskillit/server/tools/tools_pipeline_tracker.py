@@ -353,7 +353,15 @@ def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: st
 
     try:
         tracker_identity = read_tracker_identity(resolved)
-    except (json.JSONDecodeError, OSError) as exc:
+    except json.JSONDecodeError as exc:
+        return json.dumps(
+            deny_envelope(
+                f"record_pipeline_step: failed to read tracker identity: {exc}",
+                stage="preflight:pipeline_tracker",
+                retriable=False,
+            )
+        )
+    except OSError as exc:
         return json.dumps(
             deny_envelope(
                 f"record_pipeline_step: failed to read tracker identity: {exc}",

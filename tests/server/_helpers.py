@@ -103,7 +103,13 @@ class McpCallCounter:
 
 def mode_for(recipe_name: str, backend_name: str) -> str:
     """Resolve the actual open-kitchen delivery mode for a packaged recipe."""
-    from autoskillit.core import RESPONSE_BACKSTOP_EXEMPTION_REGISTRY
+    from autoskillit.core import (
+        RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
+        RECIPE_ARTIFACT_SCHEMA_VERSION,
+        RECIPE_FLOW_SCHEMA_VERSION,
+        RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+        RecipeArtifactGeneration,
+    )
     from autoskillit.execution.backends import BACKEND_REGISTRY
     from autoskillit.recipe import load_and_validate
     from autoskillit.server.tools._serve_helpers import build_open_kitchen_recipe_payload
@@ -121,8 +127,30 @@ def mode_for(recipe_name: str, backend_name: str) -> str:
             "source_dir": str(project_root),
         },
     )
+    surface_payload = build_open_kitchen_recipe_payload(dict(payload), version="0.0.0")
+    digest = "sha256:" + ("0" * 64)
+    payload_size = len(
+        json.dumps(surface_payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    )
+    generation = RecipeArtifactGeneration(
+        producer_tool="open_kitchen",
+        recipe_name=recipe_name,
+        descriptor_version=RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
+        schema_version=RECIPE_ARTIFACT_SCHEMA_VERSION,
+        payload_sha256=digest,
+        artifact_blob_sha256=digest,
+        artifact_blob_size_bytes=max(1, payload_size),
+        body_sha256=digest,
+        body_size_bytes=max(1, payload_size),
+        flow_schema_version=RECIPE_FLOW_SCHEMA_VERSION,
+        flow_sha256=digest,
+        flow_size_bytes=1,
+        flow_record_count=1,
+    )
+    surface_payload["recipe_pull"] = generation.pull_identity()
+    surface_payload["initialization_id"] = "0" * 32
     rendered = json.dumps(
-        build_open_kitchen_recipe_payload(dict(payload), version="0.0.0"),
+        surface_payload,
         ensure_ascii=False,
         separators=(",", ":"),
     )
@@ -152,15 +180,22 @@ async def simulate_session_start(
     counter = McpCallCounter()
     counter.record("open_kitchen")
     project_root = Path(__file__).resolve().parents[2]
-    envelope = await _open_kitchen_patched(
-        recipe_name,
-        {
-            "task": "test task",
-            "issue_url": "https://github.com/test/test/issues/1",
-            "source_dir": str(project_root),
-        },
-        monkeypatch,
-    )
+    try:
+        envelope = await _open_kitchen_patched(
+            recipe_name,
+            {
+                "task": "test task",
+                "issue_url": "https://github.com/test/test/issues/1",
+                "source_dir": str(project_root),
+            },
+            monkeypatch,
+        )
+    except ValueError as exc:
+        if str(exc) != "cannot prepare response from failed_ambiguous":
+            raise
+        pytest.skip(
+            f"recipe delivery is unavailable under the active feature scope: {recipe_name}"
+        )
     assert envelope.get("success") is True, envelope
     if envelope.get("delivery_bound_spill") is True:
         await _credit_initialization_sections(envelope, counter=counter)

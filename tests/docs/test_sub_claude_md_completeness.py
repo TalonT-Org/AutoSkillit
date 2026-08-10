@@ -341,6 +341,18 @@ def test_capture_guide_retains_isolated_import_contract() -> None:
             ),
         ),
         (
+            "src/autoskillit/recipe/rules/AGENTS.md",
+            (
+                "@semantic_rule",
+                "ValidationContext",
+                "No cross-imports",
+                "campaign/",
+                "ci/",
+                "dataflow/",
+                "graph/",
+            ),
+        ),
+        (
             "src/autoskillit/server/tools/AGENTS.md",
             ("`serve_recipe()`", "only legal caller", "`load_and_validate`"),
         ),

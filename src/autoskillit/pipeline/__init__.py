@@ -22,7 +22,7 @@ from autoskillit.pipeline.background import (
     create_background_task,
     write_status,
 )
-from autoskillit.pipeline.context import ToolContext
+from autoskillit.pipeline.context import TerminalRecipeResponseCacheEntry, ToolContext
 from autoskillit.pipeline.context_admission_ledger import (
     DefaultContextAdmissionLedger,
 )
@@ -190,6 +190,7 @@ __all__ = [
     "is_review_passing",
     "partition_prs",
     # recipe initialization
+    "TerminalRecipeResponseCacheEntry",
     "InitializingRecipe",
     "NoActiveRecipe",
     "ReadyRecipe",

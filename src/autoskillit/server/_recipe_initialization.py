@@ -27,6 +27,7 @@ from autoskillit.pipeline import (
     InitializingRecipe,
     ReadyRecipe,
     RecipeInitializationRequirement,
+    TerminalRecipeResponseCacheEntry,
     initialization_is_complete,
     record_initialization_page,
     start_recipe_initialization,
@@ -397,15 +398,17 @@ def complete_section_response(
         now = time.monotonic()
         expired = [
             key
-            for key, (expires_at, _, _) in tool_ctx.recipe_terminal_response_cache.items()
-            if expires_at <= now
+            for key, entry in tool_ctx.recipe_terminal_response_cache.items()
+            if entry.expires_at <= now
         ]
         for key in expired:
             del tool_ctx.recipe_terminal_response_cache[key]
         tool_ctx.recipe_terminal_response_cache[(finalized.initialization_id, finalized.part)] = (
-            now + _TERMINAL_RESPONSE_RETENTION_SECONDS,
-            finalized.content_sha256,
-            enforced,
+            TerminalRecipeResponseCacheEntry(
+                expires_at=now + _TERMINAL_RESPONSE_RETENTION_SECONDS,
+                content_sha256=finalized.content_sha256,
+                rendered=enforced,
+            )
         )
     return enforced
 
@@ -422,16 +425,15 @@ def replay_terminal_section_response(
         record = tool_ctx.recipe_terminal_response_cache.get((initialization_id, part))
         if record is None:
             return None
-        expires_at, cached_content_sha256, rendered = record
-        if expires_at <= time.monotonic():
+        if record.expires_at <= time.monotonic():
             del tool_ctx.recipe_terminal_response_cache[(initialization_id, part)]
             return None
-        if cached_content_sha256 != content_sha256:
+        if record.content_sha256 != content_sha256:
             return json.dumps(
                 {"success": False, "error": "recipe_initialization_receipt_content_mismatch"},
                 separators=(",", ":"),
             )
-        return rendered
+        return record.rendered
 
 
 def complete_initialization_response(

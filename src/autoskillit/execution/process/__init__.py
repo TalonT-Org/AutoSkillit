@@ -256,10 +256,7 @@ async def execute_termination_action(
                     )
                     await anyio.sleep(_poll_interval)
             proc_log.debug("grace_expired_killing", grace_seconds=grace_seconds)
-            if process_group_id is None:
-                await async_kill_process_tree(proc.pid)
-            else:
-                await async_kill_process_tree(proc.pid, process_group_id=process_group_id)
+            await async_kill_process_tree(proc.pid, process_group_id=process_group_id)
             return KillReason.KILL_AFTER_COMPLETION
         case TerminationAction.IMMEDIATE_KILL:
             if pid is not None and _has_active_child_processes(pid):
@@ -267,10 +264,7 @@ async def execute_termination_action(
                     "immediate_kill_with_active_children",
                     pid=pid,
                 )
-            if process_group_id is None:
-                await async_kill_process_tree(proc.pid)
-            else:
-                await async_kill_process_tree(proc.pid, process_group_id=process_group_id)
+            await async_kill_process_tree(proc.pid, process_group_id=process_group_id)
             return KillReason.INFRA_KILL
         case _ as unreachable:
             assert_never(unreachable)
@@ -724,9 +718,7 @@ async def run_managed_async(
                 if "proc" in locals():
                     await async_kill_process_tree(
                         proc.pid,
-                        process_group_id=(
-                            process_group_id if "process_group_id" in locals() else proc.pid
-                        ),
+                        process_group_id=process_group_id,
                     )
             raise
         finally:

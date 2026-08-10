@@ -521,6 +521,29 @@ class TestCheckPipelineDepsImmutableTarget:
         assert result is None
 
 
+class TestSelectTrackerAuthority:
+    def test_read_failure_releases_retained_lease(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ):
+        from autoskillit.server.tools import tools_pipeline_tracker
+
+        tool_ctx_kitchen_open.project_dir = tmp_path
+        tool_ctx_kitchen_open.kitchen_id = "kitchen-xyz"
+        retained = {}
+
+        def fail_read(_target, lease):
+            retained["lease"] = lease
+            raise OSError("read failed")
+
+        monkeypatch.setattr(tools_pipeline_tracker, "read_tracker_authority", fail_read)
+
+        with pytest.raises(OSError, match="read failed"):
+            tools_pipeline_tracker._select_tracker_authority(tool_ctx_kitchen_open, "")
+
+        assert retained["lease"].closed
+        assert tool_ctx_kitchen_open.tracker_leases == {}
+
+
 class TestSelectTrackerTarget:
     def test_kitchen_scoped_fallback_never_scans_ambient_candidates(
         self, tool_ctx_kitchen_open, tmp_path

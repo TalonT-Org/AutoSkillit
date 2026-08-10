@@ -154,7 +154,12 @@ def _select_tracker_authority(
         owner_kind="kitchen",
         owner_id=tool_ctx.kitchen_id or target_order_id,
     )
-    return target, read_tracker_authority(target, lease), key, lease
+    try:
+        authority = read_tracker_authority(target, lease)
+    except Exception:
+        _release_context_tracker(tool_ctx, key)
+        raise
+    return target, authority, key, lease
 
 
 def _restore_reserved_tracker_authority(

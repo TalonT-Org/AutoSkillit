@@ -286,6 +286,26 @@ def test_open_retires_unleased_orphan_without_age_inference(monkeypatch, tmp_pat
     assert not (tracker_dir / "K1.json").exists()
 
 
+def test_open_preserves_orphan_while_shared_lease_is_held(monkeypatch, tmp_path):
+    """A live participant lease is sufficient ownership evidence."""
+    from autoskillit.core import ArtifactLease, TrackerAuthorityTarget, tracker_lease_path
+
+    tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
+    _write_tracker(tracker_dir, "K1", initialized_at=datetime.now(UTC))
+    _write_registry(monkeypatch, tmp_path, [])
+    target = TrackerAuthorityTarget("K1", tracker_dir / "K1.json", expected=False)
+
+    lease = ArtifactLease.acquire_shared(tracker_lease_path(target))
+    try:
+        prune_stale_kitchen_state(tmp_path, "K2")
+        assert target.path.exists()
+    finally:
+        lease.close_preserving()
+
+    prune_stale_kitchen_state(tmp_path, "K2")
+    assert not target.path.exists()
+
+
 def test_multi_entry_same_kitchen_one_alive_preserves_tracker(monkeypatch, tmp_path):
     """Fleet-campaign shape: multiple registry entries share one kitchen_id.
 

@@ -86,10 +86,6 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def _context_kitchen_identity(ctx: Any) -> Any:
-    return get_kitchen_process_identity(ctx)
-
-
 def _retain_context_tracker_authority(ctx: Any) -> None:
     from autoskillit.server.tools.tools_kitchen import (  # circular-break
         _retain_kitchen_tracker_authority,
@@ -439,7 +435,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
 
     try:
         _retain_context_tracker_authority(ctx)
-        register_active_kitchen(_context_kitchen_identity(ctx))
+        register_active_kitchen(get_kitchen_process_identity(ctx))
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("fleet_auto_gate_boot_registry_failed", exc_info=True)
@@ -507,7 +503,7 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
         _mcp.disable(tags={tag})
     try:
         _retain_context_tracker_authority(ctx)
-        register_active_kitchen(_context_kitchen_identity(ctx))
+        register_active_kitchen(get_kitchen_process_identity(ctx))
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("pre_reveal_kitchen_registry_failed", exc_info=True)
@@ -600,7 +596,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
 
     try:
         _retain_context_tracker_authority(ctx)
-        register_active_kitchen(_context_kitchen_identity(ctx))
+        register_active_kitchen(get_kitchen_process_identity(ctx))
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("food_truck_auto_gate_boot_registry_failed", exc_info=True)
@@ -703,7 +699,7 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
 
     try:
         _retain_context_tracker_authority(ctx)
-        register_active_kitchen(_context_kitchen_identity(ctx))
+        register_active_kitchen(get_kitchen_process_identity(ctx))
         _activate_recipe_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("skill_auto_gate_boot_registry_failed", exc_info=True)

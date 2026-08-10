@@ -206,8 +206,10 @@ ratio; implicit byte/token arithmetic is not permitted at a consumer boundary.
 
 `output_budget.page_max_bytes` is an explicit operator calibration for bounded recipe
 pages. When present it selects the measured UTF-8 page ceiling instead of treating a
-backend token count as bytes. The bundled-recipe calibration task reports a conservative
-lower-percentile ratio so tokenizer or corpus drift is visible during packaging review.
+backend token count as bytes. AutoSkillit has no cross-backend exact tokenizer authority,
+so the fixed bytes-to-token ratio remains an explicitly conservative transport policy,
+not a corpus calibration. Any future calibration must name its backend, model, tokenizer
+identity, and exact measurement source before it can change that policy.
 
 ## Operational Signals
 

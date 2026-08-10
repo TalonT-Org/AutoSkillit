@@ -583,11 +583,6 @@ tasks:
     cmds:
       - uv run python scripts/compile_recipes.py
 
-  calibrate-bytes-per-token:
-    desc: Report the conservative bundled-recipe bytes/token calibration
-    cmds:
-      - uv run python scripts/calibrate_bytes_per_token.py
-
   install-worktree:
     desc: Set up development environment (isolated venv in worktrees, direct install in main)
     deps: [compile-recipes]

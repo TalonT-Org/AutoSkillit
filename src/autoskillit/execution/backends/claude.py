@@ -77,6 +77,7 @@ from autoskillit.execution.backends._backend_cmd_builder_base import (
     FlagVocabulary,
 )
 from autoskillit.execution.backends._claude_prompt import (
+    _CLAUDE_SKILL_SESSION_HARDENING,
     _HEADLESS_ENV_HARDENING,
     _HEADLESS_EXCLUSIVE_VARS,
     _INTERACTIVE_ENV_EXCLUSIONS,
@@ -605,6 +606,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         managed_attempt_id: str | None = None,
         include_scope_discipline: bool = False,
+        skill_session: bool = False,
     ) -> CmdSpec:
         del (
             native_shell_capture_decision,
@@ -632,6 +634,8 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
                     merged[key] = value
         env = dict(build_agent_env(base={}, extras=merged))
         env.update(_HEADLESS_ENV_HARDENING)
+        if skill_session:
+            env.update(_CLAUDE_SKILL_SESSION_HARDENING)
         return CmdSpec(
             cmd=tuple(cmd),
             env=env,
@@ -738,6 +742,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             for k, v in provider_extras.items():
                 if k not in _SKILL_SESSION_EXTRAS_DENYLIST:
                     extras[k] = v
+        extras.update(_CLAUDE_SKILL_SESSION_HARDENING)
         if profile_name:
             extras[PROVIDER_PROFILE_ENV_VAR] = profile_name
             extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
@@ -748,7 +753,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             model=model,
             env_extras=extras,
             base=filtered_base,
-            required=SKILL_SESSION_REQUIRED_ENV,
+            required=SKILL_SESSION_REQUIRED_ENV | _CLAUDE_SKILL_SESSION_HARDENING.keys(),
         )
         cmd: list[str] = [*spec.cmd]
         if plugin_binding is not None:

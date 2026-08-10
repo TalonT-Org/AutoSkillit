@@ -334,7 +334,7 @@ HOOK_REGISTRY: list[HookDef] = [
         enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
-        matcher=r"Bash|Agent",
+        matcher=r"Bash|Agent|ScheduleWakeup",
         scripts=["guards/background_exec_guard.py"],
         session_scope="headless_only",
         mechanism="deny",

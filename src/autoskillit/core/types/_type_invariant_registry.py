@@ -39,7 +39,7 @@ _CLAUDE_ONLY = frozenset({AGENT_BACKEND_CLAUDE_CODE})
 INVARIANT_REGISTRY: Final[dict[str, InvariantDef]] = {
     "run-in-background": InvariantDef(
         id="run-in-background",
-        prohibition="run_in_background=true is prohibited in skill sessions",
+        prohibition=("run_in_background=true and ScheduleWakeup are prohibited in skill sessions"),
         source_doc="docs/decisions/0001-prohibit-background-subagent-execution.md",
         gate_target="guards/background_exec_guard.py",
         enforcement_layer="hook-deny",

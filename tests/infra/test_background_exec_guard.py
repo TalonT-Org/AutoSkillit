@@ -75,6 +75,33 @@ def test_denies_agent_run_in_background_skill_session():
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+def test_denies_schedule_wakeup_skill_session():
+    response = _run_guard_headless(
+        {"tool_name": "ScheduleWakeup", "tool_input": {"delay": "5m"}},
+        session_type="skill",
+    )
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "ScheduleWakeup" in response["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+@pytest.mark.parametrize("session_type", ["orchestrator", "fleet"])
+def test_allows_schedule_wakeup_exempt_headless_tiers(session_type: str):
+    out = _run_guard(
+        {"tool_name": "ScheduleWakeup", "tool_input": {"delay": "5m"}},
+        headless=True,
+        session_type=session_type,
+    )
+    assert not out.strip()
+
+
+def test_allows_schedule_wakeup_interactive_session():
+    out = _run_guard(
+        {"tool_name": "ScheduleWakeup", "tool_input": {"delay": "5m"}},
+        headless=False,
+    )
+    assert not out.strip()
+
+
 def test_allows_bash_without_run_in_background():
     out = _run_guard(
         {"tool_name": "Bash", "tool_input": {"command": "ls"}},

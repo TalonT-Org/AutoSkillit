@@ -51,13 +51,14 @@ indicators and asserts the prohibition string is present. This test runs as part
 
 ## Runtime Enforcement
 
-The `background_exec_guard.py` PreToolUse hook intercepts Bash and Agent tool calls
-in headless skill sessions. If `run_in_background: true` is present in the tool input,
-the hook denies the call with a message referencing this ADR. This converts the prose
-prohibition into a structural invariant that no model can bypass.
+The `background_exec_guard.py` PreToolUse hook intercepts Bash, Agent, and
+ScheduleWakeup tool calls in headless skill sessions. It denies an explicit
+`run_in_background: true` input and every scheduled wakeup because either can leave
+owned work running after the parent reports completion. The denial references this ADR.
 
 Registered in `HOOK_REGISTRY` with `session_scope="headless_only"` and matcher
-`Bash|Agent`. Test coverage in `tests/infra/test_background_exec_guard.py`.
+`Bash|Agent|ScheduleWakeup`. Test coverage in
+`tests/infra/test_background_exec_guard.py`.
 
 ## Scope
 

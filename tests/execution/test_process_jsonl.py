@@ -8,17 +8,79 @@ record types without false-fires on embedded marker text.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
+from autoskillit.execution.backends import ClaudeStreamParser
 from autoskillit.execution.process import (
     _jsonl_contains_marker,
     _jsonl_has_record_type,
     _jsonl_last_record_type,
     _marker_is_standalone,
 )
+from autoskillit.execution.process._process_jsonl import EventCursor, fold_event_cursor
+from autoskillit.execution.process._process_race import RaceAccumulator
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+def test_event_cursor_preserves_partial_utf8_record(tmp_path: Path) -> None:
+    path = tmp_path / "session.jsonl"
+    encoded = '{"text":"café"}\n'.encode()
+    split = encoded.index(b"\xc3") + 1
+    path.write_bytes(encoded[:split])
+    cursor = EventCursor(path)
+    assert cursor.read_complete_lines() == ()
+    with path.open("ab") as stream:
+        stream.write(encoded[split:])
+    assert cursor.read_complete_lines() == ('{"text":"café"}',)
+    assert cursor.read_complete_lines() == ()
+
+
+def test_event_cursor_starts_at_resume_boundary(tmp_path: Path) -> None:
+    path = tmp_path / "session.jsonl"
+    path.write_bytes(b'{"old":true}\n')
+    cursor = EventCursor(path, run_boundary=path.stat().st_size)
+    with path.open("ab") as stream:
+        stream.write(b'{"new":true}\n')
+    assert cursor.read_complete_lines() == ('{"new":true}',)
+
+
+def test_event_cursor_observes_file_created_after_spawn(tmp_path: Path) -> None:
+    path = tmp_path / "new-session.jsonl"
+    cursor = EventCursor(path)
+    assert cursor.read_complete_lines() is None
+    path.write_text('{"type":"task_started","task_id":"new"}\n')
+    assert cursor.read_complete_lines() == ('{"type":"task_started","task_id":"new"}',)
+    assert cursor.read_complete_lines() == ()
+
+
+def test_event_cursor_fold_reports_unavailable_source(tmp_path: Path) -> None:
+    cursor = EventCursor(tmp_path / "missing.jsonl")
+    accumulator = RaceAccumulator(lifecycle_observation_enabled=True)
+
+    assert fold_event_cursor(cursor, ClaudeStreamParser(), accumulator.observe_event) is False
+
+
+def test_incremental_and_final_folds_are_idempotent(tmp_path: Path) -> None:
+    path = tmp_path / "stdout.jsonl"
+    path.write_text('{"type":"task_started","task_id":"owned"}\n')
+    cursor = EventCursor(path)
+    accumulator = RaceAccumulator(lifecycle_observation_enabled=True)
+    parser = ClaudeStreamParser()
+
+    fold_event_cursor(cursor, parser, accumulator.observe_event)
+    fold_event_cursor(cursor, parser, accumulator.observe_event)
+    assert accumulator.to_race_signals().pending_task_ids == ("owned",)
+
+    with path.open("a") as stream:
+        stream.write('{"type":"task_updated","task_id":"owned","patch":{"status":"completed"}}\n')
+    fold_event_cursor(cursor, parser, accumulator.observe_event)
+    fold_event_cursor(cursor, parser, accumulator.observe_event)
+    signals = accumulator.to_race_signals()
+    assert signals.pending_task_ids == ()
+    assert signals.terminal_task_ids == ("owned",)
 
 
 class TestJsonlContainsMarker:

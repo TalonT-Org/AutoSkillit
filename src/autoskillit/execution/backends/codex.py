@@ -1412,6 +1412,7 @@ class CodexBackend(BackendCmdBuilderBase):
     def capabilities(self) -> BackendCapabilities:
         return BackendCapabilities(
             channel_b_capable=False,
+            supports_task_lifecycle_events=False,
             pty_required=False,
             session_resume_capable=True,
             skill_injection_capable=True,
@@ -1992,7 +1993,9 @@ class CodexBackend(BackendCmdBuilderBase):
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         managed_attempt_id: str | None = None,
         include_scope_discipline: bool = False,
+        skill_session: bool = False,
     ) -> CmdSpec:
+        del skill_session
         if not resume_session_id.strip():
             msg = "resume_session_id must be a non-empty string"
             raise ValueError(msg)

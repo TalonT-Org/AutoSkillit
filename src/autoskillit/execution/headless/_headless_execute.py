@@ -97,6 +97,7 @@ async def _execute_claude_headless(
     step_name: str = "",
     kitchen_id: str = "",
     caller_session_id: str = "",
+    backend_resume_session_id: str = "",
     order_id: str = "",
     campaign_id: str = "",
     dispatch_id: str = "",
@@ -276,6 +277,9 @@ async def _execute_claude_headless(
         terminal_reason_override = "CANCELLED"
 
     _stream_parser = _step_backend.stream_parser(completion_marker=completion_marker)
+    lifecycle_observation_enabled = bool(skill_command) and (
+        _step_backend.capabilities.supports_task_lifecycle_events
+    )
     lineage_callbacks = _LineageCallbacks(managed_lineage_observer, on_session_id_resolved)
     launch_logged = False
     spec: CmdSpec | None = None
@@ -323,6 +327,8 @@ async def _execute_claude_headless(
                 session_id=session_id,
                 on_session_id_resolved=lineage_callbacks.on_candidate,
                 stream_parser=_stream_parser,
+                backend_resume_session_id=backend_resume_session_id,
+                lifecycle_observation_enabled=lifecycle_observation_enabled,
                 on_launch_resolved=observe_launch,
                 managed_attempt_id=managed_attempt_id,
                 **lineage_callbacks.attempt_kwargs,

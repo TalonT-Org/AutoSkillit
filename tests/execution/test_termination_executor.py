@@ -60,7 +60,11 @@ class TestDrainWindowPermitsNaturalExit:
 
         kill_calls: list[int] = []
 
-        async def _mock_kill(pid: int, timeout: float = 2.0) -> None:
+        async def _mock_kill(
+            pid: int,
+            timeout: float = 2.0,
+            process_group_id: int | None = None,
+        ) -> None:
             kill_calls.append(pid)
 
         with patch(
@@ -99,7 +103,11 @@ class TestDrainWindowEscalatesToKill:
 
         kill_calls: list[int] = []
 
-        async def _mock_kill(pid: int, timeout: float = 2.0) -> None:
+        async def _mock_kill(
+            pid: int,
+            timeout: float = 2.0,
+            process_group_id: int | None = None,
+        ) -> None:
             kill_calls.append(pid)
             proc.kill()
             await proc.wait()
@@ -136,7 +144,11 @@ class TestImmediateKillSkipsDrain:
         kill_calls: list[int] = []
         call_time: list[float] = []
 
-        async def _mock_kill(pid: int, timeout: float = 2.0) -> None:
+        async def _mock_kill(
+            pid: int,
+            timeout: float = 2.0,
+            process_group_id: int | None = None,
+        ) -> None:
             call_time.append(time.monotonic())
             kill_calls.append(pid)
             proc.kill()
@@ -178,7 +190,11 @@ class TestNoKillNeverTouchesKillHelper:
 
         kill_calls: list[int] = []
 
-        async def _mock_kill(pid: int, timeout: float = 2.0) -> None:
+        async def _mock_kill(
+            pid: int,
+            timeout: float = 2.0,
+            process_group_id: int | None = None,
+        ) -> None:
             kill_calls.append(pid)
 
         import structlog
@@ -219,7 +235,11 @@ class TestChildLivenessDefersKill:
 
         kill_calls: list[int] = []
 
-        async def _mock_kill(pid: int, timeout: float = 2.0) -> None:
+        async def _mock_kill(
+            pid: int,
+            timeout: float = 2.0,
+            process_group_id: int | None = None,
+        ) -> None:
             kill_calls.append(pid)
             proc.kill()
             await proc.wait()
@@ -270,7 +290,11 @@ class TestChildLivenessFastKillUnchanged:
 
         kill_calls: list[int] = []
 
-        async def _mock_kill(pid: int, timeout: float = 2.0) -> None:
+        async def _mock_kill(
+            pid: int,
+            timeout: float = 2.0,
+            process_group_id: int | None = None,
+        ) -> None:
             kill_calls.append(pid)
             proc.kill()
             await proc.wait()
@@ -319,7 +343,11 @@ class TestChildLivenessCeilingExceeded:
 
         kill_calls: list[int] = []
 
-        async def _mock_kill(pid: int, timeout: float = 2.0) -> None:
+        async def _mock_kill(
+            pid: int,
+            timeout: float = 2.0,
+            process_group_id: int | None = None,
+        ) -> None:
             kill_calls.append(pid)
             proc.kill()
             await proc.wait()
@@ -373,7 +401,11 @@ class TestChildLivenessChildExitsDuringDeferral:
 
         kill_calls: list[int] = []
 
-        async def _mock_kill(pid: int, timeout: float = 2.0) -> None:
+        async def _mock_kill(
+            pid: int,
+            timeout: float = 2.0,
+            process_group_id: int | None = None,
+        ) -> None:
             kill_calls.append(pid)
             proc.kill()
             await proc.wait()

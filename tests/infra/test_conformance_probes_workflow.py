@@ -367,12 +367,12 @@ class TestPostFailure:
                 if step.get("run"):
                     assert "post-probe-failure.sh" in step["run"]
 
-    def test_claude_failure_uploads_bounded_startup_traces(self, workflow: dict) -> None:
+    def test_claude_always_uploads_bounded_startup_traces(self, workflow: dict) -> None:
         steps = workflow["jobs"]["claude-probe"]["steps"]
         upload = next(
             step for step in steps if step.get("name") == "Upload bounded startup-readiness traces"
         )
-        assert upload["if"] == "failure()"
+        assert upload["if"] == "always()"
         assert "upload-artifact@" in upload["uses"]
         assert upload["with"]["path"].endswith("*")
         assert upload["with"]["retention-days"] == 14

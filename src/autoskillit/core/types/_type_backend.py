@@ -96,6 +96,8 @@ class BackendCapabilities:
 
     # True when backend streams a side-channel JSONL log (Channel B)
     channel_b_capable: bool = field(default=False)
+    # True when backend emits owned task lifecycle records
+    supports_task_lifecycle_events: bool = field(default=False)
     # True when the subprocess needs a pseudo-TTY allocation
     pty_required: bool = field(default=False)
     # True when backend supports --resume <session_id>
@@ -328,6 +330,7 @@ def model_class(model: str) -> str:
 
 CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     channel_b_capable=True,
+    supports_task_lifecycle_events=True,
     pty_required=True,
     session_resume_capable=True,
     skill_injection_capable=True,
@@ -534,6 +537,8 @@ class SessionEvent:
     session_id: str | None = None
     exit_code: int | None = None
     backend_data: ClaudeEventData | CodexEventData | None = None
+    task_id: str | None = None
+    task_active: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)

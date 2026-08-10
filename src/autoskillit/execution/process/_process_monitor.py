@@ -12,13 +12,14 @@ import psutil
 
 from autoskillit.core import ChannelBStatus, get_logger
 from autoskillit.execution.process._process_jsonl import (
+    EventCursor,
     _jsonl_contains_marker,
     _jsonl_has_record_type,
     _jsonl_last_record_type,
 )
 
 if TYPE_CHECKING:
-    from autoskillit.core import StreamParser
+    from autoskillit.core import SessionEvent, StreamParser
 
 logger = get_logger(__name__)
 
@@ -29,6 +30,7 @@ class SessionMonitorResult(NamedTuple):
     status: ChannelBStatus
     session_id: str  # Claude Code session ID from JSONL filename stem, or ""
     orphaned_tool_result: bool = False
+    cursor: EventCursor | None = None
 
 
 async def _heartbeat(
@@ -38,6 +40,7 @@ async def _heartbeat(
     stream_parser: StreamParser | None = None,
     _poll_interval: float = 0.5,
     _on_poll: Callable[[], None] | None = None,
+    _on_event: Callable[[SessionEvent], None] | None = None,
 ) -> str:
     """Poll session NDJSON output for a result-type record with non-empty content.
 
@@ -73,6 +76,8 @@ async def _heartbeat(
         if stream_parser is not None:
             for line in new_content.splitlines():
                 event = stream_parser.parse_line(line)
+                if event is not None and _on_event is not None:
+                    _on_event(event)
                 if event is not None and event.is_terminal:
                     if not completion_marker or event.has_marker:
                         return "completion"
@@ -196,6 +201,9 @@ async def _session_log_monitor(
     max_suppression_seconds: float = 1800.0,
     marker_dir: Path | None = None,
     caller_session_id: str | None = None,
+    resume_cursor: EventCursor | None = None,
+    on_session_file_selected: Callable[[Path, EventCursor], None] | None = None,
+    has_pending_tasks: Callable[[], bool] | None = None,
 ) -> SessionMonitorResult:
     """Watch Claude Code session log for completion or staleness.
 
@@ -236,6 +244,10 @@ async def _session_log_monitor(
                 for f in session_log_dir.iterdir()
                 if f.suffix == ".jsonl" and f.stat().st_ctime > spawn_time
             ]
+            if expected_session_id and resume_cursor is not None:
+                expected_file = session_log_dir / f"{expected_session_id}.jsonl"
+                if expected_file.is_file() and expected_file not in candidates:
+                    candidates.append(expected_file)
             if candidates:
                 if expected_session_id:
                     # Identity-based selection: match filename stem to session ID
@@ -282,6 +294,13 @@ async def _session_log_monitor(
 
     # Extract session ID from the discovered JSONL filename stem
     _session_id = session_file.stem
+    lifecycle_cursor = (
+        resume_cursor
+        if resume_cursor is not None and resume_cursor.path == session_file
+        else EventCursor(session_file)
+    )
+    if on_session_file_selected is not None:
+        on_session_file_selected(session_file, lifecycle_cursor)
 
     # Phase 2: Monitor the session log
     # Initialize scan offset from file state at discovery. On resumed sessions,
@@ -289,9 +308,12 @@ async def _session_log_monitor(
     # prior session. Starting at the current file boundary ensures Phase 2 only
     # scans content written AFTER monitoring began.
     try:
-        _initial_content = session_file.read_text(errors="replace")
-        scan_pos = len(_initial_content)
-        last_size = len(_initial_content.encode("utf-8"))
+        scan_pos = (
+            lifecycle_cursor.run_boundary
+            if resume_cursor is not None
+            else session_file.stat().st_size
+        )
+        last_size = session_file.stat().st_size
     except OSError:
         logger.warning(
             "session_log_phase2_init_read_failed",
@@ -332,8 +354,8 @@ async def _session_log_monitor(
 
             # Check new content for completion marker (structured)
             try:
-                content = session_file.read_text(errors="replace")
-                new_content = content[scan_pos:]
+                content = session_file.read_bytes()
+                new_content = content[scan_pos:].decode("utf-8", errors="replace")
                 scan_pos = len(content)
                 if _jsonl_contains_marker(new_content, completion_marker, record_types):
                     logger.debug(
@@ -342,7 +364,11 @@ async def _session_log_monitor(
                         file_size=current_size,
                         scan_pos=scan_pos,
                     )
-                    return SessionMonitorResult(ChannelBStatus.COMPLETION, _session_id)
+                    return SessionMonitorResult(
+                        ChannelBStatus.COMPLETION,
+                        _session_id,
+                        cursor=lifecycle_cursor,
+                    )
                 last_type_in_chunk = _jsonl_last_record_type(new_content)
                 if last_type_in_chunk is not None:
                     _last_record_type = last_type_in_chunk
@@ -352,7 +378,15 @@ async def _session_log_monitor(
             # Check staleness
             elapsed = _time.monotonic() - last_change
             if elapsed >= stale_threshold:
-                if pid is not None and _has_active_api_connection(pid):
+                if has_pending_tasks is not None and has_pending_tasks():
+                    if suppression_start is None:
+                        suppression_start = _time.monotonic()
+                    if _time.monotonic() - suppression_start >= max_suppression_seconds:
+                        return SessionMonitorResult(
+                            ChannelBStatus.STALE, _session_id, cursor=lifecycle_cursor
+                        )
+                    last_change = _time.monotonic()
+                elif pid is not None and _has_active_api_connection(pid):
                     if suppression_start is None:
                         suppression_start = _time.monotonic()
                     if _time.monotonic() - suppression_start >= max_suppression_seconds:
@@ -363,7 +397,9 @@ async def _session_log_monitor(
                             max_suppression_seconds,
                             pid,
                         )
-                        return SessionMonitorResult(ChannelBStatus.STALE, _session_id)
+                        return SessionMonitorResult(
+                            ChannelBStatus.STALE, _session_id, cursor=lifecycle_cursor
+                        )
                     last_change = _time.monotonic()
                     logger.warning(
                         "JSONL silent for %.0fs but ESTABLISHED port-443 connection — "
@@ -382,7 +418,9 @@ async def _session_log_monitor(
                             max_suppression_seconds,
                             pid,
                         )
-                        return SessionMonitorResult(ChannelBStatus.STALE, _session_id)
+                        return SessionMonitorResult(
+                            ChannelBStatus.STALE, _session_id, cursor=lifecycle_cursor
+                        )
                     last_change = _time.monotonic()
                     logger.warning(
                         "JSONL silent for %.0fs but child processes are CPU-active — "
@@ -404,7 +442,9 @@ async def _session_log_monitor(
                             caller_session_id=caller_session_id,
                             marker_dir=str(marker_dir),
                         )
-                        return SessionMonitorResult(ChannelBStatus.STALE, _session_id)
+                        return SessionMonitorResult(
+                            ChannelBStatus.STALE, _session_id, cursor=lifecycle_cursor
+                        )
                     last_change = _time.monotonic()
                     logger.warning(
                         "JSONL silent but active dispatch marker found — suppressing stale kill",
@@ -417,4 +457,5 @@ async def _session_log_monitor(
                         ChannelBStatus.STALE,
                         _session_id,
                         orphaned_tool_result=(_last_record_type == "user"),
+                        cursor=lifecycle_cursor,
                     )

@@ -17,14 +17,16 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING, assert_never
+from typing import TYPE_CHECKING, assert_never, cast
 
 import anyio
 import anyio.abc
 
 from autoskillit.core import (
+    ChannelBStatus,
     ChannelConfirmation,
     KillReason,
+    SessionEvent,
     SubprocessResult,
     TerminationAction,
     TerminationReason,
@@ -40,10 +42,12 @@ from autoskillit.execution.process._process_io import (
     summarize_capture,
 )
 from autoskillit.execution.process._process_jsonl import (
+    EventCursor,
     _jsonl_contains_marker,
     _jsonl_has_record_type,
     _jsonl_last_record_type,
     _marker_is_standalone,
+    fold_event_cursor,
 )
 from autoskillit.execution.process._process_kill import (
     _wait_process_dead,
@@ -63,10 +67,12 @@ from autoskillit.execution.process._process_race import (
     RaceSignals,
     _extract_stdout_session_id,
     _watch_child_activity,
+    _watch_completion_eligibility,
     _watch_heartbeat,
     _watch_process,
     _watch_session_log,
     _watch_stdout_idle,
+    fold_lifecycle_evidence,
     resolve_termination,
 )
 
@@ -108,6 +114,7 @@ __all__ = [
     "create_temp_io",
     "decide_termination_action",
     "execute_termination_action",
+    "fold_lifecycle_evidence",
     "kill_process_tree",
     "pty_wrap_command",
     "read_temp_output",
@@ -136,6 +143,9 @@ def decide_termination_action(
     *,
     timeout_fired: bool,
     process_exited: bool,
+    pending_task_ids: tuple[str, ...] = (),
+    schedule_wakeup_violation: bool = False,
+    completion_ceiling_expired: bool = False,
 ) -> TerminationAction:
     """Pure decision function: maps race signals to a TerminationAction.
 
@@ -151,6 +161,10 @@ def decide_termination_action(
     as a pure decision table without any async or process infrastructure.
     """
     if timeout_fired:
+        return TerminationAction.IMMEDIATE_KILL
+    if process_exited and (
+        pending_task_ids or schedule_wakeup_violation or completion_ceiling_expired
+    ):
         return TerminationAction.IMMEDIATE_KILL
     if process_exited:
         return TerminationAction.NO_KILL
@@ -181,6 +195,7 @@ async def execute_termination_action(
     marker_dir: Path | None = None,
     session_id: str | None = None,
     child_deferral_ceiling: float = 0.0,
+    process_group_id: int | None = None,
 ) -> KillReason:
     """Single authorized executor for all kill decisions in run_managed_async.
 
@@ -230,7 +245,7 @@ async def execute_termination_action(
                     )
                     await anyio.sleep(_poll_interval)
             proc_log.debug("grace_expired_killing", grace_seconds=grace_seconds)
-            await async_kill_process_tree(proc.pid)
+            await async_kill_process_tree(proc.pid, process_group_id=process_group_id)
             return KillReason.KILL_AFTER_COMPLETION
         case TerminationAction.IMMEDIATE_KILL:
             if pid is not None and _has_active_child_processes(pid):
@@ -238,7 +253,7 @@ async def execute_termination_action(
                     "immediate_kill_with_active_children",
                     pid=pid,
                 )
-            await async_kill_process_tree(proc.pid)
+            await async_kill_process_tree(proc.pid, process_group_id=process_group_id)
             return KillReason.INFRA_KILL
         case _ as unreachable:
             assert_never(unreachable)
@@ -279,6 +294,8 @@ async def run_managed_async(
     on_session_id_resolved: Callable[[str], None] | None = None,
     child_deferral_ceiling: float = 0.0,
     capture_dir: Path | None = None,
+    backend_resume_session_id: str = "",
+    lifecycle_observation_enabled: bool = False,
 ) -> SubprocessResult:
     """Async subprocess execution with temp file I/O and process tree cleanup.
 
@@ -291,6 +308,7 @@ async def run_managed_async(
     6. read_temp_output for results
     7. cleanup temp files via context manager
     """
+    lifecycle_observation_enabled = lifecycle_observation_enabled and stream_parser is not None
     # Capture workload basename before PTY wrapping rewrites cmd (#806)
     _workload_basename = Path(cmd[0]).name if cmd else ""
     _inherited_fds = _normalize_pass_fds(pass_fds)
@@ -323,6 +341,20 @@ async def run_managed_async(
             # Capturing it after open_process() creates a race: under CI load
             # the subprocess writes its JSONL before time.time() is evaluated,
             # causing st_ctime < spawn_time and Phase 1 to never find the file.
+            resume_cursor: EventCursor | None = None
+            if session_log_dir is not None and backend_resume_session_id:
+                resume_path = session_log_dir / f"{backend_resume_session_id}.jsonl"
+                try:
+                    resume_boundary = resume_path.stat().st_size
+                except OSError:
+                    logger.warning(
+                        "resume_cursor_stat_failed",
+                        path=str(resume_path),
+                        exc_info=True,
+                    )
+                    resume_boundary = None
+                if resume_boundary is not None and resume_path.is_file():
+                    resume_cursor = EventCursor(resume_path, run_boundary=resume_boundary)
             _spawn_time = time.time()
             proc = await anyio.open_process(
                 cmd,
@@ -334,6 +366,7 @@ async def run_managed_async(
                 start_new_session=True,
                 pass_fds=_inherited_fds,
             )
+            process_group_id = proc.pid
 
             # Resolve the workload TraceTarget — the PID that should be observed.
             # anyio.open_process returns the spawn PID, which in PTY mode is the
@@ -393,9 +426,20 @@ async def run_managed_async(
                 session_monitor_enabled=session_log_dir is not None,
             )
 
-            acc = RaceAccumulator()
+            if lifecycle_observation_enabled:
+                assert stream_parser is not None
+            lifecycle_parser = cast("StreamParser", stream_parser)
+            acc = RaceAccumulator(
+                lifecycle_observation_enabled=lifecycle_observation_enabled,
+                stdout_cursor=(
+                    EventCursor(stdout_path) if lifecycle_observation_enabled else None
+                ),
+                channel_b_cursor=resume_cursor,
+                process_group_id=process_group_id,
+            )
             trigger = anyio.Event()
             channel_b_ready = anyio.Event()
+            channel_b_selected = anyio.Event()
             stdout_session_id_ready = anyio.Event()
             timeout_scope_ref: list[anyio.CancelScope | None] = [None]
 
@@ -444,6 +488,19 @@ async def run_managed_async(
                         marker_dir,
                         session_id,
                         on_session_id_resolved,
+                        backend_resume_session_id,
+                        channel_b_selected,
+                    )
+                if lifecycle_observation_enabled:
+                    tg.start_soon(
+                        _watch_completion_eligibility,
+                        acc,
+                        trigger,
+                        channel_b_selected,
+                        completion_drain_timeout,
+                        child_deferral_ceiling,
+                        lifecycle_parser,
+                        session_log_dir is not None,
                     )
                 if idle_output_timeout is not None and idle_output_timeout > 0:
                     tg.start_soon(
@@ -458,6 +515,11 @@ async def run_managed_async(
                             max_suppression_seconds=max_suppression_seconds or 1800.0,
                             inspector_callback=inspector_callback,
                             timeout_scope_ref=timeout_scope_ref,
+                            has_pending_tasks=(
+                                acc.has_unresolved_obligations
+                                if lifecycle_observation_enabled
+                                else None
+                            ),
                         ),
                     )
                 tracing_handle = None
@@ -479,6 +541,11 @@ async def run_managed_async(
                             trigger,
                             marker_dir=marker_dir,
                             session_id=session_id,
+                            has_pending_tasks=(
+                                acc.has_unresolved_obligations
+                                if lifecycle_observation_enabled
+                                else None
+                            ),
                         ),
                     )
                 timeout_scope: anyio.CancelScope | None
@@ -508,6 +575,34 @@ async def run_managed_async(
                     )
                 tg.cancel_scope.cancel()
 
+            if lifecycle_observation_enabled:
+
+                def _observe_final_stdout(event: SessionEvent) -> None:
+                    acc.observe_event(event)
+                    if event.has_marker and acc.channel_a_candidate_at is None:
+                        acc.channel_a_candidate_at = anyio.current_time()
+
+                def _observe_final_channel_b(event: SessionEvent) -> None:
+                    acc.observe_event(event)
+                    if event.has_marker and acc.channel_b_candidate_at is None:
+                        acc.channel_b_candidate_at = anyio.current_time()
+
+                final_fold_complete = acc.stdout_cursor is not None
+                if acc.stdout_cursor is not None:
+                    final_fold_complete = fold_event_cursor(
+                        acc.stdout_cursor, lifecycle_parser, _observe_final_stdout
+                    )
+                if acc.channel_b_cursor is not None:
+                    final_fold_complete = (
+                        fold_event_cursor(
+                            acc.channel_b_cursor, lifecycle_parser, _observe_final_channel_b
+                        )
+                        and final_fold_complete
+                    )
+                acc.channel_a_confirmed = acc.channel_a_candidate_at is not None
+                if acc.channel_b_candidate_at is not None:
+                    acc.channel_b_status = ChannelBStatus.COMPLETION
+                acc.lifecycle_observation_complete = final_fold_complete
             signals = acc.to_race_signals()
             termination, _channel_confirmation = resolve_termination(signals)
 
@@ -526,6 +621,9 @@ async def run_managed_async(
                 termination,
                 timeout_fired=timeout_scope is not None and timeout_scope.cancelled_caught,
                 process_exited=signals.process_exited,
+                pending_task_ids=signals.pending_task_ids,
+                schedule_wakeup_violation=signals.schedule_wakeup_violation,
+                completion_ceiling_expired=signals.completion_ceiling_expired,
             )
             proc_log.debug(
                 "kill_decision",
@@ -546,6 +644,7 @@ async def run_managed_async(
                 marker_dir=marker_dir,
                 session_id=session_id,
                 child_deferral_ceiling=child_deferral_ceiling,
+                process_group_id=process_group_id,
             )
 
             # Flush and close before reading
@@ -571,6 +670,12 @@ async def run_managed_async(
                 channel_confirmation=_channel_confirmation,
                 proc_snapshots=snapshots_data,
                 channel_b_session_id=signals.channel_b_session_id,
+                lifecycle_observation_enabled=lifecycle_observation_enabled,
+                lifecycle_observation_complete=signals.lifecycle_observation_complete,
+                pending_task_ids=signals.pending_task_ids,
+                schedule_wakeup_violation=signals.schedule_wakeup_violation,
+                completion_ceiling_expired=signals.completion_ceiling_expired,
+                process_group_id=process_group_id,
                 session_id=_resolve_session_id(
                     signals.stdout_session_id, signals.channel_b_session_id
                 ),
@@ -599,8 +704,11 @@ async def run_managed_async(
             with anyio.CancelScope(shield=True):
                 if "tracing_handle" in locals() and tracing_handle is not None:
                     tracing_handle.stop()
-                if "proc" in locals() and proc.returncode is None:
-                    await async_kill_process_tree(proc.pid)
+                if "proc" in locals():
+                    await async_kill_process_tree(
+                        proc.pid,
+                        process_group_id=process_group_id,
+                    )
             raise
         finally:
             if stdin_handle is not None:
@@ -684,6 +792,7 @@ def run_managed_sync(
                 stderr=stderr,
                 termination=termination,
                 pid=process.pid,
+                process_group_id=process.pid,
                 channel_confirmation=ChannelConfirmation.UNMONITORED,
                 stdout_path=_stdout_path,
                 stderr_path=_stderr_path,
@@ -733,6 +842,8 @@ class DefaultSubprocessRunner:
         on_session_id_resolved: Callable[[str], None] | None = None,
         child_deferral_ceiling: float = 0.0,
         capture_dir: Path | None = None,
+        backend_resume_session_id: str = "",
+        lifecycle_observation_enabled: bool = False,
     ) -> SubprocessResult:
         return await run_managed_async(
             cmd,
@@ -762,4 +873,6 @@ class DefaultSubprocessRunner:
             workload_basenames=workload_basenames,
             on_session_id_resolved=on_session_id_resolved,
             capture_dir=capture_dir,
+            backend_resume_session_id=backend_resume_session_id,
+            lifecycle_observation_enabled=lifecycle_observation_enabled,
         )

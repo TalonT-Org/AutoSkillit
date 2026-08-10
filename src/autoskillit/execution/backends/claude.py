@@ -77,6 +77,7 @@ from autoskillit.execution.backends._backend_cmd_builder_base import (
     FlagVocabulary,
 )
 from autoskillit.execution.backends._claude_prompt import (
+    _CLAUDE_SKILL_SESSION_HARDENING,
     _HEADLESS_ENV_HARDENING,
     _HEADLESS_EXCLUSIVE_VARS,
     _INTERACTIVE_ENV_EXCLUSIONS,
@@ -227,6 +228,46 @@ class ClaudeStreamParser:
 
         record_type = obj.get("type", "")
 
+        if record_type in {"task_started", "task_progress", "task_notification", "task_updated"}:
+            task_id = obj.get("task_id")
+            if not isinstance(task_id, str) or not task_id.strip():
+                return SessionEvent(
+                    kind=BackendEventKind.IGNORED,
+                    is_terminal=False,
+                    has_marker=False,
+                )
+            status: object = obj.get("status")
+            if record_type == "task_updated":
+                patch = obj.get("patch")
+                if not isinstance(patch, dict):
+                    return SessionEvent(
+                        kind=BackendEventKind.IGNORED,
+                        is_terminal=False,
+                        has_marker=False,
+                    )
+                status = patch.get("status")
+            active_statuses = {"pending", "running", "paused"}
+            terminal_statuses = {"completed", "failed", "stopped", "killed"}
+            if record_type in {"task_started", "task_progress"}:
+                task_active = True
+            elif status in active_statuses:
+                task_active = True
+            elif status in terminal_statuses:
+                task_active = False
+            else:
+                return SessionEvent(
+                    kind=BackendEventKind.IGNORED,
+                    is_terminal=False,
+                    has_marker=False,
+                )
+            return SessionEvent(
+                kind=BackendEventKind.TASK_LIFECYCLE,
+                is_terminal=False,
+                has_marker=False,
+                task_id=task_id.strip(),
+                task_active=task_active,
+            )
+
         if record_type == "system":
             subtype = obj.get("subtype", "")
             session_id = obj.get("session_id", "")
@@ -293,6 +334,19 @@ class ClaudeStreamParser:
                             raw=obj,
                         ),
                     )
+            message = obj.get("message")
+            content = message.get("content") if isinstance(message, dict) else None
+            if isinstance(content, list) and any(
+                isinstance(block, dict)
+                and block.get("type") == "tool_use"
+                and block.get("name") == "ScheduleWakeup"
+                for block in content
+            ):
+                return SessionEvent(
+                    kind=BackendEventKind.SCHEDULE_WAKEUP,
+                    is_terminal=False,
+                    has_marker=False,
+                )
             return SessionEvent(
                 kind=BackendEventKind.IGNORED,
                 is_terminal=False,
@@ -605,6 +659,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         managed_attempt_id: str | None = None,
         include_scope_discipline: bool = False,
+        skill_session: bool = False,
     ) -> CmdSpec:
         del (
             native_shell_capture_decision,
@@ -632,6 +687,8 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
                     merged[key] = value
         env = dict(build_agent_env(base={}, extras=merged))
         env.update(_HEADLESS_ENV_HARDENING)
+        if skill_session:
+            env.update(_CLAUDE_SKILL_SESSION_HARDENING)
         return CmdSpec(
             cmd=tuple(cmd),
             env=env,
@@ -738,6 +795,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             for k, v in provider_extras.items():
                 if k not in _SKILL_SESSION_EXTRAS_DENYLIST:
                     extras[k] = v
+        extras.update(_CLAUDE_SKILL_SESSION_HARDENING)
         if profile_name:
             extras[PROVIDER_PROFILE_ENV_VAR] = profile_name
             extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
@@ -748,7 +806,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             model=model,
             env_extras=extras,
             base=filtered_base,
-            required=SKILL_SESSION_REQUIRED_ENV,
+            required=SKILL_SESSION_REQUIRED_ENV | _CLAUDE_SKILL_SESSION_HARDENING.keys(),
         )
         cmd: list[str] = [*spec.cmd]
         if plugin_binding is not None:

@@ -38,6 +38,70 @@ def _context_exhaustion_line() -> str:
 
 
 class TestClaudeStreamParser:
+    @pytest.mark.parametrize("record_type", ["task_started", "task_progress"])
+    def test_active_task_records_are_normalized(self, record_type: str) -> None:
+        result = ClaudeStreamParser().parse_line(
+            json.dumps({"type": record_type, "task_id": " task-1 "})
+        )
+        assert result is not None
+        assert result.kind is BackendEventKind.TASK_LIFECYCLE
+        assert result.task_id == "task-1"
+        assert result.task_active is True
+
+    @pytest.mark.parametrize("status", ["pending", "running", "paused"])
+    def test_task_updated_nonterminal_status_is_active(self, status: str) -> None:
+        result = ClaudeStreamParser().parse_line(
+            json.dumps({"type": "task_updated", "task_id": "t1", "patch": {"status": status}})
+        )
+        assert result is not None
+        assert result.kind is BackendEventKind.TASK_LIFECYCLE
+        assert result.task_active is True
+
+    @pytest.mark.parametrize("status", ["completed", "failed", "stopped"])
+    def test_task_notification_terminal_status_is_inactive(self, status: str) -> None:
+        result = ClaudeStreamParser().parse_line(
+            json.dumps({"type": "task_notification", "task_id": "t1", "status": status})
+        )
+        assert result is not None
+        assert result.kind is BackendEventKind.TASK_LIFECYCLE
+        assert result.task_active is False
+
+    @pytest.mark.parametrize("status", ["completed", "failed", "stopped", "killed"])
+    def test_task_updated_terminal_status_is_inactive(self, status: str) -> None:
+        result = ClaudeStreamParser().parse_line(
+            json.dumps({"type": "task_updated", "task_id": "t1", "patch": {"status": status}})
+        )
+        assert result is not None
+        assert result.kind is BackendEventKind.TASK_LIFECYCLE
+        assert result.task_active is False
+
+    @pytest.mark.parametrize(
+        "record",
+        [
+            {"type": "task_progress"},
+            {"type": "task_updated", "task_id": "t1", "patch": "bad"},
+            {"type": "task_updated", "task_id": "t1", "patch": {"subject": "x"}},
+        ],
+    )
+    def test_malformed_task_records_are_ignored(self, record: dict[str, Any]) -> None:
+        result = ClaudeStreamParser().parse_line(json.dumps(record))
+        assert result is not None
+        assert result.kind is BackendEventKind.IGNORED
+        assert result.task_id is None
+
+    def test_schedule_wakeup_tool_use_is_detected(self) -> None:
+        result = ClaudeStreamParser().parse_line(
+            _assistant_line(
+                message={
+                    "content": [
+                        {"type": "tool_use", "name": "ScheduleWakeup", "input": {"delay": "5m"}}
+                    ]
+                }
+            )
+        )
+        assert result is not None
+        assert result.kind is BackendEventKind.SCHEDULE_WAKEUP
+
     def test_parse_line_system_api_retry_returns_api_retry_kind(self) -> None:
         parser = ClaudeStreamParser()
         line = json.dumps(

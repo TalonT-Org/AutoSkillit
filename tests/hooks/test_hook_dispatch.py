@@ -242,7 +242,6 @@ class TestDispatchOverhead:
         direct_median = sorted(direct_times)[runs // 2]
         dispatch_median = sorted(dispatch_times)[runs // 2]
         overhead = dispatch_median - direct_median
-
         assert overhead < 0.100, (
             f"Dispatch overhead {overhead:.3f}s exceeds 100ms threshold "
             f"(direct={direct_median:.3f}s, dispatch={dispatch_median:.3f}s)"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import signal
 
 import anyio
@@ -13,7 +14,11 @@ from autoskillit.core import ProcessCleanupResult, get_logger
 logger = get_logger(__name__)
 
 
-def kill_process_tree(pid: int, timeout: float = 2.0) -> ProcessCleanupResult:
+def kill_process_tree(
+    pid: int,
+    timeout: float = 2.0,
+    process_group_id: int | None = None,
+) -> ProcessCleanupResult:
     """Kill a process and all its descendants. SIGTERM → wait → SIGKILL.
 
     Uses psutil to find ALL descendants (not just same process group),
@@ -24,18 +29,31 @@ def kill_process_tree(pid: int, timeout: float = 2.0) -> ProcessCleanupResult:
         timeout: Seconds to wait between SIGTERM and SIGKILL.
     """
     try:
-        parent = psutil.Process(pid)
+        parent: psutil.Process | None = psutil.Process(pid)
     except psutil.NoSuchProcess:
-        return ProcessCleanupResult(root_pid=pid)
+        parent = None
 
     # Collect all children first (recursive)
     try:
-        children = parent.children(recursive=True)
+        children = parent.children(recursive=True) if parent is not None else []
     except psutil.NoSuchProcess:
         children = []
 
     # Include the parent in the kill list
-    all_procs = children + [parent]
+    all_procs = children + ([parent] if parent is not None else [])
+    if process_group_id is not None:
+        known = {proc.pid for proc in all_procs}
+        for candidate in psutil.process_iter():
+            try:
+                if (
+                    candidate.pid not in known
+                    and candidate.pid != os.getpid()
+                    and os.getpgid(candidate.pid) == process_group_id
+                ):
+                    all_procs.append(candidate)
+                    known.add(candidate.pid)
+            except (OSError, psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
     identities: list[tuple[int, float]] = []
     access_denied: set[int] = set()
     for proc in all_procs:
@@ -81,9 +99,13 @@ def kill_process_tree(pid: int, timeout: float = 2.0) -> ProcessCleanupResult:
     )
 
 
-async def async_kill_process_tree(pid: int, timeout: float = 2.0) -> ProcessCleanupResult:
+async def async_kill_process_tree(
+    pid: int,
+    timeout: float = 2.0,
+    process_group_id: int | None = None,
+) -> ProcessCleanupResult:
     """Non-blocking wrapper around kill_process_tree for async callers."""
-    return await anyio.to_thread.run_sync(kill_process_tree, pid, timeout)
+    return await anyio.to_thread.run_sync(kill_process_tree, pid, timeout, process_group_id)
 
 
 async def _wait_process_dead(proc: psutil.Process, timeout: float = 5.0) -> bool:

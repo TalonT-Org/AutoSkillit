@@ -38,6 +38,7 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "create_temp_io",
         "decide_termination_action",
         "execute_termination_action",
+        "fold_lifecycle_evidence",
         "kill_process_tree",
         "pty_wrap_command",
         "read_temp_output",
@@ -127,6 +128,7 @@ def test_process_race_exports():
         RaceAccumulator,
         RaceSignals,
         _watch_heartbeat,
+        fold_lifecycle_evidence,
         resolve_termination,
     )
 
@@ -136,10 +138,12 @@ def test_process_race_exports():
     assert resolve_termination.__module__ == "autoskillit.execution.process._process_race"
     assert callable(_watch_heartbeat)
     assert _watch_heartbeat.__module__ == "autoskillit.execution.process._process_race"
+    assert callable(fold_lifecycle_evidence)
+    assert fold_lifecycle_evidence.__module__ == "autoskillit.execution.process._process_race"
 
 
 def test_process_facade_reexports_all_public_symbols():
-    """process.py facade re-exports exactly the expected 28 public symbols."""
+    """process.py facade re-exports exactly the expected public symbols."""
     from autoskillit.execution import process
 
     assert hasattr(process, "__all__")

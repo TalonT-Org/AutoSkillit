@@ -13,6 +13,7 @@ import structlog.testing
 from autoskillit.core import AGENT_BACKEND_CLAUDE_CODE, BackendCapabilities
 from autoskillit.core.types import (
     AgentSessionResult,
+    ChannelConfirmation,
     CliSubtype,
     InfraExitCategory,
     KillReason,
@@ -95,6 +96,199 @@ def _success_result_json(result_text: str = "done", session_id: str = "test-sess
             "is_error": False,
         }
     )
+
+
+def test_pending_lifecycle_obligation_preempts_success() -> None:
+    result = SubprocessResult(
+        returncode=0,
+        stdout=_success_result_json(),
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=1,
+        lifecycle_observation_enabled=True,
+        lifecycle_observation_complete=True,
+        pending_task_ids=("task-1",),
+    )
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/plan",
+        backend=ClaudeCodeBackend(),
+    )
+    assert skill_result.success is False
+    assert skill_result.needs_retry is True
+    assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
+
+
+def test_lifecycle_result_flag_is_authoritative_for_obligation_gate() -> None:
+    result = SubprocessResult(
+        returncode=0,
+        stdout=_success_result_json(),
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=1,
+        lifecycle_observation_enabled=True,
+        lifecycle_observation_complete=True,
+        pending_task_ids=("owned",),
+    )
+
+    skill_result = _build_skill_result(
+        result,
+        skill_command="",
+        backend=ClaudeCodeBackend(),
+    )
+
+    assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
+
+
+def test_observed_empty_lifecycle_preserves_success() -> None:
+    result = SubprocessResult(
+        returncode=0,
+        stdout=_success_result_json(),
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=1,
+        lifecycle_observation_enabled=True,
+        lifecycle_observation_complete=True,
+    )
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/plan",
+        backend=ClaudeCodeBackend(),
+    )
+    assert skill_result.success is True
+    assert skill_result.retry_reason is RetryReason.NONE
+
+
+def test_unobserved_lifecycle_without_foldable_source_fails_safe() -> None:
+    result = SubprocessResult(
+        returncode=0,
+        stdout="",
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=1,
+        lifecycle_observation_enabled=True,
+    )
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/plan",
+        backend=ClaudeCodeBackend(),
+    )
+    assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
+
+
+@pytest.mark.parametrize(
+    "termination",
+    [TerminationReason.COMPLETED, TerminationReason.NATURAL_EXIT],
+)
+@pytest.mark.parametrize(
+    "obligation",
+    [
+        {"pending_task_ids": ("task-2", "task-1")},
+        {"schedule_wakeup_violation": True},
+        {"completion_ceiling_expired": True},
+    ],
+)
+def test_each_authoritative_obligation_rejects_success(
+    termination: TerminationReason,
+    obligation: dict[str, object],
+) -> None:
+    result = SubprocessResult(
+        returncode=0,
+        stdout=_success_result_json(),
+        stderr="",
+        termination=termination,
+        pid=1,
+        lifecycle_observation_enabled=True,
+        lifecycle_observation_complete=True,
+        **obligation,
+    )
+
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/plan",
+        backend=ClaudeCodeBackend(),
+    )
+
+    assert skill_result.success is False
+    assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
+
+
+@pytest.mark.parametrize(
+    "channel_confirmation",
+    [ChannelConfirmation.CHANNEL_A, ChannelConfirmation.CHANNEL_B],
+)
+def test_channel_provenance_cannot_bypass_pending_obligation(
+    channel_confirmation: ChannelConfirmation,
+) -> None:
+    result = SubprocessResult(
+        returncode=0,
+        stdout=_success_result_json(),
+        stderr="",
+        termination=TerminationReason.COMPLETED,
+        pid=1,
+        channel_confirmation=channel_confirmation,
+        lifecycle_observation_enabled=True,
+        lifecycle_observation_complete=True,
+        pending_task_ids=("owned",),
+    )
+
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/plan",
+        backend=ClaudeCodeBackend(),
+    )
+
+    assert skill_result.success is False
+    assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
+
+
+@pytest.mark.parametrize("captured", [False, True])
+def test_defensive_fold_rejects_pending_task_from_available_output(
+    tmp_path: Path,
+    captured: bool,
+) -> None:
+    lifecycle_line = json.dumps({"type": "task_started", "task_id": "defensive-task"})
+    stdout_path = tmp_path / "stdout.jsonl"
+    stdout_path.write_text(lifecycle_line + "\n")
+    result = SubprocessResult(
+        returncode=0,
+        stdout="" if captured else lifecycle_line,
+        stdout_path=stdout_path if captured else None,
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=1,
+        lifecycle_observation_enabled=True,
+    )
+
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/plan",
+        backend=ClaudeCodeBackend(),
+    )
+
+    assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
+    assert "pending=defensive-task" in skill_result.result
+
+
+def test_defensive_fold_preserves_existing_pending_evidence() -> None:
+    result = SubprocessResult(
+        returncode=0,
+        stdout=_success_result_json(),
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=1,
+        lifecycle_observation_enabled=True,
+        pending_task_ids=("channel-b-owned",),
+    )
+
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/plan",
+        backend=ClaudeCodeBackend(),
+    )
+
+    assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
+    assert "pending=channel-b-owned" in skill_result.result
 
 
 def _stale_result(

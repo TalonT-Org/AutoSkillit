@@ -11,6 +11,11 @@ from autoskillit.core import (
     SKILL_SESSION_REQUIRED_ENV,
     OutputFormat,
 )
+from autoskillit.execution.backends._claude_prompt import (
+    _CLAUDE_SKILL_SESSION_HARDENING,
+    _HEADLESS_EXCLUSIVE_VARS,
+    _SKILL_SESSION_EXTRAS_DENYLIST,
+)
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
 from tests.execution.backends._plugin_binding import plugin_binding
@@ -35,6 +40,23 @@ def test_skill_session_env_contains_required_vars(backend_factory) -> None:
     )
     missing = SKILL_SESSION_REQUIRED_ENV - spec.env.keys()
     assert not missing, f"Missing required skill session env vars: {missing}"
+
+
+def test_claude_skill_hardening_stays_backend_local() -> None:
+    keys = _CLAUDE_SKILL_SESSION_HARDENING.keys()
+    assert set(keys) == {
+        "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS",
+        "CLAUDE_CODE_DISABLE_CRON",
+    }
+    assert keys.isdisjoint(SKILL_SESSION_REQUIRED_ENV)
+    assert keys.isdisjoint(_SKILL_SESSION_EXTRAS_DENYLIST)
+    assert keys.isdisjoint(_HEADLESS_EXCLUSIVE_VARS)
+    codex_env = (
+        CodexBackend()
+        .build_skill_session_cmd("/investigate foo", cwd="/tmp", completion_marker="%%DONE%%")
+        .env
+    )
+    assert keys.isdisjoint(codex_env)
 
 
 @pytest.mark.parametrize(

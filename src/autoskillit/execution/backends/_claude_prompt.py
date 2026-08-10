@@ -45,6 +45,11 @@ _HEADLESS_ENV_HARDENING: dict[str, str] = {
     "NO_COLOR": "1",
 }
 
+_CLAUDE_SKILL_SESSION_HARDENING: dict[str, str] = {
+    "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
+    "CLAUDE_CODE_DISABLE_CRON": "1",
+}
+
 # Keys excluded from the host env when building the interactive base env.
 # Kept separate from _HEADLESS_ENV_HARDENING so that future headless-only
 # additions to that set do not silently change interactive env filtering.

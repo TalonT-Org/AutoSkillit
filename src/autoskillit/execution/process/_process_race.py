@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, assert_never
@@ -11,6 +11,7 @@ import anyio
 import anyio.abc
 
 from autoskillit.core import (
+    BackendEventKind,
     ChannelBStatus,
     ChannelConfirmation,
     InspectorEvidence,
@@ -18,6 +19,11 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.core import fast_loads as _fast_loads
+from autoskillit.execution.process._process_jsonl import (
+    EventCursor,
+    fold_event_cursor,
+    fold_event_lines,
+)
 from autoskillit.execution.process._process_monitor import (
     _has_active_api_connection,
     _has_active_child_processes,
@@ -28,7 +34,7 @@ from autoskillit.execution.process._process_monitor import (
 from autoskillit.execution.session._exit_classification import is_signal_death_code
 
 if TYPE_CHECKING:
-    from autoskillit.core import InspectorCallback, InspectorVerdict, StreamParser
+    from autoskillit.core import InspectorCallback, InspectorVerdict, SessionEvent, StreamParser
 
 logger = get_logger(__name__)
 
@@ -73,6 +79,12 @@ class RaceSignals:
     process_exited_event: anyio.Event = field(default_factory=anyio.Event)
     exit_snapshot: dict[str, object] | None = None
     inspector_verdict: InspectorVerdict | None = None
+    lifecycle_observation_complete: bool = False
+    pending_task_ids: tuple[str, ...] = ()
+    terminal_task_ids: tuple[str, ...] = ()
+    schedule_wakeup_violation: bool = False
+    completion_ceiling_expired: bool = False
+    process_group_id: int = 0
 
 
 @dataclass
@@ -100,6 +112,38 @@ class RaceAccumulator:
     process_exited_event: anyio.Event = field(default_factory=anyio.Event)
     exit_snapshot: dict[str, object] | None = None
     inspector_verdict: InspectorVerdict | None = None
+    lifecycle_observation_enabled: bool = False
+    lifecycle_observation_complete: bool = False
+    pending_task_ids: set[str] = field(default_factory=set)
+    terminal_task_ids: set[str] = field(default_factory=set)
+    schedule_wakeup_violation: bool = False
+    completion_ceiling_expired: bool = False
+    channel_a_candidate_at: float | None = None
+    channel_b_candidate_at: float | None = None
+    stdout_cursor: EventCursor | None = None
+    channel_b_cursor: EventCursor | None = None
+    completion_candidate_event: anyio.Event = field(default_factory=anyio.Event)
+    process_group_id: int = 0
+
+    def observe_event(self, event: SessionEvent) -> None:
+        if not self.lifecycle_observation_enabled:
+            return
+        if event.kind is BackendEventKind.SCHEDULE_WAKEUP:
+            self.schedule_wakeup_violation = True
+        elif (
+            event.kind is BackendEventKind.TASK_LIFECYCLE
+            and event.task_id is not None
+            and event.task_active is not None
+        ):
+            if event.task_active:
+                if event.task_id not in self.terminal_task_ids:
+                    self.pending_task_ids.add(event.task_id)
+            else:
+                self.pending_task_ids.discard(event.task_id)
+                self.terminal_task_ids.add(event.task_id)
+
+    def has_unresolved_obligations(self) -> bool:
+        return bool(self.pending_task_ids or self.schedule_wakeup_violation)
 
     def to_race_signals(self) -> RaceSignals:
         return RaceSignals(
@@ -114,7 +158,24 @@ class RaceAccumulator:
             process_exited_event=self.process_exited_event,
             exit_snapshot=self.exit_snapshot,
             inspector_verdict=self.inspector_verdict,
+            lifecycle_observation_complete=self.lifecycle_observation_complete,
+            pending_task_ids=tuple(sorted(self.pending_task_ids)),
+            terminal_task_ids=tuple(sorted(self.terminal_task_ids)),
+            schedule_wakeup_violation=self.schedule_wakeup_violation,
+            completion_ceiling_expired=self.completion_ceiling_expired,
+            process_group_id=self.process_group_id,
         )
+
+
+def fold_lifecycle_evidence(
+    lines: Sequence[str],
+    parser: StreamParser,
+) -> tuple[tuple[str, ...], bool]:
+    """Reduce lifecycle records to pending-task and wakeup evidence."""
+    accumulator = RaceAccumulator(lifecycle_observation_enabled=True)
+    fold_event_lines(list(lines), parser, accumulator.observe_event)
+    signals = accumulator.to_race_signals()
+    return signals.pending_task_ids, signals.schedule_wakeup_violation
 
 
 async def _watch_process(
@@ -166,14 +227,19 @@ async def _watch_heartbeat(
         completion_marker=completion_marker,
         _poll_interval=_poll_interval,
         stream_parser=stream_parser,
+        _on_event=(acc.observe_event if acc.lifecycle_observation_enabled else None),
     )
     logger.debug(
         "channel_a_confirmed",
         stdout_path=str(stdout_path),
         record_types=list(completion_record_types),
     )
-    acc.channel_a_confirmed = True
-    trigger.set()
+    if acc.lifecycle_observation_enabled:
+        acc.channel_a_candidate_at = anyio.current_time()
+        acc.completion_candidate_event.set()
+    else:
+        acc.channel_a_confirmed = True
+        trigger.set()
 
 
 async def _watch_stdout_idle(
@@ -188,6 +254,7 @@ async def _watch_stdout_idle(
     max_suppression_seconds: float = 1800.0,
     inspector_callback: InspectorCallback | None = None,
     timeout_scope_ref: list[anyio.CancelScope | None] | None = None,
+    has_pending_tasks: Callable[[], bool] | None = None,
 ) -> None:
     """Kill the child if stdout stops growing for idle_output_timeout seconds.
 
@@ -217,9 +284,11 @@ async def _watch_stdout_idle(
             last_growth_time = _time.monotonic()
             suppression_start_marker = None
         elif _time.monotonic() - last_growth_time >= idle_output_timeout:
-            if marker_dir is not None and _has_active_execution_marker(
+            authoritative_task_active = has_pending_tasks is not None and has_pending_tasks()
+            marker_active = marker_dir is not None and _has_active_execution_marker(
                 marker_dir, session_id=session_id
-            ):
+            )
+            if authoritative_task_active or marker_active:
                 now = _time.monotonic()
                 if suppression_start_marker is None:
                     suppression_start_marker = now
@@ -308,6 +377,7 @@ async def _watch_child_activity(
     *,
     marker_dir: Path | None = None,
     session_id: str | None = None,
+    has_pending_tasks: Callable[[], bool] | None = None,
 ) -> None:
     """Extend the wall-clock CancelScope.deadline when child processes are active.
 
@@ -335,7 +405,8 @@ async def _watch_child_activity(
             _first_observed_deadline = scope.deadline
 
         active = (
-            _has_active_child_processes(pid)
+            (has_pending_tasks is not None and has_pending_tasks())
+            or _has_active_child_processes(pid)
             or _has_active_api_connection(pid)
             or (
                 marker_dir is not None
@@ -443,6 +514,8 @@ async def _watch_session_log(
     marker_dir: Path | None = None,
     session_id: str | None = None,
     on_session_id_resolved: Callable[[str], None] | None = None,
+    backend_resume_session_id: str = "",
+    channel_b_selected: anyio.Event | None = None,
 ) -> None:
     """Monitor the session JSONL log and deposit the Channel B signal.
 
@@ -461,8 +534,19 @@ async def _watch_session_log(
         "_phase1_poll": _phase1_poll,
         "_phase2_poll": _phase2_poll,
         "_phase1_timeout": _phase1_timeout,
-        "expected_session_id": acc.stdout_session_id,
+        "expected_session_id": backend_resume_session_id or acc.stdout_session_id,
     }
+    if acc.channel_b_cursor is not None:
+        _monitor_kwargs["resume_cursor"] = acc.channel_b_cursor
+    if acc.lifecycle_observation_enabled:
+        _monitor_kwargs["has_pending_tasks"] = acc.has_unresolved_obligations
+
+    def _selected(_path: Path, cursor: EventCursor) -> None:
+        acc.channel_b_cursor = cursor
+        if channel_b_selected is not None:
+            channel_b_selected.set()
+
+    _monitor_kwargs["on_session_file_selected"] = _selected
     if max_suppression_seconds is not None:
         _monitor_kwargs["max_suppression_seconds"] = max_suppression_seconds
     if marker_dir is not None:
@@ -488,11 +572,55 @@ async def _watch_session_log(
     acc.channel_b_status = monitor_result.status
     acc.channel_b_session_id = monitor_result.session_id
     acc.channel_b_orphaned_tool_result = monitor_result.orphaned_tool_result
+    if monitor_result.cursor is not None:
+        acc.channel_b_cursor = monitor_result.cursor
     if on_session_id_resolved is not None and monitor_result.session_id:
         on_session_id_resolved(monitor_result.session_id)
     channel_b_ready.set()
-    if monitor_result.status != ChannelBStatus.COMPLETION:
+    if monitor_result.status is ChannelBStatus.COMPLETION:
+        if acc.lifecycle_observation_enabled:
+            acc.channel_b_candidate_at = anyio.current_time()
+            acc.completion_candidate_event.set()
+    else:
         trigger.set()
+
+
+async def _watch_completion_eligibility(
+    acc: RaceAccumulator,
+    trigger: anyio.Event,
+    channel_b_selected: anyio.Event,
+    completion_drain_timeout: float,
+    child_deferral_ceiling: float,
+    stream_parser: StreamParser,
+    session_log_enabled: bool,
+    _poll_interval: float = 0.05,
+) -> None:
+    """Release a completion candidate only after both owned streams are caught up."""
+
+    await acc.completion_candidate_event.wait()
+    if session_log_enabled and acc.channel_b_cursor is None:
+        with anyio.move_on_after(completion_drain_timeout):
+            await channel_b_selected.wait()
+    started = min(
+        timestamp
+        for timestamp in (acc.channel_a_candidate_at, acc.channel_b_candidate_at)
+        if timestamp is not None
+    )
+    while not trigger.is_set():
+        if acc.stdout_cursor is not None:
+            fold_event_cursor(acc.stdout_cursor, stream_parser, acc.observe_event)
+        if acc.channel_b_cursor is not None:
+            fold_event_cursor(acc.channel_b_cursor, stream_parser, acc.observe_event)
+        if not acc.has_unresolved_obligations():
+            acc.channel_a_confirmed = acc.channel_a_candidate_at is not None
+            trigger.set()
+            return
+        if anyio.current_time() - started >= child_deferral_ceiling:
+            acc.completion_ceiling_expired = True
+            acc.channel_a_confirmed = acc.channel_a_candidate_at is not None
+            trigger.set()
+            return
+        await anyio.sleep(_poll_interval)
 
 
 def resolve_termination(

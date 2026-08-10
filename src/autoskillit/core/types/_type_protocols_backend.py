@@ -241,6 +241,7 @@ class CodingAgentBackend(Protocol):
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         managed_attempt_id: str | None = None,
         include_scope_discipline: bool = False,
+        skill_session: bool = False,
     ) -> CmdSpec: ...
 
     def build_skill_session_cmd(

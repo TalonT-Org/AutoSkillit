@@ -9,7 +9,9 @@ NO MOCKS — that's the whole point.
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
 import sys
 import textwrap
 
@@ -23,6 +25,7 @@ from autoskillit.execution.process import (
     kill_process_tree,
     run_managed_async,
 )
+from tests.execution._process_group_helpers import _cleanup_process_group
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -52,6 +55,42 @@ HANG_FOREVER_SCRIPT = textwrap.dedent("""\
     sys.stdout.write("before hang\\n")
     sys.stdout.flush()
     time.sleep(3600)
+""")
+
+LIFECYCLE_TREE_SCRIPT = textwrap.dedent("""\
+    import json, os, time
+    children = []
+    for task_id in ("owned-1", "owned-2"):
+        child = os.fork()
+        if child == 0:
+            time.sleep(60)
+            raise SystemExit(0)
+        children.append(child)
+        print(json.dumps({"type": "task_started", "task_id": task_id}), flush=True)
+        print(json.dumps({"type": "child_pid", "pid": child}), flush=True)
+    print(json.dumps({"type": "result", "result": "ORDER_UP"}), flush=True)
+    time.sleep(0.4)
+    print(json.dumps({
+        "type": "task_notification",
+        "task_id": "owned-1",
+        "status": "completed",
+    }), flush=True)
+    print(json.dumps({
+        "type": "task_updated",
+        "task_id": "owned-2",
+        "patch": {"status": "failed"},
+    }), flush=True)
+    time.sleep(60)
+""")
+
+NATURAL_EXIT_WITH_OWNED_CHILD_SCRIPT = textwrap.dedent("""\
+    import json, os, time
+    child = os.fork()
+    if child == 0:
+        time.sleep(60)
+        raise SystemExit(0)
+    print(json.dumps({"type": "task_started", "task_id": "owned-exit"}), flush=True)
+    print(json.dumps({"type": "child_pid", "pid": child}), flush=True)
 """)
 
 
@@ -84,6 +123,82 @@ class TestProcessTreeKill:
         for pid in pids:
             assert not psutil.pid_exists(pid), f"PID {pid} should be dead"
 
+    @pytest.mark.anyio
+    async def test_lifecycle_marker_waits_for_terminal_then_cleans_group(self, tmp_path):
+        from autoskillit.execution.backends import ClaudeStreamParser
+
+        script = tmp_path / "lifecycle_tree.py"
+        script.write_text(LIFECYCLE_TREE_SCRIPT)
+        started = anyio.current_time()
+        spawned_pid: list[int] = []
+        result = None
+        try:
+            result = await run_managed_async(
+                [sys.executable, str(script)],
+                cwd=tmp_path,
+                timeout=10,
+                completion_marker="ORDER_UP",
+                stream_parser=ClaudeStreamParser(completion_marker="ORDER_UP"),
+                lifecycle_observation_enabled=True,
+                child_deferral_ceiling=2,
+                natural_exit_grace_seconds=0.05,
+                on_pid_resolved=lambda pid, _ticks: spawned_pid.append(pid),
+            )
+            assert anyio.current_time() - started >= 0.35
+            assert result.termination is TerminationReason.COMPLETED
+            assert result.lifecycle_observation_complete is True
+            assert result.pending_task_ids == ()
+            child_records = [
+                json.loads(line)
+                for line in result.stdout.splitlines()
+                if '"type": "child_pid"' in line
+            ]
+            assert len(child_records) == 2
+            assert all(not psutil.pid_exists(record["pid"]) for record in child_records)
+        finally:
+            process_group_id = (
+                result.process_group_id
+                if result is not None
+                else (spawned_pid[-1] if spawned_pid else 0)
+            )
+            _cleanup_process_group(process_group_id)
+
+    @pytest.mark.anyio
+    async def test_natural_exit_retains_obligation_and_cleans_owned_group(self, tmp_path):
+        from autoskillit.execution.backends import ClaudeStreamParser
+
+        script = tmp_path / "natural_exit_with_owned_child.py"
+        script.write_text(NATURAL_EXIT_WITH_OWNED_CHILD_SCRIPT)
+        spawned_pid: list[int] = []
+        result = None
+        try:
+            result = await run_managed_async(
+                [sys.executable, str(script)],
+                cwd=tmp_path,
+                timeout=10,
+                stream_parser=ClaudeStreamParser(),
+                lifecycle_observation_enabled=True,
+                natural_exit_grace_seconds=0.05,
+                on_pid_resolved=lambda pid, _ticks: spawned_pid.append(pid),
+            )
+
+            assert result.termination is TerminationReason.NATURAL_EXIT
+            assert result.lifecycle_observation_complete is True
+            assert result.pending_task_ids == ("owned-exit",)
+            child_record = next(
+                json.loads(line)
+                for line in result.stdout.splitlines()
+                if '"type": "child_pid"' in line
+            )
+            assert not psutil.pid_exists(child_record["pid"])
+        finally:
+            process_group_id = (
+                result.process_group_id
+                if result is not None
+                else (spawned_pid[-1] if spawned_pid else 0)
+            )
+            _cleanup_process_group(process_group_id)
+
 
 class TestKillProcessTreeUnit:
     """Direct tests for kill_process_tree utility."""
@@ -107,6 +222,30 @@ class TestKillProcessTreeUnit:
 
         # Should handle gracefully
         kill_process_tree(pid)
+
+    def test_process_group_cleanup_survives_exited_root(self):
+        proc = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import os,time; pid=os.fork(); "
+                    "print(pid, flush=True) if pid else time.sleep(60)"
+                ),
+            ],
+            start_new_session=True,
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        assert proc.stdout is not None
+        child_pid = int(proc.stdout.readline())
+        proc.wait(timeout=5)
+        try:
+            result = kill_process_tree(proc.pid, process_group_id=proc.pid)
+            assert child_pid in result.terminated_pids
+            assert not result.survivor_pids
+        finally:
+            _cleanup_process_group(proc.pid)
 
 
 class TestCancellationKillsProcess:

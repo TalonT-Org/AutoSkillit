@@ -22,7 +22,11 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 @pytest.mark.anyio
 async def test_run_headless_core_uses_ctx_backend_for_command_construction(minimal_ctx):
-    backend = _mock_backend(pty_required=True, channel_b_capable=True)
+    backend = _mock_backend(
+        pty_required=True,
+        channel_b_capable=True,
+        supports_task_lifecycle_events=True,
+    )
     minimal_ctx.backend = backend
 
     mock_runner = AsyncMock()
@@ -58,6 +62,8 @@ async def test_run_headless_core_uses_ctx_backend_for_command_construction(minim
             "/tmp/test-cwd",
             minimal_ctx,
             completion_marker="%%DONE%%",
+            resume_session_id="backend-resume-id",
+            caller_session_id="caller-marker-id",
         )
 
     backend.build_skill_session_cmd.assert_called_once()
@@ -66,6 +72,10 @@ async def test_run_headless_core_uses_ctx_backend_for_command_construction(minim
     assert call_args.args[1] == str(Path("/tmp/test-cwd").resolve())
     config = call_args.args[2]
     assert config.completion_marker == "%%DONE%%"
+    runner_kwargs = mock_runner.call_args.kwargs
+    assert runner_kwargs["session_id"] == "caller-marker-id"
+    assert runner_kwargs["backend_resume_session_id"] == "backend-resume-id"
+    assert runner_kwargs["lifecycle_observation_enabled"] is True
 
 
 class TestBackendDispatchRouting:

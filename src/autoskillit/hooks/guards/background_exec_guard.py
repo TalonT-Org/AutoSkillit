@@ -11,6 +11,7 @@ import os
 import sys
 
 BACKGROUND_EXEC_DENY_TRIGGER: str = "run_in_background=true is prohibited in skill sessions"
+SCHEDULE_WAKEUP_DENY_TRIGGER: str = "ScheduleWakeup is prohibited in skill sessions"
 
 
 def main() -> None:
@@ -34,9 +35,15 @@ def main() -> None:
     if not isinstance(tool_input, dict):
         sys.exit(0)  # fail-open: missing or malformed tool_input
 
-    if tool_input.get("run_in_background"):
+    tool_name = data.get("tool_name")
+    deny_trigger = (
+        SCHEDULE_WAKEUP_DENY_TRIGGER
+        if tool_name == "ScheduleWakeup"
+        else BACKGROUND_EXEC_DENY_TRIGGER
+    )
+    if tool_name == "ScheduleWakeup" or tool_input.get("run_in_background"):
         denial_reason = (
-            f"{BACKGROUND_EXEC_DENY_TRIGGER} (ADR-0001). "
+            f"{deny_trigger} (ADR-0001). "
             "Background execution causes race conditions and lost results. "
             "Use foreground execution — multiple tool calls in a single message "
             "execute concurrently."

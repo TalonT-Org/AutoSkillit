@@ -210,6 +210,41 @@ class TestOutputDisciplineDelivery:
         spec = ClaudeCodeBackend().build_skill_session_cmd("/plan", **SKILL_BASE)
         assert OUTPUT_DISCIPLINE_DIGEST not in self._extract_prompt(spec)
 
+    @pytest.mark.parametrize("resume_session_id", ["", "session-1"])
+    def test_skill_session_forces_foreground_environment(
+        self, monkeypatch: pytest.MonkeyPatch, resume_session_id: str
+    ) -> None:
+        monkeypatch.setenv("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS", "0")
+        monkeypatch.setenv("CLAUDE_CODE_DISABLE_CRON", "0")
+        spec = ClaudeCodeBackend().build_skill_session_cmd(
+            "/plan",
+            **SKILL_BASE,
+            resume_session_id=resume_session_id,
+            provider_extras={
+                "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "0",
+                "CLAUDE_CODE_DISABLE_CRON": "0",
+            },
+        )
+        assert spec.env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] == "1"
+        assert spec.env["CLAUDE_CODE_DISABLE_CRON"] == "1"
+
+    def test_resume_hardening_is_skill_selected(self) -> None:
+        backend = ClaudeCodeBackend()
+        ordinary = backend.build_resume_cmd(
+            resume_session_id="session-1",
+            prompt="continue",
+            env_extras={"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "0"},
+        )
+        skill = backend.build_resume_cmd(
+            resume_session_id="session-1",
+            prompt="continue",
+            env_extras={"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "0"},
+            skill_session=True,
+        )
+        assert ordinary.env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] == "0"
+        assert skill.env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] == "1"
+        assert skill.env["CLAUDE_CODE_DISABLE_CRON"] == "1"
+
     def test_fresh_orchestrator_does_not_include_codex_digest(self) -> None:
         from autoskillit.core import OUTPUT_DISCIPLINE_DIGEST
 

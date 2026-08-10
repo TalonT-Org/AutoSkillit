@@ -40,6 +40,7 @@ from autoskillit.core import (
     CLAUDE_CODE_CAPABILITIES,
     OUTPUT_DISCIPLINE_DIGEST,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+    OutputFormat,
     agent_definition_digest,
     load_agent_definitions,
     normalize_codex_cli_version,
@@ -79,7 +80,9 @@ from autoskillit.execution.backends._probe_cache import (
     read_probe_cache,
     write_probe_cache,
 )
+from autoskillit.execution.backends.claude import ClaudeCodeBackend, ClaudeStreamParser
 from autoskillit.execution.backends.codex import CodexBackend
+from autoskillit.execution.process import run_managed_async
 from autoskillit.hook_registry import generate_hooks_json
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
@@ -94,6 +97,10 @@ from autoskillit.hooks._capture_contract import (
 )
 from autoskillit.hooks._capture_lifecycle import CaptureState
 from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
+from tests.execution._process_group_helpers import (
+    _cleanup_process_group,
+    _process_group_members,
+)
 from tests.execution.backends._conformance_assertions import (
     assert_boundary_spill_behavior,
     assert_config_schema,
@@ -163,6 +170,7 @@ _skip_unless_claude_startup_smoke = pytest.mark.skipif(
     or (not os.environ.get("ANTHROPIC_API_KEY") and not os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")),
     reason=_CLAUDE_STARTUP_SKIP_REASON,
 )
+
 
 _PROBE_BACKEND = "codex"
 _CANARY_TITLE_PREFIX = "[Canary] codex conformance probe"
@@ -2636,3 +2644,272 @@ def test_claude_startup_readiness_addressability_trace(
             < int(successful_attempt["monotonic_ns"])
             < int(success["monotonic_ns"])
         )
+
+
+@_skip_unless_claude_startup_smoke
+@pytest.mark.timeout(180)
+def test_claude_startup_readiness_multi_agent_foreground_trace(tmp_path: Path) -> None:
+    target = tmp_path / "foreground-proof.txt"
+    marker = "AUTOSKILLIT_MULTI_AGENT_READY"
+    spec = ClaudeCodeBackend().build_skill_session_cmd(
+        (
+            "Launch two Agent tool calls in one turn with run_in_background omitted. "
+            "Join both results, then use Write to create "
+            f"{target} containing exactly foreground-ok. Do not poll with Bash. "
+            f"Finally emit {marker}."
+        ),
+        cwd=str(tmp_path),
+        completion_marker=marker,
+        output_format=OutputFormat.STREAM_JSON,
+    )
+    environment = dict(spec.env)
+    for key in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"):
+        if value := os.environ.get(key):
+            environment[key] = value
+    process = subprocess.Popen(
+        spec.cmd,
+        cwd=tmp_path,
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    survivors: set[int] = set()
+    try:
+        stdout, stderr = process.communicate(timeout=150)
+    finally:
+        survivors = _cleanup_process_group(process.pid, timeout=5, poll_interval=0.05)
+
+    records = []
+    for line in stdout.splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict):
+            records.append(record)
+    tool_uses = [
+        block
+        for record in records
+        for block in (record.get("message") or {}).get("content", [])
+        if isinstance(block, dict) and block.get("type") == "tool_use"
+    ]
+    agents = [block for block in tool_uses if block.get("name") == "Agent"]
+    forbidden_lifecycle = {
+        "task_started",
+        "task_progress",
+        "task_notification",
+        "task_updated",
+    }
+    trace_dir = Path.cwd() / ".autoskillit" / "temp" / "claude-startup-readiness"
+    trace_dir.mkdir(parents=True, exist_ok=True)
+    (trace_dir / f"multi-agent-{time.time_ns()}.jsonl").write_text(
+        json.dumps(
+            {
+                "event": "multi_agent_terminal",
+                "agent_calls": len(agents),
+                "async_lifecycle_records": 0,
+                "output_bytes": len(stdout.encode()),
+                "output_sha256": hashlib.sha256(stdout.encode()).hexdigest(),
+                "process_group_id": process.pid,
+                "survivor_pids_after_root_exit": sorted(survivors),
+                "target_written": target.is_file(),
+            },
+            sort_keys=True,
+        )
+        + "\n"
+    )
+    assert process.returncode == 0, stderr[-2_000:]
+    assert len(agents) >= 2
+    assert all("run_in_background" not in (block.get("input") or {}) for block in agents)
+    assert not any(record.get("type") in forbidden_lifecycle for record in records)
+    assert not any(block.get("name") == "ScheduleWakeup" for block in tool_uses)
+    assert not any(
+        block.get("name") == "Bash"
+        and any(
+            token in str((block.get("input") or {}).get("command", ""))
+            for token in ("sleep", "while")
+        )
+        for block in tool_uses
+    )
+    assert target.read_text() == "foreground-ok"
+    assert marker in stdout
+    assert not survivors
+
+
+@_skip_unless_claude_startup_smoke
+@pytest.mark.timeout(240)
+def test_claude_startup_readiness_implement_worktree_no_merge_contract(
+    tmp_path: Path,
+) -> None:
+    import anyio
+
+    repository = tmp_path / "repository"
+    worktree_path = tmp_path / "implementation-worktree"
+    worktree_branch = "impl-live-obligation-contract"
+    target_relpath = Path("src/foreground_contract.py")
+    plan = tmp_path / "implementation-plan.md"
+    repository.mkdir()
+    subprocess.run(["git", "init", "-b", "develop"], cwd=repository, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "autoskillit-probe@example.invalid"],
+        cwd=repository,
+        check=True,
+    )
+    subprocess.run(["git", "config", "user.name", "AutoSkillit Probe"], cwd=repository, check=True)
+    (repository / "README.md").write_text("probe repository\n")
+    subprocess.run(["git", "add", "README.md"], cwd=repository, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "test: establish probe base"],
+        cwd=repository,
+        check=True,
+    )
+    start_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(
+        [
+            "git",
+            "worktree",
+            "add",
+            "-b",
+            worktree_branch,
+            str(worktree_path),
+            start_sha,
+        ],
+        cwd=repository,
+        check=True,
+    )
+    expected_content = "FOREGROUND_CONTRACT = True\n"
+    plan.write_text(
+        "Dry-walkthrough verified = TRUE\n"
+        "# Live foreground contract\n\n"
+        "Launch at least two Agent tool calls in one turn with run_in_background omitted, "
+        "join both results, then create exactly "
+        f"{target_relpath} with the exact content {expected_content!r}. "
+        "Do not use Bash to poll, sleep, or loop. Commit the change on the current branch.\n"
+    )
+    marker = "AUTOSKILLIT_WORKTREE_CONTRACT_READY"
+    spec = ClaudeCodeBackend().build_skill_session_cmd(
+        f"/autoskillit:implement-worktree-no-merge {plan}\nFinally emit {marker}.",
+        cwd=str(worktree_path),
+        completion_marker=marker,
+        output_format=OutputFormat.STREAM_JSON,
+    )
+    environment = dict(spec.env)
+    for key in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"):
+        if value := os.environ.get(key):
+            environment[key] = value
+    spawned_pid: list[int] = []
+
+    async def _run():
+        return await run_managed_async(
+            spec.cmd,
+            cwd=worktree_path,
+            timeout=210,
+            env=environment,
+            completion_marker=marker,
+            stream_parser=ClaudeStreamParser(),
+            lifecycle_observation_enabled=True,
+            child_deferral_ceiling=120,
+            on_pid_resolved=lambda observed_pid, _ticks: spawned_pid.append(observed_pid),
+        )
+
+    result = None
+    survivors: set[int] = set()
+    try:
+        result = anyio.run(_run)
+        records = []
+        for line in result.stdout.splitlines():
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(record, dict):
+                records.append(record)
+        tool_uses = [
+            block
+            for record in records
+            for block in (record.get("message") or {}).get("content", [])
+            if isinstance(block, dict) and block.get("type") == "tool_use"
+        ]
+        agents = [block for block in tool_uses if block.get("name") == "Agent"]
+        survivors = _process_group_members(result.process_group_id)
+        head_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=worktree_path,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        current_branch = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=worktree_path,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        head_is_descendant = (
+            subprocess.run(
+                ["git", "merge-base", "--is-ancestor", start_sha, head_sha],
+                cwd=worktree_path,
+                check=False,
+            ).returncode
+            == 0
+        )
+        target_path = worktree_path / target_relpath
+        source_write_exact = target_path.is_file() and target_path.read_text() == expected_content
+        trace_dir = Path.cwd() / ".autoskillit" / "temp" / "claude-startup-readiness"
+        trace_dir.mkdir(parents=True, exist_ok=True)
+        (trace_dir / f"worktree-contract-{time.time_ns()}.jsonl").write_text(
+            json.dumps(
+                {
+                    "event": "implement_worktree_contract_terminal",
+                    "worktree_path": str(worktree_path),
+                    "worktree_branch": worktree_branch,
+                    "observed_branch": current_branch,
+                    "start_sha": start_sha,
+                    "head_sha": head_sha,
+                    "head_is_descendant": head_is_descendant,
+                    "target_relpath": str(target_relpath),
+                    "source_write_exact": source_write_exact,
+                    "process_group_id": result.process_group_id,
+                    "survivor_pids_after_root_exit": sorted(survivors),
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        )
+
+        assert result.returncode == 0, result.stderr[-2_000:]
+        assert result.lifecycle_observation_complete is True
+        assert result.pending_task_ids == ()
+        assert len(agents) >= 2
+        assert all("run_in_background" not in (block.get("input") or {}) for block in agents)
+        assert not any(
+            block.get("name") == "Bash"
+            and any(
+                token in str((block.get("input") or {}).get("command", ""))
+                for token in ("sleep", "while", "until")
+            )
+            for block in tool_uses
+        )
+        assert source_write_exact
+        assert current_branch == worktree_branch
+        assert head_sha != start_sha
+        assert head_is_descendant
+        assert not survivors
+        assert marker in result.stdout
+    finally:
+        process_group_id = (
+            result.process_group_id
+            if result is not None
+            else (spawned_pid[-1] if spawned_pid else 0)
+        )
+        if process_group_id:
+            _cleanup_process_group(process_group_id, timeout=5, poll_interval=0.05)

@@ -2,10 +2,72 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TYPE_CHECKING
+
 from autoskillit.core import ClaudeContentBlockType, get_logger
 from autoskillit.core import fast_loads as _fast_loads
 
 logger = get_logger(__name__)
+
+if TYPE_CHECKING:
+    from autoskillit.core import SessionEvent, StreamParser
+
+
+@dataclass
+class EventCursor:
+    """Incremental byte cursor over complete records from one owned JSONL stream."""
+
+    path: Path
+    run_boundary: int = 0
+    offset: int | None = None
+    trailing: bytes = field(default=b"", repr=False)
+
+    def __post_init__(self) -> None:
+        if self.offset is None:
+            self.offset = self.run_boundary
+
+    def read_complete_lines(self) -> tuple[str, ...] | None:
+        try:
+            with self.path.open("rb") as stream:
+                stream.seek(self.offset or 0)
+                chunk = stream.read()
+        except OSError:
+            logger.warning("event_cursor_read_failed", path=str(self.path), exc_info=True)
+            return None
+        self.offset = (self.offset or 0) + len(chunk)
+        buffered = self.trailing + chunk
+        records = buffered.split(b"\n")
+        self.trailing = records.pop()
+        return tuple(record.decode("utf-8", errors="replace") for record in records if record)
+
+
+def fold_event_cursor(
+    cursor: EventCursor,
+    parser: StreamParser,
+    observer: Callable[[SessionEvent], None],
+) -> bool:
+    """Parse and reduce every newly completed record from ``cursor`` exactly once."""
+    lines = cursor.read_complete_lines()
+    if lines is None:
+        return False
+    fold_event_lines(lines, parser, observer)
+    return True
+
+
+def fold_event_lines(
+    lines: tuple[str, ...] | list[str],
+    parser: StreamParser,
+    observer: Callable[[SessionEvent], None],
+) -> None:
+    """Parse and reduce an already-owned sequence of JSONL records."""
+
+    for line in lines:
+        event = parser.parse_line(line)
+        if event is not None:
+            observer(event)
 
 
 def _marker_is_standalone(text: str, marker: str) -> bool:

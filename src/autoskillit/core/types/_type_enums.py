@@ -85,6 +85,7 @@ class RetryReason(StrEnum):
     OUTCOME_INVARIANT = (
         "outcome_invariant"  # skill-emitted outcome fields violated a contract invariant
     )
+    ASYNC_OBLIGATION = "async_obligation"
 
 
 class InfraExitCategory(StrEnum):
@@ -618,6 +619,8 @@ class BackendEventKind(StrEnum):
     SESSION_META = "session_meta"
     API_RETRY = "api_retry"
     TOOL_OUTPUT = "tool_output"
+    TASK_LIFECYCLE = "task_lifecycle"
+    SCHEDULE_WAKEUP = "schedule_wakeup"
     ERROR = "error"
     IGNORED = "ignored"
 

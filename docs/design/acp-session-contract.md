@@ -144,7 +144,7 @@ and has no ACP analogue. Both backends raise `CapabilityNotSupportedError`
 
 ## Section 2: Recovery Ladder
 
-The recovery ladder maps each of the 16 `RetryReason` enum values
+The recovery ladder maps each of the 18 `RetryReason` enum values
 (`src/autoskillit/core/types/_type_enums.py`, lines 44–64) to one of three ACP
 session rungs — `session/resume`, `session/load`, `session/new` — or to a
 terminal/wait-and-retry classification.
@@ -177,6 +177,8 @@ specific infra-classification signals (e.g. API errors → `RESUME`, rate limits
 | `BUDGET_EXHAUSTED` | (terminal) | Provider fallback check | Consecutive retry budget exceeded; no further retry. |
 | `RATE_LIMITED` | (wait-and-retry) | `on_rate_limit` | Transient HTTP 429 or rate-limit pattern — wait then same rung (`_headless_result.py:578` override). |
 | `CANCELLED` | (terminal) | N/A | Transport teardown; no recovery. |
+| `OUTCOME_INVARIANT` | `session/new` | `on_failure` | Skill-emitted outcome fields violated their declared relationship. |
+| `ASYNC_OBLIGATION` | `session/new` | `on_failure` | Backend-owned work or a wakeup remained unresolved, the bounded completion drain expired, or lifecycle evidence was unavailable. Start fresh; never poll or resume the prior session. |
 | `NONE` | (no retry) | N/A | Success — no recovery needed. |
 
 ### 2.2 ACP rung semantics

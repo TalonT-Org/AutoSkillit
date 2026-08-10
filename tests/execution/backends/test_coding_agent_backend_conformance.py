@@ -44,6 +44,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "applicable_guards": "REQUIRED",
     "anthropic_provider_capable": "OPTIONAL",
     "channel_b_capable": "OPTIONAL",
+    "supports_task_lifecycle_events": "REQUIRED",
     "claude_marketplace_tool_prefix_capable": "REQUIRED",
     "completion_record_types": "REQUIRED",
     "default_skill_sandbox_mode": "REQUIRED",
@@ -434,6 +435,10 @@ class TestCodingAgentBackendConformance(BackendContractBase):
             self.backend.capabilities.supports_model_capacity_error_detection,
             bool,
         )
+
+    def test_supports_task_lifecycle_events_is_bool(self) -> None:
+        """BackendCapabilities.supports_task_lifecycle_events is bool-typed."""
+        assert isinstance(self.backend.capabilities.supports_task_lifecycle_events, bool)
 
     def test_protected_recipe_delivery_capable_is_bool(self) -> None:
         """BackendCapabilities.protected_recipe_delivery_capable — protected host gate is bool."""

@@ -3,21 +3,28 @@
 from __future__ import annotations
 
 import dataclasses
+import sys
 from pathlib import Path
 
 import anyio
 import pytest
 
 from autoskillit.core.types import (
+    BackendEventKind,
     ChannelBStatus,
     ChannelConfirmation,
     InspectorVerdict,
+    SessionEvent,
     TerminationReason,
 )
+from autoskillit.execution.backends import ClaudeStreamParser
+from autoskillit.execution.process import run_managed_async
+from autoskillit.execution.process._process_jsonl import EventCursor
 from autoskillit.execution.process._process_race import (
     RaceAccumulator,
     RaceSignals,
     _extract_stdout_session_id,
+    _watch_completion_eligibility,
     resolve_termination,
 )
 
@@ -250,8 +257,8 @@ class TestRaceSignalsFieldCount:
     """Sentinel test: breaks when RaceSignals fields change."""
 
     def test_race_signals_field_count(self) -> None:
-        assert len(dataclasses.fields(RaceSignals)) == 11, (
-            f"RaceSignals has {len(dataclasses.fields(RaceSignals))} fields (expected 11). "
+        assert len(dataclasses.fields(RaceSignals)) == 17, (
+            f"RaceSignals has {len(dataclasses.fields(RaceSignals))} fields (expected 17). "
             "Update tests to cover the new field."
         )
 
@@ -283,9 +290,227 @@ class TestRaceAccumulatorFieldCount:
 
     def test_race_accumulator_field_count(self) -> None:
         n = len(dataclasses.fields(RaceAccumulator))
-        assert n == 11, (
-            f"RaceAccumulator has {n} fields (expected 11). Update tests for new fields."
+        assert n == 23, (
+            f"RaceAccumulator has {n} fields (expected 23). Update tests for new fields."
         )
+
+
+def test_lifecycle_reducer_is_terminal_dominant_and_freezes_sorted() -> None:
+    acc = RaceAccumulator(lifecycle_observation_enabled=True)
+    for task_id in ("c", "z", "a", "m", "b"):
+        acc.observe_event(
+            SessionEvent(
+                kind=BackendEventKind.TASK_LIFECYCLE,
+                is_terminal=False,
+                has_marker=False,
+                task_id=task_id,
+                task_active=True,
+            )
+        )
+    acc.observe_event(
+        SessionEvent(
+            kind=BackendEventKind.TASK_LIFECYCLE,
+            is_terminal=False,
+            has_marker=False,
+            task_id="z",
+            task_active=False,
+        )
+    )
+    acc.observe_event(
+        SessionEvent(
+            kind=BackendEventKind.TASK_LIFECYCLE,
+            is_terminal=False,
+            has_marker=False,
+            task_id="m",
+            task_active=False,
+        )
+    )
+    acc.observe_event(
+        SessionEvent(
+            kind=BackendEventKind.TASK_LIFECYCLE,
+            is_terminal=False,
+            has_marker=False,
+            task_id="z",
+            task_active=True,
+        )
+    )
+    signals = acc.to_race_signals()
+    assert signals.pending_task_ids == ("a", "b", "c")
+    assert signals.terminal_task_ids == ("m", "z")
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        signals.pending_task_ids = ()
+
+
+def test_lifecycle_accumulator_fields_have_exact_defaults_and_freeze_propagation() -> None:
+    acc = RaceAccumulator()
+
+    assert acc.lifecycle_observation_enabled is False
+    assert acc.lifecycle_observation_complete is False
+    assert acc.pending_task_ids == set()
+    assert acc.terminal_task_ids == set()
+    assert acc.schedule_wakeup_violation is False
+    assert acc.completion_ceiling_expired is False
+    assert acc.channel_a_candidate_at is None
+    assert acc.channel_b_candidate_at is None
+    assert acc.stdout_cursor is None
+    assert acc.channel_b_cursor is None
+    assert not acc.completion_candidate_event.is_set()
+    assert acc.process_group_id == 0
+
+    signals = acc.to_race_signals()
+    assert signals.lifecycle_observation_complete is False
+    assert signals.pending_task_ids == ()
+    assert signals.terminal_task_ids == ()
+    assert signals.schedule_wakeup_violation is False
+    assert signals.completion_ceiling_expired is False
+    assert signals.process_group_id == 0
+
+
+@pytest.mark.anyio
+async def test_completion_candidate_without_task_ignores_large_ceiling() -> None:
+    acc = RaceAccumulator(lifecycle_observation_enabled=True)
+    acc.channel_a_candidate_at = anyio.current_time()
+    acc.completion_candidate_event.set()
+    trigger = anyio.Event()
+
+    with anyio.fail_after(0.2):
+        await _watch_completion_eligibility(
+            acc,
+            trigger,
+            anyio.Event(),
+            completion_drain_timeout=0,
+            child_deferral_ceiling=120,
+            stream_parser=ClaudeStreamParser(),
+            session_log_enabled=False,
+            _poll_interval=0,
+        )
+
+    assert trigger.is_set()
+    assert acc.channel_a_confirmed is True
+    assert acc.completion_ceiling_expired is False
+
+
+@pytest.mark.anyio
+async def test_completion_ceiling_preserves_pending_ids_for_adjudication() -> None:
+    acc = RaceAccumulator(lifecycle_observation_enabled=True)
+    acc.pending_task_ids.add("owned")
+    acc.channel_b_candidate_at = anyio.current_time()
+    acc.completion_candidate_event.set()
+    trigger = anyio.Event()
+
+    with anyio.fail_after(0.2):
+        await _watch_completion_eligibility(
+            acc,
+            trigger,
+            anyio.Event(),
+            completion_drain_timeout=0,
+            child_deferral_ceiling=0,
+            stream_parser=ClaudeStreamParser(),
+            session_log_enabled=False,
+            _poll_interval=0,
+        )
+
+    signals = acc.to_race_signals()
+    assert trigger.is_set()
+    assert signals.channel_b_status is None
+    assert signals.pending_task_ids == ("owned",)
+    assert signals.completion_ceiling_expired is True
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("marker_channel", "task_channel"),
+    [("b", "b"), ("a", "b"), ("b", "a")],
+    ids=["channel-b", "a-marker-b-task", "b-marker-a-task"],
+)
+async def test_completion_waits_for_terminal_evidence_across_channel_orderings(
+    tmp_path: Path, marker_channel: str, task_channel: str
+) -> None:
+    stdout_path = tmp_path / "stdout.jsonl"
+    channel_b_path = tmp_path / "channel-b.jsonl"
+    task_path = stdout_path if task_channel == "a" else channel_b_path
+    task_path.write_text('{"type":"task_started","task_id":"owned"}\n')
+    other_path = channel_b_path if task_path == stdout_path else stdout_path
+    other_path.write_text("")
+
+    acc = RaceAccumulator(lifecycle_observation_enabled=True)
+    acc.stdout_cursor = EventCursor(stdout_path)
+    acc.channel_b_cursor = EventCursor(channel_b_path)
+    if marker_channel == "a":
+        acc.channel_a_candidate_at = anyio.current_time()
+    else:
+        acc.channel_b_candidate_at = anyio.current_time()
+        acc.channel_b_status = ChannelBStatus.COMPLETION
+    acc.completion_candidate_event.set()
+    trigger = anyio.Event()
+
+    async with anyio.create_task_group() as task_group:
+        task_group.start_soon(
+            _watch_completion_eligibility,
+            acc,
+            trigger,
+            anyio.Event(),
+            0,
+            1,
+            ClaudeStreamParser(),
+            True,
+            0.005,
+        )
+        await anyio.sleep(0.03)
+        assert not trigger.is_set()
+        with task_path.open("a") as stream:
+            stream.write('{"type":"task_notification","task_id":"owned","status":"completed"}\n')
+        with anyio.fail_after(1):
+            await trigger.wait()
+
+    signals = acc.to_race_signals()
+    assert signals.pending_task_ids == ()
+    assert signals.terminal_task_ids == ("owned",)
+    assert signals.channel_a_confirmed is (marker_channel == "a")
+
+
+@pytest.mark.anyio
+async def test_natural_exit_final_fold_preserves_a_first_provenance(
+    tmp_path: Path,
+) -> None:
+    session_id = "final-fold-session"
+    session_dir = tmp_path / "sessions"
+    session_dir.mkdir()
+    script = tmp_path / "final_fold.py"
+    script.write_text(
+        "import json,sys,time\n"
+        "from pathlib import Path\n"
+        f"sid={session_id!r}\n"
+        "print(json.dumps({'type':'system','subtype':'init','session_id':sid}), flush=True)\n"
+        "log=Path(sys.argv[1]) / f'{sid}.jsonl'\n"
+        "log.write_text(json.dumps({'type':'task_started','task_id':'owned'})+'\\n'"
+        "+json.dumps({'type':'assistant','message':{'content':'ORDER_UP'}})+'\\n')\n"
+        "time.sleep(0.15)\n"
+        "print(json.dumps({'type':'result','result':'ORDER_UP'}), flush=True)\n"
+        "time.sleep(0.15)\n"
+        "print(json.dumps({'type':'task_notification','task_id':'owned',"
+        "'status':'completed'}), flush=True)\n"
+    )
+
+    result = await run_managed_async(
+        [sys.executable, str(script), str(session_dir)],
+        cwd=tmp_path,
+        timeout=5,
+        completion_marker="ORDER_UP",
+        session_log_dir=session_dir,
+        stream_parser=ClaudeStreamParser(completion_marker="ORDER_UP"),
+        lifecycle_observation_enabled=True,
+        child_deferral_ceiling=2,
+        completion_drain_timeout=0.5,
+        _heartbeat_poll=0.01,
+        _phase1_poll=0.01,
+        _phase2_poll=0.01,
+    )
+
+    assert result.termination is TerminationReason.NATURAL_EXIT
+    assert result.lifecycle_observation_complete is True
+    assert result.pending_task_ids == ()
+    assert result.channel_confirmation is ChannelConfirmation.CHANNEL_A
 
 
 class TestResolveTerminationInspector:

@@ -10,6 +10,7 @@ import dataclasses
 import inspect
 import os
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -451,6 +452,8 @@ class TestGroupDApiContractPreservation:
             "child_deferral_ceiling",
             "capture_dir",
             "pass_fds",
+            "backend_resume_session_id",
+            "lifecycle_observation_enabled",
         }
         assert expected == public_params, (
             f"run_managed_async public params changed.\n"
@@ -526,6 +529,8 @@ class TestGroupDApiContractPreservation:
             "child_deferral_ceiling",
             "capture_dir",
             "pass_fds",
+            "backend_resume_session_id",
+            "lifecycle_observation_enabled",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"
@@ -599,6 +604,40 @@ class TestGroupDApiContractPreservation:
             "run_managed_sync must not reference asyncio — it is a sync function"
         )
 
+    @pytest.mark.anyio
+    async def test_req_api_003_async_producers_distinguish_unobserved_from_observed_empty(
+        self, tmp_path: Path
+    ) -> None:
+        from autoskillit.execution.backends import ClaudeStreamParser
+
+        unobserved = await run_managed_async(
+            [sys.executable, "-c", "pass"],
+            cwd=tmp_path,
+            timeout=5,
+            lifecycle_observation_enabled=False,
+        )
+        observed_empty = await run_managed_async(
+            [sys.executable, "-c", "pass"],
+            cwd=tmp_path,
+            timeout=5,
+            stream_parser=ClaudeStreamParser(),
+            lifecycle_observation_enabled=True,
+        )
+
+        assert unobserved.lifecycle_observation_complete is False
+        assert observed_empty.lifecycle_observation_complete is True
+        assert observed_empty.pending_task_ids == ()
+
+    def test_req_api_003_sync_producer_records_spawned_process_group(self, tmp_path: Path) -> None:
+        result = run_managed_sync(
+            [sys.executable, "-c", "pass"],
+            cwd=tmp_path,
+            timeout=5,
+        )
+
+        assert result.pid > 0
+        assert result.process_group_id == result.pid
+
     # ------------------------------------------------------------------
     # REQ-API-004: Callers require no new asyncio runtime imports
     # ------------------------------------------------------------------
@@ -662,7 +701,7 @@ class TestGroupDApiContractPreservation:
     # ------------------------------------------------------------------
 
     def test_req_api_005_subprocess_result_field_names(self):
-        """SubprocessResult must have exactly the 18 canonical fields."""
+        """SubprocessResult must have exactly the 24 canonical fields."""
         from autoskillit.core.types import SubprocessResult
 
         fields = {f.name for f in dataclasses.fields(SubprocessResult)}
@@ -675,6 +714,12 @@ class TestGroupDApiContractPreservation:
             "channel_confirmation",
             "proc_snapshots",
             "channel_b_session_id",
+            "lifecycle_observation_enabled",
+            "lifecycle_observation_complete",
+            "pending_task_ids",
+            "schedule_wakeup_violation",
+            "completion_ceiling_expired",
+            "process_group_id",
             "session_id",
             "start_ts",
             "end_ts",
@@ -698,6 +743,10 @@ class TestGroupDApiContractPreservation:
 
         field_map = {f.name: f for f in dataclasses.fields(SubprocessResult)}
         assert field_map["channel_confirmation"].default == ChannelConfirmation.UNMONITORED
+        assert field_map["lifecycle_observation_complete"].default is False
+        assert field_map["lifecycle_observation_enabled"].default is False
+        assert field_map["pending_task_ids"].default == ()
+        assert field_map["process_group_id"].default == 0
 
     # ------------------------------------------------------------------
     # REQ-API-006: TerminationReason and ChannelConfirmation enums unchanged

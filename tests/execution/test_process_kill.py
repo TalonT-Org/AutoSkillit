@@ -9,6 +9,7 @@ NO MOCKS — that's the whole point.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import textwrap
@@ -54,6 +55,24 @@ HANG_FOREVER_SCRIPT = textwrap.dedent("""\
     time.sleep(3600)
 """)
 
+LIFECYCLE_TREE_SCRIPT = textwrap.dedent("""\
+    import json, os, time
+    child = os.fork()
+    if child == 0:
+        time.sleep(60)
+        raise SystemExit(0)
+    print(json.dumps({"type": "task_started", "task_id": "owned-1"}), flush=True)
+    print(json.dumps({"type": "child_pid", "pid": child}), flush=True)
+    print(json.dumps({"type": "result", "result": "ORDER_UP"}), flush=True)
+    time.sleep(0.4)
+    print(json.dumps({
+        "type": "task_notification",
+        "task_id": "owned-1",
+        "status": "completed",
+    }), flush=True)
+    time.sleep(60)
+""")
+
 
 class TestProcessTreeKill:
     """psutil-based kill terminates all descendants."""
@@ -83,6 +102,34 @@ class TestProcessTreeKill:
         await anyio.sleep(0.5)  # Brief wait for kernel cleanup
         for pid in pids:
             assert not psutil.pid_exists(pid), f"PID {pid} should be dead"
+
+    @pytest.mark.anyio
+    async def test_lifecycle_marker_waits_for_terminal_then_cleans_group(self, tmp_path):
+        from autoskillit.execution.backends import ClaudeStreamParser
+
+        script = tmp_path / "lifecycle_tree.py"
+        script.write_text(LIFECYCLE_TREE_SCRIPT)
+        started = anyio.current_time()
+        result = await run_managed_async(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=10,
+            completion_marker="ORDER_UP",
+            stream_parser=ClaudeStreamParser(completion_marker="ORDER_UP"),
+            lifecycle_observation_enabled=True,
+            child_deferral_ceiling=2,
+            natural_exit_grace_seconds=0.05,
+        )
+        assert anyio.current_time() - started >= 0.35
+        assert result.termination is TerminationReason.COMPLETED
+        assert result.lifecycle_observation_complete is True
+        assert result.pending_task_ids == ()
+        child_record = next(
+            json.loads(line)
+            for line in result.stdout.splitlines()
+            if '"type": "child_pid"' in line
+        )
+        assert not psutil.pid_exists(child_record["pid"])
 
 
 class TestKillProcessTreeUnit:

@@ -40,6 +40,7 @@ from autoskillit.core import (
     CLAUDE_CODE_CAPABILITIES,
     OUTPUT_DISCIPLINE_DIGEST,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+    OutputFormat,
     agent_definition_digest,
     load_agent_definitions,
     normalize_codex_cli_version,
@@ -79,6 +80,7 @@ from autoskillit.execution.backends._probe_cache import (
     read_probe_cache,
     write_probe_cache,
 )
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.hook_registry import generate_hooks_json
 from autoskillit.hooks._capture_artifacts import (
@@ -2636,3 +2638,98 @@ def test_claude_startup_readiness_addressability_trace(
             < int(successful_attempt["monotonic_ns"])
             < int(success["monotonic_ns"])
         )
+
+
+@_skip_unless_claude_startup_smoke
+@pytest.mark.timeout(180)
+def test_claude_startup_readiness_multi_agent_foreground_trace(tmp_path: Path) -> None:
+    target = tmp_path / "foreground-proof.txt"
+    marker = "AUTOSKILLIT_MULTI_AGENT_READY"
+    spec = ClaudeCodeBackend().build_skill_session_cmd(
+        (
+            "Launch two Agent tool calls in one turn with run_in_background omitted. "
+            "Join both results, then use Write to create "
+            f"{target} containing exactly foreground-ok. Do not poll with Bash. "
+            f"Finally emit {marker}."
+        ),
+        cwd=str(tmp_path),
+        completion_marker=marker,
+        output_format=OutputFormat.STREAM_JSON,
+    )
+    environment = dict(spec.env)
+    for key in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"):
+        if value := os.environ.get(key):
+            environment[key] = value
+    process = subprocess.Popen(
+        spec.cmd,
+        cwd=tmp_path,
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=150)
+    finally:
+        if process.poll() is None:
+            os.killpg(process.pid, signal.SIGTERM)
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait(timeout=5)
+
+    records = []
+    for line in stdout.splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict):
+            records.append(record)
+    tool_uses = [
+        block
+        for record in records
+        for block in (record.get("message") or {}).get("content", [])
+        if isinstance(block, dict) and block.get("type") == "tool_use"
+    ]
+    agents = [block for block in tool_uses if block.get("name") == "Agent"]
+    forbidden_lifecycle = {
+        "task_started",
+        "task_progress",
+        "task_notification",
+        "task_updated",
+    }
+    assert process.returncode == 0, stderr[-2_000:]
+    assert len(agents) >= 2
+    assert all("run_in_background" not in (block.get("input") or {}) for block in agents)
+    assert not any(record.get("type") in forbidden_lifecycle for record in records)
+    assert not any(block.get("name") == "ScheduleWakeup" for block in tool_uses)
+    assert not any(
+        block.get("name") == "Bash"
+        and any(
+            token in str((block.get("input") or {}).get("command", ""))
+            for token in ("sleep", "while")
+        )
+        for block in tool_uses
+    )
+    assert target.read_text() == "foreground-ok"
+    assert marker in stdout
+
+    trace_dir = Path.cwd() / ".autoskillit" / "temp" / "claude-startup-readiness"
+    trace_dir.mkdir(parents=True, exist_ok=True)
+    (trace_dir / f"multi-agent-{time.time_ns()}.jsonl").write_text(
+        json.dumps(
+            {
+                "event": "multi_agent_terminal",
+                "agent_calls": len(agents),
+                "async_lifecycle_records": 0,
+                "output_bytes": len(stdout.encode()),
+                "output_sha256": hashlib.sha256(stdout.encode()).hexdigest(),
+                "target_written": True,
+            },
+            sort_keys=True,
+        )
+        + "\n"
+    )

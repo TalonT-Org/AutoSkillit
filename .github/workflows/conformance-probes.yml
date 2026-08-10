@@ -303,7 +303,7 @@ jobs:
           key: probe-claude-${{ steps.resolve-version.outputs.cli_version }}-${{ steps.resolve-policy.outputs.policy_identity }}
 
       - name: Upload bounded startup-readiness traces
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: claude-startup-readiness-${{ matrix.os }}-${{ matrix.claude-version }}

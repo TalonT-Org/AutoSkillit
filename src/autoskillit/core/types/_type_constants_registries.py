@@ -667,10 +667,17 @@ RECIPE_SECTION_RESPONSE_FLOOR_BYTES = _RECIPE_SECTION_FAILURE_ENVELOPE_WITH_EMPT
 RESPONSE_BACKSTOP_EXEMPTION_REGISTRY: Mapping[str, ResponseBackstopExemptionDef] = (
     MappingProxyType(
         {
-            definition.response_exemption_tool: definition.response_exemption
-            for definition in RECIPE_DELIVERY_SURFACE_REGISTRY.values()
-            if definition.response_exemption_tool is not None
-            and definition.response_exemption is not None
+            "get_recipe_section": ResponseBackstopExemptionDef(
+                max_chars=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
+                max_utf8_bytes=_RECIPE_RESPONSE_MAX_UTF8_BYTES,
+                measurement_id="bundled-recipes-all-modes-2026-08-09/get-recipe-section",
+            ),
+            **{
+                definition.response_exemption_tool: definition.response_exemption
+                for definition in RECIPE_DELIVERY_SURFACE_REGISTRY.values()
+                if definition.response_exemption_tool is not None
+                and definition.response_exemption is not None
+            },
         }
     )
 )

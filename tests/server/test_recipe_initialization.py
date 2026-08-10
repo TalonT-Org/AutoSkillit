@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+from unittest.mock import Mock
 
 import pytest
 
+import autoskillit.server._recipe_initialization as recipe_initialization
 import autoskillit.server._state as server_state
 from autoskillit.core import (
     RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
@@ -23,12 +25,21 @@ from autoskillit.pipeline import (
     record_initialization_page,
 )
 from autoskillit.server._factory import make_recipe_execution
-from autoskillit.server._recipe_execution import build_recipe_execution_snapshot
+from autoskillit.server._recipe_execution import (
+    RecipeExecutionAdmissionError,
+    build_recipe_execution_snapshot,
+    install_recipe_execution,
+    prepare_recipe_execution,
+)
 from autoskillit.server._recipe_initialization import (
     FinalizedRecipeInitializationResponse,
+    FinalizedRecipeSectionResponse,
     admit_registered_tool_during_initialization,
     build_completion_response,
     complete_initialization_response,
+    complete_section_response,
+    recipe_initialization_receipt,
+    replay_terminal_section_response,
     stage_recipe_initialization,
 )
 
@@ -147,6 +158,240 @@ def test_completion_is_server_owned_and_commits_ready_only_after_enforcement(
         "snapshot_digest",
     }
     assert parsed_initial["recipe_execution"] == parsed_replay["recipe_execution"]
+
+
+def test_install_rejects_initializing_recipe_without_completion_receipt(
+    minimal_ctx,
+    tmp_path,
+) -> None:
+    state = _stage(minimal_ctx, tmp_path)
+    prepared = prepare_recipe_execution(minimal_ctx, snapshot=state.staged_snapshot)
+
+    with pytest.raises(RecipeExecutionAdmissionError, match="without a completion receipt"):
+        install_recipe_execution(minimal_ctx, prepared_execution=prepared)
+
+
+def test_terminal_page_credit_atomically_installs_ready_recipe(minimal_ctx, tmp_path) -> None:
+    state = _stage(minimal_ctx, tmp_path)
+    content_sha256 = _hash("terminal-content")
+    receipt = recipe_initialization_receipt(
+        "initialization",
+        state.artifact_generation,
+        content_sha256=content_sha256,
+    )
+    rendered = json.dumps({"success": True, "completion_receipt": receipt})
+    finalized = FinalizedRecipeSectionResponse(
+        rendered=rendered,
+        tool_ctx=minimal_ctx,
+        initialization_id="initialization",
+        artifact_generation=state.artifact_generation,
+        section="flow_records",
+        page_plan_sha256=_hash("flow-plan"),
+        part=0,
+        content_sha256=content_sha256,
+        completion_receipt=receipt,
+    )
+
+    assert complete_section_response(finalized, rendered) == rendered
+    ready = minimal_ctx.recipe_initialization_state
+    assert isinstance(ready, ReadyRecipe)
+    assert ready.completion_receipt == receipt
+    assert (
+        replay_terminal_section_response(
+            minimal_ctx,
+            initialization_id="initialization",
+            section="flow_records",
+            part=0,
+            content_sha256=content_sha256,
+        )
+        == rendered
+    )
+
+
+def test_section_rejection_preserves_diagnostic_context(
+    minimal_ctx,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = _stage(minimal_ctx, tmp_path)
+    rendered = json.dumps({"success": True})
+    finalized = FinalizedRecipeSectionResponse(
+        rendered=rendered,
+        tool_ctx=minimal_ctx,
+        initialization_id=state.initialization_id,
+        artifact_generation=state.artifact_generation,
+        section="flow_records",
+        page_plan_sha256=_hash("flow-plan"),
+        part=1,
+        content_sha256=_hash("content"),
+        completion_receipt=None,
+    )
+    logger = Mock()
+    monkeypatch.setattr(recipe_initialization, "logger", logger)
+
+    response = complete_section_response(finalized, rendered)
+
+    assert json.loads(response) == {
+        "success": False,
+        "error": "recipe_initialization_page_rejected",
+    }
+    logger.error.assert_called_once_with(
+        "recipe initialization page rejected",
+        initialization_id=state.initialization_id,
+        section="flow_records",
+        part=1,
+        exc_info=True,
+    )
+
+
+def test_receipt_content_mismatch_preserves_diagnostic_context(
+    minimal_ctx,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = _stage(minimal_ctx, tmp_path)
+    rendered = json.dumps({"success": True})
+    finalized = FinalizedRecipeSectionResponse(
+        rendered=rendered,
+        tool_ctx=minimal_ctx,
+        initialization_id=state.initialization_id,
+        artifact_generation=state.artifact_generation,
+        section="flow_records",
+        page_plan_sha256=_hash("flow-plan"),
+        part=0,
+        content_sha256=_hash("content"),
+        completion_receipt="wrong-receipt",
+    )
+    expected_receipt = recipe_initialization_receipt(
+        state.initialization_id,
+        state.artifact_generation,
+        content_sha256=finalized.content_sha256,
+    )
+    logger = Mock()
+    monkeypatch.setattr(recipe_initialization, "logger", logger)
+
+    response = complete_section_response(finalized, rendered)
+
+    assert json.loads(response)["error"] == "recipe_initialization_receipt_content_mismatch"
+    logger.error.assert_called_once_with(
+        "recipe initialization receipt content mismatch",
+        initialization_id=state.initialization_id,
+        section="flow_records",
+        part=0,
+        expected_receipt=expected_receipt,
+        observed_receipt="wrong-receipt",
+    )
+
+
+def test_terminal_preparation_failure_preserves_diagnostic_context(
+    minimal_ctx,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = _stage(minimal_ctx, tmp_path)
+    content_sha256 = _hash("content")
+    receipt = recipe_initialization_receipt(
+        state.initialization_id,
+        state.artifact_generation,
+        content_sha256=content_sha256,
+    )
+    rendered = json.dumps({"success": True, "completion_receipt": receipt})
+    finalized = FinalizedRecipeSectionResponse(
+        rendered=rendered,
+        tool_ctx=minimal_ctx,
+        initialization_id=state.initialization_id,
+        artifact_generation=state.artifact_generation,
+        section="flow_records",
+        page_plan_sha256=_hash("flow-plan"),
+        part=0,
+        content_sha256=content_sha256,
+        completion_receipt=receipt,
+    )
+    logger = Mock()
+    monkeypatch.setattr(recipe_initialization, "logger", logger)
+    monkeypatch.setattr(
+        recipe_initialization,
+        "prepare_recipe_execution",
+        Mock(side_effect=ValueError("prepare failed")),
+    )
+
+    response = complete_section_response(finalized, rendered)
+
+    assert json.loads(response)["error"] == "recipe_execution_install_failed"
+    logger.error.assert_called_once_with(
+        "terminal recipe execution preparation failed",
+        initialization_id=state.initialization_id,
+        section="flow_records",
+        part=0,
+        exc_info=True,
+    )
+
+
+def test_terminal_page_replay_rejects_changed_content_digest(minimal_ctx, tmp_path) -> None:
+    state = _stage(minimal_ctx, tmp_path)
+    content_sha256 = _hash("terminal-content")
+    receipt = recipe_initialization_receipt(
+        "initialization",
+        state.artifact_generation,
+        content_sha256=content_sha256,
+    )
+    rendered = json.dumps({"success": True, "completion_receipt": receipt})
+    finalized = FinalizedRecipeSectionResponse(
+        rendered=rendered,
+        tool_ctx=minimal_ctx,
+        initialization_id="initialization",
+        artifact_generation=state.artifact_generation,
+        section="flow_records",
+        page_plan_sha256=_hash("flow-plan"),
+        part=0,
+        content_sha256=content_sha256,
+        completion_receipt=receipt,
+    )
+    assert complete_section_response(finalized, rendered) == rendered
+
+    replay = replay_terminal_section_response(
+        minimal_ctx,
+        initialization_id="initialization",
+        section="flow_records",
+        part=0,
+        content_sha256=_hash("tampered"),
+    )
+    assert replay is not None
+    assert json.loads(replay)["error"] == "recipe_initialization_receipt_content_mismatch"
+
+
+def test_terminal_page_replay_is_scoped_to_section(minimal_ctx, tmp_path) -> None:
+    state = _stage(minimal_ctx, tmp_path)
+    content_sha256 = _hash("terminal-content")
+    receipt = recipe_initialization_receipt(
+        state.initialization_id,
+        state.artifact_generation,
+        content_sha256=content_sha256,
+    )
+    rendered = json.dumps({"success": True, "completion_receipt": receipt})
+    finalized = FinalizedRecipeSectionResponse(
+        rendered=rendered,
+        tool_ctx=minimal_ctx,
+        initialization_id=state.initialization_id,
+        artifact_generation=state.artifact_generation,
+        section="flow_records",
+        page_plan_sha256=_hash("flow-plan"),
+        part=0,
+        content_sha256=content_sha256,
+        completion_receipt=receipt,
+    )
+    assert complete_section_response(finalized, rendered) == rendered
+
+    assert (
+        replay_terminal_section_response(
+            minimal_ctx,
+            initialization_id=state.initialization_id,
+            section="step",
+            part=0,
+            content_sha256=content_sha256,
+        )
+        is None
+    )
 
 
 def test_completion_rejects_stale_or_altered_initialization_id(

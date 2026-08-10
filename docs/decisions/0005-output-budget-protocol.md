@@ -171,7 +171,12 @@ it to 90% of the resolved context window (244,800 for gpt-5.6-sol), per
 and `RECIPE_SECTION_RESPONSE_FLOOR_BYTES` is their maximum UTF-8 size. Configuration
 below that floor is invalid. After request admission, the request-specific ceiling is:
 
-`recipe_section_bound_bytes = min(response_max_bytes, conservative_general_result_limit)`
+`recipe_section_bound_bytes = page_max_bytes ?? min(response_max_bytes, conservative_general_result_limit)`
+
+This runtime projection is subordinate to the packaging-time fitness check: every
+bounded initialization plan must fit the fixed round-trip budget below. Runtime
+projection remains valid for ordinary inline delivery, but it cannot authorize an
+unbounded bounded-delivery sequence.
 
 The current ordinary Codex policy deliberately keeps the conservative limit at
 10,000 bytes. It is not the generic token×4 projection. Planning trial-renders each
@@ -179,6 +184,32 @@ complete outer response with compact canonical JSON and accepts only pages withi
 captured UTF-8 bound. Oversized arrays use complete pages or
 `json-element-fragment`; there is no truncation and no dropped element. A terminal
 page omits `next_part`.
+
+### Bounded-delivery round-trip budget
+
+Every bounded recipe initialization must be representable in at most four MCP calls,
+including `open_kitchen`, both required section pulls, and completion. Page planning
+records each section's compiled byte and page counts and rejects a plan with more than
+one page per required section. Receivers must not assume that recovery can continue for
+an unbounded number of calls.
+
+The reserved inline-exemption margin is a packaging-time fitness invariant enforced by
+the bundled-recipe contract matrix. Runtime delivery mode selection does not repeat that
+packaging validation.
+
+### Typed dimensional bounds
+
+Token and UTF-8 byte limits are represented by the distinct `TokenLimit` and
+`Utf8ByteLimit` frozen value objects. They deliberately provide no integer coercion or
+cross-unit ordering. Conversion uses `BytesToTokensPolicy` with an exact `Fraction`
+ratio; implicit byte/token arithmetic is not permitted at a consumer boundary.
+
+`output_budget.page_max_bytes` is an explicit operator calibration for bounded recipe
+pages. When present it selects the measured UTF-8 page ceiling instead of treating a
+backend token count as bytes. AutoSkillit has no cross-backend exact tokenizer authority,
+so the fixed bytes-to-token ratio remains an explicitly conservative transport policy,
+not a corpus calibration. Any future calibration must name its backend, model, tokenizer
+identity, and exact measurement source before it can change that policy.
 
 ## Operational Signals
 

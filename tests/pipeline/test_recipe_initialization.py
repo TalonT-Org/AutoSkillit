@@ -148,6 +148,17 @@ def test_page_progress_is_in_order_and_exact_replay_is_idempotent() -> None:
     )
 
 
+def test_page_progress_rejects_a_later_section_before_prior_completion() -> None:
+    with pytest.raises(ValueError, match="sections are out of order"):
+        record_initialization_page(
+            _initializing(),
+            initialization_id="initialization",
+            section="step",
+            page_plan_sha256=_hash("step-plan"),
+            part=0,
+        )
+
+
 @pytest.mark.parametrize(
     ("initialization_id", "section", "page_plan_sha256", "part"),
     [

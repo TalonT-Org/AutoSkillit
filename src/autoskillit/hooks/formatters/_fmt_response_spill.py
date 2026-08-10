@@ -46,6 +46,11 @@ _RESPONSE_SPILL_NUMERIC_KEYS = (
     "omitted_items",
 )
 _RESPONSE_BACKSTOP_EXEMPTION_REGISTRY = {
+    "get_recipe_section": {
+        "max_chars": 195_000,
+        "max_utf8_bytes": 195_000,
+        "measurement_id": "bundled-recipes-all-modes-2026-08-09/get-recipe-section",
+    },
     "load_recipe": {
         "max_chars": 195_000,
         "max_utf8_bytes": 195_000,

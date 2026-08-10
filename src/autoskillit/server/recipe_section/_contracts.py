@@ -88,6 +88,7 @@ class SelectedRecipeSection:
     value: object
     present: bool
     initialization_id: str | None = None
+    completion_response: dict[str, object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,3 +215,8 @@ class RecipeSectionPagePlan:
     @property
     def total_parts(self) -> int:
         return len(self.rendered_pages)
+
+    @property
+    def measured_bytes(self) -> int:
+        """Return the exact UTF-8 size of the compiled wire pages."""
+        return sum(len(page.encode("utf-8")) for page in self.rendered_pages)

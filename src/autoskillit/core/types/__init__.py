@@ -36,6 +36,8 @@ from ._type_context_admission_persistence import *  # noqa: F401, F403
 from ._type_context_admission_persistence import (
     __all__ as _context_admission_persistence_all,
 )
+from ._type_dimensions import *  # noqa: F401, F403
+from ._type_dimensions import __all__ as _dimensions_all
 from ._type_dispatch_identity import *  # noqa: F401, F403
 from ._type_dispatch_identity import __all__ as _dispatch_identity_all
 from ._type_enums import *  # noqa: F401, F403
@@ -125,6 +127,7 @@ __all__ = (
     + _context_admission_all
     + _context_admission_persistence_all
     + _dispatch_identity_all
+    + _dimensions_all
     + _enums_all
     + _exceptions_all
     + _exploration_all

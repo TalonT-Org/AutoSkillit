@@ -482,6 +482,7 @@ class TestTrackResponseSize:
                 section="flow_records",
                 page_plan_sha256="sha256:plan",
                 part=0,
+                content_sha256="sha256:content",
             )
         else:
             finalized = FinalizedRecipeInitializationResponse(

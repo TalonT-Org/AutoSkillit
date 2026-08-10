@@ -70,11 +70,36 @@ Consumers reject an unknown pagination version or unknown content format, mixed
 identities, gaps, overlaps, duplicates, a page after the terminal page, or a terminal
 page carrying `next_part`. They must not guess or repair a malformed continuation.
 
+### Terminal pages and embedded completion receipts
+
+The last required `get_recipe_section` page may carry the deterministic completion
+receipt and recipe-execution credential. The page credit and transition to READY occur
+only after the universal response boundary preserves the exact page bytes. When the
+receipt is present, consumers skip `complete_recipe_initialization`; otherwise the
+separate completion call remains the fallback.
+
+Four invariants are non-negotiable:
+
+1. **Server-state-only derivation.** Receipts contain no client nonce. The server caches
+   the exact terminal response by `(initialization_id, part_index)` for 24 hours, so an
+   exact re-fetch returns byte-identical receipt and execution fields.
+2. **Atomic credit and transition.** Page credit and the transition to `ReadyRecipe`
+   occur under one lock with one final state assignment. Splitting these writes would
+   reintroduce the dual-call race.
+3. **Content hash binding.** Receipt derivation includes the terminal page's
+   `page_content_sha256`; a replay with different content is rejected before any state
+   transition.
+4. **Full READY authority.** The receipt carries recipe, immutable artifact and flow
+   identities plus the complete recipe-execution credential. Together with the installed
+   snapshot and audit-ledger occurrence, this reconstructs the attested READY context
+   rather than representing a standalone done flag.
+
 ## Consequences
 
 - `recipe_read_guard.py` error messages direct the agent to call `load_recipe` (and,
   for envelope responses, `get_recipe_section`).
-- No production code changes are needed today — the channel already exists and works.
+- Terminal-page delivery enforces the four invariants above while preserving the
+  separate completion call as a compatibility fallback for non-receipt responses.
 - Future work relaxing `CODEX_AUTO_COMPACT_LIMIT` must add integration tests verifying
   `load_recipe` / `open_kitchen` / `get_recipe_section` re-delivery restores full
   pipeline execution capability, including envelope re-delivery plus per-step pulls.

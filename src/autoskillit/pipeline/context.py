@@ -77,10 +77,24 @@ from autoskillit.pipeline.recipe_initialization import (
     RecipeInitializationState,
 )
 
-__all__ = ["ToolContext", "current_step_name", "current_order_id"]
+__all__ = [
+    "TerminalRecipeResponseCacheEntry",
+    "ToolContext",
+    "current_order_id",
+    "current_step_name",
+]
 
 # Must-supply-or-raise: fields defaulting to _MISSING are required by __post_init__.
 _MISSING: Any = object()
+
+
+@dataclass(frozen=True, slots=True)
+class TerminalRecipeResponseCacheEntry:
+    """One retained terminal response and its replay binding."""
+
+    expires_at: float
+    content_sha256: str
+    rendered: str
 
 
 @dataclass
@@ -259,6 +273,9 @@ class ToolContext:
         default_factory=threading.RLock,
         repr=False,
     )
+    recipe_terminal_response_cache: dict[
+        tuple[str, str, int], TerminalRecipeResponseCacheEntry
+    ] = field(default_factory=dict, repr=False)
     exploration_context_store: ExplorationContextStoreProtocol[object] | None = field(default=None)
     _baseline_config: AutomationConfig = field(init=False, repr=False)
     _session_config_overrides: dict[str, dict[str, Any]] = field(

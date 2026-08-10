@@ -34,6 +34,7 @@ from autoskillit.pipeline import (  # noqa: F401
     GATED_TOOLS,
     UNGATED_TOOLS,
     InitializingRecipe,
+    ReadyRecipe,
 )
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
@@ -62,6 +63,8 @@ from autoskillit.server._recipe_initialization import (
     FinalizedRecipeSectionResponse,
     build_completion_response,
     matches_recipe_initialization_requirement,
+    recipe_initialization_progress_counts,
+    replay_terminal_section_response,
 )
 from autoskillit.server._recipe_section_pagination import (
     RecipeSectionBoundError,
@@ -112,14 +115,14 @@ def _recipe_section_request_state_factory() -> RecipeSectionRequestState:
     admitted = tool_ctx is not None and tool_ctx.recipes is not None
     response_max_bytes = 90_000
     conservative_limit = 10_000
+    page_max_bytes: int | None = None
     if tool_ctx is not None:
-        configured_response_max = getattr(
-            getattr(tool_ctx.config, "output_budget", None),
-            "response_max_bytes",
-            None,
-        )
+        configured_response_max = tool_ctx.config.output_budget.response_max_bytes
         if isinstance(configured_response_max, int) and configured_response_max > 0:
             response_max_bytes = configured_response_max
+        configured_page_max = tool_ctx.config.output_budget.page_max_bytes
+        if isinstance(configured_page_max, int) and configured_page_max > 0:
+            page_max_bytes = configured_page_max
         backend_capabilities = (
             tool_ctx.backend.capabilities
             if tool_ctx.backend is not None
@@ -136,6 +139,7 @@ def _recipe_section_request_state_factory() -> RecipeSectionRequestState:
         recipe_section_bound_bytes=resolve_recipe_section_bound_bytes(
             response_max_bytes,
             conservative_limit,
+            page_max_bytes,
         ),
     )
 
@@ -678,7 +682,7 @@ async def get_recipe_section(
                 )
             if page_plan_sha256 is not None and (page_plan_sha256 != page_plan.page_plan_sha256):
                 return _recipe_section_failure("invalid_recipe_page_plan_identity")
-            active_initialization: InitializingRecipe | None = None
+            active_initialization: InitializingRecipe | ReadyRecipe | None = None
             if initialization_id is not None:
                 with tool_ctx.recipe_execution_lock:
                     state = tool_ctx.recipe_initialization_state
@@ -690,7 +694,7 @@ async def get_recipe_section(
                     page_plan_sha256=page_plan.page_plan_sha256,
                 ):
                     return _recipe_section_failure("invalid_recipe_initialization_identity")
-                assert isinstance(state, InitializingRecipe)
+                assert isinstance(state, (InitializingRecipe, ReadyRecipe))
                 active_initialization = state
                 if page_plan_sha256 != page_plan.page_plan_sha256:
                     return _recipe_section_failure("invalid_recipe_page_plan_identity")
@@ -709,8 +713,45 @@ async def get_recipe_section(
             if continuation != expected_continuation:
                 return _recipe_section_failure("invalid_recipe_section_continuation")
             rendered = render_recipe_section_page(page_plan, part)
+            rendered_payload = json.loads(rendered)
+            if isinstance(active_initialization, InitializingRecipe):
+                completed_parts, total_parts, remaining_section_pulls = (
+                    recipe_initialization_progress_counts(
+                        active_initialization,
+                        section=section,
+                        page_plan_sha256=page_plan.page_plan_sha256,
+                        part=part,
+                    )
+                )
+                rendered_payload.update(
+                    completed_parts=completed_parts,
+                    total_parts=total_parts,
+                    remaining_section_pulls=remaining_section_pulls,
+                )
+                rendered = json.dumps(
+                    rendered_payload,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+                if len(rendered.encode("utf-8")) > request_state.recipe_section_bound_bytes:
+                    return _recipe_section_failure("recipe_section_bound_too_small")
+            content_sha256 = rendered_payload.get("content_sha256")
+            if isinstance(active_initialization, ReadyRecipe):
+                if isinstance(content_sha256, str):
+                    replayed = replay_terminal_section_response(
+                        tool_ctx,
+                        initialization_id=active_initialization.initialization_id,
+                        section=section,
+                        part=part,
+                        content_sha256=content_sha256,
+                    )
+                    if replayed is not None:
+                        return replayed
+                return rendered
             if active_initialization is None:
                 return rendered
+            completion_receipt = rendered_payload.get("completion_receipt")
             return cast(
                 str,
                 FinalizedRecipeSectionResponse(
@@ -721,6 +762,10 @@ async def get_recipe_section(
                     section=section,
                     page_plan_sha256=page_plan.page_plan_sha256,
                     part=part,
+                    content_sha256=(content_sha256 if isinstance(content_sha256, str) else ""),
+                    completion_receipt=(
+                        completion_receipt if isinstance(completion_receipt, str) else None
+                    ),
                 ),
             )
     except Exception:

@@ -1248,11 +1248,8 @@ def test_rendered_open_kitchen_payload_under_budget(tmp_path, monkeypatch):
                 flow_generation=flow_generation,
             )
             envelope = build_recipe_envelope(
-                payload,
-                recipe_name=recipe_name,
                 generation=generation,
                 flow_generation=flow_generation,
-                entrypoint=step_names[0],
                 bound_bytes=smallest_bound_bytes,
             )
             rendered = _fmt_open_kitchen(envelope, pipeline=False)

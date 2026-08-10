@@ -161,6 +161,7 @@ _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
 )
 _SINGLETON_SAFE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
     {
+        ("src/autoskillit/core/types/_type_dimensions.py", "ASCII_YAML_POLICY"),
         ("src/autoskillit/hooks/_capture/_types.py", "TRANSITION_RESCUE_BUDGET"),
         ("src/autoskillit/pipeline/context_admission_ledger.py", "_EVENT_TYPES"),
         ("src/autoskillit/pipeline/context_admission_ledger.py", "_EFFECT_TYPES"),
@@ -975,8 +976,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +GitHub review types, portable launch authority, stable contract,
         # closed skill semantics, non-executable projection binding, explorer contracts,
         # execution-identity value objects/protocols, and the typed maintenance-install
-        # subprocess boundary.
-        "core/types": 52,
+        # subprocess boundary, and dimension-safe recipe delivery limits.
+        "core/types": 53,
         "cli": 24,  # +_install_contract typed install process boundary (#4409);
         # +_capture_store capture-store stats/reclaim command
         "cli/doctor": 12,  # +_doctor_skills capability declaration authenticity checks;
@@ -1158,7 +1159,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "transaction boundary after conflict resolution.",
     ),
     "server/_recipe_delivery.py": (
-        1460,
+        1500,
         "REQ-CNST-010-E12: immutable recipe generation persistence, host-attested delivery "
         "selection, receipt reservation, and compiled-execution publication form one "
         "transactional authority boundary; the snapshot carrier keeps installation before "
@@ -1169,7 +1170,14 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "ordinary-inline override and success-shaped surface payload preserve complete bodies "
         "for registered non-protected surfaces; #4419's audit installation/finalization fence "
         "and #4425's kitchen-effect transition remain co-located to preserve that single "
-        "delivery authority.",
+        "delivery authority. #4414 adds packaging-time bounded-call and exemption-margin "
+        "fitness checks at this same finalization boundary.",
+    ),
+    "server/_recipe_section_pagination.py": (
+        1020,
+        "REQ-CNST-010-E23: #4414 binds terminal completion receipts to the finalized page "
+        "content digest inside the existing immutable page renderer so pagination and receipt "
+        "identity cannot drift across separate serialization authorities.",
     ),
     "tools_kitchen.py": (
         2260,
@@ -1671,6 +1679,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "active_recipe_steps",
         "active_recipe_ingredients",
         "recipe_initialization_state",
+        "recipe_terminal_response_cache",
         "kitchen_open_state",
         "temp_dir",
         "project_dir",

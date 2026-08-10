@@ -47,6 +47,20 @@ def test_small_response_is_byte_identical(tmp_path):
     assert list(tmp_path.iterdir()) == []
 
 
+def test_empty_response_with_delivery_limit_is_byte_identical(tmp_path):
+    assert (
+        enforce_response_budget(
+            "",
+            tool_name="run_skill",
+            artifact_dir=tmp_path,
+            config=_config(),
+            selected_result_token_limit=1,
+        )
+        == ""
+    )
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_oversized_json_preserves_routing_shape_and_full_artifact(tmp_path):
     original = json.dumps(
         {

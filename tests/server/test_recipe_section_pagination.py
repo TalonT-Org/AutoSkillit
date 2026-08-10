@@ -28,6 +28,7 @@ from autoskillit.core import (
     recipe_section_plan_digest,
 )
 from autoskillit.server import _recipe_section_pagination as pagination
+from autoskillit.server._recipe_initialization import recipe_initialization_receipt
 from autoskillit.server._recipe_section_pagination import (
     PagePlanCache,
     RecipeSectionPageDescriptor,
@@ -271,6 +272,35 @@ def _build(
         selected=selected,
         recipe_section_bound_bytes=bound,
     )
+
+
+def test_terminal_initialization_page_carries_progress_and_completion_receipt() -> None:
+    generation = _generation()
+    selected = dataclasses.replace(
+        select_recipe_section(_payload(), "content"),
+        initialization_id="initialization",
+        completion_response={
+            "completion_receipt": f"sha256:{'a' * 64}",
+            "recipe_execution": {"execution_id": "execution"},
+        },
+    )
+    plan = build_recipe_section_page_plan(
+        kitchen_id="kitchen-test",
+        generation=generation,
+        selected=selected,
+        recipe_section_bound_bytes=90_000,
+    )
+
+    page = json.loads(plan.rendered_pages[-1])
+    assert page["completed_parts"] == page["total_parts"]
+    assert page["remaining_section_pulls"] == 0
+    content_sha256 = page["content_sha256"]
+    assert page["completion_receipt"] == recipe_initialization_receipt(
+        "initialization",
+        generation,
+        content_sha256=content_sha256,
+    )
+    assert page["recipe_execution"] == {"execution_id": "execution"}
 
 
 def test_select_recipe_section_loads_only_recognized_dynamic_content() -> None:

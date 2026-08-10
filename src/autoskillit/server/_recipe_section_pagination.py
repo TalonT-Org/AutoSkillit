@@ -25,6 +25,7 @@ from autoskillit.core import (
     recipe_section_element_digest,
     recipe_section_plan_digest,
 )
+from autoskillit.server._recipe_initialization import recipe_initialization_receipt
 from autoskillit.server.recipe_section._contracts import (
     PlannedRecipeSectionPage,
     RecipeSectionBoundError,
@@ -238,8 +239,11 @@ register_kitchen_retirement_callback(_evict_retired_kitchen)
 def resolve_recipe_section_bound_bytes(
     response_max_bytes: int,
     conservative_general_result_limit: int,
+    page_max_bytes_override: int | None = None,
 ) -> int:
     """Resolve the deliberately conservative ordinary recipe-pull ceiling."""
+    if page_max_bytes_override is not None:
+        return page_max_bytes_override
     return min(response_max_bytes, conservative_general_result_limit)
 
 
@@ -361,6 +365,19 @@ def _render_candidate(
     body.pop("pull_tool")
     if selected.initialization_id is not None:
         body["initialization_id"] = selected.initialization_id
+        body["completed_parts"] = part + 1
+        body["remaining_section_pulls"] = total_parts - part - 1
+    if terminal and selected.completion_response is not None:
+        completion_response = dict(selected.completion_response)
+        content_sha256 = page.descriptor.page_content_sha256
+        completion_response["content_sha256"] = content_sha256
+        assert selected.initialization_id is not None
+        completion_response["completion_receipt"] = recipe_initialization_receipt(
+            selected.initialization_id,
+            generation,
+            content_sha256=content_sha256,
+        )
+        body.update(completion_response)
     if not terminal:
         body["next_part"] = part + 1
         body["continuation"] = recipe_section_continuation_binding(
@@ -372,12 +389,7 @@ def _render_candidate(
             next_part=part + 1,
         )
     body.update(page.descriptor.wire_ranges())
-    return json.dumps(
-        body,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    )
+    return json.dumps(body, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
 
 def recipe_section_continuation_binding(

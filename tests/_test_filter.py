@@ -273,6 +273,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     ),
     "_type_recipe_delivery": frozenset({"core", "execution", "pipeline", "server"}),
     "_type_recipe_sections": frozenset({"core", "execution", "server"}),
+    "_type_dimensions": frozenset({"core", "server"}),
     "_type_context_admission": frozenset({"core", "pipeline", "server"}),
     "_type_context_admission_persistence": frozenset({"core", "pipeline", "server"}),
     "_type_audit_admission": frozenset({"core", "execution", "pipeline", "server"}),

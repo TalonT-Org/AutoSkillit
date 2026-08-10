@@ -559,11 +559,8 @@ def _build_envelope(
     generation = _persist(tmp_path, payload)
     flow_generation = _test_flow_generation(payload)
     envelope = build_recipe_envelope(
-        payload,
-        recipe_name="remediation",
         generation=generation,
         flow_generation=flow_generation,
-        entrypoint="first",
         bound_bytes=bound_bytes,
     )
     return envelope, generation
@@ -589,11 +586,8 @@ def test_recovery_order_is_derived_from_initialization_requirements(
     )
 
     envelope = build_recipe_envelope(
-        payload,
-        recipe_name="remediation",
         generation=generation,
         flow_generation=flow_generation,
-        entrypoint="first",
         bound_bytes=90_000,
         initialization_requirements=requirements,
     )
@@ -970,7 +964,10 @@ def test_initialization_requirements_use_the_pull_response_bound(
     response_max_bytes = RECIPE_SECTION_RESPONSE_FLOOR_BYTES + 500
     tool_ctx.backend = CodexBackend()
     tool_ctx.kitchen_id = "initialization-page-bound"
-    tool_ctx.config.output_budget = OutputBudgetConfig(response_max_bytes=response_max_bytes)
+    tool_ctx.config.output_budget = OutputBudgetConfig(
+        response_max_bytes=response_max_bytes,
+        page_max_bytes=None,
+    )
     captured_bounds: list[int] = []
 
     def _capture_requirements(
@@ -1007,7 +1004,6 @@ def test_initialization_requirements_use_the_pull_response_bound(
     [
         ("stale_initialization_id", "invalid_recipe_initialization_identity"),
         ("altered_page_plan", "invalid_recipe_page_plan_identity"),
-        ("missing_continuation", "invalid_recipe_section_continuation"),
         ("wrong_continuation", "invalid_recipe_section_continuation"),
     ],
 )
@@ -1018,7 +1014,10 @@ async def test_initialization_pull_rejections_preserve_progress(
 ) -> None:
     tool_ctx_kitchen_open.backend = CodexBackend()
     tool_ctx_kitchen_open.kitchen_id = f"initialization-rejection-{case}"
-    tool_ctx_kitchen_open.config.output_budget = OutputBudgetConfig(response_max_bytes=8_000)
+    tool_ctx_kitchen_open.config.output_budget = OutputBudgetConfig(
+        response_max_bytes=8_000,
+        page_max_bytes=195_000,
+    )
     payload = _payload(
         "name: remediation\nsteps:\n  first:\n    action: stop\n    message: "
         + ("x" * 20_000)
@@ -1036,7 +1035,7 @@ async def test_initialization_pull_rejections_preserve_progress(
         finalized.rendered
     )
     envelope = json.loads(finalized.rendered)
-    requirement = next(item for item in envelope["required_sections"] if item["total_parts"] > 1)
+    requirement = envelope["required_sections"][0]
     identity = dict(envelope["recipe_pull"])
     identity.pop("pull_tool")
     initialization_id = envelope["initialization_id"]
@@ -1048,10 +1047,8 @@ async def test_initialization_pull_rejections_preserve_progress(
         page_plan_sha256 = None
     elif case == "altered_page_plan":
         page_plan_sha256 = "sha256:" + ("0" * 64)
-    else:
-        part = 1
-        if case == "wrong_continuation":
-            continuation = "wrong-continuation"
+    elif case == "wrong_continuation":
+        continuation = "invalid-continuation"
 
     before = tool_ctx_kitchen_open.recipe_initialization_state
     assert isinstance(before, InitializingRecipe)
@@ -1153,9 +1150,9 @@ def test_exemption_overrides_envelope_for_exempt_surface_within_ceiling(tool_ctx
     # Payload whose ordinary JSON exceeds the ordinary_limit (in bytes) but stays
     # under the 195,000-byte exemption ceiling.
     ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
-    oversized_content = "x" * (min(ceiling - 1_000, ordinary_limit * 4 + 5_000))
-    assert len(oversized_content.encode("utf-8")) > ordinary_limit * 4
-    assert len(oversized_content.encode("utf-8")) < ceiling
+    oversized_content = "x" * min(ceiling * 9 // 10 - 1_000, ordinary_limit + 5_000)
+    assert len(oversized_content.encode("utf-8")) > ordinary_limit
+    assert len(oversized_content.encode("utf-8")) <= ceiling * 9 // 10
 
     finalized = _finalize_recipe_delivery(
         _payload(oversized_content),
@@ -1387,6 +1384,7 @@ async def test_pull_tool_reads_exact_generation_and_reports_byte_offsets(
 ) -> None:
     tool_ctx_kitchen_open.backend = CodexBackend()
     tool_ctx_kitchen_open.kitchen_id = "pull-kitchen"
+    tool_ctx_kitchen_open.config.output_budget = OutputBudgetConfig(page_max_bytes=None)
     expected_content = "héllo\n" * 12_000
     generation = persist_recipe_artifact(
         tool_ctx_kitchen_open.temp_dir,
@@ -1435,6 +1433,39 @@ async def test_pull_tool_reads_exact_generation_and_reports_byte_offsets(
     assert part > 0
     assert expected_byte_start == response["byte_total"]
     assert "".join(chunks) == expected_content
+
+
+@pytest.mark.parametrize("continuation", [None, "wrong-continuation"])
+async def test_pull_tool_rejects_missing_or_wrong_continuation(
+    tool_ctx_kitchen_open,
+    continuation: str | None,
+) -> None:
+    tool_ctx_kitchen_open.backend = CodexBackend()
+    tool_ctx_kitchen_open.kitchen_id = "pull-continuation-rejection"
+    tool_ctx_kitchen_open.config.output_budget = OutputBudgetConfig(page_max_bytes=None)
+    generation = persist_recipe_artifact(
+        tool_ctx_kitchen_open.temp_dir,
+        kitchen_id=tool_ctx_kitchen_open.kitchen_id,
+        producer_tool="open_kitchen",
+        recipe_name="remediation",
+        payload=_payload("x" * 50_000),
+    )
+    kwargs = generation.pull_identity()
+    kwargs.pop("pull_tool")
+    first = json.loads(await get_recipe_section(section="content", **kwargs))
+    assert first["next_part"] == 1
+
+    response = json.loads(
+        await get_recipe_section(
+            section="content",
+            part=1,
+            page_plan_sha256=first["page_plan_sha256"],
+            continuation=continuation,
+            **kwargs,
+        )
+    )
+
+    assert response["error"] == "invalid_recipe_section_continuation"
 
 
 def _assert_section_response_bound(rendered: str, tool_ctx) -> None:
@@ -1741,7 +1772,8 @@ async def test_request_specific_floor_returns_exact_bounded_failure(
         replace(
             tool_ctx_kitchen_open.config,
             output_budget=OutputBudgetConfig(
-                response_max_bytes=RECIPE_SECTION_RESPONSE_FLOOR_BYTES
+                response_max_bytes=RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
+                page_max_bytes=None,
             ),
         ),
     )
@@ -1824,6 +1856,7 @@ async def test_oversized_named_step_round_trips_through_continuation(
 ) -> None:
     tool_ctx_kitchen_open.backend = CodexBackend()
     tool_ctx_kitchen_open.kitchen_id = "pull-oversized-step"
+    tool_ctx_kitchen_open.config.output_budget = OutputBudgetConfig(page_max_bytes=None)
     content = "steps:\n  giant_step:\n    note: " + ("X" * 80_000) + "\n"
     payload = _payload(content)
     payload["post_prune_step_names"] = ["giant_step"]

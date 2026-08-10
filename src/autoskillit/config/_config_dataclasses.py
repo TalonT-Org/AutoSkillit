@@ -383,6 +383,7 @@ class OutputBudgetConfig:
     head_chars: int = 2500
     tail_chars: int = 2500
     response_max_bytes: int = 90_000
+    page_max_bytes: int | None = 195_000
     guard_enabled: bool = True
     shell_max_inline_bytes: int = 12_000
     capture_capacity: dict[str, int] | None = None
@@ -391,6 +392,13 @@ class OutputBudgetConfig:
         if self.response_max_bytes < RECIPE_SECTION_RESPONSE_FLOOR_BYTES:
             raise ValueError(
                 f"response_max_bytes must be at least {RECIPE_SECTION_RESPONSE_FLOOR_BYTES} bytes"
+            )
+        if (
+            self.page_max_bytes is not None
+            and self.page_max_bytes < RECIPE_SECTION_RESPONSE_FLOOR_BYTES
+        ):
+            raise ValueError(
+                f"page_max_bytes must be at least {RECIPE_SECTION_RESPONSE_FLOOR_BYTES} bytes"
             )
 
 

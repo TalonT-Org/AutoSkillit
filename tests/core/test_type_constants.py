@@ -32,6 +32,11 @@ def test_response_backstop_exemption_registry_is_closed_and_pinned() -> None:
     )
 
     assert RESPONSE_BACKSTOP_EXEMPTION_REGISTRY == {
+        "get_recipe_section": ResponseBackstopExemptionDef(
+            max_chars=195_000,
+            max_utf8_bytes=195_000,
+            measurement_id="bundled-recipes-all-modes-2026-08-09/get-recipe-section",
+        ),
         "load_recipe": ResponseBackstopExemptionDef(
             max_chars=195_000,
             max_utf8_bytes=195_000,
@@ -67,7 +72,7 @@ def test_response_backstop_exemption_registry_digest_is_canonical() -> None:
     )
     assert (
         RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST
-        == "1dae50b43813a0e9addb643794edfcdb5b93d069ed650ae5f51bac432aa90e61"
+        == "669328c03372e174282f498e17c682c6e8d74bd68e9b8086e400848777061f66"
     )
 
 

@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
+    RECIPE_SECTION_PAGINATION_VERSION,
+    RECIPE_SECTION_REGISTRY_DIGEST,
     RecipeArtifactGeneration,
     RecipeExecutionCredential,
     RecipeExecutionId,
@@ -24,6 +27,7 @@ from autoskillit.pipeline import (
     InitializingRecipe,
     ReadyRecipe,
     RecipeInitializationRequirement,
+    TerminalRecipeResponseCacheEntry,
     initialization_is_complete,
     record_initialization_page,
     start_recipe_initialization,
@@ -32,6 +36,7 @@ from autoskillit.server._recipe_execution import (
     RecipeExecutionAdmissionError,
     install_recipe_execution,
     prepare_recipe_execution,
+    ready_recipe_execution_state,
 )
 from autoskillit.server._state import _get_ctx_or_none
 
@@ -44,18 +49,92 @@ __all__ = [
     "FinalizedRecipeInitializationResponse",
     "FinalizedRecipeSectionResponse",
     "admit_registered_tool_during_initialization",
+    "build_embedded_completion_response",
+    "build_recipe_envelope",
     "build_completion_response",
     "complete_initialization_response",
     "complete_section_response",
     "matches_recipe_initialization_requirement",
+    "recipe_initialization_progress_counts",
+    "recipe_initialization_receipt",
+    "replay_terminal_section_response",
     "stage_recipe_initialization",
 ]
 
 
-def _receipt(initialization_id: str, artifact: RecipeArtifactGeneration) -> str:
+def build_recipe_envelope(
+    *,
+    generation: RecipeArtifactGeneration,
+    flow_generation: RecipeFlowGeneration,
+    bound_bytes: int,
+    initialization_id: str | None = None,
+    initialization_requirements: tuple[RecipeInitializationRequirement, ...] = (),
+    completion_required: bool = False,
+) -> dict[str, Any]:
+    """Build the bounded pull envelope used by every recipe delivery surface."""
+    manifest = {
+        "success": True,
+        "delivery_bound_spill": True,
+        "recipe_pull": generation.pull_identity(),
+        "recipe_flow": flow_generation.identity(),
+        "completed_parts": 0,
+        "total_parts": sum(item.total_parts for item in initialization_requirements),
+        "remaining_section_pulls": sum(item.total_parts for item in initialization_requirements),
+        "required_sections": [
+            {
+                "page_plan_sha256": requirement.page_plan_sha256,
+                "section": requirement.section,
+                "total_parts": requirement.total_parts,
+                "compiled_page_count": requirement.total_parts,
+                "compiled_bytes": requirement.compiled_bytes,
+            }
+            for requirement in initialization_requirements
+        ],
+        "recovery": {
+            "completion_required": completion_required,
+            "ordered_sections": [
+                requirement.section for requirement in initialization_requirements
+            ],
+            "pagination_version": RECIPE_SECTION_PAGINATION_VERSION,
+            "section_registry_sha256": RECIPE_SECTION_REGISTRY_DIGEST,
+            "pull_tool": "get_recipe_section",
+        },
+    }
+    if initialization_id is not None:
+        manifest["initialization_id"] = initialization_id
+    if (
+        len(json.dumps(manifest, ensure_ascii=False, separators=(",", ":")).encode())
+        <= bound_bytes
+    ):
+        return manifest
+    fallback_candidates: tuple[dict[str, Any], ...] = (
+        {
+            "success": False,
+            "error": "recipe_envelope_exceeds_delivery_bound",
+            "recipe_pull": generation.pull_identity(),
+        },
+        {"success": False, "error": "recipe_envelope_exceeds_delivery_bound"},
+        {},
+    )
+    for fallback in fallback_candidates:
+        if len(json.dumps(fallback, separators=(",", ":")).encode()) <= bound_bytes:
+            return fallback
+    raise ValueError("delivery bound is too small for a JSON object")
+
+
+_TERMINAL_RESPONSE_RETENTION_SECONDS = 24 * 60 * 60
+
+
+def recipe_initialization_receipt(
+    initialization_id: str,
+    artifact: RecipeArtifactGeneration,
+    *,
+    content_sha256: str | None = None,
+) -> str:
     material = json.dumps(
         {
             "artifact": artifact.pull_identity(),
+            "content_sha256": content_sha256,
             "initialization_id": initialization_id,
         },
         ensure_ascii=False,
@@ -66,6 +145,24 @@ def _receipt(initialization_id: str, artifact: RecipeArtifactGeneration) -> str:
         "sha256:"
         + hashlib.sha256(b"autoskillit.recipe-initialization-receipt.v1\0" + material).hexdigest()
     )
+
+
+def recipe_initialization_progress_counts(
+    state: InitializingRecipe,
+    *,
+    section: str,
+    page_plan_sha256: str,
+    part: int,
+) -> tuple[int, int, int]:
+    """Return global completed, total, and remaining counts for one rendered page."""
+    current = next(
+        item
+        for item in state.progress
+        if item.section == section and item.page_plan_sha256 == page_plan_sha256
+    )
+    total = sum(item.total_parts for item in state.progress)
+    completed = sum(item.next_part for item in state.progress) + int(part >= current.next_part)
+    return completed, total, total - completed
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +176,8 @@ class FinalizedRecipeSectionResponse:
     section: str
     page_plan_sha256: str
     part: int
+    content_sha256: str
+    completion_receipt: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,9 +294,13 @@ def matches_recipe_initialization_requirement(
     page_plan_sha256: str,
 ) -> bool:
     """Return whether a page belongs to the active immutable initialization."""
-    return (
-        isinstance(state, InitializingRecipe)
-        and state.initialization_id == initialization_id
+    if isinstance(state, ReadyRecipe):
+        return (
+            state.initialization_id == initialization_id
+            and state.artifact_generation == artifact_generation
+        )
+    return isinstance(state, InitializingRecipe) and (
+        state.initialization_id == initialization_id
         and state.artifact_generation == artifact_generation
         and any(
             requirement.section == section and requirement.page_plan_sha256 == page_plan_sha256
@@ -225,20 +328,113 @@ def complete_section_response(
                 {"success": False, "error": "recipe_initialization_stale"},
                 separators=(",", ":"),
             )
+        terminal = finalized.completion_receipt is not None
+        if terminal:
+            expected_receipt = recipe_initialization_receipt(
+                finalized.initialization_id,
+                finalized.artifact_generation,
+                content_sha256=finalized.content_sha256,
+            )
+            if finalized.completion_receipt != expected_receipt:
+                logger.error(
+                    "recipe initialization receipt content mismatch",
+                    initialization_id=finalized.initialization_id,
+                    section=finalized.section,
+                    part=finalized.part,
+                    expected_receipt=expected_receipt,
+                    observed_receipt=finalized.completion_receipt,
+                )
+                return json.dumps(
+                    {"success": False, "error": "recipe_initialization_receipt_content_mismatch"},
+                    separators=(",", ":"),
+                )
         try:
-            tool_ctx.recipe_initialization_state = record_initialization_page(
+            updated = record_initialization_page(
                 state,
                 initialization_id=finalized.initialization_id,
                 section=finalized.section,
                 page_plan_sha256=finalized.page_plan_sha256,
                 part=finalized.part,
             )
+            assert isinstance(updated, InitializingRecipe)
         except ValueError:
+            logger.error(
+                "recipe initialization page rejected",
+                initialization_id=finalized.initialization_id,
+                section=finalized.section,
+                part=finalized.part,
+                exc_info=True,
+            )
             return json.dumps(
                 {"success": False, "error": "recipe_initialization_page_rejected"},
                 separators=(",", ":"),
             )
+        terminal = terminal and initialization_is_complete(updated)
+        if not terminal:
+            tool_ctx.recipe_initialization_state = updated
+            return enforced
+        assert finalized.completion_receipt is not None
+        try:
+            prepared = prepare_recipe_execution(tool_ctx, snapshot=updated.staged_snapshot)
+            ready = ready_recipe_execution_state(
+                tool_ctx,
+                updated,
+                prepared_execution=prepared,
+                completion_receipt=finalized.completion_receipt,
+            )
+        except (RecipeExecutionAdmissionError, ValueError):
+            logger.error(
+                "terminal recipe execution preparation failed",
+                initialization_id=finalized.initialization_id,
+                section=finalized.section,
+                part=finalized.part,
+                exc_info=True,
+            )
+            return json.dumps(
+                {"success": False, "error": "recipe_execution_install_failed"},
+                separators=(",", ":"),
+            )
+        tool_ctx.recipe_initialization_state = ready
+        now = time.monotonic()
+        expired = [
+            key
+            for key, entry in tool_ctx.recipe_terminal_response_cache.items()
+            if entry.expires_at <= now
+        ]
+        for key in expired:
+            del tool_ctx.recipe_terminal_response_cache[key]
+        cache_key = (finalized.initialization_id, finalized.section, finalized.part)
+        tool_ctx.recipe_terminal_response_cache[cache_key] = TerminalRecipeResponseCacheEntry(
+            expires_at=now + _TERMINAL_RESPONSE_RETENTION_SECONDS,
+            content_sha256=finalized.content_sha256,
+            rendered=enforced,
+        )
     return enforced
+
+
+def replay_terminal_section_response(
+    tool_ctx: ToolContext,
+    *,
+    initialization_id: str,
+    section: str,
+    part: int,
+    content_sha256: str,
+) -> str | None:
+    """Return a non-expired byte-identical terminal response for exact replay."""
+    with tool_ctx.recipe_execution_lock:
+        cache_key = (initialization_id, section, part)
+        record = tool_ctx.recipe_terminal_response_cache.get(cache_key)
+        if record is None:
+            return None
+        if record.expires_at <= time.monotonic():
+            del tool_ctx.recipe_terminal_response_cache[cache_key]
+            return None
+        if record.content_sha256 != content_sha256:
+            return json.dumps(
+                {"success": False, "error": "recipe_initialization_receipt_content_mismatch"},
+                separators=(",", ":"),
+            )
+        return record.rendered
 
 
 def complete_initialization_response(
@@ -339,6 +535,28 @@ def _render_completion_receipt(
     )
 
 
+def build_embedded_completion_response(
+    *,
+    initialization_id: str,
+    recipe_name: str,
+    artifact_generation: RecipeArtifactGeneration,
+    flow_generation: RecipeFlowGeneration,
+    snapshot: RecipeExecutionSnapshot,
+) -> dict[str, object]:
+    """Build the deterministic READY receipt fields carried by a terminal page."""
+    rendered = _render_completion_receipt(
+        initialization_id=initialization_id,
+        completion_receipt=recipe_initialization_receipt(initialization_id, artifact_generation),
+        recipe_name=recipe_name,
+        artifact_generation=artifact_generation,
+        flow_generation=flow_generation,
+        credential=build_recipe_execution_credential(snapshot),
+    )
+    parsed = json.loads(rendered)
+    assert isinstance(parsed, dict)
+    return parsed
+
+
 def build_completion_response(
     tool_ctx: ToolContext,
     initialization_id: str,
@@ -370,7 +588,10 @@ def build_completion_response(
                 {"success": False, "error": "recipe_initialization_incomplete"},
                 separators=(",", ":"),
             )
-        completion_receipt = _receipt(initialization_id, state.artifact_generation)
+        completion_receipt = recipe_initialization_receipt(
+            initialization_id,
+            state.artifact_generation,
+        )
         rendered = _render_completion_receipt(
             initialization_id=initialization_id,
             completion_receipt=completion_receipt,

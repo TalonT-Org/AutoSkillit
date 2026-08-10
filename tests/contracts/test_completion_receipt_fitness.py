@@ -25,8 +25,8 @@ from autoskillit.server._recipe_delivery import (
 )
 from autoskillit.server._recipe_generation import RecipeGenerationStore
 from autoskillit.server._recipe_initialization import (
-    _receipt,
     _render_completion_receipt,
+    recipe_initialization_receipt,
 )
 from tests.contracts.test_delivery_bound_fitness import (
     _backend_capabilities,
@@ -78,7 +78,7 @@ def test_completion_receipt_fits_every_delivery_bound(
     credential = build_recipe_execution_credential(prepared.execution_snapshot)
     receipt = _render_completion_receipt(
         initialization_id=initialization_id,
-        completion_receipt=_receipt(initialization_id, generation),
+        completion_receipt=recipe_initialization_receipt(initialization_id, generation),
         recipe_name=recipe_name,
         artifact_generation=generation,
         flow_generation=prepared.flow_generation,

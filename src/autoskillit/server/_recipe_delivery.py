@@ -29,10 +29,9 @@ from autoskillit.core import (
     RECIPE_DELIVERY_SURFACE_REGISTRY,
     RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
     RECIPE_FLOW_SCHEMA_VERSION,
-    RECIPE_SECTION_PAGINATION_VERSION,
-    RECIPE_SECTION_REGISTRY_DIGEST,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     BackendCapabilities,
+    BoundedDeliveryRoundTripBudgetExceededError,
     FinalizedRecipeProjection,
     RecipeArtifactGeneration,
     RecipeDeliveryAttestation,
@@ -41,6 +40,7 @@ from autoskillit.core import (
     RecipeDeliveryRequest,
     RecipeExecutionId,
     RecipeExecutionSnapshot,
+    RecipeExemptionFitnessError,
     RecipeFlowGeneration,
     atomic_write,
     build_recipe_execution_credential,
@@ -76,7 +76,11 @@ from autoskillit.server._recipe_generation import (
     generation_json_primitive,
     get_recipe_generation_store,
 )
-from autoskillit.server._recipe_initialization import stage_recipe_initialization
+from autoskillit.server._recipe_initialization import (
+    build_embedded_completion_response,
+    build_recipe_envelope,
+    stage_recipe_initialization,
+)
 from autoskillit.server._recipe_section_pagination import (
     get_or_build_recipe_section_page_plan,
     resolve_recipe_section_bound_bytes,
@@ -106,6 +110,10 @@ class RecipeArtifactError(RuntimeError):
 
 class RecipeArtifactSchemaError(RecipeArtifactError):
     """A recipe artifact violates the static pullable-section schema."""
+
+
+_MAX_BOUNDED_RECIPE_CALLS = 4
+_MAX_PAGES_PER_INITIALIZATION_SECTION = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -685,69 +693,6 @@ def recipe_recreation_producers() -> frozenset[str]:
     )
 
 
-def build_recipe_envelope(
-    payload: dict[str, Any],
-    *,
-    recipe_name: str,
-    generation: RecipeArtifactGeneration,
-    flow_generation: RecipeFlowGeneration,
-    entrypoint: str,
-    bound_bytes: int,
-    initialization_id: str | None = None,
-    initialization_requirements: tuple[RecipeInitializationRequirement, ...] = (),
-    completion_required: bool = False,
-) -> dict[str, Any]:
-    """Build the bounded pull envelope used by every recipe delivery surface."""
-    manifest = {
-        "success": True,
-        "delivery_bound_spill": True,
-        "recipe_pull": generation.pull_identity(),
-        "recipe_flow": flow_generation.identity(),
-        "required_sections": [
-            {
-                "page_plan_sha256": requirement.page_plan_sha256,
-                "section": requirement.section,
-                "total_parts": requirement.total_parts,
-            }
-            for requirement in initialization_requirements
-        ],
-        "recovery": {
-            "completion_required": completion_required,
-            "ordered_sections": [
-                requirement.section for requirement in initialization_requirements
-            ],
-            "pagination_version": RECIPE_SECTION_PAGINATION_VERSION,
-            "section_registry_sha256": RECIPE_SECTION_REGISTRY_DIGEST,
-            "pull_tool": "get_recipe_section",
-        },
-    }
-    if initialization_id is not None:
-        manifest["initialization_id"] = initialization_id
-    if (
-        len(json.dumps(manifest, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-        <= bound_bytes
-    ):
-        return manifest
-    pull_identity = generation.pull_identity()
-
-    fallback_candidates: tuple[dict[str, Any], ...] = (
-        {
-            "success": False,
-            "error": "recipe_envelope_exceeds_delivery_bound",
-            "recipe_pull": pull_identity,
-        },
-        {"success": False, "error": "recipe_envelope_exceeds_delivery_bound"},
-        {},
-    )
-    for fallback in fallback_candidates:
-        if (
-            len(json.dumps(fallback, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-            <= bound_bytes
-        ):
-            return fallback
-    raise ValueError("delivery bound is too small for a JSON object")
-
-
 def _initialization_requirements(
     *,
     tool_ctx: ToolContext,
@@ -756,6 +701,10 @@ def _initialization_requirements(
     entrypoint: str,
     bound_bytes: int,
     initialization_id: str | None,
+    backend_name: str,
+    completion_required: bool,
+    flow_generation: RecipeFlowGeneration,
+    execution_snapshot: RecipeExecutionSnapshot,
 ) -> tuple[RecipeInitializationRequirement, ...]:
     """Build the exact flow and entrypoint page plans advertised by a manifest."""
 
@@ -775,7 +724,22 @@ def _initialization_requirements(
             section,
             dynamic_content_loader=_entrypoint_content,
         )
-        selected = replace(selected, initialization_id=initialization_id)
+        completion_response = (
+            build_embedded_completion_response(
+                initialization_id=initialization_id,
+                recipe_name=generation.recipe_name,
+                artifact_generation=generation,
+                flow_generation=flow_generation,
+                snapshot=execution_snapshot,
+            )
+            if completion_required and initialization_id is not None and section == entrypoint
+            else None
+        )
+        selected = replace(
+            selected,
+            initialization_id=initialization_id,
+            completion_response=completion_response,
+        )
         if not selected.present:
             raise RecipeArtifactSchemaError(
                 f"required recipe initialization section is absent: {section}"
@@ -791,9 +755,63 @@ def _initialization_requirements(
                 section=section,
                 page_plan_sha256=page_plan.page_plan_sha256,
                 total_parts=page_plan.total_parts,
+                compiled_bytes=page_plan.measured_bytes,
             )
         )
-    return tuple(requirements)
+    compiled = tuple(requirements)
+    validate_compiled_recipe_delivery_budget(
+        recipe=generation.recipe_name,
+        backend=backend_name,
+        section_page_counts=tuple(item.total_parts for item in compiled),
+    )
+    return compiled
+
+
+def validate_compiled_recipe_delivery_budget(
+    *,
+    recipe: str,
+    backend: str,
+    section_page_counts: tuple[int, ...],
+) -> None:
+    """Reject a compiled bounded delivery that exceeds its fixed call budget."""
+    planned_calls = 1 + sum(section_page_counts) + 1
+    if (
+        any(parts > _MAX_PAGES_PER_INITIALIZATION_SECTION for parts in section_page_counts)
+        or planned_calls > _MAX_BOUNDED_RECIPE_CALLS
+    ):
+        raise BoundedDeliveryRoundTripBudgetExceededError(
+            recipe=recipe,
+            backend=backend,
+            planned_calls=planned_calls,
+            budget=_MAX_BOUNDED_RECIPE_CALLS,
+        )
+
+
+def validate_recipe_exemption_fitness(
+    *,
+    recipe: str,
+    surface: str,
+    backend: str,
+    ordinary_rendered: str,
+    ceiling_bytes: int,
+) -> None:
+    """Reject inline packaging that has consumed its reserved ten-percent margin."""
+    rendered_bytes = len(ordinary_rendered.encode("utf-8"))
+    admitted_bytes = _recipe_exemption_admitted_bytes(ceiling_bytes)
+    if rendered_bytes > admitted_bytes:
+        raise RecipeExemptionFitnessError(
+            recipe=recipe,
+            surface=surface,
+            backend=backend,
+            rendered_bytes=rendered_bytes,
+            ceiling_bytes=ceiling_bytes,
+            margin_bytes=ceiling_bytes - admitted_bytes,
+        )
+
+
+def _recipe_exemption_admitted_bytes(ceiling_bytes: int) -> int:
+    """Return the exemption ceiling after reserving the packaging margin."""
+    return ceiling_bytes * 9 // 10
 
 
 def _conservative_token_upper_bound(rendered: str) -> int:
@@ -972,6 +990,11 @@ def finalize_recipe_delivery(
         ensure_ascii=False,
         separators=(",", ":"),
     )
+    backend_name = (
+        (tool_ctx.backend.name if tool_ctx.backend is not None else None)
+        or capabilities.process_name
+        or "unknown"
+    )
     candidate_evidence = supported_evidence if surface_definition.negotiation_eligible else None
     candidate_attestation = attestation if surface_definition.negotiation_eligible else None
     candidate_request = delivery_request if surface_definition.negotiation_eligible else None
@@ -1004,25 +1027,17 @@ def finalize_recipe_delivery(
         supported_evidence=candidate_evidence,
         now_unix=now_unix,
     )
-    response_budget = getattr(getattr(tool_ctx, "config", None), "output_budget", None)
-    response_max_bytes = getattr(response_budget, "response_max_bytes", None)
-    response_ceiling_bytes = (
-        response_max_bytes
-        if isinstance(response_max_bytes, int) and response_max_bytes > 0
-        else None
-    )
+    response_budget = tool_ctx.config.output_budget
+    response_ceiling_bytes = response_budget.response_max_bytes
+    page_max_bytes = response_budget.page_max_bytes
     section_response_bound_bytes = resolve_recipe_section_bound_bytes(
-        (
-            response_ceiling_bytes
-            if response_ceiling_bytes is not None
-            else OutputBudgetConfig().response_max_bytes
-        ),
+        response_ceiling_bytes,
         ordinary_limit,
+        page_max_bytes,
     )
     if (
         decision.mode is RecipeDeliveryMode.ORDINARY_INLINE
         and surface_definition.response_exemption_tool is None
-        and response_ceiling_bytes is not None
         and len(ordinary_rendered.encode("utf-8")) > response_ceiling_bytes
     ):
         decision = replace(
@@ -1093,10 +1108,9 @@ def finalize_recipe_delivery(
         _exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.get(
             surface_definition.response_exemption_tool
         )
-        if (
-            _exemption is not None
-            and len(ordinary_rendered.encode("utf-8")) <= _exemption.max_utf8_bytes
-        ):
+        if _exemption is not None and len(
+            ordinary_rendered.encode("utf-8")
+        ) <= _recipe_exemption_admitted_bytes(_exemption.max_utf8_bytes):
             decision = replace(
                 decision,
                 mode=RecipeDeliveryMode.ORDINARY_INLINE,
@@ -1112,10 +1126,7 @@ def finalize_recipe_delivery(
         rendered = high_rendered
     else:
         envelope_bound_bytes = envelope_byte_limit
-        if (
-            surface_definition.response_exemption_tool is None
-            and response_ceiling_bytes is not None
-        ):
+        if surface_definition.response_exemption_tool is None:
             envelope_bound_bytes = min(envelope_bound_bytes, response_ceiling_bytes)
         try:
             initialization_requirements = _initialization_requirements(
@@ -1125,14 +1136,15 @@ def finalize_recipe_delivery(
                 entrypoint=finalized_projection.entrypoint,
                 bound_bytes=section_response_bound_bytes,
                 initialization_id=initialization_id,
+                backend_name=backend_name,
+                completion_required=surface_definition.initialization_activating,
+                flow_generation=flow_generation,
+                execution_snapshot=execution_snapshot,
             )
             rendered = json.dumps(
                 build_recipe_envelope(
-                    candidate_payload,
-                    recipe_name=recipe_name,
                     generation=generation,
                     flow_generation=flow_generation,
-                    entrypoint=finalized_projection.entrypoint,
                     bound_bytes=envelope_bound_bytes,
                     initialization_id=initialization_id,
                     initialization_requirements=initialization_requirements,
@@ -1141,6 +1153,8 @@ def finalize_recipe_delivery(
                 ensure_ascii=False,
                 separators=(",", ":"),
             )
+        except BoundedDeliveryRoundTripBudgetExceededError:
+            raise
         except Exception:
             get_logger(__name__).error(
                 "recipe initialization manifest planning failed",
@@ -1454,4 +1468,6 @@ __all__ = [
     "prepare_recipe_delivery_generation",
     "recipe_pull_producers",
     "retire_recipe_artifacts",
+    "validate_compiled_recipe_delivery_budget",
+    "validate_recipe_exemption_fitness",
 ]

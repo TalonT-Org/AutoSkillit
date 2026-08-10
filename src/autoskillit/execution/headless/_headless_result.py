@@ -248,7 +248,7 @@ def _apply_post_session_adjudication(
 
 def _validate_declared_artifact(cwd: str, field_name: str, value: str) -> tuple[str, str] | None:
     """Validate one emitted ``file_path`` without exposing unsafe paths."""
-    safe_name = Path(value).name or "."
+    safe_name = "."
     producer_detail = (
         f"Skill output '{field_name}' did not identify a contained regular file: {safe_name}"
     )
@@ -258,6 +258,10 @@ def _validate_declared_artifact(cwd: str, field_name: str, value: str) -> tuple[
     try:
         root = Path(cwd).resolve()
         candidate = Path(value)
+        safe_name = candidate.name or "."
+        producer_detail = (
+            f"Skill output '{field_name}' did not identify a contained regular file: {safe_name}"
+        )
         target = (
             (root / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
         )
@@ -268,6 +272,8 @@ def _validate_declared_artifact(cwd: str, field_name: str, value: str) -> tuple[
         target_stat = target.stat()
         if not stat.S_ISREG(target_stat.st_mode):
             return "artifact_contract_violation", producer_detail
+    except (TypeError, ValueError):
+        return "artifact_contract_violation", producer_detail
     except OSError as exc:
         if exc.errno in {errno.ENOENT, errno.ENOTDIR, errno.ELOOP}:
             return "artifact_contract_violation", producer_detail

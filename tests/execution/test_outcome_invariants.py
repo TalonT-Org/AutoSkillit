@@ -28,7 +28,10 @@ from autoskillit.execution.headless._headless_outcome import (
     evaluate_success_qualifier,
     parse_outcome_fields,
 )
-from autoskillit.execution.headless._headless_result import _apply_post_session_adjudication
+from autoskillit.execution.headless._headless_result import (
+    _apply_post_session_adjudication,
+    _validate_declared_artifact,
+)
 from autoskillit.recipe import (
     OutcomeInvariantEntry,
     SkillContract,
@@ -699,6 +702,17 @@ def _artifact_contract() -> SkillContract:
 
 
 class TestDeclaredArtifactAdjudication:
+    @pytest.mark.parametrize("value", ["bad\0name", None])
+    def test_invalid_path_value_is_producer_failure(self, tmp_path, value: object) -> None:
+        result = _validate_declared_artifact(
+            str(tmp_path),
+            "artifact",
+            value,  # type: ignore[arg-type]
+        )
+
+        assert result is not None
+        assert result[0] == "artifact_contract_violation"
+
     def test_existing_declared_file_is_preserved(self, tmp_path) -> None:
         (tmp_path / "report.md").write_text("report")
         sr = _base_skill_result(result_text="artifact = report.md")

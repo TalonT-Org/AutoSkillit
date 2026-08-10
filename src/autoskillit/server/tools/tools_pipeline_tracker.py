@@ -421,8 +421,8 @@ def mark_step_complete(
 ) -> dict:
     """Mark a single step as complete in the tracker file.
 
-    Used by both ``op="complete"`` (operator repair) and the adjudication-point
-    marker in ``run_skill``. Returns a result dict (always includes ``success``).
+    Used by both ``op="complete"`` (operator repair) and
+    ``complete_run_skill_result``. Returns a result dict (always includes ``success``).
     """
     canonical = canonical_step_name(step_name)
     lock_path = tracker_path.parent / ".pipeline_tracker.lock"

@@ -40,6 +40,7 @@ from tests.server._helpers import (
     _pull_step_section,
     _skill_ok,
 )
+from tests.server._pipeline_test_helpers import _ack_direct_run_skill_result
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
@@ -347,8 +348,6 @@ async def test_staged_fault_retry_preserves_one_durable_audit_lifecycle(
     }
 
     first = json.loads(await run_skill(**invocation))
-    from tests.server._pipeline_test_helpers import _ack_direct_run_skill_result
-
     _ack_direct_run_skill_result(tool_ctx_kitchen_open, first)
 
     assert fault_hits == [stage]

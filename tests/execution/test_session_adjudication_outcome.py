@@ -704,9 +704,7 @@ class TestDeadEndGuardContentState:
             channel_confirmation=ChannelConfirmation.CHANNEL_B,
             expected_output_patterns=["investigation_path\\s*=\\s*/.+"],
         )
-        assert outcome == SessionOutcome.RETRIABLE, (
-            "Empty result with channel confirmation must remain RETRIABLE (drain-race rescue)."
-        )
+        assert outcome == SessionOutcome.RETRIABLE, "Empty result must remain RETRIABLE."
         assert retry_reason == RetryReason.EMPTY_OUTPUT
 
     def test_compute_outcome_channel_b_missing_marker_uses_early_stop(

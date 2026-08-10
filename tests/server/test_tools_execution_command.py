@@ -18,6 +18,7 @@ from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES
 from autoskillit.execution.commands import _inject_completion_directive
 from autoskillit.server.tools.tools_execution import run_skill
 from tests.conftest import _make_result
+from tests.server._pipeline_test_helpers import _ack_direct_run_skill_result
 from tests.server.conftest import _SUCCESS_JSON
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -276,8 +277,6 @@ class TestRunSkillPerInvocationMarker:
             _make_result(returncode=1)
         )  # clone guard snapshot call 2
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=0, stdout=success_json))
-
-        from tests.server._pipeline_test_helpers import _ack_direct_run_skill_result
 
         first = json.loads(await run_skill("/investigate a", cwd="/tmp"))
         _ack_direct_run_skill_result(tool_ctx_kitchen_open, first)

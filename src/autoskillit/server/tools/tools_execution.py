@@ -1040,6 +1040,8 @@ async def run_skill(
         is not None
     ):
         return _plan_path_denial
+    tool_ctx: ToolContext | None = None
+    _completion_invocation_id = ""
     try:
         contract_lifecycle = _RunSkillContractLifecycle()
         _sn_token = _oid_token = None
@@ -2539,11 +2541,10 @@ async def run_skill(
             skill_command=skill_command,
             order_id=order_id,
         )
-        _invocation_id = locals().get("_completion_invocation_id", "")
-        if _invocation_id and "tool_ctx" in locals():
+        if _completion_invocation_id and tool_ctx is not None:
             return _finalize_run_skill_completion(
                 tool_ctx,
-                _invocation_id,
+                _completion_invocation_id,
                 _unhandled_result.to_json(),
                 child_session_id=_unhandled_result.session_id,
             )
@@ -2557,19 +2558,18 @@ async def run_skill(
             skill_command=_cmd,  # type: ignore[arg-type]
             order_id=_oid,  # type: ignore[arg-type]
         )
-        _invocation_id = locals().get("_completion_invocation_id", "")
-        if _invocation_id and "tool_ctx" in locals():
+        if _completion_invocation_id and tool_ctx is not None:
             with anyio.CancelScope(shield=True):
                 return _finalize_run_skill_completion(
                     tool_ctx,
-                    _invocation_id,
+                    _completion_invocation_id,
                     _cancelled_result.to_json(),
                     child_session_id=_cancelled_result.session_id,
                 )
         return _cancelled_result.to_json()
     finally:
         contract_lifecycle.cleanup()
-        if _explorer_launch_lease is not None:
+        if _explorer_launch_lease is not None and tool_ctx is not None:
             exploration_store = tool_ctx.exploration_context_store
             if exploration_store is None:
                 logger.warning(
@@ -2588,7 +2588,7 @@ async def run_skill(
         if _oid_token is not None:
             _current_order_id.reset(_oid_token)  # type: ignore[possibly-undefined]
         _sid: str | None = locals().get("_cleanup_session_id")  # type: ignore[assignment]
-        if _sid is not None:
+        if _sid is not None and tool_ctx is not None:
             _ssm = tool_ctx.session_skill_manager  # type: ignore[possibly-undefined]
             if _ssm is not None:
                 try:

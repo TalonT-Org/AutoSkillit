@@ -28,6 +28,7 @@ from ._type_audit_admission import (
     _require_digest,
     _require_nonempty,
     _require_optional_digest,
+    _require_tracker_target,
 )
 from ._type_audit_cycle import ArtifactRef, AuditCycleHead
 
@@ -191,15 +192,11 @@ class AuditReservationRequest:
             raise ValueError(
                 "AuditReservationRequest.retry_after_audit_attempt_id has the wrong type"
             )
-        if type(self.tracker_expected) is not bool:
-            raise ValueError("AuditReservationRequest.tracker_expected must be a boolean")
-        if self.tracker_target_order_id is not None:
-            _require_nonempty(
-                "AuditReservationRequest.tracker_target_order_id",
-                self.tracker_target_order_id,
-            )
-        if self.tracker_expected and self.tracker_target_order_id is None:
-            raise ValueError("expected tracker authority requires a target order id")
+        _require_tracker_target(
+            "AuditReservationRequest",
+            self.tracker_expected,
+            self.tracker_target_order_id,
+        )
 
 
 @dataclass(frozen=True, slots=True)

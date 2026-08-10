@@ -145,6 +145,19 @@ def _require_absolute_path(name: str, value: object) -> Path:
     return value
 
 
+def _require_tracker_target(
+    owner: str,
+    tracker_expected: object,
+    tracker_target_order_id: object,
+) -> None:
+    if type(tracker_expected) is not bool:
+        raise ValueError(f"{owner}.tracker_expected must be a boolean")
+    if tracker_target_order_id is not None:
+        _require_nonempty(f"{owner}.tracker_target_order_id", tracker_target_order_id)
+    if tracker_expected and tracker_target_order_id is None:
+        raise ValueError("expected tracker authority requires a target order id")
+
+
 def _typed_tuple(name: str, value: object, item_type: type[Any]) -> tuple[Any, ...]:
     if not isinstance(value, tuple) or not all(isinstance(item, item_type) for item in value):
         raise ValueError(f"{name} must be a tuple of {item_type.__name__} values")
@@ -768,15 +781,11 @@ class AuditIdentityReservation:
                 raise ValueError(
                     "AuditIdentityReservation expected head digest does not match parent"
                 )
-        if type(self.tracker_expected) is not bool:
-            raise ValueError("AuditIdentityReservation.tracker_expected must be a boolean")
-        if self.tracker_target_order_id is not None:
-            _require_nonempty(
-                "AuditIdentityReservation.tracker_target_order_id",
-                self.tracker_target_order_id,
-            )
-        if self.tracker_expected and self.tracker_target_order_id is None:
-            raise ValueError("expected tracker authority requires a target order id")
+        _require_tracker_target(
+            "AuditIdentityReservation",
+            self.tracker_expected,
+            self.tracker_target_order_id,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -892,12 +901,11 @@ class AuditOutcome:
                 "AuditOutcome.replay_response_json",
                 self.replay_response_json,
             )
-        if type(self.tracker_expected) is not bool:
-            raise ValueError("AuditOutcome.tracker_expected must be a boolean")
-        if self.tracker_target_order_id is not None:
-            _require_nonempty("AuditOutcome.tracker_target_order_id", self.tracker_target_order_id)
-        if self.tracker_expected and self.tracker_target_order_id is None:
-            raise ValueError("expected tracker authority requires a target order id")
+        _require_tracker_target(
+            "AuditOutcome",
+            self.tracker_expected,
+            self.tracker_target_order_id,
+        )
         if self.status is AuditOutcomeStatus.NON_PUBLISHED_STANDALONE:
             _validate_standalone_payload(
                 owner="AuditOutcome",

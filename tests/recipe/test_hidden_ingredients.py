@@ -1155,8 +1155,8 @@ def test_guarded_chain_pruning_matches_independent_oracle(
     assert not _validate_route_consistency(repaired, pruned)
 
 
-def test_load_and_validate_clears_content_on_dangling_routes(tmp_path: Path) -> None:
-    """load_and_validate blocks content when pruning produces dangling route references."""
+def test_load_and_validate_preserves_content_on_invalid_skip_contract(tmp_path: Path) -> None:
+    """Invalid skip contracts preserve the declared content for diagnostics."""
     from autoskillit.recipe import load_and_validate
 
     recipe_dir = tmp_path / ".autoskillit" / "recipes"

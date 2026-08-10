@@ -138,10 +138,10 @@ async def test_close_kitchen_preserves_peer_tracker_and_lease_sidecar(monkeypatc
         '{"pipeline_id": "AB", "kitchen_id": "AB", "steps": {}, "dependencies": {}}'
     )
     peer_target = TrackerAuthorityTarget("AB", peer_tracker, expected=False)
-    peer_lease = tracker_lease_path(peer_target)
+    peer_lease_path = tracker_lease_path(peer_target)
 
-    lease = ArtifactLease.acquire_shared(peer_lease)
-    peer_lease_inode = peer_lease.stat().st_ino
+    lease = ArtifactLease.acquire_shared(peer_lease_path)
+    peer_lease_inode = peer_lease_path.stat().st_ino
     try:
         with (
             patch(
@@ -168,10 +168,10 @@ async def test_close_kitchen_preserves_peer_tracker_and_lease_sidecar(monkeypatc
             _close_kitchen_handler()
 
         assert peer_tracker.exists()
-        assert peer_lease.exists()
-        assert peer_lease.stat().st_ino == peer_lease_inode
+        assert peer_lease_path.exists()
+        assert peer_lease_path.stat().st_ino == peer_lease_inode
         with pytest.raises(ArtifactLeaseContention):
-            ArtifactLease.acquire_exclusive(peer_lease, blocking=False)
+            ArtifactLease.acquire_exclusive(peer_lease_path, blocking=False)
         assert not current_target.path.exists()
         assert tracker_lease_path(current_target).exists()
     finally:

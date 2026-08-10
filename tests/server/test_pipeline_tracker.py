@@ -134,6 +134,26 @@ class TestRecordPipelineStepInit:
         assert not self.ctx.tracker_leases[manual_key].closed
         _release_context_tracker(self.ctx, manual_key)
 
+    def test_kitchen_release_does_external_work_outside_lease_lock(self, monkeypatch):
+        from autoskillit.server.tools import tools_kitchen
+
+        tools_kitchen._retain_kitchen_tracker_authority(self.ctx)
+        lock_states = []
+
+        def record_lock_state(_value):
+            lock_states.append(getattr(self.ctx.tracker_leases_lock, "_is_owned")())
+
+        monkeypatch.setattr(tools_kitchen, "unregister_active_kitchen", record_lock_state)
+        monkeypatch.setattr(tools_kitchen, "try_retire_tracker", record_lock_state)
+
+        tools_kitchen._release_kitchen_tracker_authority(
+            self.ctx,
+            unregister=True,
+            retire=True,
+        )
+
+        assert lock_states == [False, False]
+
     @pytest.mark.anyio
     async def test_completion_exception_releases_manual_tracker_lease(self, monkeypatch):
         from autoskillit.server.tools import tools_pipeline_tracker

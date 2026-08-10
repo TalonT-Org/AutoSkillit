@@ -642,14 +642,14 @@ def _release_kitchen_tracker_authority(
         if key is not None:
             release_tracker_lease(tool_ctx.tracker_leases, key)
         tool_ctx.kitchen_tracker_key = None
-        try:
-            if unregister and identity is not None:
-                unregister_active_kitchen(identity)
-        finally:
-            if unregister:
-                tool_ctx.kitchen_process_identity = None
-            if retire and key is not None:
-                try_retire_tracker(key.target)
+        if unregister:
+            tool_ctx.kitchen_process_identity = None
+    try:
+        if unregister and identity is not None:
+            unregister_active_kitchen(identity)
+    finally:
+        if retire and key is not None:
+            try_retire_tracker(key.target)
 
 
 def prune_stale_kitchen_state(project_dir: Path, current_kitchen_id: str) -> None:

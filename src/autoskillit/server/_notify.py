@@ -137,23 +137,16 @@ def track_response_size(
             finalized_run_skill = (
                 result if isinstance(result, FinalizedRunSkillCompletionResponse) else None
             )
-            response_value = (
-                finalized.rendered
-                if finalized is not None
-                else (
-                    finalized_section.rendered
-                    if finalized_section is not None
-                    else (
-                        finalized_initialization.rendered
-                        if finalized_initialization is not None
-                        else (
-                            finalized_run_skill.rendered
-                            if finalized_run_skill is not None
-                            else result
-                        )
-                    )
-                )
-            )
+            if finalized is not None:
+                response_value = finalized.rendered
+            elif finalized_section is not None:
+                response_value = finalized_section.rendered
+            elif finalized_initialization is not None:
+                response_value = finalized_initialization.rendered
+            elif finalized_run_skill is not None:
+                response_value = finalized_run_skill.rendered
+            else:
+                response_value = result
             ctx = _get_ctx_or_none()
             try:
                 response_str = (

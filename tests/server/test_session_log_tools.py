@@ -121,7 +121,8 @@ async def test_read_pages_have_byte_counts_citations_and_authenticated_continuat
     assert second["line_range"] == {"start": 2, "end": 2}
     assert second["truncated"] is False
 
-    tampered = first["next_continuation"][:-1] + "A"
+    continuation = first["next_continuation"]
+    tampered = ("A" if continuation[0] != "A" else "B") + continuation[1:]
     invalid = json.loads(
         await session_logs.inspect_session_logs(
             operation="read",

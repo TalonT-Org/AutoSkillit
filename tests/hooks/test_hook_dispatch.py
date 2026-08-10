@@ -219,29 +219,30 @@ class TestDispatchOverhead:
         stdin_data = b'{"tool_name": "Read", "tool_input": {}}'
         runs = 10
 
-        overhead_times = []
-        for index in range(runs):
-            commands = (
-                (
-                    [sys.executable, str(direct_script)],
-                    [sys.executable, str(dispatch_script), "guards/quota_guard"],
-                )
-                if index % 2 == 0
-                else (
-                    [sys.executable, str(dispatch_script), "guards/quota_guard"],
-                    [sys.executable, str(direct_script)],
-                )
+        direct_times = []
+        for _ in range(runs):
+            start = time.perf_counter()
+            subprocess.run(
+                [sys.executable, str(direct_script)],
+                input=stdin_data,
+                capture_output=True,
             )
-            elapsed: dict[str, float] = {}
-            for command in commands:
-                label = "dispatch" if command[1] == str(dispatch_script) else "direct"
-                start = time.perf_counter()
-                subprocess.run(command, input=stdin_data, capture_output=True)
-                elapsed[label] = time.perf_counter() - start
-            overhead_times.append(elapsed["dispatch"] - elapsed["direct"])
+            direct_times.append(time.perf_counter() - start)
 
-        overhead = sorted(overhead_times)[runs // 2]
+        dispatch_times = []
+        for _ in range(runs):
+            start = time.perf_counter()
+            subprocess.run(
+                [sys.executable, str(dispatch_script), "guards/quota_guard"],
+                input=stdin_data,
+                capture_output=True,
+            )
+            dispatch_times.append(time.perf_counter() - start)
+
+        direct_median = sorted(direct_times)[runs // 2]
+        dispatch_median = sorted(dispatch_times)[runs // 2]
+        overhead = dispatch_median - direct_median
         assert overhead < 0.100, (
             f"Dispatch overhead {overhead:.3f}s exceeds 100ms threshold "
-            f"(paired samples={overhead_times!r})"
+            f"(direct={direct_median:.3f}s, dispatch={dispatch_median:.3f}s)"
         )

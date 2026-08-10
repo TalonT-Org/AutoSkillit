@@ -13,6 +13,49 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("terminal_after", [0.08, None], ids=["terminal", "active-cap"])
+async def test_pending_task_extension_releases_on_terminal_and_respects_cap(
+    monkeypatch, terminal_after: float | None
+) -> None:
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_race._has_active_child_processes",
+        lambda pid: False,
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_race._has_active_api_connection",
+        lambda pid: False,
+    )
+    pending = [True]
+    trigger = anyio.Event()
+    original_deadline = anyio.current_time() + 0.03
+    scope = anyio.CancelScope(deadline=original_deadline)
+    scope_ref: list[anyio.CancelScope | None] = [scope]
+
+    async with anyio.create_task_group() as task_group:
+        task_group.start_soon(
+            functools.partial(
+                _watch_child_activity,
+                1,
+                scope_ref,
+                0.1,
+                trigger,
+                0.02,
+                has_pending_tasks=lambda: pending[0],
+            )
+        )
+        await anyio.sleep(terminal_after or 0.2)
+        deadline_while_active = scope.deadline
+        if terminal_after is not None:
+            pending[0] = False
+            await anyio.sleep(0.06)
+            assert scope.deadline == deadline_while_active
+        trigger.set()
+
+    assert deadline_while_active > original_deadline
+    assert scope.deadline <= original_deadline + 0.1
+
+
+@pytest.mark.anyio
 async def test_extends_deadline_when_children_active(monkeypatch) -> None:
     """Deadline is extended when _has_active_child_processes returns True."""
     monkeypatch.setattr(

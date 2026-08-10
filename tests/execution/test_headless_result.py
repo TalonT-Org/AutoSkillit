@@ -13,6 +13,7 @@ import structlog.testing
 from autoskillit.core import AGENT_BACKEND_CLAUDE_CODE, BackendCapabilities
 from autoskillit.core.types import (
     AgentSessionResult,
+    ChannelConfirmation,
     CliSubtype,
     InfraExitCategory,
     KillReason,
@@ -178,6 +179,35 @@ def test_each_authoritative_obligation_rejects_success(
         lifecycle_observation_enabled=True,
         lifecycle_observation_complete=True,
         **obligation,
+    )
+
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/plan",
+        backend=ClaudeCodeBackend(),
+    )
+
+    assert skill_result.success is False
+    assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
+
+
+@pytest.mark.parametrize(
+    "channel_confirmation",
+    [ChannelConfirmation.CHANNEL_A, ChannelConfirmation.CHANNEL_B],
+)
+def test_channel_provenance_cannot_bypass_pending_obligation(
+    channel_confirmation: ChannelConfirmation,
+) -> None:
+    result = SubprocessResult(
+        returncode=0,
+        stdout=_success_result_json(),
+        stderr="",
+        termination=TerminationReason.COMPLETED,
+        pid=1,
+        channel_confirmation=channel_confirmation,
+        lifecycle_observation_enabled=True,
+        lifecycle_observation_complete=True,
+        pending_task_ids=("owned",),
     )
 
     skill_result = _build_skill_result(

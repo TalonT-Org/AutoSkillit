@@ -159,6 +159,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
                     step_name=step_name,
                     model=_extract_model(cmd),
                     session_log_dir=session_log_dir,
+                    stream_parser=stream_parser,
+                    lifecycle_observation_enabled=lifecycle_observation_enabled,
                 )
 
             if pty_mode or not self._capabilities.pty_required:
@@ -272,6 +274,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
         step_name: str,
         model: str,
         session_log_dir: Path | None,
+        stream_parser: StreamParser | None,
+        lifecycle_observation_enabled: bool,
     ) -> SubprocessResult:
         """Record a session call via ScenarioRecorder.record_step()."""
         try:
@@ -288,10 +292,35 @@ class RecordingSubprocessRunner(SubprocessRunner):
             raise
 
         stdout = ""
+        cassette_stdout: Path | None = None
         if step_result.cassette_path:
             cassette_stdout = Path(step_result.cassette_path) / "stdout.jsonl"
             if cassette_stdout.exists():
                 stdout = cassette_stdout.read_text(encoding="utf-8")
+
+        lifecycle_observation_complete = False
+        pending_task_ids: tuple[str, ...] = ()
+        schedule_wakeup_violation = False
+        if (
+            lifecycle_observation_enabled
+            and stream_parser is not None
+            and cassette_stdout is not None
+            and cassette_stdout.is_file()
+        ):
+            from autoskillit.execution.process._process_jsonl import (
+                EventCursor,
+                fold_event_cursor,
+            )
+            from autoskillit.execution.process._process_race import RaceAccumulator
+
+            accumulator = RaceAccumulator(lifecycle_observation_enabled=True)
+            fold_event_cursor(
+                EventCursor(cassette_stdout), stream_parser, accumulator.observe_event
+            )
+            signals = accumulator.to_race_signals()
+            lifecycle_observation_complete = True
+            pending_task_ids = signals.pending_task_ids
+            schedule_wakeup_violation = signals.schedule_wakeup_violation
 
         ephemeral_dir = _extract_ephemeral_add_dir(cmd)
         if ephemeral_dir is not None and step_result.cassette_path:
@@ -311,6 +340,10 @@ class RecordingSubprocessRunner(SubprocessRunner):
             termination=TerminationReason.NATURAL_EXIT,
             pid=0,
             elapsed_seconds=(step_result.cassette_duration_ms or 0) / 1000.0,
+            lifecycle_observation_enabled=lifecycle_observation_enabled,
+            lifecycle_observation_complete=lifecycle_observation_complete,
+            pending_task_ids=pending_task_ids,
+            schedule_wakeup_violation=schedule_wakeup_violation,
         )
 
     async def _record_non_pty_session(

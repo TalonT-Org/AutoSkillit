@@ -67,12 +67,7 @@ def test_sigterm_writes_scenario_json(tmp_path):
     # calling readiness_sentinel_path(), because the test process's own
     # AUTOSKILLIT_STATE_DIR may differ from the subprocess's.
     sentinel_path = state_dir / "kitchen_state" / f"server_ready_{proc.pid}.sentinel"
-    try:
-        wait_for_subprocess_ready(proc, sentinel_path, deadline_s=30.0)
-    except BaseException:
-        proc.kill()
-        proc.communicate()
-        raise
+    wait_for_subprocess_ready(proc, sentinel_path, deadline_s=10.0)
 
     # SIGTERM is the exact signal Claude Code sends on /exit. Close stdin so
     # the stdio transport detects EOF and the event loop can fully unwind.

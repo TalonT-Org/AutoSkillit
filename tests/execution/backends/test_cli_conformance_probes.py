@@ -167,6 +167,39 @@ _skip_unless_claude_startup_smoke = pytest.mark.skipif(
     reason=_CLAUDE_STARTUP_SKIP_REASON,
 )
 
+
+def _process_group_members(process_group_id: int) -> set[int]:
+    import psutil
+
+    members: set[int] = set()
+    for process in psutil.process_iter(["pid"]):
+        try:
+            if process.pid != os.getpid() and os.getpgid(process.pid) == process_group_id:
+                members.add(process.pid)
+        except (OSError, psutil.Error):
+            continue
+    return members
+
+
+def _cleanup_process_group(process_group_id: int) -> set[int]:
+    survivors = _process_group_members(process_group_id)
+    if not survivors:
+        return survivors
+    try:
+        os.killpg(process_group_id, signal.SIGTERM)
+    except ProcessLookupError:
+        return survivors
+    deadline = time.monotonic() + 5
+    while _process_group_members(process_group_id) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    if _process_group_members(process_group_id):
+        try:
+            os.killpg(process_group_id, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    return survivors
+
+
 _PROBE_BACKEND = "codex"
 _CANARY_TITLE_PREFIX = "[Canary] codex conformance probe"
 
@@ -2670,16 +2703,11 @@ def test_claude_startup_readiness_multi_agent_foreground_trace(tmp_path: Path) -
         text=True,
         start_new_session=True,
     )
+    survivors: set[int] = set()
     try:
         stdout, stderr = process.communicate(timeout=150)
     finally:
-        if process.poll() is None:
-            os.killpg(process.pid, signal.SIGTERM)
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGKILL)
-                process.wait(timeout=5)
+        survivors = _cleanup_process_group(process.pid)
 
     records = []
     for line in stdout.splitlines():
@@ -2702,6 +2730,24 @@ def test_claude_startup_readiness_multi_agent_foreground_trace(tmp_path: Path) -
         "task_notification",
         "task_updated",
     }
+    trace_dir = Path.cwd() / ".autoskillit" / "temp" / "claude-startup-readiness"
+    trace_dir.mkdir(parents=True, exist_ok=True)
+    (trace_dir / f"multi-agent-{time.time_ns()}.jsonl").write_text(
+        json.dumps(
+            {
+                "event": "multi_agent_terminal",
+                "agent_calls": len(agents),
+                "async_lifecycle_records": 0,
+                "output_bytes": len(stdout.encode()),
+                "output_sha256": hashlib.sha256(stdout.encode()).hexdigest(),
+                "process_group_id": process.pid,
+                "survivor_pids_after_root_exit": sorted(survivors),
+                "target_written": target.is_file(),
+            },
+            sort_keys=True,
+        )
+        + "\n"
+    )
     assert process.returncode == 0, stderr[-2_000:]
     assert len(agents) >= 2
     assert all("run_in_background" not in (block.get("input") or {}) for block in agents)
@@ -2717,23 +2763,7 @@ def test_claude_startup_readiness_multi_agent_foreground_trace(tmp_path: Path) -
     )
     assert target.read_text() == "foreground-ok"
     assert marker in stdout
-
-    trace_dir = Path.cwd() / ".autoskillit" / "temp" / "claude-startup-readiness"
-    trace_dir.mkdir(parents=True, exist_ok=True)
-    (trace_dir / f"multi-agent-{time.time_ns()}.jsonl").write_text(
-        json.dumps(
-            {
-                "event": "multi_agent_terminal",
-                "agent_calls": len(agents),
-                "async_lifecycle_records": 0,
-                "output_bytes": len(stdout.encode()),
-                "output_sha256": hashlib.sha256(stdout.encode()).hexdigest(),
-                "target_written": True,
-            },
-            sort_keys=True,
-        )
-        + "\n"
-    )
+    assert not survivors
 
 
 @_skip_unless_claude_startup_smoke
@@ -2742,7 +2772,6 @@ def test_claude_startup_readiness_implement_worktree_no_merge_contract(
     tmp_path: Path,
 ) -> None:
     import anyio
-    import psutil
 
     repository = tmp_path / "repository"
     worktree_path = tmp_path / "implementation-worktree"
@@ -2819,16 +2848,6 @@ def test_claude_startup_readiness_implement_worktree_no_merge_contract(
             on_pid_resolved=lambda observed_pid, _ticks: spawned_pid.append(observed_pid),
         )
 
-    def _group_members(process_group_id: int) -> set[int]:
-        members: set[int] = set()
-        for process in psutil.process_iter(["pid"]):
-            try:
-                if process.pid != os.getpid() and os.getpgid(process.pid) == process_group_id:
-                    members.add(process.pid)
-            except (OSError, psutil.Error):
-                continue
-        return members
-
     result = None
     survivors: set[int] = set()
     try:
@@ -2848,7 +2867,7 @@ def test_claude_startup_readiness_implement_worktree_no_merge_contract(
             if isinstance(block, dict) and block.get("type") == "tool_use"
         ]
         agents = [block for block in tool_uses if block.get("name") == "Agent"]
-        survivors = _group_members(result.process_group_id)
+        survivors = _process_group_members(result.process_group_id)
         head_sha = subprocess.run(
             ["git", "rev-parse", "HEAD"],
             cwd=worktree_path,
@@ -2863,6 +2882,37 @@ def test_claude_startup_readiness_implement_worktree_no_merge_contract(
             capture_output=True,
             text=True,
         ).stdout.strip()
+        head_is_descendant = (
+            subprocess.run(
+                ["git", "merge-base", "--is-ancestor", start_sha, head_sha],
+                cwd=worktree_path,
+                check=False,
+            ).returncode
+            == 0
+        )
+        target_path = worktree_path / target_relpath
+        source_write_exact = target_path.is_file() and target_path.read_text() == expected_content
+        trace_dir = Path.cwd() / ".autoskillit" / "temp" / "claude-startup-readiness"
+        trace_dir.mkdir(parents=True, exist_ok=True)
+        (trace_dir / f"worktree-contract-{time.time_ns()}.jsonl").write_text(
+            json.dumps(
+                {
+                    "event": "implement_worktree_contract_terminal",
+                    "worktree_path": str(worktree_path),
+                    "worktree_branch": worktree_branch,
+                    "observed_branch": current_branch,
+                    "start_sha": start_sha,
+                    "head_sha": head_sha,
+                    "head_is_descendant": head_is_descendant,
+                    "target_relpath": str(target_relpath),
+                    "source_write_exact": source_write_exact,
+                    "process_group_id": result.process_group_id,
+                    "survivor_pids_after_root_exit": sorted(survivors),
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        )
 
         assert result.returncode == 0, result.stderr[-2_000:]
         assert result.lifecycle_observation_complete is True
@@ -2877,14 +2927,10 @@ def test_claude_startup_readiness_implement_worktree_no_merge_contract(
             )
             for block in tool_uses
         )
-        assert (worktree_path / target_relpath).read_text() == expected_content
+        assert source_write_exact
         assert current_branch == worktree_branch
         assert head_sha != start_sha
-        subprocess.run(
-            ["git", "merge-base", "--is-ancestor", start_sha, head_sha],
-            cwd=worktree_path,
-            check=True,
-        )
+        assert head_is_descendant
         assert not survivors
         assert marker in result.stdout
     finally:
@@ -2894,11 +2940,4 @@ def test_claude_startup_readiness_implement_worktree_no_merge_contract(
             else (spawned_pid[-1] if spawned_pid else 0)
         )
         if process_group_id:
-            survivors = _group_members(process_group_id)
-            if survivors:
-                os.killpg(process_group_id, signal.SIGTERM)
-                deadline = time.monotonic() + 5
-                while _group_members(process_group_id) and time.monotonic() < deadline:
-                    time.sleep(0.05)
-                if _group_members(process_group_id):
-                    os.killpg(process_group_id, signal.SIGKILL)
+            _cleanup_process_group(process_group_id)

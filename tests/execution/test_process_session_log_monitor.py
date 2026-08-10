@@ -31,6 +31,46 @@ class TestSessionLogMonitor:
     """Session log monitor detects completion and staleness."""
 
     @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        ("terminal_after", "minimum_elapsed"),
+        [(0.03, 0.03), (None, 0.06)],
+        ids=["terminal-releases", "active-max-bound"],
+    )
+    async def test_pending_task_suppresses_stale_until_terminal_or_max_bound(
+        self,
+        tmp_path,
+        terminal_after: float | None,
+        minimum_elapsed: float,
+    ) -> None:
+        (tmp_path / "session.jsonl").write_text('{"type":"assistant"}\n')
+        pending = [True]
+        started = time.monotonic()
+
+        async def release_terminal() -> None:
+            if terminal_after is not None:
+                await anyio.sleep(terminal_after)
+                pending[0] = False
+
+        async with anyio.create_task_group() as task_group:
+            task_group.start_soon(release_terminal)
+            result = await _session_log_monitor(
+                tmp_path,
+                "ORDER_UP",
+                stale_threshold=0.01,
+                spawn_time=time.time() - 1,
+                _phase1_poll=0.005,
+                _phase2_poll=0.005,
+                _phase1_timeout=0.1,
+                max_suppression_seconds=0.06,
+                has_pending_tasks=lambda: pending[0],
+            )
+
+        elapsed = time.monotonic() - started
+        assert result.status is ChannelBStatus.STALE
+        assert elapsed >= minimum_elapsed
+        assert elapsed < 0.2
+
+    @pytest.mark.anyio
     async def test_session_log_monitor_detects_completion(self, tmp_path):
         """Session log with completion marker in assistant record returns 'completion'."""
 

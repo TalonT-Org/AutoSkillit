@@ -11,8 +11,11 @@ from __future__ import annotations
 
 import json
 import os
+import signal
+import subprocess
 import sys
 import textwrap
+import time
 
 import anyio
 import psutil
@@ -92,6 +95,34 @@ NATURAL_EXIT_WITH_OWNED_CHILD_SCRIPT = textwrap.dedent("""\
 """)
 
 
+def _process_group_members(process_group_id: int) -> set[int]:
+    members: set[int] = set()
+    for process in psutil.process_iter(["pid"]):
+        try:
+            if process.pid != os.getpid() and os.getpgid(process.pid) == process_group_id:
+                members.add(process.pid)
+        except (OSError, psutil.Error):
+            continue
+    return members
+
+
+def _terminate_process_group(process_group_id: int) -> None:
+    if not process_group_id or not _process_group_members(process_group_id):
+        return
+    try:
+        os.killpg(process_group_id, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    deadline = time.monotonic() + 1
+    while _process_group_members(process_group_id) and time.monotonic() < deadline:
+        time.sleep(0.02)
+    if _process_group_members(process_group_id):
+        try:
+            os.killpg(process_group_id, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
 class TestProcessTreeKill:
     """psutil-based kill terminates all descendants."""
 
@@ -128,27 +159,38 @@ class TestProcessTreeKill:
         script = tmp_path / "lifecycle_tree.py"
         script.write_text(LIFECYCLE_TREE_SCRIPT)
         started = anyio.current_time()
-        result = await run_managed_async(
-            [sys.executable, str(script)],
-            cwd=tmp_path,
-            timeout=10,
-            completion_marker="ORDER_UP",
-            stream_parser=ClaudeStreamParser(completion_marker="ORDER_UP"),
-            lifecycle_observation_enabled=True,
-            child_deferral_ceiling=2,
-            natural_exit_grace_seconds=0.05,
-        )
-        assert anyio.current_time() - started >= 0.35
-        assert result.termination is TerminationReason.COMPLETED
-        assert result.lifecycle_observation_complete is True
-        assert result.pending_task_ids == ()
-        child_records = [
-            json.loads(line)
-            for line in result.stdout.splitlines()
-            if '"type": "child_pid"' in line
-        ]
-        assert len(child_records) == 2
-        assert all(not psutil.pid_exists(record["pid"]) for record in child_records)
+        spawned_pid: list[int] = []
+        result = None
+        try:
+            result = await run_managed_async(
+                [sys.executable, str(script)],
+                cwd=tmp_path,
+                timeout=10,
+                completion_marker="ORDER_UP",
+                stream_parser=ClaudeStreamParser(completion_marker="ORDER_UP"),
+                lifecycle_observation_enabled=True,
+                child_deferral_ceiling=2,
+                natural_exit_grace_seconds=0.05,
+                on_pid_resolved=lambda pid, _ticks: spawned_pid.append(pid),
+            )
+            assert anyio.current_time() - started >= 0.35
+            assert result.termination is TerminationReason.COMPLETED
+            assert result.lifecycle_observation_complete is True
+            assert result.pending_task_ids == ()
+            child_records = [
+                json.loads(line)
+                for line in result.stdout.splitlines()
+                if '"type": "child_pid"' in line
+            ]
+            assert len(child_records) == 2
+            assert all(not psutil.pid_exists(record["pid"]) for record in child_records)
+        finally:
+            process_group_id = (
+                result.process_group_id
+                if result is not None
+                else (spawned_pid[-1] if spawned_pid else 0)
+            )
+            _terminate_process_group(process_group_id)
 
     @pytest.mark.anyio
     async def test_natural_exit_retains_obligation_and_cleans_owned_group(self, tmp_path):
@@ -156,24 +198,35 @@ class TestProcessTreeKill:
 
         script = tmp_path / "natural_exit_with_owned_child.py"
         script.write_text(NATURAL_EXIT_WITH_OWNED_CHILD_SCRIPT)
-        result = await run_managed_async(
-            [sys.executable, str(script)],
-            cwd=tmp_path,
-            timeout=10,
-            stream_parser=ClaudeStreamParser(),
-            lifecycle_observation_enabled=True,
-            natural_exit_grace_seconds=0.05,
-        )
+        spawned_pid: list[int] = []
+        result = None
+        try:
+            result = await run_managed_async(
+                [sys.executable, str(script)],
+                cwd=tmp_path,
+                timeout=10,
+                stream_parser=ClaudeStreamParser(),
+                lifecycle_observation_enabled=True,
+                natural_exit_grace_seconds=0.05,
+                on_pid_resolved=lambda pid, _ticks: spawned_pid.append(pid),
+            )
 
-        assert result.termination is TerminationReason.NATURAL_EXIT
-        assert result.lifecycle_observation_complete is True
-        assert result.pending_task_ids == ("owned-exit",)
-        child_record = next(
-            json.loads(line)
-            for line in result.stdout.splitlines()
-            if '"type": "child_pid"' in line
-        )
-        assert not psutil.pid_exists(child_record["pid"])
+            assert result.termination is TerminationReason.NATURAL_EXIT
+            assert result.lifecycle_observation_complete is True
+            assert result.pending_task_ids == ("owned-exit",)
+            child_record = next(
+                json.loads(line)
+                for line in result.stdout.splitlines()
+                if '"type": "child_pid"' in line
+            )
+            assert not psutil.pid_exists(child_record["pid"])
+        finally:
+            process_group_id = (
+                result.process_group_id
+                if result is not None
+                else (spawned_pid[-1] if spawned_pid else 0)
+            )
+            _terminate_process_group(process_group_id)
 
 
 class TestKillProcessTreeUnit:
@@ -200,9 +253,6 @@ class TestKillProcessTreeUnit:
         kill_process_tree(pid)
 
     def test_process_group_cleanup_survives_exited_root(self):
-        import signal
-        import subprocess
-
         proc = subprocess.Popen(
             [
                 sys.executable,
@@ -224,10 +274,7 @@ class TestKillProcessTreeUnit:
             assert child_pid in result.terminated_pids
             assert not result.survivor_pids
         finally:
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+            _terminate_process_group(proc.pid)
 
 
 class TestCancellationKillsProcess:

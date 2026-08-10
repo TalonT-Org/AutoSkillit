@@ -23,8 +23,10 @@ import anyio
 import anyio.abc
 
 from autoskillit.core import (
+    ChannelBStatus,
     ChannelConfirmation,
     KillReason,
+    SessionEvent,
     SubprocessResult,
     TerminationAction,
     TerminationReason,
@@ -573,10 +575,26 @@ async def run_managed_async(
                 tg.cancel_scope.cancel()
 
             if lifecycle_observation_enabled:
+
+                def _observe_final_stdout(event: SessionEvent) -> None:
+                    acc.observe_event(event)
+                    if event.has_marker and acc.channel_a_candidate_at is None:
+                        acc.channel_a_candidate_at = anyio.current_time()
+
+                def _observe_final_channel_b(event: SessionEvent) -> None:
+                    acc.observe_event(event)
+                    if event.has_marker and acc.channel_b_candidate_at is None:
+                        acc.channel_b_candidate_at = anyio.current_time()
+
                 if acc.stdout_cursor is not None:
-                    fold_event_cursor(acc.stdout_cursor, lifecycle_parser, acc.observe_event)
+                    fold_event_cursor(acc.stdout_cursor, lifecycle_parser, _observe_final_stdout)
                 if acc.channel_b_cursor is not None:
-                    fold_event_cursor(acc.channel_b_cursor, lifecycle_parser, acc.observe_event)
+                    fold_event_cursor(
+                        acc.channel_b_cursor, lifecycle_parser, _observe_final_channel_b
+                    )
+                acc.channel_a_confirmed = acc.channel_a_candidate_at is not None
+                if acc.channel_b_candidate_at is not None:
+                    acc.channel_b_status = ChannelBStatus.COMPLETION
                 acc.lifecycle_observation_complete = True
             signals = acc.to_race_signals()
             termination, _channel_confirmation = resolve_termination(signals)

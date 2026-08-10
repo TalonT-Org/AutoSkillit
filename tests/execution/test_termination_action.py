@@ -109,3 +109,15 @@ def test_natural_exit_with_unresolved_obligation_requires_cleanup(kwargs: dict) 
         **kwargs,
     )
     assert result is TerminationAction.IMMEDIATE_KILL
+
+
+def test_natural_exit_with_observed_empty_obligations_requires_no_kill() -> None:
+    result = decide_termination_action(
+        TerminationReason.NATURAL_EXIT,
+        timeout_fired=False,
+        process_exited=True,
+        pending_task_ids=(),
+        schedule_wakeup_violation=False,
+        completion_ceiling_expired=False,
+    )
+    assert result is TerminationAction.NO_KILL

@@ -22,6 +22,49 @@ from tests.conftest import make_stub_inspector
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("terminal_after", "minimum_elapsed"),
+    [(0.03, 0.03), (None, 0.06)],
+    ids=["terminal-releases", "active-max-bound"],
+)
+async def test_pending_task_suppression_releases_on_terminal_or_max_bound(
+    tmp_path: anyio.Path,
+    terminal_after: float | None,
+    minimum_elapsed: float,
+) -> None:
+    stdout_file = tmp_path / "stdout.txt"
+    await anyio.Path(stdout_file).write_bytes(b"initial\n")
+    pending = [True]
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+    started = time.monotonic()
+
+    async with anyio.create_task_group() as task_group:
+        task_group.start_soon(
+            functools.partial(
+                _watch_stdout_idle,
+                stdout_file,
+                0.01,
+                acc,
+                trigger,
+                0.005,
+                max_suppression_seconds=0.06,
+                has_pending_tasks=lambda: pending[0],
+            )
+        )
+        if terminal_after is not None:
+            await anyio.sleep(terminal_after)
+            pending[0] = False
+        with anyio.fail_after(0.3):
+            await trigger.wait()
+
+    elapsed = time.monotonic() - started
+    assert acc.idle_stall is True
+    assert elapsed >= minimum_elapsed
+    assert elapsed < 0.2
+
+
+@pytest.mark.anyio
 async def test_watch_stdout_idle_emits_suppression_evaluated_debug_log(
     tmp_path: anyio.Path,
 ) -> None:

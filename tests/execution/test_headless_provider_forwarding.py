@@ -305,6 +305,53 @@ async def test_no_fallback_env_returns_empty_provider_used(
 
 
 @pytest.mark.anyio
+async def test_empty_skill_command_keeps_shared_fleet_lifecycle_observation_disabled(
+    minimal_ctx, tmp_path, monkeypatch
+) -> None:
+    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
+    from tests.execution.conftest import _sr
+
+    captured_runner_kwargs: dict[str, object] = {}
+
+    async def fake_runner(cmd, **kwargs):  # noqa: ARG001
+        captured_runner_kwargs.update(kwargs)
+        return _sr()
+
+    minimal_ctx.runner = fake_runner
+    minimal_ctx.backend = _mock_backend(
+        pty_required=True,
+        channel_b_capable=True,
+        supports_task_lifecycle_events=True,
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute._build_skill_result",
+        lambda *a, **kw: _STUB_RESULT,  # noqa: ARG005
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
+        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute._capture_git_head_sha",
+        lambda *a: "",  # noqa: ARG005
+    )
+
+    await _execute_claude_headless(
+        lambda _binding, _extras: ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
+        str(tmp_path),
+        minimal_ctx,
+        timeout=30,
+        stale_threshold=5,
+        skill_command="",
+        launch_resolver=minimal_ctx.launch_resolver,
+        launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
+    )
+
+    assert captured_runner_kwargs["lifecycle_observation_enabled"] is False
+
+
+@pytest.mark.anyio
 async def test_provider_name_stamps_provider_used_on_result(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:

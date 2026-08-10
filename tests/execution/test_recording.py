@@ -12,11 +12,13 @@ import pytest
 from autoskillit.core import CLAUDE_CODE_CAPABILITIES, BackendCapabilities
 from autoskillit.core.types import (
     OutputFormat,
+    RetryReason,
     SubprocessResult,
     SubprocessRunner,
     TerminationReason,
 )
-from autoskillit.execution.backends.claude import ClaudeCodeBackend
+from autoskillit.execution.backends.claude import ClaudeCodeBackend, ClaudeStreamParser
+from autoskillit.execution.headless._headless_result import _build_skill_result
 from autoskillit.execution.recording import (
     RecordingSubprocessRunner,
     ReplayingSubprocessRunner,
@@ -133,6 +135,79 @@ async def test_session_call_routes_to_record_step(tmp_path):
     assert inner.call_args_list == []  # inner NOT called
     assert result.returncode == 0
     assert result.termination == TerminationReason.NATURAL_EXIT
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("lifecycle_record", "expected_pending", "expected_retry"),
+    [
+        ('{"type":"task_started","task_id":"cassette-task"}\n', ("cassette-task",), True),
+        ("", (), False),
+    ],
+    ids=["pending", "observed-empty"],
+)
+async def test_recorded_pty_session_folds_cassette_lifecycle_before_adjudication(
+    tmp_path: Path,
+    lifecycle_record: str,
+    expected_pending: tuple[str, ...],
+    expected_retry: bool,
+) -> None:
+    cassette = tmp_path / "cassette"
+    cassette.mkdir()
+    success_record = (
+        '{"type":"result","subtype":"success","result":"done",'
+        '"session_id":"s1","is_error":false}\n'
+    )
+    (cassette / "stdout.jsonl").write_text(lifecycle_record + success_record)
+    recorder = Mock()
+    recorder.record_step.return_value = FakeStepResult(0, str(cassette), 10)
+    runner = RecordingSubprocessRunner(recorder=recorder, inner=MockSubprocessRunner())
+
+    result = await runner(
+        ["claude", "--print", "test"],
+        cwd=tmp_path,
+        timeout=30,
+        env={"SCENARIO_STEP_NAME": "recorded"},
+        pty_mode=True,
+        stream_parser=ClaudeStreamParser(),
+        lifecycle_observation_enabled=True,
+    )
+
+    assert result.lifecycle_observation_enabled is True
+    assert result.lifecycle_observation_complete is True
+    assert result.pending_task_ids == expected_pending
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/autoskillit:recorded",
+        backend=ClaudeCodeBackend(),
+    )
+    assert (skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION) is expected_retry
+
+
+@pytest.mark.anyio
+async def test_recorded_pty_session_remains_unobserved_when_lifecycle_disabled(
+    tmp_path: Path,
+) -> None:
+    cassette = tmp_path / "cassette"
+    cassette.mkdir()
+    (cassette / "stdout.jsonl").write_text('{"type":"task_started","task_id":"ignored"}\n')
+    recorder = Mock()
+    recorder.record_step.return_value = FakeStepResult(0, str(cassette), 10)
+    runner = RecordingSubprocessRunner(recorder=recorder, inner=MockSubprocessRunner())
+
+    result = await runner(
+        ["claude", "--print", "test"],
+        cwd=tmp_path,
+        timeout=30,
+        env={"SCENARIO_STEP_NAME": "recorded"},
+        pty_mode=True,
+        stream_parser=ClaudeStreamParser(),
+        lifecycle_observation_enabled=False,
+    )
+
+    assert result.lifecycle_observation_enabled is False
+    assert result.lifecycle_observation_complete is False
+    assert result.pending_task_ids == ()
 
 
 # --- T3: Non-session call delegates to inner runner + records summary ---

@@ -797,7 +797,7 @@ def validate_recipe_exemption_fitness(
 ) -> None:
     """Reject inline packaging that has consumed its reserved ten-percent margin."""
     rendered_bytes = len(ordinary_rendered.encode("utf-8"))
-    admitted_bytes = ceiling_bytes * 9 // 10
+    admitted_bytes = _recipe_exemption_admitted_bytes(ceiling_bytes)
     if rendered_bytes > admitted_bytes:
         raise RecipeExemptionFitnessError(
             recipe=recipe,
@@ -807,6 +807,11 @@ def validate_recipe_exemption_fitness(
             ceiling_bytes=ceiling_bytes,
             margin_bytes=ceiling_bytes - admitted_bytes,
         )
+
+
+def _recipe_exemption_admitted_bytes(ceiling_bytes: int) -> int:
+    """Return the exemption ceiling after reserving the packaging margin."""
+    return ceiling_bytes * 9 // 10
 
 
 def _conservative_token_upper_bound(rendered: str) -> int:
@@ -1101,10 +1106,9 @@ def finalize_recipe_delivery(
         _exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY.get(
             surface_definition.response_exemption_tool
         )
-        if (
-            _exemption is not None
-            and len(ordinary_rendered.encode("utf-8")) <= _exemption.max_utf8_bytes * 9 // 10
-        ):
+        if _exemption is not None and len(
+            ordinary_rendered.encode("utf-8")
+        ) <= _recipe_exemption_admitted_bytes(_exemption.max_utf8_bytes):
             decision = replace(
                 decision,
                 mode=RecipeDeliveryMode.ORDINARY_INLINE,

@@ -231,18 +231,11 @@ def test_integration_body_omitting_one_source_url_denies(monkeypatch, tmp_path):
     )
 
 
-def test_integration_metadata_with_explicit_empty_sources_denies(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
+def test_integration_metadata_preserves_explicit_empty_sources(tmp_path):
     body = _body_file(tmp_path, f"Tracks {ISSUE_URL}\nTracks {OTHER_ISSUE_URL}")
-    _integration_metadata(body, source_issue_urls=[])
+    metadata_path = _integration_metadata(body, source_issue_urls=[])
 
-    assert _is_denied(
-        _run_hook(
-            _event(f"gh pr create --body-file {body}"),
-            monkeypatch,
-            skill_name="open-integration-pr",
-        )
-    )
+    assert json.loads(metadata_path.read_text(encoding="utf-8"))["source_issue_urls"] == []
 
 
 def test_any_invalid_create_segment_denies_compound_command(monkeypatch, tmp_path):

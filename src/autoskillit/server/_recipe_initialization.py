@@ -335,6 +335,14 @@ def complete_section_response(
                 content_sha256=finalized.content_sha256,
             )
             if finalized.completion_receipt != expected_receipt:
+                logger.error(
+                    "recipe initialization receipt content mismatch",
+                    initialization_id=finalized.initialization_id,
+                    section=finalized.section,
+                    part=finalized.part,
+                    expected_receipt=expected_receipt,
+                    observed_receipt=finalized.completion_receipt,
+                )
                 return json.dumps(
                     {"success": False, "error": "recipe_initialization_receipt_content_mismatch"},
                     separators=(",", ":"),
@@ -374,7 +382,13 @@ def complete_section_response(
                 completion_receipt=finalized.completion_receipt,
             )
         except (RecipeExecutionAdmissionError, ValueError):
-            logger.error("terminal recipe execution preparation failed", exc_info=True)
+            logger.error(
+                "terminal recipe execution preparation failed",
+                initialization_id=finalized.initialization_id,
+                section=finalized.section,
+                part=finalized.part,
+                exc_info=True,
+            )
             return json.dumps(
                 {"success": False, "error": "recipe_execution_install_failed"},
                 separators=(",", ":"),

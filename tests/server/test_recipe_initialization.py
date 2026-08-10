@@ -227,6 +227,89 @@ def test_section_rejection_preserves_diagnostic_context(
     )
 
 
+def test_receipt_content_mismatch_preserves_diagnostic_context(
+    minimal_ctx,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = _stage(minimal_ctx, tmp_path)
+    rendered = json.dumps({"success": True})
+    finalized = FinalizedRecipeSectionResponse(
+        rendered=rendered,
+        tool_ctx=minimal_ctx,
+        initialization_id=state.initialization_id,
+        artifact_generation=state.artifact_generation,
+        section="flow_records",
+        page_plan_sha256=_hash("flow-plan"),
+        part=0,
+        content_sha256=_hash("content"),
+        completion_receipt="wrong-receipt",
+    )
+    expected_receipt = recipe_initialization_receipt(
+        state.initialization_id,
+        state.artifact_generation,
+        content_sha256=finalized.content_sha256,
+    )
+    logger = Mock()
+    monkeypatch.setattr(recipe_initialization, "logger", logger)
+
+    response = complete_section_response(finalized, rendered)
+
+    assert json.loads(response)["error"] == "recipe_initialization_receipt_content_mismatch"
+    logger.error.assert_called_once_with(
+        "recipe initialization receipt content mismatch",
+        initialization_id=state.initialization_id,
+        section="flow_records",
+        part=0,
+        expected_receipt=expected_receipt,
+        observed_receipt="wrong-receipt",
+    )
+
+
+def test_terminal_preparation_failure_preserves_diagnostic_context(
+    minimal_ctx,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = _stage(minimal_ctx, tmp_path)
+    content_sha256 = _hash("content")
+    receipt = recipe_initialization_receipt(
+        state.initialization_id,
+        state.artifact_generation,
+        content_sha256=content_sha256,
+    )
+    rendered = json.dumps({"success": True, "completion_receipt": receipt})
+    finalized = FinalizedRecipeSectionResponse(
+        rendered=rendered,
+        tool_ctx=minimal_ctx,
+        initialization_id=state.initialization_id,
+        artifact_generation=state.artifact_generation,
+        section="flow_records",
+        page_plan_sha256=_hash("flow-plan"),
+        part=0,
+        content_sha256=content_sha256,
+        completion_receipt=receipt,
+    )
+    logger = Mock()
+    monkeypatch.setattr(recipe_initialization, "logger", logger)
+    monkeypatch.setattr(
+        recipe_initialization,
+        "prepare_recipe_execution",
+        Mock(side_effect=ValueError("prepare failed")),
+    )
+
+    response = complete_section_response(finalized, rendered)
+
+    assert json.loads(response)["error"] == "recipe_execution_install_failed"
+    logger.error.assert_called_once_with(
+        "terminal recipe execution preparation failed",
+        initialization_id=state.initialization_id,
+        section="flow_records",
+        part=0,
+        exc_info=True,
+    )
+
+
 def test_terminal_page_replay_rejects_changed_content_digest(minimal_ctx, tmp_path) -> None:
     state = _stage(minimal_ctx, tmp_path)
     content_sha256 = _hash("terminal-content")

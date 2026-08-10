@@ -227,6 +227,8 @@ def record_initialization_page(
     )
     if index is None:
         raise ValueError("recipe initialization page plan is not required")
+    if any(item.next_part != item.total_parts for item in progress[:index]):
+        raise ValueError("recipe initialization sections are out of order")
     current = progress[index]
     if part < current.next_part:
         return state

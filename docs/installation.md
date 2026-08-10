@@ -67,10 +67,10 @@ projects need.
 
     autoskillit doctor
 
-Doctor runs 45 ungated checks: 36 numbered checks (1–23, excluding 5,
-and 30–43) plus 9 lettered sub-checks (`2b`, `2c`, `2d`, `2e`, `4b`,
+Doctor runs 46 ungated checks: 37 numbered checks (1–23, excluding 5,
+and 30–44) plus 9 lettered sub-checks (`2b`, `2c`, `2d`, `2e`, `4b`,
 `7b`, `7c`, `17b`, `31b`). Enabling the fleet feature adds checks 24–29,
-for 51 total: 42 numbered and 9 lettered checks.
+for 52 total: 43 numbered and 9 lettered checks.
 Enumerated by `run_doctor` in `src/autoskillit/cli/doctor/__init__.py`:
 
 | # | Check | What it verifies |
@@ -122,6 +122,7 @@ Enumerated by `run_doctor` in `src/autoskillit/cli/doctor/__init__.py`:
 | 41 | Capture-store statistics | Capture ledger and retained-directory statistics are readable |
 | 42 | Project-local skill contracts | Excluded or shadowed project-local skill copies are reported |
 | 43 | Session index projection | Retained committed summary parents match index-row multiplicity |
+| 44 | Orphaned codex processes | Interactive codex TUIs whose fd 0 is a deleted pty (spinning after pty loss) |
 
 See **[Hooks](safety/hooks.md)** for what each PreToolUse / PostToolUse /
 SessionStart hook actually enforces.

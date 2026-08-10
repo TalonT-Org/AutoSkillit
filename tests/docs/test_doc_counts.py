@@ -242,11 +242,11 @@ def test_quota_thresholds_defaults() -> None:
     assert long_ == pytest.approx(95.0)
 
 
-def test_doctor_check_count_is_51() -> None:
-    # Combined-tree canonical count: 42 numbered checks + 9 lettered sub-checks.
+def test_doctor_check_count_is_52() -> None:
+    # Combined-tree canonical count: 43 numbered checks + 9 lettered sub-checks.
     # Update both tests whenever a new doctor check is added.
     count = _count_doctor_checks()
-    assert count == 51, f"Expected 51 doctor checks; found {count}"
+    assert count == 52, f"Expected 52 doctor checks; found {count}"
 
 
 def test_bundled_recipe_count_is_15() -> None:

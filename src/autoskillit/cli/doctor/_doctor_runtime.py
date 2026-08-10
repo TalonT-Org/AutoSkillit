@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import tempfile
 from collections import Counter
-from datetime import date
+from datetime import UTC, date
 from pathlib import Path
 from typing import NamedTuple
 
@@ -527,6 +527,35 @@ def _check_session_index_projection(*, log_dir: str = "") -> DoctorResult:
         check_name,
         "Committed summary/index projection mismatch (" + ", ".join(details) + ")",
     )
+
+
+def _check_orphaned_codex_processes() -> list[DoctorResult]:
+    """Check for orphaned interactive codex TUI processes (fd 0 → deleted pty)."""
+    from autoskillit.execution import find_orphaned_codex_processes
+
+    check_name = "orphaned_codex_processes"
+    try:
+        orphans = find_orphaned_codex_processes()
+    except Exception as exc:
+        return [DoctorResult(Severity.WARNING, check_name, f"scan failed: {exc}")]
+
+    if not orphans:
+        return [DoctorResult(Severity.OK, check_name, "no orphaned codex processes")]
+
+    from datetime import datetime
+
+    return [
+        DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"orphaned codex TUI pid={o.pid}"
+            f" started={datetime.fromtimestamp(o.started_at, tz=UTC).isoformat()}"
+            f" fd0={o.fd0_target}"
+            f" — spinning after pty loss;"
+            f" run: autoskillit codex-orphans --reap",
+        )
+        for o in orphans
+    ]
 
 
 def _check_codex_model_alias_staleness() -> DoctorResult:

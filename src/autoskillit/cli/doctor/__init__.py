@@ -70,6 +70,7 @@ from ._doctor_runtime import (
     _check_codex_limits_verified,
     _check_codex_model_alias_staleness,
     _check_codex_ndjson_drift,
+    _check_orphaned_codex_processes,
     _check_quota_cache_schema,
     _check_script_binary,
     _check_session_index_projection,
@@ -242,6 +243,8 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.extend(_check_project_local_skill_contracts())
     # Check 43: Retained committed summaries exactly match physical index rows
     results.append(_check_session_index_projection(log_dir=cfg.linux_tracing.log_dir))
+    # Check 44: Orphaned codex TUI processes (deleted pty)
+    results.extend(_check_orphaned_codex_processes())
     # Output
     for line in _format_results(results, output_json=output_json):
         print(line)

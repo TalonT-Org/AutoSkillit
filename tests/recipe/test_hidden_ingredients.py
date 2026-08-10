@@ -1001,6 +1001,7 @@ steps:
         ),
         ("on_failure: done", RecipeStep(tool="run_cmd"), "declared routes"),
         ("on_success: done", RecipeStep(tool="run_cmd", on_failure="done"), "declared routes"),
+        ("on_skip: done", RecipeStep(tool="run_cmd"), "declared routes"),
     ],
 )
 def test_route_consistency_rejects_remaining_edge_drift(

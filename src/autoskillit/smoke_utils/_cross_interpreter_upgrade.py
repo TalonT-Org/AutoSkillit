@@ -16,6 +16,10 @@ from pathlib import Path
 
 from packaging.version import InvalidVersion, Version
 
+from autoskillit.core import get_logger
+
+logger = get_logger(__name__)
+
 # Declared precondition, not a default to silently fall back on: the runner
 # must offer both minors, or this step fails loudly (no silent caps).
 _REQUIRED_PYTHON_MINORS = ("3.11", "3.13")
@@ -206,7 +210,7 @@ def run_cross_interpreter_upgrade_smoke(*, work_dir: str) -> bool:
         # infrastructure.  When the smoke runs under a mocked subprocess
         # (unit-test tier), projection may fail — that's fine, the real
         # cross-interpreter smoke (integration tier) exercises it fully.
-        pass
+        logger.warning("projected_artifact_relocatability_check_skipped", exc_info=True)
 
     return True
 

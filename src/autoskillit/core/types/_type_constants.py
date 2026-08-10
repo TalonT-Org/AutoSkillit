@@ -190,6 +190,7 @@ RETIRED_AGENT_NAMES: frozenset[str] = frozenset(
         # Agent names that have been replaced with proven alternatives.
         # Append retired names here atomically with the replacement commit.
         # DO NOT REMOVE entries — this registry is append-only.
+        "pipeline-health-scanner",
         "plan-assumption-challenger",
         "plan-completeness-auditor",
         "plan-contract-verifier",

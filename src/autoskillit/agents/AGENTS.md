@@ -39,7 +39,7 @@ agent definitions are readable via `ReadMcpResourceTool` at `agent://{pack}/{nam
 |------|-----|--------|---------|
 | `plan-review` | `plan-review` | 3 adversarial reviewers | make-plan Steps 6-9, rectify Steps 4-6 |
 | _(none)_ | _(none)_ | `wp-elaborator` | planner-elaborate-wps (subagent_type-only) |
-| _(none)_ | _(none)_ | `pipeline-health-scanner` | analyze-pipeline-health (subagent_type-only) |
+| _(none)_ | _(none)_ | `session-log-reader` | analyze-pipeline-health (subagent_type-only) |
 | _(none)_ | _(none)_ | `audit-impl-slice-auditor` | audit-impl Step 3 (subagent_type-only) |
 | _(none)_ | _(none)_ | `audit-impl-deviation-evaluator` | audit-impl Step 3.5 (subagent_type-only) |
 | _(none)_ | _(none)_ | `semantic-code-navigator`, `repository-impact-profiler` | L1 exploration parent (subagent_type-only) |
@@ -57,7 +57,7 @@ agent definitions are readable via `ReadMcpResourceTool` at `agent://{pack}/{nam
 `subagent_type: "autoskillit:{name}"` and does NOT need MCP resource access via
 `unlock_agent_pack`, only step 1 is required. Steps 2–5 exist for the
 `agent://{pack}/{name}` resource path and can be skipped for packless agents.
-Current packless agents: `wp-elaborator`, `pipeline-health-scanner`, `audit-impl-slice-auditor`,
+Current packless agents: `wp-elaborator`, `session-log-reader`, `audit-impl-slice-auditor`,
 `pr-review-auditor-baseline`, `pr-review-auditor-v1-precision`, `pr-review-auditor-v2-contrastive`,
 `pr-review-auditor-v3-simulation`, `pr-review-auditor-reachability`,
 `pr-review-auditor-abstraction-surface`, `audit-impl-deviation-evaluator`,

@@ -303,12 +303,13 @@ def test_packless_overengineering_agents_are_not_plan_resources(name: str) -> No
         get_plan_review_agent(name)
 
 
-# T13: RETIRED_AGENT_NAMES contains all 4 replaced agent names
+# T13: RETIRED_AGENT_NAMES contains all 5 replaced agent names
 def test_retired_agent_names_contains_old_agents():
-    """RETIRED_AGENT_NAMES must contain all 4 replaced agent names."""
+    """RETIRED_AGENT_NAMES must contain all 5 replaced agent names."""
     from autoskillit.core.types._type_constants import RETIRED_AGENT_NAMES
 
     expected = {
+        "pipeline-health-scanner",
         "plan-assumption-challenger",
         "plan-completeness-auditor",
         "plan-contract-verifier",
@@ -479,45 +480,6 @@ def test_wp_elaborator_is_packless():
     # Guard against accidental inclusion in the plan-review pack glob (plan-*.md)
     assert not agent_path.stem.startswith("plan-"), (
         "wp-elaborator.md must NOT start with 'plan-' (would collide with plan-review pack glob)"
-    )
-
-
-# DIAG_C6: pipeline-health-scanner agent exists
-def test_pipeline_health_scanner_agent_exists():
-    """pipeline-health-scanner.md agent definition must exist with required frontmatter."""
-    from autoskillit.core import pkg_root
-    from autoskillit.core.io import load_yaml
-
-    agent_path = pkg_root() / "agents" / "pipeline-health-scanner.md"
-    assert agent_path.is_file(), f"pipeline-health-scanner.md not found at {agent_path}"
-    content = agent_path.read_text()
-    assert "name: pipeline-health-scanner" in content
-
-    parts = content.split("---", 2)
-    assert len(parts) >= 3, "pipeline-health-scanner.md must have YAML frontmatter"
-    frontmatter = load_yaml(parts[1]) or {}
-    max_turns = frontmatter.get("maxTurns")
-    assert max_turns is not None and max_turns >= 80, (
-        f"pipeline-health-scanner maxTurns must be >= 80 (got {max_turns}); "
-        "80 minimum: scanner needs > 40 turns for adversarial sub-cycles"
-    )
-    tools = frontmatter.get("tools", [])
-    assert "Agent" in tools, (
-        "pipeline-health-scanner.md frontmatter tools must include 'Agent' "
-        "(body instructs spawning adversarial subagents)"
-    )
-
-    body = parts[2]
-    assert "scan_result:" in body, (
-        "pipeline-health-scanner.md body must contain a 'scan_result:' structured completion token"
-    )
-    assert "codex_log" in body, (
-        "pipeline-health-scanner.md body must contain Codex log guidance "
-        "(codex_log data source section)"
-    )
-    assert "turn.failed" in body, (
-        "pipeline-health-scanner.md body must reference turn.failed event type "
-        "(Codex error detection guidance)"
     )
 
 

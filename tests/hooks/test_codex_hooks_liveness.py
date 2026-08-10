@@ -1,8 +1,8 @@
-"""T-B6: Codex config liveness — detection and sync-time durable-root guard.
+"""T-B6: Codex config liveness — detection and sync-time hooks resolution.
 
 Detection: broken config.toml hooks → structured findings; healthy → none.
-Sync guard: nonexistent resolved hooks dir → typed error; dev-checkout-only
-fallback → typed error; live durable dir → writes as today.
+Resolution: invalid explicit plugin dir → error; missing installed candidates →
+dev-checkout fallback; live durable dir → writes as today.
 """
 
 from __future__ import annotations

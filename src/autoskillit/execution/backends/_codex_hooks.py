@@ -38,17 +38,6 @@ from autoskillit.hook_registry import (
 logger = get_logger(__name__)
 
 
-class CodexHooksDurableRootUnavailable(RuntimeError):
-    """No durable hooks directory is available for Codex configuration.
-
-    Raised when ``_resolve_codex_hooks_dir`` cannot find any live generation
-    store or legacy installed cache with ``_dispatch.py``.  The ``HOOKS_DIR``
-    (dev-checkout) terminal fallback is intentionally excluded: its lifetime
-    is shorter than the config artifact's, exactly the class instance this
-    error exists to prevent.
-    """
-
-
 def find_broken_codex_hook_commands(config_path: Path | None = None) -> list[str]:
     """Detect broken autoskillit hook commands in ``~/.codex/config.toml``.
 
@@ -91,7 +80,7 @@ def find_broken_codex_hook_commands(config_path: Path | None = None) -> list[str
 
 
 def _resolve_codex_hooks_dir(plugin_dir: Path | None = None) -> Path:
-    """Select a durable absolute dispatcher root for Codex configuration.
+    """Select an absolute dispatcher root for Codex configuration.
 
     When ``plugin_dir`` is supplied (a session's validated generation path),
     the hooks tree inside that directory is used directly.  When ``None``
@@ -100,9 +89,7 @@ def _resolve_codex_hooks_dir(plugin_dir: Path | None = None) -> Path:
     performed through the same generation-store authority as launch binding.
 
     If neither the generation store nor the legacy installed cache supplies a
-    dispatcher, raises :class:`CodexHooksDurableRootUnavailable` instead of
-    falling back to the dev-checkout hooks directory (whose lifetime is shorter
-    than the config artifact's — the exact class instance this guard prevents).
+    dispatcher, the dev-checkout ``HOOKS_DIR`` is used as the terminal fallback.
     """
     if plugin_dir is not None:
         candidate = plugin_dir / "hooks"

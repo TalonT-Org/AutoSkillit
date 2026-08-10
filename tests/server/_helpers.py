@@ -93,73 +93,13 @@ class McpCallCounter:
     """Record one session-start MCP sequence with initialization identity."""
 
     calls: list[tuple[str, str | None]] = field(default_factory=list)
+    delivery_mode: str | None = None
 
     def record(self, tool_name: str, initialization_id: str | None = None) -> None:
         self.calls.append((tool_name, initialization_id))
 
     def __len__(self) -> int:
         return len(self.calls)
-
-
-def mode_for(recipe_name: str, backend_name: str) -> str:
-    """Resolve the actual open-kitchen delivery mode for a packaged recipe."""
-    from autoskillit.core import (
-        RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
-        RECIPE_ARTIFACT_SCHEMA_VERSION,
-        RECIPE_FLOW_SCHEMA_VERSION,
-        RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
-        RecipeArtifactGeneration,
-    )
-    from autoskillit.execution.backends import BACKEND_REGISTRY
-    from autoskillit.recipe import load_and_validate
-    from autoskillit.server.tools._serve_helpers import build_open_kitchen_recipe_payload
-
-    capabilities = BACKEND_REGISTRY[backend_name]().capabilities
-    if capabilities.recipe_delivery_budget is not None:
-        return "codex_bounded"
-    project_root = Path(__file__).resolve().parents[2]
-    payload = load_and_validate(
-        recipe_name,
-        project_dir=project_root,
-        ingredient_overrides={
-            "task": "test task",
-            "issue_url": "https://github.com/test/test/issues/1",
-            "source_dir": str(project_root),
-        },
-    )
-    surface_payload = build_open_kitchen_recipe_payload(dict(payload), version="0.0.0")
-    digest = "sha256:" + ("0" * 64)
-    payload_size = len(
-        json.dumps(surface_payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    )
-    generation = RecipeArtifactGeneration(
-        producer_tool="open_kitchen",
-        recipe_name=recipe_name,
-        descriptor_version=RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
-        schema_version=RECIPE_ARTIFACT_SCHEMA_VERSION,
-        payload_sha256=digest,
-        artifact_blob_sha256=digest,
-        artifact_blob_size_bytes=max(1, payload_size),
-        body_sha256=digest,
-        body_size_bytes=max(1, payload_size),
-        flow_schema_version=RECIPE_FLOW_SCHEMA_VERSION,
-        flow_sha256=digest,
-        flow_size_bytes=1,
-        flow_record_count=1,
-    )
-    surface_payload["recipe_pull"] = generation.pull_identity()
-    surface_payload["initialization_id"] = "0" * 32
-    rendered = json.dumps(
-        surface_payload,
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
-    exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"]
-    return (
-        "claude_code_inline"
-        if len(rendered.encode("utf-8")) <= exemption.max_utf8_bytes * 9 // 10
-        else "claude_code_bounded"
-    )
 
 
 async def simulate_session_start(
@@ -198,7 +138,15 @@ async def simulate_session_start(
         )
     assert envelope.get("success") is True, envelope
     if envelope.get("delivery_bound_spill") is True:
+        capabilities = BACKEND_REGISTRY[backend_name]().capabilities
+        counter.delivery_mode = (
+            "codex_bounded"
+            if capabilities.recipe_delivery_budget is not None
+            else "claude_code_bounded"
+        )
         await _credit_initialization_sections(envelope, counter=counter)
+    else:
+        counter.delivery_mode = "claude_code_inline"
     return counter
 
 

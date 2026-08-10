@@ -10,7 +10,7 @@ from tests.contracts._delivery_constants import (
     MAX_OPEN_KITCHEN_CALLS,
 )
 from tests.contracts.fixtures.recipes import BUNDLED_RECIPE_PATHS
-from tests.server._helpers import mode_for, simulate_session_start
+from tests.server._helpers import simulate_session_start
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium, pytest.mark.anyio]
 
@@ -31,5 +31,5 @@ async def test_session_start_round_trip_count_is_bounded(
         tool_ctx=tool_ctx,
         monkeypatch=monkeypatch,
     )
-    mode = mode_for(recipe_name, backend_name)
-    assert len(counter) <= MAX_OPEN_KITCHEN_CALLS[mode]
+    assert counter.delivery_mode is not None
+    assert len(counter) <= MAX_OPEN_KITCHEN_CALLS[counter.delivery_mode]

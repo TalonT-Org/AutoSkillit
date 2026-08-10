@@ -10,7 +10,7 @@ import pytest
 from fastmcp.server.middleware import MiddlewareContext
 from fastmcp.tools.base import ToolResult
 from fastmcp.tools.function_tool import FunctionTool
-from mcp.types import CallToolRequestParams, TextContent
+from mcp.types import CallToolRequestParams, ImageContent, TextContent
 
 from autoskillit.pipeline import DefaultRunSkillCompletionAuthority
 from autoskillit.server._run_skill_completion import (
@@ -27,6 +27,8 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 def _finalized(
     authority: DefaultRunSkillCompletionAuthority | None = None,
+    *,
+    success: bool = True,
 ) -> FinalizedRunSkillCompletionResponse:
     authority = authority or DefaultRunSkillCompletionAuthority()
     invocation = authority.begin(
@@ -40,12 +42,16 @@ def _finalized(
     )
     receipt = authority.draft(
         invocation,
-        classification="success",
-        success=True,
+        classification="success" if success else "timeout",
+        success=success,
         result_digest="sha256:digest",
     )
     rendered = json.dumps(
-        {"success": True, "result": "investigation complete", "receipt_id": receipt.receipt_id}
+        {
+            "success": success,
+            "result": "investigation complete",
+            "receipt_id": receipt.receipt_id,
+        }
     )
     return FinalizedRunSkillCompletionResponse(rendered, authority, receipt)
 
@@ -92,6 +98,27 @@ def test_exact_receipt_requires_single_conformant_text_and_exact_json_field() ->
     )
 
 
+@pytest.mark.parametrize(
+    "case",
+    ["empty_content", "non_text", "invalid_json", "json_list", "wrong_receipt"],
+)
+def test_exact_receipt_rejects_malformed_delivery_shapes(case: str) -> None:
+    receipt_id = "receipt"
+    if case == "empty_content":
+        result = ToolResult(content=[], structured_content={})
+    elif case == "non_text":
+        image = ImageContent(type="image", data="", mimeType="image/png")
+        result = ToolResult(content=[image], structured_content={})
+    elif case == "invalid_json":
+        result = _tool_result("not json")
+    elif case == "json_list":
+        result = _tool_result("[]")
+    else:
+        result = _tool_result(json.dumps({"receipt_id": "other"}))
+
+    assert not _exact_receipt(result, receipt_id)
+
+
 def test_compact_fallback_preserves_authoritative_projection_and_full_result() -> None:
     finalized = _finalized()
 
@@ -102,6 +129,20 @@ def test_compact_fallback_preserves_authoritative_projection_and_full_result() -
     assert compact["success"] is True
     assert compact["needs_retry"] is False
     assert compact["result_digest"] == "sha256:digest"
+    assert compact["result"] == finalized.rendered
+
+
+def test_compact_fallback_preserves_failure_projection() -> None:
+    finalized = _finalized(success=False)
+
+    compact = json.loads(_compact_response(finalized))
+
+    assert compact["success"] is False
+    assert compact["is_error"] is True
+    assert compact["exit_code"] == -1
+    assert compact["needs_retry"] is True
+    assert compact["retry_reason"] == "timeout"
+    assert compact["error"] == "run_skill completed without success"
     assert compact["result"] == finalized.rendered
 
 
@@ -120,7 +161,11 @@ async def test_middleware_denies_other_tools_while_receipt_is_pending(monkeypatc
         _context(), call_next
     )
 
-    assert json.loads(_result_text(result))["error"] == "run_skill_completion_pending"
+    denial = json.loads(_result_text(result))
+    assert denial["error"] == "run_skill_completion_pending"
+    assert denial["stage"] == "preflight:run_skill_completion"
+    assert denial["retriable"] is False
+    assert denial["user_visible_message"]
     call_next.assert_not_awaited()
     assert current_request_session_id() == ""
 

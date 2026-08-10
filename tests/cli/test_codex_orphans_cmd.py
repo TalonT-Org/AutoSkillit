@@ -131,12 +131,13 @@ def test_run_reap_invokes_reaper_and_reports(
     import autoskillit.execution as execution_mod
     from autoskillit.cli._codex_orphans import run_codex_orphans
 
-    orphans = [_make_orphan(2001), _make_orphan(2002)]
+    orphans = [_make_orphan(2001), _make_orphan(2002), _make_orphan(2003)]
     monkeypatch.setattr(execution_mod, "find_orphaned_codex_processes", lambda: orphans)
 
     fake_results = [
         CodexOrphanReapResult(2001, "terminated"),
         CodexOrphanReapResult(2002, "incomplete", survivor_pids=(3001,)),
+        CodexOrphanReapResult(2003, "skipped"),
     ]
     received: list[object] = []
 
@@ -153,7 +154,9 @@ def test_run_reap_invokes_reaper_and_reports(
     out = capsys.readouterr().out
     assert "terminated pid 2001" in out
     assert "incomplete pid 2002 (survivors: 3001)" in out
+    assert "skipped pid 2003 (no longer matches the orphan signature)" in out
     assert out.index("orphan: pid=2001") < out.index("terminated pid 2001")
     assert out.index("orphan: pid=2002") < out.index("incomplete pid 2002")
+    assert out.index("orphan: pid=2003") < out.index("skipped pid 2003")
     assert "exited" not in out
     assert "caused" not in out

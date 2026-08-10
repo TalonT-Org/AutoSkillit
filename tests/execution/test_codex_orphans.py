@@ -40,29 +40,26 @@ def _spawn_fake_codex(tmp_path):
         link = tmp_path / name
         link.symlink_to(sys.executable)
 
-        if stdin_mode == "orphan_pty":
+        if stdin_mode in {"orphan_pty", "live_pty"}:
             master_fd, slave_fd = pty.openpty()
-            child = subprocess.Popen(
-                [str(link), "-c", "import time; time.sleep(120)"],
-                stdin=slave_fd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
+            try:
+                child = subprocess.Popen(
+                    [str(link), "-c", "import time; time.sleep(120)"],
+                    stdin=slave_fd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+            except BaseException:
+                os.close(slave_fd)
+                os.close(master_fd)
+                raise
             os.close(slave_fd)
-            os.close(master_fd)  # closes master → child fd 0 becomes deleted pty
-        elif stdin_mode == "live_pty":
-            master_fd, slave_fd = pty.openpty()
-            child = subprocess.Popen(
-                [str(link), "-c", "import time; time.sleep(120)"],
-                stdin=slave_fd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
-            os.close(slave_fd)
-            # keep master_fd open — store it on child for teardown
-            child._master_fd = master_fd  # type: ignore[attr-defined]
+            if stdin_mode == "orphan_pty":
+                os.close(master_fd)  # closes master → child fd 0 becomes deleted pty
+            else:
+                # keep master_fd open — store it on child for teardown
+                child._master_fd = master_fd  # type: ignore[attr-defined]
         elif stdin_mode == "devnull":
             child = subprocess.Popen(
                 [str(link), "-c", "import time; time.sleep(120)"],

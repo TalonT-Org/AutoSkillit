@@ -10,6 +10,8 @@ No test here reads ``payload.json`` or any file under ``recipe-delivery/``.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
+from unittest.mock import Mock
 
 import pytest
 
@@ -20,6 +22,10 @@ from autoskillit.core import (
     RecipeDeliveryMode,
 )
 from autoskillit.pipeline import ReadyRecipe
+from autoskillit.server._recipe_execution import (
+    RecipeExecutionAdmissionError,
+    install_recipe_execution,
+)
 from tests.conftest import _make_result
 from tests.server.test_tools_recipe_pull import (
     _NOW,
@@ -63,6 +69,18 @@ async def test_bounded_initialization_delivers_attestation_credential(
     assert _ATTESTED_STEP in digests
     assert credential["execution_id"]
     assert isinstance(ready.tool_ctx.recipe_initialization_state, ReadyRecipe)
+
+
+async def test_ready_execution_replacement_rejects_mismatched_audit_ledger(
+    tool_ctx_ready_recipe,
+) -> None:
+    ready = tool_ctx_ready_recipe
+    state = ready.tool_ctx.recipe_initialization_state
+    assert isinstance(state, ReadyRecipe)
+    mismatched = replace(state.installed_execution, audit_admission_ledger=Mock())
+
+    with pytest.raises(RecipeExecutionAdmissionError, match="different audit admission ledger"):
+        install_recipe_execution(ready.tool_ctx, prepared_execution=mismatched)
 
 
 async def test_attested_run_skill_succeeds_using_only_delivered_values(

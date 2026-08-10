@@ -362,6 +362,7 @@ def install_recipe_execution(
     else:
         assert snapshot is not None
         installed = prepare_recipe_execution(tool_ctx, snapshot=snapshot)
+    _validate_audit_admission_ledger(tool_ctx, installed)
     with tool_ctx.recipe_execution_lock:
         state = tool_ctx.recipe_initialization_state
         if isinstance(state, InitializingRecipe):
@@ -389,16 +390,23 @@ def ready_recipe_execution_state(
     completion_receipt: str,
 ) -> ReadyRecipe:
     """Validate a prepared execution and return READY without mutating context."""
-    if prepared_execution.audit_admission_ledger is not tool_ctx.audit_admission_ledger:
-        raise RecipeExecutionAdmissionError(
-            "audit_admission_ledger_mismatch",
-            "prepared recipe execution uses a different audit admission ledger",
-        )
+    _validate_audit_admission_ledger(tool_ctx, prepared_execution)
     return transition_recipe_ready(
         state,
         installed_execution=prepared_execution,
         completion_receipt=completion_receipt,
     )
+
+
+def _validate_audit_admission_ledger(
+    tool_ctx: ToolContext,
+    prepared_execution: InstalledRecipeExecution,
+) -> None:
+    if prepared_execution.audit_admission_ledger is not tool_ctx.audit_admission_ledger:
+        raise RecipeExecutionAdmissionError(
+            "audit_admission_ledger_mismatch",
+            "prepared recipe execution uses a different audit admission ledger",
+        )
 
 
 def clear_recipe_execution(tool_ctx: ToolContext) -> None:

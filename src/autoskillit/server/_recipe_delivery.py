@@ -1121,15 +1121,6 @@ def finalize_recipe_delivery(
 
     initialization_requirements: tuple[RecipeInitializationRequirement, ...] = ()
     if decision.mode is RecipeDeliveryMode.ORDINARY_INLINE:
-        exemption = surface_definition.response_exemption
-        if exemption is not None:
-            validate_recipe_exemption_fitness(
-                recipe=recipe_name,
-                surface=surface,
-                backend=backend_name,
-                ordinary_rendered=ordinary_rendered,
-                ceiling_bytes=exemption.max_utf8_bytes,
-            )
         rendered = ordinary_rendered
     elif decision.mode is RecipeDeliveryMode.ATTESTED_INLINE:
         rendered = high_rendered

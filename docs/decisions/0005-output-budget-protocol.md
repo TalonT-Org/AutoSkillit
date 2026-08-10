@@ -193,6 +193,10 @@ records each section's compiled byte and page counts and rejects a plan with mor
 one page per required section. Receivers must not assume that recovery can continue for
 an unbounded number of calls.
 
+The reserved inline-exemption margin is a packaging-time fitness invariant enforced by
+the bundled-recipe contract matrix. Runtime delivery mode selection does not repeat that
+packaging validation.
+
 ### Typed dimensional bounds
 
 Token and UTF-8 byte limits are represented by the distinct `TokenLimit` and

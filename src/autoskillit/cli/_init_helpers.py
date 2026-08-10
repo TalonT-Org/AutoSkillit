@@ -33,8 +33,17 @@ def validate_public_plugin_projection(
     private_manifest: Path,
     skills: EffectiveSkillCatalog | Iterable[SkillInfo],
 ) -> None:
-    """Fail install when public documents and the private machine manifest drift."""
+    """Fail install when public documents and the private machine manifest drift.
+
+    Also validates that every hook command in the published artifact is
+    relocatable with a live dispatcher target — the same fail-closed gate
+    the projection staging path uses (``validate_staged_plugin_hooks``).
+    """
     from autoskillit.workspace import validate_sanitized_plugin_artifact
+    from autoskillit.workspace._projected_artifact._hook_repair import (
+        ProjectedArtifactHooksInvalid,
+        validate_staged_plugin_hooks,
+    )
 
     errors = validate_sanitized_plugin_artifact(
         source_root,
@@ -46,6 +55,12 @@ def validate_public_plugin_projection(
         raise RuntimeError(
             "refusing to publish invalid marketplace artifact: " + "; ".join(errors)
         )
+    try:
+        validate_staged_plugin_hooks(public_root)
+    except ProjectedArtifactHooksInvalid as exc:
+        raise RuntimeError(
+            f"refusing to publish marketplace artifact with broken hooks: {exc}"
+        ) from exc
 
 
 class _ScanResult(NamedTuple):

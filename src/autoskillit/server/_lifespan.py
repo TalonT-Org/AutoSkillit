@@ -218,6 +218,21 @@ def run_startup_hook_health_check() -> list[str]:
     except Exception:
         logger.exception("startup_projection_hook_repair_failed")
 
+    # Codex config hook detection — detection-only (repair happens at sync time).
+    try:
+        from autoskillit.execution.backends._codex_hooks import find_broken_codex_hook_commands
+
+        codex_broken = find_broken_codex_hook_commands()
+        if codex_broken:
+            broken.extend(codex_broken)
+            logger.warning(
+                "stale_codex_hook_commands_detected",
+                broken=codex_broken,
+                remediation="Run `autoskillit install` or re-sync Codex hooks",
+            )
+    except Exception:
+        logger.exception("startup_codex_hook_detection_failed")
+
     return broken
 
 

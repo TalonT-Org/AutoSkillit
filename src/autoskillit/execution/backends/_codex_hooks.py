@@ -26,7 +26,6 @@ from autoskillit.execution.backends._codex_config import (
 from autoskillit.execution.backends._codex_config_lock import CodexConfigLock
 from autoskillit.hook_registry import (
     HOOK_REGISTRY,
-    HOOKS_DIR,
     LIFECYCLE_CONTRACTS,
     HookDef,
     LifecycleContractDef,
@@ -36,6 +35,58 @@ from autoskillit.hook_registry import (
 )
 
 logger = get_logger(__name__)
+
+
+class CodexHooksDurableRootUnavailable(RuntimeError):
+    """No durable hooks directory is available for Codex configuration.
+
+    Raised when ``_resolve_codex_hooks_dir`` cannot find any live generation
+    store or legacy installed cache with ``_dispatch.py``.  The ``HOOKS_DIR``
+    (dev-checkout) terminal fallback is intentionally excluded: its lifetime
+    is shorter than the config artifact's, exactly the class instance this
+    error exists to prevent.
+    """
+
+
+def find_broken_codex_hook_commands(config_path: Path | None = None) -> list[str]:
+    """Detect broken autoskillit hook commands in ``~/.codex/config.toml``.
+
+    Returns a list of broken command strings (empty if all healthy or no
+    autoskillit hooks are present).  Does not modify the config.
+    """
+    if config_path is None:
+        config_path = Path.home() / ".codex" / "config.toml"
+    if not config_path.is_file():
+        return []
+    result = _read_codex_config(config_path)
+    broken: list[str] = []
+    hooks = result.data.get("hooks", [])
+    if not isinstance(hooks, list):
+        return []
+    for entry in hooks:
+        if not isinstance(entry, dict):
+            continue
+        cmd = entry.get("command", "")
+        if not isinstance(cmd, str) or not cmd:
+            continue
+        if "/autoskillit/" not in cmd and "_dispatch.py" not in cmd:
+            continue
+        # Check: does the dispatcher target exist?
+        import shlex
+
+        try:
+            parts = shlex.split(cmd)
+        except ValueError:
+            broken.append(cmd)
+            continue
+        if len(parts) >= 3 and parts[-2].endswith("_dispatch.py"):
+            if not Path(parts[-2]).is_file():
+                broken.append(cmd)
+        elif len(parts) >= 2:
+            script = parts[-1]
+            if not Path(script).is_file():
+                broken.append(cmd)
+    return broken
 
 
 def _resolve_codex_hooks_dir(plugin_dir: Path | None = None) -> Path:
@@ -48,8 +99,9 @@ def _resolve_codex_hooks_dir(plugin_dir: Path | None = None) -> Path:
     performed through the same generation-store authority as launch binding.
 
     If neither the generation store nor the legacy installed cache supplies a
-    dispatcher, the failure is logged before falling back to ``HOOKS_DIR`` in
-    the development checkout.
+    dispatcher, raises :class:`CodexHooksDurableRootUnavailable` instead of
+    falling back to the dev-checkout hooks directory (whose lifetime is shorter
+    than the config artifact's — the exact class instance this guard prevents).
     """
     if plugin_dir is not None:
         candidate = plugin_dir / "hooks"
@@ -78,16 +130,20 @@ def _resolve_codex_hooks_dir(plugin_dir: Path | None = None) -> Path:
             ),
         )
     except Exception:
-        logger.warning(
-            "codex_hooks_dir_resolution_failed: no generation store or legacy "
-            "installed artifact available; using dev checkout hooks",
-            exc_info=True,
+        raise CodexHooksDurableRootUnavailable(
+            "No durable hooks directory available for Codex config. "
+            "Candidates checked: generation store (absent), legacy installed "
+            f"cache at {cache_root} (identity unreadable). "
+            "Remedy: run `autoskillit install` from an external terminal."
         )
-        return HOOKS_DIR
     cache_hooks_dir = identity.managed_path / "hooks"
     if (cache_hooks_dir / "_dispatch.py").is_file():
         return cache_hooks_dir
-    return HOOKS_DIR
+    raise CodexHooksDurableRootUnavailable(
+        f"No durable hooks directory available for Codex config. "
+        f"Legacy cache {cache_hooks_dir} exists but is missing _dispatch.py. "
+        f"Remedy: run `autoskillit install` from an external terminal."
+    )
 
 
 def _build_codex_hook_command(hooks_dir: Path, script: str, timeout_seconds: int | None) -> dict:

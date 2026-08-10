@@ -180,6 +180,9 @@ class InstalledPluginArtifactAuthority:
         If validation of the current generation fails, attempts a single
         self-heal republish from source before propagating the error.
         """
+        from autoskillit.workspace import assert_generator_process_fresh
+
+        assert_generator_process_fresh()
         del backend
         if not load_mode.consumes_artifact:
             raise PluginArtifactValidationError(

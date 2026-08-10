@@ -1,4 +1,21 @@
-"""Repair and verify pending publication obligations."""
+"""Repair and verify pending publication obligations.
+
+``attempt_obligation_repair`` defers (``ObligationRepairOutcome.DEFERRED``)
+whenever ``CLAUDECODE`` is set in the environment: it spawns an
+``autoskillit install`` child process, and installation mutates global
+install state (the installed-plugin cache root, the publication manifest,
+hook registration) which is unsafe to mutate from inside a live session
+that may itself be reading that state.
+
+This deferral does NOT extend to ``repair_broken_plugin_cache_hooks`` and
+``repair_broken_projection_hooks`` (``autoskillit.workspace``, invoked from
+``autoskillit.server._lifespan``). Those repairs run unconditionally,
+regardless of ``CLAUDECODE`` — they are the precise remediation needed
+where in-session staleness manifests: targeted JSON rewrites of hook
+entries under artifact leases, not global install-state mutations. Gating
+them on ``CLAUDECODE`` would disable self-healing in exactly the process
+context (a live session) where drift is most likely to be observed.
+"""
 
 from __future__ import annotations
 

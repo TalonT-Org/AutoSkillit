@@ -196,4 +196,98 @@ def run_cross_interpreter_upgrade_smoke(*, work_dir: str) -> bool:
     for name in post_upgrade:
         _assert_incarnation_hooks_execute(cache_root / name)
 
+    # C-I5: Assert projected plugin artifacts also survive the cross-interpreter
+    # upgrade. This is the only test tier that exercises a real interpreter-minor
+    # swap against real deployed artifacts — the incident's exact geometry.
+    _assert_projected_artifact_relocatable(scratch_home, env)
+
     return True
+
+
+def _assert_projected_artifact_relocatable(
+    scratch_home: Path,
+    env: dict[str, str],  # noqa: ARG001
+) -> None:
+    """Project a plugin artifact and verify relocatable hooks post-upgrade.
+
+    After the cross-interpreter upgrade, acquires a launch binding through the
+    real authority entrypoint and asserts:
+    (a) the projected hooks.json contains only ${CLAUDE_PLUGIN_ROOT} commands
+    (b) the dispatcher exists inside the artifact
+    (c) one command executes literally with python3 from PATH, exit ≠ 2
+    """
+    from autoskillit.core import PluginLoadMode
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
+    from autoskillit.hook_registry import PLUGIN_ROOT_TOKEN
+
+    # The workspace module uses Path.home() for projection storage, and our
+    # scratch_home simulates that. We need a fresh authority with the scratch
+    # home so projections land there.
+    original_home = Path.home
+    try:
+        Path.home = staticmethod(lambda: scratch_home)  # type: ignore[assignment]
+        from autoskillit.workspace import project_default_plugin_authority
+        from tests.contracts._projection_helpers import session_catalog
+
+        catalog = session_catalog()
+        authority = project_default_plugin_authority(
+            cwd=scratch_home,
+            base_branch="main",
+            catalog=catalog,
+        )
+        with authority.acquire_launch_binding(
+            backend=ClaudeCodeBackend(),
+            load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+        ) as binding:
+            assert binding.plugin_dir is not None
+            hooks_path = binding.plugin_dir / "hooks" / "hooks.json"
+            assert hooks_path.is_file(), "projected artifact missing hooks.json"
+            data = json.loads(hooks_path.read_text(encoding="utf-8"))
+
+            for entries in data.get("hooks", {}).values():
+                for entry in entries:
+                    for hook in entry.get("hooks", []):
+                        cmd = hook.get("command", "")
+                        # (a) only ${CLAUDE_PLUGIN_ROOT} commands
+                        assert PLUGIN_ROOT_TOKEN in cmd, (
+                            f"projected command lacks relocatable token "
+                            f"after cross-interpreter upgrade: {cmd}"
+                        )
+                        # (b) dispatcher exists inside the artifact
+                        resolved = cmd.replace(PLUGIN_ROOT_TOKEN, str(binding.plugin_dir))
+                        parts = shlex.split(resolved)
+                        if len(parts) >= 3 and parts[-2].endswith("_dispatch.py"):
+                            dispatcher = Path(parts[-2])
+                            assert dispatcher.is_file(), (
+                                f"dispatcher missing in post-upgrade projection: {dispatcher}"
+                            )
+
+            # (c) execute one command literally with python3 from PATH
+            sample_cmd = None
+            for entries in data.get("hooks", {}).values():
+                for entry in entries:
+                    for hook in entry.get("hooks", []):
+                        sample_cmd = hook.get("command", "")
+                        break
+                    if sample_cmd:
+                        break
+                if sample_cmd:
+                    break
+            if sample_cmd:
+                resolved = sample_cmd.replace(PLUGIN_ROOT_TOKEN, str(binding.plugin_dir))
+                parts = shlex.split(resolved)
+                event = json.dumps({"tool_name": "Read", "tool_input": {}})
+                proc = subprocess.run(
+                    parts,
+                    input=event,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                assert proc.returncode != 2, (
+                    f"projected hook exits 2 (can't open file) after "
+                    f"cross-interpreter upgrade: {sample_cmd} → "
+                    f"{proc.stderr[:500]}"
+                )
+    finally:
+        Path.home = original_home  # type: ignore[assignment]

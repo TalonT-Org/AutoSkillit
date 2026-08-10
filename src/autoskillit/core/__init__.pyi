@@ -384,6 +384,7 @@ from .types import CORE_PACKS as CORE_PACKS
 from .types import DATA_MANIFEST_SOURCE_TYPES as DATA_MANIFEST_SOURCE_TYPES
 from .types import DISPATCH_ID_ENV_VAR as DISPATCH_ID_ENV_VAR
 from .types import DRY_WALKTHROUGH_VERIFIED_MARKER as DRY_WALKTHROUGH_VERIFIED_MARKER
+from .types import DURABLE_ARTIFACT_WRITERS as DURABLE_ARTIFACT_WRITERS
 from .types import DYNAMIC_RECIPE_SECTION_DEF as DYNAMIC_RECIPE_SECTION_DEF
 from .types import EXPLORATION_TOOLS as EXPLORATION_TOOLS
 from .types import FEATURE_REGISTRY as FEATURE_REGISTRY
@@ -721,6 +722,7 @@ from .types import DirectInstall as DirectInstall
 from .types import DispatchGateType as DispatchGateType
 from .types import DispatchIdentity as DispatchIdentity
 from .types import DispatchRequestEvent as DispatchRequestEvent
+from .types import DurableArtifactWriterDef as DurableArtifactWriterDef
 from .types import DurableContextAdmissionPayload as DurableContextAdmissionPayload
 from .types import EffectiveSkillCatalogAuthority as EffectiveSkillCatalogAuthority
 from .types import EffectiveSkillInvocationAuthority as EffectiveSkillInvocationAuthority

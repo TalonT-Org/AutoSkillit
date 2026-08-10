@@ -169,6 +169,49 @@ def test_content_complete_drift_healing_catches_hash_matching_staleness(
     )
 
 
+def test_startup_drift_check_leaves_hooks_json_untouched_on_render_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A-I3: a render_hooks_json_text() failure must not touch the on-disk
+    hooks.json — render and file-I/O are independently guarded (see
+    run_startup_drift_check's own docstring) so a renderer regression cannot
+    silently corrupt or clobber the published artifact.
+    """
+    import structlog
+
+    import autoskillit.core.paths as _paths
+    import autoskillit.server._lifespan as _lifespan_mod
+    from autoskillit.server._lifespan import run_startup_drift_check
+    from tests._helpers import _flush_structlog_proxy_caches
+
+    fake_pkg_root = tmp_path / "pkg"
+    hooks_dir = fake_pkg_root / "hooks"
+    hooks_dir.mkdir(parents=True)
+    original_content = json.dumps({"_autoskillit_registry_hash": "deadbeef", "hooks": {}})
+    (hooks_dir / "hooks.json").write_text(original_content)
+
+    monkeypatch.setattr(_paths, "pkg_root", lambda: fake_pkg_root)
+
+    def _raise_render_failure() -> str:
+        raise RuntimeError("renderer regression")
+
+    monkeypatch.setattr(_lifespan_mod, "render_hooks_json_text", _raise_render_failure)
+
+    _flush_structlog_proxy_caches()
+    try:
+        with structlog.testing.capture_logs() as logs:
+            run_startup_drift_check()
+    finally:
+        _flush_structlog_proxy_caches()
+
+    assert (hooks_dir / "hooks.json").read_text() == original_content, (
+        "render failure must leave the on-disk hooks.json untouched"
+    )
+    assert any(entry.get("event") == "startup_drift_check_render_failed" for entry in logs), (
+        "render failure must be logged so the regression is observable"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Token-aware validation.
 # ---------------------------------------------------------------------------
@@ -358,6 +401,35 @@ def test_catalog_projection_context_accepts_durable_scripts_root(tmp_path: Path)
     assert context.substitutions["{{AUTOSKILLIT_SCRIPTS}}"] == str(
         durable_root / "recipes" / "scripts"
     )
+
+
+def test_catalog_projection_context_requires_durable_scripts_root(tmp_path: Path) -> None:
+    """T-C3: durable_scripts_root is a required keyword — no implicit default."""
+    from autoskillit.core import SkillExecutionRole
+    from autoskillit.workspace import EffectiveSkillCatalog, SkillsDirectoryProvider
+
+    provider = SkillsDirectoryProvider(
+        temp_dir_relpath=".autoskillit/temp",
+        default_base_branch="develop",
+    )
+    catalog = EffectiveSkillCatalog(skills=(), execution_role=SkillExecutionRole.SESSION)
+    with pytest.raises(TypeError):
+        provider.catalog_projection_context(catalog, tmp_path)
+
+
+def test_projection_context_requires_durable_scripts_root(tmp_path: Path) -> None:
+    """T-C3: projection_context wrapper cannot re-introduce the removed default."""
+    from autoskillit.workspace import DefaultSkillResolver, SkillsDirectoryProvider
+
+    provider = SkillsDirectoryProvider(
+        temp_dir_relpath=".autoskillit/temp",
+        default_base_branch="develop",
+    )
+    skills = DefaultSkillResolver().list_all()
+    if not skills:
+        pytest.skip("no bundled skills available")
+    with pytest.raises(TypeError):
+        provider.projection_context(skills[0], tmp_path)
 
 
 def test_cook_session_passes_behavioral_durable_root_to_projection(

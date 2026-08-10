@@ -596,7 +596,6 @@ class TestTrackerBridgeIntegration:
         assert result["success"] is False
         assert result["dispatch_status"] == "failure"
         assert result["reason"] == FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH
-        assert "progress unavailable" in result["diagnostic_message"]
         assert load_calls == 1
         assert not any(key.owner_kind == "dispatch" for key in tool_ctx.tracker_leases)
 

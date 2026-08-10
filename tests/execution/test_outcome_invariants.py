@@ -724,6 +724,25 @@ class TestDeclaredArtifactAdjudication:
         assert result.success is True
         assert result.outcome_fields == {"artifact": "report.md"}
 
+    @pytest.mark.parametrize("path_kind", ["absolute", "symlink"])
+    def test_inside_cwd_declared_file_is_preserved(self, tmp_path, path_kind: str) -> None:
+        target = tmp_path / "report.md"
+        target.write_text("report")
+        if path_kind == "absolute":
+            declared_path = str(target)
+        else:
+            link = tmp_path / "report-link.md"
+            link.symlink_to(target)
+            declared_path = link.name
+        sr = _base_skill_result(result_text=f"artifact = {declared_path}")
+
+        result = _apply_post_session_adjudication(
+            sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)
+        )
+
+        assert result.success is True
+        assert result.outcome_fields == {"artifact": declared_path}
+
     @pytest.mark.parametrize("artifact_name", ["missing.md", "directory"])
     def test_missing_or_non_file_artifact_is_producer_failure(
         self, tmp_path, artifact_name: str

@@ -22,6 +22,32 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 class TestValidateStagedPluginHooks:
     """T-B1 (unit level): validate_staged_plugin_hooks rejects broken commands."""
 
+    @pytest.mark.parametrize(
+        "hooks_data",
+        [
+            [],
+            {"hooks": []},
+            {"hooks": {"PreToolUse": {}}},
+            {"hooks": {"PreToolUse": [[]]}},
+            {"hooks": {"PreToolUse": [{"hooks": {}}]}},
+            {"hooks": {"PreToolUse": [{"hooks": [[]]}]}},
+        ],
+    )
+    def test_malformed_container_shapes_raise_typed_error(
+        self, tmp_path: Path, hooks_data: object
+    ) -> None:
+        from autoskillit.workspace._projected_artifact._hook_repair import (
+            ProjectedArtifactHooksInvalid,
+            validate_staged_plugin_hooks,
+        )
+
+        hooks_dir = tmp_path / "hooks"
+        hooks_dir.mkdir()
+        (hooks_dir / "hooks.json").write_text(json.dumps(hooks_data))
+
+        with pytest.raises(ProjectedArtifactHooksInvalid):
+            validate_staged_plugin_hooks(tmp_path)
+
     def test_relocatable_commands_with_live_dispatcher_pass(self, tmp_path: Path) -> None:
         from autoskillit.workspace._projected_artifact._hook_repair import (
             validate_staged_plugin_hooks,

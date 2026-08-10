@@ -51,13 +51,11 @@ class ProjectedArtifactHooksInvalid(Exception):
 
 
 def validate_staged_plugin_hooks(staging_root: Path) -> None:
-    """Validate that every hook command in a staged plugin artifact is relocatable.
+    """Validate hook commands in a staged or published plugin artifact.
 
     Raises :class:`ProjectedArtifactHooksInvalid` when any command is absolute
     (non-relocatable) or when a token-form command's dispatcher target does not
-    exist under *staging_root*.  Called from :func:`_stage_projected_plugin_artifact`
-    after the hooks manifest is rendered and before the artifact digest is computed,
-    as the publication chokepoint that prevents broken hooks from reaching sessions.
+    exist under *staging_root*.
     """
     hooks_json_path = staging_root / "hooks" / "hooks.json"
     if not hooks_json_path.is_file():
@@ -66,11 +64,31 @@ def validate_staged_plugin_hooks(staging_root: Path) -> None:
         data = json.loads(hooks_json_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ProjectedArtifactHooksInvalid(f"staged hooks.json is unreadable: {exc}") from exc
-    for event_type, entries in data.get("hooks", {}).items():
+    if not isinstance(data, dict):
+        raise ProjectedArtifactHooksInvalid("staged hooks.json must contain a JSON object")
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        raise ProjectedArtifactHooksInvalid("staged hooks.json must contain a hooks object")
+    for event_type, entries in hooks.items():
         if not isinstance(entries, list):
-            continue
+            raise ProjectedArtifactHooksInvalid(
+                f"staged hooks.json event {event_type!r} must contain a list"
+            )
         for entry in entries:
-            for hook in entry.get("hooks", []):
+            if not isinstance(entry, dict):
+                raise ProjectedArtifactHooksInvalid(
+                    f"staged hooks.json event {event_type!r} contains a malformed entry"
+                )
+            entry_hooks = entry.get("hooks")
+            if not isinstance(entry_hooks, list):
+                raise ProjectedArtifactHooksInvalid(
+                    f"staged hooks.json event {event_type!r} entry must contain a hooks list"
+                )
+            for hook in entry_hooks:
+                if not isinstance(hook, dict):
+                    raise ProjectedArtifactHooksInvalid(
+                        f"staged hooks.json event {event_type!r} contains a malformed hook"
+                    )
                 cmd = hook.get("command", "")
                 if not isinstance(cmd, str) or not cmd:
                     continue

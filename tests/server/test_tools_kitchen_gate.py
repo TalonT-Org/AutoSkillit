@@ -91,6 +91,33 @@ def test_close_kitchen_continues_when_hook_config_removal_fails(tmp_path, monkey
     logger.warning.assert_any_call("hook_config_remove_failed", path=str(hook_cfg_path))
 
 
+def test_close_kitchen_continues_when_overlay_removal_fails(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
+    mock_ctx._session_config_overrides = {"order": {"timeout": 30}}
+    overlay_path = MagicMock()
+    overlay_path.unlink.side_effect = OSError("busy")
+    overlay_lock = MagicMock()
+    overlay_lock.__enter__.return_value = (overlay_path, {})
+
+    with (
+        patch("autoskillit.server._get_ctx", return_value=mock_ctx),
+        patch("autoskillit.server.logger") as logger,
+        patch(
+            "autoskillit.server.tools.tools_kitchen.locked_overlay",
+            return_value=overlay_lock,
+        ),
+    ):
+        from autoskillit.server.tools.tools_kitchen import _close_kitchen_handler
+
+        _close_kitchen_handler()
+
+    mock_ctx.gate.disable.assert_called_once()
+    assert mock_ctx._session_config_overrides == {}
+    logger.warning.assert_any_call("hook_config_overlay_remove_failed", path=str(overlay_path))
+
+
 # ---------------------------------------------------------------------------
 # Group J — T7, T8, T5, alwaysLoad MCP meta
 # ---------------------------------------------------------------------------

@@ -100,12 +100,23 @@ def test_exact_receipt_requires_single_conformant_text_and_exact_json_field() ->
 
 @pytest.mark.parametrize(
     "case",
-    ["empty_content", "non_text", "invalid_json", "json_list", "wrong_receipt"],
+    [
+        "empty_content",
+        "multiple_content",
+        "non_text",
+        "invalid_json",
+        "json_list",
+        "wrong_receipt",
+    ],
 )
 def test_exact_receipt_rejects_malformed_delivery_shapes(case: str) -> None:
     receipt_id = "receipt"
     if case == "empty_content":
         result = ToolResult(content=[], structured_content={})
+    elif case == "multiple_content":
+        rendered = json.dumps({"receipt_id": receipt_id})
+        text = TextContent(type="text", text=rendered)
+        result = ToolResult(content=[text, text], structured_content={"result": rendered})
     elif case == "non_text":
         image = ImageContent(type="image", data="", mimeType="image/png")
         result = ToolResult(content=[image], structured_content={})

@@ -175,7 +175,7 @@ class TestLoadDispatchProgress:
     def test_missing_optional_tracker_returns_no_authority_error(self, tool_ctx, tmp_path) -> None:
         tool_ctx.project_dir = tmp_path
         dispatch_id = "dispatch-missing"
-        target = TrackerAuthorityTarget.for_project(tmp_path, dispatch_id, expected=True)
+        target = TrackerAuthorityTarget.for_project(tmp_path, dispatch_id, expected=False)
         lease = ArtifactLease.acquire_shared(tracker_lease_path(target))
         try:
             result = load_dispatch_progress(

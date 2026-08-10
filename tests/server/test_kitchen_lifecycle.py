@@ -113,7 +113,12 @@ async def test_open_kitchen_runs_reaper(monkeypatch, tmp_path):
 
 async def test_close_kitchen_preserves_peer_tracker_and_lease_sidecar(monkeypatch, tmp_path):
     """Close retires only its exact tracker and never removes peer authority."""
-    from autoskillit.core import ArtifactLease
+    from autoskillit.core import (
+        ArtifactLease,
+        ArtifactLeaseContention,
+        TrackerAuthorityTarget,
+        tracker_lease_path,
+    )
 
     monkeypatch.chdir(tmp_path)
 
@@ -132,10 +137,11 @@ async def test_close_kitchen_preserves_peer_tracker_and_lease_sidecar(monkeypatc
     peer_tracker.write_text(
         '{"pipeline_id": "AB", "kitchen_id": "AB", "steps": {}, "dependencies": {}}'
     )
-    peer_lease = tracker_dir / "AB.lease.lock"
-    peer_lease.write_text("")
+    peer_target = TrackerAuthorityTarget("AB", peer_tracker, expected=False)
+    peer_lease = tracker_lease_path(peer_target)
 
     lease = ArtifactLease.acquire_shared(peer_lease)
+    peer_lease_inode = peer_lease.stat().st_ino
     try:
         with (
             patch(
@@ -146,10 +152,28 @@ async def test_close_kitchen_preserves_peer_tracker_and_lease_sidecar(monkeypatc
             patch("autoskillit.core.unregister_active_kitchen"),
         ):
             await _open_kitchen_handler()
+            current_target = TrackerAuthorityTarget.for_project(
+                tmp_path, ctx.kitchen_id, expected=False
+            )
+            current_target.path.write_text(
+                json.dumps(
+                    {
+                        "pipeline_id": ctx.kitchen_id,
+                        "kitchen_id": ctx.kitchen_id,
+                        "steps": {},
+                        "dependencies": {},
+                    }
+                )
+            )
             _close_kitchen_handler()
 
         assert peer_tracker.exists()
         assert peer_lease.exists()
+        assert peer_lease.stat().st_ino == peer_lease_inode
+        with pytest.raises(ArtifactLeaseContention):
+            ArtifactLease.acquire_exclusive(peer_lease, blocking=False)
+        assert not current_target.path.exists()
+        assert tracker_lease_path(current_target).exists()
     finally:
         lease.close_preserving()
 

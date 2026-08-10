@@ -217,9 +217,9 @@ def _assert_projected_artifact_relocatable(
     from autoskillit.execution import ClaudeCodeBackend
     from autoskillit.hook_registry import PLUGIN_ROOT_TOKEN
     from autoskillit.workspace import (
-        DefaultSkillResolver,
         EffectiveSkillCatalog,
         SkillCatalogEntry,
+        default_skill_resolver,
         project_default_plugin_authority,
     )
 
@@ -228,7 +228,7 @@ def _assert_projected_artifact_relocatable(
         Path.home = staticmethod(lambda: scratch_home)  # type: ignore[assignment]
         bundled_skills = tuple(
             skill
-            for skill in DefaultSkillResolver().list_all()
+            for skill in default_skill_resolver().list_all()
             if skill.source is SkillSource.BUNDLED
         )
         catalog = EffectiveSkillCatalog(

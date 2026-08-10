@@ -158,7 +158,7 @@ class TestNonMachineLocalWritersAreRelocatable:
         write_installed_plugin_artifact_manifest_locked(
             incarnation,
             semantic_key=installed_plugin_semantic_key(_AUTOSKILLIT_PLUGIN_KEY, "1.2.3"),
-            action="test",
+            action="repair",
         )
 
         outcomes = repair_broken_plugin_cache_hooks(cache_dir)

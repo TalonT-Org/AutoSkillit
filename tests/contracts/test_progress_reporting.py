@@ -37,9 +37,3 @@ async def test_progress_counters_in_every_recovery_response(
             assert key in response
         completed.append(response["completed_parts"])
     assert completed == sorted(completed)
-
-
-def test_progress_counter_formula_is_monotonic() -> None:
-    totals = [(completed, 2 - completed) for completed in range(3)]
-    assert [item[0] for item in totals] == [0, 1, 2]
-    assert [item[1] for item in totals] == [2, 1, 0]

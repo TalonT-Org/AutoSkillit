@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -17,6 +18,7 @@ from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES
 from autoskillit.execution.commands import _inject_completion_directive
 from autoskillit.server.tools.tools_execution import run_skill
 from tests.conftest import _make_result
+from tests.server._pipeline_test_helpers import _ack_direct_run_skill_result
 from tests.server.conftest import _SUCCESS_JSON
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -276,7 +278,8 @@ class TestRunSkillPerInvocationMarker:
         )  # clone guard snapshot call 2
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=0, stdout=success_json))
 
-        await run_skill("/investigate a", cwd="/tmp")
+        first = json.loads(await run_skill("/investigate a", cwd="/tmp"))
+        _ack_direct_run_skill_result(tool_ctx_kitchen_open, first)
         await run_skill("/investigate b", cwd="/tmp")
 
         calls = tool_ctx_kitchen_open.runner.call_args_list

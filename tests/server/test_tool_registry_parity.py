@@ -188,7 +188,9 @@ def test_every_tool_has_an_explicit_initialization_operation() -> None:
     expected = {
         ToolInitializationOperation.RECOVERY: {
             "complete_recipe_initialization",
+            "complete_run_skill_result",
             "get_recipe_section",
+            "recover_run_skill_result",
         },
         ToolInitializationOperation.INSPECTION: {
             "analyze_tool_sequences",

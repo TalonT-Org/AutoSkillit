@@ -5,28 +5,36 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
-import regex as re
+from fastmcp import Context
+from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import DISPATCH_ID_ENV_VAR, atomic_write, get_logger
+from autoskillit.core import (
+    DISPATCH_ID_ENV_VAR,
+    RunSkillCompletionAuthority,
+    atomic_write,
+    get_logger,
+)
+from autoskillit.pipeline import canonical_step_name
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_enabled
+from autoskillit.server._guards import _require_enabled, _require_orchestrator_exact
 from autoskillit.server._misc import (
     _pipeline_tracker_dir,
     _pipeline_tracker_path,
 )
 from autoskillit.server._notify import track_response_size
+from autoskillit.server._run_skill_completion import _request_session_identity
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._overlay_state import read_overlay
 from autoskillit.server.tools._types import deny_envelope
 
 logger = get_logger(__name__)
-
-_STEP_SUFFIX_RE = re.compile(r"-\d+$")
 
 
 class _TrackerCtx(Protocol):
@@ -34,6 +42,7 @@ class _TrackerCtx(Protocol):
 
     kitchen_id: str
     project_dir: Path
+    run_skill_completion: RunSkillCompletionAuthority | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +51,16 @@ class ResolvedTracker:
 
     order_id: str
     path: Path
+
+
+def read_tracker_identity(resolved: ResolvedTracker) -> tuple[str, str] | None:
+    """Read the kitchen and incarnation identities from a resolved tracker."""
+    tracker = json.loads(resolved.path.read_text())
+    kitchen_id = tracker.get("kitchen_id")
+    incarnation_id = tracker.get("tracker_incarnation_id")
+    if not isinstance(kitchen_id, str) or not isinstance(incarnation_id, str):
+        return None
+    return kitchen_id, incarnation_id
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,6 +264,7 @@ def _handle_init(
         "pipeline_id": effective_pipeline_id,
         "kitchen_id": ctx.kitchen_id,  # type: ignore[attr-defined]
         "initialized_at": datetime.now(UTC).isoformat(),
+        "tracker_incarnation_id": uuid.uuid4().hex,
         "steps": steps,
         "dependencies": dependencies or {},
     }
@@ -331,7 +351,63 @@ def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: st
             )
         )
 
-    result = mark_step_complete(resolved.path, step_name, resolved.order_id)
+    try:
+        tracker_identity = read_tracker_identity(resolved)
+    except json.JSONDecodeError as exc:
+        return json.dumps(
+            deny_envelope(
+                f"record_pipeline_step: failed to read tracker identity: {exc}",
+                stage="preflight:pipeline_tracker",
+                retriable=False,
+            )
+        )
+    except OSError as exc:
+        return json.dumps(
+            deny_envelope(
+                f"record_pipeline_step: failed to read tracker identity: {exc}",
+                stage="preflight:pipeline_tracker",
+                retriable=True,
+            )
+        )
+    if tracker_identity is None:
+        return json.dumps(
+            deny_envelope(
+                "record_pipeline_step: tracker incarnation identity is missing.",
+                stage="preflight:pipeline_tracker",
+                retriable=False,
+            )
+        )
+    tracker_kitchen_id, tracker_incarnation_id = tracker_identity
+    authority = ctx.run_skill_completion
+    if authority is None:
+        return json.dumps(
+            deny_envelope(
+                "record_pipeline_step: completion authority is unavailable.",
+                stage="preflight:pipeline_tracker",
+                retriable=True,
+            )
+        )
+    try:
+        result = authority.apply_tracker_credit(
+            tracker_order_id=resolved.order_id,
+            tracker_path=str(resolved.path.resolve()),
+            tracker_kitchen_id=tracker_kitchen_id,
+            tracker_incarnation_id=tracker_incarnation_id,
+            step_name=step_name,
+            effect=lambda: mark_step_complete(
+                resolved.path,
+                step_name,
+                resolved.order_id,
+                expected_tracker_kitchen_id=tracker_kitchen_id,
+                expected_tracker_incarnation_id=tracker_incarnation_id,
+            ),
+        )
+    except ValueError as exc:
+        result = deny_envelope(
+            f"record_pipeline_step: {exc}",
+            stage="preflight:pipeline_tracker_credit",
+            retriable=False,
+        )
     return json.dumps(result)
 
 
@@ -339,13 +415,16 @@ def mark_step_complete(
     tracker_path: Path,
     step_name: str,
     order_id: str,
+    *,
+    expected_tracker_kitchen_id: str = "",
+    expected_tracker_incarnation_id: str = "",
 ) -> dict:
     """Mark a single step as complete in the tracker file.
 
-    Used by both ``op="complete"`` (operator repair) and the adjudication-point
-    marker in ``run_skill``. Returns a result dict (always includes ``success``).
+    Used by both ``op="complete"`` (operator repair) and
+    ``complete_run_skill_result``. Returns a result dict (always includes ``success``).
     """
-    canonical = _STEP_SUFFIX_RE.sub("", step_name)
+    canonical = canonical_step_name(step_name)
     lock_path = tracker_path.parent / ".pipeline_tracker.lock"
 
     try:
@@ -384,6 +463,19 @@ def mark_step_complete(
                 retriable=False,
             )
 
+        if expected_tracker_kitchen_id and (
+            tracker.get("kitchen_id") != expected_tracker_kitchen_id
+            or tracker.get("tracker_incarnation_id") != expected_tracker_incarnation_id
+        ):
+            return {
+                **deny_envelope(
+                    "mark_step_complete: tracker incarnation changed.",
+                    stage="mark_step_complete",
+                    retriable=False,
+                ),
+                "incarnation_matches": False,
+            }
+
         steps = tracker.get("steps", {})
         if canonical not in steps:
             return deny_envelope(
@@ -415,6 +507,7 @@ def mark_step_complete(
 
         result = {
             "success": True,
+            "incarnation_matches": True,
             "step": canonical,
             "order_id": order_id,
             "status": "complete",
@@ -431,3 +524,132 @@ def mark_step_complete(
     finally:
         fcntl.flock(lock_fd, fcntl.LOCK_UN)
         os.close(lock_fd)
+
+
+@mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
+@track_response_size("recover_run_skill_result")
+async def recover_run_skill_result(
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Recover the sole delivered ``run_skill`` receipt after transport loss. Never raises."""
+    if (tier_gate := _require_orchestrator_exact("recover_run_skill_result")) is not None:
+        return tier_gate
+    if (gate := _require_enabled()) is not None:
+        return gate
+    try:
+        from autoskillit.server import _get_ctx  # circular-break
+
+        tool_ctx = _get_ctx()
+        authority = tool_ctx.run_skill_completion
+        if authority is None:
+            raise RuntimeError("run_skill completion authority is unavailable")
+        receipt = authority.recover(
+            kitchen_id=tool_ctx.kitchen_id,
+            request_session_id=_request_session_identity(ctx),
+        )
+        return json.dumps(
+            {
+                "success": True,
+                "receipt_id": receipt.receipt_id,
+                "run_skill_success": receipt.success,
+                "classification": receipt.classification,
+                "session_id": receipt.child_session_id,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    except ValueError as exc:
+        return json.dumps(
+            deny_envelope(
+                f"recover_run_skill_result: {exc}",
+                stage="preflight:run_skill_completion",
+                retriable=False,
+            )
+        )
+    except Exception:
+        logger.exception("recover_run_skill_result_unexpected_error")
+        return json.dumps(
+            deny_envelope(
+                "recover_run_skill_result: unexpected internal error.",
+                stage="complete:run_skill_completion",
+                retriable=True,
+            )
+        )
+
+
+@mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
+@track_response_size("complete_run_skill_result")
+async def complete_run_skill_result(
+    receipt_id: str,
+    ctx: Context = CurrentContext(),
+) -> str:
+    """Acknowledge one exactly delivered ``run_skill`` result. Never raises."""
+    if (tier_gate := _require_orchestrator_exact("complete_run_skill_result")) is not None:
+        return tier_gate
+    if (gate := _require_enabled()) is not None:
+        return gate
+    try:
+        from autoskillit.server import _get_ctx  # circular-break
+
+        tool_ctx = _get_ctx()
+        authority = tool_ctx.run_skill_completion
+        if authority is None:
+            raise RuntimeError("run_skill completion authority is unavailable")
+        receipt = authority.acknowledge(
+            receipt_id,
+            kitchen_id=tool_ctx.kitchen_id,
+            request_session_id=_request_session_identity(ctx),
+        )
+        tracker_result: Mapping[str, object] | None = None
+        if receipt.success and receipt.tracker_incarnation_id:
+            tracker_result = authority.apply_tracker_credit(
+                tracker_order_id=receipt.tracker_order_id,
+                tracker_path=receipt.tracker_path,
+                tracker_kitchen_id=receipt.tracker_kitchen_id,
+                tracker_incarnation_id=receipt.tracker_incarnation_id,
+                step_name=receipt.step_name,
+                receipt_id=receipt.receipt_id,
+                effect=lambda: mark_step_complete(
+                    Path(receipt.tracker_path),
+                    receipt.step_name,
+                    receipt.tracker_order_id,
+                    expected_tracker_kitchen_id=receipt.tracker_kitchen_id,
+                    expected_tracker_incarnation_id=receipt.tracker_incarnation_id,
+                ),
+            )
+        return json.dumps(
+            {
+                "success": True,
+                "receipt_id": receipt.receipt_id,
+                "run_skill_success": receipt.success,
+                "classification": receipt.classification,
+                "session_id": receipt.child_session_id,
+                "tracker": tracker_result,
+                "tracker_repairable": bool(
+                    receipt.success
+                    and receipt.tracker_incarnation_id
+                    and not (tracker_result or {}).get("success")
+                ),
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    except ValueError as exc:
+        return json.dumps(
+            deny_envelope(
+                f"complete_run_skill_result: {exc}",
+                stage="preflight:run_skill_completion",
+                retriable=False,
+            )
+        )
+    except Exception:
+        logger.exception("complete_run_skill_result_unexpected_error")
+        return json.dumps(
+            deny_envelope(
+                "complete_run_skill_result: unexpected internal error.",
+                stage="complete:run_skill_completion",
+                retriable=True,
+            )
+        )

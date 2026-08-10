@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import dataclasses
+import errno
+import stat
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, assert_never
+from typing import TYPE_CHECKING, cast
 
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
@@ -50,7 +52,6 @@ from autoskillit.execution.headless._headless_path_tokens import (
     _validate_output_paths,
 )
 from autoskillit.execution.headless._headless_recovery import (
-    _CHANNEL_B_RECOVERABLE_SUBTYPES,
     _infer_enum_token_from_write_contract,
     _recover_block_from_assistant_messages,
     _recover_from_separate_marker,
@@ -173,12 +174,17 @@ def _apply_post_session_adjudication(
     evidence: WriteEvidence,
     write_behavior: WriteBehaviorSpec | None,
     skill_contract: SkillContract | None,
+    cwd: str,
 ) -> SkillResult:
-    """Consolidated post-session adjudication: zero-write gate + outcome invariants.
+    """Apply write, invariant, and declared-artifact contract checks.
 
     Invoked as the last adjudication step before each success-finalizing
     return. Makes "a success path that skips adjudication" unrepresentable.
     """
+    fields = parse_outcome_fields(sr.result, skill_contract) if skill_contract else {}
+    if fields:
+        sr = dataclasses.replace(sr, outcome_fields=fields)
+
     if not sr.success:
         return sr
 
@@ -201,7 +207,6 @@ def _apply_post_session_adjudication(
             )
 
     if skill_contract is not None and skill_contract.outcome_invariants:
-        fields = parse_outcome_fields(sr.result, skill_contract)
         violated, detail = evaluate_outcome_invariants(fields, skill_contract.outcome_invariants)
         if violated:
             logger.warning("outcome_invariant_violated", detail=detail)
@@ -211,9 +216,75 @@ def _apply_post_session_adjudication(
                 subtype="outcome_invariant_violation",
                 needs_retry=True,
                 retry_reason=RetryReason.OUTCOME_INVARIANT,
+                outcome_fields=None,
             )
 
+    if skill_contract is not None:
+        for output in skill_contract.outputs:
+            value = fields.get(output.name)
+            if output.type != "file_path" or value is None:
+                continue
+            failure = _validate_declared_artifact(cwd, output.name, cast(str, value))
+            if failure is not None:
+                subtype, detail = failure
+                retry_reason = (
+                    RetryReason.CONTRACT_RECOVERY
+                    if subtype == "artifact_contract_violation"
+                    else RetryReason.RESUME
+                )
+                return dataclasses.replace(
+                    sr,
+                    success=False,
+                    is_error=True,
+                    subtype=subtype,
+                    needs_retry=True,
+                    retry_reason=retry_reason,
+                    result=detail,
+                    outcome_fields=None,
+                )
+
     return sr
+
+
+def _validate_declared_artifact(cwd: str, field_name: str, value: str) -> tuple[str, str] | None:
+    """Validate one emitted ``file_path`` without exposing unsafe paths."""
+    safe_name = "."
+    producer_detail = (
+        f"Skill output '{field_name}' did not identify a contained regular file: {safe_name}"
+    )
+    infrastructure_detail = (
+        f"Could not validate skill output '{field_name}' because filesystem access failed."
+    )
+    try:
+        root = Path(cwd).resolve()
+        candidate = Path(value)
+        safe_name = candidate.name or "."
+        producer_detail = (
+            f"Skill output '{field_name}' did not identify a contained regular file: {safe_name}"
+        )
+        target = (
+            (root / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
+        )
+        try:
+            target.relative_to(root)
+        except ValueError:
+            return "artifact_contract_violation", producer_detail
+        target_stat = target.stat()
+        if not stat.S_ISREG(target_stat.st_mode):
+            return "artifact_contract_violation", producer_detail
+    except (TypeError, ValueError, RuntimeError):
+        return "artifact_contract_violation", producer_detail
+    except OSError as exc:
+        if exc.errno in {errno.ENOENT, errno.ENOTDIR, errno.ELOOP}:
+            return "artifact_contract_violation", producer_detail
+        logger.warning(
+            "artifact_adjudication_error",
+            field_name=field_name,
+            artifact_name=safe_name,
+            exc_info=True,
+        )
+        return "artifact_adjudication_error", infrastructure_detail
+    return None
 
 
 def _build_skill_result(
@@ -308,7 +379,7 @@ def _build_skill_result(
                     api_retry=stale_api_retry,
                 )
                 _stale_success_sr = _apply_post_session_adjudication(
-                    _stale_success_sr, stale_evidence, write_behavior, skill_contract
+                    _stale_success_sr, stale_evidence, write_behavior, skill_contract, cwd
                 )
                 return _stale_success_sr
         # No valid result in stdout — fall through to original stale response
@@ -398,7 +469,7 @@ def _build_skill_result(
                     api_retry=idle_api_retry,
                 )
                 _idle_success_sr = _apply_post_session_adjudication(
-                    _idle_success_sr, idle_evidence, write_behavior, skill_contract
+                    _idle_success_sr, idle_evidence, write_behavior, skill_contract, cwd
                 )
                 return _idle_success_sr
         _idle_is_rate_limited = has_rate_limit_signal(idle_session, result)
@@ -495,60 +566,6 @@ def _build_skill_result(
         )
         evidence = dataclasses.replace(evidence, write_call_count=1)
         _has_write_evidence = True
-
-    # Channel B drain-race: recover from assistant_messages if type=result was not flushed.
-    match result.channel_confirmation:
-        case ChannelConfirmation.CHANNEL_B if (
-            session.subtype in _CHANNEL_B_RECOVERABLE_SUBTYPES and completion_marker
-        ):
-            cb_recovered = _recover_from_separate_marker(session, completion_marker)
-            if cb_recovered is not None:
-                original_subtype = session.subtype
-                session = dataclasses.replace(
-                    cb_recovered,
-                    subtype=CliSubtype.SUCCESS,
-                    is_error=False,
-                )
-                logger.warning(
-                    "channel_b_drain_race_recovery",
-                    original_subtype=str(original_subtype),
-                    assistant_message_count=len(session.assistant_messages),
-                )
-        case ChannelConfirmation.DIR_MISSING if (
-            session.subtype in _CHANNEL_B_RECOVERABLE_SUBTYPES and completion_marker
-        ):
-            # Late-bind recovery: the directory may have been created by
-            # Claude Code during the run even though it was absent at
-            # monitor start.  Attempt the same marker-based recovery as
-            # the CHANNEL_B arm.
-            cb_recovered = _recover_from_separate_marker(session, completion_marker)
-            if cb_recovered is not None:
-                original_subtype = session.subtype
-                session = dataclasses.replace(
-                    cb_recovered,
-                    subtype=CliSubtype.SUCCESS,
-                    is_error=False,
-                )
-                logger.warning(
-                    "dir_missing_late_bind_recovery",
-                    original_subtype=str(original_subtype),
-                    assistant_message_count=len(session.assistant_messages),
-                )
-            else:
-                logger.warning(
-                    "dir_missing_late_bind_recovery_failed",
-                    subtype=str(session.subtype),
-                    assistant_message_count=len(session.assistant_messages),
-                )
-        case (
-            ChannelConfirmation.CHANNEL_B
-            | ChannelConfirmation.CHANNEL_A
-            | ChannelConfirmation.UNMONITORED
-            | ChannelConfirmation.DIR_MISSING
-        ):
-            pass  # no drain-race recovery applicable
-        case _ as _unreachable_cc:
-            assert_never(_unreachable_cc)
 
     # Recovery is only valid for sessions that completed normally.
     # For incomplete sessions (UNPARSEABLE, TIMEOUT, etc.), any Write calls were
@@ -873,7 +890,7 @@ def _build_skill_result(
         )
         sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 
-    sr = _apply_post_session_adjudication(sr, evidence, write_behavior, skill_contract)
+    sr = _apply_post_session_adjudication(sr, evidence, write_behavior, skill_contract, cwd)
 
     # Closure verification gate: when a ClosureAuthoritySpec is active, independently
     # verify the canonical closure report. On failure, demote to execution error so
@@ -915,7 +932,7 @@ def _build_skill_result(
         sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 
     if skill_contract is not None and skill_contract.outputs:
-        _parsed_fields = parse_outcome_fields(sr.result, skill_contract)
+        _parsed_fields = dict(sr.outcome_fields or {})
         _qualifier: str | None = None
         if sr.success and skill_contract.success_qualifiers:
             from autoskillit.execution.headless._headless_outcome import (
@@ -927,7 +944,6 @@ def _build_skill_result(
             )
         sr = dataclasses.replace(
             sr,
-            outcome_fields=_parsed_fields if _parsed_fields else None,
             outcome_invariant_violated=sr.retry_reason == RetryReason.OUTCOME_INVARIANT,
             outcome_qualifier=_qualifier,
         )

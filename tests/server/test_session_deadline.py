@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from tests.fakes import InMemoryHeadlessExecutor
+from tests.server._pipeline_test_helpers import _ack_direct_run_skill_result
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
@@ -39,10 +40,12 @@ async def test_reconfiguration_recomputes_order_deadline_without_environment_cac
 
     assert json.loads(await configure_order(timeout=180))["success"] is True
     first_start = time.time()
-    await run_skill("/test skill", str(tmp_path))
+    first_result = json.loads(await run_skill("/test skill", str(tmp_path)))
+    _ack_direct_run_skill_result(tool_ctx_kitchen_open, first_result)
     assert json.loads(await configure_order(timeout=360))["success"] is True
     second_start = time.time()
-    await run_skill("/test skill", str(tmp_path))
+    second_result = json.loads(await run_skill("/test skill", str(tmp_path)))
+    _ack_direct_run_skill_result(tool_ctx_kitchen_open, second_result)
 
     first = float(executor.calls[0].provider_extras["AUTOSKILLIT_SESSION_DEADLINE"])
     second = float(executor.calls[1].provider_extras["AUTOSKILLIT_SESSION_DEADLINE"])
@@ -123,7 +126,8 @@ async def test_close_reopen_rebuilds_deadline_from_new_configuration(
 
     assert json.loads(await configure_order(timeout=180))["success"] is True
     first_start = time.time()
-    await run_skill("/test skill", str(tmp_path))
+    first_result = json.loads(await run_skill("/test skill", str(tmp_path)))
+    _ack_direct_run_skill_result(tool_ctx_kitchen_open, first_result)
 
     with (
         patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new_callable=AsyncMock),
@@ -135,7 +139,8 @@ async def test_close_reopen_rebuilds_deadline_from_new_configuration(
 
     assert json.loads(await configure_order(timeout=360))["success"] is True
     second_start = time.time()
-    await run_skill("/test skill", str(tmp_path))
+    second_result = json.loads(await run_skill("/test skill", str(tmp_path)))
+    _ack_direct_run_skill_result(tool_ctx_kitchen_open, second_result)
 
     first = float(executor.calls[0].provider_extras["AUTOSKILLIT_SESSION_DEADLINE"])
     second = float(executor.calls[1].provider_extras["AUTOSKILLIT_SESSION_DEADLINE"])

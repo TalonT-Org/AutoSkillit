@@ -262,6 +262,9 @@ def build_ctx(tmp_path):
         DefaultContextAdmissionLedger,
     )
     from autoskillit.pipeline.gate import DefaultGateState
+    from autoskillit.pipeline.run_skill_completion import (
+        DefaultRunSkillCompletionAuthority,
+    )
     from autoskillit.pipeline.timings import DefaultTimingLog
     from autoskillit.pipeline.tokens import DefaultTokenLog
     from autoskillit.server._audit_authority_materializer import (
@@ -329,6 +332,7 @@ def build_ctx(tmp_path):
             committed_disposition_resolver=DefaultCommittedDispositionResolver(
                 audit_admission_ledger
             ),
+            run_skill_completion=DefaultRunSkillCompletionAuthority(),
         )
         for field_name, value in overrides.items():
             setattr(ctx, field_name, value)

@@ -432,7 +432,6 @@ async def run_managed_async(
                         _spawn_time,
                         session_record_types,
                         _observed_pid,
-                        completion_drain_timeout,
                         acc,
                         trigger,
                         channel_b_ready,

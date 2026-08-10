@@ -479,7 +479,6 @@ class TestWatchSessionLogSessionId:
                 time.time() - 1,
                 frozenset({"assistant"}),
                 12345,
-                5.0,
                 acc,
                 trigger,
                 channel_b_ready,
@@ -491,6 +490,38 @@ class TestWatchSessionLogSessionId:
             tg.cancel_scope.cancel()
 
         assert acc.channel_b_session_id == session_uuid
+
+    @pytest.mark.anyio
+    async def test_channel_b_completion_does_not_trigger_termination(self, monkeypatch, tmp_path):
+        async def _completion(*_args, **_kwargs):
+            return SessionMonitorResult(ChannelBStatus.COMPLETION, "child-session")
+
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_race._session_log_monitor",
+            _completion,
+        )
+        acc = RaceAccumulator()
+        trigger = anyio.Event()
+        channel_b_ready = anyio.Event()
+
+        await _watch_session_log(
+            tmp_path,
+            "MARKER",
+            10.0,
+            time.time(),
+            frozenset({"assistant"}),
+            12345,
+            acc,
+            trigger,
+            channel_b_ready,
+            0.1,
+            0.1,
+            30.0,
+        )
+
+        assert channel_b_ready.is_set()
+        assert acc.channel_b_status == ChannelBStatus.COMPLETION
+        assert not trigger.is_set()
 
 
 class TestSessionIdBasedSelection:
@@ -912,7 +943,6 @@ async def test_watch_session_log_passes_marker_dir_to_monitor_kwargs(
             spawn_time=time.time(),
             session_record_types=frozenset({"assistant"}),
             pid=12345,
-            completion_drain_timeout=1.0,
             acc=acc,
             trigger=trigger,
             channel_b_ready=channel_b_ready,
@@ -959,7 +989,6 @@ async def test_watch_session_log_omits_marker_kwargs_when_none(
             spawn_time=time.time(),
             session_record_types=frozenset({"assistant"}),
             pid=12345,
-            completion_drain_timeout=1.0,
             acc=acc,
             trigger=trigger,
             channel_b_ready=channel_b_ready,

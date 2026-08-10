@@ -32,7 +32,7 @@ class TestChannelBStatusExhaustiveCoverage:
         [
             (
                 ChannelBStatus.COMPLETION,
-                TerminationReason.COMPLETED,
+                TerminationReason.NATURAL_EXIT,
                 ChannelConfirmation.CHANNEL_B,
             ),
             (

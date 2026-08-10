@@ -306,7 +306,7 @@ def test_all_headless_builders_handle_output_format():
 
 
 class TestChannelDefaultCoverage:
-    """Verify that UNMONITORED channel exercises content validation."""
+    """Verify that every channel exercises content validation."""
 
     def test_unmonitored_channel_checks_content(self):
         """UNMONITORED + empty result = failure (content check not bypassed)."""
@@ -326,8 +326,8 @@ class TestChannelDefaultCoverage:
         )
         assert success is False
 
-    def test_channel_b_bypasses_content_check(self):
-        """CHANNEL_B + empty result = success (provenance bypass)."""
+    def test_channel_b_checks_content(self):
+        """CHANNEL_B + empty result remains a content failure."""
         session = ClaudeSessionResult(
             subtype="success",
             is_error=False,
@@ -342,4 +342,4 @@ class TestChannelDefaultCoverage:
             completion_marker="%%DONE%%",
             channel_confirmation=ChannelConfirmation.CHANNEL_B,
         )
-        assert success is True
+        assert success is False

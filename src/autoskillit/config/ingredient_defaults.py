@@ -20,7 +20,16 @@ from autoskillit.core import (
 logger = get_logger(__name__)
 
 _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Execution", ("run_cmd", "run_python", "run_skill")),
+    (
+        "Execution",
+        (
+            "run_cmd",
+            "run_python",
+            "run_skill",
+            "recover_run_skill_result",
+            "complete_run_skill_result",
+        ),
+    ),
     ("Testing & Workspace", ("test_check", "reset_test_dir", "classify_fix", "reset_workspace")),
     (
         "Git Operations",

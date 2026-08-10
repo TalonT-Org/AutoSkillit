@@ -131,11 +131,19 @@ class LifecycleContractDef:
 # skill_load_guard                       | works-as-is
 # review_loop_gate                       | works-as-is
 # reset_resume_gate                      | works-as-is
+# fabricated_completion_guard            | works-as-is
 # capture_lifecycle_hook                 | works-as-is
 # session_start_hook                     | works-as-is
 # ---------------------------------------------------------------------------
 
 HOOK_REGISTRY: list[HookDef] = [
+    HookDef(
+        matcher=r".*",
+        scripts=["guards/fabricated_completion_guard.py"],
+        session_scope="headless_only",
+        mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
+    ),
     HookDef(
         matcher="mcp__.*autoskillit.*__run_skill.*",
         scripts=[
@@ -511,6 +519,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "reset_resume_gate.py",
         "recipe_read_guard.py",
         "github_mutation_guard.py",
+        "fabricated_completion_guard.py",
     }
 )
 

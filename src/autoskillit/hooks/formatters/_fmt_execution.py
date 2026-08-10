@@ -62,6 +62,8 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
         session_id = data.get("session_id", "")
         if session_id:
             lines.append(f"session_id: {session_id}")
+        if data.get("receipt_id"):
+            lines.append(f"receipt_id: {data['receipt_id']}")
         lines.append(_format_exit_code_line(data))
         lines.append(f"needs_retry: {data.get('needs_retry', False)}")
         if data.get("retry_reason") and data["retry_reason"] != "none":
@@ -88,6 +90,8 @@ def _fmt_run_skill(data: dict, pipeline: bool) -> str:
     session_id = data.get("session_id", "")
     if session_id:
         lines.append(f"session_id: {session_id}")
+    if data.get("receipt_id"):
+        lines.append(f"receipt_id: {data['receipt_id']}")
     lines.append(f"subtype: {subtype}")
     lines.append(_format_exit_code_line(data))
     lines.append(f"needs_retry: {data.get('needs_retry', False)}")
@@ -225,6 +229,7 @@ _FMT_RUN_SKILL_RENDERED: frozenset[str] = frozenset(
         "provider_used",
         "provider_fallback",
         "pipeline_tracker",
+        "receipt_id",
         "error",
     }
 )

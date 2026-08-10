@@ -38,6 +38,9 @@ from autoskillit.server._response_budget import (
     bounded_response_budget_failure,
     enforce_response_budget,
 )
+from autoskillit.server._run_skill_completion import (
+    FinalizedRunSkillCompletionResponse,
+)
 
 if TYPE_CHECKING:
     from fastmcp import Context
@@ -131,19 +134,19 @@ def track_response_size(
             finalized_initialization = (
                 result if isinstance(result, FinalizedRecipeInitializationResponse) else None
             )
-            response_value = (
-                finalized.rendered
-                if finalized is not None
-                else (
-                    finalized_section.rendered
-                    if finalized_section is not None
-                    else (
-                        finalized_initialization.rendered
-                        if finalized_initialization is not None
-                        else result
-                    )
-                )
+            finalized_run_skill = (
+                result if isinstance(result, FinalizedRunSkillCompletionResponse) else None
             )
+            if finalized is not None:
+                response_value = finalized.rendered
+            elif finalized_section is not None:
+                response_value = finalized_section.rendered
+            elif finalized_initialization is not None:
+                response_value = finalized_initialization.rendered
+            elif finalized_run_skill is not None:
+                response_value = finalized_run_skill.rendered
+            else:
+                response_value = result
             ctx = _get_ctx_or_none()
             try:
                 response_str = (

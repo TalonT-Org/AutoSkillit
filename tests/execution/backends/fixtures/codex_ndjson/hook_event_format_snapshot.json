@@ -1,5 +1,5 @@
 {
-  "_registry_hash": "93798b15b817cc30635aa4a706c0335d73e13d2ebda445e0e65ab15c5b99f3a4",
+  "_registry_hash": "b5d7646c1545be063cdfb5fc1bde32616943c8427667f31d805d8fd0a6da05e5",
   "hooks": {
     "PostToolUse": [
       {
@@ -74,6 +74,16 @@
       }
     ],
     "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py guards/fabricated_completion_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": ".*"
+      },
       {
         "hooks": [
           {

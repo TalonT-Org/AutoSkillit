@@ -636,10 +636,8 @@ _BASE_AUDIT_FINALIZATION_EFFECT_NAMES = (
 )
 
 
-def required_audit_finalization_effect_names(step_name: str) -> tuple[str, ...]:
+def required_audit_finalization_effect_names() -> tuple[str, ...]:
     """Return the closed required-effect set for one attested audit response."""
-    if step_name:
-        return (*_BASE_AUDIT_FINALIZATION_EFFECT_NAMES, "pipeline_step_completed")
     return _BASE_AUDIT_FINALIZATION_EFFECT_NAMES
 
 
@@ -648,10 +646,7 @@ def complete_audit_finalization_effects(
     *,
     attempt_id: AuditAttemptId,
     skill_command: str,
-    step_name: str,
-    order_id: str,
-    mark_step_complete: Callable[[ToolContext, str, str], dict | None],
-) -> dict[str, object] | None:
+) -> None:
     """Complete each attempt-keyed success effect at most once."""
 
     def complete(
@@ -680,10 +675,3 @@ def complete_audit_finalization_effects(
         ),
     )
     complete("run_skill_state_cleared", lambda: clear_run_skill_state(tool_ctx.project_dir))
-    if not step_name:
-        return None
-    marker = complete(
-        "pipeline_step_completed",
-        lambda: mark_step_complete(tool_ctx, step_name, order_id),
-    )
-    return marker or None

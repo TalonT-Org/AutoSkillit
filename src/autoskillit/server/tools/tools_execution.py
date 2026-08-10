@@ -10,7 +10,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import anyio
 import regex as re
@@ -128,6 +128,11 @@ from autoskillit.server._recipe_execution import (
 )
 from autoskillit.server._recipe_execution import (
     required_audit_finalization_effect_names as _required_audit_finalization_effect_names,
+)
+from autoskillit.server._run_skill_completion import (
+    FinalizedRunSkillCompletionResponse,
+    _request_session_identity,
+    stage_run_skill_completion_response,
 )
 from autoskillit.server._subprocess import _run_subprocess_captured
 from autoskillit.server.tools._backend_compat import _check_backend_compat
@@ -338,8 +343,6 @@ def _complete_resumed_audit(
     *,
     result: AuditMaterializationResult,
     skill_command: str,
-    step_name: str,
-    order_id: str,
 ) -> str:
     status = _materialization_outcome_status(result)
     if status is AuditOutcomeStatus.PUBLISHED:
@@ -363,9 +366,6 @@ def _complete_resumed_audit(
             tool_ctx,
             attempt_id=result.attempt_id,
             skill_command=skill_command,
-            step_name=step_name,
-            order_id=order_id,
-            mark_step_complete=_mark_step_complete_server_side,
         )
         outcome = AuditOutcome(
             status=AuditOutcomeStatus.PUBLISHED,
@@ -378,7 +378,7 @@ def _complete_resumed_audit(
         tool_ctx.audit_admission_ledger.finalize_response(
             result.attempt_id,
             outcome,
-            required_effect_names=_required_audit_finalization_effect_names(step_name),
+            required_effect_names=_required_audit_finalization_effect_names(),
         )
         return response
     return _audit_response(
@@ -534,56 +534,98 @@ def _has_active_deps() -> bool:
     return bool(tracker.get("dependencies"))
 
 
-def _mark_step_complete_server_side(
-    tool_ctx: ToolContext,
-    step_name: str,
-    order_id: str,
-) -> dict | None:
-    """Mark a pipeline step complete at the run_skill adjudication point.
-
-    Uses the shared ``resolve_tracker_order_id`` so the marker resolves the
-    same tracker file as ``_check_pipeline_deps``. Failures are logged but
-    never fail the tool call.
-    """
+def _completion_tracker_binding(tool_ctx: ToolContext, order_id: str) -> tuple[str, str, str, str]:
+    """Resolve immutable tracker identity for a new completion receipt."""
     from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
         ResolvedTracker,
-        mark_step_complete,
+        read_tracker_identity,
         resolve_tracker_order_id,
     )
 
+    resolved = resolve_tracker_order_id(tool_ctx, order_id)
+    if not isinstance(resolved, ResolvedTracker) or not resolved.path.exists():
+        return "", "", "", ""
     try:
-        resolved = resolve_tracker_order_id(tool_ctx, order_id)
-        if not isinstance(resolved, ResolvedTracker):
-            logger.debug("pipeline_marker_skip_no_tracker", reason=resolved.reason)
-            return None
-        if not resolved.path.exists():
-            logger.debug("pipeline_marker_skip_no_file", path=str(resolved.path))
-            return None
-        result = mark_step_complete(resolved.path, step_name, resolved.order_id)
-        if result.get("success"):
-            logger.info(
-                "pipeline_step_marked_complete",
-                step=result["step"],
-                order_id=result["order_id"],
-                done=result["done"],
-                total=result["total"],
-            )
-        else:
-            logger.warning(
-                "pipeline_marker_failed",
-                error=result.get("error", "unknown"),
-            )
-        marker = {
-            "step": result.get("step", step_name),
-            "order_id": resolved.order_id,
-            "status": "complete" if result.get("success") else "marker_failed",
+        tracker_identity = read_tracker_identity(resolved)
+    except (json.JSONDecodeError, OSError):
+        return "", "", "", ""
+    if tracker_identity is None:
+        return "", "", "", ""
+    kitchen_id, incarnation_id = tracker_identity
+    return resolved.order_id, str(resolved.path.resolve()), kitchen_id, incarnation_id
+
+
+def _begin_run_skill_completion(
+    tool_ctx: ToolContext,
+    *,
+    request_context: Context,
+    order_id: str,
+    step_name: str,
+) -> str:
+    authority = tool_ctx.run_skill_completion
+    if authority is None:
+        raise RuntimeError("run_skill completion authority is unavailable")
+    request_session_id = _request_session_identity(request_context)
+
+    tracker_order_id, tracker_path, tracker_kitchen_id, tracker_incarnation_id = (
+        _completion_tracker_binding(tool_ctx, order_id)
+    )
+    return authority.begin(
+        kitchen_id=tool_ctx.kitchen_id,
+        request_session_id=request_session_id,
+        tracker_order_id=tracker_order_id,
+        tracker_path=tracker_path,
+        tracker_kitchen_id=tracker_kitchen_id,
+        tracker_incarnation_id=tracker_incarnation_id,
+        step_name=step_name,
+    )
+
+
+def _finalize_run_skill_completion(
+    tool_ctx: ToolContext,
+    invocation_id: str,
+    rendered: str,
+    *,
+    child_session_id: str = "",
+) -> str:
+    """Draft a receipt and bind its rendered carrier to this request."""
+    authority = tool_ctx.run_skill_completion
+    if authority is None:
+        raise RuntimeError("run_skill completion authority is unavailable")
+    try:
+        payload = json.loads(rendered)
+    except json.JSONDecodeError:
+        payload = {
+            "success": False,
+            "is_error": True,
+            "exit_code": -1,
+            "subtype": "response_adjudication_error",
+            "error": "run_skill produced a non-JSON terminal response",
         }
-        if "advisory" in result:
-            marker["advisory"] = result["advisory"]
-        return marker
-    except Exception:
-        logger.warning("pipeline_marker_exception", exc_info=True)
-        return None
+    if not isinstance(payload, dict):
+        payload = {
+            "success": False,
+            "is_error": True,
+            "exit_code": -1,
+            "subtype": "response_adjudication_error",
+            "error": "run_skill produced a non-object terminal response",
+        }
+    success = payload.get("success") is True
+    classification = str(payload.get("subtype") or ("success" if success else "failed"))
+    receipt = authority.draft(
+        invocation_id,
+        classification=classification,
+        success=success,
+        result_digest=compute_bytes_hash(rendered.encode("utf-8")),
+        child_session_id=child_session_id,
+    )
+    payload["receipt_id"] = receipt.receipt_id
+    finalized = FinalizedRunSkillCompletionResponse(
+        rendered=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        authority=authority,
+        receipt=receipt,
+    )
+    return cast(str, stage_run_skill_completion_response(finalized))
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -999,6 +1041,8 @@ async def run_skill(
     ):
         return _plan_path_denial
     try:
+        tool_ctx: ToolContext | None = None
+        _completion_invocation_id = ""
         contract_lifecycle = _RunSkillContractLifecycle()
         _sn_token = _oid_token = None
         from autoskillit.server import _get_ctx  # circular-break
@@ -1391,14 +1435,25 @@ async def run_skill(
                             assert _reservation_outcome.replay_outcome is not None
                             _replay = _reservation_outcome.replay_outcome
                             if _replay.replay_response_json is not None:
-                                return _replay.replay_response_json
-                            return _audit_response(
-                                status=AuditOutcomeStatus.EXACT_REPLAY,
-                                attempt_id=_replay.attempt_id,
-                                verdict=_replay.verdict,
-                                path=_replay.path,
-                                error=_replay.error,
-                                kill_reason=_replay.kill_reason,
+                                _replay_response = _replay.replay_response_json
+                            else:
+                                _replay_response = _audit_response(
+                                    status=AuditOutcomeStatus.EXACT_REPLAY,
+                                    attempt_id=_replay.attempt_id,
+                                    verdict=_replay.verdict,
+                                    path=_replay.path,
+                                    error=_replay.error,
+                                    kill_reason=_replay.kill_reason,
+                                )
+                            return _finalize_run_skill_completion(
+                                tool_ctx,
+                                _begin_run_skill_completion(
+                                    tool_ctx,
+                                    request_context=ctx,
+                                    order_id=order_id,
+                                    step_name=step_name,
+                                ),
+                                _replay_response,
                             )
                         case ReservationDecision.RESUME_PREPARED:
                             assert _reservation_outcome.reservation is not None
@@ -1415,12 +1470,20 @@ async def run_skill(
                                     ),
                                     preflight_step_names=_audit_preflight_steps,
                                 )
-                            return _complete_resumed_audit(
+                            _resumed_response = _complete_resumed_audit(
                                 tool_ctx,
                                 result=_resumed,
                                 skill_command=skill_command,
-                                step_name=step_name,
-                                order_id=order_id,
+                            )
+                            return _finalize_run_skill_completion(
+                                tool_ctx,
+                                _begin_run_skill_completion(
+                                    tool_ctx,
+                                    request_context=ctx,
+                                    order_id=order_id,
+                                    step_name=step_name,
+                                ),
+                                _resumed_response,
                             )
                         case ReservationDecision.PUBLISHED_PENDING_FINALIZATION:
                             assert _reservation_outcome.reservation is not None
@@ -1434,12 +1497,20 @@ async def run_skill(
                                 path=_reservation_outcome.reservation.authority_path,
                                 error=None,
                             )
-                            return _complete_resumed_audit(
+                            _published_response = _complete_resumed_audit(
                                 tool_ctx,
                                 result=_published,
                                 skill_command=skill_command,
-                                step_name=step_name,
-                                order_id=order_id,
+                            )
+                            return _finalize_run_skill_completion(
+                                tool_ctx,
+                                _begin_run_skill_completion(
+                                    tool_ctx,
+                                    request_context=ctx,
+                                    order_id=order_id,
+                                    step_name=step_name,
+                                ),
+                                _published_response,
                             )
                         case ReservationDecision.CONFLICT:
                             return _audit_response(
@@ -2144,6 +2215,12 @@ async def run_skill(
             def _observe_contract_session_id(candidate_session_id: str) -> None:
                 contract_lifecycle.observe_candidate(candidate_session_id)
 
+            _completion_invocation_id = _begin_run_skill_completion(
+                tool_ctx,
+                request_context=ctx,
+                order_id=order_id,
+                step_name=step_name,
+            )
             _start = time.monotonic()
             try:
                 try:
@@ -2216,11 +2293,17 @@ async def run_skill(
                         f"MCP tool timeout ({_cfg.run_skill.mcp_tool_timeout_sec}s) exceeded"
                     )
                     _timeout_exc.__cause__ = exc
-                    return SkillResult.crashed(
+                    _timeout_result = SkillResult.crashed(
                         exception=_timeout_exc,
                         skill_command=resolved_command,
                         order_id=effective_order_id,
-                    ).to_json()
+                    )
+                    return _finalize_run_skill_completion(
+                        tool_ctx,
+                        _completion_invocation_id,
+                        _timeout_result.to_json(),
+                        child_session_id=_timeout_result.session_id,
+                    )
 
                 contract_lifecycle.finalize(skill_result.session_id)
 
@@ -2292,13 +2375,18 @@ async def run_skill(
                                     kill_reason=skill_result.kill_reason,
                                 )
                             case AuditOutcomeStatus.EXACT_REPLAY:
-                                return _audit_response(
-                                    status=_materialized_status,
-                                    attempt_id=_materialized.attempt_id,
-                                    verdict=_materialized.verdict,
-                                    path=_materialized.path,
-                                    error=_materialized.error,
-                                    kill_reason=skill_result.kill_reason,
+                                return _finalize_run_skill_completion(
+                                    tool_ctx,
+                                    _completion_invocation_id,
+                                    _audit_response(
+                                        status=_materialized_status,
+                                        attempt_id=_materialized.attempt_id,
+                                        verdict=_materialized.verdict,
+                                        path=_materialized.path,
+                                        error=_materialized.error,
+                                        kill_reason=skill_result.kill_reason,
+                                    ),
+                                    child_session_id=skill_result.session_id,
                                 )
                             case (
                                 AuditOutcomeStatus.SEMANTIC_REJECTED
@@ -2309,34 +2397,29 @@ async def run_skill(
                             ):
                                 skill_result.result = ""
                                 skill_result.outcome_fields = None
-                                return _audit_response(
-                                    status=_materialized_status,
-                                    attempt_id=_materialized.attempt_id,
-                                    verdict=None,
-                                    path=None,
-                                    error=_materialized.error,
-                                    kill_reason=skill_result.kill_reason,
+                                return _finalize_run_skill_completion(
+                                    tool_ctx,
+                                    _completion_invocation_id,
+                                    _audit_response(
+                                        status=_materialized_status,
+                                        attempt_id=_materialized.attempt_id,
+                                        verdict=None,
+                                        path=None,
+                                        error=_materialized.error,
+                                        kill_reason=skill_result.kill_reason,
+                                    ),
+                                    child_session_id=skill_result.session_id,
                                 )
                     if _audit_outcome_to_finalize is not None:
-                        _pipeline_marker = _complete_audit_finalization_effects(
+                        _complete_audit_finalization_effects(
                             tool_ctx,
                             attempt_id=_audit_outcome_to_finalize.attempt_id,
                             skill_command=skill_command,
-                            step_name=step_name,
-                            order_id=order_id,
-                            mark_step_complete=_mark_step_complete_server_side,
                         )
                     else:
                         tool_ctx.audit.record_success(skill_command)
                         clear_run_skill_state(tool_ctx.project_dir)
-                        if step_name:
-                            _pipeline_marker = _mark_step_complete_server_side(
-                                tool_ctx, step_name, order_id
-                            )
-                        else:
-                            _pipeline_marker = None
                 else:
-                    _pipeline_marker = None
                     await _notify(
                         ctx,
                         "error",
@@ -2364,13 +2447,18 @@ async def run_skill(
                     _parsed = json.loads(_json_str)
                 except Exception as exc:
                     logger.warning("run_skill_json_parse_failed", exc_info=True)
-                    return json.dumps(
-                        ToolFailureEnvelope(
-                            success=False,
-                            error=f"Degraded SkillResult payload: JSON parse failed: {exc}",
-                            stage="validate_result:run_skill",
-                            retriable=True,
-                        )
+                    return _finalize_run_skill_completion(
+                        tool_ctx,
+                        _completion_invocation_id,
+                        json.dumps(
+                            ToolFailureEnvelope(
+                                success=False,
+                                error=f"Degraded SkillResult payload: JSON parse failed: {exc}",
+                                stage="validate_result:run_skill",
+                                retriable=True,
+                            )
+                        ),
+                        child_session_id=skill_result.session_id,
                     )
                 _missing = {"success", "exit_code"} - _parsed.keys()
                 if _missing:
@@ -2378,16 +2466,22 @@ async def run_skill(
                         "run_skill_degraded_payload",
                         absent_fields=sorted(_missing),
                     )
-                    return json.dumps(
-                        ToolFailureEnvelope(
-                            success=False,
-                            error=f"Degraded SkillResult payload: missing keys {sorted(_missing)}",
-                            stage="validate_result:run_skill",
-                            retriable=True,
-                        )
+                    return _finalize_run_skill_completion(
+                        tool_ctx,
+                        _completion_invocation_id,
+                        json.dumps(
+                            ToolFailureEnvelope(
+                                success=False,
+                                error=(
+                                    "Degraded SkillResult payload: missing keys "
+                                    f"{sorted(_missing)}"
+                                ),
+                                stage="validate_result:run_skill",
+                                retriable=True,
+                            )
+                        ),
+                        child_session_id=skill_result.session_id,
                     )
-                if _pipeline_marker is not None:
-                    _parsed["pipeline_tracker"] = _pipeline_marker
                 _shaped_response = shape_execution_response(
                     tool_ctx,
                     _parsed,
@@ -2413,17 +2507,28 @@ async def run_skill(
                             kill_reason=_audit_outcome_to_finalize.kill_reason,
                             replay_response_json=_replay_response,
                         ),
-                        required_effect_names=_required_audit_finalization_effect_names(step_name),
+                        required_effect_names=_required_audit_finalization_effect_names(),
                     )
-                return _shaped_response
+                return _finalize_run_skill_completion(
+                    tool_ctx,
+                    _completion_invocation_id,
+                    _shaped_response,
+                    child_session_id=skill_result.session_id,
+                )
             except Exception as exc:
                 contract_lifecycle.retain_bound = False
                 logger.error("run_skill executor raised unexpectedly", exc_info=True)
-                return SkillResult.crashed(
+                _crashed_result = SkillResult.crashed(
                     exception=exc,
                     skill_command=resolved_command,
                     order_id=effective_order_id,
-                ).to_json()
+                )
+                return _finalize_run_skill_completion(
+                    tool_ctx,
+                    _completion_invocation_id,
+                    _crashed_result.to_json(),
+                    child_session_id=_crashed_result.session_id,
+                )
             finally:
                 if step_name:
                     tool_ctx.timing_log.record(
@@ -2431,23 +2536,40 @@ async def run_skill(
                     )
     except Exception as exc:
         logger.error("run_skill unhandled exception", exc_info=True)
-        return SkillResult.crashed(
+        _unhandled_result = SkillResult.crashed(
             exception=exc,
             skill_command=skill_command,
             order_id=order_id,
-        ).to_json()
+        )
+        if _completion_invocation_id and tool_ctx is not None:
+            return _finalize_run_skill_completion(
+                tool_ctx,
+                _completion_invocation_id,
+                _unhandled_result.to_json(),
+                child_session_id=_unhandled_result.session_id,
+            )
+        return _unhandled_result.to_json()
     except asyncio.CancelledError:
         with anyio.CancelScope(shield=True):
             logger.warning("run_skill cancelled", exc_info=True)
         _cmd = locals().get("resolved_command", skill_command)
         _oid = locals().get("effective_order_id", order_id)
-        return SkillResult.cancelled(
+        _cancelled_result = SkillResult.cancelled(
             skill_command=_cmd,  # type: ignore[arg-type]
             order_id=_oid,  # type: ignore[arg-type]
-        ).to_json()
+        )
+        if _completion_invocation_id and tool_ctx is not None:
+            with anyio.CancelScope(shield=True):
+                return _finalize_run_skill_completion(
+                    tool_ctx,
+                    _completion_invocation_id,
+                    _cancelled_result.to_json(),
+                    child_session_id=_cancelled_result.session_id,
+                )
+        return _cancelled_result.to_json()
     finally:
         contract_lifecycle.cleanup()
-        if _explorer_launch_lease is not None:
+        if _explorer_launch_lease is not None and tool_ctx is not None:
             exploration_store = tool_ctx.exploration_context_store
             if exploration_store is None:
                 logger.warning(
@@ -2466,7 +2588,7 @@ async def run_skill(
         if _oid_token is not None:
             _current_order_id.reset(_oid_token)  # type: ignore[possibly-undefined]
         _sid: str | None = locals().get("_cleanup_session_id")  # type: ignore[assignment]
-        if _sid is not None:
+        if _sid is not None and tool_ctx is not None:
             _ssm = tool_ctx.session_skill_manager  # type: ignore[possibly-undefined]
             if _ssm is not None:
                 try:

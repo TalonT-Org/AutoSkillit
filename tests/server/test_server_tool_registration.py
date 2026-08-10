@@ -118,6 +118,8 @@ class TestToolRegistration:
             "reset_dispatch",
             "get_recipe_section",
             "complete_recipe_initialization",
+            "complete_run_skill_result",
+            "recover_run_skill_result",
             "write_audit_disposition_bundle",
             "write_audit_semantic_result",
             "write_standalone_audit_evidence",

@@ -952,6 +952,7 @@ from .types import ReviewReconciliationResult as ReviewReconciliationResult
 from .types import ReviewResponseClass as ReviewResponseClass
 from .types import RollbackAdmissionEvent as RollbackAdmissionEvent
 from .types import RolloverEpochEvent as RolloverEpochEvent
+from .types import RunSkillCompletionAuthority as RunSkillCompletionAuthority
 from .types import SecretEnvironmentBinding as SecretEnvironmentBinding
 from .types import SemanticLaunchPlan as SemanticLaunchPlan
 from .types import ServeOverridesSnapshot as ServeOverridesSnapshot

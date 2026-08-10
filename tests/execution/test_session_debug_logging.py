@@ -126,9 +126,8 @@ class TestComputeOutcomeLogging:
         assert dead_end_logs
         assert dead_end_logs[0]["action"] == "terminal_failure_not_promoted"
 
-    def test_logs_contradiction_guard(self):
-        """_compute_outcome logs when contradiction guard fires."""
-        # Channel B grants success, but session.needs_retry is True (error_max_turns)
+    def test_channel_b_error_needs_no_contradiction_guard(self):
+        """Normal adjudication rejects Channel-B session errors directly."""
         session = ClaudeSessionResult(
             subtype="error_max_turns",
             is_error=True,
@@ -144,8 +143,8 @@ class TestComputeOutcomeLogging:
                 channel_confirmation=ChannelConfirmation.CHANNEL_B,
             )
         contradiction_logs = [r for r in logs if r.get("event") == "contradiction_guard"]
-        assert contradiction_logs
-        assert contradiction_logs[0]["action"] == "demoted_success"
+        assert contradiction_logs == []
+        assert outcome.name != "SUCCEEDED"
 
     def test_logs_compute_outcome_inputs(self):
         """_compute_outcome logs input state."""
@@ -180,9 +179,9 @@ class TestComputeOutcomeLogging:
 
 
 class TestComputeSuccessLogging:
-    """Verify _compute_success logs channel bypass and termination dispatch."""
+    """Verify _compute_success uses the normal termination dispatch."""
 
-    def test_logs_channel_b_bypass(self):
+    def test_channel_b_uses_normal_termination_dispatch(self):
         session = ClaudeSessionResult(subtype="success", is_error=False, result="x", session_id="")
         with structlog.testing.capture_logs() as logs:
             result = _compute_success(
@@ -193,9 +192,9 @@ class TestComputeSuccessLogging:
                 ChannelConfirmation.CHANNEL_B,
             )
         assert result is True
-        bypass_logs = [r for r in logs if r.get("event") == "compute_success_bypass"]
-        assert bypass_logs
-        assert bypass_logs[0]["channel"] == "CHANNEL_B"
+        assert not [r for r in logs if r.get("event") == "compute_success_bypass"]
+        termination_logs = [r for r in logs if r.get("event") == "compute_success_termination"]
+        assert termination_logs
 
     def test_logs_termination_dispatch(self):
         session = ClaudeSessionResult(

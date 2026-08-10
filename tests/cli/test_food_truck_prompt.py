@@ -74,16 +74,17 @@ def _get_admiral_block() -> str:
 
 
 class TestAdmiralDispatchBlock:
-    def test_retains_exactly_four_sections(self) -> None:
+    def test_retains_exactly_five_sections(self) -> None:
         block = _get_admiral_block()
         for title in (
             "CONTEXT LIMIT ROUTING",
             "STEP NAME IMMUTABILITY",
             "MERGE PHASE",
             "QUOTA WAIT PROTOCOL",
+            "RUN_SKILL COMPLETION HANDSHAKE",
         ):
             assert title in block, f"Missing retained section: {title}"
-        assert len(re.findall(r"^## ", block, re.MULTILINE)) == 4
+        assert len(re.findall(r"^## ", block, re.MULTILINE)) == 5
 
     def test_excludes_five_sections(self) -> None:
         block = _get_admiral_block()
@@ -142,6 +143,23 @@ class TestAdmiralDispatchBlock:
                 f"_build_admiral_dispatch_block() unexpectedly includes "
                 f"non-dispatch section: {header!r}"
             )
+
+    def test_completion_handshake_is_shared_verbatim_across_prompts(self) -> None:
+        from autoskillit.cli._prompts import _build_orchestrator_prompt
+        from autoskillit.cli._prompts_kitchen import _build_open_kitchen_prompt
+
+        source = _projected_sous_chef()
+        match = re.search(
+            r"(?ms)^## RUN_SKILL COMPLETION HANDSHAKE — MANDATORY\n.*?(?=^## )",
+            source,
+        )
+        assert match is not None
+        section = match.group(0).rstrip()
+
+        assert section in _build_orchestrator_prompt("implementation", _MCP_PREFIX)
+        assert section in _build_open_kitchen_prompt(_MCP_PREFIX)
+        assert section in _get_admiral_block()
+        assert section in _get_prompt()
 
 
 # --- Group E-2: Placeholder Interpolation ---

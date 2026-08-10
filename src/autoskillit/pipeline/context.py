@@ -50,6 +50,7 @@ from autoskillit.core import (
     RecipeExecutionFactory,
     RecipeExecutionLock,
     RecipeRepository,
+    RunSkillCompletionAuthority,
     ServeOverridesSnapshot,
     SessionSkillManager,
     SkillContractResolver,
@@ -265,6 +266,7 @@ class ToolContext:
         default_factory=dict,
         repr=False,
     )
+    run_skill_completion: RunSkillCompletionAuthority | None = field(default=None)
 
     def __post_init__(self) -> None:
         self._baseline_config = deepcopy(self.config)

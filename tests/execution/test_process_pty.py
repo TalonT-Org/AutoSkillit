@@ -571,7 +571,7 @@ class TestResolveTerminationMatrix:
                 False,
                 False,
                 "completion",
-                TerminationReason.COMPLETED,
+                TerminationReason.NATURAL_EXIT,
                 ChannelConfirmation.CHANNEL_B,
             ),
             (
@@ -673,22 +673,10 @@ def _assistant_content_ndjson(text: str) -> str:
     )
 
 
-class TestChannelBDrainRaceRecovery:
-    """Verify pre-gate Channel B drain-race recovery in _build_skill_result.
+class TestChannelBAssistantRecovery:
+    """Channel-B assistant records never reconstruct terminal success."""
 
-    When Claude Code defers the type=result NDJSON record until all background
-    agents finish, killing the process tree after Channel B fires means the
-    deferred record is never flushed to stdout. These tests cover the recovery
-    block that reconstructs the result from assistant_messages.
-    """
-
-    def test_channel_b_drain_race_recovery_promotes_unparseable(self) -> None:
-        """CHANNEL_B + UNPARSEABLE + marker standalone in assistant_messages → success.
-
-        Simulates the background-agent deferred-result scenario: Channel B confirmed
-        completion, assistant_messages contain the marker with substantive content,
-        but type=result was never flushed to stdout.
-        """
+    def test_channel_b_marker_does_not_promote_unparseable(self) -> None:
         stdout = _assistant_content_ndjson(
             "Plan completed.\n\nplan_path = /tmp/plan.md\n%%ORDER_UP%%"
         )
@@ -708,9 +696,8 @@ class TestChannelBDrainRaceRecovery:
             expected_output_patterns=[r"plan_path\s*=\s*/.+"],
             backend=ClaudeCodeBackend(),
         )
-        assert skill_result.success is True
-        assert skill_result.needs_retry is False
-        assert "plan_path = /tmp/plan.md" in skill_result.result
+        assert skill_result.success is False
+        assert skill_result.needs_retry is True
 
     def test_channel_b_drain_race_no_marker_in_messages_not_rescued(self) -> None:
         """CHANNEL_B + UNPARSEABLE + marker absent from assistant_messages → not rescued.
@@ -738,17 +725,12 @@ class TestChannelBDrainRaceRecovery:
             backend=ClaudeCodeBackend(),
         )
         assert skill_result.success is False
-        assert skill_result.needs_retry is False
+        assert skill_result.needs_retry is True
 
-    def test_channel_b_drain_race_recovery_empty_output(
+    def test_channel_b_marker_does_not_recover_empty_output(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """CHANNEL_B + EMPTY_OUTPUT + marker in assistant_messages → success.
-
-        Same deferred-result scenario but stdout is completely empty.
-        Monkeypatches parse_session_result to inject assistant_messages since
-        an empty stdout produces no NDJSON records to accumulate from.
-        """
+        """Assistant messages remain nonterminal when stdout is empty."""
         import autoskillit.execution.headless._headless_result as headless_result_mod
 
         fake_session = ClaudeSessionResult(
@@ -774,7 +756,8 @@ class TestChannelBDrainRaceRecovery:
             audit=None,
             backend=ClaudeCodeBackend(),
         )
-        assert skill_result.success is True
+        assert skill_result.success is False
+        assert skill_result.needs_retry is True
 
     def test_channel_a_unparseable_no_drain_race_recovery(self) -> None:
         """CHANNEL_A + UNPARSEABLE must not trigger the new Channel B recovery.

@@ -86,7 +86,6 @@ from autoskillit.execution.headless._headless_path_tokens import (  # noqa: F401
     _validate_output_paths,
 )
 from autoskillit.execution.headless._headless_recovery import (
-    _CHANNEL_B_RECOVERABLE_SUBTYPES,  # noqa: F401
     _ENUM_BINDING_RE,  # noqa: F401
     _TOKEN_NAME_RE,  # noqa: F401
     _extract_missing_token_hints,  # noqa: F401

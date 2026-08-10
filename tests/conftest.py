@@ -396,6 +396,9 @@ def minimal_ctx(tmp_path):
         DefaultContextAdmissionLedger,
     )
     from autoskillit.pipeline.gate import DefaultGateState
+    from autoskillit.pipeline.run_skill_completion import (
+        DefaultRunSkillCompletionAuthority,
+    )
     from autoskillit.pipeline.timings import DefaultTimingLog
     from autoskillit.pipeline.tokens import DefaultTokenLog
     from tests.fakes import (
@@ -438,6 +441,7 @@ def minimal_ctx(tmp_path):
         audit_admission_ledger=audit_admission_ledger,
         audit_authority_materializer=cast(AuditAuthorityMaterializer, object()),
         committed_disposition_resolver=cast(CommittedDispositionResolver, object()),
+        run_skill_completion=DefaultRunSkillCompletionAuthority(),
     )
     try:
         yield ctx

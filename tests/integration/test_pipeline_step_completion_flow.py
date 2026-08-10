@@ -4,15 +4,30 @@ from __future__ import annotations
 
 import dataclasses
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from fastmcp.server.middleware import MiddlewareContext
+from fastmcp.tools.base import ToolResult
+from fastmcp.tools.function_tool import FunctionTool
+from mcp.types import CallToolRequestParams, TextContent
 
 from autoskillit.core.types import RetryReason
 from autoskillit.core.types._type_results import SkillResult
+from autoskillit.server._run_skill_completion import RunSkillCompletionMiddleware
 from autoskillit.server.tools.tools_execution import run_skill
-from tests.server._pipeline_test_helpers import _setup_project as _shared_setup_project
-from tests.server._pipeline_test_helpers import _write_tracker
+from autoskillit.server.tools.tools_pipeline_tracker import (
+    complete_run_skill_result,
+    recover_run_skill_result,
+)
+from tests.server._pipeline_test_helpers import (
+    _ack_direct_run_skill_result,
+    _write_tracker,
+)
+from tests.server._pipeline_test_helpers import (
+    _setup_project as _shared_setup_project,
+)
 
 pytestmark = [pytest.mark.layer("integration"), pytest.mark.medium]
 
@@ -64,10 +79,131 @@ class TestServerSideStepCompletionMarking:
         tool_ctx_kitchen_open.executor = AsyncMock()
         tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=_SUCCESS_RESULT)
 
-        await run_skill("/autoskillit:rectify task", str(tmp_path), step_name="rectify")
+        result = json.loads(
+            await run_skill("/autoskillit:rectify task", str(tmp_path), step_name="rectify")
+        )
+        _ack_direct_run_skill_result(tool_ctx_kitchen_open, result)
 
         tracker = _read_tracker(tmp_path)
         assert tracker["steps"]["rectify"]["status"] == "complete"
+
+    @pytest.mark.anyio
+    async def test_wire_delivery_is_acknowledged_through_completion_handler(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ):
+        monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
+        _setup_project(tmp_path, tool_ctx_kitchen_open)
+        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
+        _write_tracker(
+            tmp_path,
+            "test-kitchen",
+            {"rectify": {"status": "pending"}},
+            {},
+        )
+        tool_ctx_kitchen_open.executor = AsyncMock()
+        tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=_SUCCESS_RESULT)
+
+        async def placeholder() -> str:
+            return "unused"
+
+        registered = FunctionTool.from_function(placeholder, name="run_skill")
+        fake_mcp = SimpleNamespace(get_tool=AsyncMock(return_value=registered))
+        context = MiddlewareContext(
+            message=CallToolRequestParams(name="run_skill", arguments={}),
+            fastmcp_context=SimpleNamespace(session_id="request-session"),  # type: ignore[arg-type]
+            method="tools/call",
+            type="request",
+        )
+
+        async def call_next(_context) -> ToolResult:
+            rendered = await run_skill(
+                "/autoskillit:rectify task",
+                str(tmp_path),
+                step_name="rectify",
+            )
+            return registered.convert_result(rendered)
+
+        delivered = await RunSkillCompletionMiddleware(fake_mcp).on_call_tool(  # type: ignore[arg-type]
+            context, call_next
+        )
+        assert len(delivered.content) == 1
+        assert isinstance(delivered.content[0], TextContent)
+        receipt_id = json.loads(delivered.content[0].text)["receipt_id"]
+
+        completed = json.loads(
+            await complete_run_skill_result(
+                receipt_id,
+                ctx=SimpleNamespace(session_id="request-session"),  # type: ignore[arg-type]
+            )
+        )
+
+        assert completed["success"] is True
+        assert completed["tracker"]["success"] is True
+        assert _read_tracker(tmp_path)["steps"]["rectify"]["status"] == "complete"
+
+    @pytest.mark.anyio
+    async def test_lost_delivery_is_recovered_by_replacement_request_session(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ):
+        monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
+        _setup_project(tmp_path, tool_ctx_kitchen_open)
+        tool_ctx_kitchen_open.kitchen_id = "test-kitchen"
+        _write_tracker(
+            tmp_path,
+            "test-kitchen",
+            {"rectify": {"status": "pending"}},
+            {},
+        )
+        tool_ctx_kitchen_open.executor = AsyncMock()
+        tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=_SUCCESS_RESULT)
+
+        async def placeholder() -> str:
+            return "unused"
+
+        registered = FunctionTool.from_function(placeholder, name="run_skill")
+        fake_mcp = SimpleNamespace(get_tool=AsyncMock(return_value=registered))
+        original_context = MiddlewareContext(
+            message=CallToolRequestParams(name="run_skill", arguments={}),
+            fastmcp_context=SimpleNamespace(session_id="disconnected"),  # type: ignore[arg-type]
+            method="tools/call",
+            type="request",
+        )
+
+        async def call_next(_context) -> ToolResult:
+            rendered = await run_skill(
+                "/autoskillit:rectify task",
+                str(tmp_path),
+                step_name="rectify",
+            )
+            return registered.convert_result(rendered)
+
+        await RunSkillCompletionMiddleware(fake_mcp).on_call_tool(  # type: ignore[arg-type]
+            original_context, call_next
+        )
+        replacement_context = SimpleNamespace(session_id="replacement")
+
+        recovered = json.loads(
+            await recover_run_skill_result(ctx=replacement_context)  # type: ignore[arg-type]
+        )
+        refused = json.loads(
+            await complete_run_skill_result(
+                recovered["receipt_id"],
+                ctx=SimpleNamespace(session_id="disconnected"),  # type: ignore[arg-type]
+            )
+        )
+        completed = json.loads(
+            await complete_run_skill_result(
+                recovered["receipt_id"],
+                ctx=replacement_context,  # type: ignore[arg-type]
+            )
+        )
+
+        assert recovered["success"] is True
+        assert refused["success"] is False
+        assert "another request session" in refused["error"]
+        assert completed["success"] is True
+        assert completed["tracker"]["success"] is True
+        assert _read_tracker(tmp_path)["steps"]["rectify"]["status"] == "complete"
 
 
 class TestDependentStepAllowedAfterServerSideMarking:
@@ -87,7 +223,10 @@ class TestDependentStepAllowedAfterServerSideMarking:
         tool_ctx_kitchen_open.executor = AsyncMock()
         tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=_SUCCESS_RESULT)
 
-        await run_skill("/autoskillit:rectify task", str(tmp_path), step_name="rectify")
+        first = json.loads(
+            await run_skill("/autoskillit:rectify task", str(tmp_path), step_name="rectify")
+        )
+        _ack_direct_run_skill_result(tool_ctx_kitchen_open, first)
 
         result = json.loads(
             await run_skill(
@@ -98,6 +237,7 @@ class TestDependentStepAllowedAfterServerSideMarking:
         )
         assert result.get("success") is True, f"Expected success but got: {result}"
         assert "DEPENDENCY UNMET" not in result.get("error", "")
+        _ack_direct_run_skill_result(tool_ctx_kitchen_open, result)
 
 
 class TestStaleSecondTrackerDoesNotDisableMarking:
@@ -125,7 +265,10 @@ class TestStaleSecondTrackerDoesNotDisableMarking:
         tool_ctx_kitchen_open.executor = AsyncMock()
         tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=_SUCCESS_RESULT)
 
-        await run_skill("/autoskillit:rectify task", str(tmp_path), step_name="rectify")
+        result = json.loads(
+            await run_skill("/autoskillit:rectify task", str(tmp_path), step_name="rectify")
+        )
+        _ack_direct_run_skill_result(tool_ctx_kitchen_open, result)
 
         tracker = _read_tracker(tmp_path, kitchen_id="test-kitchen")
         assert tracker["steps"]["rectify"]["status"] == "complete"
@@ -150,7 +293,10 @@ class TestRetrySuffixFoldsToCanonicalStep:
         tool_ctx_kitchen_open.executor = AsyncMock()
         tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=_SUCCESS_RESULT)
 
-        await run_skill("/autoskillit:rectify task", str(tmp_path), step_name="rectify-2")
+        result = json.loads(
+            await run_skill("/autoskillit:rectify task", str(tmp_path), step_name="rectify-2")
+        )
+        _ack_direct_run_skill_result(tool_ctx_kitchen_open, result)
 
         tracker = _read_tracker(tmp_path)
         assert tracker["steps"]["rectify"]["status"] == "complete"
@@ -173,7 +319,10 @@ class TestFailureAndNeedsRetryDoNotMarkComplete:
         tool_ctx_kitchen_open.executor = AsyncMock()
         tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=_FAIL_RESULT)
 
-        await run_skill("/autoskillit:rectify task", str(tmp_path), step_name="rectify")
+        result = json.loads(
+            await run_skill("/autoskillit:rectify task", str(tmp_path), step_name="rectify")
+        )
+        _ack_direct_run_skill_result(tool_ctx_kitchen_open, result)
 
         tracker = _read_tracker(tmp_path)
         assert tracker["steps"]["rectify"]["status"] == "pending"
@@ -198,7 +347,10 @@ class TestEmptyStepNameDoesNotWriteTracker:
         tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=_SUCCESS_RESULT)
 
         before = _read_tracker(tmp_path)
-        await run_skill("/autoskillit:rectify task", str(tmp_path), step_name="")
+        result = json.loads(
+            await run_skill("/autoskillit:rectify task", str(tmp_path), step_name="")
+        )
+        _ack_direct_run_skill_result(tool_ctx_kitchen_open, result)
 
         after = _read_tracker(tmp_path)
         assert after["steps"] == before["steps"]
@@ -231,8 +383,10 @@ class TestAdvisorySurfacedOnUnmetDependents:
         )
 
         assert result.get("success") is True, f"Expected success but got: {result}"
-        assert "advisory" in result["pipeline_tracker"], result["pipeline_tracker"]
-        assert "review_approach" in result["pipeline_tracker"]["advisory"]
+        tracker_result = _ack_direct_run_skill_result(tool_ctx_kitchen_open, result)
+        assert tracker_result is not None
+        assert "advisory" in tracker_result, tracker_result
+        assert "review_approach" in tracker_result["advisory"]
 
 
 class TestResumeWithStepNameMarksCompleteOnSuccess:
@@ -275,6 +429,7 @@ class TestResumeWithStepNameMarksCompleteOnSuccess:
             )
         )
         assert result["success"] is True, result["result"]
+        _ack_direct_run_skill_result(tool_ctx_kitchen_open, result)
 
         tracker = _read_tracker(tmp_path)
         assert tracker["steps"]["rectify"]["status"] == "complete"

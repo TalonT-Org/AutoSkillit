@@ -29,6 +29,7 @@ from tests.server._helpers import (
     _pull_step_section,
     _skill_ok,
 )
+from tests.server._pipeline_test_helpers import _ack_direct_run_skill_result
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
@@ -176,6 +177,8 @@ async def test_attested_run_skill_materializes_publishes_captures_and_exact_repl
     assert captured["audit_verdict"] == "GO"
     assert captured["audit_attempt_id"] == published["audit_attempt_id"]
 
+    _ack_direct_run_skill_result(tool_ctx_kitchen_open, published)
+
     replay = json.loads(await run_skill(**invocation))
 
     assert len(dispatch_prompts) == 1
@@ -184,3 +187,4 @@ async def test_attested_run_skill_materializes_publishes_captures_and_exact_repl
     assert replay["audit_verdict"] == published["audit_verdict"]
     assert replay["audit_cycle_path"] == published["audit_cycle_path"]
     assert replay["audit_attempt_id"] == published["audit_attempt_id"]
+    assert replay["receipt_id"] != published["receipt_id"]

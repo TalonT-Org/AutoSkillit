@@ -22,7 +22,7 @@ def test_pretty_output_below_budget() -> None:
     budgets = {
         "pretty_output_hook.py": 350,
         "_fmt_primitives.py": 200,
-        "_fmt_execution.py": 350,
+        "_fmt_execution.py": 355,  # #4457 renders completion receipts verbatim
         "_fmt_dispatch.py": 200,
         "_fmt_status.py": 250,
         "_fmt_recipe.py": 350,  # replay/effect provenance remains visible after compaction

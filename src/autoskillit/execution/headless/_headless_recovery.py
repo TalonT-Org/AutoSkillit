@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, NamedTuple
 import regex as re
 
 from autoskillit.core import (
-    CliSubtype,
     SkillContractView,
     extract_bash_write_targets,
     get_logger,
@@ -33,11 +32,6 @@ if TYPE_CHECKING:
     from autoskillit.core import ResultParser
 
 logger = get_logger(__name__)
-
-# Drain-race recovery subtypes: TIMEOUT and UNKNOWN excluded (time-limit breach; unrecognised CLI).
-_CHANNEL_B_RECOVERABLE_SUBTYPES: frozenset[CliSubtype] = frozenset(
-    {CliSubtype.UNPARSEABLE, CliSubtype.EMPTY_OUTPUT}
-)
 
 _TOKEN_NAME_RE: re.Pattern[str] = re.compile(r"^(\w+)")
 

@@ -10,8 +10,11 @@ reporting fix_failures > 0. Covers RECT-011 through RECT-018.
 from __future__ import annotations
 
 import dataclasses
+import errno
 import json
 import re
+from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -25,7 +28,10 @@ from autoskillit.execution.headless._headless_outcome import (
     evaluate_success_qualifier,
     parse_outcome_fields,
 )
-from autoskillit.execution.headless._headless_result import _apply_post_session_adjudication
+from autoskillit.execution.headless._headless_result import (
+    _apply_post_session_adjudication,
+    _validate_declared_artifact,
+)
 from autoskillit.recipe import (
     OutcomeInvariantEntry,
     SkillContract,
@@ -635,7 +641,7 @@ class TestApplyPostSessionAdjudicationUnit:
     def test_non_success_passthrough(self) -> None:
         sr = _base_skill_result(success=False)
         result = _apply_post_session_adjudication(
-            sr, WriteEvidence.none_observed(), None, _resolve_review_contract()
+            sr, WriteEvidence.none_observed(), None, _resolve_review_contract(), ""
         )
         assert result is sr
 
@@ -645,7 +651,9 @@ class TestApplyPostSessionAdjudicationUnit:
                 verdict="already_green", accept_count=3, fixes_applied=0, fix_failures=3
             )
         )
-        result = _apply_post_session_adjudication(sr, WriteEvidence.none_observed(), None, None)
+        result = _apply_post_session_adjudication(
+            sr, WriteEvidence.none_observed(), None, None, ""
+        )
         assert result.success is True
         assert result.subtype != "outcome_invariant_violation"
 
@@ -663,7 +671,7 @@ class TestApplyPostSessionAdjudicationUnit:
         )
         result = dataclasses.replace(sr)  # sanity: replace works on SkillResult
         result = _apply_post_session_adjudication(
-            result, evidence, None, _resolve_review_contract()
+            result, evidence, None, _resolve_review_contract(), ""
         )
         assert result.success is False
         assert result.subtype == "outcome_invariant_violation"
@@ -677,7 +685,169 @@ class TestApplyPostSessionAdjudicationUnit:
             )
         )
         result = _apply_post_session_adjudication(
-            sr, WriteEvidence.none_observed(), None, _resolve_review_contract()
+            sr, WriteEvidence.none_observed(), None, _resolve_review_contract(), ""
         )
         assert result.success is True
         assert result.subtype != "outcome_invariant_violation"
+
+
+def _artifact_contract() -> SkillContract:
+    return SkillContract(
+        inputs=(),
+        outputs=[
+            SkillOutput(name="artifact", type="file_path"),
+            SkillOutput(name="note", type="string"),
+        ],
+    )
+
+
+class TestDeclaredArtifactAdjudication:
+    @pytest.mark.parametrize("value", ["bad\0name", None])
+    def test_invalid_path_value_is_producer_failure(self, tmp_path, value: object) -> None:
+        result = _validate_declared_artifact(
+            str(tmp_path),
+            "artifact",
+            value,  # type: ignore[arg-type]
+        )
+
+        assert result is not None
+        assert result[0] == "artifact_contract_violation"
+
+    def test_existing_declared_file_is_preserved(self, tmp_path) -> None:
+        (tmp_path / "report.md").write_text("report")
+        sr = _base_skill_result(result_text="artifact = report.md")
+
+        result = _apply_post_session_adjudication(
+            sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)
+        )
+
+        assert result.success is True
+        assert result.outcome_fields == {"artifact": "report.md"}
+
+    @pytest.mark.parametrize("path_kind", ["absolute", "symlink"])
+    def test_inside_cwd_declared_file_is_preserved(self, tmp_path, path_kind: str) -> None:
+        target = tmp_path / "report.md"
+        target.write_text("report")
+        if path_kind == "absolute":
+            declared_path = str(target)
+        else:
+            link = tmp_path / "report-link.md"
+            link.symlink_to(target)
+            declared_path = link.name
+        sr = _base_skill_result(result_text=f"artifact = {declared_path}")
+
+        result = _apply_post_session_adjudication(
+            sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)
+        )
+
+        assert result.success is True
+        assert result.outcome_fields == {"artifact": declared_path}
+
+    @pytest.mark.parametrize("artifact_name", ["missing.md", "directory"])
+    def test_missing_or_non_file_artifact_is_producer_failure(
+        self, tmp_path, artifact_name: str
+    ) -> None:
+        if artifact_name == "directory":
+            (tmp_path / artifact_name).mkdir()
+        sr = _base_skill_result(result_text=f"artifact = {artifact_name}")
+
+        result = _apply_post_session_adjudication(
+            sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)
+        )
+
+        assert result.success is False
+        assert result.subtype == "artifact_contract_violation"
+        assert result.outcome_fields is None
+        assert artifact_name in result.result
+
+    def test_symlink_escape_is_producer_failure(self, tmp_path) -> None:
+        outside = tmp_path.parent / f"{tmp_path.name}-outside.md"
+        outside.write_text("outside")
+        (tmp_path / "report.md").symlink_to(outside)
+        sr = _base_skill_result(result_text="artifact = report.md")
+
+        result = _apply_post_session_adjudication(
+            sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)
+        )
+
+        assert result.success is False
+        assert result.subtype == "artifact_contract_violation"
+        assert result.outcome_fields is None
+        assert "report.md" in result.result
+
+    def test_absolute_path_escape_is_producer_failure(self, tmp_path) -> None:
+        outside = tmp_path.parent / f"{tmp_path.name}-outside.md"
+        outside.write_text("outside")
+        sr = _base_skill_result(result_text=f"artifact = {outside}")
+
+        result = _apply_post_session_adjudication(
+            sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)
+        )
+
+        assert result.success is False
+        assert result.subtype == "artifact_contract_violation"
+        assert result.outcome_fields is None
+        assert outside.name in result.result
+
+    def test_absent_optional_path_and_non_path_output_are_not_validated(self, tmp_path) -> None:
+        sr = _base_skill_result(result_text="note = missing.md")
+
+        result = _apply_post_session_adjudication(
+            sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)
+        )
+
+        assert result.success is True
+        assert result.outcome_fields == {"note": "missing.md"}
+
+    @pytest.mark.parametrize("error_number", [errno.EACCES, errno.EIO, errno.EAGAIN])
+    def test_filesystem_access_failure_is_infrastructure_error(
+        self, monkeypatch, tmp_path, error_number: int
+    ) -> None:
+        sr = _base_skill_result(result_text="artifact = report.md")
+        warning = Mock()
+        original_stat = Path.stat
+
+        def _raise(path: Path, *args, **kwargs):
+            if path.name == "report.md":
+                raise OSError(error_number, "unavailable")
+            return original_stat(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "stat", _raise)
+        monkeypatch.setattr(
+            "autoskillit.execution.headless._headless_result.logger.warning", warning
+        )
+        result = _apply_post_session_adjudication(
+            sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)
+        )
+
+        assert result.success is False
+        assert result.subtype == "artifact_adjudication_error"
+        assert result.outcome_fields is None
+        warning.assert_called_once_with(
+            "artifact_adjudication_error",
+            field_name="artifact",
+            artifact_name="report.md",
+            exc_info=True,
+        )
+
+    @pytest.mark.parametrize("error_number", [errno.ENOTDIR, errno.ELOOP])
+    def test_invalid_artifact_path_is_producer_failure(
+        self, monkeypatch, tmp_path, error_number: int
+    ) -> None:
+        sr = _base_skill_result(result_text="artifact = report.md")
+        original_stat = Path.stat
+
+        def _raise(path: Path, *args, **kwargs):
+            if path.name == "report.md":
+                raise OSError(error_number, "invalid artifact path")
+            return original_stat(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "stat", _raise)
+        result = _apply_post_session_adjudication(
+            sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)
+        )
+
+        assert result.success is False
+        assert result.subtype == "artifact_contract_violation"
+        assert result.outcome_fields is None
+        assert "report.md" in result.result

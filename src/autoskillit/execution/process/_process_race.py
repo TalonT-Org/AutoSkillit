@@ -431,7 +431,6 @@ async def _watch_session_log(
     spawn_time: float,
     session_record_types: frozenset[str],
     pid: int,
-    completion_drain_timeout: float,
     acc: RaceAccumulator,
     trigger: anyio.Event,
     channel_b_ready: anyio.Event,
@@ -447,9 +446,8 @@ async def _watch_session_log(
 ) -> None:
     """Monitor the session JSONL log and deposit the Channel B signal.
 
-    When the session reports completion (not stale), a drain-wait window
-    is opened via anyio.move_on_after so Channel A can fire first if it
-    is about to confirm. The trigger is set after the B signal is deposited.
+    A completion marker is corroboration and session discovery only. It must
+    not wake the termination race while the child process is still alive.
 
     If ``stdout_session_id_ready`` is provided, waits briefly for session ID
     extraction before starting Phase 1 to enable identity-based JSONL selection.
@@ -479,12 +477,6 @@ async def _watch_session_log(
         session_record_types,
         **_monitor_kwargs,  # type: ignore[arg-type]
     )
-    if monitor_result.status == ChannelBStatus.COMPLETION:
-        # Drain-wait: give Channel A a window to confirm before Channel B wins.
-        # move_on_after absorbs timeout; trigger may already be set if A fired.
-        with anyio.move_on_after(completion_drain_timeout):
-            await trigger.wait()
-        logger.debug("channel_b_drain_complete", trigger_was_set=trigger.is_set())
     logger.debug(
         "channel_b_result",
         status=monitor_result.status,
@@ -499,7 +491,8 @@ async def _watch_session_log(
     if on_session_id_resolved is not None and monitor_result.session_id:
         on_session_id_resolved(monitor_result.session_id)
     channel_b_ready.set()
-    trigger.set()
+    if monitor_result.status != ChannelBStatus.COMPLETION:
+        trigger.set()
 
 
 def resolve_termination(
@@ -544,26 +537,13 @@ def resolve_termination(
             termination = TerminationReason.HEALTH_INSPECTOR
         else:
             termination = TerminationReason.IDLE_STALL
+    elif signals.channel_b_status in {ChannelBStatus.STALE, ChannelBStatus.DIR_MISSING}:
+        termination = TerminationReason.STALE
+    elif signals.channel_a_confirmed:
+        termination = TerminationReason.COMPLETED
     else:
-        match signals.channel_b_status:
-            case ChannelBStatus.STALE | ChannelBStatus.DIR_MISSING:
-                # DIR_MISSING maps to STALE: both represent inconclusive monitoring
-                # that triggered an external kill, not a clean process exit.
-                # TerminationReason does not need a DIR_MISSING variant because
-                # downstream consumers only care whether the process exited cleanly
-                # (NATURAL_EXIT) or was forcibly terminated (STALE/COMPLETED).
-                # The DIR_MISSING structural distinction is preserved at the
-                # ChannelConfirmation level for recovery-gate decisions.
-                termination = TerminationReason.STALE
-            case ChannelBStatus.COMPLETION:
-                termination = TerminationReason.COMPLETED
-            case None:
-                if signals.channel_a_confirmed:
-                    termination = TerminationReason.COMPLETED
-                else:
-                    termination = TerminationReason.NATURAL_EXIT  # fallback
-            case _ as unreachable:
-                assert_never(unreachable)
+        assert signals.channel_b_status in {ChannelBStatus.COMPLETION, None}
+        termination = TerminationReason.NATURAL_EXIT
 
     logger.debug(
         "resolve_termination",

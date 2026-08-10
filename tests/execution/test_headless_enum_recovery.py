@@ -250,6 +250,7 @@ class TestBuildSkillResultIncidentReproduction:
             subprocess_result,
             completion_marker="%%ORDER_UP%%",
             expected_output_patterns=contract.expected_output_patterns,
+            cwd=str(tmp_path),
             backend=ClaudeCodeBackend(),
             skill_contract=contract,
         )
@@ -281,6 +282,7 @@ class TestBuildSkillResultIncidentReproduction:
             subprocess_result,
             completion_marker="%%ORDER_UP%%",
             expected_output_patterns=expected_patterns,
+            cwd=str(tmp_path),
             backend=ClaudeCodeBackend(),
             skill_contract=contract,
         )

@@ -93,10 +93,8 @@ class StaleGeneratorError(Exception):
 def assert_generator_process_fresh() -> None:
     """Verify that the running process's on-disk installation still exists.
 
-    A long-lived orchestrator whose venv was deleted or upgraded in place
-    projects from stale code until something ENOENTs.  This probe, called
-    at the top of :func:`acquire_launch_binding`, refuses with a typed,
-    actionable error instead.
+    Called at the top of :func:`acquire_launch_binding`, this probe refuses a
+    deleted or replaced installation with a typed, actionable error.
 
     Checks:
     1. ``pkg_root()`` must still be a directory and contain ``hooks/_dispatch.py``.

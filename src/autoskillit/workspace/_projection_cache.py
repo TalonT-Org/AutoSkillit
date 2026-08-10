@@ -266,12 +266,7 @@ def iter_public_plugin_asset_files(source_root: Path, *, top_level: bool = True)
             yield entry
 
 
-#: Source-tree file excluded from :func:`public_plugin_asset_digest` because
-#: its projected bytes are determined by the renderer, not by the source file.
-#: Projection staging calls ``write_generated_hooks_json`` which overwrites
-#: the copied ``hooks/hooks.json`` with a fresh render; the source-file bytes
-#: are therefore a non-input.  The rendered content is covered instead by
-#: ``rendered_hooks_digest`` in ``ProjectionCacheKey``.
+#: Renderer-owned manifest excluded from the source-asset digest.
 _RENDERED_HOOKS_MANIFEST_RELPATH = "hooks/hooks.json"
 
 

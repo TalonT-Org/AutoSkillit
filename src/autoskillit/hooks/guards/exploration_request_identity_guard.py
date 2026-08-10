@@ -52,7 +52,8 @@ def _short_tool_name(raw_name: object) -> str | None:
 def main() -> None:
     try:
         data: Any = json.loads(sys.stdin.read())
-    except Exception:
+    except Exception as exc:
+        sys.stderr.write(f"exploration_request_identity_guard: malformed hook input: {exc}\n")
         return
     if not isinstance(data, dict):
         return

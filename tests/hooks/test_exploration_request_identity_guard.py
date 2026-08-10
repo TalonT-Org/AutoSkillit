@@ -144,18 +144,20 @@ def test_supported_event_fails_closed_when_record_write_fails(tmp_path: Path) ->
 
 def test_guard_allows_unparseable_and_unrelated_input(tmp_path: Path) -> None:
     root = _project(tmp_path)
-    assert _run("not-json", root).stdout == ""
-    assert (
-        _run(
-            {
-                "tool_name": "mcp__autoskillit__open_kitchen",
-                "session_id": "native-session",
-                "tool_input": {},
-            },
-            root,
-        ).stdout
-        == ""
+    malformed = _run("not-json", root)
+    assert malformed.stdout == ""
+    assert "exploration_request_identity_guard: malformed hook input:" in malformed.stderr
+
+    unrelated = _run(
+        {
+            "tool_name": "mcp__autoskillit__open_kitchen",
+            "session_id": "native-session",
+            "tool_input": {},
+        },
+        root,
     )
+    assert unrelated.stdout == ""
+    assert unrelated.stderr == ""
 
 
 def test_guard_skips_headless_events(tmp_path: Path) -> None:

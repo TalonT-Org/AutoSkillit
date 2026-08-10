@@ -109,6 +109,9 @@ def _cleanup_expired(request_fd: int, now: float) -> None:
         names = os.listdir(request_fd)
     except OSError:
         return
+    if len(names) > _MAX_CLEANUP_ENTRIES:
+        start = secrets.randbelow(len(names))
+        names = names[start:] + names[:start]
     for name in names[:_MAX_CLEANUP_ENTRIES]:
         if not (
             name.startswith(_RECORD_PREFIX) or name.startswith(_CLAIM_PREFIX)

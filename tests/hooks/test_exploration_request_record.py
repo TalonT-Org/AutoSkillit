@@ -144,6 +144,32 @@ def test_cleanup_is_limited_to_expired_request_records(
     assert ordinary_marker.read_text() == "keep"
 
 
+def test_cleanup_window_can_reach_records_beyond_the_first_batch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    request_dir = _project(tmp_path) / ".autoskillit" / "temp" / "exploration-requests"
+    request_dir.mkdir()
+    fresh = request_dir / records._record_name("A" * 43)
+    stale = request_dir / records._record_name("B" * 43)
+    fresh.write_text("{}")
+    stale.write_text("{}")
+    os.utime(fresh, (100.0, 100.0))
+    os.utime(stale, (0.0, 0.0))
+
+    monkeypatch.setattr(records, "_MAX_CLEANUP_ENTRIES", 1)
+    monkeypatch.setattr(records.os, "listdir", lambda _fd: [fresh.name, stale.name])
+    monkeypatch.setattr(records.secrets, "randbelow", lambda _size: 1)
+
+    request_fd = os.open(request_dir, records._DIRECTORY_FLAGS)
+    try:
+        records._cleanup_expired(request_fd, 100.0)
+    finally:
+        os.close(request_fd)
+
+    assert fresh.exists()
+    assert not stale.exists()
+
+
 def test_creation_forces_mode_0600_despite_umask(tmp_path: Path) -> None:
     root = _project(tmp_path)
     previous = os.umask(0o777)

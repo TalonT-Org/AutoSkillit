@@ -37,11 +37,15 @@ ingredients:
 
 When the gate ingredient is `"false"` (default), the sub-recipe step is **dropped
 entirely** from the loaded recipe. The agent sees only the standard steps, and the
-recipe behaves identically to how it did before sub-recipe composition was introduced.
+placeholder's incoming routes and ordered entry attachment are redirected to its
+declared `on_success` continuation.
 
 When the gate ingredient is `"true"`, the sub-recipe's steps are **merged inline** at
 the attachment point, with step names prefixed to avoid collisions. The sub-recipe's
 kitchen rules are merged with the parent's kitchen rules.
+Incoming routes and the ordered entry attachment target the first prefixed child
+step. This gate rewrite is separate from optional-step pruning and does not use
+`on_skip` as a runtime event.
 
 Pass `overrides` when loading the recipe via the `open_kitchen` or `load_recipe` MCP
 tool to activate a gated sub-recipe:

@@ -107,6 +107,7 @@ steps:
     action: confirm
     message: guarded
     skip_when_false: inputs.enabled
+    on_skip: done
     on_success: done
     on_failure: done
   done:

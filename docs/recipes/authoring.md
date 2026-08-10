@@ -30,7 +30,15 @@ top-level keys (defined in `recipe/schema.py:Recipe`):
 | `steps` | list[RecipeStep] | The sequenced step graph |
 
 `RecipeStep` adds: `name`, `tool`, `with_args`, `capture`, `on_result`,
-`skip_when_false`, `retries`.
+`skip_when_false`, `on_skip`, `retries`.
+
+Every step with `skip_when_false` must declare `on_skip` naming the surviving
+step where configuration-time absence continues. `on_skip` is not a runtime
+success, failure, or result edge, and it must be chosen by the recipe author.
+Project-local recipes created before 0.10.952 must be migrated explicitly; do
+not infer the field from an `on_result` default. Guarded recipes use a
+block-style top-level `steps` mapping and may use quoted route scalars or
+block/flow nested `on_result` collections. Aliases within `steps` are rejected.
 
 ## Authoring flow
 

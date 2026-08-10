@@ -183,6 +183,7 @@ steps:
     tool: claim_and_resolve_issue
     optional: true
     skip_when_false: inputs.issue_url
+    on_skip: create_and_publish
     with:
       issue_url: ${{ inputs.issue_url }}
       allow_reentry: ${{ inputs.upfront_claimed }}
@@ -208,6 +209,7 @@ steps:
     tool: create_and_publish_branch
     optional: true
     skip_when_false: inputs.open_pr
+    on_skip: investigate
     with:
       issue_slug: ${{ context.issue_slug }}
       run_name: ${{ inputs.run_name }}
@@ -229,6 +231,7 @@ steps:
     tool: run_skill
     optional: true
     skip_when_false: inputs.investigate
+    on_skip: bridge_investigation
     model: ${{ 'opus[1m]' if inputs.depth == 'deep' else 'sonnet' }}
     with:
       skill_command: /autoskillit:investigate
@@ -340,6 +343,7 @@ steps:
     on_context_limit: dry_walkthrough
     on_rate_limit: dry_walkthrough
     skip_when_false: inputs.review_approach
+    on_skip: dry_walkthrough
     note: Only execute this step if review_approach input is 'true'. Otherwise skip
       directly to dry_walkthrough.
   dry_walkthrough:
@@ -475,6 +479,7 @@ steps:
     tool: release_issue
     optional: true
     skip_when_false: inputs.issue_url
+    on_skip: register_clone_no_changes
     with:
       issue_url: ${{ inputs.issue_url }}
       target_branch: ${{ inputs.base_branch }}
@@ -1005,6 +1010,7 @@ steps:
     on_rate_limit: check_audit_remediation_loop
     optional: true
     skip_when_false: inputs.audit_impl
+    on_skip: commit_guard
     optional_context_refs:
     - deviation_manifest_path
     - audit_cycle_path
@@ -1182,6 +1188,7 @@ steps:
     tool: run_python
     optional: true
     skip_when_false: inputs.issue_url
+    on_skip: register_clone_already_done
     with:
       callable: autoskillit.smoke_utils.close_issue_already_done
       issue_url: ${{ inputs.issue_url }}
@@ -1240,6 +1247,7 @@ steps:
     on_exhausted: release_issue_failure
     optional: true
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: "Reads plan, runs git diff, classifies changed files, selects 1\u20133 arch-lens\
       \ slugs, writes one PR context file per lens, and writes a PR prep file. Does\
       \ NOT invoke arch-lens skills.\n"
@@ -1261,6 +1269,7 @@ steps:
     on_rate_limit: compose_pr
     optional: true
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: "LENS ITERATION: context.selected_lenses contains comma-separated arch-lens\
       \ slugs (e.g. \"module-dependency,process-flow\"). context.lens_context_paths\
       \ contains the corresponding comma-separated context file paths (same order\
@@ -1296,6 +1305,7 @@ steps:
     on_rate_limit: release_issue_failure
     optional: true
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: "Reads the PR prep file, validates arch-lens diagrams (must contain \u2605\
       \ or \u25CF), composes the PR body, and runs gh pr create. Degrades gracefully\
       \ if gh is unavailable (emits pr_url=).\n"
@@ -1319,6 +1329,7 @@ steps:
     on_failure: release_issue_failure
     optional: true
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: 'Extracts the integer PR number from the feature branch opened by compose_pr.
       pr_number is required by the queue finale steps (enable_auto_merge, wait_for_queue).
 
@@ -1384,6 +1395,7 @@ steps:
     on_failure: release_issue_failure
     optional: true
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     optional_context_refs:
     - review_loop_count
     note: 'Pre-computes annotated diff with [LNNN] markers and hunk ranges JSON for
@@ -1436,6 +1448,7 @@ steps:
     on_rate_limit: release_issue_failure
     optional: true
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     optional_context_refs:
     - review_loop_count
     - review_mode
@@ -1655,6 +1668,7 @@ steps:
     on_success: route_ci_applicable
     on_failure: ci_watch
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: 'Derives ci_event for the feature branch BEFORE ci_watch runs. Uses context.merge_target
       (feature branch) so push.branches filter is evaluated against the actual branch
       being pushed, not the base branch. Non-blocking: on_failure routes to ci_watch
@@ -1668,6 +1682,7 @@ steps:
       route: check_repo_merge_state
     - route: check_pr_state
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: 'Short-circuits CI wait when no workflow trigger matches the feature branch.
       ci_applicable=false means neither push nor pull_request triggers apply to this
       branch/base combination, so wait_for_ci would exhaust its timeout budget with
@@ -1685,6 +1700,7 @@ steps:
     - route: ci_watch
     on_failure: ci_watch
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: "Pre-CI-watch gate: checks PR mergeable state before entering the CI polling\
       \ loop. CONFLICTING PRs cannot trigger pull_request workflows (GitHub cannot\
       \ create refs/pull/N/merge), so routing to ci_watch would produce a guaranteed\
@@ -1715,6 +1731,7 @@ steps:
     on_failure: detect_ci_conflict
     optional: true
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: "Waits for the GitHub Actions CI run on context.merge_target to complete\
       \ using the wait_for_ci MCP tool (timeout: 300 s). Captures structured output\
       \ (conclusion + failed job names) for downstream resolve_ci. Skipped when open_pr=false\
@@ -1833,6 +1850,7 @@ steps:
       remote_url: ${{ context.remote_url }}
       auto_trigger: true
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     on_result:
     - when: ${{ result.conclusion }} == success
       route: check_repo_merge_state
@@ -1852,6 +1870,7 @@ steps:
     tool: release_issue
     optional: true
     skip_when_false: inputs.issue_url
+    on_skip: register_clone_no_ci
     with:
       issue_url: ${{ inputs.issue_url }}
       fail_label: fail
@@ -1871,6 +1890,7 @@ steps:
     stale_threshold: 2400
     optional: true
     skip_when_false: inputs.pipeline_health
+    on_skip: escalate_stop_no_ci
     with:
       skill_command: /autoskillit:analyze-pipeline-health
       skill_inputs:
@@ -1913,6 +1933,7 @@ steps:
     on_success: route_queue_mode
     on_failure: immediate_merge
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: "Single GraphQL round-trip that captures queue_available, merge_group_trigger,\
       \ auto_merge_available, and ci_event for the target branch. Consolidates the\
       \ former three sequential run_cmd steps (check_merge_queue, check_merge_group_trigger,\
@@ -1932,6 +1953,7 @@ steps:
       route: direct_merge
     - route: immediate_merge
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
   enqueue_to_queue:
     tool: enqueue_pr
     with:
@@ -1942,6 +1964,7 @@ steps:
     on_success: wait_for_queue
     on_failure: verify_queue_enrollment
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: 'Submits the PR to the merge queue via the unified enqueue_pr tool. The
       tool resolves the enrollment strategy internally based on auto_merge_available.
       On failure, probes the queue via verify_queue_enrollment to distinguish a transient
@@ -2018,6 +2041,7 @@ steps:
     - route: register_clone_unconfirmed
     on_failure: register_clone_unconfirmed
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: "Waits up to 15 minutes for the PR to merge through the queue. merged \u2192\
       \ release_issue_success to apply staged label, then register_clone_success.\
       \ release_issue_success is optional with skip_when_false: inputs.issue_url \u2014\
@@ -2039,6 +2063,7 @@ steps:
     on_success: check_stall_loop
     on_failure: release_issue_failure
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
   check_stall_loop:
     tool: run_python
     with:
@@ -2123,6 +2148,7 @@ steps:
     - route: resolve_queue_merge_conflicts
     on_failure: resolve_queue_merge_conflicts
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: 'Attempts a cheap rebase before invoking the full conflict-resolution skill.
       On a clean rebase (stdout "clean"), skips the skill and proceeds directly to
       re_push_queue_fix. On conflict, aborts the rebase and routes to resolve_queue_merge_conflicts
@@ -2153,6 +2179,7 @@ steps:
     retries: 1
     on_exhausted: diagnose_ci
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: "Resolves rebase conflicts on the feature branch after queue ejection. Only\
       \ reached when the cheap rebase in queue_ejected_fix encountered conflicts.\
       \ escalation_required=true \u2192 release_issue_failure for human review.\n"
@@ -2170,6 +2197,7 @@ steps:
     on_success: ci_watch_post_queue_fix
     on_failure: classify_push_failure
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
   classify_push_failure:
     action: route
     on_result:
@@ -2226,6 +2254,7 @@ steps:
     - route: detect_ci_conflict
     on_failure: detect_ci_conflict
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: "Validates CI on the rebased feature branch after queue ejection fix and\
       \ re-push. Routes on result.conclusion: success \u2192 reenter_merge_queue,\
       \ no_runs \u2192 release_issue_failure (auto_trigger fires first: empty commit\
@@ -2247,6 +2276,7 @@ steps:
     optional_context_refs:
     - ci_post_queue_loop_count
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: "Iteration guard for the ci_watch_post_queue_fix timed_out self-loop. Caps\
       \ at 2 iterations (initial + 1 retry). On budget exhaustion, routes to release_issue_failure\
       \ \u2014 this is already a post-ejection retry path so further escalation is\
@@ -2261,6 +2291,7 @@ steps:
     on_success: wait_for_queue
     on_failure: release_issue_failure
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: 'Re-submits the PR after conflict resolution. Routes back to wait_for_queue.
       If re-entry fails, release_issue_failure preserves the clone for debugging.
 
@@ -2275,6 +2306,7 @@ steps:
     on_success: wait_for_queue
     on_failure: release_issue_failure
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: 'Re-submits a healthy PR into the merge queue after auto_merge was cleared
       externally (DROPPED_HEALTHY state). No conflict-resolution CI wait needed. Routes
       back to wait_for_queue on success.
@@ -2289,6 +2321,7 @@ steps:
     on_success: wait_for_direct_merge
     on_failure: release_issue_failure
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: 'Enables GitHub native auto-merge for direct merge (no merge queue). GitHub
       merges automatically once all required checks pass. On failure, escalates via
       release_issue_failure so the issue claim is released and the pipeline reports
@@ -2310,6 +2343,7 @@ steps:
     - route: register_clone_unconfirmed
     on_failure: register_clone_unconfirmed
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: "Polls GitHub PR state every 10 s for up to 15 minutes. merged \u2192 release_issue_success.\
       \ closed \u2192 conflict fix cycle. timeout \u2192 register_clone_unconfirmed\
       \ (releases claim; merge unconfirmed).\n"
@@ -2326,6 +2360,7 @@ steps:
     - route: resolve_direct_merge_conflicts
     on_failure: resolve_direct_merge_conflicts
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: 'Attempts a cheap rebase before invoking the full conflict-resolution skill.
       On clean rebase, proceeds to re_push_direct_fix. On conflict, routes to resolve_direct_merge_conflicts
       for goal-aware resolution.
@@ -2355,6 +2390,7 @@ steps:
     retries: 1
     on_exhausted: diagnose_ci
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: "Resolves rebase conflicts after direct-merge rejection. Only reached when\
       \ the cheap rebase in direct_merge_conflict_fix encountered conflicts. escalation_required=true\
       \ \u2192 release_issue_failure for human review.\n"
@@ -2368,6 +2404,7 @@ steps:
     on_success: redirect_merge
     on_failure: classify_push_failure
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
   redirect_merge:
     tool: run_cmd
     with:
@@ -2377,6 +2414,7 @@ steps:
     on_success: wait_for_direct_merge
     on_failure: release_issue_failure
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: 'Re-enables auto-merge after conflict resolution and re-push. Routes back
       to wait_for_direct_merge to poll for completion. On failure, release_issue_failure
       preserves the clone for debugging.
@@ -2391,6 +2429,7 @@ steps:
     on_success: wait_for_immediate_merge
     on_failure: release_issue_failure
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: "Merges the PR immediately using plain --squash when autoMergeAllowed=false.\
       \ Unlike direct_merge, no --auto flag is used \u2014 GitHub executes the merge\
       \ synchronously rather than queueing it for when checks pass. On failure, escalates\
@@ -2411,6 +2450,7 @@ steps:
     - route: register_clone_unconfirmed
     on_failure: register_clone_unconfirmed
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: "Polls GitHub PR state every 10s for up to 5 minutes (30 iterations). Since\
       \ immediate_merge uses --squash without --auto, the merge completes synchronously\
       \ \u2014 this poll is a confirmation window. merged \u2192 release_issue_success.\
@@ -2429,6 +2469,7 @@ steps:
     - route: resolve_immediate_merge_conflicts
     on_failure: resolve_immediate_merge_conflicts
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: 'Attempts a cheap rebase before invoking the full conflict-resolution skill.
       On clean rebase, proceeds to re_push_immediate_fix. On conflict, routes to resolve_immediate_merge_conflicts
       for goal-aware resolution.
@@ -2458,6 +2499,7 @@ steps:
     retries: 1
     on_exhausted: diagnose_ci
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: "Resolves rebase conflicts after immediate-merge rejection. Only reached\
       \ when the cheap rebase in immediate_merge_conflict_fix encountered conflicts.\
       \ escalation_required=true \u2192 release_issue_failure for human review.\n"
@@ -2471,6 +2513,7 @@ steps:
     on_success: remerge_immediate
     on_failure: classify_push_failure
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
   remerge_immediate:
     tool: run_cmd
     with:
@@ -2480,6 +2523,7 @@ steps:
     on_success: wait_for_immediate_merge
     on_failure: release_issue_failure
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: 'Re-attempts plain squash merge after conflict resolution and re-push. Routes
       back to wait_for_immediate_merge to confirm completion. On failure, release_issue_failure
       preserves the clone for debugging.
@@ -2509,6 +2553,7 @@ steps:
     - ci_rebase_count
     - ci_flake_count
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: 'Runs when ci_watch reports a CI failure. Fetches CI logs via gh API and
       writes a structured diagnosis to {{AUTOSKILLIT_TEMP}}/diagnose-ci/. Routes to
       resolve_ci on success OR failure. If diagnosis fails, resolve_ci proceeds without
@@ -2667,6 +2712,7 @@ steps:
     on_failure: diagnose_ci
     optional: true
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: "Stale-base triage gate for CI FAILURE paths only. Do NOT route check_pr_mergeable\
       \ CONFLICTING here \u2014 GitHub's CONFLICTING status is authoritative and should\
       \ route directly to ci_conflict_fix. Valid callers: ci_watch, check_ci_timed_out_loop,\
@@ -2696,6 +2742,7 @@ steps:
     retries: 1
     on_exhausted: diagnose_ci
     skip_when_false: inputs.open_pr
+    on_skip: release_issue_success
     note: 'Resolves a stale-base CI failure by rebasing the feature branch onto the
       latest integration HEAD. Mirrors queue_ejected_fix: on clean rebase or goal-aware
       conflict resolution, routes to re_push to re-trigger CI on the rebased branch.
@@ -2724,6 +2771,7 @@ steps:
     stale_threshold: 2400
     optional: true
     skip_when_false: inputs.pipeline_health
+    on_skip: done_unconfirmed
     with:
       skill_command: /autoskillit:analyze-pipeline-health
       skill_inputs:
@@ -2752,6 +2800,7 @@ steps:
     tool: release_issue
     optional: true
     skip_when_false: inputs.issue_url
+    on_skip: patch_token_summary
     with:
       issue_url: ${{ inputs.issue_url }}
       target_branch: ${{ inputs.base_branch }}
@@ -2765,6 +2814,7 @@ steps:
     tool: run_python
     optional: true
     skip_when_false: inputs.open_pr
+    on_skip: register_clone_success
     with:
       callable: autoskillit.smoke_utils.patch_pr_token_summary
       timeout: 60
@@ -2780,6 +2830,7 @@ steps:
     tool: release_issue
     optional: true
     skip_when_false: inputs.issue_url
+    on_skip: register_clone_failure
     with:
       issue_url: ${{ inputs.issue_url }}
       fail_label: fail
@@ -2807,6 +2858,7 @@ steps:
     stale_threshold: 2400
     optional: true
     skip_when_false: inputs.pipeline_health
+    on_skip: done
     with:
       skill_command: /autoskillit:analyze-pipeline-health
       skill_inputs:
@@ -2830,6 +2882,7 @@ steps:
     stale_threshold: 2400
     optional: true
     skip_when_false: inputs.pipeline_health
+    on_skip: escalate_stop
     with:
       skill_command: /autoskillit:analyze-pipeline-health
       skill_inputs:
@@ -2860,6 +2913,7 @@ steps:
     stale_threshold: 2400
     optional: true
     skip_when_false: inputs.pipeline_health
+    on_skip: done_no_changes
     with:
       skill_command: /autoskillit:analyze-pipeline-health
       skill_inputs:
@@ -2890,6 +2944,7 @@ steps:
     stale_threshold: 2400
     optional: true
     skip_when_false: inputs.pipeline_health
+    on_skip: done_already_done
     with:
       skill_command: /autoskillit:analyze-pipeline-health
       skill_inputs:

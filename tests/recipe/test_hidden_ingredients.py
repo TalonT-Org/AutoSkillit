@@ -142,6 +142,7 @@ def test_prune_skipped_steps_truthy_clears_field() -> None:
                 tool="run_skill",
                 optional=True,
                 skip_when_false="inputs.pipeline_health",
+                on_skip="done",
                 on_success="done",
                 on_failure="done",
                 with_args={"skill_command": "/autoskillit:diagnose /tmp/x.md", "cwd": "/tmp"},
@@ -187,6 +188,7 @@ def test_prune_skipped_steps_removes_step_and_cleans_routes() -> None:
                 tool="run_skill",
                 optional=True,
                 skip_when_false="inputs.pipeline_health",
+                on_skip="done",
                 on_success="done",
                 on_failure="done",
                 with_args={"skill_command": "/autoskillit:diagnose /tmp/x.md", "cwd": "/tmp"},
@@ -204,6 +206,32 @@ def test_prune_skipped_steps_removes_step_and_cleans_routes() -> None:
     for step in pruned.steps.values():
         assert step.on_success != "diag"
         assert step.on_failure != "diag"
+
+
+@pytest.mark.parametrize("guarded_order", [("a", "b"), ("b", "a")])
+def test_prune_skipped_chain_is_order_independent(
+    guarded_order: tuple[str, str],
+) -> None:
+    from autoskillit.recipe._recipe_composition import _prune_skipped_steps
+
+    guarded = {
+        "a": RecipeStep(tool="run_cmd", skip_when_false="false", on_skip="b"),
+        "b": RecipeStep(tool="run_cmd", skip_when_false="false", on_skip="survivor"),
+    }
+    recipe = Recipe(
+        name="chain",
+        description="chain",
+        kitchen_rules=["test"],
+        steps={
+            **{name: guarded[name] for name in guarded_order},
+            "survivor": RecipeStep(tool="run_cmd", on_success="done"),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+    )
+
+    pruned, _ = _prune_skipped_steps(recipe)
+
+    assert tuple(pruned.steps) == ("survivor", "done")
 
 
 def test_prune_skipped_steps_url_string_is_truthy() -> None:
@@ -224,6 +252,7 @@ def test_prune_skipped_steps_url_string_is_truthy() -> None:
                 tool="claim_and_resolve_issue",
                 optional=True,
                 skip_when_false="inputs.issue_url",
+                on_skip="done",
                 on_success="done",
                 on_failure="done",
                 with_args={"issue_url": "inputs.issue_url"},
@@ -259,6 +288,7 @@ def test_prune_skipped_steps_empty_string_is_falsy() -> None:
                 tool="claim_and_resolve_issue",
                 optional=True,
                 skip_when_false="inputs.issue_url",
+                on_skip="done",
                 on_success="done",
                 on_failure="done",
                 with_args={"issue_url": "inputs.issue_url"},
@@ -323,6 +353,7 @@ def test_prune_skipped_steps_truthiness_boundary(value: str, expected_truthy: bo
                 tool="run_cmd",
                 optional=True,
                 skip_when_false="inputs.flag",
+                on_skip="done",
                 on_success="done",
                 on_failure="done",
                 with_args={"cmd": "echo hi"},
@@ -361,6 +392,7 @@ def test_prune_investigate_auto_default_evaluates_truthy() -> None:
                 tool="run_skill",
                 optional=True,
                 skip_when_false="inputs.investigate",
+                on_skip="done",
                 on_success="done",
                 on_failure="done",
                 on_context_limit="done",
@@ -404,6 +436,7 @@ steps:
     tool: run_skill
     optional: true
     skip_when_false: inputs.pipeline_health
+    on_skip: done
     with:
       skill_command: /autoskillit:diagnose /tmp/x.md
       cwd: /tmp
@@ -459,6 +492,7 @@ def test_prune_on_result_only_step_repairs_upstream_routes() -> None:
                 tool="run_skill",
                 optional=True,
                 skip_when_false="inputs.flag",
+                on_skip="done",
                 on_result=StepResultRoute(
                     conditions=[
                         StepResultCondition(when="${{ result.ok }}", route="done"),
@@ -478,8 +512,7 @@ def test_prune_on_result_only_step_repairs_upstream_routes() -> None:
     pruned, resolutions = _prune_skipped_steps(recipe, ingredient_overrides={"flag": "false"})
     assert "skippable" not in pruned.steps
     assert resolutions["skippable"] is False
-    # upstream.on_success redirected to the when=None default condition route ("fallback")
-    assert pruned.steps["upstream"].on_success == "fallback"
+    assert pruned.steps["upstream"].on_success == "done"
     # No surviving step references "skippable" in any routing field
     for step in pruned.steps.values():
         assert step.on_success != "skippable"
@@ -518,6 +551,7 @@ steps:
     tool: run_skill
     optional: true
     skip_when_false: inputs.enable_optional
+    on_skip: done
     with:
       skill_command: /autoskillit:check /tmp/x.md
       cwd: /tmp
@@ -572,6 +606,7 @@ steps:
     tool: run_skill
     optional: true
     skip_when_false: inputs.enable_optional
+    on_skip: done
     with:
       skill_command: /autoskillit:check /tmp/x.md
       cwd: /tmp
@@ -632,6 +667,7 @@ def test_prune_repairs_upstream_on_result_pointing_to_pruned_step() -> None:
                 tool="run_skill",
                 optional=True,
                 skip_when_false="inputs.flag",
+                on_skip="done",
                 on_success="done",
                 with_args={"skill_command": "/autoskillit:diagnose /tmp/x.md", "cwd": "/tmp"},
             ),
@@ -674,6 +710,7 @@ def test_prune_repairs_legacy_on_result_routes_pointing_to_pruned_step() -> None
                 tool="run_skill",
                 optional=True,
                 skip_when_false="inputs.flag",
+                on_skip="done",
                 on_success="done",
                 with_args={"skill_command": "/autoskillit:diagnose /tmp/x.md", "cwd": "/tmp"},
             ),
@@ -690,8 +727,7 @@ def test_prune_repairs_legacy_on_result_routes_pointing_to_pruned_step() -> None
     assert router.on_result.routes["ok"] == "done"
 
 
-def test_prune_on_result_no_default_condition_leaves_redirect_none() -> None:
-    """When pruned step has on_result.conditions but no when=None, redirect stays None."""
+def test_prune_on_result_no_default_uses_explicit_on_skip() -> None:
     from autoskillit.recipe._recipe_composition import _prune_skipped_steps
     from autoskillit.recipe.schema import StepResultCondition, StepResultRoute
 
@@ -709,6 +745,7 @@ def test_prune_on_result_no_default_condition_leaves_redirect_none() -> None:
                 tool="run_skill",
                 optional=True,
                 skip_when_false="inputs.flag",
+                on_skip="done",
                 on_result=StepResultRoute(
                     conditions=[
                         StepResultCondition(when="${{ result.ok }}", route="done"),
@@ -722,14 +759,12 @@ def test_prune_on_result_no_default_condition_leaves_redirect_none() -> None:
         kitchen_rules=["test"],
     )
 
-    # No when=None condition → redirect is None → upstream.on_success not repaired
     pruned, _ = _prune_skipped_steps(recipe, ingredient_overrides={"flag": "false"})
     assert "skippable" not in pruned.steps
-    assert pruned.steps["upstream"].on_success == "skippable"
+    assert pruned.steps["upstream"].on_success == "done"
 
 
-def test_prune_legacy_on_result_routes_leaves_redirect_none() -> None:
-    """When pruned step uses legacy on_result.routes, redirect is None (no semantic default)."""
+def test_prune_legacy_on_result_routes_uses_explicit_on_skip() -> None:
     from autoskillit.recipe._recipe_composition import _prune_skipped_steps
     from autoskillit.recipe.schema import StepResultRoute
 
@@ -747,6 +782,7 @@ def test_prune_legacy_on_result_routes_leaves_redirect_none() -> None:
                 tool="run_skill",
                 optional=True,
                 skip_when_false="inputs.flag",
+                on_skip="done",
                 on_result=StepResultRoute(
                     field="result.status",
                     routes={"ok": "done", "fail": "escalate"},
@@ -758,10 +794,9 @@ def test_prune_legacy_on_result_routes_leaves_redirect_none() -> None:
         kitchen_rules=["test"],
     )
 
-    # Legacy routes format → redirect is None → upstream.on_success not repaired
     pruned, _ = _prune_skipped_steps(recipe, ingredient_overrides={"flag": "false"})
     assert "skippable" not in pruned.steps
-    assert pruned.steps["upstream"].on_success == "skippable"
+    assert pruned.steps["upstream"].on_success == "done"
 
 
 def test_prune_content_strips_pruned_step_block_entirely(tmp_path: Path) -> None:
@@ -791,6 +826,7 @@ steps:
     tool: run_skill
     optional: true
     skip_when_false: inputs.flag
+    on_skip: done
     with:
       skill_command: /autoskillit:diagnose /tmp/x.md
       cwd: /tmp
@@ -827,6 +863,7 @@ def test_prune_content_strips_literal_skip_when_false_step_block() -> None:
     tool: run_skill
     optional: true
     skip_when_false: "false"
+    on_skip: done
     with:
       skill_command: /autoskillit:diagnose /tmp/x.md
       cwd: /tmp
@@ -840,9 +877,11 @@ def test_prune_content_strips_literal_skip_when_false_step_block() -> None:
             tool="run_skill",
             optional=True,
             skip_when_false="false",
+            on_skip="done",
             on_success="done",
             with_args={"skill_command": "/autoskillit:diagnose /tmp/x.md", "cwd": "/tmp"},
-        )
+        ),
+        "done": RecipeStep(action="stop", message="done"),
     }
     resolutions = {"optional_step": False}
 
@@ -874,14 +913,45 @@ def test_post_prune_dangling_route_returns_errors() -> None:
     assert any("upstream" in e for e in errors)
 
 
+def test_route_consistency_rejects_source_swapped_edges() -> None:
+    from autoskillit.recipe._recipe_composition import _validate_route_consistency
+
+    recipe = Recipe(
+        name="parity",
+        description="parity",
+        steps={
+            "a": RecipeStep(tool="run_cmd", on_success="c"),
+            "b": RecipeStep(tool="run_cmd", on_success="d"),
+            "c": RecipeStep(action="stop", message="c"),
+            "d": RecipeStep(action="stop", message="d"),
+        },
+    )
+    raw = """name: parity
+steps:
+  a:
+    tool: run_cmd
+    on_success: d
+  b:
+    tool: run_cmd
+    on_success: c
+  c:
+    action: stop
+    message: c
+  d:
+    action: stop
+    message: d
+"""
+
+    assert _validate_route_consistency(raw, recipe)
+
+
 def test_load_and_validate_clears_content_on_dangling_routes(tmp_path: Path) -> None:
     """load_and_validate blocks content when pruning produces dangling route references."""
     from autoskillit.recipe import load_and_validate
 
     recipe_dir = tmp_path / ".autoskillit" / "recipes"
     recipe_dir.mkdir(parents=True)
-    # skippable has on_result with NO when=None default condition; redirect=None after pruning.
-    # upstream.on_success remains pointing to "skippable" → dangling route.
+    # Invalid guarded recipes are rejected before pruning can invent a continuation.
     yaml_text = """
 name: test-dangling-route
 description: Test dangling route safety net
@@ -923,17 +993,8 @@ steps:
         ingredient_overrides={"flag": "false"},
     )
     assert result["valid"] is False
-    assert result["content"] == ""
-
-
-def _has_computable_redirect(step: object) -> bool:
-    """Return True if the step has a safe redirect that can be computed."""
-    if getattr(step, "on_success", None) is not None:
-        return True
-    on_result = getattr(step, "on_result", None)
-    if on_result is not None and on_result.conditions:
-        return any(c.when is None for c in on_result.conditions)
-    return False
+    assert result["valid"] is False
+    assert any("on_skip" in error for error in result["errors"])
 
 
 def test_bundled_recipes_prune_produces_no_dangling_routes() -> None:
@@ -971,13 +1032,7 @@ def test_bundled_recipes_prune_produces_no_dangling_routes() -> None:
             )
 
 
-def test_all_skip_guarded_steps_have_computable_redirect() -> None:
-    """Every bundled recipe step with skip_when_false must have a computable redirect.
-
-    This is the structural invariant: if a step can be pruned, the pruning engine
-    must be able to repair all routes that pointed to it. Steps that lack both
-    on_success and a when=None catch-all in on_result are structurally defective.
-    """
+def test_all_skip_guarded_steps_have_explicit_on_skip() -> None:
     from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
     recipe_dir = builtin_recipes_dir()
@@ -986,11 +1041,26 @@ def test_all_skip_guarded_steps_have_computable_redirect() -> None:
         for step_name, step in recipe.steps.items():
             if step.skip_when_false is None:
                 continue
-            assert _has_computable_redirect(step), (
+            assert step.on_skip in recipe.steps, (
                 f"Bundled recipe {yaml_file.name!r}: step {step_name!r} has "
-                f"skip_when_false={step.skip_when_false!r} but no computable redirect. "
-                f"Add on_success or a when=None catch-all to on_result."
+                f"skip_when_false={step.skip_when_false!r} but no named on_skip target."
             )
+
+
+def test_remediation_audit_skip_routes_to_commit_guard() -> None:
+    from autoskillit.core import load_yaml
+    from autoskillit.recipe import load_and_validate
+
+    result = load_and_validate(
+        "remediation",
+        ingredient_overrides={"audit_impl": "false"},
+    )
+    assert result["valid"] is True
+    parsed = load_yaml(result["content"])
+    steps = parsed["steps"]
+    assert "audit_impl" not in steps
+    assert steps["test"]["on_success"] == "commit_guard"
+    assert steps["merge_gate_test"]["on_success"] == "commit_guard"
 
 
 def test_resolve_skip_guards_strips_optional_true_on_truthy() -> None:
@@ -1007,6 +1077,7 @@ def test_resolve_skip_guards_strips_optional_true_on_truthy() -> None:
     tool: run_skill
     optional: true
     skip_when_false: inputs.flag
+    on_skip: done
     with:
       skill_command: /autoskillit:do_thing /tmp/x.md
     on_success: done
@@ -1021,6 +1092,7 @@ def test_resolve_skip_guards_strips_optional_true_on_truthy() -> None:
             tool="run_skill",
             optional=True,
             skip_when_false="inputs.flag",
+            on_skip="done",
             on_success="done",
             on_failure="done",
             on_context_limit="done",
@@ -1034,6 +1106,25 @@ def test_resolve_skip_guards_strips_optional_true_on_truthy() -> None:
     assert "optional: True" not in result
     assert "tool: run_skill" in result
     assert "on_success: done" in result
+
+
+@pytest.mark.parametrize(
+    ("raw", "message"),
+    [
+        ("steps: {guarded: {tool: run_cmd}, done: {action: stop}}\n", "flow-style"),
+        (
+            "shared: &shared\n  tool: run_cmd\nsteps:\n  guarded: *shared\n"
+            "  done:\n    action: stop\n",
+            "aliases",
+        ),
+    ],
+)
+def test_guarded_raw_repair_rejects_unsafe_yaml_shapes(raw: str, message: str) -> None:
+    from autoskillit.recipe._recipe_composition import _resolve_skip_guards_in_content
+
+    guarded = RecipeStep(tool="run_cmd", skip_when_false="true", on_skip="done")
+    with pytest.raises(ValueError, match=message):
+        _resolve_skip_guards_in_content(raw, {"guarded": True}, {"guarded": guarded})
 
 
 def test_resolve_skip_guards_preserves_optional_on_unresolved_steps() -> None:

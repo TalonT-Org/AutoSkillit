@@ -5,6 +5,7 @@ Re-export facade. Implementation: _api_cache.py, _api_listing.py.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import time
@@ -167,7 +168,8 @@ def _build_orchestration_rules(
         "You MUST execute every step the pipeline routes you to. "
         "skip_when_false ingredient references are resolved server-side before the recipe "
         'is served. You may see literal "false" values (skip the step) '
-        "or no skip_when_false field at all (step is mandatory). "
+        "or no skip_when_false field at all (step is mandatory). Resolved content "
+        "contains neither skip_when_false nor its configuration-only on_skip continuation. "
         "NEVER skip a step because the PR is small, the diff is trivial, or you judge "
         "the step unnecessary. NEVER replace recipe steps with manual tool calls. "
         "Consequence: skipping PR review steps results in unreviewed code, missing "
@@ -332,6 +334,7 @@ def load_and_validate(
     recipe = None
     active_recipe = None
     _skip_resolutions: dict[str, bool | None] = {}
+    _source_skip_resolutions: dict[str, bool | None] = {}
     _pre_prune_steps: dict[str, Any] = {}
     _post_prune_bindings = None
     _finalized_projection = None
@@ -370,17 +373,30 @@ def load_and_validate(
                 content_bytes=_recipe_bytes,
             )
 
+            source_recipe = dataclasses.replace(
+                recipe,
+                steps={name: dataclasses.replace(step) for name, step in recipe.steps.items()},
+            )
+            errors = validate_recipe_structure(source_recipe)
+
             # Stage: sub-recipe composition (lazy-loaded prefixes)
             active_recipe, combined_recipe = _build_active_recipe(
-                recipe, ingredient_overrides, _pdir, _temp_relpath
+                dataclasses.replace(
+                    recipe,
+                    steps={name: dataclasses.replace(step) for name, step in recipe.steps.items()},
+                ),
+                ingredient_overrides,
+                _pdir,
+                _temp_relpath,
             )
 
             # Stage: structural validation on active recipe
-            errors = validate_recipe_structure(active_recipe)
             if combined_recipe is not None:
                 # Dual validation: also validate the combined (merged) graph
                 combined_errors = validate_recipe_structure(combined_recipe)
                 errors.extend(f"[combined] {e}" for e in combined_errors)
+            elif any(step.sub_recipe is not None for step in source_recipe.steps.values()):
+                errors.extend(validate_recipe_structure(active_recipe))
             t0 = _t("validate_recipe_structure", t0, name)
 
             # Stage: resolve skill_resolver (needed by both pre-prune and post-prune contexts)
@@ -421,15 +437,27 @@ def load_and_validate(
             active_recipe, _skip_resolutions = _prune_skipped_steps(
                 active_recipe, ingredient_overrides, defer_unresolved
             )
-            if _skip_resolutions:
-                raw = _resolve_skip_guards_in_content(raw, _skip_resolutions, _pre_prune_steps)
-                _assert_content_integrity(raw, _skip_resolutions, _pre_prune_steps)
+            _source_pre_prune_steps = dict(source_recipe.steps)
+            source_recipe, _source_skip_resolutions = _prune_skipped_steps(
+                source_recipe, ingredient_overrides, defer_unresolved
+            )
+            if _source_skip_resolutions:
+                raw = _resolve_skip_guards_in_content(
+                    raw, _source_skip_resolutions, _source_pre_prune_steps
+                )
+                _assert_content_integrity(raw, _source_skip_resolutions, _source_pre_prune_steps)
             # Auto-derive on_rate_limit from on_context_limit for run_skill steps.
             # Runs after _prune_skipped_steps so live (non-pruned) steps get the
             # derivation. This is production defense-in-depth — explicit YAML
             # values remain the canonical declaration, but the silent fallback
             # in the sous-chef cascade is removed at the data level.
-            _derive_rate_limit_routes(active_recipe)
+            _route_consistency_errors = _validate_route_consistency(raw, source_recipe)
+            if _route_consistency_errors:
+                errors.extend(
+                    f"[post-prune] route consistency: {e}" for e in _route_consistency_errors
+                )
+                raw = ""
+            active_recipe = _derive_rate_limit_routes(active_recipe)
             # Post-prune: validate that no surviving step routes to a removed step.
             # Must run inside try so active_recipe and errors are both in scope.
             _dangling_errors = _validate_no_dangling_routes(active_recipe)
@@ -438,12 +466,6 @@ def load_and_validate(
                 raw = ""
             # Cross-check: raw YAML route refs must match the Python model exactly.
             # Catches any refs that the model repaired but the YAML repair pass missed.
-            _route_consistency_errors = _validate_route_consistency(raw, active_recipe)
-            if _route_consistency_errors:
-                errors.extend(
-                    f"[post-prune] route consistency: {e}" for e in _route_consistency_errors
-                )
-                raw = ""
             t0 = _t("prune_skipped_steps", t0, name)
 
             # Stage: semantic rules (builds ValidationContext from post-prune recipe)

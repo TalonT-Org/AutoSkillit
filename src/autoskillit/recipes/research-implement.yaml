@@ -412,6 +412,7 @@ steps:
     on_failure: escalate_stop
     on_context_limit: escalate_stop
     skip_when_false: inputs.audit_impl
+    on_skip: run_experiment
     optional_context_refs:
     - audit_cycle_path
     - audit_attempt_id
@@ -643,6 +644,7 @@ steps:
     with:
       worktree_path: ${{ context.worktree_path }}
     skip_when_false: inputs.test_check_enabled
+    on_skip: push_branch
     on_success: push_branch
     on_failure: fix_tests
   fix_tests:

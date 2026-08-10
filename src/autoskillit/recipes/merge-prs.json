@@ -1470,6 +1470,7 @@
       "on_rate_limit": "register_clone_failure",
       "optional": true,
       "skip_when_false": "inputs.audit_impl",
+      "on_skip": "open_integration_pr",
       "optional_context_refs": [
         "audit_cycle_path",
         "audit_attempt_id"
@@ -2061,6 +2062,7 @@
       "stale_threshold": 2400,
       "optional": true,
       "skip_when_false": "inputs.pipeline_health",
+      "on_skip": "done",
       "with": {
         "skill_command": "/autoskillit:analyze-pipeline-health",
         "skill_inputs": {
@@ -2083,6 +2085,7 @@
       "stale_threshold": 2400,
       "optional": true,
       "skip_when_false": "inputs.pipeline_health",
+      "on_skip": "escalate_stop",
       "with": {
         "skill_command": "/autoskillit:analyze-pipeline-health",
         "skill_inputs": {

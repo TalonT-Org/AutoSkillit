@@ -106,7 +106,8 @@ def _build_open_kitchen_prompt(
         "- NEVER skip a step because the PR is small, the diff is trivial, the change\n"
         "  looks simple, or you judge the step unnecessary.\n"
         "- skip_when_false ingredient references are resolved server-side; you may see\n"
-        '  literal "false" (skip) or no skip_when_false field (mandatory).\n'
+        '  literal "false" (skip) or no skip_when_false field (mandatory). Resolved\n'
+        "  steps also omit the configuration-only on_skip continuation.\n"
         "- Consequence: skipping PR review steps results in unreviewed code, missing diff\n"
         "  annotations, and no architectural lens analysis — code reaches main without\n"
         "  quality gates.\n\n"

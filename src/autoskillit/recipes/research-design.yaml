@@ -111,6 +111,7 @@ steps:
       classification_timestamp: "${{ result.classification_timestamp }}"
     pass_through: [experiment_type, is_silent_type, classification_timestamp]
     skip_when_false: inputs.review_design
+    on_skip: select_review_dimensions
     on_context_limit: synthesize
     on_success: select_review_dimensions
     on_failure: escalate_stop

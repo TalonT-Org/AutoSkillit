@@ -271,6 +271,7 @@ steps:
       review_receipt_path: "${{ result.review_receipt_path }}"
     pass_through: [verdict, review_post_state]
     skip_when_false: inputs.review_research_pr
+    on_skip: check_review_posted
     on_context_limit: escalate_stop
     on_failure: escalate_stop
     on_result:
@@ -301,6 +302,7 @@ steps:
         operation_key: "${{ context.review_operation_key }}"
         post_state: "${{ context.review_post_state }}"
     skip_when_false: inputs.review_research_pr
+    on_skip: audit_claims
     on_result:
     - when: "${{ result.reviews_posted }} == 'false'"
       route: escalate_stop
@@ -336,6 +338,7 @@ steps:
       audit_review_receipt_path: "${{ result.review_receipt_path }}"
     pass_through: [verdict, review_post_state]
     skip_when_false: inputs.audit_claims
+    on_skip: check_audit_review_posted
     retries: 1
     on_exhausted: escalate_stop
     on_context_limit: escalate_stop
@@ -364,6 +367,7 @@ steps:
         operation_key: "${{ context.audit_review_operation_key }}"
         post_state: "${{ context.audit_review_post_state }}"
     skip_when_false: inputs.audit_claims
+    on_skip: route_review_resolve
     on_result:
     - when: "${{ result.reviews_posted }} == 'false'"
       route: escalate_stop

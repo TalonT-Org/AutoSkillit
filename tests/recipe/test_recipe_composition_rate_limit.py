@@ -52,7 +52,7 @@ class TestDeriveRateLimitRoutes:
             }
         )
 
-        _derive_rate_limit_routes(recipe)
+        recipe = _derive_rate_limit_routes(recipe)
 
         assert recipe.steps["fix"].on_rate_limit == "retry_worktree", (
             f"Expected on_rate_limit to be derived from on_context_limit, "
@@ -77,7 +77,7 @@ class TestDeriveRateLimitRoutes:
             }
         )
 
-        _derive_rate_limit_routes(recipe)
+        recipe = _derive_rate_limit_routes(recipe)
 
         assert recipe.steps["fix"].on_rate_limit == "rate_recovery", (
             "Explicit on_rate_limit must be preserved when derivation runs"
@@ -99,7 +99,7 @@ class TestDeriveRateLimitRoutes:
             }
         )
 
-        _derive_rate_limit_routes(recipe)
+        recipe = _derive_rate_limit_routes(recipe)
 
         assert recipe.steps["fix"].on_rate_limit is None, (
             "Step without on_context_limit should not get on_rate_limit derived"
@@ -122,7 +122,7 @@ class TestDeriveRateLimitRoutes:
             }
         )
 
-        _derive_rate_limit_routes(recipe)
+        recipe = _derive_rate_limit_routes(recipe)
 
         assert recipe.steps["push"].on_rate_limit is None, (
             "Non-run_skill steps should not get on_rate_limit derived"
@@ -143,7 +143,7 @@ class TestDeriveRateLimitRoutes:
             }
         )
 
-        _derive_rate_limit_routes(recipe)
+        recipe = _derive_rate_limit_routes(recipe)
 
         assert recipe.steps["fix"].on_rate_limit == "escalate", (
             f"Expected on_rate_limit='escalate', got: {recipe.steps['fix'].on_rate_limit!r}"

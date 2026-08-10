@@ -9,9 +9,9 @@ from typing import Any
 
 import regex as re
 
-from autoskillit.core import SKILL_TOOLS, YAMLError, load_yaml
+from autoskillit.core import SKILL_TOOLS, YAMLError, compose_yaml, load_yaml
 from autoskillit.recipe._contracts_types import INPUT_REF_RE
-from autoskillit.recipe.io import find_sub_recipe_by_name
+from autoskillit.recipe.io import _parse_recipe, find_sub_recipe_by_name
 from autoskillit.recipe.io import load_recipe as _load_recipe_from_path
 from autoskillit.recipe.schema import (
     _TERMINAL_TARGETS,
@@ -38,6 +38,8 @@ def _collect_all_route_targets(step: RecipeStep) -> set[str]:
         targets.add(step.on_rate_limit)
     if step.on_exhausted:
         targets.add(step.on_exhausted)
+    if step.on_skip:
+        targets.add(step.on_skip)
     if step.on_result:
         sr = step.on_result
         if sr.conditions:
@@ -47,7 +49,7 @@ def _collect_all_route_targets(step: RecipeStep) -> set[str]:
     return targets
 
 
-def _derive_rate_limit_routes(recipe: Any) -> None:
+def _derive_rate_limit_routes(recipe: Any) -> Any:
     """Auto-populate on_rate_limit from on_context_limit for run_skill steps.
 
     When a run_skill step declares on_context_limit but not on_rate_limit,
@@ -55,18 +57,20 @@ def _derive_rate_limit_routes(recipe: Any) -> None:
     This derivation makes that behavior explicit at the schema level, removing
     the silent fallback and making the routing visible to semantic rules.
 
-    Mutates the recipe's steps in place. Steps with explicit on_rate_limit are
+    Returns a recipe with copied steps. Steps with explicit on_rate_limit are
     left untouched (explicit overrides win). Steps with neither field set are
     also untouched (they remain flagged by the run-skill-missing-rate-limit
     semantic rule).
     """
-    for step in recipe.steps.values():
+    steps = dict(recipe.steps)
+    for name, step in recipe.steps.items():
         if step.tool not in SKILL_TOOLS:
             continue
         if step.on_rate_limit is not None:
             continue
         if step.on_context_limit is not None:
-            step.on_rate_limit = step.on_context_limit
+            steps[name] = dataclasses.replace(step, on_rate_limit=step.on_context_limit)
+    return dataclasses.replace(recipe, steps=steps)
 
 
 def _step_block_pattern(escaped_name: str) -> str:
@@ -93,31 +97,56 @@ def _validate_no_dangling_routes(recipe: Recipe) -> list[str]:
     return errors
 
 
+def _declared_route_signatures(recipe: Recipe) -> tuple[tuple[Any, ...], ...]:
+    signatures: list[tuple[Any, ...]] = []
+    scalar_fields = (
+        "on_success",
+        "on_failure",
+        "on_context_limit",
+        "on_rate_limit",
+        "on_exhausted",
+        "on_skip",
+    )
+    for step_name, step in recipe.steps.items():
+        for field in scalar_fields:
+            target = getattr(step, field)
+            if target is not None:
+                signatures.append((step_name, field, target))
+        if step.on_result is None:
+            continue
+        if step.on_result.conditions:
+            signatures.extend(
+                (step_name, "on_result", index, condition.when, condition.route)
+                for index, condition in enumerate(step.on_result.conditions)
+            )
+        else:
+            signatures.extend(
+                (step_name, "on_result", step.on_result.field, key, target)
+                for key, target in step.on_result.routes.items()
+            )
+    return tuple(signatures)
+
+
 def _validate_route_consistency(raw: str, recipe: Recipe) -> list[str]:
-    """Return error strings for route targets in raw YAML that are absent from the Python model.
-
-    Cross-checks the two parallel representations (Python model and raw YAML string) after
-    all pruning and content mutations. Catches any step names that were repaired in the model
-    but missed by the raw-YAML repair pass.
-    """
-    raw_targets: set[str] = set()
-    for match in re.finditer(
-        r"(?m)^[ \t]+(?:on_success|on_failure|on_context_limit|on_rate_limit|on_exhausted)"
-        r":[ \t]+(\S+)",
-        raw,
-    ):
-        raw_targets.add(match.group(1))
-    for match in re.finditer(r"(?m)^[ \t]+route:[ \t]+(\S+)", raw):
-        raw_targets.add(match.group(1))
-
-    model_targets: set[str] = set()
-    for step in recipe.steps.values():
-        model_targets.update(_collect_all_route_targets(step))
-
+    """Compare ordered steps and exact declared routes in raw and source models."""
+    try:
+        data = load_yaml(raw)
+        raw_recipe = _parse_recipe(data)
+    except (TypeError, ValueError, YAMLError) as exc:
+        return [f"Repaired raw YAML cannot be parsed: {exc}"]
     errors: list[str] = []
-    raw_only = raw_targets - model_targets - _TERMINAL_TARGETS
-    for target in sorted(raw_only):
-        errors.append(f"Raw YAML references step '{target}' which is not in the Python model")
+    if tuple(raw_recipe.steps) != tuple(recipe.steps):
+        errors.append(
+            "Raw YAML step order differs from the Python model: "
+            f"{tuple(raw_recipe.steps)!r} != {tuple(recipe.steps)!r}"
+        )
+    raw_signatures = _declared_route_signatures(raw_recipe)
+    model_signatures = _declared_route_signatures(recipe)
+    if raw_signatures != model_signatures:
+        errors.append(
+            "Raw YAML declared routes differ from the Python model: "
+            f"{raw_signatures!r} != {model_signatures!r}"
+        )
     return errors
 
 
@@ -128,9 +157,78 @@ def _is_ingredient_truthy(value: str) -> bool:
     return bool(value) and value.lower() not in FALSY_STRINGS
 
 
+def _rewrite_step_routes(step: RecipeStep, redirects: dict[str, str]) -> RecipeStep:
+    def rewrite(target: str | None) -> str | None:
+        return redirects.get(target, target) if target is not None else None
+
+    result_route = step.on_result
+    if result_route is not None:
+        if result_route.conditions:
+            result_route = StepResultRoute(
+                conditions=[
+                    StepResultCondition(when=condition.when, route=rewrite(condition.route) or "")
+                    for condition in result_route.conditions
+                ]
+            )
+        else:
+            result_route = StepResultRoute(
+                field=result_route.field,
+                routes={
+                    key: rewrite(target) or target for key, target in result_route.routes.items()
+                },
+            )
+    return dataclasses.replace(
+        step,
+        on_success=rewrite(step.on_success),
+        on_failure=rewrite(step.on_failure),
+        on_context_limit=rewrite(step.on_context_limit),
+        on_rate_limit=rewrite(step.on_rate_limit),
+        on_exhausted=rewrite(step.on_exhausted) or step.on_exhausted,
+        on_skip=rewrite(step.on_skip),
+        on_result=result_route,
+    )
+
+
+def _resolve_skip_redirects(
+    steps: dict[str, RecipeStep], resolutions: dict[str, bool | None]
+) -> dict[str, str]:
+    redirects: dict[str, str] = {}
+    falsy = {name for name, resolution in resolutions.items() if resolution is False}
+    for start in falsy:
+        current = start
+        visited: set[str] = set()
+        while current in falsy:
+            if current in visited:
+                raise ValueError(f"on_skip cycle encountered while resolving '{start}'")
+            visited.add(current)
+            step = steps.get(current)
+            if step is None or step.on_skip is None:
+                raise ValueError(f"Skipped step '{current}' has no valid on_skip target")
+            current = step.on_skip
+        if current not in steps:
+            raise ValueError(f"Skipped step '{start}' resolves to unknown step '{current}'")
+        redirects[start] = current
+    return redirects
+
+
 def _drop_sub_recipe_step(recipe: Any, step_name: str) -> Any:
-    """Return a new Recipe with the named sub_recipe placeholder step removed."""
-    new_steps = {k: v for k, v in recipe.steps.items() if k != step_name}
+    """Drop a false-gated placeholder and preserve its attachment point."""
+    placeholder = recipe.steps[step_name]
+    continuation = placeholder.on_success
+    if continuation is None or continuation not in recipe.steps or continuation == step_name:
+        raise ValueError(
+            f"Sub-recipe placeholder '{step_name}' has no surviving on_success continuation"
+        )
+    new_steps = {
+        name: _rewrite_step_routes(step, {step_name: continuation})
+        for name, step in recipe.steps.items()
+        if name != step_name
+    }
+    if next(iter(recipe.steps), None) == step_name:
+        new_steps = {
+            continuation: new_steps[continuation],
+            **{name: step for name, step in new_steps.items() if name != continuation},
+        }
     return dataclasses.replace(recipe, steps=new_steps)
 
 
@@ -200,6 +298,7 @@ def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
             on_context_limit=_fix_route(sub_step.on_context_limit),
             on_rate_limit=_fix_route(sub_step.on_rate_limit),
             on_exhausted=_fix_route(sub_step.on_exhausted),
+            on_skip=_fix_route(sub_step.on_skip),
             on_result=_fix_result_route(sub_step.on_result),
         )
         prefixed_steps[new_name] = new_step
@@ -210,7 +309,9 @@ def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
         if step_name == placeholder_name:
             new_steps.update(prefixed_steps)
         else:
-            new_steps[step_name] = step
+            new_steps[step_name] = _rewrite_step_routes(
+                step, {placeholder_name: next(iter(prefixed_steps))}
+            )
 
     # Merge ingredients: sub-recipe non-hidden ingredients into parent
     merged_ingredients = dict(parent.ingredients)
@@ -331,109 +432,53 @@ def _prune_skipped_steps(
     """
     overrides = ingredient_overrides or {}
     resolutions: dict[str, bool | None] = {}
-    working = recipe
-
-    # Collect guarded steps from the original recipe (stable iteration order)
-    steps_to_check = [
-        name for name, step in recipe.steps.items() if step.skip_when_false is not None
-    ]
-
-    for step_name in steps_to_check:
-        step = working.steps.get(step_name)
-        if step is None or not step.skip_when_false:
-            continue
+    for step_name, step in recipe.steps.items():
         ref = step.skip_when_false
-
+        if ref is None:
+            continue
         if ref.startswith("inputs."):
             ingredient_name = ref[len("inputs.") :]
-            # Resolve value: explicit override > defer (if requested) > recipe default > absent
             if ingredient_name in overrides:
                 value = str(overrides[ingredient_name])
             elif defer_unresolved:
                 resolutions[step_name] = None
-                new_steps = dict(working.steps)
-                new_steps[step_name] = dataclasses.replace(step, skip_when_false=None)
-                working = dataclasses.replace(working, steps=new_steps)
                 continue
             else:
-                ing = working.ingredients.get(ingredient_name)
+                ingredient = recipe.ingredients.get(ingredient_name)
                 value = (
-                    str(ing.default) if ing is not None and ing.default is not None else "false"
+                    str(ingredient.default)
+                    if ingredient is not None and ingredient.default is not None
+                    else "false"
                 )
         else:
-            # Literal value already resolved — evaluate directly without ingredient lookup
             value = ref
+        resolutions[step_name] = _is_ingredient_truthy(value)
 
-        is_truthy = _is_ingredient_truthy(value)
-        resolutions[step_name] = is_truthy
-
-        if is_truthy:
-            new_steps = dict(working.steps)
-            new_steps[step_name] = dataclasses.replace(step, skip_when_false=None, optional=False)
-            working = dataclasses.replace(working, steps=new_steps)
-        else:
-            # Redirect all routes pointing to the pruned step; guard against None redirect.
-            # For on_result-only steps (on_success is None), derive redirect from the
-            # default/else condition (when=None). For legacy routes format, no safe default
-            # exists — redirect stays None and _validate_no_dangling_routes catches dangling refs.
-            if step.on_success is not None:
-                redirect = step.on_success
-            elif step.on_result is not None and step.on_result.conditions:
-                redirect = next(
-                    (c.route for c in step.on_result.conditions if c.when is None), None
-                )
-            else:
-                redirect = None
-            new_steps = {}
-            for name, s in working.steps.items():
-                if name == step_name:
-                    continue
-                # Fast path: skip steps that do not reference the pruned step at all.
-                # _collect_all_route_targets is the single source of truth for routing
-                # field enumeration — adding a new routing field there automatically
-                # extends this guard's coverage.
-                if step_name not in _collect_all_route_targets(s):
-                    new_steps[name] = s
-                    continue
-                fixes: dict[str, Any] = {}
-                if s.on_success == step_name and redirect is not None:
-                    fixes["on_success"] = redirect
-                if s.on_failure == step_name and redirect is not None:
-                    fixes["on_failure"] = redirect
-                if s.on_context_limit == step_name and redirect is not None:
-                    fixes["on_context_limit"] = redirect
-                if s.on_rate_limit == step_name and redirect is not None:
-                    fixes["on_rate_limit"] = redirect
-                if s.on_exhausted == step_name and redirect is not None:
-                    fixes["on_exhausted"] = redirect
-                if s.on_result is not None and redirect is not None:
-                    sr = s.on_result
-                    if sr.conditions:
-                        if any(c.route == step_name for c in sr.conditions):
-                            fixes["on_result"] = StepResultRoute(
-                                conditions=[
-                                    StepResultCondition(
-                                        when=c.when,
-                                        route=redirect if c.route == step_name else c.route,
-                                    )
-                                    for c in sr.conditions
-                                ]
-                            )
-                    elif sr.routes:
-                        if any(v == step_name for v in sr.routes.values()):
-                            fixes["on_result"] = StepResultRoute(
-                                field=sr.field,
-                                routes={
-                                    k: (redirect if v == step_name else v)
-                                    for k, v in sr.routes.items()
-                                },
-                            )
-                new_steps[name] = dataclasses.replace(s, **fixes) if fixes else s
-            recipe_kwargs: dict[str, Any] = {"steps": new_steps}
-            if getattr(working, "entry", None) == step_name:
-                recipe_kwargs["entry"] = redirect
-            working = dataclasses.replace(working, **recipe_kwargs)
-
+    redirects = _resolve_skip_redirects(recipe.steps, resolutions)
+    steps: dict[str, RecipeStep] = {}
+    for name, step in recipe.steps.items():
+        resolution = resolutions.get(name, True)
+        if resolution is False:
+            continue
+        if name in resolutions:
+            step = dataclasses.replace(
+                step,
+                skip_when_false=None,
+                on_skip=None,
+                optional=False if resolution is True else step.optional,
+            )
+        steps[name] = _rewrite_step_routes(step, redirects)
+    working = dataclasses.replace(recipe, steps=steps)
+    first = next(iter(recipe.steps), None)
+    if first in redirects:
+        entry = redirects[first]
+        working = dataclasses.replace(
+            working,
+            steps={
+                entry: working.steps[entry],
+                **{name: step for name, step in working.steps.items() if name != entry},
+            },
+        )
     return working, resolutions
 
 
@@ -451,72 +496,153 @@ def _resolve_skip_guards_in_content(
     """
     if not resolutions:
         return raw
+    root = compose_yaml(raw)
+    if root is None or not isinstance(getattr(root, "value", None), list):
+        raise ValueError("Guarded recipe must be a YAML mapping")
+    steps_node = None
+    for key_node, value_node in root.value:
+        if getattr(key_node, "value", None) == "steps":
+            steps_node = value_node
+            break
+    if steps_node is None or not isinstance(getattr(steps_node, "value", None), list):
+        raise ValueError("Guarded recipe requires a block-style top-level steps mapping")
+    if getattr(steps_node, "flow_style", False):
+        raise ValueError("Guarded recipe does not support a flow-style top-level steps mapping")
 
-    for step_name, is_truthy in resolutions.items():
-        step = original_steps.get(step_name)
-        if step is None or not step.skip_when_false:
+    counts: dict[int, int] = {}
+    expanded: set[int] = set()
+
+    def count_nodes(node: Any) -> None:
+        identity = id(node)
+        counts[identity] = counts.get(identity, 0) + 1
+        if identity in expanded:
+            return
+        expanded.add(identity)
+        value = getattr(node, "value", None)
+        if isinstance(value, list):
+            for item in value:
+                if isinstance(item, tuple):
+                    count_nodes(item[0])
+                    count_nodes(item[1])
+                else:
+                    count_nodes(item)
+
+    count_nodes(root)
+
+    def descendants(node: Any) -> list[Any]:
+        found = [node]
+        value = getattr(node, "value", None)
+        if isinstance(value, list):
+            for item in value:
+                if isinstance(item, tuple):
+                    found.extend(descendants(item[0]))
+                    found.extend(descendants(item[1]))
+                else:
+                    found.extend(descendants(item))
+        return found
+
+    if any(counts.get(id(node), 0) > 1 for node in descendants(steps_node)):
+        raise ValueError("Guarded recipe does not support aliases within steps")
+
+    def line_start(index: int) -> int:
+        return raw.rfind("\n", 0, index) + 1
+
+    def line_end(index: int) -> int:
+        newline = raw.find("\n", index)
+        return len(raw) if newline < 0 else newline + 1
+
+    redirects = _resolve_skip_redirects(original_steps, resolutions)
+    entries = list(steps_node.value)
+    mapping_end = (
+        len(raw)
+        if steps_node.end_mark.index >= len(raw)
+        else line_start(steps_node.end_mark.index)
+    )
+    blocks: dict[str, str] = {}
+    order: list[str] = []
+    route_fields = {
+        "on_success",
+        "on_failure",
+        "on_context_limit",
+        "on_rate_limit",
+        "on_exhausted",
+        "on_skip",
+        "route",
+    }
+    for index, (name_node, step_node) in enumerate(entries):
+        name = str(name_node.value)
+        order.append(name)
+        start = line_start(name_node.start_mark.index)
+        end = (
+            line_start(entries[index + 1][0].start_mark.index)
+            if index + 1 < len(entries)
+            else mapping_end
+        )
+        if resolutions.get(name) is False:
             continue
-        ref = step.skip_when_false
-        if is_truthy is None:
-            if ref.startswith("inputs."):
-                ingredient_name = re.escape(ref[len("inputs.") :])
-                raw = re.sub(
-                    rf"(?m)^([ \t]+)skip_when_false:[ \t]+inputs\.{ingredient_name}[ \t]*\n",
-                    "",
-                    raw,
-                )
-            continue
-        if not is_truthy:
-            # Derive redirect target using the same logic as _prune_skipped_steps
-            if step.on_success is not None:
-                redirect = step.on_success
-            elif step.on_result is not None and step.on_result.conditions:
-                redirect = next(
-                    (c.route for c in step.on_result.conditions if c.when is None), None
-                )
-            else:
-                redirect = None
-
-            # Strip the pruned step's YAML block
-            raw = _strip_step_block(raw, step_name)
-
-            # Repair route refs in surviving steps' raw YAML
-            if redirect is not None:
-                route_fields = (
-                    "on_success",
-                    "on_failure",
-                    "on_context_limit",
-                    "on_rate_limit",
-                    "on_exhausted",
-                )
-                for field in route_fields:
-                    raw = re.sub(
-                        rf"(?m)^([ \t]+{re.escape(field)}:[ \t]+){re.escape(step_name)}"
-                        rf"([ \t]*(?:#.*)?)$",
-                        rf"\g<1>{redirect}\g<2>",
-                        raw,
+        edits: list[tuple[int, int, str]] = []
+        for key_node, value_node in step_node.value:
+            key = str(key_node.value)
+            if key in {"skip_when_false", "on_skip"} or (
+                key == "optional" and resolutions.get(name) is True
+            ):
+                edits.append(
+                    (
+                        line_start(key_node.start_mark.index),
+                        line_end(value_node.end_mark.index),
+                        "",
                     )
-                # Handle on_result conditions (route: step_name)
-                raw = re.sub(
-                    rf"(?m)^([ \t]+route:[ \t]+){re.escape(step_name)}([ \t]*(?:#.*)?)$",
-                    rf"\g<1>{redirect}\g<2>",
-                    raw,
                 )
-            continue
-        raw = re.sub(
-            rf"(?m)({_step_block_pattern(re.escape(step_name))})",
-            lambda m: re.sub(r"(?m)^[ \t]+optional:[ \t]+(?:true|True)[ \t]*\n", "", m.group(0)),
-            raw,
-        )
-        if not ref.startswith("inputs."):
-            continue
-        ingredient_name = re.escape(ref[len("inputs.") :])
-        raw = re.sub(
-            rf'(?m)^([ \t]+)skip_when_false:[ \t]+["\']?inputs\.{ingredient_name}["\']?[ \t]*\n',
-            "",
-            raw,
-        )
-    return raw
+
+        def collect_route_edits(node: Any, parent_key: str | None = None) -> None:
+            value = getattr(node, "value", None)
+            if not isinstance(value, list):
+                return
+            for item in value:
+                if isinstance(item, tuple):
+                    key_node, value_node = item
+                    key = str(getattr(key_node, "value", ""))
+                    scalar = getattr(value_node, "value", None)
+                    is_legacy_route = parent_key == "routes"
+                    if isinstance(scalar, str) and (
+                        (key in route_fields and key != "on_skip") or is_legacy_route
+                    ):
+                        replacement = redirects.get(scalar)
+                        if replacement is not None:
+                            style = getattr(value_node, "style", None)
+                            rendered = replacement
+                            if style == "'":
+                                rendered = "'" + replacement.replace("'", "''") + "'"
+                            elif style == '"':
+                                rendered = (
+                                    '"'
+                                    + replacement.replace("\\", "\\\\").replace('"', '\\"')
+                                    + '"'
+                                )
+                            edits.append(
+                                (value_node.start_mark.index, value_node.end_mark.index, rendered)
+                            )
+                    collect_route_edits(value_node, key)
+                else:
+                    collect_route_edits(item, parent_key)
+
+        collect_route_edits(step_node)
+        ordered_edits = sorted(edits)
+        for previous, current in zip(ordered_edits, ordered_edits[1:]):
+            if previous[1] > current[0]:
+                raise ValueError(f"Overlapping YAML edit spans in step '{name}'")
+        block = raw[start:end]
+        for edit_start, edit_end, replacement in sorted(edits, reverse=True):
+            block = block[: edit_start - start] + replacement + block[edit_end - start :]
+        blocks[name] = block
+
+    surviving = [name for name in order if name in blocks]
+    if order and order[0] in redirects:
+        entry = redirects[order[0]]
+        surviving = [entry, *[name for name in surviving if name != entry]]
+    content_start = line_start(entries[0][0].start_mark.index)
+    content_end = mapping_end
+    return raw[:content_start] + "".join(blocks[name] for name in surviving) + raw[content_end:]
 
 
 _MODEL_COND_RE = re.compile(
@@ -596,10 +722,10 @@ def _assert_content_integrity(
         return
     parsed_steps: dict[str, Any] = parsed.get("steps", {}) or {}
     for step_name, is_truthy in resolutions.items():
-        if not is_truthy:
+        if is_truthy is False:
             continue
         step_data = parsed_steps.get(step_name, {}) or {}
-        if step_data.get("optional") is True:
+        if is_truthy is True and step_data.get("optional") is True:
             raise ValueError(
                 f"Content integrity violation: step '{step_name}' retains "
                 f"'optional: true' after truthy resolution"
@@ -610,4 +736,9 @@ def _assert_content_integrity(
             raise ValueError(
                 f"Content integrity violation: step '{step_name}' retains "
                 f"'skip_when_false' after truthy resolution"
+            )
+        if "on_skip" in step_data:
+            raise ValueError(
+                f"Content integrity violation: step '{step_name}' retains "
+                "'on_skip' after guard resolution"
             )

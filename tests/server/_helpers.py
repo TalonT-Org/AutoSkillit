@@ -79,7 +79,7 @@ BUNDLED_RECIPE_STEP_BACKEND_PIN_CASES = (
 
 
 def _configure_admitted_recipe(ctx: Any, path: Path) -> None:
-    """Configure the recipe repository mocks for successful namespace admission."""
+    """Admit a recipe and load it with empty steps and ingredients by default."""
     ctx.recipes.find.return_value = MagicMock(path=path)
     ctx.recipes.load.return_value = MagicMock(steps={}, ingredients={})
 

@@ -483,11 +483,15 @@ async def test_open_kitchen_rejects_skill_before_operational_mutation(tmp_path, 
 
 
 @pytest.mark.anyio
-async def test_open_kitchen_without_recipe_returns_json_envelope(tmp_path, monkeypatch):
-    """open_kitchen() without name returns JSON envelope with success=True."""
+async def test_open_kitchen_without_recipe_bypasses_namespace_admission(tmp_path, monkeypatch):
+    """open_kitchen(name=None) activates without consulting recipe or skill names."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes.find.side_effect = AssertionError("anonymous activation admitted a recipe")
+    mock_ctx.skill_resolver.resolve_effective.side_effect = AssertionError(
+        "anonymous activation resolved a skill"
+    )
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -505,6 +509,8 @@ async def test_open_kitchen_without_recipe_returns_json_envelope(tmp_path, monke
     assert parsed["kitchen"] == "open"
     assert "Kitchen is open" in parsed["content"]
     assert parsed["ingredients_table"] is None
+    mock_ctx.recipes.find.assert_not_called()
+    mock_ctx.skill_resolver.resolve_effective.assert_not_called()
 
 
 @pytest.mark.anyio

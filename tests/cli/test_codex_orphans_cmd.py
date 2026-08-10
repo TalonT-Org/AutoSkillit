@@ -98,6 +98,33 @@ def test_run_output_json_shape(
     assert doc["reaped"] == []
 
 
+def test_run_reap_output_json_shape(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import autoskillit.execution as execution_mod
+    from autoskillit.cli._codex_orphans import run_codex_orphans
+
+    orphans = [_make_orphan(1001)]
+    monkeypatch.setattr(execution_mod, "find_orphaned_codex_processes", lambda: orphans)
+    monkeypatch.setattr(
+        execution_mod,
+        "reap_orphaned_codex_processes",
+        lambda scanned: [CodexOrphanReapResult(scanned[0].pid, "terminated")],
+    )
+
+    run_codex_orphans(reap=True, output_json=True)
+
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["reaped"] == [
+        {
+            "pid": 1001,
+            "action": "terminated",
+            "survivor_pids": [],
+            "access_denied_pids": [],
+        }
+    ]
+
+
 def test_run_reap_invokes_reaper_and_reports(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

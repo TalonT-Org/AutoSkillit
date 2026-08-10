@@ -25,6 +25,8 @@ def test_required_fields_present() -> None:
         "session_id",
         "exit_code",
         "backend_data",
+        "task_id",
+        "task_active",
     }
 
 
@@ -57,6 +59,8 @@ def test_default_construction_succeeds() -> None:
     assert ev.session_id is None
     assert ev.exit_code is None
     assert ev.backend_data is None
+    assert ev.task_id is None
+    assert ev.task_active is None
 
 
 def test_two_identical_instances_are_equal() -> None:

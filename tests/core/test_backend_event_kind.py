@@ -21,6 +21,8 @@ def test_backend_event_kind_members():
         BackendEventKind.SESSION_META,
         BackendEventKind.API_RETRY,
         BackendEventKind.TOOL_OUTPUT,
+        BackendEventKind.TASK_LIFECYCLE,
+        BackendEventKind.SCHEDULE_WAKEUP,
         BackendEventKind.ERROR,
         BackendEventKind.IGNORED,
     }
@@ -33,6 +35,8 @@ def test_backend_event_kind_values():
     assert BackendEventKind.SESSION_META == "session_meta"
     assert BackendEventKind.API_RETRY == "api_retry"
     assert BackendEventKind.TOOL_OUTPUT == "tool_output"
+    assert BackendEventKind.TASK_LIFECYCLE == "task_lifecycle"
+    assert BackendEventKind.SCHEDULE_WAKEUP == "schedule_wakeup"
     assert BackendEventKind.ERROR == "error"
     assert BackendEventKind.IGNORED == "ignored"
 

@@ -618,6 +618,8 @@ class BackendEventKind(StrEnum):
     SESSION_META = "session_meta"
     API_RETRY = "api_retry"
     TOOL_OUTPUT = "tool_output"
+    TASK_LIFECYCLE = "task_lifecycle"
+    SCHEDULE_WAKEUP = "schedule_wakeup"
     ERROR = "error"
     IGNORED = "ignored"
 

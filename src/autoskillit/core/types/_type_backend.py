@@ -534,6 +534,8 @@ class SessionEvent:
     session_id: str | None = None
     exit_code: int | None = None
     backend_data: ClaudeEventData | CodexEventData | None = None
+    task_id: str | None = None
+    task_active: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -228,6 +228,46 @@ class ClaudeStreamParser:
 
         record_type = obj.get("type", "")
 
+        if record_type in {"task_started", "task_progress", "task_notification", "task_updated"}:
+            task_id = obj.get("task_id")
+            if not isinstance(task_id, str) or not task_id.strip():
+                return SessionEvent(
+                    kind=BackendEventKind.IGNORED,
+                    is_terminal=False,
+                    has_marker=False,
+                )
+            status: object = obj.get("status")
+            if record_type == "task_updated":
+                patch = obj.get("patch")
+                if not isinstance(patch, dict):
+                    return SessionEvent(
+                        kind=BackendEventKind.IGNORED,
+                        is_terminal=False,
+                        has_marker=False,
+                    )
+                status = patch.get("status")
+            active_statuses = {"pending", "running", "paused"}
+            terminal_statuses = {"completed", "failed", "stopped", "killed"}
+            if record_type in {"task_started", "task_progress"}:
+                task_active = True
+            elif status in active_statuses:
+                task_active = True
+            elif status in terminal_statuses:
+                task_active = False
+            else:
+                return SessionEvent(
+                    kind=BackendEventKind.IGNORED,
+                    is_terminal=False,
+                    has_marker=False,
+                )
+            return SessionEvent(
+                kind=BackendEventKind.TASK_LIFECYCLE,
+                is_terminal=False,
+                has_marker=False,
+                task_id=task_id.strip(),
+                task_active=task_active,
+            )
+
         if record_type == "system":
             subtype = obj.get("subtype", "")
             session_id = obj.get("session_id", "")
@@ -294,6 +334,19 @@ class ClaudeStreamParser:
                             raw=obj,
                         ),
                     )
+            message = obj.get("message")
+            content = message.get("content") if isinstance(message, dict) else None
+            if isinstance(content, list) and any(
+                isinstance(block, dict)
+                and block.get("type") == "tool_use"
+                and block.get("name") == "ScheduleWakeup"
+                for block in content
+            ):
+                return SessionEvent(
+                    kind=BackendEventKind.SCHEDULE_WAKEUP,
+                    is_terminal=False,
+                    has_marker=False,
+                )
             return SessionEvent(
                 kind=BackendEventKind.IGNORED,
                 is_terminal=False,

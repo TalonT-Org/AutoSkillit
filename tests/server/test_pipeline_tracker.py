@@ -149,6 +149,9 @@ class TestRecordPipelineStepInit:
         )
 
         assert completed["success"] is False
+        assert completed["is_error"] is True
+        assert completed["stage"] == "pipeline_marker"
+        assert completed["error"] == "record_pipeline_step: pipeline marker failed."
         assert self.ctx.tracker_leases == {}
 
     @pytest.mark.anyio

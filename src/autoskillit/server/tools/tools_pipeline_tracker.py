@@ -469,7 +469,15 @@ def _handle_complete(ctx: _TrackerCtx, effective_pipeline_id: str, step_name: st
         )
     except Exception:
         _release_context_tracker(ctx, key)
-        raise
+        logger.exception("record_pipeline_step_marker_failed")
+        return json.dumps(
+            {
+                "success": False,
+                "is_error": True,
+                "error": "record_pipeline_step: pipeline marker failed.",
+                "stage": "pipeline_marker",
+            }
+        )
     if not result.get("success") or result.get("done") == result.get("total"):
         _release_context_tracker(ctx, key)
     return json.dumps(result)

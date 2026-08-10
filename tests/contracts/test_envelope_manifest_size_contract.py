@@ -1,5 +1,6 @@
-"""Bounded recipe manifests remain independent of recipe body size."""
+"""Bounded recipe manifests remain within their delivery budget."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,7 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 
 @pytest.mark.parametrize("recipe_path", BUNDLED_RECIPE_PATHS, ids=lambda path: path.stem)
-def test_envelope_manifest_fits_independent_size_budget(
+def test_serialized_envelope_manifest_fits_size_budget(
     recipe_path: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -23,7 +24,5 @@ def test_envelope_manifest_fits_independent_size_budget(
         temp_dir=tmp_path,
         monkeypatch=monkeypatch,
     )
-    import json
-
     rendered = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
     assert len(rendered.encode("utf-8")) <= MAX_ENVELOPE_MANIFEST_BYTES

@@ -7,6 +7,7 @@ Two progress sources feed into SessionCheckpoint:
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -19,11 +20,11 @@ from autoskillit.core import (
     get_logger,
     read_tracker_authority,
     retain_tracker_lease,
+    sample_kitchen_process_identity,
 )
 from autoskillit.fleet.sidecar import IssueSidecarEntry, read_sidecar_from_path
 from autoskillit.fleet.state import CampaignStateMutator
 from autoskillit.fleet.state_types import DispatchStatus
-from autoskillit.pipeline import get_kitchen_process_identity
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
@@ -41,7 +42,11 @@ def retain_dispatch_tracker_authority(
         dispatch_id,
         expected=False,
     )
-    identity = get_kitchen_process_identity(tool_ctx, dispatch_id)
+    identity = tool_ctx.kitchen_process_identity or sample_kitchen_process_identity(
+        tool_ctx.kitchen_id or dispatch_id,
+        os.getpid(),
+        tool_ctx.project_dir,
+    )
     key = TrackerParticipantKey(
         target=target,
         owner_kind="dispatch",

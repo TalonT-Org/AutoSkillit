@@ -87,7 +87,9 @@ class ChildSpawnSpec:
         if self.count < 1:
             raise SkillContractError("child spawn count must be positive")
         if self.for_each is not None:
-            if not isinstance(self.for_each, str) or not self.for_each.strip():
+            if not isinstance(self.for_each, str):
+                raise SkillContractError("child spawn for_each must be a string")
+            if not self.for_each.strip():
                 raise SkillContractError("child spawn for_each must be non-empty")
             if self.count != 1:
                 raise SkillContractError(

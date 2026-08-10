@@ -579,7 +579,11 @@ class TestTrackerBridgeIntegration:
             lambda **_: _make_completed_clean(success=True),
         )
 
+        load_calls = 0
+
         def fail_progress_load(**_kwargs):
+            nonlocal load_calls
+            load_calls += 1
             raise OSError("progress unavailable")
 
         monkeypatch.setattr(
@@ -590,6 +594,10 @@ class TestTrackerBridgeIntegration:
         result = await _run(tool_ctx)
 
         assert result["success"] is False
+        assert result["dispatch_status"] == "failure"
+        assert result["reason"] == FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH
+        assert "progress unavailable" in result["diagnostic_message"]
+        assert load_calls == 1
         assert not any(key.owner_kind == "dispatch" for key in tool_ctx.tracker_leases)
 
     @pytest.mark.anyio

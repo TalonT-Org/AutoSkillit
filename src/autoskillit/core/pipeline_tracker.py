@@ -336,6 +336,7 @@ def try_retire_tracker(target: TrackerAuthorityTarget) -> bool:
                 kitchen_id = current.data.get("kitchen_id")
                 if not isinstance(kitchen_id, str) or not kitchen_id:
                     return False
+                # <project>/.autoskillit/temp/pipeline_tracker/<id>.json -> <project>
                 project_path = str(target.path.parents[3].resolve())
                 matching = [
                     entry

@@ -25,7 +25,12 @@ from autoskillit.pipeline import (
     record_initialization_page,
 )
 from autoskillit.server._factory import make_recipe_execution
-from autoskillit.server._recipe_execution import build_recipe_execution_snapshot
+from autoskillit.server._recipe_execution import (
+    RecipeExecutionAdmissionError,
+    build_recipe_execution_snapshot,
+    install_recipe_execution,
+    prepare_recipe_execution,
+)
 from autoskillit.server._recipe_initialization import (
     FinalizedRecipeInitializationResponse,
     FinalizedRecipeSectionResponse,
@@ -153,6 +158,17 @@ def test_completion_is_server_owned_and_commits_ready_only_after_enforcement(
         "snapshot_digest",
     }
     assert parsed_initial["recipe_execution"] == parsed_replay["recipe_execution"]
+
+
+def test_install_rejects_initializing_recipe_without_completion_receipt(
+    minimal_ctx,
+    tmp_path,
+) -> None:
+    state = _stage(minimal_ctx, tmp_path)
+    prepared = prepare_recipe_execution(minimal_ctx, snapshot=state.staged_snapshot)
+
+    with pytest.raises(RecipeExecutionAdmissionError, match="without a completion receipt"):
+        install_recipe_execution(minimal_ctx, prepared_execution=prepared)
 
 
 def test_terminal_page_credit_atomically_installs_ready_recipe(minimal_ctx, tmp_path) -> None:

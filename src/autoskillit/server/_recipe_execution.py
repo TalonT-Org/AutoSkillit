@@ -366,11 +366,17 @@ def install_recipe_execution(
     with tool_ctx.recipe_execution_lock:
         state = tool_ctx.recipe_initialization_state
         if isinstance(state, InitializingRecipe):
+            receipt = completion_receipt or state.completion_receipt
+            if not receipt:
+                raise RecipeExecutionAdmissionError(
+                    "recipe_completion_receipt_missing",
+                    "recipe execution cannot become ready without a completion receipt",
+                )
             tool_ctx.recipe_initialization_state = ready_recipe_execution_state(
                 tool_ctx,
                 state,
                 prepared_execution=installed,
-                completion_receipt=completion_receipt or state.completion_receipt or "",
+                completion_receipt=receipt,
             )
         elif isinstance(state, ReadyRecipe):
             tool_ctx.recipe_initialization_state = replace_ready_execution(state, installed)

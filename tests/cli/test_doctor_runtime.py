@@ -426,3 +426,20 @@ def test_orphaned_codex_check_ok_when_none(monkeypatch: pytest.MonkeyPatch) -> N
     assert len(results) == 1
     assert results[0].check == "orphaned_codex_processes"
     assert results[0].severity == Severity.OK
+
+
+def test_orphaned_codex_check_reports_scan_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    import autoskillit.execution as execution_mod
+    from autoskillit.cli.doctor._doctor_runtime import _check_orphaned_codex_processes
+
+    def fail_scan() -> None:
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(execution_mod, "find_orphaned_codex_processes", fail_scan)
+
+    results = _check_orphaned_codex_processes()
+
+    assert len(results) == 1
+    assert results[0].severity is Severity.WARNING
+    assert results[0].check == "orphaned_codex_processes"
+    assert results[0].message == "scan failed: PermissionError: denied"

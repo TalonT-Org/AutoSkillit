@@ -537,7 +537,13 @@ def _check_orphaned_codex_processes() -> list[DoctorResult]:
     try:
         orphans = find_orphaned_codex_processes()
     except Exception as exc:
-        return [DoctorResult(Severity.WARNING, check_name, f"scan failed: {exc}")]
+        return [
+            DoctorResult(
+                Severity.WARNING,
+                check_name,
+                f"scan failed: {type(exc).__name__}: {exc}",
+            )
+        ]
 
     if not orphans:
         return [DoctorResult(Severity.OK, check_name, "no orphaned codex processes")]

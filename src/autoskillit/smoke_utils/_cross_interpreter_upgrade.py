@@ -16,10 +16,6 @@ from pathlib import Path
 
 from packaging.version import InvalidVersion, Version
 
-from autoskillit.core import get_logger
-
-logger = get_logger(__name__)
-
 # Declared precondition, not a default to silently fall back on: the runner
 # must offer both minors, or this step fails loudly (no silent caps).
 _REQUIRED_PYTHON_MINORS = ("3.11", "3.13")
@@ -200,17 +196,7 @@ def run_cross_interpreter_upgrade_smoke(*, work_dir: str) -> bool:
     for name in post_upgrade:
         _assert_incarnation_hooks_execute(cache_root / name)
 
-    # C-I5: Assert projected plugin artifacts also survive the cross-interpreter
-    # upgrade. This is the only test tier that exercises a real interpreter-minor
-    # swap against real deployed artifacts — the incident's exact geometry.
-    try:
-        _assert_projected_artifact_relocatable(scratch_home, env)
-    except Exception:
-        # The projection assertion requires a real workspace with catalog
-        # infrastructure.  When the smoke runs under a mocked subprocess
-        # (unit-test tier), projection may fail — that's fine, the real
-        # cross-interpreter smoke (integration tier) exercises it fully.
-        logger.warning("projected_artifact_relocatability_check_skipped", exc_info=True)
+    _assert_projected_artifact_relocatable(scratch_home, env)
 
     return True
 
@@ -227,20 +213,28 @@ def _assert_projected_artifact_relocatable(
     (b) the dispatcher exists inside the artifact
     (c) one command executes literally with python3 from PATH, exit ≠ 2
     """
-    from autoskillit.core import PluginLoadMode
+    from autoskillit.core import PluginLoadMode, SkillExecutionRole, SkillSource
     from autoskillit.execution import ClaudeCodeBackend
     from autoskillit.hook_registry import PLUGIN_ROOT_TOKEN
+    from autoskillit.workspace import (
+        DefaultSkillResolver,
+        EffectiveSkillCatalog,
+        SkillCatalogEntry,
+        project_default_plugin_authority,
+    )
 
-    # The workspace module uses Path.home() for projection storage, and our
-    # scratch_home simulates that. We need a fresh authority with the scratch
-    # home so projections land there.
     original_home = Path.home
     try:
         Path.home = staticmethod(lambda: scratch_home)  # type: ignore[assignment]
-        from autoskillit.workspace import project_default_plugin_authority
-        from tests.contracts._projection_helpers import session_catalog
-
-        catalog = session_catalog()
+        bundled_skills = tuple(
+            skill
+            for skill in DefaultSkillResolver().list_all()
+            if skill.source is SkillSource.BUNDLED
+        )
+        catalog = EffectiveSkillCatalog(
+            skills=tuple(SkillCatalogEntry.from_skill_info(skill) for skill in bundled_skills),
+            execution_role=SkillExecutionRole.SESSION,
+        )
         authority = project_default_plugin_authority(
             cwd=scratch_home,
             base_branch="main",

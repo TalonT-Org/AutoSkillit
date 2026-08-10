@@ -6433,11 +6433,12 @@ def test_extract_investigation_accepts_report_without_recommendations(
 
 
 @pytest.mark.parametrize(
-    ("version_returncode", "version_stdout", "error_match"),
+    ("version_returncode", "version_stdout", "projection_error", "error_match"),
     [
-        (0, "1.1.0\n", None),
-        (1, "1.1.0\n", "version probe failed"),
-        (0, "not-a-version\n", "invalid post-upgrade version"),
+        (0, "1.1.0\n", False, None),
+        (1, "1.1.0\n", False, "version probe failed"),
+        (0, "not-a-version\n", False, "invalid post-upgrade version"),
+        (0, "1.1.0\n", True, "projected assertion failed"),
     ],
 )
 def test_cross_interpreter_upgrade_smoke_validates_version_before_republish(
@@ -6445,6 +6446,7 @@ def test_cross_interpreter_upgrade_smoke_validates_version_before_republish(
     monkeypatch: pytest.MonkeyPatch,
     version_returncode: int,
     version_stdout: str,
+    projection_error: bool,
     error_match: str | None,
 ) -> None:
     """The real smoke path must validate the probe before constructing republish argv."""
@@ -6485,10 +6487,16 @@ def test_cross_interpreter_upgrade_smoke_validates_version_before_republish(
     )
     monkeypatch.setattr(smoke, "_assert_incarnation_hooks_execute", lambda _path: None)
 
+    def assert_projection(_home: Path, _env: dict[str, str]) -> None:
+        if projection_error:
+            raise RuntimeError("projected assertion failed")
+
+    monkeypatch.setattr(smoke, "_assert_projected_artifact_relocatable", assert_projection)
+
     if error_match is not None:
         with pytest.raises(RuntimeError, match=error_match):
             smoke.run_cross_interpreter_upgrade_smoke(work_dir=str(tmp_path))
-        assert not any("--maintenance-update" in cmd for cmd in run_calls)
+        assert any("--maintenance-update" in cmd for cmd in run_calls) is projection_error
         return
 
     assert smoke.run_cross_interpreter_upgrade_smoke(work_dir=str(tmp_path)) is True

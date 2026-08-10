@@ -14,8 +14,10 @@ from typing import Literal
 
 import psutil
 
-from autoskillit.core import read_starttime_ticks
+from autoskillit.core import get_logger, read_starttime_ticks
 from autoskillit.execution.process._process_kill import kill_process_tree
+
+logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -162,11 +164,18 @@ def reap_orphaned_codex_processes(
             read_starttime_ticks(o.pid) != o.starttime_ticks
             or _fd0_deleted_pty_target(o.pid) is None
         ):
+            logger.info("codex_orphan_reap_skipped", pid=o.pid)
             results.append(CodexOrphanReapResult(o.pid, "skipped"))
             continue
 
         result = kill_process_tree(o.pid)
         if result.survivor_pids or result.access_denied_pids:
+            logger.warning(
+                "codex_orphan_reap_incomplete",
+                pid=o.pid,
+                survivor_pids=result.survivor_pids,
+                access_denied_pids=result.access_denied_pids,
+            )
             results.append(
                 CodexOrphanReapResult(
                     o.pid,

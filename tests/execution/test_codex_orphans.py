@@ -251,7 +251,11 @@ class TestReapSkipsStaleIdentity:
         assert len(results) == 1
         assert results[0].action == "skipped"
 
-    def test_nonexistent_pid(self):
+    def test_nonexistent_pid(self, monkeypatch):
+        from unittest.mock import Mock
+
+        import autoskillit.execution.process._codex_orphans as codex_orphans
+
         orphan = OrphanedCodexProcess(
             pid=999999999,
             fd0_target="/dev/pts/99 (deleted)",
@@ -259,11 +263,14 @@ class TestReapSkipsStaleIdentity:
             starttime_ticks=1,
             started_at=0.0,
         )
+        logger = Mock()
+        monkeypatch.setattr(codex_orphans, "logger", logger)
 
         results = reap_orphaned_codex_processes([orphan])
 
         assert len(results) == 1
         assert results[0].action == "skipped"
+        logger.info.assert_called_once_with("codex_orphan_reap_skipped", pid=orphan.pid)
 
     def test_live_child_with_mismatched_fd0(self, _spawn_fake_codex):
         name = _unique_name("cdxmism")
@@ -343,6 +350,10 @@ def test_scan_is_same_uid_scoped(_spawn_fake_codex, monkeypatch):
 
 
 def test_reap_reports_incomplete_on_survivors(_spawn_fake_codex, monkeypatch):
+    from unittest.mock import Mock
+
+    import autoskillit.execution.process._codex_orphans as codex_orphans
+
     name = _unique_name("cdxsurv")
     _spawn_fake_codex(name=name, stdin_mode="orphan_pty")
 
@@ -351,6 +362,8 @@ def test_reap_reports_incomplete_on_survivors(_spawn_fake_codex, monkeypatch):
     orphan = orphans[0]
 
     fake = ProcessCleanupResult(root_pid=orphan.pid, survivor_pids=(orphan.pid,))
+    logger = Mock()
+    monkeypatch.setattr(codex_orphans, "logger", logger)
     monkeypatch.setattr(
         "autoskillit.execution.process._codex_orphans.kill_process_tree",
         lambda pid, **kw: fake,
@@ -361,3 +374,9 @@ def test_reap_reports_incomplete_on_survivors(_spawn_fake_codex, monkeypatch):
     assert len(results) == 1
     assert results[0].action == "incomplete"
     assert results[0].survivor_pids == (orphan.pid,)
+    logger.warning.assert_called_once_with(
+        "codex_orphan_reap_incomplete",
+        pid=orphan.pid,
+        survivor_pids=(orphan.pid,),
+        access_denied_pids=(),
+    )

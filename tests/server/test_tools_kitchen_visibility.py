@@ -426,13 +426,26 @@ async def test_open_kitchen_with_recipe_not_found(tmp_path, monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_open_kitchen_rejects_skill_before_operational_mutation(tmp_path, monkeypatch):
-    """A skill-only name fails before the kitchen or active recipe is mutated."""
+@pytest.mark.parametrize(
+    ("recipe_name", "skill_match", "expected_message"),
+    [
+        ("dry-walkthrough", object(), "current session"),
+        ("missing-recipe", None, "No recipe named 'missing-recipe' found"),
+    ],
+)
+async def test_open_kitchen_rejects_non_recipe_before_operational_mutation(
+    tmp_path,
+    monkeypatch,
+    recipe_name,
+    skill_match,
+    expected_message,
+):
+    """Skill-only and unknown names fail before operational state is mutated."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.recipes = MagicMock()
     mock_ctx.recipes.find.return_value = None
-    mock_ctx.skill_resolver.resolve_effective.return_value = object()
+    mock_ctx.skill_resolver.resolve_effective.return_value = skill_match
     mock_ctx.recipe_name = "existing-recipe"
     previous_execution = mock_ctx.recipe_initialization_state
     previous_quota_task = mock_ctx.quota_refresh_task
@@ -459,11 +472,10 @@ async def test_open_kitchen_rejects_skill_before_operational_mutation(tmp_path, 
     ):
         from autoskillit.server.tools.tools_kitchen import open_kitchen
 
-        result = json.loads(await open_kitchen(name="dry-walkthrough", ctx=mock_ctx))
+        result = json.loads(await open_kitchen(name=recipe_name, ctx=mock_ctx))
 
     assert result["stage"] == "recipe_namespace"
-    assert "skill" in result["user_visible_message"].lower()
-    assert "current session" in result["user_visible_message"].lower()
+    assert expected_message in result["user_visible_message"]
     handler.assert_not_awaited()
     clear.assert_not_called()
     create_task.assert_not_called()

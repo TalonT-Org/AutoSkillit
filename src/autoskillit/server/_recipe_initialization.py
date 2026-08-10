@@ -54,6 +54,7 @@ __all__ = [
     "complete_initialization_response",
     "complete_section_response",
     "matches_recipe_initialization_requirement",
+    "recipe_initialization_progress_counts",
     "recipe_initialization_receipt",
     "replay_terminal_section_response",
     "stage_recipe_initialization",
@@ -143,6 +144,24 @@ def recipe_initialization_receipt(
         "sha256:"
         + hashlib.sha256(b"autoskillit.recipe-initialization-receipt.v1\0" + material).hexdigest()
     )
+
+
+def recipe_initialization_progress_counts(
+    state: InitializingRecipe,
+    *,
+    section: str,
+    page_plan_sha256: str,
+    part: int,
+) -> tuple[int, int, int]:
+    """Return global completed, total, and remaining counts for one rendered page."""
+    current = next(
+        item
+        for item in state.progress
+        if item.section == section and item.page_plan_sha256 == page_plan_sha256
+    )
+    total = sum(item.total_parts for item in state.progress)
+    completed = sum(item.next_part for item in state.progress) + int(part >= current.next_part)
+    return completed, total, total - completed
 
 
 @dataclass(frozen=True, slots=True)

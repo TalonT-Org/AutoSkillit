@@ -63,6 +63,7 @@ from autoskillit.server._recipe_initialization import (
     FinalizedRecipeSectionResponse,
     build_completion_response,
     matches_recipe_initialization_requirement,
+    recipe_initialization_progress_counts,
     replay_terminal_section_response,
 )
 from autoskillit.server._recipe_section_pagination import (
@@ -720,20 +721,18 @@ async def get_recipe_section(
             rendered = render_recipe_section_page(page_plan, part)
             rendered_payload = json.loads(rendered)
             if isinstance(active_initialization, InitializingRecipe):
-                current_progress = next(
-                    item
-                    for item in active_initialization.progress
-                    if item.section == section
-                    and item.page_plan_sha256 == page_plan.page_plan_sha256
+                completed_parts, total_parts, calls_remaining = (
+                    recipe_initialization_progress_counts(
+                        active_initialization,
+                        section=section,
+                        page_plan_sha256=page_plan.page_plan_sha256,
+                        part=part,
+                    )
                 )
-                total_parts = sum(item.total_parts for item in active_initialization.progress)
-                completed_parts = sum(
-                    item.next_part for item in active_initialization.progress
-                ) + int(part >= current_progress.next_part)
                 rendered_payload.update(
                     completed_parts=completed_parts,
                     total_parts=total_parts,
-                    calls_remaining=total_parts - completed_parts,
+                    calls_remaining=calls_remaining,
                 )
                 rendered = json.dumps(
                     rendered_payload,

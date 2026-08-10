@@ -443,17 +443,19 @@ def load_and_validate(
                     raw, _source_skip_resolutions, _source_pre_prune_steps
                 )
                 _assert_content_integrity(raw, _source_skip_resolutions, _source_pre_prune_steps)
-            # Auto-derive on_rate_limit from on_context_limit for run_skill steps.
-            # Runs after _prune_skipped_steps so live (non-pruned) steps get the
-            # derivation. This is production defense-in-depth — explicit YAML
-            # values remain the canonical declaration, but the silent fallback
-            # in the sous-chef cascade is removed at the data level.
+            # Cross-check: raw YAML route refs must match the Python model exactly.
+            # Catches any refs that the model repaired but the YAML repair pass missed.
             _route_consistency_errors = _validate_route_consistency(raw, source_recipe)
             if _route_consistency_errors:
                 errors.extend(
                     f"[post-prune] route consistency: {e}" for e in _route_consistency_errors
                 )
                 raw = ""
+            # Auto-derive on_rate_limit from on_context_limit for run_skill steps.
+            # Runs after _prune_skipped_steps so live (non-pruned) steps get the
+            # derivation. This is production defense-in-depth — explicit YAML
+            # values remain the canonical declaration, but the silent fallback
+            # in the sous-chef cascade is removed at the data level.
             active_recipe = _derive_rate_limit_routes(active_recipe)
             # Post-prune: validate that no surviving step routes to a removed step.
             # Must run inside try so active_recipe and errors are both in scope.
@@ -461,8 +463,6 @@ def load_and_validate(
             if _dangling_errors:
                 errors.extend(f"[post-prune] dangling route: {e}" for e in _dangling_errors)
                 raw = ""
-            # Cross-check: raw YAML route refs must match the Python model exactly.
-            # Catches any refs that the model repaired but the YAML repair pass missed.
             t0 = _t("prune_skipped_steps", t0, name)
 
             # Stage: semantic rules (builds ValidationContext from post-prune recipe)

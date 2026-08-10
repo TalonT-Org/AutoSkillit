@@ -154,6 +154,24 @@ def test_locked_initialization_and_mutation_preserve_invalid_existing_bytes(tmp_
         lease.close()
 
 
+def test_mutation_skips_atomic_replace_when_data_is_unchanged(monkeypatch, tmp_path):
+    from autoskillit.core import pipeline_tracker as tracker_module
+
+    target = _target(tmp_path, expected=False)
+    lease = retain_tracker_lease({}, _key(target, tmp_path))
+    target.path.parent.mkdir(parents=True, exist_ok=True)
+    target.path.write_text(json.dumps(_tracker()))
+    writes = []
+    monkeypatch.setattr(tracker_module, "atomic_write", lambda *_args: writes.append(True))
+    try:
+        result = mutate_tracker(target, lease, lambda data: data)
+    finally:
+        lease.close()
+
+    assert result.data == _tracker()
+    assert writes == []
+
+
 def test_kitchen_merge_preserves_progress_and_manual_init_is_create_only(tmp_path):
     target = _target(tmp_path, expected=False)
     leases = {}

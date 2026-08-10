@@ -45,7 +45,6 @@ def _validate_target_order_id(target_order_id: str) -> None:
     if (
         target_order_id in {".", ".."}
         or Path(target_order_id).name != target_order_id
-        or "/" in target_order_id
         or "\\" in target_order_id
         or "\x00" in target_order_id
     ):
@@ -308,6 +307,8 @@ def mutate_tracker(
         if current.data is None:
             return current
         updated = _validate_tracker_data(mutation(dict(current.data)))
+        if updated == current.data:
+            return current
         atomic_write(target.path, json.dumps(updated))
         return TrackerAuthorityReadResult(target, data=updated)
 

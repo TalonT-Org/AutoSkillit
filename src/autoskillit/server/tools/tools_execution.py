@@ -131,7 +131,7 @@ from autoskillit.server._recipe_execution import (
 )
 from autoskillit.server._run_skill_completion import (
     FinalizedRunSkillCompletionResponse,
-    current_request_session_id,
+    _request_session_identity,
     stage_run_skill_completion_response,
 )
 from autoskillit.server._subprocess import _run_subprocess_captured
@@ -636,18 +636,6 @@ def _begin_run_skill_completion(
         tracker_incarnation_id=tracker_incarnation_id,
         step_name=step_name,
     )
-
-
-def _request_session_identity(request_context: Context) -> str:
-    request_session_id = current_request_session_id()
-    if not request_session_id:
-        try:
-            request_session_id = str(request_context.session_id or "")
-        except (AttributeError, RuntimeError):
-            request_session_id = ""
-    if not request_session_id:
-        request_session_id = f"direct:{id(request_context)}"
-    return request_session_id
 
 
 def _finalize_run_skill_completion(

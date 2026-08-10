@@ -29,10 +29,10 @@ from autoskillit.server._misc import (
     _pipeline_tracker_path,
 )
 from autoskillit.server._notify import track_response_size
+from autoskillit.server._run_skill_completion import _request_session_identity
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._overlay_state import read_overlay
 from autoskillit.server.tools._types import deny_envelope
-from autoskillit.server.tools.tools_execution import _request_session_identity
 
 logger = get_logger(__name__)
 

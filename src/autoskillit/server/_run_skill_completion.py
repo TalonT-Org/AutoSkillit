@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import anyio
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
 from fastmcp.server.middleware import Middleware
 from fastmcp.tools.base import ToolResult
 from fastmcp.tools.function_tool import FunctionTool
@@ -26,6 +26,7 @@ logger = get_logger(__name__)
 __all__ = [
     "FinalizedRunSkillCompletionResponse",
     "RunSkillCompletionMiddleware",
+    "_request_session_identity",
     "current_request_session_id",
     "stage_run_skill_completion_response",
 ]
@@ -49,6 +50,19 @@ _staged_response: ContextVar[FinalizedRunSkillCompletionResponse | None] = Conte
 def current_request_session_id() -> str:
     """Return the trusted FastMCP session identity captured by middleware."""
     return _request_session_id.get()
+
+
+def _request_session_identity(request_context: Context) -> str:
+    """Resolve the current request session, including direct-call fallbacks."""
+    request_session_id = current_request_session_id()
+    if not request_session_id:
+        try:
+            request_session_id = str(request_context.session_id or "")
+        except (AttributeError, RuntimeError):
+            request_session_id = ""
+    if not request_session_id:
+        request_session_id = f"direct:{id(request_context)}"
+    return request_session_id
 
 
 def stage_run_skill_completion_response(

@@ -220,10 +220,21 @@ class TestProjectionFreshness:
             assert result.stdout, (
                 f"projected formatter command emitted no output: {command!r}\n{result.stderr}"
             )
-            output = json.loads(result.stdout)
+            diagnostics = (
+                f"command: {command!r}\n"
+                f"stdout: {result.stdout[:2000]!r}\n"
+                f"stderr: {result.stderr[:2000]!r}"
+            )
+            try:
+                output = json.loads(result.stdout)
+            except json.JSONDecodeError as exc:
+                pytest.fail(
+                    f"projected formatter emitted invalid JSON ({exc}):\n{diagnostics}",
+                    pytrace=False,
+                )
             updated_output = output["hookSpecificOutput"]["updatedMCPToolOutput"]
-            assert "## open_kitchen" in updated_output
-            assert input_text in updated_output
+            assert "## open_kitchen" in updated_output, diagnostics
+            assert input_text in updated_output, diagnostics
         assert binding.closed
 
 

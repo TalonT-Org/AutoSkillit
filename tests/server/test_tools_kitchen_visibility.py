@@ -394,8 +394,8 @@ async def test_open_kitchen_with_recipe_returns_combined_response(tmp_path, monk
 
 
 @pytest.mark.anyio
-async def test_open_kitchen_with_recipe_not_found(tmp_path, monkeypatch):
-    """open_kitchen(name='nonexistent') fails closed when recipe is not found."""
+async def test_open_kitchen_reports_admitted_recipe_missing_during_load(tmp_path, monkeypatch):
+    """An admitted recipe that disappears during loading fails closed."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()

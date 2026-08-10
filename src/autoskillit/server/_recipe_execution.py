@@ -646,10 +646,7 @@ def complete_audit_finalization_effects(
     *,
     attempt_id: AuditAttemptId,
     skill_command: str,
-    step_name: str,
-    order_id: str,
-    mark_step_complete: Callable[[ToolContext, str, str], dict | None],
-) -> dict[str, object] | None:
+) -> None:
     """Complete each attempt-keyed success effect at most once."""
 
     def complete(
@@ -678,4 +675,3 @@ def complete_audit_finalization_effects(
         ),
     )
     complete("run_skill_state_cleared", lambda: clear_run_skill_state(tool_ctx.project_dir))
-    return None

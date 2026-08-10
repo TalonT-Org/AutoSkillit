@@ -85,16 +85,12 @@ def test_resumed_audit_finalization_is_retry_safe_and_persists_replay(
             tool_ctx_kitchen_open,
             result=result,
             skill_command="/autoskillit:audit-impl",
-            step_name="",
-            order_id="",
         )
     response = json.loads(
         _complete_resumed_audit(
             tool_ctx_kitchen_open,
             result=result,
             skill_command="/autoskillit:audit-impl",
-            step_name="",
-            order_id="",
         )
     )
 

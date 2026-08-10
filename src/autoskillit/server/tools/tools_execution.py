@@ -343,8 +343,6 @@ def _complete_resumed_audit(
     *,
     result: AuditMaterializationResult,
     skill_command: str,
-    step_name: str,
-    order_id: str,
 ) -> str:
     status = _materialization_outcome_status(result)
     if status is AuditOutcomeStatus.PUBLISHED:
@@ -368,9 +366,6 @@ def _complete_resumed_audit(
             tool_ctx,
             attempt_id=result.attempt_id,
             skill_command=skill_command,
-            step_name=step_name,
-            order_id=order_id,
-            mark_step_complete=_mark_step_complete_server_side,
         )
         outcome = AuditOutcome(
             status=AuditOutcomeStatus.PUBLISHED,
@@ -537,58 +532,6 @@ def _has_active_deps() -> bool:
     except (json.JSONDecodeError, OSError):
         return False
     return bool(tracker.get("dependencies"))
-
-
-def _mark_step_complete_server_side(
-    tool_ctx: ToolContext,
-    step_name: str,
-    order_id: str,
-) -> dict | None:
-    """Mark a pipeline step complete at the run_skill adjudication point.
-
-    Uses the shared ``resolve_tracker_order_id`` so the marker resolves the
-    same tracker file as ``_check_pipeline_deps``. Failures are logged but
-    never fail the tool call.
-    """
-    from autoskillit.server.tools.tools_pipeline_tracker import (  # circular-break
-        ResolvedTracker,
-        mark_step_complete,
-        resolve_tracker_order_id,
-    )
-
-    try:
-        resolved = resolve_tracker_order_id(tool_ctx, order_id)
-        if not isinstance(resolved, ResolvedTracker):
-            logger.debug("pipeline_marker_skip_no_tracker", reason=resolved.reason)
-            return None
-        if not resolved.path.exists():
-            logger.debug("pipeline_marker_skip_no_file", path=str(resolved.path))
-            return None
-        result = mark_step_complete(resolved.path, step_name, resolved.order_id)
-        if result.get("success"):
-            logger.info(
-                "pipeline_step_marked_complete",
-                step=result["step"],
-                order_id=result["order_id"],
-                done=result["done"],
-                total=result["total"],
-            )
-        else:
-            logger.warning(
-                "pipeline_marker_failed",
-                error=result.get("error", "unknown"),
-            )
-        marker = {
-            "step": result.get("step", step_name),
-            "order_id": resolved.order_id,
-            "status": "complete" if result.get("success") else "marker_failed",
-        }
-        if "advisory" in result:
-            marker["advisory"] = result["advisory"]
-        return marker
-    except Exception:
-        logger.warning("pipeline_marker_exception", exc_info=True)
-        return None
 
 
 def _completion_tracker_binding(tool_ctx: ToolContext, order_id: str) -> tuple[str, str, str, str]:
@@ -1529,8 +1472,6 @@ async def run_skill(
                                 tool_ctx,
                                 result=_resumed,
                                 skill_command=skill_command,
-                                step_name=step_name,
-                                order_id=order_id,
                             )
                             return _finalize_run_skill_completion(
                                 tool_ctx,
@@ -1558,8 +1499,6 @@ async def run_skill(
                                 tool_ctx,
                                 result=_published,
                                 skill_command=skill_command,
-                                step_name=step_name,
-                                order_id=order_id,
                             )
                             return _finalize_run_skill_completion(
                                 tool_ctx,
@@ -2474,17 +2413,11 @@ async def run_skill(
                             tool_ctx,
                             attempt_id=_audit_outcome_to_finalize.attempt_id,
                             skill_command=skill_command,
-                            step_name=step_name,
-                            order_id=order_id,
-                            mark_step_complete=lambda *_args: None,
                         )
-                        _pipeline_marker = None
                     else:
                         tool_ctx.audit.record_success(skill_command)
                         clear_run_skill_state(tool_ctx.project_dir)
-                        _pipeline_marker = None
                 else:
-                    _pipeline_marker = None
                     await _notify(
                         ctx,
                         "error",
@@ -2547,8 +2480,6 @@ async def run_skill(
                         ),
                         child_session_id=skill_result.session_id,
                     )
-                if _pipeline_marker is not None:
-                    _parsed["pipeline_tracker"] = _pipeline_marker
                 _shaped_response = shape_execution_response(
                     tool_ctx,
                     _parsed,

@@ -17,7 +17,7 @@ session types can see each tool.
 │  Revealed in headless sessions via mcp.enable(headless) │
 │  Also carries the kitchen tag; hidden in plain sessions │
 ├─────────────────────────────────────────────────────────┤
-│  KITCHEN  (36 tools)                                    │
+│  KITCHEN  (44 kitchen-only tools)                       │
 │  All remaining tools                                    │
 │  Hidden at startup; revealed when open_kitchen is called│
 └─────────────────────────────────────────────────────────┘
@@ -48,7 +48,7 @@ to exact L2 `ORCHESTRATOR` sessions. L3 `FLEET` sessions create L2 food trucks t
 | Tag | Meaning |
 |-----|---------|
 | `autoskillit` | Identifies the tool as belonging to AutoSkillit. Present on every tool. |
-| `kitchen` | Tool is hidden at startup via `mcp.disable(tags={'kitchen'})`. 39 tools carry this tag. |
+| `kitchen` | Tool is hidden at startup via `mcp.disable(tags={'kitchen'})`. 50 tools carry this tag. |
 | `headless` | Tool is revealed in headless sessions via `mcp.enable(tags={'headless'})`. Most also carry `kitchen`; `post_pr_review` is headless-only and deliberately ungated. |
 | `github` | Functional category: GitHub-interacting tools. Can be disabled as a subset. |
 | `ci` | Functional category: CI/merge-queue polling tools. Can be disabled as a subset. |
@@ -61,7 +61,7 @@ Server startup sequence:
 
 ```
 1. mcp.disable(tags={"kitchen"})
-   → hides 45 kitchen-tagged tools (including the 6 headless-tagged tools)
+   → hides 50 kitchen-tagged tools (including the 6 headless-tagged tools)
 
 2. mcp.disable(tags={subset}) for each entry in config.subsets.disabled
    → e.g. hides all github-tagged tools if "github" is disabled

@@ -17,10 +17,15 @@ from .._projection_cache import (
 from ._hook_repair import (
     PluginHookRepairOutcome,
     PluginHookRepairStatus,
+    ProjectedArtifactHooksInvalid,
     repair_broken_plugin_cache_hooks,
+    repair_broken_projection_hooks,
+    validate_staged_plugin_hooks,
 )
 from .authority import (
     ProjectedPluginArtifactAuthority,
+    StaleGeneratorError,
+    assert_generator_process_fresh,
     project_default_plugin_authority,
     project_direct_install_authority,
 )
@@ -58,6 +63,11 @@ __all__ = [
     "public_plugin_asset_digest",
     "read_projected_plugin_identity",
     "repair_broken_plugin_cache_hooks",
+    "repair_broken_projection_hooks",
+    "ProjectedArtifactHooksInvalid",
     "validate_sanitized_plugin_artifact",
+    "StaleGeneratorError",
+    "assert_generator_process_fresh",
+    "validate_staged_plugin_hooks",
     "write_generated_hooks_json",
 ]

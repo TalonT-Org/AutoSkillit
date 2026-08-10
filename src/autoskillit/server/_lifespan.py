@@ -72,6 +72,7 @@ from autoskillit.workspace import (
     PluginHookRepairStatus,
     read_obligation,
     repair_broken_plugin_cache_hooks,
+    repair_broken_projection_hooks,
     verify_install_state,
 )
 
@@ -191,6 +192,32 @@ def run_startup_hook_health_check() -> list[str]:
                     )
         except Exception:
             logger.exception("startup_hook_repair_failed")
+
+    # Projection repair — independent failure domain.  Must run even when the
+    # plugin cache is healthy and no obligation is pending (projection-only
+    # staleness).  NOT inside the cache_broken/pending_obligation gate above.
+    try:
+        for outcome in repair_broken_projection_hooks():
+            if outcome.status is PluginHookRepairStatus.REPAIRED:
+                logger.info(
+                    "projection_hooks_repaired_at_startup",
+                    incarnation=str(outcome.incarnation_dir),
+                )
+            elif outcome.status is PluginHookRepairStatus.CONTENDED:
+                logger.warning(
+                    "projection_hooks_repair_contended_at_startup",
+                    incarnation=str(outcome.incarnation_dir),
+                    reason=outcome.detail,
+                )
+            else:
+                logger.error(
+                    "projection_hooks_repair_failed_at_startup",
+                    incarnation=str(outcome.incarnation_dir),
+                    reason=outcome.detail,
+                )
+    except Exception:
+        logger.exception("startup_projection_hook_repair_failed")
+
     return broken
 
 

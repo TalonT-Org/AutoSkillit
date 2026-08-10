@@ -42,6 +42,10 @@ from autoskillit.core import (
     write_versioned_json,
 )
 from autoskillit.hook_registry import render_hooks_json_text
+from autoskillit.workspace._projected_artifact._hook_repair import (
+    ProjectedArtifactHooksInvalid,
+    validate_staged_plugin_hooks,
+)
 from autoskillit.workspace._projected_artifact.materialization import (
     SkillProjectionContext,
     _copy_non_skill_plugin_assets,
@@ -80,6 +84,48 @@ __all__ = [
     "project_default_plugin_authority",
     "project_direct_install_authority",
 ]
+
+
+class StaleGeneratorError(Exception):
+    """The generating process's installation is stale or deleted."""
+
+
+def assert_generator_process_fresh() -> None:
+    """Verify that the running process's on-disk installation still exists.
+
+    A long-lived orchestrator whose venv was deleted or upgraded in place
+    projects from stale code until something ENOENTs.  This probe, called
+    at the top of :func:`acquire_launch_binding`, refuses with a typed,
+    actionable error instead.
+
+    Checks:
+    1. ``pkg_root()`` must still be a directory and contain ``hooks/_dispatch.py``.
+    2. The on-disk package version must match the in-process ``autoskillit.__version__``.
+    """
+    import importlib.metadata
+
+    source = pkg_root()
+    dispatcher = source / "hooks" / "_dispatch.py"
+    if not source.is_dir() or not dispatcher.is_file():
+        raise StaleGeneratorError(
+            f"Generator installation deleted: {source} no longer exists or is "
+            f"missing hooks/_dispatch.py.  Restart the orchestrator process."
+        )
+    try:
+        disk_version = importlib.metadata.version("autoskillit")
+    except importlib.metadata.PackageNotFoundError:
+        raise StaleGeneratorError(
+            "Generator package metadata missing: 'autoskillit' is no longer "
+            "installed.  Restart the orchestrator process."
+        )
+    import autoskillit
+
+    if disk_version != autoskillit.__version__:
+        raise StaleGeneratorError(
+            f"Generator installation upgraded under this process: "
+            f"on-disk version {disk_version!r} != in-process version "
+            f"{autoskillit.__version__!r}.  Restart the orchestrator process."
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +182,7 @@ def _stage_projected_plugin_artifact(
         # source tree.  The copy still supplies hook *scripts* (_dispatch.py,
         # handlers); only the rendered manifest is replaced.
         write_generated_hooks_json(staging_root)
+        validate_staged_plugin_hooks(staging_root)
         # Projected artifact — consumed exclusively via --plugin-dir, which
         # registers the plugin verbatim; never detect_autoskillit_mcp_prefix(),
         # which answers a different question (host-level registry presence).
@@ -214,8 +261,19 @@ def _validate_published_plugin_artifact(
     *,
     expected_identity: PluginArtifactIdentity | None = None,
 ) -> PluginArtifactIdentity:
-    """Validate both semantic content and exact physical incarnation."""
+    """Validate both semantic content and exact physical incarnation.
+
+    Beyond the structural and digest checks, hook commands are validated
+    semantically: every command must be relocatable-token form with a live
+    dispatcher target.  This catches broken-but-self-consistent artifacts
+    (e.g., published by a stale pre-fix generator) that pass the tree-digest
+    compare because their manifest agrees with their own broken bytes.
+    """
     identity = _manifest_identity(plan)
+    try:
+        validate_staged_plugin_hooks(plan.destination)
+    except ProjectedArtifactHooksInvalid as exc:
+        raise PluginArtifactValidationError(f"published plugin hooks are invalid: {exc}") from exc
     errors = validate_sanitized_plugin_artifact(
         plan.source_root,
         plan.destination,
@@ -405,6 +463,7 @@ class ProjectedPluginArtifactAuthority:
             raise ValueError(
                 f"projected plugin authority cannot bind load mode {load_mode.value!r}"
             )
+        assert_generator_process_fresh()
         try:
             plan = self._plan(backend)
         except PluginArtifactPublicationError:

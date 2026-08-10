@@ -21,20 +21,78 @@ from autoskillit.core import (
     read_installed_plugin_artifact_identity,
 )
 from autoskillit.hook_registry import (
+    PLUGIN_ROOT_TOKEN,
     find_broken_hook_scripts,
     render_relocatable_hook_command,
 )
 from autoskillit.workspace._installed_artifact import (
     write_installed_plugin_artifact_manifest_locked,
 )
+from autoskillit.workspace._projection_cache import (
+    projected_artifact_lease_path,
+    projected_artifact_manifest_path,
+    projected_plugin_artifact_digest,
+)
 
 __all__ = [
     "PluginHookRepairOutcome",
     "PluginHookRepairStatus",
+    "ProjectedArtifactHooksInvalid",
     "repair_broken_plugin_cache_hooks",
+    "repair_broken_projection_hooks",
+    "validate_staged_plugin_hooks",
 ]
 
 logger = get_logger(__name__)
+
+
+class ProjectedArtifactHooksInvalid(Exception):
+    """A staged or published plugin artifact has broken or non-relocatable hook commands."""
+
+
+def validate_staged_plugin_hooks(staging_root: Path) -> None:
+    """Validate that every hook command in a staged plugin artifact is relocatable.
+
+    Raises :class:`ProjectedArtifactHooksInvalid` when any command is absolute
+    (non-relocatable) or when a token-form command's dispatcher target does not
+    exist under *staging_root*.  Called from :func:`_stage_projected_plugin_artifact`
+    after the hooks manifest is rendered and before the artifact digest is computed,
+    as the publication chokepoint that prevents broken hooks from reaching sessions.
+    """
+    hooks_json_path = staging_root / "hooks" / "hooks.json"
+    if not hooks_json_path.is_file():
+        return
+    try:
+        data = json.loads(hooks_json_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ProjectedArtifactHooksInvalid(f"staged hooks.json is unreadable: {exc}") from exc
+    for event_type, entries in data.get("hooks", {}).items():
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            for hook in entry.get("hooks", []):
+                cmd = hook.get("command", "")
+                if not isinstance(cmd, str) or not cmd:
+                    continue
+                if PLUGIN_ROOT_TOKEN not in cmd:
+                    raise ProjectedArtifactHooksInvalid(
+                        f"staged hook command is not relocatable (no "
+                        f"{PLUGIN_ROOT_TOKEN} token): {cmd}"
+                    )
+                resolved = cmd.replace(PLUGIN_ROOT_TOKEN, str(staging_root))
+                try:
+                    parts = shlex.split(resolved)
+                except ValueError:
+                    raise ProjectedArtifactHooksInvalid(
+                        f"staged hook command cannot be parsed: {cmd}"
+                    )
+                if len(parts) >= 3 and parts[-2].endswith("_dispatch.py"):
+                    dispatcher = Path(parts[-2])
+                    if not dispatcher.is_file():
+                        raise ProjectedArtifactHooksInvalid(
+                            f"staged hook dispatcher does not exist: "
+                            f"{dispatcher} (from command: {cmd})"
+                        )
 
 
 class PluginHookRepairStatus(StrEnum):
@@ -231,4 +289,122 @@ def repair_broken_plugin_cache_hooks(
             )
         )
         logger.info("plugin_cache_hooks_repaired", version=version)
+    return tuple(outcomes)
+
+
+def repair_broken_projection_hooks(
+    projections_root: Path | None = None,
+) -> tuple[PluginHookRepairOutcome, ...]:
+    """Repair broken hooks in ``~/.autoskillit/plugin-projections/*``.
+
+    Mirrors :func:`repair_broken_plugin_cache_hooks` for the projection scope.
+    Each projection's exclusive ``ArtifactLease`` is acquired with
+    skip-on-contention — repair never blocks a live binding and never mutates
+    under a reader (the same discipline as the cache repair and the AGENTS.md
+    lock-ordering rule).
+
+    The repair transaction is fully transactional with the projection's sidecar
+    manifest: hooks.json is rewritten, the manifest is republished so
+    ``projected_plugin_artifact_digest`` agrees, and the result is revalidated
+    before REPAIRED is reported.  A hooks-only rewrite that left the manifest
+    stale would cause ``_validate_published_plugin_artifact`` to reject the
+    "repaired" incarnation at the next bind.
+    """
+    if projections_root is None:
+        projections_root = Path.home() / ".autoskillit" / "plugin-projections"
+    if not projections_root.is_dir():
+        return ()
+    outcomes: list[PluginHookRepairOutcome] = []
+    for projection_dir in sorted(
+        p
+        for p in projections_root.iterdir()
+        if p.is_dir() and not p.is_symlink() and not p.name.startswith(".")
+    ):
+        hooks_json_path = projection_dir / "hooks" / "hooks.json"
+        try:
+            if not hooks_json_path.is_file():
+                continue
+            broken = find_broken_hook_scripts(hooks_json_path, expansion_root=projection_dir)
+            if not broken:
+                continue
+            lease_path = projected_artifact_lease_path(projection_dir)
+            with ArtifactLease.acquire_exclusive(lease_path, blocking=False):
+                original_hooks = hooks_json_path.read_text(encoding="utf-8")
+                if not find_broken_hook_scripts(hooks_json_path, expansion_root=projection_dir):
+                    continue
+                manifest_path = projected_artifact_manifest_path(projection_dir)
+                original_manifest = (
+                    manifest_path.read_text(encoding="utf-8") if manifest_path.is_file() else None
+                )
+                fresh = _relocate_existing_hooks(json.loads(original_hooks))
+                try:
+                    atomic_write(
+                        hooks_json_path,
+                        json.dumps(fresh, indent=2) + "\n",
+                        strict_durability=True,
+                    )
+                    # Republish the manifest so the tree digest stays consistent.
+                    # Read the current identity, recompute the digest, and rewrite.
+                    if manifest_path.is_file():
+                        manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                        new_digest = projected_plugin_artifact_digest(projection_dir)
+                        manifest_data["artifact_digest"] = new_digest
+                        atomic_write(
+                            manifest_path,
+                            json.dumps(manifest_data, indent=2) + "\n",
+                            strict_durability=True,
+                        )
+                    remaining = find_broken_hook_scripts(
+                        hooks_json_path,
+                        expansion_root=projection_dir,
+                    )
+                    if remaining:
+                        raise RuntimeError(
+                            f"{len(remaining)} broken hook command(s) remain after repair"
+                        )
+                except Exception as exc:
+                    rollback_failures = _rollback_repair(
+                        hooks_json_path=hooks_json_path,
+                        original_hooks=original_hooks,
+                        manifest_path=manifest_path,
+                        original_manifest=original_manifest,
+                    )
+                    detail = f"projection hook repair transaction failed: {exc}"
+                    if rollback_failures:
+                        detail = f"{detail}; {'; '.join(rollback_failures)}"
+                    raise RuntimeError(detail) from exc
+        except ArtifactLeaseContention:
+            outcomes.append(
+                PluginHookRepairOutcome(
+                    incarnation_dir=projection_dir,
+                    status=PluginHookRepairStatus.CONTENDED,
+                    detail="lease contended",
+                )
+            )
+            logger.warning(
+                "projection_hooks_repair_skipped_contended",
+                projection=projection_dir.name,
+            )
+            continue
+        except Exception as exc:
+            outcomes.append(
+                PluginHookRepairOutcome(
+                    incarnation_dir=projection_dir,
+                    status=PluginHookRepairStatus.FAILED,
+                    detail=str(exc),
+                )
+            )
+            logger.warning(
+                "projection_hooks_repair_failed",
+                projection=projection_dir.name,
+                exc_info=True,
+            )
+            continue
+        outcomes.append(
+            PluginHookRepairOutcome(
+                incarnation_dir=projection_dir,
+                status=PluginHookRepairStatus.REPAIRED,
+            )
+        )
+        logger.info("projection_hooks_repaired", projection=projection_dir.name)
     return tuple(outcomes)

@@ -12,13 +12,15 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.execution.backends import ClaudeStreamParser
 from autoskillit.execution.process import (
     _jsonl_contains_marker,
     _jsonl_has_record_type,
     _jsonl_last_record_type,
     _marker_is_standalone,
 )
-from autoskillit.execution.process._process_jsonl import EventCursor
+from autoskillit.execution.process._process_jsonl import EventCursor, fold_event_cursor
+from autoskillit.execution.process._process_race import RaceAccumulator
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -43,6 +45,35 @@ def test_event_cursor_starts_at_resume_boundary(tmp_path: Path) -> None:
     with path.open("ab") as stream:
         stream.write(b'{"new":true}\n')
     assert cursor.read_complete_lines() == ('{"new":true}',)
+
+
+def test_event_cursor_observes_file_created_after_spawn(tmp_path: Path) -> None:
+    path = tmp_path / "new-session.jsonl"
+    cursor = EventCursor(path)
+    assert cursor.read_complete_lines() == ()
+    path.write_text('{"type":"task_started","task_id":"new"}\n')
+    assert cursor.read_complete_lines() == ('{"type":"task_started","task_id":"new"}',)
+    assert cursor.read_complete_lines() == ()
+
+
+def test_incremental_and_final_folds_are_idempotent(tmp_path: Path) -> None:
+    path = tmp_path / "stdout.jsonl"
+    path.write_text('{"type":"task_started","task_id":"owned"}\n')
+    cursor = EventCursor(path)
+    accumulator = RaceAccumulator(lifecycle_observation_enabled=True)
+    parser = ClaudeStreamParser()
+
+    fold_event_cursor(cursor, parser, accumulator.observe_event)
+    fold_event_cursor(cursor, parser, accumulator.observe_event)
+    assert accumulator.to_race_signals().pending_task_ids == ("owned",)
+
+    with path.open("a") as stream:
+        stream.write('{"type":"task_updated","task_id":"owned","patch":{"status":"completed"}}\n')
+    fold_event_cursor(cursor, parser, accumulator.observe_event)
+    fold_event_cursor(cursor, parser, accumulator.observe_event)
+    signals = accumulator.to_race_signals()
+    assert signals.pending_task_ids == ()
+    assert signals.terminal_task_ids == ("owned",)
 
 
 class TestJsonlContainsMarker:

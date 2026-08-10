@@ -26,7 +26,7 @@ HEADLESS_SIZE_BUDGETS = {
     "headless/_headless_recovery.py": 540,
     "headless/_headless_path_tokens.py": 190,
     # #4233 and #4457 keep lifecycle and artifact gates at the final adjudication seam.
-    "headless/_headless_result.py": 1015,
+    "headless/_headless_result.py": 1033,
     "headless/_headless_evidence.py": 310,
 }
 

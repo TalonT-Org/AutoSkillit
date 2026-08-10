@@ -57,12 +57,15 @@ HANG_FOREVER_SCRIPT = textwrap.dedent("""\
 
 LIFECYCLE_TREE_SCRIPT = textwrap.dedent("""\
     import json, os, time
-    child = os.fork()
-    if child == 0:
-        time.sleep(60)
-        raise SystemExit(0)
-    print(json.dumps({"type": "task_started", "task_id": "owned-1"}), flush=True)
-    print(json.dumps({"type": "child_pid", "pid": child}), flush=True)
+    children = []
+    for task_id in ("owned-1", "owned-2"):
+        child = os.fork()
+        if child == 0:
+            time.sleep(60)
+            raise SystemExit(0)
+        children.append(child)
+        print(json.dumps({"type": "task_started", "task_id": task_id}), flush=True)
+        print(json.dumps({"type": "child_pid", "pid": child}), flush=True)
     print(json.dumps({"type": "result", "result": "ORDER_UP"}), flush=True)
     time.sleep(0.4)
     print(json.dumps({
@@ -70,7 +73,22 @@ LIFECYCLE_TREE_SCRIPT = textwrap.dedent("""\
         "task_id": "owned-1",
         "status": "completed",
     }), flush=True)
+    print(json.dumps({
+        "type": "task_updated",
+        "task_id": "owned-2",
+        "patch": {"status": "failed"},
+    }), flush=True)
     time.sleep(60)
+""")
+
+NATURAL_EXIT_WITH_OWNED_CHILD_SCRIPT = textwrap.dedent("""\
+    import json, os, time
+    child = os.fork()
+    if child == 0:
+        time.sleep(60)
+        raise SystemExit(0)
+    print(json.dumps({"type": "task_started", "task_id": "owned-exit"}), flush=True)
+    print(json.dumps({"type": "child_pid", "pid": child}), flush=True)
 """)
 
 
@@ -124,6 +142,32 @@ class TestProcessTreeKill:
         assert result.termination is TerminationReason.COMPLETED
         assert result.lifecycle_observation_complete is True
         assert result.pending_task_ids == ()
+        child_records = [
+            json.loads(line)
+            for line in result.stdout.splitlines()
+            if '"type": "child_pid"' in line
+        ]
+        assert len(child_records) == 2
+        assert all(not psutil.pid_exists(record["pid"]) for record in child_records)
+
+    @pytest.mark.anyio
+    async def test_natural_exit_retains_obligation_and_cleans_owned_group(self, tmp_path):
+        from autoskillit.execution.backends import ClaudeStreamParser
+
+        script = tmp_path / "natural_exit_with_owned_child.py"
+        script.write_text(NATURAL_EXIT_WITH_OWNED_CHILD_SCRIPT)
+        result = await run_managed_async(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=10,
+            stream_parser=ClaudeStreamParser(),
+            lifecycle_observation_enabled=True,
+            natural_exit_grace_seconds=0.05,
+        )
+
+        assert result.termination is TerminationReason.NATURAL_EXIT
+        assert result.lifecycle_observation_complete is True
+        assert result.pending_task_ids == ("owned-exit",)
         child_record = next(
             json.loads(line)
             for line in result.stdout.splitlines()

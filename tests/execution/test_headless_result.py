@@ -153,6 +153,71 @@ def test_unobserved_lifecycle_without_foldable_source_fails_safe() -> None:
     assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
 
 
+@pytest.mark.parametrize(
+    "termination",
+    [TerminationReason.COMPLETED, TerminationReason.NATURAL_EXIT],
+)
+@pytest.mark.parametrize(
+    "obligation",
+    [
+        {"pending_task_ids": ("task-2", "task-1")},
+        {"schedule_wakeup_violation": True},
+        {"completion_ceiling_expired": True},
+    ],
+)
+def test_each_authoritative_obligation_rejects_success(
+    termination: TerminationReason,
+    obligation: dict[str, object],
+) -> None:
+    result = SubprocessResult(
+        returncode=0,
+        stdout=_success_result_json(),
+        stderr="",
+        termination=termination,
+        pid=1,
+        lifecycle_observation_enabled=True,
+        lifecycle_observation_complete=True,
+        **obligation,
+    )
+
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/plan",
+        backend=ClaudeCodeBackend(),
+    )
+
+    assert skill_result.success is False
+    assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
+
+
+@pytest.mark.parametrize("captured", [False, True])
+def test_defensive_fold_rejects_pending_task_from_available_output(
+    tmp_path: Path,
+    captured: bool,
+) -> None:
+    lifecycle_line = json.dumps({"type": "task_started", "task_id": "defensive-task"})
+    stdout_path = tmp_path / "stdout.jsonl"
+    stdout_path.write_text(lifecycle_line + "\n")
+    result = SubprocessResult(
+        returncode=0,
+        stdout="" if captured else lifecycle_line,
+        stdout_path=stdout_path if captured else None,
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=1,
+        lifecycle_observation_enabled=True,
+    )
+
+    skill_result = _build_skill_result(
+        result,
+        skill_command="/plan",
+        backend=ClaudeCodeBackend(),
+    )
+
+    assert skill_result.retry_reason is RetryReason.ASYNC_OBLIGATION
+    assert "pending=defensive-task" in skill_result.result
+
+
 def _stale_result(
     kill_reason: KillReason = KillReason.NATURAL_EXIT, stdout: str = ""
 ) -> SubprocessResult:

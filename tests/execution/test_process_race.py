@@ -16,10 +16,12 @@ from autoskillit.core.types import (
     SessionEvent,
     TerminationReason,
 )
+from autoskillit.execution.backends import ClaudeStreamParser
 from autoskillit.execution.process._process_race import (
     RaceAccumulator,
     RaceSignals,
     _extract_stdout_session_id,
+    _watch_completion_eligibility,
     resolve_termination,
 )
 
@@ -323,6 +325,56 @@ def test_lifecycle_reducer_is_terminal_dominant_and_freezes_sorted() -> None:
     signals = acc.to_race_signals()
     assert signals.pending_task_ids == ("b",)
     assert signals.terminal_task_ids == ("a",)
+
+
+@pytest.mark.anyio
+async def test_completion_candidate_without_task_ignores_large_ceiling() -> None:
+    acc = RaceAccumulator(lifecycle_observation_enabled=True)
+    acc.channel_a_candidate_at = anyio.current_time()
+    acc.completion_candidate_event.set()
+    trigger = anyio.Event()
+
+    with anyio.fail_after(0.2):
+        await _watch_completion_eligibility(
+            acc,
+            trigger,
+            anyio.Event(),
+            completion_drain_timeout=0,
+            child_deferral_ceiling=120,
+            stream_parser=ClaudeStreamParser(),
+            session_log_enabled=False,
+            _poll_interval=0,
+        )
+
+    assert trigger.is_set()
+    assert acc.channel_a_confirmed is True
+    assert acc.completion_ceiling_expired is False
+
+
+@pytest.mark.anyio
+async def test_completion_ceiling_preserves_pending_ids_for_adjudication() -> None:
+    acc = RaceAccumulator(lifecycle_observation_enabled=True)
+    acc.pending_task_ids.add("owned")
+    acc.channel_b_candidate_at = anyio.current_time()
+    acc.completion_candidate_event.set()
+    trigger = anyio.Event()
+
+    await _watch_completion_eligibility(
+        acc,
+        trigger,
+        anyio.Event(),
+        completion_drain_timeout=0,
+        child_deferral_ceiling=0,
+        stream_parser=ClaudeStreamParser(),
+        session_log_enabled=False,
+        _poll_interval=0,
+    )
+
+    signals = acc.to_race_signals()
+    assert trigger.is_set()
+    assert signals.channel_b_status is None
+    assert signals.pending_task_ids == ("owned",)
+    assert signals.completion_ceiling_expired is True
 
 
 class TestResolveTerminationInspector:

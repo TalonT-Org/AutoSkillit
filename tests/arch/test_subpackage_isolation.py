@@ -1328,7 +1328,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "async hardening beside the backend parser and command builder that own them.",
     ),
     "execution/headless/_headless_result.py": (
-        1015,
+        1033,
         "REQ-CNST-010-E25: #4233 keeps the async-obligation success gate adjacent to "
         "the existing stale, idle, timeout, and content adjudication order it must preempt",
     ),

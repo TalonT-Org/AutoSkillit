@@ -11,7 +11,7 @@ from autoskillit.core import (
     RecipeArtifactGeneration,
 )
 from autoskillit.server._recipe_initialization import recipe_initialization_receipt
-from tests.contracts._delivery_constants import MAX_TOKENS_PER_PAGE
+from tests.contracts._delivery_constants import MAX_BYTES_PER_PAGE
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
@@ -41,9 +41,7 @@ def test_completion_receipt_fits_within_last_page_bound() -> None:
         _artifact(),
         content_sha256="sha256:" + ("b" * 64),
     )
-    assert len(json.dumps({"completion_receipt": receipt}).encode("utf-8")) <= (
-        MAX_TOKENS_PER_PAGE
-    )
+    assert len(json.dumps({"completion_receipt": receipt}).encode("utf-8")) <= (MAX_BYTES_PER_PAGE)
 
 
 def test_completion_receipt_is_bound_to_terminal_content() -> None:

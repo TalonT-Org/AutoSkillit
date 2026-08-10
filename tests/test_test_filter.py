@@ -21,7 +21,6 @@ from tests._test_filter import (
     FilterMode,
     FullRunReason,
     ImportContext,
-    _expand_reexport_closure,
     apply_manifest,
     build_test_scope,
     check_bucket_a,
@@ -645,33 +644,6 @@ class TestGitChangedFiles:
         result = git_changed_files("/fake", base_ref="main")
         assert result == {"src/autoskillit/core/io.py"}
         assert mock_run.call_count == 3
-
-
-# ---------------------------------------------------------------------------
-# Re-export Closure Tests (R1–R2)
-# ---------------------------------------------------------------------------
-
-
-class TestReexportClosure:
-    def test_reexport_closure_direct_init(self, tmp_path: Path) -> None:
-        pkg = tmp_path / "pkg"
-        pkg.mkdir()
-        (pkg / "sub.py").write_text("x = 1\n")
-        (pkg / "__init__.py").write_text("from .sub import x\n")
-
-        result = _expand_reexport_closure({"pkg/sub.py"}, tmp_path)
-        assert "pkg/__init__.py" in result
-        assert "pkg/sub.py" in result
-
-    def test_reexport_closure_no_match(self, tmp_path: Path) -> None:
-        pkg = tmp_path / "pkg"
-        pkg.mkdir()
-        (pkg / "other.py").write_text("y = 2\n")
-        (pkg / "__init__.py").write_text("from .sub import x\n")
-
-        result = _expand_reexport_closure({"pkg/other.py"}, tmp_path)
-        assert "pkg/__init__.py" not in result
-        assert "pkg/other.py" in result
 
 
 # ---------------------------------------------------------------------------

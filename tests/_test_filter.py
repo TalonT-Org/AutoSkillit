@@ -1663,6 +1663,10 @@ def _expand_reexport_closure(
                         f"Failed to parse {init_path}: {exc}",
                         stacklevel=2,
                     )
+            # Path('.') and Path('/') are their own parent — without this guard
+            # a relative src_root reaches the '.' fixed point and never exits.
+            if parent == parent.parent:
+                break
             parent = parent.parent
 
     return expanded

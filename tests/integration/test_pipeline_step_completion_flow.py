@@ -185,6 +185,12 @@ class TestServerSideStepCompletionMarking:
         recovered = json.loads(
             await recover_run_skill_result(ctx=replacement_context)  # type: ignore[arg-type]
         )
+        refused = json.loads(
+            await complete_run_skill_result(
+                recovered["receipt_id"],
+                ctx=SimpleNamespace(session_id="disconnected"),  # type: ignore[arg-type]
+            )
+        )
         completed = json.loads(
             await complete_run_skill_result(
                 recovered["receipt_id"],
@@ -193,6 +199,8 @@ class TestServerSideStepCompletionMarking:
         )
 
         assert recovered["success"] is True
+        assert refused["success"] is False
+        assert "another request session" in refused["user_visible_message"]
         assert completed["success"] is True
         assert completed["tracker"]["success"] is True
         assert _read_tracker(tmp_path)["steps"]["rectify"]["status"] == "complete"
